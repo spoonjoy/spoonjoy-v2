@@ -255,15 +255,10 @@ describe("E2E: Create Recipe with Step Dependencies", () => {
       // Wait for recipe to render
       expect(await screen.findByText(/Stir Fry/)).toBeInTheDocument();
 
-      // Verify step output uses sections appear (inline with ingredients)
-      const stepOutputSections = screen.getAllByTestId("step-output-uses-section");
-      expect(stepOutputSections).toHaveLength(2);
-
-      // Verify step references are shown in the sections
-      // The step titles appear both in the step card and in the sections
-      expect(stepOutputSections[0]).toHaveTextContent("Prep Protein");
-      expect(stepOutputSections[1]).toHaveTextContent("Prep Vegetables");
-      expect(stepOutputSections[1]).toHaveTextContent("Cook Protein");
+      // Each step that uses earlier steps' outputs ticks them off in its checklist
+      expect(screen.getByRole("checkbox", { name: "Step 1: Prep Protein" })).toHaveAccessibleDescription("Step output");
+      expect(screen.getByRole("checkbox", { name: "Step 2: Prep Vegetables" })).toHaveAccessibleDescription("Step output");
+      expect(screen.getByRole("checkbox", { name: "Step 3: Cook Protein" })).toHaveAccessibleDescription("Step output");
     });
   });
 
@@ -354,9 +349,8 @@ describe("E2E: Create Recipe with Step Dependencies", () => {
       render(<Stub initialEntries={[`/recipes/${recipeId}`]} />);
 
       await screen.findByText(/Untitled Step Recipe/);
-      // Should display "Step 1" in the step output uses section
-      const stepOutputSection = screen.getByTestId("step-output-uses-section");
-      expect(stepOutputSection).toHaveTextContent("Step 1");
+      // An untitled step's output is named by its number alone
+      expect(screen.getByRole("checkbox", { name: "Step 1" })).toHaveAccessibleDescription("Step output");
     });
 
     it("should handle recipe with no dependencies (all independent steps)", async () => {

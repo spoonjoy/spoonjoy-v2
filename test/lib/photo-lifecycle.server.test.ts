@@ -299,6 +299,26 @@ describe("runPhotoSweep", () => {
     expect(again.purged).toBe(0);
   });
 
+  it("leaves QA's sample cover images and their variants alone", async () => {
+    insertUser("chef", "/photos/profiles/chef/me.jpg");
+    const bucket = memoryBucket({
+      "profiles/chef/me.jpg": "me",
+      "samples/covers/roast-chicken.jpg": "sample",
+      "variants/w512/samples/covers/roast-chicken.jpg.webp": "v",
+      "covers/unused.jpg": "unused",
+    });
+    const first = await runPhotoSweep({ db, bucket, mode: "apply", now: at(0) });
+    expect(first).toMatchObject({ objectsScanned: 2, referencedObjects: 1, unreferencedObjects: 1, orphanVariants: 0 });
+    await runPhotoSweep({ db, bucket, mode: "apply", now: at(PHOTO_SWEEP_GRACE_MS) });
+    expect([...bucket.objects.keys()].sort()).toEqual([
+      "profiles/chef/me.jpg",
+      "quarantine/covers/unused.jpg",
+      "samples/covers/roast-chicken.jpg",
+      "variants/w512/samples/covers/roast-chicken.jpg.webp",
+    ]);
+    expect(cleanupRows().map((row) => row.key)).toEqual(["covers/unused.jpg"]);
+  });
+
   it("forgets a photo that is referenced again before it is moved", async () => {
     const bucket = arrangeKitchen();
     await runPhotoSweep({ db, bucket, mode: "dry-run", now: at(0) });

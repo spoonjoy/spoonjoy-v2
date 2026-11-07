@@ -15,6 +15,11 @@ import { server, userEvent } from "vitest/browser";
  * await pressTab();
  * expect(document.activeElement).toBe(radio);
  * await pressTab({ shift: true });
+ * @claim "Presses Tab, or Shift+Tab with `{" registry/ouro/lib/ouro/testing/tab.test.ts verify:testExists(registry/ouro/lib/ouro/testing/tab.test.ts::pressTab > moves focus to the next tab stop: a button, a link and a control with a tabindex)
+ * @claim "Presses Tab, or Shift+Tab with `{" registry/ouro/lib/ouro/testing/tab.test.ts verify:testExists(registry/ouro/lib/ouro/testing/tab.test.ts::pressTab > moves focus back with shift)
+ * @claim "WebKit on a Mac follows the" https://support.apple.com/guide/safari/advanced-ibrw1075/mac verify:urlOk(https://support.apple.com/guide/safari/advanced-ibrw1075/mac)
+ * @claim "so this presses that there and plain Tab everywhere else" registry/ouro/lib/ouro/testing/tab.test.ts verify:testExists(registry/ouro/lib/ouro/testing/tab.test.ts::pressTab > moves focus to the next tab stop: a button, a link and a control with a tabindex)
+ * @claim "so this presses that there and plain Tab everywhere else" registry/ouro/lib/ouro/testing/tab.ts verify:fileLine(registry/ouro/lib/ouro/testing/tab.ts, /const\stab\s=\stabSkipsControls\(\)\s\?\s"\{Alt>\}\{Tab\}\{\/Alt\}"\s:\s"\{Tab\}";/)
  */
 export async function pressTab({ shift = false }: { shift?: boolean } = {}): Promise<void> {
   const tab = tabSkipsControls() ? "{Alt>}{Tab}{/Alt}" : "{Tab}";

@@ -1,0 +1,19 @@
+{
+  "name": "block-create",
+  "endpoint": "POST /api/v1/blocks",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_119",
+    "data": {
+      "block": {
+        "chef": {
+          "id": "id_001",
+          "username": "contract_chef",
+          "photoUrl": null
+        },
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      }
+    }
+  }
+}

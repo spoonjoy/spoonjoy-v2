@@ -5,8 +5,8 @@ export const PRODUCTION_BASE_URLS = [DEFAULT_PRODUCTION_BASE_URL, "https://spoon
 export const QA_ENV_NAME = "qa";
 export const QA_BASE_URL = "https://spoonjoy-v2-qa.mendelow-studio.workers.dev";
 export const PRODUCTION_D1_DATABASE_NAME = "spoonjoy";
-export const QA_D1_DATABASE_NAME = "spoonjoy-qa";
-export const QA_D1_DATABASE_ID = "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34";
+export const QA_D1_DATABASE_NAME = "spoonjoy-qa-2";
+export const QA_D1_DATABASE_ID = "e29dc64f-e5ee-47a4-b17f-f68dbee5a1c1";
 export const QA_R2_BUCKET = "spoonjoy-photos-qa";
 export const PRODUCTION_R2_BUCKET = "spoonjoy-photos";
 
@@ -19,7 +19,7 @@ const TARGET_METADATA = {
     destructiveScope: "local disposable test data only",
   },
   qa: {
-    d1Target: "QA D1 spoonjoy-qa (--remote --env qa)",
+    d1Target: "QA D1 spoonjoy-qa-2 (--remote --env qa)",
     d1Args: ["--remote", "--env", "qa"],
     r2Target: "QA R2 spoonjoy-photos-qa (--remote)",
     r2Bucket: QA_R2_BUCKET,

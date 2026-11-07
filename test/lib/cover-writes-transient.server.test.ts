@@ -164,6 +164,32 @@ describe("spending image generation quota on D1", () => {
     expect(await budget()).toBe(PLACEHOLDER_DAILY_CAP);
   });
 
+  it.each(OUTCOMES)("spends exactly one unit of the chef's cap and none of the global budget on a free consume (%s)", async (outcome) => {
+    const flaky = flakyD1(d1.binding);
+    flaky.failNext(/ImageGenLedger/, outcome);
+
+    await expect(tryConsumeImageGenQuota(db, chefId, "placeholder", { now, d1: flaky.binding, free: true })).resolves.toBe(true);
+
+    expect(flaky.failures()).toBe(1);
+    expect(await spent()).toBe(1);
+    expect(await budget()).toBe(0);
+    const markers = await db.apiIdempotencyKey.findMany({ where: { userId: chefId, clientKey: "image-gen-consume" } });
+    expect(markers).toHaveLength(1);
+    expect(markers[0]!.responseStatus).toBe(200);
+  });
+
+  it.each(OUTCOMES)("answers a free consume false at the chef's cap and spends nothing more (%s)", async (outcome) => {
+    for (let index = 0; index < PLACEHOLDER_DAILY_CAP; index += 1) {
+      await expect(tryConsumeImageGenQuota(db, chefId, "placeholder", { now, d1: d1.binding, free: true })).resolves.toBe(true);
+    }
+    const flaky = flakyD1(d1.binding);
+    flaky.failNext(/ImageGenLedger/, outcome);
+
+    await expect(tryConsumeImageGenQuota(db, chefId, "placeholder", { now, d1: flaky.binding, free: true })).resolves.toBe(false);
+    expect(await spent()).toBe(PLACEHOLDER_DAILY_CAP);
+    expect(await budget()).toBe(0);
+  });
+
   it("drops the chef's markers once they are a day old", async () => {
     await tryConsumeImageGenQuota(db, chefId, "placeholder", { now, d1: d1.binding });
     const nextDay = () => new Date("2026-10-12T09:00:01.000Z");

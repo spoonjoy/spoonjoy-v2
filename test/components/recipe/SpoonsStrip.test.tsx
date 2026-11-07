@@ -76,24 +76,23 @@ describe("SpoonsStrip", () => {
     expect(screen.getByText(/minute ago|just now|1 min/i)).toBeInTheDocument();
   });
 
+  it("keeps a next-time suggestion visible when a cook leaves no note", () => {
+    renderWithRouter(<SpoonsStrip spoons={[makeSpoon({ nextTime: "Less salt" })]} />);
+    expect(screen.getByRole("link", { name: "alice" })).toHaveAttribute("href", "/users/alice");
+    expect(screen.getByRole("listitem")).toHaveTextContent("Next time: Less salt");
+    expect(screen.queryByRole("button", { name: /show more/i })).not.toBeInTheDocument();
+  });
+
   it("links each chef to their profile by username", () => {
     renderWithRouter(<SpoonsStrip spoons={[makeSpoon()]} />);
     const link = screen.getByRole("link", { name: /alice/i });
     expect(link).toHaveAttribute("href", "/users/alice");
   });
 
-  it("truncates long notes and exposes an expand toggle", async () => {
+  it("keeps a long note whole for screen readers inside HX ShowMore", () => {
     const longNote = "a".repeat(220);
     renderWithRouter(<SpoonsStrip spoons={[makeSpoon({ note: longNote })]} />);
-    const toggle = screen.getByRole("button", { name: /show more/i });
-    expect(toggle).toBeInTheDocument();
-    // truncated by default
-    expect(screen.queryByText(longNote)).toBeNull();
-    await userEvent.click(toggle);
-    expect(screen.getByText(longNote)).toBeInTheDocument();
-    const collapse = screen.getByRole("button", { name: /show less/i });
-    await userEvent.click(collapse);
-    expect(screen.queryByText(longNote)).toBeNull();
+    expect(screen.getByText(longNote).closest('[data-ouro="show-more"]')).not.toBeNull();
   });
 
   it("when showRecipe=true renders the recipe title and a link to /recipes/<id>", () => {
@@ -153,75 +152,12 @@ describe("SpoonsStrip", () => {
     expect(photo).toHaveAttribute("src", "/photos/cook.png");
   });
 
-  it("renders 'just now' for cookedAt within the last 45 seconds", () => {
+  it("says how long ago each cook was, with HX RelativeTime", () => {
     renderWithRouter(
-      <SpoonsStrip
-        spoons={[
-          makeSpoon({ cookedAt: new Date(Date.now() - 5_000).toISOString() }),
-        ]}
-      />,
+      <SpoonsStrip spoons={[makeSpoon({ cookedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() })]} />,
     );
-    expect(screen.getByText(/just now/i)).toBeInTheDocument();
+    expect(screen.getByText("3 hours ago")).toBeInTheDocument();
   });
-
-  it("renders hr ago for cookedAt several hours back", () => {
-    renderWithRouter(
-      <SpoonsStrip
-        spoons={[
-          makeSpoon({
-            cookedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-          }),
-        ]}
-      />,
-    );
-    expect(screen.getByText(/3 hr ago/i)).toBeInTheDocument();
-  });
-
-  it("renders days ago for cookedAt several days back", () => {
-    renderWithRouter(
-      <SpoonsStrip
-        spoons={[
-          makeSpoon({
-            cookedAt: new Date(
-              Date.now() - 5 * 24 * 60 * 60 * 1000,
-            ).toISOString(),
-          }),
-        ]}
-      />,
-    );
-    expect(screen.getByText(/5 days ago/i)).toBeInTheDocument();
-  });
-
-  it("renders mo ago for cookedAt within the year", () => {
-    renderWithRouter(
-      <SpoonsStrip
-        spoons={[
-          makeSpoon({
-            cookedAt: new Date(
-              Date.now() - 90 * 24 * 60 * 60 * 1000,
-            ).toISOString(),
-          }),
-        ]}
-      />,
-    );
-    expect(screen.getByText(/3 mo ago/i)).toBeInTheDocument();
-  });
-
-  it("renders yr ago for cookedAt over a year back", () => {
-    renderWithRouter(
-      <SpoonsStrip
-        spoons={[
-          makeSpoon({
-            cookedAt: new Date(
-              Date.now() - 400 * 24 * 60 * 60 * 1000,
-            ).toISOString(),
-          }),
-        ]}
-      />,
-    );
-    expect(screen.getByText(/yr ago/i)).toBeInTheDocument();
-  });
-
   it("does NOT show an expand toggle for short notes", () => {
     renderWithRouter(
       <SpoonsStrip
@@ -262,36 +198,36 @@ describe("SpoonsStrip", () => {
     expect(screen.queryByRole("link", { name: /lentil soup/i })).toBeNull();
   });
 
-  it("renders each cook's time relative to the given now, in a <time> carrying the exact instant", () => {
+  it("renders each cook's time in a <time> carrying the exact instant", () => {
     const cookedAt = "2025-05-01T12:00:00.000Z";
-    const now = Date.parse("2025-05-01T15:00:30Z");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2025-05-01T15:00:30Z"));
     renderWithRouter(
       <>
-        <SpoonsStrip spoons={[makeSpoon({ id: "full", cookedAt, note: "full row" })]} now={now} />
+        <SpoonsStrip spoons={[makeSpoon({ id: "full", cookedAt, note: "full row" })]} />
         <SpoonsStrip
           spoons={[makeSpoon({ id: "compact", cookedAt, recipe: { id: "r1", title: "Lentil Soup", chefId: "u1" } })]}
           showRecipe
-          now={now}
         />
       </>,
     );
+    clock.mockRestore();
     const times = document.querySelectorAll("time");
-    // One in the full row; the compact row has one for phones and one for wider screens.
-    expect(times).toHaveLength(3);
+    // One in each row's actions.
+    expect(times).toHaveLength(2);
     for (const time of times) {
-      expect(time).toHaveTextContent("3 hr ago");
+      expect(time).toHaveTextContent("3 hours ago");
       expect(time).toHaveAttribute("datetime", cookedAt);
     }
   });
 
   it("renders the same text on the server and when the browser hydrates it a minute later", async () => {
     // A cook's relative time used to read the clock during render, so the server and the
-    // hydrating browser disagreed whenever the label changed in between ("just now" became
-    // "1 min ago") and React reported a hydration mismatch.
+    // hydrating browser disagreed whenever the label changed in between and React reported a
+    // hydration mismatch. HX RelativeTime hydrates the server's text, then moves on.
     const renderedAt = Date.parse("2025-05-01T12:00:10Z");
     const ui = (
       <MemoryRouter>
-        <SpoonsStrip spoons={[makeSpoon({ id: "s1", cookedAt: "2025-05-01T12:00:00.000Z" })]} now={renderedAt} />
+        <SpoonsStrip spoons={[makeSpoon({ id: "s1", cookedAt: "2025-05-01T12:00:00.000Z" })]} />
       </MemoryRouter>
     );
     const clock = vi.spyOn(Date, "now").mockReturnValue(renderedAt);
@@ -305,7 +241,7 @@ describe("SpoonsStrip", () => {
         hydrateRoot(container, ui, { onRecoverableError });
       });
       expect(onRecoverableError).not.toHaveBeenCalled();
-      expect(container.querySelector("time")).toHaveTextContent("just now");
+      expect(container.querySelector("time")).toHaveAttribute("datetime", "2025-05-01T12:00:00.000Z");
     } finally {
       clock.mockRestore();
       container.remove();

@@ -1,11 +1,13 @@
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/cookbooks.$id";
 import { chefDisplayName } from "~/lib/username";
-import { redirect, useLoaderData, useActionData, Form as RouterForm, data, useSubmit, type AppLoadContext } from "react-router";
+import { redirect, useLoaderData, useActionData, Form as RouterForm, data, useSubmit, type AppLoadContext, type ShouldRevalidateFunctionArgs } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { readCookbookPageFromD1, readCookbookPageWithPrisma } from "~/lib/cookbook-page-reads.server";
 import { getUserId, requireUserId } from "~/lib/session.server";
+import { hidesContent, withoutHidden } from "~/lib/moderation.server";
 import { notifyCookbookSaveOfMine } from "~/lib/notification-triggers.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import {
@@ -71,20 +73,25 @@ function captureCookbookActionFailure(
     void capture;
   }
 }
-import { ConfirmationDialog } from "~/components/confirmation-dialog";
-import { Button } from "~/components/button";
-import { Text } from "~/components/text";
-import { Link as AppLink } from "~/components/navigation/app-link";
+import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
+import { Button } from "~/components/ouro/button/button";
+import { Text } from "~/components/ouro/text/text";
+import { BookOpen } from "lucide-react";
+import { Collapsible } from "~/components/ouro/collapsible/collapsible";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Form } from "~/components/ouro/form/form";
 import { useFormErrors } from "~/hooks/use-form-errors";
 import { Link } from "~/components/ouro/link/link";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { useToast } from "~/components/feedback/toast";
-import { CookbookPage, CookbookHeader, RuledEmptyState } from "~/components/cookbook/page";
+import { toast } from "~/lib/ouro/toast";
+import { CookbookPage } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
-import { shareContent, useDockSuppressed } from "~/components/navigation";
+import { useDockSuppressed } from "~/components/navigation";
+import { ShareButton } from "~/components/ouro/share-button/share-button";
 import {
   addRecipeToCookbook,
   asCompatibleCookbookD1Database,
@@ -93,6 +100,9 @@ import {
 } from "~/lib/cookbook-membership-compat.server";
 import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.server";
 import { d1UnavailableWebResponse, retryD1Write } from "~/lib/d1-write-retry.server";
+import { revalidateUnlessNetworkFailure, submitOrReportLostRequest } from "~/lib/network-failure";
+import { useResendLostSubmission } from "~/hooks/use-resend-lost-submission";
+import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 
 export function meta({ data }: Route.MetaArgs) {
   if (!data) {
@@ -131,11 +141,15 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const d1 = requestD1(context);
   const readInput = { cookbookId: id, viewerId: userId };
-  const { cookbook, availableRecipes } = d1
+  const { cookbook, availableRecipes, hides } = d1
     ? await readCookbookPageFromD1(d1, readInput)
     : await readCookbookPageWithPrisma(await getRequestDb(context), readInput);
 
   if (!cookbook) {
+    throw new Response("Cookbook not found", { status: 404 });
+  }
+  // A cookbook the viewer reported, or whose author they blocked or reported, is hidden from them.
+  if (hidesContent(hides, "cookbook", cookbook.id, cookbook.authorId)) {
     throw new Response("Cookbook not found", { status: 404 });
   }
 
@@ -144,7 +158,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const cookbookWithCovers = {
     ...cookbook,
-    recipes: cookbook.recipes.map((item) => {
+    recipes: withoutHidden(hides, cookbook.recipes, (item) => ({ type: "recipe", id: item.recipe.id, chefId: item.recipe.chef.id })).map((item) => {
       const coverDisplay = getRecipeCoverDisplay(item.recipe, item.recipe.covers);
       return {
         ...item,
@@ -186,6 +200,26 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 }
 
+// The intents that leave the same result when applied twice: a rename sets a fixed title, and
+// adding a recipe that is already in the cookbook keeps one copy. Only these are sent again when
+// a submission got no answer (useResendLostSubmission); a delete or a removal is not.
+const IDEMPOTENT_INTENTS = new Set(["updateTitle", "addRecipe"]);
+
+export async function clientAction({ request, serverAction }: Route.ClientActionArgs) {
+  const formData = await request.clone().formData();
+  const intent = formData.get("intent");
+  const name = typeof intent === "string" ? intent : null;
+  // In the order they were sent, so the second request's body is the first one's.
+  const resend = name !== null && IDEMPOTENT_INTENTS.has(name)
+    ? Object.fromEntries([...formData].filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+    : null;
+  return submitOrReportLostRequest(serverAction, { intent: name, resend });
+}
+
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return revalidateUnlessNetworkFailure(args, args.defaultShouldRevalidate);
+}
+
 async function handleCookbookAction(
   request: Request,
   id: string,
@@ -217,6 +251,9 @@ async function handleCookbookAction(
     const title = formData.get("title")?.toString() || "";
     if (!title.trim()) {
       return data({ error: "Title is required", intent: "updateTitle" }, { status: 400 });
+    }
+    if (containsObjectionableContent(title)) {
+      return data({ error: OBJECTIONABLE_CONTENT_MESSAGE, intent: "updateTitle" }, { status: 400 });
     }
     try {
       // Sets a fixed title, so it simply runs again after a transient D1 error.
@@ -345,7 +382,6 @@ interface CookbookActionData {
 export default function CookbookDetail() {
   const { cookbook, isOwner, availableRecipes, canonicalUrl } = useLoaderData<typeof loader>();
   const actionData = useActionData() as CookbookActionData | null | undefined;
-  const { showToast } = useToast();
   const recipeImages = cookbook.recipes.map((item) => ({
     coverImageUrl: item.recipe.coverImageUrl,
     title: item.recipe.title,
@@ -362,12 +398,15 @@ export default function CookbookDetail() {
     titleAnswer,
   );
   const submit = useSubmit();
+  // A lost rename or add is sent once more before the page says Spoonjoy couldn't be reached.
+  const resendingLostSubmission = useResendLostSubmission(actionData);
   // The title editor is a form, so it hides the dock like other edit forms (R-M3-2).
   useDockSuppressed(isEditingTitle);
 
   // A rename either closes the editor with a short confirmation (R-M3-3) or keeps it open with
   // the error. Each submission yields a new actionData object, so this runs once per result.
   useEffect(() => {
+    if (resendingLostSubmission) return;
     // Saving, removing or deleting when the database was briefly unavailable: say so, so the cook
     // can try again.
     if (
@@ -375,7 +414,7 @@ export default function CookbookDetail() {
       actionData?.retryable === true &&
       typeof actionData.error === "string"
     ) {
-      showToast({ message: actionData.error });
+      toast(actionData.error, { tone: "destructive" });
       return;
     }
     if (actionData?.intent !== "updateTitle") return;
@@ -385,8 +424,8 @@ export default function CookbookDetail() {
     }
     setTitleAnswer(undefined);
     setIsEditingTitle(false);
-    showToast({ message: "Cookbook renamed." });
-  }, [actionData, showToast]);
+    toast("Cookbook renamed.", { tone: "success" });
+  }, [actionData, resendingLostSubmission]);
 
   const openTitleEditor = () => {
     setTitleAnswer(undefined);
@@ -398,42 +437,37 @@ export default function CookbookDetail() {
     setIsEditingTitle(false);
   };
 
-  const handleShare = async () => {
-    await shareContent({
-      title: cookbook.title,
-      text: `${cookbook.title} by ${cookbook.author.username} on Spoonjoy.`,
-      url: canonicalUrl,
-    });
-  };
-
   return (
     <CookbookPage>
-      <div className="mx-auto max-w-5xl">
+      {/* On a foldable held like a book, the cover sits on the left page and the contents on the right. */}
+      <div className="mx-auto max-w-5xl" data-fold-book="">
+        <div data-fold-page="left">
         <div className="mb-6 flex items-center justify-between gap-4 print:hidden">
-          <Link
-            href="/cookbooks"
-            className="inline-flex min-h-11 items-center"
-          >
+          <Link href="/cookbooks" tone="secondary">
             ← Back to cookbooks
           </Link>
-          <Button type="button" plain onClick={handleShare}>
-            Share
-          </Button>
+          <ShareButton
+            variant="plain"
+            url={canonicalUrl}
+            title={cookbook.title}
+            text={`${cookbook.title} by ${cookbook.author.username} on Spoonjoy.`}
+          />
         </div>
 
         <div className="grid gap-8 border-b border-[var(--sj-border-strong)] pb-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
-          <CookbookHeader
+          <PageHeader
             eyebrow="Cookbook"
             title={cookbook.title}
-            ruled={false}
-          >
-            <Text className="m-0">
-              By <strong className="font-medium text-[var(--sj-ink)]">{cookbook.author.username}</strong> ·{" "}
-              <span>
-                {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
-              </span>
-            </Text>
-          </CookbookHeader>
+            size="lg"
+            description={(
+              <Text as="div" tone="muted" className="[overflow-wrap:anywhere]">
+                By <strong className="font-medium text-[var(--sj-ink)]">{cookbook.author.username}</strong> ·{" "}
+                <span>
+                  {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
+                </span>
+              </Text>
+            )}
+          />
           <CookbookCoverArt
             title={cookbook.title}
             recipeCount={cookbook.recipes.length}
@@ -446,11 +480,12 @@ export default function CookbookDetail() {
             titleAsHeading={false}
           />
         </div>
+        </div>
 
         {isOwner && (
-          <ConfirmationDialog
+          <ConfirmDialog
             open={showDeleteDialog}
-            onClose={() => setShowDeleteDialog(false)}
+            onOpenChange={() => setShowDeleteDialog(false)}
             onConfirm={() => {
               setShowDeleteDialog(false);
               // Through the router, like the page's other actions: it follows the action's redirect
@@ -461,16 +496,16 @@ export default function CookbookDetail() {
             description="This will permanently delete the cookbook and remove all recipe associations. The recipes themselves will not be deleted."
             confirmLabel="Delete it"
             cancelLabel="Keep it"
-            destructive
+            tone="destructive"
           />
         )}
 
         {cookbook.recipes.length === 0 ? (
-          <RuledEmptyState title="No recipes yet">
-            <Text className="mb-6">
+          <Empty headingLevel={2} align="start" description={<>
+            <Text tone="muted" className="mb-6">
               {isOwner ? "Add recipes to your cookbook using the owner tools below." : "This cookbook is empty."}
             </Text>
-          </RuledEmptyState>
+          </>} title="No recipes yet" />
         ) : (
           <section aria-labelledby="cookbook-recipes-heading" className="mt-10">
             <div className="max-w-3xl">
@@ -480,64 +515,31 @@ export default function CookbookDetail() {
               </h2>
             </div>
 
-            <ol className="mt-6 border-y border-[var(--sj-border-strong)]">
-              {cookbook.recipes.map((item, index) => {
-                const servingsLabel = formatServingsLabel(item.recipe.servings);
-
-                return (
-                  <li key={item.id} className="border-b border-[var(--sj-border)] last:border-b-0">
-                    <AppLink
-                      href={`/recipes/${item.recipe.id}`}
-                      className="group grid min-h-24 grid-cols-[2.25rem_4.75rem_minmax(0,1fr)] gap-4 py-5 no-underline sm:grid-cols-[3rem_6rem_minmax(0,1fr)_auto] sm:items-center sm:gap-5"
-                      aria-label={item.recipe.title}
-                    >
-                      <span className="font-sj-ui pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)] sm:pt-0">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      <span className="block aspect-[4/3] overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_70%,var(--sj-panel-solid))]">
-                        {item.recipe.coverImageUrl ? (
-                          <img src={item.recipe.coverImageUrl} alt="" {...listImageProps(index, { prioritizeFirst: false })} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
-                        ) : (
-                          <span className="block h-full w-full bg-[linear-gradient(135deg,color-mix(in_srgb,var(--sj-flour)_82%,var(--sj-panel-solid)),var(--sj-panel-solid))]" />
-                        )}
-                      </span>
-                      <span className="min-w-0 self-center">
-                        <span className="font-sj-display block text-2xl/7 font-semibold text-[var(--sj-ink)] sm:text-3xl/8">
-                          {item.recipe.title}
-                        </span>
-                        <CoverProvenanceBadge label={item.recipe.coverProvenanceLabel} className="mt-2" />
-                        <span className="mt-1 block max-w-2xl text-base/6 text-[var(--sj-ink-soft)]">
-                          {item.recipe.description ?? `By ${chefDisplayName(item.recipe.chef.username)}`}
-                        </span>
-                      </span>
-                      {servingsLabel ? (
-                        <span className="font-sj-ui col-start-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] sm:col-start-auto sm:justify-self-end">
-                          {servingsLabel}
-                        </span>
-                      ) : null}
-                    </AppLink>
-                  </li>
-                );
-              })}
-            </ol>
+            <ItemGroup aria-labelledby="cookbook-recipes-heading" ordered variant="divided" className="@container mt-6 [overflow-wrap:anywhere]">
+              {cookbook.recipes.map((item, index) => (
+                <Item
+                  key={item.id}
+                  href={`/recipes/${item.recipe.id}`}
+                  title={item.recipe.title}
+                  description={
+                    <>
+                      <Text lines={2}>{item.recipe.description ?? `By ${chefDisplayName(item.recipe.chef.username)}`}</Text>
+                      {formatServingsLabel(item.recipe.servings) ? <Text size="sm">{formatServingsLabel(item.recipe.servings)}</Text> : null}
+                    </>
+                  }
+                  media={item.recipe.coverImageUrl ? <img src={item.recipe.coverImageUrl} alt="" {...listImageProps(index, { prioritizeFirst: false })} /> : <BookOpen />}
+                  mediaSize={item.recipe.coverImageUrl ? "md" : "icon"}
+                  actions={item.recipe.coverProvenanceLabel ? <CoverProvenanceBadge label={item.recipe.coverProvenanceLabel} /> : undefined}
+                />
+              ))}
+            </ItemGroup>
           </section>
         )}
 
         {isOwner ? (
           <div className="mt-12 print:hidden">
-            <button
-              type="button"
-              className="flex min-h-14 w-full cursor-pointer items-center justify-between gap-4 border-y border-[var(--sj-border)] bg-transparent py-3 text-left font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
-              aria-expanded={showOwnerTools}
-              aria-controls="cookbook-owner-tools"
-              onClick={() => setShowOwnerTools((visible) => !visible)}
-            >
-              <span>Owner tools</span>
-              <span className="text-[var(--sj-ink)]">{showOwnerTools ? "Close" : "Open +"}</span>
-            </button>
-
-            {showOwnerTools ? (
-              <div id="cookbook-owner-tools" className="border-b border-[var(--sj-border)] py-6">
+            <Collapsible title="Owner tools" open={showOwnerTools} onOpenChange={setShowOwnerTools}>
+              <div id="cookbook-owner-tools" className="py-6">
                 <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                   <div>
                     <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Cookbook details</h3>
@@ -548,14 +550,14 @@ export default function CookbookDetail() {
                   <div className="flex flex-wrap gap-2 sm:justify-end">
                     <Button
                       onClick={openTitleEditor}
-                      plain
+                      variant="outline" tone="secondary"
                       size="sm"
                     >
                       Edit title
                     </Button>
                     <Button
                       type="button"
-                      variant="destructive"
+                      variant="soft" tone="destructive"
                       aria-label="Delete cookbook"
                       onClick={() => setShowDeleteDialog(true)}
                     >
@@ -586,7 +588,7 @@ export default function CookbookDetail() {
                       </Button>
                       <Button
                         type="button"
-                        plain
+                        variant="outline" tone="secondary"
                         onClick={closeTitleEditor}
                       >
                         Cancel
@@ -624,7 +626,7 @@ export default function CookbookDetail() {
                           <span className="font-sj-ui text-sm/5 font-semibold text-[var(--sj-ink)]">{item.recipe.title}</span>
                           <Button
                             type="button"
-                            variant="destructive"
+                            variant="soft" tone="destructive"
                             size="sm"
                             className="w-full sm:w-auto"
                             aria-label={`Remove ${item.recipe.title} from cookbook`}
@@ -638,15 +640,15 @@ export default function CookbookDetail() {
                   </div>
                 ) : null}
               </div>
-            ) : null}
+            </Collapsible>
           </div>
         ) : null}
       </div>
 
       {/* Remove recipe confirmation dialog */}
-      <ConfirmationDialog
+      <ConfirmDialog
         open={!!recipeToRemove}
-        onClose={() => setRecipeToRemove(null)}
+        onOpenChange={() => setRecipeToRemove(null)}
         onConfirm={() => {
           /* istanbul ignore next -- @preserve defensive check: dialog is only open when recipeToRemove is set */
           if (recipeToRemove) {
@@ -661,7 +663,7 @@ export default function CookbookDetail() {
         description="This recipe will be removed from this cookbook. The recipe itself won't be deleted."
         confirmLabel="Remove it"
         cancelLabel="Keep it"
-        destructive
+        tone="destructive"
       />
     </CookbookPage>
   );

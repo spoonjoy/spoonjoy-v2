@@ -22,6 +22,7 @@ const textAreaClass =
  * keeps the corner radius, which only the focus outline shows.
  *
  * @internal
+ * @claim "`plain` draws no border, background or" registry/ouro/components/ouro/text-field/text-area.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.test.tsx::TextArea variant and size > draws no frame of its own with variant plain, and still outlines on keyboard focus)
  */
 const textAreaVariants = {
   outline:
@@ -38,6 +39,8 @@ const textAreaVariants = {
  * every width.
  *
  * @internal
+ * @claim "`lg` is 20px on 28px lines" registry/ouro/components/ouro/text-field/text-area.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.test.tsx::TextArea variant and size > sets 20px text on 28px lines with size lg, at phone and desktop widths)
+ * @claim "`md` is a 16px font on" registry/ouro/components/ouro/text-field/text-area.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.test.tsx::TextArea > uses a 16px font on phones, so iOS does not zoom on focus)
  */
 const textAreaSizes = {
   md: "text-base leading-6 sm:pointer-fine:text-sm sm:pointer-fine:leading-5",

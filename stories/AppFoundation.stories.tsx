@@ -2,13 +2,13 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import { Plus, ShoppingCart, Trash2, UtensilsCrossed } from 'lucide-react'
 import { Avatar } from '../app/components/ouro/avatar/avatar'
 import { Badge } from '../app/components/ouro/badge/badge'
-import { Button } from '../app/components/button'
+import { Button } from '~/components/ouro/button/button'
 import { Fieldset } from '../app/components/ouro/field/fieldset'
 import { TextArea } from '../app/components/ouro/text-field/text-area'
 import { TextField } from '../app/components/ouro/text-field/text-field'
-import { Heading, Subheading } from '../app/components/heading'
+import { Heading } from '../app/components/ouro/text/heading'
 import { Link } from '../app/components/ouro/link/link'
-import { Text } from '../app/components/text'
+import { Text } from '../app/components/ouro/text/text'
 
 const meta: Meta = {
   title: 'App/Foundation',
@@ -32,8 +32,8 @@ export const KitchenActions: Story = {
     <section className="sj-panel max-w-3xl rounded-[var(--sj-radius-surface)] p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <Heading>Tonight's Kitchen</Heading>
-          <Text className="mt-2 max-w-xl">
+          <Heading level={1} size="xl">Tonight's Kitchen</Heading>
+          <Text tone="muted" className="mt-2 max-w-xl">
             The active button set is deliberately small: default, plain, and destructive. If a flow needs more color than
             that, it should earn it in product design first.
           </Text>
@@ -50,8 +50,8 @@ export const KitchenActions: Story = {
           <ShoppingCart data-slot="icon" aria-hidden="true" />
           Shopping list
         </Button>
-        <Button plain>Cancel</Button>
-        <Button variant="destructive">
+        <Button variant="outline" tone="secondary">Cancel</Button>
+        <Button variant="soft" tone="destructive">
           <Trash2 data-slot="icon" aria-hidden="true" />
           Delete recipe
         </Button>
@@ -92,8 +92,8 @@ export const PantryCardLanguage: Story = {
       <div className="space-y-3 p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <Subheading level={2}>Lemon pasta</Subheading>
-            <Text className="mt-1">A fast, bright weeknight recipe with pantry-friendly ingredients.</Text>
+            <Heading level={2}>Lemon pasta</Heading>
+            <Text tone="muted" className="mt-1">A fast, bright weeknight recipe with pantry-friendly ingredients.</Text>
           </div>
           <Avatar name="Ari Mendelow" initials="AM" size="md" />
         </div>
@@ -102,7 +102,7 @@ export const PantryCardLanguage: Story = {
           <Badge variant="soft">20 minutes</Badge>
           <Badge variant="soft">Serves 2</Badge>
         </div>
-        <Text>
+        <Text tone="muted">
           See the full flow in <Link href="/recipes/lemon-pasta">recipe view</Link>.
         </Text>
       </div>

@@ -15,6 +15,8 @@ import { commands, page } from "vitest/browser";
  * @example
  * await rotate(844, 390); // landscape
  * afterEach(() => rotate(390, 844));
+ * @claim "Resizes the test viewport, as when" registry/ouro/lib/ouro/testing/rotate.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/rotate.touch.test.ts::the next test starts at zoom 1 in portrait)
+ * @claim "Resizes the test viewport, as when" registry/ouro/lib/ouro/testing/rotate.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/rotate.touch.test.ts::rotate names the test and still resizes and resets the zoom when called mid-test)
  */
 export async function rotate(width: number, height: number): Promise<void> {
   const zoom = await commands.pageZoom();

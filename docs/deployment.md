@@ -20,6 +20,8 @@ QA differs from production in one knowingly accepted way: it runs `COOK_SESSION_
 
 The web client sends `X-Spoonjoy-Cook-User` with every cook-session request. The Worker requires it from cookie-session (browser) callers and answers `428 user_header_required` without it, which the current page answers by asking for a reload; Bearer callers may omit it, because a token belongs to one user and is not shared between signed-in identities the way a browser's cookies are. When the header names someone other than the authenticated user (for example after signing in as someone else in another tab), the Worker answers `412 user_mismatch`; the tab then clears its unsent changes, stops without saving, and asks for a reload.
 
+When a cook-session read throws an error that Cloudflare marks `retryable: true`, the Worker waits 100 ms and makes one more GET with a fresh Durable Object stub. A reset can leave the first stub broken. It never replays an overloaded request, an unmarked error, an ordinary HTTP error response, or a start/PATCH write, whose changes might already have committed. A failed second read still reaches the normal error handler; the Worker never invents empty progress to hide a storage failure.
+
 The client retries only transient failures (network errors, `429`, and `5xx` other than `503 cook_session_protocol_unavailable`), at most five times and only while the page is visible. `401` shows "Signed out" and stops. `403`, `400`, `404` from start, and the protocol-unavailable `503` stop syncing for that page view only, and nothing is stored, so the next load of the recipe tries again (this matters during a gradual `protocol-v1-canary` rollout).
 
 Leaving a recipe inside the app lets a save in flight finish, then sends whatever is still pending, replaying conflicts and starting the session if needed. It stops after 10 seconds, and only while the page is visible. That work belongs to the recipe it started on: it keeps that recipe's ids and never changes the page, which may already show another recipe. If a new page opens the same recipe for the same cook, the old one stops at once. Hiding or closing the tab sends pending progress once with `keepalive`, but only when no save is in flight and the session already exists. Ordinary unmount lets an outstanding keepalive save finish within the same 10-second leave budget rather than aborting it immediately. Otherwise, or if that request is lost, the unsent change stays in `localStorage` and the next visit sends it. Deleting the recipe is different: submitting the confirmed delete aborts outstanding owned fetches, including keepalive saves, ignores obsolete completions, and sends no further sync work. This cannot undo requests already processed by the server or guarantee that a browser never receives a 404. Only the delete action's successful redirect clears that cook/recipe's cached progress (and that recipe's device-only progress); unconfirmed errors retain it for recovery. Failures for live recipes are not broadly suppressed.
@@ -43,7 +45,7 @@ Spoonjoy has a separate QA Worker and separate Cloudflare state for live/manual/
 QA resources:
 
 - Worker URL: `https://spoonjoy-v2-qa.mendelow-studio.workers.dev`
-- D1 database: `spoonjoy-qa`
+- D1 database: `spoonjoy-qa-2`
 - R2 bucket: `spoonjoy-photos-qa`
 - Rate-limit namespaces: `2001`, `2002`, `2003`, `2004`
 - `AUTH_IP_RATE_LIMITER` (namespace `2003`) is 60/minute in QA, vs. production's 20/minute (namespace `1003`): CI's Journeys workflow exercises QA from shared GitHub-hosted runner IPs (personas + per-run scratch users signing in, plus the journeys' own sign-ins), so QA needs headroom a single real client would never need. Production is deliberately left tighter; do not raise it to match QA.
@@ -54,7 +56,7 @@ QA resources:
 First-time QA resource creation:
 
 ```bash
-wrangler d1 create spoonjoy-qa
+wrangler d1 create spoonjoy-qa-2
 wrangler r2 bucket create spoonjoy-photos-qa
 ```
 
@@ -71,7 +73,7 @@ wrangler secret put VAPID_SUBJECT --env qa
 Optional QA secrets and vars:
 
 - Set `POSTHOG_DISABLED=true` in QA unless you are intentionally testing server telemetry and PostHog alerts.
-- Use `IMAGE_PROVIDER_PRIMARY=gemini`, `IMAGE_PROVIDER_FALLBACKS=openai`, and `GEMINI_IMAGE_MODEL=gemini-3.1-flash-image` when QA should exercise the same image-provider policy as production.
+- QA never pays for an image: `wrangler.json`'s `env.qa` sets `IMAGE_PROVIDER_PRIMARY=sample`, so the shared QA Worker and every Journeys run's Worker make AI covers and editorial covers from the sample images under `samples/covers/` in `spoonjoy-photos-qa` (from `assets/sample-covers/`, put there by `node scripts/qa-sample-covers.mjs`, which the QA Image Cover Smoke and Journeys workflows run). The sample is chosen by recipe id, and storage, the cover record and the UI run as for a generated image. Sample mode never falls back to a paid provider, even when QA has a provider key.
 - Keep `SPOONJOY_CSP_MODE=enforce` in QA. QA is the proof environment for the blocking `Content-Security-Policy` header before the same exact source SHA is released to production.
 - OAuth callback URLs must include the QA origin for Google/GitHub providers when those providers are enabled in QA. Apple OAuth callback verification remains production-only because the Apple Service ID is registered to the production return URL.
 - WebAuthn uses the request origin as RP origin, so QA passkey testing must happen on `https://spoonjoy-v2-qa.mendelow-studio.workers.dev`.
@@ -147,6 +149,7 @@ Notes:
 - `SESSION_SECRET` protects auth sessions and must be high entropy in production.
 - Google, GitHub, and Apple OAuth secrets are required for the corresponding OAuth login/account-linking provider. Native Sign in with Apple also needs `APPLE_NATIVE_CLIENT_IDS`, currently `app.spoonjoy,app.spoonjoy.mac,app.spoonjoy.Spoonjoy,app.spoonjoy.Spoonjoy.mac`, so the backend accepts iOS and macOS identity-token audiences after the Apple App IDs are registered. Keep the canonical bundle IDs first; the `.Spoonjoy` IDs are legacy internal-build aliases.
 - `OPENAI_API_KEY` enables ingredient parsing and the OpenAI recipe-image provider. Missing local keys fall back to deterministic parsing paths where supported, but production should set the secret before enabling AI-assisted flows.
+- To set production's `OPENAI_API_KEY` without a Cloudflare login, set the GitHub `production` environment secret `OPENAI_API_KEY` and run the `Production Image Key` workflow from main. It stores the key, `IMAGE_PROVIDER_PRIMARY=openai` and `IMAGE_PROVIDER_FALLBACKS=gemini` in one new Worker version tagged with the source commit production already runs, deploys that version only if no other version appeared meanwhile, and reports the Worker's secret names and the last 45 days of AI cover outcomes. Its default `report` mode reads the report without changing anything. A plain `wrangler secret put` would deploy an untagged version, which the next Production Deploy refuses.
 - `GOOGLE_API_KEY` or `GEMINI_API_KEY` enables Gemini recipe-image fallback. Prefer `GOOGLE_API_KEY` for production unless a provider-specific alias is needed.
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` are required for `/api/push/public-key` and web-push subscription flows.
 - `POSTHOG_KEY` is optional. When set, it enables server lifecycle telemetry for API v1, legacy API, MCP, OAuth, and Worker error capture. Leave it unset, or set `POSTHOG_DISABLED=true`, to keep server telemetry off.
@@ -252,6 +255,13 @@ INGREDIENT_PARSE_MAX_RETRIES=1
 Basic local app development does not require these values. The app uses safe local fallbacks for sessions and stores uploaded images as data URLs when the `PHOTOS` binding is unavailable.
 
 ## Preflight
+
+The locked test toolchain uses `@cloudflare/vitest-plugin` (the supported name for the former
+Workers pool), with its Wrangler kept at the existing `4.90.0` pin. Zod is pinned and overridden
+to `4.6.6` for GHSA-mrhx-c7xc-m3w5. `patches/zod@4.6.6.patch` removes two annotation tokens from
+explanatory comments that Rollup otherwise mistakes for misplaced optimization annotations.
+It changes no JavaScript statements or real optimization annotations; the normal build warning
+gate remains unchanged. Recheck whether this packaging patch is needed when upgrading Zod.
 
 Run the machine-checkable preflight before production deploys:
 

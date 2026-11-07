@@ -368,7 +368,7 @@ describe("cleanup-local-qa-data", () => {
       target: {
         targetEnv: "qa",
         baseUrl: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
-        d1Target: "QA D1 spoonjoy-qa (--remote --env qa)",
+        d1Target: "QA D1 spoonjoy-qa-2 (--remote --env qa)",
         r2Target: "QA R2 spoonjoy-photos-qa (--remote)",
         destructiveScope: "QA disposable test data only",
       },
@@ -436,7 +436,7 @@ describe("cleanup-local-qa-data", () => {
     expect(cleanup.resolveRunScopedQaTarget(target, "DB", { env: { qa: { d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa-run-1-1" }] } } }))
       .toMatchObject({ baseUrl: target.baseUrl, d1Target: "QA run D1 spoonjoy-qa-run-1-1 (--remote --env qa, rewritten by qa-run-scope)" });
     expect(cleanup.resolveRunScopedQaTarget(target, "OTHER_DB", runConfig)).toBe(target);
-    expect(cleanup.resolveRunScopedQaTarget(target, "DB", { env: { qa: { d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa" }] } } })).toBe(target);
+    expect(cleanup.resolveRunScopedQaTarget(target, "DB", { env: { qa: { d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa-2" }] } } })).toBe(target);
     expect(cleanup.resolveRunScopedQaTarget(target, "DB", {})).toBe(target);
     const local = cleanup.parseCleanupArgs([]).target;
     expect(cleanup.resolveRunScopedQaTarget(local, "DB", runConfig)).toBe(local);
@@ -454,7 +454,7 @@ describe("cleanup-local-qa-data", () => {
 
     expect(readWranglerConfig).toHaveBeenCalledTimes(1);
     expect(stdout.text()).toContain("D1 target: QA run D1 spoonjoy-qa-run-9-1 (--remote --env qa, rewritten by qa-run-scope)\n");
-    expect(stdout.text()).not.toContain("D1 target: QA D1 spoonjoy-qa ");
+    expect(stdout.text()).not.toContain("D1 target: QA D1 spoonjoy-qa-2 ");
   });
 
   it("formats the target summary printed before cleanup commands", () => {
@@ -463,7 +463,7 @@ describe("cleanup-local-qa-data", () => {
     expect(cleanup.formatCleanupTargetSummary(options.target)).toEqual([
       "Target environment: qa",
       "Base URL: https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
-      "D1 target: QA D1 spoonjoy-qa (--remote --env qa)",
+      "D1 target: QA D1 spoonjoy-qa-2 (--remote --env qa)",
       "R2 target: QA R2 spoonjoy-photos-qa (--remote)",
       "Destructive scope: QA disposable test data only",
     ]);
@@ -579,6 +579,7 @@ describe("cleanup-local-qa-data", () => {
       cleanup.buildLocalR2DeleteArgs("spoons/codex-user/recipe-1/spoon.jpg"),
       cleanup.buildLocalR2GetArgs("spoons/codex-user/recipe-1/spoon.jpg"),
     ]));
+    expect(stdout.text()).toContain("Deleting 1 local R2 key, 1 at a time.");
     expect(stdout.text()).toContain("Verified deleted local R2 keys: spoons/codex-user/recipe-1/spoon.jpg");
   });
 
@@ -755,14 +756,17 @@ describe("cleanup-local-qa-data", () => {
     expect(joinedCalls.filter((command) => command.includes("candidate_r2_keys"))).not.toEqual(
       expect.arrayContaining([expect.stringContaining("FROM SearchDocument")]),
     );
-    expect(calls.filter((args) => args.includes("object"))).toEqual([
-      cleanup.buildQaR2DeleteArgs("profiles/codex-user/avatar.jpg"),
-      cleanup.buildQaR2GetArgs("profiles/codex-user/avatar.jpg"),
-      cleanup.buildQaR2DeleteArgs("recipes/codex-user/recipe-1/source.jpg"),
-      cleanup.buildQaR2GetArgs("recipes/codex-user/recipe-1/source.jpg"),
-      cleanup.buildQaR2DeleteArgs("spoons/codex-user/recipe-1/spoon.jpg"),
-      cleanup.buildQaR2GetArgs("spoons/codex-user/recipe-1/spoon.jpg"),
-    ]);
+    // QA keys are deleted several at a time, so only each key's own order is fixed: delete, then check.
+    const objectCalls = calls.filter((args) => args.includes("object")).map((args) => args.join(" "));
+    const r2Keys = ["profiles/codex-user/avatar.jpg", "recipes/codex-user/recipe-1/source.jpg", "spoons/codex-user/recipe-1/spoon.jpg"];
+    expect(objectCalls).toHaveLength(r2Keys.length * 2);
+    for (const key of r2Keys) {
+      const deleteAt = objectCalls.indexOf(cleanup.buildQaR2DeleteArgs(key).join(" "));
+      const getAt = objectCalls.indexOf(cleanup.buildQaR2GetArgs(key).join(" "));
+      expect(deleteAt).toBeGreaterThan(-1);
+      expect(getAt).toBeGreaterThan(deleteAt);
+    }
+    expect(stdout.text()).toContain("Deleting 3 QA R2 keys, 4 at a time.");
     expect(joinedCalls.at(-1)).toContain(cleanup.buildScratchCleanupSql());
     expect(stdout.text()).toContain("Retained QA R2 keys: recipes/not-disposable/recipe-1/source.jpg");
     expect(stdout.text()).toContain("Skipped SearchDocument cleanup: table absent.");
@@ -1752,6 +1756,53 @@ describe("cleanup-local-qa-data", () => {
     expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
       expect.arrayContaining([expect.stringContaining("r2 object")]),
     );
+  });
+
+  describe("deleting many R2 keys", () => {
+    const keys = Array.from({ length: 20 }, (_, index) => `covers/codex-${index}.jpg`);
+    function manyKeysRun(failKey?: string) {
+      let inFlight = 0;
+      let mostInFlight = 0;
+      const deletes: string[] = [];
+      const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+        const command = args.join(" ");
+        if (command.includes("candidate_r2_keys")) {
+          return { stdout: wranglerJson(keys.map((key) => ({ action: "delete", key }))), stderr: "" };
+        }
+        if (!command.includes("r2 object")) return { stdout: wranglerJson(), stderr: "" };
+        inFlight += 1;
+        mostInFlight = Math.max(mostInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        inFlight -= 1;
+        if (command.includes("r2 object delete")) {
+          deletes.push(command);
+          if (failKey && command.includes(failKey)) throw new Error("Command failed: wrangler r2 object delete: auth");
+          return { stdout: "", stderr: "" };
+        }
+        throw "NoSuchKey";
+      });
+      return { runCommand, deletes, mostInFlight: () => mostInFlight };
+    }
+
+    it("deletes four at a time and verifies every key", async () => {
+      const stdout = writableBuffer();
+      const run = manyKeysRun();
+      await cleanup.runCleanupCli({ argv: ["--target-env", "qa", "--apply"], runCommand: run.runCommand, stdout: stdout.stream, stderr: writableBuffer().stream });
+
+      expect(cleanup.R2_DELETE_CONCURRENCY).toBe(4);
+      expect(run.mostInFlight()).toBe(4);
+      expect(run.deletes).toHaveLength(keys.length);
+      expect(stdout.text()).toContain("Deleting 20 QA R2 keys, 4 at a time.");
+      expect(stdout.text()).toContain(`Verified deleted QA R2 keys: ${keys.join(", ")}`);
+    });
+
+    it("stops taking new keys after one fails, and reports that failure", async () => {
+      const run = manyKeysRun("covers/codex-1.jpg");
+      await expect(
+        cleanup.runCleanupCli({ argv: ["--target-env", "qa", "--apply"], runCommand: run.runCommand, stdout: writableBuffer().stream, stderr: writableBuffer().stream }),
+      ).rejects.toThrow(/auth/);
+      expect(run.deletes.length).toBeLessThan(keys.length);
+    });
   });
 
   it("verifies R2 deletion when missing errors are reported as strings or stdout", async () => {

@@ -4,8 +4,9 @@
 // log lines kept for per-run QA Workers only, the completeness flag, and the workflow wiring that
 // keeps the raw tail stream out of every upload.
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { expectNoSecrets, FAKE_SECRETS, secretLine, secretMessage } from "../fixtures/fake-secrets";
@@ -79,7 +80,7 @@ function hostileEvent(overrides: TailEvent = {}): TailEvent {
   };
 }
 
-const INVOCATION_KEYS = ["cpuTime", "eventTimestamp", "exceptions", "method", "outcome", "path", "status", "wallTime"];
+const INVOCATION_KEYS = ["cpuTime", "entrypoint", "eventTimestamp", "exceptions", "executionModel", "method", "outcome", "path", "status", "wallTime"];
 
 describe("summarize-worker-tail.jq", () => {
   it("copies only allowlisted fields, so no header, cookie, body, log, cf or query value leaves the tail", () => {
@@ -89,18 +90,26 @@ describe("summarize-worker-tail.jq", () => {
       "budget",
       "byPath",
       "complete",
+      "d1ReadReissues",
       "d1TransientErrors",
       "firstEventTimestamp",
       "firstExceptions",
       "hungInvocations",
+      "isolates",
       "lastEventTimestamp",
       "nonOkInvocations",
       "outcomes",
+      "platformRetries",
       "serverErrorInvocations",
+      "slowCalls",
       "slowest",
       "stalledInvocations",
+      "stalledRequests",
       "tailAliveAtStop",
+      "tailCoverage",
+      "tailReads",
       "tailReconnects",
+      "tailSamplingNotices",
       "totalInvocations",
     ]);
     expect(Object.keys(summary.d1TransientErrors).sort()).toEqual(["notRetried", "notRetriedWrites", "retried", "total", "writeOperations"]);
@@ -108,7 +117,7 @@ describe("summarize-worker-tail.jq", () => {
       expect(Object.keys(invocation).sort()).toEqual(INVOCATION_KEYS);
       for (const exception of invocation.exceptions) expect(Object.keys(exception).sort()).toEqual(["message", "name"]);
     }
-    for (const entry of summary.byPath) expect(Object.keys(entry).sort()).toEqual(["count", "cpuTime", "path", "wallTime"]);
+    for (const entry of summary.byPath) expect(Object.keys(entry).sort()).toEqual(["count", "cpuTime", "path", "statuses", "wallTime"]);
     expect(Object.keys(summary.budget).sort()).toEqual(["cpuTimeP95Ms", "overBudget"]);
     for (const entry of summary.budget.overBudget) expect(Object.keys(entry).sort()).toEqual(["count", "cpuTime", "path"]);
 
@@ -184,6 +193,95 @@ describe("summarize-worker-tail.jq", () => {
     });
   });
 
+  it("marks the log complete when at every moment of the suite a tail was connected, however often each reconnected", () => {
+    const window = ["--argjson", "suiteWindow", JSON.stringify({ from: 10_000, to: 100_000 })];
+    const connections = (list: object[]) => ["--argjson", "tailConnections", JSON.stringify(list), ...window];
+    const overlapping = [
+      { tail: "a", startedAt: 0, endedAt: 60_000 },
+      { tail: "b", startedAt: 5_000, endedAt: null },
+      { tail: "a", startedAt: 62_000, endedAt: null },
+    ];
+    expect(summarize([hostileEvent()], true, ["--argjson", "tailReconnects", "1", ...connections(overlapping)]).summary).toMatchObject({
+      complete: true,
+      tailReconnects: 1,
+      tailCoverage: { tails: 2, connections: 3, uncoveredMs: 0, gapCount: 0, longestGapMs: 0, gaps: [] },
+    });
+
+    // Both down at once: a's first connection is counted until 20 s before it ended (a dead
+    // socket goes unnoticed for up to two 10 s pings), its second from 5 s after it started.
+    const bothDown = [
+      { tail: "a", startedAt: 0, endedAt: 60_000 },
+      { tail: "b", startedAt: 5_000, endedAt: 50_000 },
+      { tail: "a", startedAt: 62_000, endedAt: null },
+    ];
+    expect(summarize([hostileEvent()], true, connections(bothDown)).summary).toMatchObject({
+      complete: false,
+      tailCoverage: { uncoveredMs: 27_000, gapCount: 1, longestGapMs: 27_000, gaps: [{ from: 40_000, to: 67_000, ms: 27_000 }] },
+    });
+
+    // No tail at the end of the suite.
+    const ended = [{ tail: "a", startedAt: 0, endedAt: 80_000 }, { tail: "b", startedAt: 5_000, endedAt: 90_000 }];
+    expect(summarize([hostileEvent()], true, connections(ended)).summary.tailCoverage)
+      .toMatchObject({ uncoveredMs: 30_000, gaps: [{ from: 70_000, to: 100_000, ms: 30_000 }] });
+
+    // Without both arguments, or with ones that are not what the workflow writes, the old rule holds.
+    expect(summarize([hostileEvent()], true, ["--argjson", "tailConnections", JSON.stringify(overlapping)]).summary)
+      .toMatchObject({ complete: true, tailCoverage: null });
+    expect(summarize([hostileEvent()], true, ["--argjson", "tailConnections", "null", "--argjson", "suiteWindow", '{"from": null, "to": 5}']).summary)
+      .toMatchObject({ complete: true, tailCoverage: null });
+    expect(summarize([hostileEvent()], true, ["--argjson", "tailReconnects", "2", "--argjson", "tailConnections", '"x"', ...window]).summary)
+      .toMatchObject({ complete: false, tailCoverage: null });
+    // A tail that was not running at the stop still makes the log incomplete.
+    expect(summarize([hostileEvent()], false, connections(overlapping)).summary).toMatchObject({ complete: false });
+  });
+
+  it("names the longest gap among all of them, not only the ten it lists", () => {
+    const window = ["--argjson", "suiteWindow", JSON.stringify({ from: 0, to: 1_000_000 })];
+    // Twelve 1 s connections 30 s apart, then one 400 s later: twelve gaps, the last the longest.
+    const list = [...Array.from({ length: 12 }, (_, index) => ({ tail: "a", startedAt: index * 30_000, endedAt: index * 30_000 + 26_000 })),
+      { tail: "a", startedAt: 750_000, endedAt: null }];
+    const coverage = summarize([hostileEvent()], true, ["--argjson", "tailConnections", JSON.stringify(list), ...window]).summary.tailCoverage;
+    expect(coverage.gapCount).toBe(13);
+    expect(coverage.gaps).toHaveLength(10);
+    expect(coverage.longestGapMs).toBe(755_000 - 336_000);
+  });
+
+  it("keeps only the counts of what each tail delivered, and marks the log incomplete when Cloudflare dropped events", () => {
+    const reads = (value: unknown) => {
+      const dir = mkdtempSync(join(tmpdir(), "tail-reads-"));
+      const file = join(dir, "read.json");
+      writeFileSync(file, JSON.stringify(value));
+      return ["--slurpfile", "tailReads", file];
+    };
+    const delivered = {
+      tails: {
+        a: { connections: 2, events: 1769, overloadNotices: 0, unreadableLines: 1, cutOff: 1, path: CANARIES.query },
+        b: { connections: 2, events: 1112, overloadNotices: 0, unreadableLines: 0, cutOff: 0 },
+      },
+      eventsSeen: 2881,
+      eventsKept: 1769,
+      note: CANARIES.body,
+    };
+    const { summary, raw } = summarize([hostileEvent()], true, reads(delivered));
+    expect(summary).toMatchObject({
+      complete: true,
+      tailReads: { tails: 2, eventsSeen: 2881, eventsKept: 1769, eventsPerTail: [1769, 1112], overloadNotices: 0, unreadableLines: 1, cutOff: 1 },
+    });
+    expect(raw).not.toContain(CANARIES.query);
+    expect(raw).not.toContain(CANARIES.body);
+
+    const sampled = { ...delivered, tails: { ...delivered.tails, b: { ...delivered.tails.b, overloadNotices: 2 } } };
+    expect(summarize([hostileEvent()], true, reads(sampled)).summary).toMatchObject({ complete: false, tailReads: { overloadNotices: 2 }, tailSamplingNotices: 2 });
+    // Notices wrangler wrote to its error output count too.
+    expect(summarize([hostileEvent()], true, [...reads(delivered), "--argjson", "tailErrorOverloadNotices", "1"]).summary)
+      .toMatchObject({ complete: false, tailSamplingNotices: 1 });
+    expect(summarize([hostileEvent()], true, ["--argjson", "tailErrorOverloadNotices", "3"]).summary)
+      .toMatchObject({ complete: false, tailReads: null, tailSamplingNotices: 3 });
+    expect(summarize([hostileEvent()], true, reads(null)).summary).toMatchObject({ complete: true, tailReads: null });
+    expect(summarize([hostileEvent()], true, reads({ tails: { a: { events: -3, overloadNotices: "9" } } })).summary.tailReads)
+      .toEqual({ tails: 1, eventsSeen: 0, eventsKept: 0, eventsPerTail: [0], overloadNotices: 0, unreadableLines: 0, cutOff: 0 });
+  });
+
   it("marks a tail that reconnected after a drop incomplete, and records how often it reconnected", () => {
     expect(summarize([hostileEvent()], true).summary).toMatchObject({ complete: true, tailReconnects: 0 });
     expect(summarize([hostileEvent()], true, ["--argjson", "tailReconnects", "0"]).summary)
@@ -216,6 +314,32 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.d1TransientErrors).toEqual({ total: 4, retried: 1, notRetried: 3, notRetriedWrites: 2, writeOperations: none });
     expect(raw).not.toContain(CANARIES.logLine);
     expect(summarize([]).summary.d1TransientErrors).toEqual({ total: 0, retried: 0, notRetried: 0, notRetriedWrites: 0, writeOperations: none });
+  });
+
+  it("counts the D1 reads sent again after stalling, how many the re-issued try answered and how many failed both times, reading only that field", () => {
+    const line = (answeredBy: unknown) => JSON.stringify({ event: "d1_read_reissue", call: "batch", table: "Cookbook", attempt: 1, answeredBy, sql: CANARIES.query });
+    const { summary, raw } = summarize([
+      { outcome: "ok", logs: [{ level: "warn", message: [line("reissue")] }, { level: "warn", message: [line("original")] }, { level: "warn", message: [line("neither")] }] },
+      { outcome: "ok", logs: [{ level: "warn", message: [{ event: "d1_read_reissue", answeredBy: CANARIES.body }] }, { level: "warn", message: ["not json"] }] },
+    ]);
+
+    expect(summary.d1ReadReissues).toEqual({ total: 4, answeredByReissue: 1, failedBoth: 1 });
+    expect(raw).not.toContain(CANARIES.query);
+    expect(raw).not.toContain(CANARIES.body);
+  });
+
+  it("counts the platform faults our code tried again, by call label alone", () => {
+    const line = (call: unknown) => JSON.stringify({ event: "platform_retry", call, attempt: 2, code: "10001", key: CANARIES.query });
+    const { summary, raw } = summarize([
+      { outcome: "ok", logs: [{ level: "warn", message: [line("r2.put")] }, { level: "warn", message: [line("r2.put")] }] },
+      { outcome: "ok", logs: [{ level: "warn", message: [{ event: "platform_retry", call: "cook_session.start", marked: false }] }, { level: "warn", message: [line(CANARIES.body)] }] },
+      { outcome: "ok", logs: [{ level: "warn", message: [{ event: "platform_retry", call: "cook_session.read", marked: true }] }, { level: "warn", message: ["not json"] }] },
+    ]);
+
+    expect(summary.platformRetries).toEqual({ total: 5, byCall: { "cook_session.read": 1, "cook_session.start": 1, other: 1, "r2.put": 2 }, unmarked: 1 });
+    expect(raw).not.toContain(CANARIES.query);
+    expect(raw).not.toContain(CANARIES.body);
+    expect(summarize([]).summary.platformRetries).toEqual({ total: 0, byCall: {}, unmarked: 0 });
   });
 
   it("counts the writes an operation retried safely, found applied or gave up on, and leaves out of notRetriedWrites the ones it handled", () => {
@@ -289,6 +413,7 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.byPath[0]).toEqual({
       path: "/recipes/:id.data",
       count: 5,
+      statuses: { "200": 5 },
       wallTime: { p50: 300, p95: 3840, max: 3840 },
       cpuTime: { p50: 22, p95: 27, max: 27 },
     });
@@ -303,9 +428,22 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.byPath.find((entry: { path: string }) => entry.path === "/search")).toEqual({
       path: "/search",
       count: 1,
+      statuses: { "200": 1 },
       wallTime: { p50: null, p95: null, max: null },
       cpuTime: { p50: null, p95: null, max: null },
     });
+  });
+
+  it("counts each route's responses by HTTP status, so sign-in 429s from the rate limiter are on record", () => {
+    const post = (path: string, status: number | undefined) => ({
+      outcome: status === undefined ? "canceled" : "ok",
+      eventTimestamp: 1,
+      event: { request: { url: `https://qa.example${path}`, method: "POST" }, ...(status === undefined ? {} : { response: { status } }) },
+    });
+
+    const { summary } = summarize([post("/login.data", 202), post("/login.data", 202), post("/login.data", 429), post("/login.data", undefined)]);
+
+    expect(summary.byPath.find((entry: { path: string }) => entry.path === "/login.data")?.statuses).toEqual({ "202": 2, "429": 1, none: 1 });
   });
 
   it("lists the routes whose p95 CPU time is over the 10 ms budget, worst first", () => {
@@ -363,6 +501,7 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.byPath).toEqual([{
       path: "/health",
       count: count + 1,
+      statuses: { "200": count + 1 },
       cpuTime: { p50, p95, max: count },
       wallTime: { p50, p95, max: count },
     }]);
@@ -393,9 +532,9 @@ describe("summarize-worker-tail.jq", () => {
 
     expect(summary.serverErrorInvocations).toHaveLength(50);
     expect(summary.serverErrorInvocations.slice(0, 3)).toEqual([
-      { outcome: "ok", path: "/login.data", method: "POST", status: 500, cpuTime: 9, wallTime: 40, eventTimestamp: 3, exceptions: [] },
-      { outcome: "ok", path: "/recipes/cmg1abcdefghijklmnopqrstu.data", method: "POST", status: 502, cpuTime: 9, wallTime: 40, eventTimestamp: 4, exceptions: [] },
-      { outcome: "exception", path: "/shopping-list.data", method: "POST", status: 500, cpuTime: 9, wallTime: 40, eventTimestamp: 5, exceptions: [] },
+      { outcome: "ok", path: "/login.data", method: "POST", status: 500, cpuTime: 9, wallTime: 40, eventTimestamp: 3, executionModel: null, entrypoint: null, exceptions: [] },
+      { outcome: "ok", path: "/recipes/cmg1abcdefghijklmnopqrstu.data", method: "POST", status: 502, cpuTime: 9, wallTime: 40, eventTimestamp: 4, executionModel: null, entrypoint: null, exceptions: [] },
+      { outcome: "exception", path: "/shopping-list.data", method: "POST", status: 500, cpuTime: 9, wallTime: 40, eventTimestamp: 5, executionModel: null, entrypoint: null, exceptions: [] },
     ]);
     expect(summary.serverErrorInvocations.map((entry: { status: number }) => entry.status)).not.toContain(404);
   });
@@ -450,11 +589,140 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.stalledInvocations).toBe(2);
   });
 
+  describe("what a stalled request waited on", () => {
+    const slowCall = (fields: Record<string, unknown>) =>
+      JSON.stringify({ event: "slow_call", operation: "read", table: null, attempt: 1, settled: false, outcome: null, ...fields });
+    const served = (isolate: unknown, request: unknown, arrivedAt: unknown) => JSON.stringify({ event: "isolate_request", isolate, request, arrivedAt });
+    const runsIn = (isolate: unknown, colo: unknown) => JSON.stringify({ event: "isolate_colo", isolate, runsIn: colo });
+    const request = (path: string, cpuTime: number, wallTime: number, eventTimestamp: number, messages: unknown[], extra: TailEvent = {}) => ({
+      outcome: "canceled",
+      cpuTime,
+      wallTime,
+      eventTimestamp,
+      logs: messages.map((message) => ({ level: "warn", message: [message] })),
+      event: { request: { url: `https://qa.example${path}`, method: "GET" } },
+      ...extra,
+    });
+
+    it("attaches each stalled request's slow calls and where it ran, so the stall names the call it waited on", () => {
+      // Run 40241845409: GET /cookbooks/:id.data waited 5,395 ms on 1 ms of CPU and was cancelled.
+      const { summary } = summarize([
+        request("/search", 30, 1400, 10, [
+          served("0a1b2c3d", 1, "IAD"),
+          runsIn("0a1b2c3d", "IAD"),
+          slowCall({ call: "d1.first", table: "User", waitedMs: 1002, operation: "write", attempt: 2 }),
+        ]),
+        request("/api/cook-sessions/qa-kitchen-recipe-lemon-rice", 2, 3902, 20, [
+          served("0a1b2c3d", 2, "IAD"),
+          slowCall({ call: "cook_session.fetch", waitedMs: 1000 }),
+          slowCall({ call: "cook_session.fetch", waitedMs: 3890, settled: true, outcome: "ok" }),
+        ]),
+        request("/api/cook-sessions/qa-kitchen-recipe-lemon-rice", 1, 3800, 21, [], { executionModel: "durableObject", entrypoint: "CookSession" }),
+        request("/cookbooks/cmg1abcdefghijklmnopqrstu.data", 1, 5395, 30, [
+          served("ffee0011", 1, "IAD"),
+          slowCall({ call: "d1.batch", table: "Cookbook", waitedMs: 1001 }),
+        ]),
+        request("/health", 1, 20, 40, [served("ffee0011", 2, "EWR"), runsIn("ffee0011", "ORD")]),
+      ]);
+
+      expect(summary.stalledInvocations).toBe(3);
+      expect(summary.stalledRequests.map((entry: { path: string; ranOn: unknown; slowCalls: unknown[] }) => [entry.path, entry.ranOn, entry.slowCalls])).toEqual([
+        ["/api/cook-sessions/qa-kitchen-recipe-lemon-rice", { isolate: "0a1b2c3d", request: 2, arrivedAt: "IAD", runsIn: "IAD" }, [
+          { call: "cook_session.fetch", operation: "read", table: null, attempt: 1, waitedMs: 1000, settled: false, outcome: null },
+          { call: "cook_session.fetch", operation: "read", table: null, attempt: 1, waitedMs: 3890, settled: true, outcome: "ok" },
+        ]],
+        ["/api/cook-sessions/qa-kitchen-recipe-lemon-rice", null, []],
+        ["/cookbooks/cmg1abcdefghijklmnopqrstu.data", { isolate: "ffee0011", request: 1, arrivedAt: "IAD", runsIn: "ORD" }, [
+          { call: "d1.batch", operation: "read", table: "Cookbook", attempt: 1, waitedMs: 1001, settled: false, outcome: null },
+        ]],
+      ]);
+      expect(summary.stalledRequests[1]).toMatchObject({ executionModel: "durableObject", entrypoint: "CookSession" });
+      for (const entry of summary.stalledRequests) {
+        expect(Object.keys(entry).sort()).toEqual([...INVOCATION_KEYS, "ranOn", "slowCalls"].sort());
+      }
+
+      // A slow call counts once, when it was reported waiting, whether or not the request stalled.
+      expect(summary.slowCalls.total).toBe(3);
+      expect(summary.slowCalls.byCall).toEqual({ "cook_session.fetch": 1, "d1.batch": 1, "d1.first": 1 });
+      expect(summary.slowCalls.requests.map((entry: { path: string }) => entry.path)).toEqual([
+        "/search",
+        "/api/cook-sessions/qa-kitchen-recipe-lemon-rice",
+        "/cookbooks/cmg1abcdefghijklmnopqrstu.data",
+      ]);
+      expect(summary.slowCalls.requests[0].slowCalls).toEqual([
+        { call: "d1.first", operation: "write", table: "User", attempt: 2, waitedMs: 1002, settled: false, outcome: null },
+      ]);
+
+      expect(summary.isolates).toEqual([
+        { isolate: "0a1b2c3d", runsIn: "IAD", arrivedAt: ["IAD"], requests: 2, firstEventTimestamp: 10, lastEventTimestamp: 20 },
+        { isolate: "ffee0011", runsIn: "ORD", arrivedAt: ["EWR", "IAD"], requests: 2, firstEventTimestamp: 30, lastEventTimestamp: 40 },
+      ]);
+    });
+
+    it("reads only the fixed fields of slow-call and isolate lines, each checked against its shape", () => {
+      const { summary, raw } = summarize([
+        request("/recipes/cmg1abcdefghijklmnopqrstu.data", 1, 4000, 1, [
+          served(CANARIES.hex, "1", CANARIES.cf),
+          runsIn(CANARIES.hex, CANARIES.cf),
+          runsIn(42, "ORD"),
+          JSON.stringify({
+            event: "slow_call",
+            call: `SELECT * FROM "User" WHERE email = '${CANARIES.email}'`,
+            operation: "delete",
+            table: `User; ${CANARIES.logLine}`,
+            attempt: "2",
+            waitedMs: -5,
+            settled: "yes",
+            outcome: CANARIES.body,
+            sql: CANARIES.query,
+          }),
+          { event: "slow_call", call: "d1.raw", operation: "read", table: "Recipe", attempt: 1.5, waitedMs: 1200.7, settled: true, outcome: "error" },
+        ], { executionModel: `durable ${CANARIES.hex}`, entrypoint: 42 }),
+      ]);
+
+      expect(summary.stalledRequests[0]).toMatchObject({
+        ranOn: { isolate: null, request: null, arrivedAt: null, runsIn: null },
+        executionModel: null,
+        entrypoint: null,
+      });
+      expect(summary.isolates).toEqual([]);
+      expect(summary.stalledRequests[0].slowCalls).toEqual([
+        { call: null, operation: null, table: null, attempt: null, waitedMs: null, settled: false, outcome: null },
+        { call: "d1.raw", operation: "read", table: "Recipe", attempt: 1, waitedMs: 1200, settled: true, outcome: "error" },
+      ]);
+      expect(summary.slowCalls.byCall).toEqual({ unknown: 1 });
+      for (const [name, canary] of Object.entries(CANARIES)) {
+        expect(raw, `${name} canary leaked`).not.toContain(canary);
+      }
+    });
+
+    it("keeps the first 20 stalled requests and the first 40 requests with a slow call", () => {
+      const events = Array.from({ length: 45 }, (_, index) =>
+        request(`/r${index}`, 1, 3000, index, [slowCall({ call: "d1.first", waitedMs: 1000 })]));
+
+      const { summary } = summarize(events);
+
+      expect(summary.stalledInvocations).toBe(45);
+      expect(summary.stalledRequests).toHaveLength(20);
+      expect(summary.slowCalls.total).toBe(45);
+      expect(summary.slowCalls.requests).toHaveLength(40);
+      expect(summary.slowCalls.requests[39].path).toBe("/r39");
+    });
+
+    it("reports nothing to attach for a tail without the lines", () => {
+      const { summary } = summarize([{ outcome: "ok", event: { request: { url: "https://qa.example/", method: "GET" } } }]);
+
+      expect(summary.stalledRequests).toEqual([]);
+      expect(summary.slowCalls).toEqual({ total: 0, byCall: {}, requests: [] });
+      expect(summary.isolates).toEqual([]);
+    });
+  });
+
   it("tolerates events without a request", () => {
     const { summary } = summarize([{ outcome: "exceededCpu", exceptions: [] }]);
 
     expect(summary.nonOkInvocations).toEqual([
-      { outcome: "exceededCpu", path: "", method: null, status: null, cpuTime: null, wallTime: null, eventTimestamp: null, exceptions: [] },
+      { outcome: "exceededCpu", path: "", method: null, status: null, cpuTime: null, wallTime: null, eventTimestamp: null, executionModel: null, entrypoint: null, exceptions: [] },
     ]);
   });
 });
@@ -646,13 +914,53 @@ describe("Journeys workflow tail wiring", () => {
     expect(warn({})).toBe("");
   });
 
+  it("warns, without failing, on every request over 5 s whatever held it, with the longest", () => {
+    const run = step("Stop QA Worker tail and summarise it").run ?? "";
+    const filter = /jq -r '(\[\.slowest\[\][\s\S]*?)' \\\n/.exec(run)?.[1];
+    expect(filter).toBeDefined();
+    const warn = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    const get = (wallTime: number) => ({ method: "GET", wallTime });
+    // Journeys run 40590368708: three isolates waited on D1 at the same moment.
+    expect(warn({ slowest: [get(11681), get(7195), get(4487)] }).trimEnd()).toBe(
+      "::warning::Slow requests: 2 took over 5 s, the longest 11681 ms. See slowest, stalledRequests and slowCalls in worker-tail-summary.json.",
+    );
+    expect(warn({ slowest: Array.from({ length: 25 }, () => get(6000)) }).trimEnd()).toContain("Slow requests: 25 or more took over 5 s");
+    expect(warn({ slowest: [get(5000)] })).toBe("");
+    expect(warn({})).toBe("");
+  });
+
+  it("leaves out of the slow-request warning an invocation without an HTTP method, which no journey waits on", () => {
+    const run = step("Stop QA Worker tail and summarise it").run ?? "";
+    const filter = /jq -r '(\[\.slowest\[\][\s\S]*?)' \\\n/.exec(run)?.[1];
+    const warn = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    // Journeys run 40607078374: the only invocation over 5 s had no path or method.
+    const background = { path: "", method: null, wallTime: 27285 };
+    expect(warn({ slowest: [background, { method: "GET", wallTime: 4543 }] })).toBe("");
+    expect(warn({ slowest: [background, { method: "POST", wallTime: 6000 }] }).trimEnd()).toContain("Slow requests: 1 took over 5 s, the longest 6000 ms.");
+    // The list holds the 25 slowest invocations, so a full list over 5 s may hide more requests.
+    expect(warn({ slowest: [background, ...Array.from({ length: 24 }, () => ({ method: "GET", wallTime: 6000 }))] }).trimEnd())
+      .toContain("Slow requests: 24 or more took over 5 s");
+  });
+
+  it("warns, without failing, on the platform faults our code tried again, by call", () => {
+    const run = step("Stop QA Worker tail and summarise it").run ?? "";
+    const filter = /jq -r '(select\(\(\.platformRetries[\s\S]*?)' \\\n/.exec(run)?.[1];
+    expect(filter).toBeDefined();
+    const warn = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    expect(warn({ platformRetries: { total: 3, byCall: { "cook_session.start": 1, "r2.put": 2 } } }).trimEnd()).toBe(
+      "::warning::Platform retries: 3 call(s) tried again after a platform fault (cook_session.start 1, r2.put 2). See platformRetries in worker-tail-summary.json.",
+    );
+    expect(warn({ platformRetries: { total: 0, byCall: {} } })).toBe("");
+    expect(warn({})).toBe("");
+  });
+
   it("waits for late tail events before stopping the tail, bounded, so the last failures are kept", () => {
     // Tail events arrive seconds after their request ends. Stopping the tail as soon as the suite
     // finished lost the last ~6 s of events in runs 37934997247 and 37912555692, including the
     // failing request itself.
     const run = step("Stop QA Worker tail and summarise it").run ?? "";
     const waitAt = run.indexOf("cat .worker-tail/tail-*.json 2>/dev/null | wc -c");
-    const killAt = run.indexOf('kill -- "-$(cat .worker-tail/pid)"');
+    const killAt = run.indexOf('kill -- "-$(cat "$pid_file")"');
 
     expect(waitAt).toBeGreaterThan(-1);
     expect(waitAt).toBeLessThan(killAt);
@@ -662,21 +970,77 @@ describe("Journeys workflow tail wiring", () => {
     expect(run).toMatch(/quiet" -ge 5/);
   });
 
-  it("reconnects a dropped tail into a new file per connection, and summarises every connection's events", () => {
+  it("runs two tails side by side, each reconnecting into a new file per connection, and records when each connection ran", () => {
     // Run 38151797798's tail exited at 15:40:06, seconds before its two 500s, so the summary had
-    // no record of them.
+    // no record of them; run 40616102885's single tail used up its reconnects and kept 726 of
+    // about 1,750 invocations.
     const start = step("Start QA Worker tail").run ?? "";
+    expect(start).toMatch(/for tail in a b; do/);
     expect(start).toMatch(/^ *setsid nohup bash -c '/m);
-    expect(start).toMatch(/for connection in 1 2 3 4 5 6; do/);
-    expect(start).toContain('> ".worker-tail/tail-$connection.json"');
-    expect(start).toContain("echo $! > .worker-tail/pid");
+    expect(start).toMatch(/for connection in \$\(seq 1 100\); do/);
+    expect(start).toContain('> ".worker-tail/tail-$tail-$connection.json"');
+    expect(start).toContain('echo "$tail start $(date +%s%3N)" >> .worker-tail/connections.log');
+    expect(start).toContain('echo "$tail end $(date +%s%3N)" >> .worker-tail/connections.log');
+    expect(start).toContain('echo $! > ".worker-tail/pid-$tail"');
+    // The suite's window starts once both tails have had time to connect.
+    expect(start.trimEnd().split("\n").at(-1)).toBe("date +%s%3N > .worker-tail/suite-start");
 
     const stop = step("Stop QA Worker tail and summarise it").run ?? "";
-    expect(stop).toContain('kill -9 -- "-$(cat .worker-tail/pid)"');
-    expect(stop).toMatch(/for tail_file in \.worker-tail\/tail-\*\.json; do/);
-    expect(stop).toContain(`sed -n '/^{/,$p' "$tail_file" | jq -c '.' >> .worker-tail/events.ndjson`);
+    expect(stop).toContain('kill -9 -- "-$(cat "$pid_file")"');
+    // Both tails' files are read into one stream, each invocation once (scripts/read-worker-tail.mjs).
+    expect(stop).toContain("node scripts/read-worker-tail.mjs .worker-tail/events.ndjson .worker-tail/tail-*.json > .worker-tail/read.json");
+    expect(stop).toContain('--slurpfile tailReads .worker-tail/read.json --argjson tailErrorOverloadNotices "${sampling_in_errors:-0}"');
     expect(stop).toContain('--argjson tailReconnects "$tail_reconnects"');
-    expect(stop).toMatch(/jq '\{[^']*tailReconnects[^']*d1TransientErrors[^']*\}'/);
+    expect(stop).toContain('--argjson tailConnections "${tail_connections_json:-null}"');
+    expect(stop).toMatch(/jq '\{[^']*tailReconnects, tailCoverage, tailReads, tailSamplingNotices[^']*d1TransientErrors[^']*\}'/);
+  });
+
+  it("prints what each tail delivered", () => {
+    const stop = step("Stop QA Worker tail and summarise it").run ?? "";
+    const filter = /jq -r '(\.tails \| to_entries[^']*)'/.exec(stop)?.[1];
+    expect(filter).toBeDefined();
+    const output = execFileSync("jq", ["-r", filter!], {
+      input: JSON.stringify({ tails: { a: { connections: 2, events: 1769, overloadNotices: 0, unreadableLines: 1, cutOff: 1 } } }),
+      encoding: "utf8",
+    });
+    expect(output).toBe("QA Worker tail a: 1769 events over 2 connection(s), 0 sampling-mode notice(s), 1 unreadable line(s), 1 cut off.\n");
+  });
+
+  it("warns that the summary is missing when the summary step left it empty", () => {
+    const stop = step("Stop QA Worker tail and summarise it").run ?? "";
+    expect(stop).toMatch(/if \[ ! -s test-results\/worker-tail-summary\.json \]; then\n\s+echo "::warning::The QA Worker log could not be summarised\./);
+  });
+
+  it("turns the connection log into each connection's window, a connection still open at the stop without an end", () => {
+    const stop = step("Stop QA Worker tail and summarise it").run ?? "";
+    const program = /awk '([\s\S]*?)' \\\n/.exec(stop)?.[1];
+    expect(program).toBeDefined();
+    const log = ["a start 1000", "b start 6000", "a end 40000", "a start 42000", "b end 90000", "b start 92000"].join("\n");
+    const windows = execFileSync("awk", [program!], { input: `${log}\n`, encoding: "utf8" })
+      .trimEnd().split("\n").map((line) => JSON.parse(line))
+      .sort((x, y) => x.startedAt - y.startedAt);
+    expect(windows).toEqual([
+      { tail: "a", startedAt: 1000, endedAt: 40000 },
+      { tail: "b", startedAt: 6000, endedAt: 90000 },
+      { tail: "a", startedAt: 42000, endedAt: null },
+      { tail: "b", startedAt: 92000, endedAt: null },
+    ]);
+  });
+
+  it("warns how much of the suite the log missed, or that it is incomplete, and nothing when it is complete", () => {
+    const stop = step("Stop QA Worker tail and summarise it").run ?? "";
+    const filter = /jq -r '(select\(\.complete != true\)[\s\S]*?)' \\\n/.exec(stop)?.[1];
+    expect(filter).toBeDefined();
+    const warn = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    expect(warn({ complete: false, tailCoverage: { uncoveredMs: 27500, gapCount: 2, longestGapMs: 20900, gaps: [] } }).trimEnd()).toBe(
+      "::warning::The QA Worker log missed 27 s of the suite in 2 gap(s) when no tail was connected, the longest 20 s. Requests in those gaps are not in worker-tail-summary.json, so its counts (slow requests, stalls, errors, retries) are partial; see tailCoverage.gaps.",
+    );
+    expect(warn({ complete: false, tailSamplingNotices: 2, tailCoverage: { uncoveredMs: 0 } }).trimEnd()).toBe(
+      "::warning::Cloudflare dropped QA Worker log events: a tail was put in sampling mode 2 time(s). worker-tail-summary.json is partial evidence; see tailReads.",
+    );
+    expect(warn({ complete: false, tailCoverage: { uncoveredMs: 0, gapCount: 0, gaps: [] } })).toContain("::warning::The QA Worker log is incomplete (a tail reconnected without a second one covering it, no tail was running when the suite finished, or it recorded no events).");
+    expect(warn({ complete: false, tailCoverage: null })).toContain("::warning::The QA Worker log is incomplete");
+    expect(warn({ complete: true, tailCoverage: { uncoveredMs: 0, gapCount: 0, gaps: [] } })).toBe("");
   });
 
   it("warns, without failing, when the Worker reported transient D1 errors", () => {
@@ -716,7 +1080,7 @@ describe("Journeys workflow tail wiring", () => {
 
     // The census artifact is one merged JSON file of control identities, uploaded on every run.
     const census = step("Upload the HX census");
-    expect(census.with?.path).toBe("hx-census-actual.json");
+    expect(census.with?.path).toBe("census-actual.json");
     expect(census.if).toBe("always() && env.SUITE == 'journeys' && steps.suite.outcome != 'skipped'");
 
     const uploads = allUploads.filter((upload) => upload !== census);

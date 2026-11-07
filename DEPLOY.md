@@ -38,10 +38,12 @@ wrangler d1 create spoonjoy
 
 ### Dedicated QA Resources
 
-QA is a separate Cloudflare environment, not a seed namespace in production. It deploys to `spoonjoy-v2-qa.mendelow-studio.workers.dev`, uses D1 `spoonjoy-qa`, and stores images in R2 bucket `spoonjoy-photos-qa`.
+QA is a separate Cloudflare environment, not a seed namespace in production. It deploys to `spoonjoy-v2-qa.mendelow-studio.workers.dev`, uses D1 `spoonjoy-qa-2`, and stores images in R2 bucket `spoonjoy-photos-qa`.
+
+On 2026-10-29 the original QA database `spoonjoy-qa` (`c6c99e80-…`) started failing every query with Cloudflare D1 internal errors (API code 7500), including `wrangler d1 info` and time-travel restore, while production D1 kept working. QA moved to a fresh `spoonjoy-qa-2`, migrated from `migrations/`. The old database was left in place, not deleted.
 
 ```bash
-wrangler d1 create spoonjoy-qa
+wrangler d1 create spoonjoy-qa-2
 wrangler r2 bucket create spoonjoy-photos-qa
 wrangler secret list --env qa
 wrangler secret put SESSION_SECRET --env qa
@@ -50,7 +52,7 @@ wrangler secret put VAPID_PRIVATE_KEY --env qa
 wrangler secret put VAPID_SUBJECT --env qa
 ```
 
-Use `POSTHOG_DISABLED=true` for privacy-sensitive QA runs unless the point of the run is telemetry verification. Match image-provider policy with `IMAGE_PROVIDER_PRIMARY=gemini` and the same Gemini/OpenAI fallback variables used by production. QA OAuth callback configuration must include the QA origin for providers you enable there; WebAuthn passkey verification uses the QA request origin.
+Use `POSTHOG_DISABLED=true` for privacy-sensitive QA runs unless the point of the run is telemetry verification. QA makes AI covers from sample images, never a paid provider: `wrangler.json`'s `env.qa` sets `IMAGE_PROVIDER_PRIMARY=sample` (see `docs/deployment.md`). QA OAuth callback configuration must include the QA origin for providers you enable there; WebAuthn passkey verification uses the QA request origin.
 
 QA deploy and smoke flow:
 

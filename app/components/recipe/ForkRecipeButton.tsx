@@ -1,16 +1,15 @@
 import { useState } from "react";
 import { useFetcher } from "react-router";
 import { Dialog } from "~/components/ouro/dialog/dialog";
-import { Button } from "../button";
+import { Button } from "~/components/ouro/button/button";
+import { Text } from "~/components/ouro/text/text";
 
 export interface ForkRecipeButtonProps {
   recipeId: string;
   recipeTitle: string;
   sourceChefUsername: string;
   isOwner: boolean;
-  triggerClassName?: string;
   triggerTestId?: string;
-  triggerStyle?: "button" | "text";
 }
 
 export function ForkRecipeButton({
@@ -18,9 +17,7 @@ export function ForkRecipeButton({
   recipeTitle,
   sourceChefUsername,
   isOwner,
-  triggerClassName,
   triggerTestId,
-  triggerStyle = "button",
 }: ForkRecipeButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   // One fork per opening of the dialog: a double submit or a resubmit carries the same token, and
@@ -53,29 +50,12 @@ export function ForkRecipeButton({
 
   return (
     <>
-      {triggerStyle === "text" ? (
-        <button
-          type="button"
-          onClick={open}
-          className={triggerClassName}
-          data-testid={triggerTestId}
-        >
-          {triggerLabel}
-        </button>
-      ) : (
-        <Button
-          type="button"
-          plain
-          onClick={open}
-          className={triggerClassName}
-          data-testid={triggerTestId}
-        >
-          {triggerLabel}
-        </Button>
-      )}
+      <Button type="button" variant="outline" tone="secondary" onClick={open} data-testid={triggerTestId}>
+        {triggerLabel}
+      </Button>
       <Dialog open={isOpen} onOpenChange={setIsOpen} size="md" title={dialogTitle}
         footer={<>
-          <Button plain type="button" onClick={() => setIsOpen(false)}>
+          <Button variant="outline" tone="secondary" type="button" onClick={() => setIsOpen(false)}>
             Cancel
           </Button>
           <fetcher.Form method="post" action={`/recipes/${recipeId}/fork`} onSubmit={() => setSubmittedToken(forkToken)}>
@@ -86,9 +66,9 @@ export function ForkRecipeButton({
         <div>
           {dialogBody}
           {failure ? (
-            <p role="alert" className="mt-3 text-sm text-[var(--sj-tomato)]">
+            <Text role="alert" tone="destructive" size="sm" className="mt-3">
               {failure}
-            </p>
+            </Text>
           ) : null}
         </div>
       </Dialog>

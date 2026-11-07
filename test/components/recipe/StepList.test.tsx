@@ -12,20 +12,9 @@ import { render, screen, within, act, waitFor, fireEvent } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { createRoutesStub } from 'react-router'
+import { useState } from 'react'
 import { StepList } from '~/components/recipe/StepList'
 import type { StepData } from '~/components/recipe/StepEditorCard'
-
-const dragControlsStartMock = vi.hoisted(() => vi.fn())
-
-vi.mock('motion/react', () => ({
-  Reorder: {
-    Group: ({ children, className }: { children: React.ReactNode; className?: string }) => (
-      <div className={className}>{children}</div>
-    ),
-    Item: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  },
-  useDragControls: () => ({ start: dragControlsStartMock }),
-}))
 
 // Mock localStorage for IngredientInputToggle used by StepEditorCard
 let localStorageStore: Record<string, string> = {}
@@ -81,6 +70,15 @@ function createTestWrapper(props: Partial<React.ComponentProps<typeof StepList>>
   ])
 }
 
+function stepCard(stepNum: number) {
+  return screen.getByRole('article', { name: `Step ${stepNum}` })
+}
+
+async function moveStep(stepNum: number, move: 'Move up' | 'Move down' | 'Move to top' | 'Move to bottom') {
+  await userEvent.click(screen.getByRole('button', { name: `Reorder Step ${stepNum}` }))
+  await userEvent.click(await screen.findByRole('menuitem', { name: move }))
+}
+
 describe('StepList', () => {
   beforeEach(() => {
     localStorageStore = {}
@@ -125,9 +123,9 @@ describe('StepList', () => {
       expect(articles).toHaveLength(3)
 
       // Each step should be labeled correctly
-      expect(screen.getByLabelText(/step 1/i)).toBeInTheDocument()
-      expect(screen.getByLabelText(/step 2/i)).toBeInTheDocument()
-      expect(screen.getByLabelText(/step 3/i)).toBeInTheDocument()
+      expect(stepCard(1)).toBeInTheDocument()
+      expect(stepCard(2)).toBeInTheDocument()
+      expect(stepCard(3)).toBeInTheDocument()
     })
 
     it('renders many steps (5+) correctly', () => {
@@ -148,7 +146,7 @@ describe('StepList', () => {
 
       // Verify all step labels
       for (let i = 1; i <= 6; i++) {
-        expect(screen.getByLabelText(new RegExp(`step ${i}`, 'i'))).toBeInTheDocument()
+        expect(stepCard(i)).toBeInTheDocument()
       }
     })
 
@@ -236,7 +234,7 @@ describe('StepList', () => {
       render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
 
       // Click remove on first step
-      const firstStepCard = screen.getByLabelText(/step 1/i)
+      const firstStepCard = stepCard(1)
       await userEvent.click(within(firstStepCard).getByRole('button', { name: /remove/i }))
 
       // Confirm removal
@@ -266,7 +264,7 @@ describe('StepList', () => {
       expect(onChange).not.toHaveBeenCalled()
 
       // Step should still be visible
-      expect(screen.getByLabelText(/step 1/i)).toBeInTheDocument()
+      expect(stepCard(1)).toBeInTheDocument()
     })
   })
 
@@ -329,7 +327,7 @@ describe('StepList', () => {
       render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
 
       // Find the description textarea and update it
-      const textarea = screen.getByLabelText(/step 1/i).querySelector('textarea')
+      const textarea = stepCard(1).querySelector('textarea')
       expect(textarea).toBeInTheDocument()
 
       // Clear and type new description
@@ -356,7 +354,7 @@ describe('StepList', () => {
       render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
 
       // Find the first step's textarea and update it
-      const firstStepCard = screen.getByLabelText(/step 1/i)
+      const firstStepCard = stepCard(1)
       const textarea = firstStepCard.querySelector('textarea')
       expect(textarea).toBeInTheDocument()
 
@@ -379,328 +377,151 @@ describe('StepList', () => {
   })
 
   describe('reorder functionality', () => {
-    it('up button moves step up in list', async () => {
+    const threeSteps = () => [
+      createTestStep({ id: 'step-1', stepNum: 1, description: 'First step', ingredients: [{ quantity: 1, unit: 'cup', ingredientName: 'flour' }] }),
+      createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
+      createTestStep({ id: 'step-3', stepNum: 3, description: 'Third step' }),
+    ]
+
+    it('is an HX Reorderable list named Steps, with a handle per step', () => {
+      const Wrapper = createTestWrapper({ steps: threeSteps() })
+      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
+
+      expect(screen.getByRole('list', { name: 'Steps' })).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: /^Reorder Step \d$/ })).toHaveLength(3)
+    })
+
+    it('disabled state disables reordering, so a step cannot move while a save is in flight', () => {
       const onChange = vi.fn()
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
-        createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
-        createTestStep({ id: 'step-3', stepNum: 3, description: 'Third step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps, onChange })
+      const Wrapper = createTestWrapper({ steps: threeSteps(), onChange, disabled: true })
       render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
 
-      // Click up button on second step
-      const secondStepCard = screen.getByLabelText(/step 2/i)
-      await userEvent.click(within(secondStepCard).getByRole('button', { name: /move up/i }))
-
-      expect(onChange).toHaveBeenCalledTimes(1)
-      const newSteps = onChange.mock.calls[0][0]
-      // Step 2 should now be first
-      expect(newSteps[0].id).toBe('step-2')
-      expect(newSteps[1].id).toBe('step-1')
-      expect(newSteps[2].id).toBe('step-3')
-    })
-
-    it('down button moves step down in list', async () => {
-      const onChange = vi.fn()
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
-        createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
-        createTestStep({ id: 'step-3', stepNum: 3, description: 'Third step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps, onChange })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      // Click down button on second step
-      const secondStepCard = screen.getByLabelText(/step 2/i)
-      await userEvent.click(within(secondStepCard).getByRole('button', { name: /move down/i }))
-
-      expect(onChange).toHaveBeenCalledTimes(1)
-      const newSteps = onChange.mock.calls[0][0]
-      // Step 2 should now be third
-      expect(newSteps[0].id).toBe('step-1')
-      expect(newSteps[1].id).toBe('step-3')
-      expect(newSteps[2].id).toBe('step-2')
-    })
-
-    it('first step has up button disabled', () => {
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
-        createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      const firstStepCard = screen.getByLabelText(/step 1/i)
-      const upButton = within(firstStepCard).getByRole('button', { name: /move up/i })
-      expect(upButton).toBeDisabled()
-    })
-
-    it('last step has down button disabled', () => {
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
-        createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      const lastStepCard = screen.getByLabelText(/step 2/i)
-      const downButton = within(lastStepCard).getByRole('button', { name: /move down/i })
-      expect(downButton).toBeDisabled()
-    })
-
-    it('reorder updates stepNum for all affected steps', async () => {
-      const onChange = vi.fn()
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
-        createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
-        createTestStep({ id: 'step-3', stepNum: 3, description: 'Third step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps, onChange })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      // Move third step to first position (up twice)
-      const thirdStepCard = screen.getByLabelText(/step 3/i)
-      await userEvent.click(within(thirdStepCard).getByRole('button', { name: /move up/i }))
-
-      const newSteps = onChange.mock.calls[0][0]
-      // All step numbers should be correctly updated
-      expect(newSteps[0].stepNum).toBe(1)
-      expect(newSteps[1].stepNum).toBe(2)
-      expect(newSteps[2].stepNum).toBe(3)
-    })
-
-    it('steps maintain their data (description, ingredients) after reorder', async () => {
-      const onChange = vi.fn()
-      const ingredientData = [
-        { quantity: 1, unit: 'cup', ingredientName: 'flour' },
-      ]
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'Mix ingredients' }),
-        createTestStep({ id: 'step-2', stepNum: 2, description: 'Bake for 30 minutes', ingredients: ingredientData }),
-      ]
-      const Wrapper = createTestWrapper({ steps, onChange })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      // Move second step up
-      const secondStepCard = screen.getByLabelText(/step 2/i)
-      await userEvent.click(within(secondStepCard).getByRole('button', { name: /move up/i }))
-
-      const newSteps = onChange.mock.calls[0][0]
-      // Second step is now first, should still have its data
-      expect(newSteps[0].id).toBe('step-2')
-      expect(newSteps[0].description).toBe('Bake for 30 minutes')
-      expect(newSteps[0].ingredients).toEqual(ingredientData)
-      // First step is now second, should still have its data
-      expect(newSteps[1].id).toBe('step-1')
-      expect(newSteps[1].description).toBe('Mix ingredients')
-    })
-
-    it('onChange called with reordered array', async () => {
-      const onChange = vi.fn()
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1 }),
-        createTestStep({ id: 'step-2', stepNum: 2 }),
-      ]
-      const Wrapper = createTestWrapper({ steps, onChange })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      // Move second step up
-      const secondStepCard = screen.getByLabelText(/step 2/i)
-      await userEvent.click(within(secondStepCard).getByRole('button', { name: /move up/i }))
-
-      // onChange should be called exactly once with the new order
-      expect(onChange).toHaveBeenCalledTimes(1)
-      expect(onChange).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({ id: 'step-2', stepNum: 1 }),
-          expect.objectContaining({ id: 'step-1', stepNum: 2 }),
-        ])
-      )
-    })
-
-    it('drag handle has accessible aria-label', () => {
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      // Look for drag handle with aria-label within the step card
-      const stepCard = screen.getByLabelText(/step 1/i)
-      const dragHandle = within(stepCard).getByRole('button', { name: /drag to reorder/i })
-      expect(dragHandle).toBeInTheDocument()
-    })
-
-    it('pointer down on the drag handle starts Framer Motion drag controls', () => {
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
-        createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      const firstStepCard = screen.getByLabelText(/step 1/i)
-      const dragHandle = within(firstStepCard).getByRole('button', { name: /drag to reorder/i })
-      fireEvent.pointerDown(dragHandle, { pointerId: 1, buttons: 1, clientX: 10, clientY: 10 })
-
-      expect(dragControlsStartMock).toHaveBeenCalledTimes(1)
-      expect(dragControlsStartMock).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'pointerdown' }),
-        { snapToCursor: true }
-      )
-    })
-
-    it('disables the drag handle when there is only one step', () => {
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'Only step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      const stepCard = screen.getByLabelText(/step 1/i)
-      const dragHandle = within(stepCard).getByRole('button', { name: /drag to reorder/i })
-
-      expect(dragHandle).toBeDisabled()
-    })
-
-    it('keyboard: arrow up on focused step with modifier key reorders', async () => {
-      const onChange = vi.fn()
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
-        createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps, onChange })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      // Get all drag handles (one per step) and focus on the second one
-      const dragHandles = screen.getAllByRole('button', { name: /drag to reorder/i })
-      expect(dragHandles).toHaveLength(2)
-      act(() => dragHandles[1].focus()) // Second step's drag handle
-
-      // Use Ctrl+ArrowUp to move step up
-      await userEvent.keyboard('{Control>}{ArrowUp}{/Control}')
-
-      expect(onChange).toHaveBeenCalledTimes(1)
-      const newSteps = onChange.mock.calls[0][0]
-      expect(newSteps[0].id).toBe('step-2')
-      expect(newSteps[1].id).toBe('step-1')
-    })
-
-    it('keyboard: arrow down on focused step with modifier key reorders', async () => {
-      const onChange = vi.fn()
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
-        createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps, onChange })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      // Get all drag handles and focus on the first one
-      const dragHandles = screen.getAllByRole('button', { name: /drag to reorder/i })
-      expect(dragHandles).toHaveLength(2)
-      act(() => dragHandles[0].focus()) // First step's drag handle
-
-      // Use Ctrl+ArrowDown to move step down
-      await userEvent.keyboard('{Control>}{ArrowDown}{/Control}')
-
-      expect(onChange).toHaveBeenCalledTimes(1)
-      const newSteps = onChange.mock.calls[0][0]
-      expect(newSteps[0].id).toBe('step-2')
-      expect(newSteps[1].id).toBe('step-1')
-    })
-
-    it('disabled state disables reorder buttons', () => {
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1 }),
-        createTestStep({ id: 'step-2', stepNum: 2 }),
-      ]
-      const Wrapper = createTestWrapper({ steps, disabled: true })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      // All move up/down buttons should be disabled
-      const moveUpButtons = screen.getAllByRole('button', { name: /move up/i })
-      const moveDownButtons = screen.getAllByRole('button', { name: /move down/i })
-
-      moveUpButtons.forEach((button) => {
-        expect(button).toBeDisabled()
-      })
-      moveDownButtons.forEach((button) => {
-        expect(button).toBeDisabled()
-      })
-    })
-
-    it('single step has both up and down buttons disabled', () => {
-      const steps = [createTestStep({ id: 'step-1', stepNum: 1, description: 'Only step' })]
-      const Wrapper = createTestWrapper({ steps })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      const stepCard = screen.getByLabelText(/step 1/i)
-      const upButton = within(stepCard).getByRole('button', { name: /move up/i })
-      const downButton = within(stepCard).getByRole('button', { name: /move down/i })
-
-      expect(upButton).toBeDisabled()
-      expect(downButton).toBeDisabled()
-    })
-
-    it('keyboard: arrow up on first step does not reorder', async () => {
-      const onChange = vi.fn()
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
-        createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps, onChange })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      // Get all drag handles and focus on the first one
-      const dragHandles = screen.getAllByRole('button', { name: /drag to reorder/i })
-      act(() => dragHandles[0].focus())
-
-      // Use Ctrl+ArrowUp - should not reorder since it's already first
-      await userEvent.keyboard('{Control>}{ArrowUp}{/Control}')
-
-      // onChange should not be called because we can't move up from first position
+      const list = screen.getByRole('list', { name: 'Steps' })
+      expect(within(list).getAllByRole('listitem').filter((item) => item.parentElement === list)).toHaveLength(3)
+      for (const handle of within(list).getAllByRole('button', { name: /^Reorder Step \d$/ })) {
+        expect(handle).toHaveAttribute('aria-disabled', 'true')
+        expect(handle).not.toHaveAttribute('disabled')
+        expect(handle.tabIndex).toBe(0)
+      }
       expect(onChange).not.toHaveBeenCalled()
     })
 
-    it('keyboard: arrow down on last step does not reorder', async () => {
+    it('keeps the list and handle focus while saving, blocks reordering, then enables it again', async () => {
+      const steps = threeSteps()
       const onChange = vi.fn()
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
-        createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps, onChange })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
+      let setSaving!: (saving: boolean) => void
+      function Harness() {
+        const [saving, updateSaving] = useState(false)
+        setSaving = updateSaving
+        return <StepList steps={steps} recipeId="recipe-1" onChange={onChange} disabled={saving} />
+      }
+      const Stub = createRoutesStub([{ path: '/recipes/:id/edit', Component: Harness }])
+      render(<Stub initialEntries={['/recipes/recipe-1/edit']} />)
+      const list = screen.getByRole('list', { name: 'Steps' })
+      const handle = screen.getByRole('button', { name: 'Reorder Step 2' })
+      act(() => handle.focus())
 
-      // Get all drag handles and focus on the last one
-      const dragHandles = screen.getAllByRole('button', { name: /drag to reorder/i })
-      act(() => dragHandles[1].focus())
-
-      // Use Ctrl+ArrowDown - should not reorder since it's already last
-      await userEvent.keyboard('{Control>}{ArrowDown}{/Control}')
-
-      // onChange should not be called because we can't move down from last position
+      act(() => setSaving(true))
+      expect(screen.getByRole('list', { name: 'Steps' })).toBe(list)
+      expect(screen.getByRole('button', { name: 'Reorder Step 2' })).toBe(handle)
+      expect(handle).toHaveFocus()
+      expect(handle).toHaveAttribute('aria-disabled', 'true')
+      expect(handle).not.toHaveAttribute('disabled')
+      await userEvent.keyboard(' ')
+      expect(screen.queryByRole('menuitem', { name: 'Move up' })).not.toBeInTheDocument()
       expect(onChange).not.toHaveBeenCalled()
+
+      act(() => setSaving(false))
+      expect(handle).toHaveFocus()
+      expect(handle).not.toBeDisabled()
+      await userEvent.keyboard('{Enter}')
+      expect(await screen.findByRole('menuitem', { name: 'Move up' })).toBeInTheDocument()
     })
 
-    it('keyboard: arrow keys without modifier key do not reorder', async () => {
+    it("keeps each step's drafts while a save starts and ends: the AI text, the input mode and a half-typed ingredient", async () => {
+      function Harness() {
+        const [disabled, setDisabled] = useState(false)
+        return (
+          <>
+            <button type="button" onClick={() => setDisabled((value) => !value)}>Toggle saving</button>
+            <StepList steps={threeSteps()} recipeId="recipe-1" onChange={vi.fn()} disabled={disabled} />
+          </>
+        )
+      }
+      const Stub = createRoutesStub([
+        { path: '/recipes/:id/edit', Component: Harness },
+        { path: '/recipes/:id/steps/:stepId/edit', action: async () => ({ parsedIngredients: [] }) },
+      ])
+      render(<Stub initialEntries={['/recipes/recipe-1/edit']} />)
+      const toggleSaving = async () => {
+        await userEvent.click(screen.getByRole('button', { name: 'Toggle saving' }))
+        await userEvent.click(screen.getByRole('button', { name: 'Toggle saving' }))
+      }
+
+      const aiText = within(stepCard(1)).getByRole('textbox', { name: 'Ingredient text' })
+      fireEvent.change(aiText, { target: { value: '2 eggs' } })
+      await toggleSaving()
+      expect(within(stepCard(1)).getByRole('textbox', { name: 'Ingredient text' })).toBe(aiText)
+      expect(aiText).toHaveValue('2 eggs')
+
+      await userEvent.click(within(stepCard(2)).getByRole('switch', { name: 'AI Parse' }))
+      await userEvent.type(within(stepCard(2)).getByRole('textbox', { name: 'Unit' }), 'cup')
+      await toggleSaving()
+      expect(within(stepCard(2)).getByRole('switch', { name: 'AI Parse' })).not.toBeChecked()
+      expect(within(stepCard(2)).getByRole('textbox', { name: 'Unit' })).toHaveValue('cup')
+    })
+
+    it('blocks the handles while a save is in flight, without moving the steps out of the list', async () => {
       const onChange = vi.fn()
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
-        createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps, onChange })
+      const Wrapper = createTestWrapper({ steps: threeSteps(), onChange, disabled: true })
       render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
 
-      // Get all drag handles and focus on the second one
-      const dragHandles = screen.getAllByRole('button', { name: /drag to reorder/i })
-      act(() => dragHandles[1].focus())
-
-      // Press ArrowUp without modifier - should not reorder
+      const handle = screen.getByRole('button', { name: 'Reorder Step 2' })
+      await userEvent.click(handle)
+      expect(screen.queryByRole('menuitem', { name: 'Move up' })).not.toBeInTheDocument()
+      handle.focus()
+      await userEvent.keyboard(' ')
       await userEvent.keyboard('{ArrowUp}')
-
-      // onChange should not be called because no modifier key was pressed
+      await userEvent.keyboard(' ')
+      expect(handle).toHaveFocus()
+      expect(screen.getAllByRole('button', { name: /^Reorder Step \d$/ })
+        .map((button) => button.getAttribute('aria-label'))).toEqual([
+        'Reorder Step 1', 'Reorder Step 2', 'Reorder Step 3',
+      ])
       expect(onChange).not.toHaveBeenCalled()
+    })
+
+    it("a handle's Move up moves the step up and renumbers every step", async () => {
+      const onChange = vi.fn()
+      const Wrapper = createTestWrapper({ steps: threeSteps(), onChange })
+      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
+
+      await moveStep(2, 'Move up')
+
+      expect(onChange).toHaveBeenCalledTimes(1)
+      const newSteps = onChange.mock.calls[0][0]
+      expect(newSteps.map((step: StepData) => step.id)).toEqual(['step-2', 'step-1', 'step-3'])
+      expect(newSteps.map((step: StepData) => step.stepNum)).toEqual([1, 2, 3])
+    })
+
+    it("a handle's Move down moves the step down and keeps its content", async () => {
+      const onChange = vi.fn()
+      const Wrapper = createTestWrapper({ steps: threeSteps(), onChange })
+      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
+
+      await moveStep(1, 'Move down')
+
+      const newSteps = onChange.mock.calls[0][0]
+      expect(newSteps.map((step: StepData) => step.id)).toEqual(['step-2', 'step-1', 'step-3'])
+      expect(newSteps[1]).toMatchObject({ description: 'First step', stepNum: 2, ingredients: [{ ingredientName: 'flour' }] })
+    })
+
+    it('cannot move the first step up or the last step down', async () => {
+      const Wrapper = createTestWrapper({ steps: threeSteps() })
+      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
+
+      await userEvent.click(screen.getByRole('button', { name: 'Reorder Step 1' }))
+      expect(await screen.findByRole('menuitem', { name: 'Move up' })).toHaveAttribute('aria-disabled', 'true')
     })
   })
 
@@ -808,8 +629,7 @@ describe('StepList', () => {
       rerender(<WrapperWithStep initialEntries={['/recipes/new-recipe-1/edit']} />)
 
       // The new step's instructions textarea should receive focus
-      const stepCard = screen.getByLabelText(/step 1/i)
-      const instructionsTextarea = within(stepCard).getByLabelText(/instructions/i)
+      const instructionsTextarea = within(stepCard(1)).getByLabelText(/instructions/i)
       expect(instructionsTextarea).toHaveFocus()
     })
 
@@ -884,22 +704,6 @@ describe('StepList', () => {
       })
     })
 
-    it('drag handles are keyboard accessible', () => {
-      const steps = [
-        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
-        createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
-      ]
-      const Wrapper = createTestWrapper({ steps })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
-
-      // Get all drag handles and verify they're accessible
-      const dragHandles = screen.getAllByRole('button', { name: /drag to reorder/i })
-      expect(dragHandles).toHaveLength(2)
-      dragHandles.forEach((handle) => {
-        expect(handle).not.toHaveAttribute('tabindex', '-1')
-      })
-    })
-
     it('dialog Cancel button closes dialog when clicked', async () => {
       const onChange = vi.fn()
       const steps = [createTestStep({ id: 'step-1', stepNum: 1 })]
@@ -919,7 +723,7 @@ describe('StepList', () => {
       await waitFor(() => {
         expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
       })
-      expect(screen.getByLabelText(/step 1/i)).toBeInTheDocument()
+      expect(stepCard(1)).toBeInTheDocument()
       // onChange should not have been called (step not removed)
       expect(onChange).not.toHaveBeenCalled()
     })
@@ -1003,7 +807,7 @@ describe('StepList', () => {
       // onChange should NOT have been called (step not removed)
       expect(onChange).not.toHaveBeenCalled()
       // Step should still be in the document
-      expect(screen.getByLabelText(/step 1/i)).toBeInTheDocument()
+      expect(stepCard(1)).toBeInTheDocument()
     })
   })
 })

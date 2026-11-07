@@ -1,6 +1,6 @@
-# Spoonjoy v2
+# Spoonjoy
 
-Recipe management platform rebuilt with React Router v7 on Cloudflare.
+A recipe app for home cooks, built with React Router 7 on Cloudflare.[^stack] It is the reference app for building with [Ouro HX](https://ui.ouroboros.bot/): read [Building with Ouro HX](docs/building-with-ouro-hx.md).
 
 ## Links
 
@@ -11,7 +11,7 @@ Recipe management platform rebuilt with React Router v7 on Cloudflare.
 
 ## Tech Stack
 
-- **Framework**: React Router v7 (Remix)
+- **Framework**: React Router 7[^stack]
 - **Platform**: Cloudflare Pages/Workers
 - **Database**: Cloudflare D1 (local & production) via Prisma
 - **Language**: TypeScript
@@ -44,7 +44,7 @@ Open [http://localhost:5173](http://localhost:5173) — no additional setup requ
 
 ## Configuration
 
-All configuration lives in `wrangler.json`:
+`wrangler.json` holds the Worker's configuration:
 
 | Setting | Purpose |
 |---------|---------|
@@ -53,7 +53,7 @@ All configuration lives in `wrangler.json`:
 | `r2_buckets` | R2 image storage binding for profile and recipe photos |
 | `vars` | Environment variables (NODE_ENV, OAuth credentials, etc.) |
 
-**Local development uses sensible defaults** — no configuration required to get started.
+**Local development uses sensible defaults**, so you can start without configuring anything.
 When the `PHOTOS` R2 binding is unavailable locally, uploaded images are stored as data URLs so recipe/profile image flows still work.
 
 For OAuth (Google/GitHub/Apple login), provide credentials through Cloudflare secrets in production or `.dev.vars` locally:
@@ -94,7 +94,7 @@ For Ouroboros agent integration, see [`docs/ouroboros-mcp.md`](docs/ouroboros-mc
 | `pnpm typecheck` | TypeScript validation |
 | `pnpm run deploy:preflight` | Verify Cloudflare bindings, secrets docs, scripts, and migrations before production deploy |
 | `pnpm run qa:preflight` | Verify the isolated `spoonjoy-v2-qa` Worker config, QA D1/R2, required QA secrets, and QA R2 round trip |
-| `pnpm run deploy:qa` | Build with `CLOUDFLARE_ENV=qa`, migrate `spoonjoy-qa`, validate generated config with `SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG`, and deploy QA |
+| `pnpm run deploy:qa` | Build with `CLOUDFLARE_ENV=qa`, migrate `spoonjoy-qa-2`, validate generated config with `SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG`, and deploy QA |
 | `pnpm run smoke:qa` | Run the live smoke against `spoonjoy-v2-qa.mendelow-studio.workers.dev` with `--target-env qa` cleanup |
 | `pnpm run cleanup:local` | Dry-run disposable cleanup against local D1 with `--target-env local` |
 | `pnpm run cleanup:local:apply` | Apply disposable cleanup to local D1 only |
@@ -225,7 +225,7 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
 
 See [docs/deployment.md](./docs/deployment.md) for the full production checklist, local `.dev.vars` guidance, and common failure modes.
 
-The dedicated QA environment uses D1 `spoonjoy-qa`, R2 `spoonjoy-photos-qa`, per-run `codex-qa-seed-` seed users, disposable `codex-smoke-` users, and `SPOONJOY_CSP_MODE=enforce`. Configure QA secrets with commands such as `wrangler secret put SESSION_SECRET --env qa` and verify them with `wrangler secret list --env qa`. QA docs also cover `POSTHOG_DISABLED=true`, `IMAGE_PROVIDER_PRIMARY=gemini`, OAuth callback setup, WebAuthn origins, and the rule: Do not run broad production cleanup.
+The dedicated QA environment uses D1 `spoonjoy-qa-2`, R2 `spoonjoy-photos-qa`, per-run `codex-qa-seed-` seed users, disposable `codex-smoke-` users, and `SPOONJOY_CSP_MODE=enforce`. Configure QA secrets with commands such as `wrangler secret put SESSION_SECRET --env qa` and verify them with `wrangler secret list --env qa`. QA docs also cover `POSTHOG_DISABLED=true`, `IMAGE_PROVIDER_PRIMARY=sample` (QA covers come from sample images), OAuth callback setup, WebAuthn origins, and the rule: Do not run broad production cleanup.
 
 ## Project Structure
 
@@ -279,3 +279,5 @@ The canonical proposed backlog lives in [`BACKLOG.md`](./BACKLOG.md). Agent task
 ## License
 
 ISC
+
+[^stack]: package.json verify:fileLine(package.json, /"react-router": "7\./)

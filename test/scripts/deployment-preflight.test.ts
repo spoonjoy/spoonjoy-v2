@@ -146,27 +146,18 @@ function validQaImageCoverSmokeWorkflow(): string {
     "        run: |",
     "          corepack enable",
     "          corepack prepare pnpm@10.28.1 --activate",
-    "      - run: pnpm install --frozen-lockfile",
+    "      - run: pnpm install --frozen-lockfile --ignore-scripts",
     "        if: steps.cloudflare.outputs.ready == 'true'",
     "      - run: pnpm prisma:generate",
     "        if: steps.cloudflare.outputs.ready == 'true'",
-    "      - name: Check QA image-provider secrets",
-    "        id: qa-secrets",
+    "      - name: Put the sample cover images in QA's photo bucket",
     "        if: steps.cloudflare.outputs.ready == 'true'",
     "        env:",
     "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
     "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
-    "        run: |",
-    "          secrets_json=\"$(pnpm exec wrangler secret list --env qa)\"",
-    "          echo \"$secrets_json\"",
-    "          if ! printf '%s' \"$secrets_json\" | grep -Eq '\"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\"'; then",
-    "            echo \"ready=false\" >> \"$GITHUB_OUTPUT\"",
-    "            echo \"Skipping QA image-cover smoke because no QA image-provider secret is configured.\"",
-    "            exit 1",
-    "          fi",
-    "          echo \"ready=true\" >> \"$GITHUB_OUTPUT\"",
+    "        run: node scripts/qa-sample-covers.mjs",
     "      - name: Run QA image-cover smoke",
-    "        if: steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'",
+    "        if: steps.cloudflare.outputs.ready == 'true'",
     "        env:",
     "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
     "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
@@ -174,7 +165,7 @@ function validQaImageCoverSmokeWorkflow(): string {
     "          SPOONJOY_QA_SMOKE_TARGET: --target-env qa",
     "        run: pnpm run smoke:qa:image-cover",
     "      - name: Upload QA image-cover smoke artifacts",
-    "        if: always() && steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'",
+    "        if: always() && steps.cloudflare.outputs.ready == 'true'",
     "        uses: actions/upload-artifact@v7",
     "        with:",
     "          path: qa-image-cover-smoke-artifacts/",
@@ -296,8 +287,8 @@ function validInputs(): DeploymentPreflightInputs {
           d1_databases: [
             {
               binding: "DB",
-              database_name: "spoonjoy-qa",
-              database_id: "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34",
+              database_name: "spoonjoy-qa-2",
+              database_id: "e29dc64f-e5ee-47a4-b17f-f68dbee5a1c1",
             },
           ],
           r2_buckets: [{ binding: "PHOTOS", bucket_name: "spoonjoy-photos-qa" }],
@@ -3519,12 +3510,13 @@ describe("deployment preflight", () => {
     ["unit-changed runs outside pull requests", "    name: unit-changed\n    needs: queue-tested\n    if: ${{ !cancelled() && github.event_name == 'pull_request' }}\n", "    name: unit-changed\n    needs: queue-tested\n    if: always()\n"],
     ["unit-changed is skipped whenever queue-tested is", "    name: unit-changed\n    needs: queue-tested\n    if: ${{ !cancelled() && github.event_name == 'pull_request' }}\n", "    name: unit-changed\n    needs: queue-tested\n    if: github.event_name == 'pull_request'\n"],
     ["unit-changed drops its dependency on queue-tested", "    name: unit-changed\n    needs: queue-tested\n    if: ${{ !cancelled() && github.event_name == 'pull_request' }}\n", "    name: unit-changed\n    if: ${{ !cancelled() && github.event_name == 'pull_request' }}\n"],
-    ["unit-changed interpolates a commit into its shell", 'git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"', "git fetch --quiet --no-tags --deepen=1 origin ${{ github.event.pull_request.head.sha }}"],
-    ["unit-changed fetches the base commit without its history", 'git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"', 'git fetch --quiet --no-tags --depth=1 origin "$CI_SOURCE_SHA"'],
+    ["unit-changed checks out without the base commit", "          fetch-depth: 2\n", ""],
+    ["unit-changed checks out the whole history", "          fetch-depth: 2\n", "          fetch-depth: 0\n"],
+    ["unit-changed deepens its checkout in a later step", "      - name: 🧭 HX source rule\n", "      - name: 📥 Fetch the base commit\n        run: node scripts/warning-gate.ts -- git fetch --quiet --no-tags --deepen=1 origin \"$CI_SOURCE_SHA\"\n\n      - name: 🧭 HX source rule\n"],
     ["unit-changed reads its base from the event payload", 'SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed', "SPOONJOY_CHANGED_SINCE=${{ github.event.pull_request.base.sha }} pnpm run verify:clean:test:changed"],
     ["unit-changed takes its base from env", '        run: SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed', '        env:\n          SPOONJOY_CHANGED_SINCE: ${{ github.event.pull_request.base.sha }}\n        run: SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed'],
     ["unit-changed runs an ungated test command", '        run: SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed', "        run: pnpm exec vitest run"],
-    ["unit-changed drops the generated contract check", "        run: pnpm run verify:clean:typecheck\n\n      - name: 🔐 Verify generated API contract\n        run: pnpm run verify:clean:generated-contract\n\n      # The checkout", "        run: pnpm run verify:clean:typecheck\n\n      # The checkout"],
+    ["unit-changed drops the generated contract check", "        run: pnpm run verify:clean:typecheck\n\n      - name: 🔐 Verify generated API contract\n        run: pnpm run verify:clean:generated-contract\n\n      # Runs on every pull request and ratchets", "        run: pnpm run verify:clean:typecheck\n\n      # Runs on every pull request and ratchets"],
     ["unit-changed drops the HX source rule", "      - name: 🧭 HX source rule\n        run: node scripts/warning-gate.ts -- pnpm run hx:source-rules --base \"$(git rev-parse HEAD^1)\"\n", ""],
     ["unit-changed checks the HX source rule without its ratchet", "pnpm run hx:source-rules --base \"$(git rev-parse HEAD^1)\"\n", "pnpm run hx:source-rules\n"],
     ["coverage drops the HX source rule", "      - name: 🧭 HX source rule\n        if: github.event_name != 'pull_request'\n        run: node scripts/warning-gate.ts -- pnpm run hx:source-rules\n", ""],
@@ -4051,39 +4043,39 @@ describe("deployment preflight", () => {
     expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain("output gate scripts");
   });
 
-  it("requires Playwright dependency installation to disable dpkg progress cursor rewriting", () => {
+  // e2e runs in Playwright's image (test/workflows/playwright-image.test.ts).
+  const PLAYWRIGHT_IMAGE_LINE =
+    "      image: mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f # v1.64.0-noble";
+  const CONTAINER_OPTIONS_LINE = "      options: --user 1001 -v /usr/bin/zstd:/usr/bin/zstd:ro";
+
+  it.each([
+    ["another image", PLAYWRIGHT_IMAGE_LINE, "      image: mcr.microsoft.com/playwright:v1.64.0-noble"],
+    ["no lent zstd", CONTAINER_OPTIONS_LINE, "      options: --user 1001"],
+    ["another runner", "    runs-on: ubuntu-24.04\n", "    runs-on: ubuntu-latest\n"],
+  ])("refuses e2e in %s", (_case, expected, replacement) => {
     const inputs = validInputs();
-    inputs.ciWorkflow = replaceRequired(
-      inputs.ciWorkflow,
-      "sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -o Dpkg::Use-Pty=0 install",
-      "sudo env NEEDRESTART_SUSPEND=1 apt-get install",
-    );
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((entry) => entry.name)).toContain("CI workflow");
-  });
-
-  it("requires the exact warning-gated man-db preseed before Playwright dependency installation", () => {
-    const inputs = validInputs();
-    inputs.ciWorkflow = replaceRequired(
-      inputs.ciWorkflow,
-      "node scripts/warning-gate.ts -- sudo sh -c 'printf \"%s\\n\" \"man-db man-db/auto-update boolean true\" | debconf-set-selections'",
-      "sudo sh -c 'printf \"%s\\n\" \"man-db man-db/auto-update boolean true\" | debconf-set-selections'",
-    );
+    inputs.ciWorkflow = replaceRequired(inputs.ciWorkflow, expected, replacement);
 
     expect(validateDeploymentConfig(inputs).errors.map((entry) => entry.name)).toContain("CI workflow");
   });
 
-  it("requires the man-db trigger cache to match the preseed before dependency installation", () => {
-    const inputs = validInputs();
-    inputs.ciWorkflow = replaceRequired(
-      inputs.ciWorkflow,
-      "node scripts/warning-gate.ts -- sudo touch /var/lib/man-db/auto-update",
-      "sudo touch /var/lib/man-db/auto-update",
-    );
+  it("refuses e2e with setup-node's package cache on, or a system package install", () => {
+    const e2eStart = (workflow: string) => workflow.indexOf("  e2e:\n");
+    const inE2e = (workflow: string, expected: string, replacement: string) => {
+      const start = e2eStart(workflow);
+      return workflow.slice(0, start) + replaceRequired(workflow.slice(start), expected, replacement);
+    };
+    const cacheOn = validInputs();
+    cacheOn.ciWorkflow = inE2e(cacheOn.ciWorkflow, '          cache: ""\n', "");
+    expect(validateDeploymentConfig(cacheOn).errors.map((entry) => entry.name)).toContain("CI workflow");
 
-    expect(validateDeploymentConfig(inputs).errors.map((entry) => entry.name)).toContain("CI workflow");
+    const apt = validInputs();
+    apt.ciWorkflow = inE2e(
+      apt.ciWorkflow,
+      "      - name: 🗄️ Apply D1 migrations\n",
+      "      - name: 🎭 Install Playwright Browsers\n        run: node scripts/warning-gate.ts -- pnpm exec playwright install --with-deps chromium\n\n      - name: 🗄️ Apply D1 migrations\n",
+    );
+    expect(validateDeploymentConfig(apt).errors.map((entry) => entry.name)).toContain("CI workflow");
   });
 
   it("requires an explicit non-interactive Playwright reporter while preserving HTML artifacts", () => {
@@ -4372,49 +4364,15 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("QA image-cover smoke workflow");
   });
 
-  it("rejects QA image-cover workflows that echo provider gate commands instead of executing them", () => {
-    const inputs = validInputs();
-    inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow()
-      .replace(
-        '          secrets_json="$(pnpm exec wrangler secret list --env qa)"',
-        '          echo "secrets_json=\\"$(pnpm exec wrangler secret list --env qa)\\""',
-      )
-      .replace(
-        "          if ! printf '%s' \"$secrets_json\" | grep -Eq '\"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\"'; then",
-        "          echo \"if ! printf '%s' \\\"$secrets_json\\\" | grep -Eq '\\\"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\\\"'; then\"",
-      );
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("QA image-cover smoke workflow");
-  });
-
-  it("rejects QA image-cover workflows that hide provider gate commands in a heredoc", () => {
+  it("rejects QA image-cover workflows that require a paid image-provider key again", () => {
     const inputs = validInputs();
     inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow().replace(
+      "        run: node scripts/qa-sample-covers.mjs",
       [
-        "        run: |",
-        '          secrets_json="$(pnpm exec wrangler secret list --env qa)"',
-        '          echo "$secrets_json"',
-        "          if ! printf '%s' \"$secrets_json\" | grep -Eq '\"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\"'; then",
-        "            echo \"ready=false\" >> \"$GITHUB_OUTPUT\"",
-        "            echo \"Skipping QA image-cover smoke because no QA image-provider secret is configured.\"",
-        "            exit 1",
-        "          fi",
-        "          echo \"ready=true\" >> \"$GITHUB_OUTPUT\"",
-      ].join("\n"),
-      [
-        "        run: |",
-        "          cat <<'EOF'",
-        '          secrets_json="$(pnpm exec wrangler secret list --env qa)"',
-        '          echo "$secrets_json"',
-        "          if ! printf '%s' \"$secrets_json\" | grep -Eq '\"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\"'; then",
-        "          echo \"ready=false\" >> \"$GITHUB_OUTPUT\"",
-        "          echo \"Skipping QA image-cover smoke because no QA image-provider secret is configured.\"",
-        "          exit 1",
-        "          fi",
-        "          echo \"ready=true\" >> \"$GITHUB_OUTPUT\"",
-        "          EOF",
+        "        run: node scripts/qa-sample-covers.mjs",
+        "      - name: Check QA image-provider secrets",
+        "        if: steps.cloudflare.outputs.ready == 'true'",
+        "        run: pnpm exec wrangler secret list --env qa | grep -q OPENAI_API_KEY",
       ].join("\n"),
     );
 
@@ -4423,7 +4381,19 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("QA image-cover smoke workflow");
   });
 
-  it("rejects QA image-cover workflows that set provider ready true after skip branches", () => {
+  it("rejects QA image-cover workflows that do not put the sample cover images in place before the smoke", () => {
+    const inputs = validInputs();
+    inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow().replace(
+      "        run: node scripts/qa-sample-covers.mjs",
+      "        run: echo node scripts/qa-sample-covers.mjs",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("QA image-cover smoke workflow");
+  });
+
+  it("rejects QA image-cover workflows that set ready true after the skip branch", () => {
     const inputs = validInputs();
     inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow().replaceAll(
       "            exit 1\n",
@@ -4439,12 +4409,12 @@ describe("deployment preflight", () => {
     const inputs = validInputs();
     inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow()
       .replace(
-        "        if: steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'",
-        "        if: always() || steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'",
+        "      - name: Run QA image-cover smoke\n        if: steps.cloudflare.outputs.ready == 'true'",
+        "      - name: Run QA image-cover smoke\n        if: always() || steps.cloudflare.outputs.ready == 'true'",
       )
       .replace(
-        "        if: always() && steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'",
-        "        if: always() || steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'",
+        "        if: always() && steps.cloudflare.outputs.ready == 'true'",
+        "        if: always() || steps.cloudflare.outputs.ready == 'true'",
       );
 
     const result = validateDeploymentConfig(inputs);
@@ -4975,7 +4945,7 @@ describe("deployment docs", () => {
     const docs = `${readme}\n${deployDoc}\n${deploymentDoc}`;
 
     for (const term of [
-      "spoonjoy-qa",
+      "spoonjoy-qa-2",
       "spoonjoy-photos-qa",
       "spoonjoy-v2-qa.mendelow-studio.workers.dev",
       "pnpm run qa:preflight",
@@ -4988,7 +4958,7 @@ describe("deployment docs", () => {
       "wrangler secret list --env qa",
       "wrangler secret put SESSION_SECRET --env qa",
       "POSTHOG_DISABLED=true",
-      "IMAGE_PROVIDER_PRIMARY=gemini",
+      "IMAGE_PROVIDER_PRIMARY=sample",
       "OAuth callback",
       "WebAuthn",
       "codex-qa-seed-",
@@ -5129,7 +5099,7 @@ describe("package.json deploy scripts", () => {
 });
 
 describe("QA image-cover smoke workflow", () => {
-  it("runs only on manual dispatch and schedule with credential and QA secret gates", async () => {
+  it("runs only on manual dispatch and schedule with a credential gate and no paid-key gate", async () => {
     const workflow = await readFile(`${process.cwd()}/.github/workflows/qa-image-cover-smoke.yml`, "utf8");
     const result = validateDeploymentConfig({
       ...validInputs(),
@@ -5782,8 +5752,8 @@ describe("wrangler QA environment", () => {
     expect(qa?.d1_databases).toEqual([
       {
         binding: "DB",
-        database_name: "spoonjoy-qa",
-        database_id: "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34",
+        database_name: "spoonjoy-qa-2",
+        database_id: "e29dc64f-e5ee-47a4-b17f-f68dbee5a1c1",
       },
     ]);
     expect(qa?.r2_buckets).toEqual([{ binding: "PHOTOS", bucket_name: "spoonjoy-photos-qa" }]);

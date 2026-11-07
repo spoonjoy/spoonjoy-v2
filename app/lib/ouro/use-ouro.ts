@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, createElement, useContext, type AnchorHTMLAttributes, type ComponentType, type Ref } from "react";
+import { createContext, createElement, useContext, type AnchorHTMLAttributes, type ComponentType, type Ref, type RefObject } from "react";
 
 // The OuroProvider context and its hook, apart from the provider so ouro-provider.tsx
 // exports only components (React Fast Refresh).
@@ -13,6 +13,8 @@ export type OuroLinkComponent = ComponentType<
 export interface OuroContextValue {
   /** Renders internal links. Defaults to a plain `<a>`. */
   linkComponent: OuroLinkComponent;
+  /** Where floating popups render. Unset, they render where Base UI puts them: the end of `<body>`, or the portal they open from. */
+  portalContainer?: HTMLElement | RefObject<HTMLElement | null> | undefined;
 }
 
 /**
@@ -29,7 +31,11 @@ export const DefaultLink: OuroLinkComponent = (props) => createElement("a", prop
  */
 export const OuroContext = createContext<OuroContextValue>({ linkComponent: DefaultLink });
 
-/** Reads the `OuroProvider` settings; returns defaults when there is no provider. */
+/**
+ * Reads the `OuroProvider` settings; returns defaults when there is no provider.
+ *
+ * @claim "Reads the `OuroProvider` settings; returns defaults" registry/ouro/lib/ouro/ouro-provider.test.tsx verify:testExists(registry/ouro/lib/ouro/ouro-provider.test.tsx::OuroProvider and useOuro > defaults to a plain anchor without a provider)
+ */
 export function useOuro(): OuroContextValue {
   return useContext(OuroContext);
 }

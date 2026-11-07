@@ -18,7 +18,7 @@ afterEach(async () => {
   await commands.emulateMedia({ reducedMotion: "no-preference" });
   await rotate(390, 844);
 });
-const checkbox = () => document.querySelector<HTMLElement>('[role="checkbox"][aria-label="lemons"]')!;
+const checkbox = () => fixture!.row().querySelector<HTMLElement>('[role="checkbox"]')!;
 const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
 const track = () => fixture!.row().querySelector<HTMLElement>("[data-ouro-swipe-actions-track]")!;
 async function mount(direction: "ltr" | "rtl" = "ltr") {

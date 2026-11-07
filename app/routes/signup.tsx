@@ -1,5 +1,5 @@
 import type { Route } from "./+types/signup";
-import { Form as RouterForm, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
+import { Form as RouterForm, redirect, data, useActionData, useLoaderData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { createUser, emailExists } from "~/lib/auth.server";
 import { D1_WRITE_UNAVAILABLE_MESSAGE, d1UnavailableHeaders, isD1Unavailable } from "~/lib/d1-write-retry.server";
@@ -8,16 +8,18 @@ import { isValidEmail, normalizeEmail } from "~/lib/email";
 import { createUserSession, getUserId, sanitizeSessionRedirect } from "~/lib/session.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
 import { normalizeUsername, USERNAME_HINT, usernameFormatError } from "~/lib/username";
-import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/oauth";
+import { OAuthButtonGroup, OAuthError } from "~/components/oauth";
+import { Separator } from "~/components/ouro/separator/separator";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { AuthPage } from "~/components/auth/auth-page";
 import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
+import { useRedirectToWithHash } from "~/hooks/use-redirect-hash";
 
 interface ActionData {
   errors?: {
@@ -155,8 +157,7 @@ export default function Signup() {
   const actionData = useActionData<ActionData>();
   const loaderData = useLoaderData<LoaderData | null>();
   const oauthProviders = loaderData?.oauthProviders ?? [];
-  const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") ?? undefined;
+  const redirectTo = useRedirectToWithHash();
   const formErrors = useFormErrors(actionData?.errors, undefined, actionData);
 
   return (
@@ -174,7 +175,7 @@ export default function Signup() {
         {oauthProviders.length > 0 && (
           <>
             <OAuthButtonGroup providers={oauthProviders} redirectTo={redirectTo} className="mt-8" />
-            <OAuthDivider className="my-6" />
+            <Separator label="or" className="my-6" data-testid="oauth-separator" />
           </>
         )}
 
@@ -229,7 +230,7 @@ export default function Signup() {
           </Button>
         </Form>
 
-        <Text align="center" className="mt-6">
+        <Text tone="muted" align="center" className="mt-6">
           Already have an account?{" "}
           <Link href={redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : "/login"}>Log in</Link>
         </Text>

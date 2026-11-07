@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { ToastProvider } from "~/components/feedback/toast";
+import { Toaster } from "~/components/ouro/toast/toaster";
 import { NotificationsSection } from "~/components/notifications-section";
 
 vi.mock("~/lib/push-client", () => ({
@@ -29,9 +29,9 @@ function renderWithToast(props: Partial<Parameters<typeof NotificationsSection>[
     initialPreferences: props.initialPreferences ?? DEFAULT_PREFS,
   };
   return render(
-    <ToastProvider>
+    <>
       <NotificationsSection {...merged} />
-    </ToastProvider>,
+    <Toaster /></>,
   );
 }
 
@@ -55,6 +55,9 @@ describe("NotificationsSection", () => {
     (isPushSupported as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ supported: true });
     renderWithToast({ initiallySubscribed: false });
     expect(screen.getByRole("button", { name: /enable notifications/i })).toBeInTheDocument();
+    const section = screen.getByRole("heading", { name: "Notifications", level: 2 }).closest("section");
+    expect(section).toHaveClass("border", "border-border");
+    expect(section).not.toHaveClass("border-b", "border-t");
   });
 
   it("renders 'Notifications enabled' label + Disable button when initiallySubscribed", () => {
@@ -95,9 +98,9 @@ describe("NotificationsSection", () => {
     });
     renderWithToast({ initiallySubscribed: false });
     fireEvent.click(screen.getByRole("button", { name: /enable notifications/i }));
-    await waitFor(() =>
-      expect(screen.getByText(/permission was denied|unable to enable/i)).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByRole("alertdialog", { name: "Permission was denied — re-enable notifications in your browser to continue." }),
+    ).toBeInTheDocument();
   });
 
   it("clicking Disable calls unsubscribeFromPush and reverts to Enable state on ok:true", async () => {
@@ -122,9 +125,7 @@ describe("NotificationsSection", () => {
     });
     renderWithToast({ initiallySubscribed: false });
     fireEvent.click(screen.getByRole("button", { name: /enable notifications/i }));
-    await waitFor(() =>
-      expect(screen.getByText(/unable to enable notifications/i)).toBeInTheDocument(),
-    );
+    expect(await screen.findByRole("alertdialog", { name: "Unable to enable notifications." })).toBeInTheDocument();
   });
 
   it("clicking Disable on server error keeps the user marked as enabled and surfaces an error toast", async () => {
@@ -135,9 +136,7 @@ describe("NotificationsSection", () => {
     });
     renderWithToast({ initiallySubscribed: true });
     fireEvent.click(screen.getByRole("button", { name: /disable/i }));
-    await waitFor(() =>
-      expect(screen.getByText(/unable to disable/i)).toBeInTheDocument(),
-    );
+    expect(await screen.findByRole("alertdialog", { name: "Unable to disable notifications. Please try again." })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /disable/i }),
     ).toBeInTheDocument();
@@ -213,9 +212,9 @@ describe("NotificationsSection — preference toggles", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     // Rolled back to ON.
     await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("true"));
-    await waitFor(() =>
-      expect(screen.getByText(/unable to update notification preferences/i)).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByRole("alertdialog", { name: "Unable to update notification preferences. Please try again." }),
+    ).toBeInTheDocument();
   });
 
   it("toggle network error rolls back the optimistic state and shows an error toast", async () => {
@@ -226,9 +225,9 @@ describe("NotificationsSection — preference toggles", () => {
     fireEvent.click(sw);
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("true"));
-    await waitFor(() =>
-      expect(screen.getByText(/unable to update notification preferences/i)).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByRole("alertdialog", { name: "Unable to update notification preferences. Please try again." }),
+    ).toBeInTheDocument();
   });
 
   it("disables all toggles when push is unsupported", () => {

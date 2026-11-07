@@ -15,6 +15,8 @@ let input = "";
  *
  * @example
  * const tapped = lastInput() === "touch" || lastInput() === "pen";
+ * @claim "Overlays read it when they open" registry/ouro/lib/ouro/last-input.test.ts verify:testExists(registry/ouro/lib/ouro/last-input.test.ts::records the pointer type of a press, and keyboard after a key press)
+ * @claim "Overlays read it when they open" registry/ouro/components/ouro/dialog/dialog.touch.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.touch.test.tsx::initial focus in a controlled dialog opened from the app's own button > focuses the centered popup, not its first input, after a tap)
  */
 function lastInput(): string {
   return input;

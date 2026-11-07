@@ -23,6 +23,8 @@ export type { TextFieldType };
  * The types TextField supports. `number` is not one: NumberField parses and steps numbers.
  *
  * @internal
+ * @claim "The types TextField supports" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField types > renders a text input and lists the types for any other type)
+ * @claim "The types TextField supports" registry/ouro/components/ouro/text-field/text-field-styles.ts verify:fileLine(registry/ouro/components/ouro/text-field/text-field-styles.ts, /const\stextFieldTypes\s=\s\["text",\s"email",\s"password",\s"tel",\s"url",\s"search",\s"date",\s"time"\]/)
  */
 const textFieldTypes = ["text", "email", "password", "tel", "url", "search", "date", "time"] as const;
 
@@ -30,6 +32,8 @@ const textFieldTypes = ["text", "email", "password", "tel", "url", "search", "da
  * A type TextField supports.
  *
  * @internal
+ * @claim "A type TextField supports" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField types > renders a text input and lists the types for any other type)
+ * @claim "A type TextField supports" registry/ouro/components/ouro/text-field/text-field-styles.ts verify:fileLine(registry/ouro/components/ouro/text-field/text-field-styles.ts, /const\stextFieldTypes\s=/)
  */
 type TextFieldType = (typeof textFieldTypes)[number];
 
@@ -48,6 +52,9 @@ interface TypeDefaults {
  * the OS picker, so they set no keyboard.
  *
  * @internal
+ * @claim "Each type's keyboard (`inputMode`) and autofill" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField > lets the app's inputMode and autoComplete win over the type's defaults)
+ * @claim "Each type's keyboard (`inputMode`) and autofill" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField types > turns off capitalization and spell check for email and url)
+ * @claim "Date and time open the OS" registry/ouro/components/ouro/text-field/text-field-styles.ts verify:fileLine(registry/ouro/components/ouro/text-field/text-field-styles.ts, /^\s+date:\s\{\sautoComplete:\s"off"\s\},/)
  */
 const typeDefaults: Readonly<Record<TextFieldType, TypeDefaults>> = {
   text: { inputMode: "text", autoComplete: "on" },
@@ -79,6 +86,7 @@ const groupBaseClass =
  * only the focus outline shows.
  *
  * @internal
+ * @claim "`plain` draws no border, background or" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField variant and size > draws no frame of its own with variant plain, and still outlines on keyboard focus)
  */
 const groupVariants = {
   outline:
@@ -94,6 +102,8 @@ const groupVariants = {
  * a 20px font and 20px icons at every width.
  *
  * @internal
+ * @claim "`md` is 44px tall with a" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField looks > uses a 16px font on phones, so iOS does not zoom on focus, and a 44px box)
+ * @claim "`lg` is 56px tall, 48px from" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField variant and size > sets 20px text in a taller box with size lg, at phone and desktop widths)
  */
 const groupSizes = {
   md: "[--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] text-base sm:pointer-fine:text-sm",
@@ -141,6 +151,9 @@ const adornmentClass = "flex shrink-0 items-center whitespace-nowrap text-muted-
  * padding to pull them into, so TextField sets `me-0` there.
  *
  * @internal
+ * @claim "On a coarse pointer they sit" registry/ouro/components/ouro/text-field/text-field.touch.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.touch.test.tsx::gives the toggle a 44px hit area, though it is smaller than the box)
+ * @claim "On a coarse pointer they sit" registry/ouro/components/ouro/text-field/text-field.touch.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.touch.test.tsx::keeps the clear button's and the toggle's touch areas apart)
+ * @claim "A plain box has no padding" registry/ouro/components/ouro/text-field/text-field.tsx verify:fileLine(registry/ouro/components/ouro/text-field/text-field.tsx, /variant\s===\s"plain"\s&&\s"me-0"/)
  */
 const endSlotClass = "-me-2 flex shrink-0 items-center gap-1 pointer-coarse:gap-3";
 
@@ -161,6 +174,8 @@ const otherComponents: Readonly<Record<string, (label: string) => readonly [stri
  * there is one (NumberField, DatePicker, FileField), else the list of types. Development only.
  *
  * @internal
+ * @claim "The dev message for a type" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField types > renders a text input with a decimal keyboard and points to NumberField for type=number)
+ * @claim "The dev message for a type" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField types > renders a text input and lists the types for any other type)
  */
 function typeWarning(type: string, label: string): readonly [string, string] {
   if (Object.hasOwn(otherComponents, type)) {

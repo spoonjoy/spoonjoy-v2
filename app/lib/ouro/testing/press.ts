@@ -16,6 +16,7 @@ const MOVES = ["pointermove", "mousemove", "pointerover", "mouseover", "pointere
  * @example
  * const { rest, pressed, active } = await pressTint(option);
  * expect(active && pressed !== rest).toBe(true);
+ * @claim "It throws if the element never" registry/ouro/lib/ouro/testing/press.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/press.touch.test.ts::fails on an element with no pressed tint)
  */
 export async function pressTint(
   element: HTMLElement,

@@ -41,4 +41,12 @@ describe("revalidateUnlessHashOnly", () => {
     expect(rootShouldRevalidate(args("/", "/recipes"))).toBe(true);
     expect(recipeShouldRevalidate(args("/recipes/r1", "/recipes/r1"))).toBe(true);
   });
+
+  // A submission that got no answer (app/lib/network-failure.ts): the root's data is not reloaded
+  // either, since that request would most likely fail the same way and show the error boundary.
+  it("keeps the root's data after a submission that got no answer", () => {
+    const actionResult = { intent: "updateTitle", error: "Spoonjoy couldn't be reached.", errorCode: "network_failure", retryable: true };
+    expect(rootShouldRevalidate(args("/cookbooks/c1", "/cookbooks/c1", { formMethod: "POST", actionResult }))).toBe(false);
+    expect(rootShouldRevalidate(args("/cookbooks/c1", "/cookbooks/c1", { formMethod: "POST", actionResult: { success: true } }))).toBe(true);
+  });
 });

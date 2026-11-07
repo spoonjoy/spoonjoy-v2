@@ -25,6 +25,8 @@ import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { createUser } from "~/lib/auth.server";
 import { buildApiV1OpenApiDocument } from "~/lib/api-v1-openapi.server";
+import { recordCookingNow } from "~/lib/cooking-now.server";
+import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import { getLocalDb } from "~/lib/db.server";
 import * as recipeImport from "~/lib/recipe-import.server";
 import * as recipeWrites from "~/lib/api-v1-recipe-writes.server";
@@ -582,6 +584,18 @@ async function recordNativeSession() {
     endpoint: "GET /api/v1/users/{identifier}/fellow-chefs",
   });
   await api("me-chefs", "GET", "me/chefs", { token: chef, endpoint: "GET /api/v1/me/chefs" });
+  // Cooking now: the Worker records a row after each cook-session write; record one directly.
+  await recordCookingNow(d1Binding as D1ReadDatabase, {
+    userId: chefUser.id,
+    recipeId,
+    attemptId: "11111111-1111-4111-8111-111111111111",
+    revision: 1,
+    activeStepId: stepId,
+    activeStepIndex: 0,
+    checkedCount: 1,
+    touchedAt: Date.now(),
+  });
+  await api("cooking-now", "GET", "cooking-now", { token: chef, endpoint: "GET /api/v1/cooking-now" });
   await api("me-sync", "GET", "me/sync", { token: chef, query: { limit: "20" }, endpoint: "GET /api/v1/me/sync" });
 
   // Recipe import: without the import provider's secret the API answers with a blocker, and with it
@@ -699,6 +713,23 @@ async function recordNativeSession() {
     status: 202,
   });
   await api("me-export", "GET", "me/export", { token: chef, endpoint: "GET /api/v1/me/export" });
+
+  // Moderation: the friend reports the chef's recipe (again answers the same open report), then
+  // blocks, lists and unblocks the chef.
+  await api("report-create", "POST", "reports", {
+    token: friend,
+    body: { targetType: "recipe", targetId: recipeId, reason: "offensive", details: "Contract report." },
+    endpoint: "POST /api/v1/reports",
+    status: 201,
+  });
+  await api("report-create-again", "POST", "reports", {
+    token: friend,
+    body: { targetType: "recipe", targetId: recipeId, reason: "offensive" },
+    endpoint: "POST /api/v1/reports",
+  });
+  await api("block-create", "POST", "blocks", { token: friend, body: { chefId: chefUser.id }, endpoint: "POST /api/v1/blocks" });
+  await api("blocks-list", "GET", "blocks", { token: friend, endpoint: "GET /api/v1/blocks" });
+  await api("block-delete", "DELETE", `blocks/${chefUser.id}`, { token: friend, endpoint: "DELETE /api/v1/blocks/{chefId}" });
 
   // Deletes, last: they remove what the reads above recorded.
   await api("recipe-spoon-delete", "DELETE", `recipes/${recipeId}/spoons/${jsonSpoon.data.spoon.id}`, {

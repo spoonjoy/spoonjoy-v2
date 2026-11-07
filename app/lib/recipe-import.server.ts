@@ -71,6 +71,7 @@ import {
   type OEmbedMetadata,
 } from "~/lib/recipe-import-video.server";
 import { fetchSafeImageBytes } from "~/lib/safe-image-fetch.server";
+import { putWithTransientRetry } from "~/lib/r2-transient-retry.server";
 import { normalizeRecipeSourceUrl, recipeSourceUrlCandidates } from "~/lib/recipe-source-url.server";
 
 type Database = PrismaClient | Prisma.TransactionClient;
@@ -876,7 +877,7 @@ async function uploadImportCover(
     const { bytes, contentType, extension } = await fetchSafeImageBytes(coverSourceUrl, { fetchImpl });
     const stamp = now().getTime();
     const key = `covers/import/${stamp}-${crypto.randomUUID()}.${extension}`;
-    await bucket.put(key, bytes, {
+    await putWithTransientRetry(bucket, key, bytes, {
       httpMetadata: { contentType },
     });
     await createCover(db, {

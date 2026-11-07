@@ -1,4 +1,3 @@
-import axe from "axe-core";
 import { createRef, StrictMode, useState, type AnchorHTMLAttributes, type ReactNode } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
@@ -22,17 +21,27 @@ import {
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
 import { isTransparent } from "~/lib/ouro/testing/color";
-import { axeExclude } from "~/lib/ouro/testing/axe";
+import { audit, axeExclude, describeFindings } from "~/lib/ouro/testing/axe";
+
+/** The colour behind an element: the nearest background around it that is not transparent. */
+function behind(element: Element): string {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const color = getComputedStyle(node).backgroundColor;
+    if (color !== "transparent" && !/rgba\(.*,\s*0\)$/.test(color)) return color;
+  }
+  return "rgb(255, 255, 255)";
+}
+
 
 // Runs in Chromium and WebKit.
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
 
-async function render(node: ReactNode) {
+async function render(node: ReactNode, parent: Element = document.body) {
   const host = document.createElement("div");
   host.style.padding = "160px 400px";
-  document.body.append(host);
+  parent.append(host);
   mounted.push(host);
   const root = createRoot(host);
   roots.push(root);
@@ -61,6 +70,20 @@ const trigger = () => document.querySelector<HTMLElement>('[data-ouro="button"]'
 
 describe("Menu current-page forced colors", () => {
   afterEach(() => document.documentElement.removeAttribute("dir"));
+  /** The highlighted item's fill against its popup's, under forced colours, which paint plain fills in the canvas colour. */
+  const highlightShows = (highlighted: Element) => getComputedStyle(highlighted).backgroundColor !== behind(highlighted);
+
+  it("shows the highlighted item in the system's highlight colours, where its fill is dropped", async () => {
+    await render(<Menu trigger={<Button>Account</Button>}><MenuItem onClick={() => {}}>Edit</MenuItem><MenuItem onClick={() => {}}>Duplicate</MenuItem></Menu>);
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    const edit = page.getByRole("menuitem", { name: "Edit", exact: true });
+    await expect.element(edit).toHaveAttribute("data-highlighted");
+    await commands.emulateMedia({ forcedColors: "active" });
+    expect(highlightShows(edit.element())).toBe(true);
+    expect(getComputedStyle(edit.element()).color).not.toBe(getComputedStyle(page.getByRole("menuitem", { name: "Duplicate", exact: true }).element()).color);
+  });
+
   for (const direction of ["ltr", "rtl"] as const) {
     it(`keeps its ${direction} start-edge mark visible in the system palette`, async () => {
       document.documentElement.dir = direction;
@@ -531,33 +554,53 @@ describe("Menu items", () => {
     expect(document.body.textContent).not.toContain("Back");
   });
 
-  it("has no axe violations open, with every item type", async () => {
-    await openDropdown(
-      {},
-      <>
-        <MenuGroup label="Recipe">
-          <MenuItem shortcut={["mod", "e"]}>Edit</MenuItem>
-          <MenuItem tone="destructive">Delete</MenuItem>
-        </MenuGroup>
-        <MenuSeparator />
-        <MenuCheckboxItem defaultChecked>Pin</MenuCheckboxItem>
-        <MenuRadioGroup label="Sort" defaultValue="a">
-          <MenuRadioItem value="a">A</MenuRadioItem>
-        </MenuRadioGroup>
-        <MenuSub label="Share">
-          <MenuItem>Copy link</MenuItem>
-        </MenuSub>
-      </>,
+  it("passes the accessibility gate open, with every item type, in light and dark, inside the page's main landmark", async () => {
+    // As an app places it: in the page's main, under its heading, with popups rendered inside main (OuroProvider's portalContainer).
+    const main = document.createElement("main");
+    main.innerHTML = "<h1>Recipes</h1>";
+    document.body.append(main);
+    mounted.push(main);
+    await render(
+      <OuroProvider portalContainer={main}>
+        <Menu trigger={<Button>Actions</Button>}>
+          <MenuGroup label="Recipe">
+            <MenuItem shortcut={["mod", "e"]}>Edit</MenuItem>
+            <MenuItem tone="destructive">Delete</MenuItem>
+          </MenuGroup>
+          <MenuSeparator />
+          <MenuCheckboxItem defaultChecked>Pin</MenuCheckboxItem>
+          <MenuRadioGroup label="Sort" defaultValue="a">
+            <MenuRadioItem value="a">A</MenuRadioItem>
+          </MenuRadioGroup>
+          <MenuSub label="Share">
+            <MenuItem>Copy link</MenuItem>
+          </MenuSub>
+        </Menu>
+      </OuroProvider>,
+      main,
     );
+    await userEvent.click(trigger());
+    await settled();
     for (const scheme of ["light", "dark"]) {
       document.documentElement.classList.toggle("dark", scheme === "dark");
-      const result = await axe.run(
-        { include: [document.documentElement], exclude: axeExclude.map((selector) => [selector]) },
-        { resultTypes: ["violations"], rules: { region: { enabled: false }, "landmark-one-main": { enabled: false }, "page-has-heading-one": { enabled: false } } },
-      );
-      expect(result.violations.map((violation) => violation.id)).toEqual([]);
+      expect(describeFindings(await audit({ include: [document.documentElement], exclude: axeExclude.map((selector) => [selector]) }))).toBe("");
     }
     document.documentElement.classList.remove("dark");
+  });
+
+  it("warns when its open menu renders outside every landmark of a page that has a main", async () => {
+    const main = document.body.appendChild(document.createElement("main"));
+    mounted.push(main);
+    await render(
+      <Menu trigger={<Button>Actions</Button>}>
+        <MenuItem>Edit</MenuItem>
+      </Menu>,
+    );
+    await userEvent.click(trigger());
+    await settled();
+    expect(warnings()).toEqual([
+      "[ouro-ui] Menu: the open popup renders outside every landmark, so screen reader users who move by landmark miss it. Fix: <OuroProvider portalContainer={popups}> around the app, with <div ref={popups} /> inside <main>.",
+    ]);
   });
 });
 
@@ -585,6 +628,8 @@ describe("Menu presentation", () => {
     const sub = menus()[1]!;
     expect(sub.getAttribute("data-ouro-presentation")).toBe("sheet");
     await expect.poll(() => Math.round(sub.getBoundingClientRect().bottom)).toBe(innerHeight);
+    // The submenu's sheet goes back with Back; only the menu's own sheet ends with Close.
+    expect(sub.querySelector("[data-ouro-menu-close]")).toBeNull();
     await userEvent.click(item("Return"));
     await expect.poll(() => menus().length).toBe(1);
     expect(menu()).not.toBeNull();
@@ -688,6 +733,113 @@ describe("Menu presentation", () => {
   });
 });
 
+describe("Menu modal", () => {
+  /** Whether the page's scroll is locked: Base UI hides the overflow of the element that scrolls the page. */
+  const locked = () => [document.documentElement, document.body].some((element) => /hidden|clip/.test(getComputedStyle(element).overflowY));
+
+  it("holds the page while open: its scroll is locked, and a click outside only closes it", async () => {
+    const outside = vi.fn();
+    await render(
+      <>
+        <Menu trigger={<Button>Actions</Button>}>{basicItems}</Menu>
+        <button type="button" data-testid="outside" onClick={outside}>
+          Outside
+        </button>
+      </>,
+    );
+    await expect.poll(locked).toBe(false);
+    await userEvent.click(trigger());
+    await settled();
+    await expect.poll(locked).toBe(true);
+    // Forced: the open menu keeps the pointer from the page, so the click lands where the button is.
+    await userEvent.click(document.querySelector<HTMLElement>("[data-testid=outside]")!, { force: true });
+    await expect.poll(menu).toBeNull();
+    expect(outside).not.toHaveBeenCalled();
+    await expect.poll(locked).toBe(false);
+  });
+
+  it("with modal={false}, leaves the page's scroll alone while a modal Menu's lock comes and goes", async () => {
+    function Pair() {
+      const [held, setHeld] = useState(false);
+      return (
+        <>
+          <Menu modal={false} open onOpenChange={() => {}} trigger={<Button>Light</Button>}>
+            <MenuItem onClick={() => {}}>Paint</MenuItem>
+          </Menu>
+          <Menu open={held} onOpenChange={setHeld} trigger={<Button>Heavy</Button>}>
+            <MenuItem onClick={() => {}}>Hoist</MenuItem>
+          </Menu>
+        </>
+      );
+    }
+    await render(<Pair />);
+    await expect.element(page.getByRole("menuitem", { name: "Paint", exact: true })).toBeVisible();
+    // The positive control: the modal Menu, opened while the light one stays open, locks the page...
+    await userEvent.click(page.getByRole("button", { name: "Heavy", exact: true }));
+    await expect.poll(locked).toBe(true);
+    // ...and unlocks it as it closes, which a lock of the light menu's own would prevent.
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => document.body.textContent?.includes("Hoist")).toBe(false);
+    await expect.poll(locked).toBe(false);
+    await expect.element(page.getByRole("menuitem", { name: "Paint", exact: true })).toBeVisible();
+  });
+
+  it("with modal={false}, leaves the page's controls live: a click outside reaches them and closes the menu", async () => {
+    const outside = vi.fn();
+    await render(
+      <>
+        <Menu modal={false} trigger={<Button>Actions</Button>}>
+          {basicItems}
+        </Menu>
+        <button type="button" onClick={outside}>
+          Outside
+        </button>
+      </>,
+    );
+    await userEvent.click(trigger());
+    await settled();
+    await userEvent.click(page.getByRole("button", { name: "Outside", exact: true }));
+    expect(outside).toHaveBeenCalledOnce();
+    await expect.poll(menu).toBeNull();
+    // A dropdown takes modal without a word.
+    expect(warnings()).toEqual([]);
+  });
+
+  it("keeps the phone sheet holding the page with modal={false}", async () => {
+    await page.viewport(390, 844);
+    await render(
+      <Menu modal={false} trigger={<Button>Actions</Button>}>
+        {basicItems}
+      </Menu>,
+    );
+    await userEvent.click(trigger());
+    expect((await settled()).getAttribute("data-ouro-presentation")).toBe("sheet");
+    await expect.poll(locked).toBe(true);
+  });
+
+  it("warns that a context menu does not use modal, and drops it", async () => {
+    await render(
+      <Menu contextTrigger={<div>Area</div>} {...({ modal: false } as object)}>
+        {basicItems}
+      </Menu>,
+    );
+    await act(nextFrame);
+    expect(warnings()).toEqual(["[ouro-ui] Menu: modal is not used by a context menu, which holds the page while open. Fix: remove modal."]);
+  });
+
+  it("warns that a menu in a MenuBar does not use modal: the bar decides", async () => {
+    await render(
+      <MenuBar aria-label="Recipe editor">
+        <Menu label="File" {...({ modal: false } as object)}>
+          {basicItems}
+        </Menu>
+      </MenuBar>,
+    );
+    await act(nextFrame);
+    expect(warnings()).toEqual(["[ouro-ui] Menu: modal is not used by a menu in <MenuBar>; the bar decides. Fix: remove modal."]);
+  });
+});
+
 describe("Menu context trigger", () => {
   const area = () => document.querySelector<HTMLElement>("[data-testid=area]")!;
 
@@ -774,6 +926,18 @@ describe("MenuBar", () => {
   it("gives its triggers a 32px row with a fine pointer", async () => {
     await renderBar();
     expect(Math.round(barTrigger("File").element().getBoundingClientRect().height)).toBe(32);
+  });
+
+  it("opens each menu as a bottom sheet below 640px", async () => {
+    await page.viewport(390, 844);
+    await renderBar();
+    await userEvent.click(barTrigger("Edit"));
+    const element = await settled();
+    expect(element.getAttribute("data-ouro-presentation")).toBe("sheet");
+    expect(Math.round(element.getBoundingClientRect().bottom)).toBe(innerHeight);
+    expect(Math.round(element.getBoundingClientRect().width)).toBe(innerWidth);
+    // The bar decides how its menus hold the page: a menu in it passes Base UI no modal, which would warn.
+    expect(warnings().filter((message: unknown) => String(message).includes("modal"))).toEqual([]);
   });
 });
 

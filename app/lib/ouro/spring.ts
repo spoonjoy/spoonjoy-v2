@@ -15,7 +15,12 @@ export type { SpringHandle, SpringOptions, SpringState };
 
 /** What `spring` takes. */
 interface SpringOptions {
-  /** The live value to start from: read it from the element, never from the logical target. */
+  /**
+   * The live value to start from: read it from the element, never from the logical target.
+   *
+   * @claim "The live value to start from" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > starts at the live value with the velocity it was handed, in px per millisecond)
+   * @claim "The live value to start from" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > on animation frames > moves from the live value to the target, ends exactly on it and says when it rests)
+   */
   from: number;
   /** The value to settle on. */
   to: number;
@@ -27,14 +32,24 @@ interface SpringOptions {
   /**
    * 1 is critically damped (no overshoot). Pass 0.8 only after a flick. More than 1 is treated as 1.
    * @default 1
+   * @claim "1 is critically damped (no overshoot)" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > settles on its target without passing it when critically damped, the default)
+   * @claim "1 is critically damped (no overshoot)" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > keeps a damping or response of zero or less from breaking it: it still comes to rest, on a number)
+   * @claim "More than 1 is treated as" registry/ouro/lib/ouro/spring.ts verify:fileLine(registry/ouro/lib/ouro/spring.ts, /if\s\(damping\s>=\s1\)\s\{/)
    */
   damping?: number | undefined;
   /**
    * Seconds to approach the target (Apple's "response"). Not a duration: a spring has none.
    * @default 0.3
+   * @claim "Not a duration: a spring has" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > starts at the live value with the velocity it was handed, in px per millisecond)
+   * @claim "Not a duration: a spring has" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > reaches its target sooner with a shorter response)
    */
   response?: number | undefined;
-  /** Called every frame with the value and its velocity in px/ms, and last with exactly `to` and 0. Write `transform` here. */
+  /**
+   * Called every frame with the value and its velocity in px/ms, and last with exactly `to` and 0. Write `transform` here.
+   *
+   * @claim "Called every frame with the value" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > starts at the live value with the velocity it was handed, in px per millisecond)
+   * @claim "Called every frame with the value" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > on animation frames > moves from the live value to the target, ends exactly on it and says when it rests)
+   */
   onUpdate: (value: number, velocity: number) => void;
   /** Called when the spring comes to rest on its target. Not called after `stop()`. */
   onRest?: (() => void) | undefined;
@@ -42,6 +57,7 @@ interface SpringOptions {
    * The element being moved. It carries `data-ouro-settling` while the spring runs, from the
    * call to the rest or the stop, so styles can follow it and tests can wait for rest. With
    * reduced motion the spring never runs, and the attribute is never set.
+   * @claim "With reduced motion the spring never" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > on animation frames > jumps to the target and rests, before it returns, with reduced motion)
    */
   element?: Element | null | undefined;
 }
@@ -73,6 +89,9 @@ const MIN_RESPONSE = 0.01;
  * Where a spring that left `from` toward `to` at `velocity` (px/ms) is after `elapsed`
  * milliseconds. It is the exact solution, so any moment can be asked for in any order.
  * `damping` is kept between 0.1 and 1, and `response` at 0.01s or more.
+ * @claim "`damping` is kept between 0.1 and" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > keeps a damping or response of zero or less from breaking it: it still comes to rest, on a number)
+ * @claim "`damping` is kept between 0.1 and" registry/ouro/lib/ouro/spring.ts verify:fileLine(registry/ouro/lib/ouro/spring.ts, /const\sMIN_DAMPING\s=\s0\.1;/)
+ * @claim "`damping` is kept between 0.1 and" registry/ouro/lib/ouro/spring.ts verify:fileLine(registry/ouro/lib/ouro/spring.ts, /const\sMIN_RESPONSE\s=\s0\.01;/)
  */
 function springAt(
   from: number,
@@ -176,12 +195,18 @@ function project(position: number, velocity: number, deceleration = 0.998): numb
  * `over` px beyond an end, less and less the further it goes, never a hard stop.
  * `(over * dimension * c) / (dimension + c * |over|)`, where `dimension` is the size of
  * what is dragged along that axis. The sign of `over` is kept.
+ * @claim "Resistance past a boundary: how far" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > resists more the further past a boundary, and never stops dead)
  */
 function rubberband(over: number, dimension: number, constant = 0.55): number {
   return (over * dimension * constant) / (dimension + constant * Math.abs(over));
 }
 
-/** The snap point nearest `value`; the first of two equally near. `value` itself when there are no points. */
+/**
+ * The snap point nearest `value`; the first of two equally near. `value` itself when there are no points.
+ *
+ * @claim "The snap point nearest `value`; the" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > finds the snap point nearest a value)
+ * @claim "`value` itself when there are no" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > finds the snap point nearest a value)
+ */
 function nearest(points: readonly number[], value: number): number {
   return points.reduce((best, point) => (Math.abs(point - value) < Math.abs(best - value) ? point : best), points[0] ?? value);
 }

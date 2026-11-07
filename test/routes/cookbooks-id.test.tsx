@@ -3,20 +3,24 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { cleanup, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { createTestRoutesStub, queryShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
-import { loader, action, meta } from "~/routes/cookbooks.$id";
+import { loader, action, meta, clientAction, shouldRevalidate } from "~/routes/cookbooks.$id";
 import CookbookDetail from "~/routes/cookbooks.$id";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 import { data as routerData, redirect } from "react-router";
-import { shareContent, useDockSuppressed } from "~/components/navigation";
-import { ToastProvider } from "~/components/feedback/toast";
+import { useDockSuppressed } from "~/components/navigation";
+import { share } from "~/lib/ouro/share";
+import { Toaster } from "~/components/ouro/toast/toaster";
 
 vi.mock("~/components/navigation", () => ({
-  shareContent: vi.fn(async () => ({ success: true, method: "native" })),
   useDockSuppressed: vi.fn(),
 }));
+vi.mock("~/lib/ouro/share", async () => {
+  const actual = await vi.importActual<typeof import("~/lib/ouro/share")>("~/lib/ouro/share");
+  return { ...actual, share: vi.fn(async () => "shared" as const) };
+});
 
 // Helper to extract data from React Router's data() response
 function extractResponseData(response: any): { data: any; status: number } {
@@ -89,7 +93,7 @@ describe("Cookbooks $id Route", () => {
   let cookbookId: string;
 
   beforeEach(async () => {
-    vi.mocked(shareContent).mockClear();
+    vi.mocked(share).mockClear();
     vi.mocked(useDockSuppressed).mockClear();
     await cleanupDatabase();
     const email = faker.internet.email();
@@ -1308,7 +1312,7 @@ describe("Cookbooks $id Route", () => {
       expect(screen.getByRole("link", { name: "← Back to cookbooks" })).toHaveAttribute("href", "/cookbooks");
       fireEvent.click(screen.getByRole("button", { name: "Share" }));
       await waitFor(() => {
-        expect(vi.mocked(shareContent)).toHaveBeenCalledWith({
+        expect(vi.mocked(share)).toHaveBeenCalledWith({
           title: "My Test Cookbook",
           text: "My Test Cookbook by testchef on Spoonjoy.",
           url: "https://spoonjoy.app/cookbooks/cookbook-1",
@@ -1523,7 +1527,7 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
-      const ownerToolsToggle = await screen.findByRole("button", { name: "Owner tools Open +" });
+      const ownerToolsToggle = await screen.findByRole("button", { name: "Owner tools" });
       expect(ownerToolsToggle).toBeInTheDocument();
       expect(ownerToolsToggle).toHaveAttribute("aria-expanded", "false");
       expect(screen.queryByRole("button", { name: "Edit title" })).not.toBeInTheDocument();
@@ -1532,7 +1536,7 @@ describe("Cookbooks $id Route", () => {
 
       await openOwnerTools();
 
-      expect(screen.getByRole("button", { name: "Owner tools Close" })).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByRole("button", { name: "Owner tools" })).toHaveAttribute("aria-expanded", "true");
       expect(await screen.findByRole("button", { name: "Edit title" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Delete cookbook" })).toBeInTheDocument();
       // Each row's button names its recipe, so rows are told apart by name.
@@ -1850,9 +1854,9 @@ describe("Cookbooks $id Route", () => {
         ]);
 
         render(
-          <ToastProvider>
+          <>
             <Stub initialEntries={["/cookbooks/cookbook-1"]} />
-          </ToastProvider>,
+          <Toaster /></>,
         );
       }
 
@@ -1909,6 +1913,7 @@ describe("Cookbooks $id Route", () => {
         expect(rejected).toHaveAttribute("aria-invalid", "true");
         expect(rejected).toHaveAccessibleDescription("You already have a cookbook with this title");
         expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).not.toBeInTheDocument();
+        expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("alertdialog")).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
         expect(screen.queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
@@ -1957,6 +1962,150 @@ describe("Cookbooks $id Route", () => {
         expect(await screen.findByText(/Spoonjoy couldn't save that just now\./)).toBeInTheDocument();
         expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Renamed Title");
         expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).not.toBeInTheDocument();
+        expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("alertdialog")).not.toBeInTheDocument();
+      });
+
+      // Journeys run 39838941793: the second Save's request got no answer (WebKit's TLS handshake
+      // to the server was reset), and the whole page became the root error boundary, so the title
+      // field and what the cook typed were gone.
+      describe("when a submission gets no answer", () => {
+        const noAnswer = () => new TypeError("Peer failed to perform TLS handshake: Error receiving data: Connection reset by peer");
+
+        // serverAction as React Router runs it: it reads the submission's request body (single
+        // fetch's createRequestInit), so a second call on the same request finds the body used.
+        // `respond` sees each body that was sent and answers or loses it.
+        function renderWithClientAction(respond: (body: string) => Promise<unknown>) {
+          let loads = 0;
+          const sent: string[] = [];
+          const Stub = createTestRoutesStub([
+            {
+              path: "/cookbooks/:id",
+              Component: CookbookDetail,
+              loader: () => {
+                loads += 1;
+                return renameData;
+              },
+              action: ((args: { request: Request; params: Record<string, string> }) =>
+                clientAction({
+                  ...args,
+                  serverAction: async () => {
+                    const body = await args.request.text();
+                    sent.push(body);
+                    return respond(body);
+                  },
+                } as never)) as never,
+              shouldRevalidate: shouldRevalidate as never,
+            },
+          ]);
+          render(
+            <>
+              <Stub initialEntries={["/cookbooks/cookbook-1"]} />
+              <Toaster />
+            </>,
+          );
+          return { loads: () => loads, sent };
+        }
+
+        it("sends the same rename once more, as a new request, and closes the editor when that one is answered", async () => {
+          const respond = vi.fn()
+            .mockRejectedValueOnce(noAnswer())
+            .mockResolvedValueOnce({ success: true, intent: "updateTitle" });
+          const { sent } = renderWithClientAction(respond);
+
+          const input = await openTitleEditor();
+          fireEvent.change(input, { target: { value: "Renamed Title" } });
+          fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+          expect(await screen.findByRole("dialog", { name: "Cookbook renamed." })).toBeInTheDocument();
+          // Byte for byte the same body, so the journeys' console gate pairs the two requests.
+          expect(sent).toEqual(["intent=updateTitle&title=Renamed+Title", "intent=updateTitle&title=Renamed+Title"]);
+          expect(screen.queryByRole("heading", { name: "Something went wrong." })).not.toBeInTheDocument();
+          expect(screen.queryByText(/couldn't be reached/)).not.toBeInTheDocument();
+        });
+
+        it("keeps the editor open, with what the cook typed and the field described by the reason, when no try is answered", async () => {
+          const respond = vi.fn().mockRejectedValue(noAnswer());
+          const { loads, sent } = renderWithClientAction(respond);
+
+          const input = await openTitleEditor();
+          const loadsBeforeSave = loads();
+          fireEvent.change(input, { target: { value: "Renamed Title" } });
+          fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+          const reason = "Spoonjoy couldn't be reached. Check your connection and try again.";
+          expect(await screen.findByText(reason)).toBeInTheDocument();
+          const field = screen.getByRole("textbox", { name: "Cookbook title" });
+          expect(field).toHaveValue("Renamed Title");
+          expect(field).toHaveAttribute("aria-invalid", "true");
+          expect(field).toHaveAccessibleDescription(reason);
+          expect(sent).toHaveLength(2);
+          // Reloading the page's data would fail the same way, so it is not reloaded.
+          expect(loads()).toBe(loadsBeforeSave);
+        });
+
+        it("sends a later Save again after one that was lost twice", async () => {
+          const respond = vi.fn()
+            .mockRejectedValueOnce(noAnswer())
+            .mockRejectedValueOnce(noAnswer())
+            .mockRejectedValueOnce(noAnswer())
+            .mockResolvedValueOnce({ success: true, intent: "updateTitle" });
+          const { sent } = renderWithClientAction(respond);
+
+          const input = await openTitleEditor();
+          fireEvent.change(input, { target: { value: "Renamed Title" } });
+          fireEvent.click(screen.getByRole("button", { name: "Save" }));
+          expect(await screen.findByText(/couldn't be reached/)).toBeInTheDocument();
+
+          fireEvent.click(screen.getByRole("button", { name: "Save" }));
+          expect(await screen.findByRole("dialog", { name: "Cookbook renamed." })).toBeInTheDocument();
+          expect(sent).toHaveLength(4);
+        });
+
+        // Pins IDEMPOTENT_INTENTS: adding a recipe that is already in the cookbook keeps one copy,
+        // so it is offered for sending again, as is a rename; removing a recipe and deleting are not.
+        it.each([
+          ["addRecipe", { intent: "addRecipe", recipeId: "recipe-1" }],
+          ["updateTitle", { intent: "updateTitle", title: "Renamed" }],
+          ["removeRecipe", null],
+          ["delete", null],
+        ])("answers a lost %s with %j to send again", async (intent, resend) => {
+          const body = new URLSearchParams({ intent, ...(intent === "addRecipe" ? { recipeId: "recipe-1" } : {}), ...(intent === "updateTitle" ? { title: "Renamed" } : {}) });
+          const request = new Request("https://spoonjoy.test/cookbooks/cookbook-1", { method: "POST", body });
+          const serverAction = vi.fn().mockRejectedValue(noAnswer());
+          await expect(clientAction({ request, params: { id: "cookbook-1" }, serverAction } as never)).resolves.toEqual({
+            intent,
+            error: "Spoonjoy couldn't be reached. Check your connection and try again.",
+            errorCode: "network_failure",
+            retryable: true,
+            resend,
+          });
+          expect(serverAction).toHaveBeenCalledTimes(1);
+        });
+
+        it("offers nothing to send again for a submission without an intent", async () => {
+          const serverAction = vi.fn().mockRejectedValue(noAnswer());
+          const request = new Request("https://spoonjoy.test/cookbooks/cookbook-1", { method: "POST", body: new FormData() });
+          await expect(clientAction({ request, params: { id: "cookbook-1" }, serverAction } as never)).resolves.toMatchObject({
+            intent: null,
+            resend: null,
+          });
+        });
+
+        it("never sends a delete twice, and says why it did not happen while the page stays", async () => {
+          const respond = vi.fn().mockRejectedValue(noAnswer());
+          const { sent } = renderWithClientAction(respond);
+
+          await openOwnerTools();
+          fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
+          fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
+
+          expect(await screen.findByRole("alertdialog", { name: "Spoonjoy couldn't be reached. Check your connection and try again." })).toBeInTheDocument();
+          expect(sent).toEqual(["intent=delete"]);
+          await waitFor(() => {
+            expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
+          });
+          expect(screen.getByRole("heading", { name: "Original Title", level: 1 })).toBeInTheDocument();
+        });
       });
 
       it("says so when deleting could not be saved because the database was briefly unavailable", async () => {
@@ -1971,7 +2120,7 @@ describe("Cookbooks $id Route", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
         fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
-        expect(await screen.findByRole("dialog", { name: /Spoonjoy couldn't save that just now/ })).toHaveTextContent("Spoonjoy couldn't save that just now.");
+        expect(await screen.findByRole("alertdialog", { name: "Spoonjoy couldn't save that just now. Please try again in a moment." })).toBeInTheDocument();
         // The page stays, and the dialog finishes closing before the test ends.
         await waitFor(() => {
           expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
@@ -1990,6 +2139,7 @@ describe("Cookbooks $id Route", () => {
           expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Renamed Title");
         });
         expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).not.toBeInTheDocument();
+        expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("alertdialog")).not.toBeInTheDocument();
         expect(queryShownAlert()).toBeNull();
       });
     });

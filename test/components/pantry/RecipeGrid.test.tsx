@@ -14,7 +14,6 @@ const recipes: PantryRecipeCard[] = [
     servings: '4',
     chefName: 'Chef Mario',
     coverProvenanceLabel: 'Original photo',
-    href: '/recipes/r-1',
   },
   {
     id: 'r-2',
@@ -22,7 +21,6 @@ const recipes: PantryRecipeCard[] = [
     description: 'Roasted chickpeas with tahini drizzle.',
     difficulty: 'Medium',
     cookTimeMinutes: 35,
-    href: '/recipes/r-2',
   },
 ]
 
@@ -38,10 +36,7 @@ describe('RecipeGrid', () => {
     }} />)
     expect(screen.getByText('55 total')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Lemon Pasta/ })).toHaveAttribute('href', '/recipes/r-1')
-    // ShowMore adds list wrappers; the actual app row must still own its rule,
-    // rather than relying on the old direct-child selector that no longer reaches it.
-    expect(screen.getByRole('link', { name: /Lemon Pasta/ }).closest('article'))
-      .toHaveClass('border-b', 'border-[var(--sj-border)]')
+    expect(screen.getByRole('link', { name: /Lemon Pasta/ }).closest('article')).toHaveAttribute('data-ouro', 'item')
     const next = screen.getByRole('link', { name: 'Show more recipes' })
     expect(next).toHaveAttribute('href', '/users/ari?after=r-2')
     fireEvent.click(next)
@@ -61,12 +56,23 @@ describe('RecipeGrid', () => {
     expect(img).toHaveAttribute('alt', '')
   })
 
-  it('names each row link from its visible text, so the chef and yield are read too (WCAG 2.5.3)', () => {
+  it('names each row link by its title, as an HX Item in a list of recipes', () => {
     renderWithRouter(<RecipeGrid recipes={recipes} />)
 
-    const link = screen.getByRole('link', { name: /\bLemon Pasta\b/ })
-    expect(link).not.toHaveAttribute('aria-label')
-    expect(link).toHaveAccessibleName(/Serves 4.*Chef Mario/i)
+    const link = screen.getByRole('link', { name: 'Lemon Pasta' })
+    expect(link).toHaveAttribute('href', '/recipes/r-1')
+    expect(screen.getByRole('list', { name: 'Recipes' })).toContainElement(link)
+    // The section's heading already says "Recipes"; the list is named for screen readers only.
+    expect(screen.getAllByText('Recipes')).toHaveLength(1)
+  })
+
+  it('separates the rows of a growing list, as the divided list does', () => {
+    renderWithRouter(<RecipeGrid recipes={recipes} totalCount={55} loadMore={{
+      hasMore: true, loading: false, href: '/users/ari?after=r-2', onShowMore: vi.fn(),
+    }} />)
+    for (const name of [/Lemon Pasta/, /Spiced Chickpea Bowl/]) {
+      expect(screen.getByRole('link', { name }).closest('[data-ouro="item"]')).toHaveClass('border')
+    }
   })
 
   it('renders placeholder when image is missing', () => {
@@ -84,8 +90,7 @@ describe('RecipeGrid', () => {
   it('renders servings and chef name metadata', () => {
     renderWithRouter(<RecipeGrid recipes={recipes} />)
 
-    expect(screen.getByText('Serves 4')).toBeInTheDocument()
-    expect(screen.getByText('Chef Mario')).toBeInTheDocument()
+    expect(screen.getByText('Serves 4 • Chef Mario')).toBeInTheDocument()
   })
 
   it('does not double-prefix already-written servings phrases', () => {
@@ -94,12 +99,6 @@ describe('RecipeGrid', () => {
 
     expect(screen.getByText('2 pizzas')).toBeInTheDocument()
     expect(screen.queryByText('Serves 2 pizzas')).not.toBeInTheDocument()
-  })
-
-  it('renders dot separator between servings and chef name', () => {
-    renderWithRouter(<RecipeGrid recipes={recipes} />)
-
-    expect(screen.getByText('•')).toBeInTheDocument()
   })
 
   it('does not render metadata row when neither servings nor chefName provided', () => {
@@ -113,7 +112,7 @@ describe('RecipeGrid', () => {
     renderWithRouter(<RecipeGrid recipes={[recipe]} />)
 
     expect(screen.getByText('Serves 2')).toBeInTheDocument()
-    expect(screen.queryByText('·')).not.toBeInTheDocument()
+    expect(screen.queryByText(/•/)).not.toBeInTheDocument()
   })
 
   it('renders chefName only without separator when no servings', () => {
@@ -121,7 +120,7 @@ describe('RecipeGrid', () => {
     renderWithRouter(<RecipeGrid recipes={[recipe]} />)
 
     expect(screen.getByText('Anna')).toBeInTheDocument()
-    expect(screen.queryByText('·')).not.toBeInTheDocument()
+    expect(screen.queryByText(/•/)).not.toBeInTheDocument()
   })
 
   it('renders total count', () => {
@@ -158,87 +157,10 @@ describe('RecipeGrid', () => {
     expect(screen.queryByRole('link', { name: 'Create recipe' })).toBeNull()
   })
 
-  it('defaults href to /recipes/:id when no href provided', () => {
+  it('links each recipe to /recipes/:id', () => {
     const recipe: PantryRecipeCard = { id: 'abc', title: 'Soup' }
     renderWithRouter(<RecipeGrid recipes={[recipe]} />)
 
     expect(screen.getByRole('link', { name: /soup/i })).toHaveAttribute('href', '/recipes/abc')
-  })
-
-  // Quick actions tests (#17)
-  it('renders Share and Save buttons when handlers are provided', () => {
-    renderWithRouter(<RecipeGrid recipes={[recipes[0]]} onShare={vi.fn()} onSave={vi.fn()} />)
-
-    expect(screen.getByLabelText('Share Lemon Pasta')).toBeInTheDocument()
-    expect(screen.getByLabelText('Save Lemon Pasta')).toBeInTheDocument()
-  })
-
-  it('hides quick action buttons when handlers are not provided', () => {
-    renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
-
-    expect(screen.queryByLabelText('Share Lemon Pasta')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Save Lemon Pasta')).not.toBeInTheDocument()
-  })
-
-  it('renders only Share when only onShare is provided', () => {
-    renderWithRouter(<RecipeGrid recipes={[recipes[0]]} onShare={vi.fn()} />)
-
-    expect(screen.getByLabelText('Share Lemon Pasta')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Save Lemon Pasta')).not.toBeInTheDocument()
-  })
-
-  it('renders only Save when only onSave is provided', () => {
-    renderWithRouter(<RecipeGrid recipes={[recipes[0]]} onSave={vi.fn()} />)
-
-    expect(screen.queryByLabelText('Share Lemon Pasta')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Save Lemon Pasta')).toBeInTheDocument()
-  })
-
-  it('calls onShare with recipe id when Share is clicked', () => {
-    const onShare = vi.fn()
-    renderWithRouter(<RecipeGrid recipes={[recipes[0]]} onShare={onShare} />)
-
-    fireEvent.click(screen.getByLabelText('Share Lemon Pasta'))
-    expect(onShare).toHaveBeenCalledWith('r-1')
-  })
-
-  it('calls onSave with recipe id when Save is clicked', () => {
-    const onSave = vi.fn()
-    renderWithRouter(<RecipeGrid recipes={[recipes[0]]} onSave={onSave} />)
-
-    fireEvent.click(screen.getByLabelText('Save Lemon Pasta'))
-    expect(onSave).toHaveBeenCalledWith('r-1')
-  })
-
-  it('keeps the action rail out of the DOM when no handlers are provided', () => {
-    const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
-
-    expect(screen.queryByTestId('recipe-grid-actions')).toBeNull()
-  })
-
-  it('uses a ruled photo-index treatment instead of a card shell', () => {
-    const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
-
-    const tile = container.querySelector('.sj-photo-tile')
-    expect(tile?.className).not.toContain('rounded')
-    expect(container.querySelector('.sj-list-ruled')).not.toBeNull()
-    expect(container.querySelector('.sj-card')).toBeNull()
-  })
-
-  it('keeps the layout free of generic hover-lift card affordances', () => {
-    const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
-
-    const article = container.querySelector('article')
-    expect(article?.className).not.toContain('sj-hover-lift')
-    expect(article?.className).not.toContain('shadow-lg')
-    expect(article?.className).not.toContain('shadow-md')
-  })
-
-  it('renders image inside a landscape-to-square photo tile for a ruled index layout', () => {
-    const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
-
-    const tile = container.querySelector('.sj-photo-tile')
-    expect(tile?.className).toContain('aspect-[4/3]')
-    expect(tile?.className).toContain('sm:aspect-square')
   })
 })

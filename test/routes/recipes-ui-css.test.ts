@@ -61,8 +61,6 @@ function hasUIComponentImports(content: string): boolean {
   return (
     content.includes('from "~/components/ouro/') ||
     content.includes("from '~/components/ouro/") ||
-    content.includes('from "~/components/button"') ||
-    content.includes('from "~/components/text"') ||
     content.includes('from "~/components/recipe/') ||
     content.includes('from "@/') ||
     content.includes("from '@/")
@@ -97,14 +95,10 @@ function countVisibleInputs(content: string): number {
 }
 
 /**
- * The raw inputs each recipe route may keep. Every other field is one of Ouro UI's
- * (app/components/ouro/text-field/text-field.tsx).
+ * The raw inputs each recipe route may keep: none. Every field is one of Ouro HX's, and
+ * RecipeBuilder's data goes to the action with fetcher.submit, not through a hidden form.
  */
-const ALLOWED_RAW_INPUTS: Record<string, number> = {
-  // The image file input of the hidden form that carries RecipeBuilder's data to the action.
-  "app/routes/recipes.new.tsx": 1,
-  "app/routes/recipes.$id.edit.tsx": 1,
-};
+const ALLOWED_RAW_INPUTS: Record<string, number> = {};
 
 /**
  * How many raw <textarea> elements a chef can see. One with className="hidden" carries form data
@@ -132,6 +126,10 @@ describe("Recipe Routes UI/CSS Compliance", () => {
   });
 
   describe("Uses UI Components", () => {
+    it("recognizes direct HX imports, not the retired app Button wrapper", () => {
+      expect(hasUIComponentImports('import { Button } from "~/components/ouro/button/button";')).toBe(true);
+      expect(hasUIComponentImports('import { Button } from "~/components/button";')).toBe(false);
+    });
     it.each(RECIPE_ROUTE_FILES_WITH_UI)(
       "%s should import released UI or its app-owned integration",
       (filePath) => {
@@ -154,7 +152,7 @@ describe("Recipe Routes UI/CSS Compliance", () => {
         expect(
           usesRawButtonElements(content),
           `${filePath} uses raw <button> elements. ` +
-          `Should use released Button through app/components/button.tsx`
+          `Import the released Button directly from ~/components/ouro/button/button`
         ).toBe(false);
       }
     );
@@ -294,24 +292,14 @@ describe("Individual Route Detailed Checks", () => {
   describe("recipes.$id.tsx (Recipe Detail)", () => {
     const filePath = "app/routes/recipes.$id.tsx";
 
-    it("should use Heading component for h1/h2", () => {
+    it("should use Ouro HX Heading for h1/h2", () => {
       const content = readSourceFile(filePath);
-      expect(
-        content.includes('from "~/components/heading"') ||
-        content.includes("from '~/components/heading'") ||
-        content.includes("Heading"),
-        "Should use Heading component for headings"
-      ).toBe(true);
+      expect(content, "Should use Ouro HX Heading for headings").toContain('from "~/components/ouro/text/heading"');
     });
 
     it("should use Text component for paragraphs", () => {
       const content = readSourceFile(filePath);
-      expect(
-        content.includes('from "~/components/text"') ||
-        content.includes("from '~/components/text'") ||
-        content.includes("Text"),
-        "Should use Text component for text content"
-      ).toBe(true);
+      expect(content, "Should use Ouro HX Text for paragraphs").toContain('from "~/components/ouro/text/text"');
     });
   });
 

@@ -16,6 +16,8 @@ export const INGREDIENT_NAME_MAX_LENGTH = 100
 export const QUANTITY_MIN = 0.001
 export const QUANTITY_MAX = 99999
 
+import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from './objectionable-terms'
+
 // Validation result type
 export type ValidationResult = { valid: true } | { valid: false; error: string }
 
@@ -31,6 +33,9 @@ export function validateTitle(title: string): ValidationResult {
   }
   if (trimmed.length > TITLE_MAX_LENGTH) {
     return { valid: false, error: 'Title must be 200 characters or less' }
+  }
+  if (containsObjectionableContent(trimmed)) {
+    return { valid: false, error: OBJECTIONABLE_CONTENT_MESSAGE }
   }
   return { valid: true }
 }
@@ -48,6 +53,9 @@ export function validateDescription(description: string | null): ValidationResul
   if (trimmed.length > DESCRIPTION_MAX_LENGTH) {
     return { valid: false, error: 'Description must be 2,000 characters or less' }
   }
+  if (containsObjectionableContent(trimmed)) {
+    return { valid: false, error: OBJECTIONABLE_CONTENT_MESSAGE }
+  }
   return { valid: true }
 }
 
@@ -64,6 +72,9 @@ export function validateStepTitle(stepTitle: string | null): ValidationResult {
   if (trimmed.length > STEP_TITLE_MAX_LENGTH) {
     return { valid: false, error: 'Step title must be 200 characters or less' }
   }
+  if (containsObjectionableContent(trimmed)) {
+    return { valid: false, error: OBJECTIONABLE_CONTENT_MESSAGE }
+  }
   return { valid: true }
 }
 
@@ -79,6 +90,9 @@ export function validateStepDescription(description: string): ValidationResult {
   }
   if (trimmed.length > STEP_DESCRIPTION_MAX_LENGTH) {
     return { valid: false, error: 'Description must be 5,000 characters or less' }
+  }
+  if (containsObjectionableContent(trimmed)) {
+    return { valid: false, error: OBJECTIONABLE_CONTENT_MESSAGE }
   }
   return { valid: true }
 }

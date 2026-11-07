@@ -1,5 +1,6 @@
 import type { Cookbook, PrismaClient, Recipe, RecipeCover, RecipeInCookbook } from "@prisma/client";
 import { d1ReadBatch, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
+import { NO_HIDES, hidesFromRows, loadViewerHides, viewerHidesQuery, type ViewerHides } from "~/lib/moderation.server";
 import {
   COOKBOOK_COLUMNS,
   mapModel,
@@ -19,7 +20,7 @@ type CookbookPageRecipe = Pick<
   "id" | "title" | "description" | "servings" | "activeCoverId" | "activeCoverVariant" | "coverMode"
 > & {
   covers: RecipeCover[];
-  chef: { username: string };
+  chef: { id: string; username: string };
 };
 
 export type CookbookPageEntry = RecipeInCookbook & { recipe: CookbookPageRecipe };
@@ -34,6 +35,8 @@ export interface CookbookPageRows {
   cookbook: CookbookPageCookbook | null;
   /** For the cookbook's owner, their live recipes not in it, by title; empty for anyone else. */
   availableRecipes: Array<{ id: string; title: string }>;
+  /** What the viewer blocked or reported (app/lib/moderation.server.ts). */
+  hides: ViewerHides;
 }
 
 export interface CookbookPageInput {
@@ -63,7 +66,7 @@ export async function readCookbookPageWithPrisma(
               activeCoverVariant: true,
               coverMode: true,
               covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
-              chef: { select: { username: true } },
+              chef: { select: { id: true, username: true } },
             },
           },
         },
@@ -71,7 +74,7 @@ export async function readCookbookPageWithPrisma(
       },
     },
   });
-  if (!cookbook) return { cookbook: null, availableRecipes: [] };
+  if (!cookbook) return { cookbook: null, availableRecipes: [], hides: NO_HIDES };
 
   const availableRecipes = viewerId !== null && cookbook.authorId === viewerId
     ? await database.recipe.findMany({
@@ -80,7 +83,7 @@ export async function readCookbookPageWithPrisma(
         orderBy: { title: "asc" },
       })
     : [];
-  return { cookbook, availableRecipes };
+  return { cookbook, availableRecipes, hides: await loadViewerHides(database, viewerId) };
 }
 
 const AUTHOR_COLUMNS: ColumnSpec<CookbookPageCookbook["author"]> = { id: "string", username: "string" };
@@ -95,7 +98,7 @@ const PAGE_RECIPE_COLUMNS: ColumnSpec<Omit<CookbookPageRecipe, "covers" | "chef"
   coverMode: "string",
 };
 
-const CHEF_COLUMNS: ColumnSpec<CookbookPageRecipe["chef"]> = { username: "string" };
+const CHEF_COLUMNS: ColumnSpec<CookbookPageRecipe["chef"]> = { id: "string", username: "string" };
 
 const AVAILABLE_RECIPE_COLUMNS: ColumnSpec<CookbookPageRows["availableRecipes"][number]> = { id: "string", title: "string" };
 
@@ -123,7 +126,7 @@ export async function readCookbookPageFromD1(
   db: D1ReadDatabase,
   { cookbookId, viewerId }: CookbookPageInput,
 ): Promise<CookbookPageRows> {
-  const [cookbookRows, entryRows, availableRows] = await d1ReadBatch(db, [
+  const [cookbookRows, entryRows, availableRows, hideRows] = await d1ReadBatch(db, [
     [
       `SELECT ${selectColumns(COOKBOOK_COLUMNS, "c")}, ${selectColumns(AUTHOR_COLUMNS, "a", "author_")}
        FROM "Cookbook" c
@@ -158,10 +161,11 @@ export async function readCookbookPageFromD1(
       cookbookId,
       cookbookId,
     ],
+    viewerId ? viewerHidesQuery(viewerId) : ["SELECT 1 WHERE 0"],
   ]);
 
   const cookbookRow = cookbookRows[0];
-  if (!cookbookRow) return { cookbook: null, availableRecipes: [] };
+  if (!cookbookRow) return { cookbook: null, availableRecipes: [], hides: NO_HIDES };
   return {
     cookbook: {
       ...mapModel(COOKBOOK_COLUMNS, cookbookRow),
@@ -169,5 +173,6 @@ export async function readCookbookPageFromD1(
       recipes: entryRows.map(mapEntry),
     },
     availableRecipes: availableRows.map((row) => mapModel(AVAILABLE_RECIPE_COLUMNS, row)),
+    hides: viewerId ? hidesFromRows(hideRows!) : NO_HIDES,
   };
 }

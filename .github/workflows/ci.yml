@@ -216,10 +216,17 @@ jobs:
         run: pnpm run verify:clean:generated-contract
 
       # Hand-rolled controls in app code may only fall: the scan must equal
-      # test/scripts/hx-source-rules.baseline.json (see AGENTS.md, "The HX source rule").
+      # ouro-source-rules.baseline.json (see AGENTS.md, "The HX source rule").
       - name: 🧭 HX source rule
         if: github.event_name != 'pull_request'
         run: node scripts/warning-gate.ts -- pnpm run hx:source-rules
+
+      # Each factual sentence on Spoonjoy's surfaces (claims.config.json) carries its primary
+      # source and a check that still holds, checked with HX's lib-claims checker (AGENTS.md,
+      # "Claims").
+      - name: 🧾 Claims
+        if: github.event_name != 'pull_request'
+        run: node scripts/warning-gate.ts -- pnpm run claims:check
 
       - name: 🧪 Test & Coverage
         if: github.event_name != 'pull_request'
@@ -250,9 +257,14 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      # The pull request's merge commit and its parents, the base commit among them, so the
+      # ratchets and `vitest --changed` (git diff base...HEAD) read the base from the checkout. A
+      # later fetch by SHA can miss them when a reopened pull request delivers a merge commit
+      # GitHub has since replaced.
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ env.CI_SOURCE_SHA }}
+          fetch-depth: 2
           persist-credentials: false
 
       - name: 📦 Setup Node.js
@@ -289,17 +301,16 @@ jobs:
       - name: 🔐 Verify generated API contract
         run: pnpm run verify:clean:generated-contract
 
-      # The checkout is the pull request's merge commit at depth 1. Deepening it by one fetches its
-      # parents, the base commit among them, so `vitest --changed` (git diff base...HEAD) finds the
-      # merge base.
-      - name: 📥 Fetch the pull request's base commit
-        run: node scripts/warning-gate.ts -- git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"
-
-      # Runs on every pull request (`vitest --changed` skips the rule's own test when only app code
-      # changes) and ratchets: no fingerprint may rise against the base commit's baseline unless
+      # Runs on every pull request and ratchets: no fingerprint may rise against the base commit's baseline unless
       # the new baseline records why under allowedRegressions.
       - name: 🧭 HX source rule
         run: node scripts/warning-gate.ts -- pnpm run hx:source-rules --base "$(git rev-parse HEAD^1)"
+
+      # The claims ratchet against the base commit (an exemption claims.config.json adds needs a
+      # reason and a mention in the description), the title and body, and every claim, with the
+      # addresses this pull request adds fetched again (scripts/claims-pr.mjs).
+      - name: 🧾 Claims in this pull request
+        run: node scripts/warning-gate.ts -- pnpm run claims:pr
 
       # The base is the merge commit's first parent, which is exactly what this pull request is
       # merged onto, so the affected tests are always computed from history the checkout has.
@@ -346,7 +357,17 @@ jobs:
     name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}
     needs: queue-tested
     if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' }}
-    runs-on: ubuntu-latest
+    # Runs in Playwright's image, at the version package.json pins, by digest
+    # (test/workflows/playwright-image.test.ts): its browsers and their system packages are in it, so
+    # the job installs nothing from Ubuntu's mirror, whose downloads can stall for the whole job. The
+    # image ships zstd; the runner's own is mounted over it, as ourostack/ouro-ui#170 does, so an
+    # actions/cache step added here would compress exactly as the runner does (none uses one today).
+    # The runner's zstd needs the image's Ubuntu (24.04), so the job names that runner. setup-node's
+    # package cache is off: its path differs inside the container.
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f # v1.64.0-noble
+      options: --user 1001 -v /usr/bin/zstd:/usr/bin/zstd:ro
     timeout-minutes: 10
     env:
       NODE_ENV: development
@@ -362,6 +383,7 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
+          cache: ""
 
       - name: 🔐 Validate CI invocation
         run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
@@ -371,8 +393,11 @@ jobs:
           node scripts/warning-gate.ts -- corepack enable
           node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
 
+      # Without install scripts: the only one allowed (pnpm-workspace.yaml) builds better-sqlite3
+      # from source, which needs make and a C++ compiler the image lacks, and only the unit tests
+      # use it. The root postinstall is "prisma generate", which the next step runs.
       - name: 📥 Install dependencies
-        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile
+        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile --ignore-scripts
 
       - name: 🔧 Generate Prisma client
         run: node scripts/warning-gate.ts -- pnpm prisma:generate
@@ -381,15 +406,6 @@ jobs:
         run: |
           node scripts/warning-gate.ts -- pnpm why blake3-wasm
           node scripts/warning-gate.ts -- pnpm why @c4312/blake3-internal
-
-      - name: 🎭 Install Playwright Browsers
-        run: |
-          node scripts/warning-gate.ts -- sudo apt-get update
-          node scripts/warning-gate.ts -- sudo sh -c 'printf "%s\n" "man-db man-db/auto-update boolean true" | debconf-set-selections'
-          node scripts/warning-gate.ts -- sudo touch /var/lib/man-db/auto-update
-          node scripts/warning-gate.ts -- sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2
-          node scripts/warning-gate.ts -- pnpm exec playwright install-deps --dry-run chromium
-          node scripts/warning-gate.ts -- pnpm exec playwright install chromium
 
       - name: 🗄️ Apply D1 migrations
         run: pnpm run verify:clean:migrations

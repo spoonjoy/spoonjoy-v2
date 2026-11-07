@@ -11,6 +11,9 @@ type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 expectTypeOf<{ children: "Go" }>().toExtend<ButtonProps>();
 expectTypeOf<{ children: "Go"; type: "submit"; loading: true }>().toExtend<ButtonProps>();
 expectTypeOf<{ children: "Go"; href: "/x"; target: "_blank"; rel: "noopener" }>().toExtend<ButtonProps>();
+expectTypeOf<{ children: "Go"; href: "/auth/start"; reloadDocument: true }>().toExtend<ButtonProps>();
+expectTypeOf<{ children: "Go"; reloadDocument: true }>().not.toExtend<ButtonProps>();
+createElement(Button, { href: "/auth/start", reloadDocument: true, children: "Sign in" });
 expectTypeOf<{
   children: "Go";
   tone: "destructive";

@@ -9,39 +9,50 @@ import {
   useRouteError,
   useNavigation,
   Form,
-  Link as RouterLink,
   useLocation,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
-import { useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, useRef, type RefObject } from "react";
 import { usePostHog } from "~/lib/use-posthog";
-import * as Headless from "@headlessui/react";
 import { getUserId } from "~/lib/session.server";
 import { NonceContext } from "~/lib/nonce";
+import { FOLD_BOOTSTRAP } from "~/lib/fold";
 import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
+import { revalidateUnlessNetworkFailure } from "~/lib/network-failure";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { toAnalyticsPageUrl } from "~/lib/analytics";
-import { applyStorageSchemaMigration } from "~/lib/client-storage-schema";
+import { applyStorageSchemaMigration, THEME_STORAGE_KEY } from "~/lib/client-storage-schema";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 import { useCookProgressCacheOwner } from "~/hooks/use-cook-session-sync";
 import { registerServiceWorkerOnPageLoad } from "~/lib/push-client";
-import { ThemeProvider } from "~/components/theme-provider";
+import { useHydratedMark } from "~/hooks/use-hydrated-mark";
+import { ColorSchemeProvider } from "~/lib/ouro/color-scheme";
+import { colorSchemeScript } from "~/lib/ouro/color-scheme-script";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
+import { ColorSchemeToggle } from "~/components/ouro/color-scheme-toggle/color-scheme-toggle";
+import { RouteProgress } from "~/components/ouro/route-progress/route-progress";
+import { SkipLink } from "~/components/ouro/skip-link/skip-link";
 import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
-import { ToastProvider } from "~/components/feedback/toast";
-import { ThemeToggle } from "~/components/theme-toggle";
-import { MobileNav, DockContextProvider } from "~/components/navigation";
-import { InstallPromptCard } from "~/components/pwa/InstallPromptCard";
-import { Button } from "~/components/button";
+import { Link } from "~/components/ouro/link/link";
+import { Navbar } from "~/components/ouro/navbar/navbar";
+import { Popover } from "~/components/ouro/popover/popover";
+import { Text } from "~/components/ouro/text/text";
+import { MobileNav, MobileNavInstallPrompt, MobileNavToaster, DockContextProvider } from "~/components/navigation";
+import { Button } from "~/components/ouro/button/button";
 import { OAuthButtonGroup } from "~/components/oauth";
 import { SpoonjoyLogo } from "~/components/spoonjoy-logo";
-import { SkipLink } from "~/components/navigation/skip-link";
 import { RouteErrorContent } from "~/components/errors/route-error";
 import { PhoneBrandBar } from "~/components/navigation/phone-brand-bar";
 import { useHistoryTrail } from "~/hooks/use-back-navigation";
 import { useUnsavedFormGuard } from "~/hooks/use-unsaved-form-guard";
+import { useCookingNow } from "~/hooks/use-cooking-now";
+import { CookingNowPill } from "~/components/cooking-now/CookingNow";
+import { SiteFooter } from "~/components/navigation/site-footer";
+import { XrayProvider } from "~/components/xray/xray-provider";
+import { UNKNOWN_SOURCE_SHA, buildSourceSha } from "~/lib/build-info.server";
 import "./styles/tailwind.css";
+import "./styles/fold.css";
 
 /**
  * Default document title for every route. React Router only calls a route's
@@ -72,13 +83,16 @@ export function links() {
 
 // Hash-only navigations (entering or leaving cook mode) keep the loaded data.
 export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
-  return revalidateUnlessHashOnly(args);
+  return revalidateUnlessNetworkFailure(args, revalidateUnlessHashOnly(args));
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await getUserId(request, context.cloudflare?.env);
   const oauthProviders = getConfiguredOAuthProviders(getOAuthEnv(context));
-  return { userId, oauthProviders };
+  // X-ray's Source links point at the commit that is running (main in a local build without git).
+  const built = buildSourceSha();
+  const sourceSha = built === UNKNOWN_SOURCE_SHA ? "main" : built;
+  return { userId, oauthProviders, sourceSha };
 }
 
 /**
@@ -97,104 +111,104 @@ function getActiveNav(pathname: string): string | null {
   return null;
 }
 
-/**
- * Desktop Navbar component - shown in StackedLayout header
- */
-function LoginMenu({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
+const signedInLinks = [
+  { label: "Kitchen", href: "/", nav: "kitchen" },
+  { label: "Recipes", href: "/recipes", nav: "recipes" },
+  { label: "My Recipes", href: "/my-recipes", nav: "my-recipes" },
+  { label: "Saved", href: "/saved-recipes", nav: "saved-recipes" },
+  { label: "Cookbooks", href: "/cookbooks", nav: "cookbooks" },
+  { label: "Shopping List", href: "/shopping-list", nav: "shopping" },
+  { label: "Chefs", href: "/chefs", nav: "chefs" },
+  { label: "Kitchen Search", href: "/search", nav: "search" },
+];
+
+const signedOutLinks = [
+  { label: "Search", href: "/search", nav: "search" },
+  { label: "Recipes", href: "/recipes", nav: "recipes" },
+  { label: "Cookbooks", href: "/cookbooks", nav: "cookbooks" },
+];
+
+/** Signing in from the desktop bar: an HX Popover with the providers, the password form and signup. */
+function LoginPopover({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
   return (
-    <Headless.Menu as="div" className="relative">
-      <Headless.MenuButton className="sj-desktop-nav-link">
-        Log in
-      </Headless.MenuButton>
-      <Headless.MenuItems
-        anchor="bottom end"
-        className="z-50 mt-3 w-80 border border-[var(--sj-border-strong)] bg-[var(--sj-panel-solid)] p-4 shadow-[var(--sj-shadow-soft)] focus:outline-none"
-      >
-        <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-          Sign in to SPOONJOY
-        </p>
-        {oauthProviders.length > 0 ? (
-          <OAuthButtonGroup providers={oauthProviders} className="mt-4" />
-        ) : (
-          <p className="mt-4 text-sm/6 text-[var(--sj-ink-soft)]">
-            OAuth is not configured here, but email and password sign-in is available.
-          </p>
-        )}
-        <div className="mt-4 grid gap-2 border-t border-[var(--sj-border)] pt-4">
-          <Button href="/login" plain>Use Password</Button>
-          <Button href="/signup">Create Account</Button>
-        </div>
-      </Headless.MenuItems>
-    </Headless.Menu>
+    <Popover title="Sign in to SPOONJOY" align="end" trigger={<Button variant="outline" tone="secondary">Log in</Button>}>
+      {oauthProviders.length > 0 ? (
+        <OAuthButtonGroup providers={oauthProviders} />
+      ) : (
+        <Text tone="muted" size="sm">OAuth is not configured here, but email and password sign-in is available.</Text>
+      )}
+      <div className="mt-4 grid gap-2">
+        <Button href="/login" variant="outline" tone="secondary">Use Password</Button>
+        <Button href="/signup">Create Account</Button>
+      </div>
+    </Popover>
   );
 }
 
+/** The desktop bar: HX Navbar with Spoonjoy's links, the current one marked, and the account actions. */
 export function AppNavbar({
   userId,
   oauthProviders = [],
+  cookingNowCount = 0,
 }: {
   userId: string | null;
   oauthProviders?: OAuthProvider[];
+  /** How many recipes the cook has in progress; the "Cooking" pill shows when there is one. */
+  cookingNowCount?: number;
 }) {
   const location = useLocation();
   const currentNav = getActiveNav(location.pathname);
-  const navLinkClass = "sj-desktop-nav-link";
+  const links = userId ? signedInLinks : signedOutLinks;
 
   return (
-    <nav className="sj-desktop-nav" aria-label="Main navigation">
-      <RouterLink to="/" className="sj-desktop-brand" data-current={currentNav === "kitchen"}>
-        <SpoonjoyLogo
-          width={42}
-          height={26}
-          className="sj-desktop-brand-logo"
-          aria-hidden="true"
-        />
-        <span className="sj-desktop-brand-word">SPOONJOY</span>
-      </RouterLink>
-      {userId ? (
+    <Navbar
+      label="Main navigation"
+      brand={
+        <Link href="/" tone="secondary" inline={false} aria-label="Spoonjoy kitchen" className="inline-flex items-center gap-4">
+          <SpoonjoyLogo width={42} height={26} aria-hidden="true" />
+          <span className="font-sj-display text-lg font-extrabold">SPOONJOY</span>
+        </Link>
+      }
+      items={links.map(({ label, href, nav }) => ({ label, href, current: currentNav === nav }))}
+      actions={userId ? (
         <>
-          <div className="sj-desktop-nav-center">
-            <RouterLink to="/" className={navLinkClass} data-current={currentNav === "kitchen"}>Kitchen</RouterLink>
-            <RouterLink to="/recipes" className={navLinkClass} data-current={currentNav === "recipes"}>Recipes</RouterLink>
-            <RouterLink to="/my-recipes" className={navLinkClass} data-current={currentNav === "my-recipes"}>My Recipes</RouterLink>
-            <RouterLink to="/saved-recipes" className={navLinkClass} data-current={currentNav === "saved-recipes"}>Saved</RouterLink>
-            <RouterLink to="/cookbooks" className={navLinkClass} data-current={currentNav === "cookbooks"}>Cookbooks</RouterLink>
-            <RouterLink to="/shopping-list" className={navLinkClass} data-current={currentNav === "shopping"}>Shopping List</RouterLink>
-            <RouterLink to="/chefs" className={navLinkClass} data-current={currentNav === "chefs"}>Chefs</RouterLink>
-            <RouterLink to="/search" className={navLinkClass} data-current={currentNav === "search"}>Kitchen Search</RouterLink>
-          </div>
-          <div className="sj-desktop-nav-actions">
-            <ThemeToggle />
-            <RouterLink to="/account/settings" className={navLinkClass} data-current={currentNav === "account"}>Account</RouterLink>
-            <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
-              <button type="submit" className={navLinkClass}>
-                Log out
-              </button>
-            </Form>
-          </div>
+          <CookingNowPill count={cookingNowCount} />
+          <ColorSchemeToggle />
+          <Button href="/account/settings" variant="outline" tone="secondary" aria-current={currentNav === "account" ? "page" : undefined}>Account</Button>
+          <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
+            <Button type="submit" variant="outline" tone="secondary">Log out</Button>
+          </Form>
         </>
       ) : (
         <>
-          <div className="sj-desktop-nav-center">
-            <RouterLink to="/search" className={navLinkClass} data-current={currentNav === "search"}>Search</RouterLink>
-            <RouterLink to="/recipes" className={navLinkClass} data-current={currentNav === "recipes"}>Recipes</RouterLink>
-            <RouterLink to="/cookbooks" className={navLinkClass} data-current={currentNav === "cookbooks"}>Cookbooks</RouterLink>
-          </div>
-          <div className="sj-desktop-nav-actions">
-            <ThemeToggle />
-            <LoginMenu oauthProviders={oauthProviders} />
-            <Button href="/signup">Sign up</Button>
-          </div>
+          <CookingNowPill count={cookingNowCount} />
+          <ColorSchemeToggle />
+          <LoginPopover oauthProviders={oauthProviders} />
+          <Button href="/signup">Sign up</Button>
         </>
       )}
-    </nav>
+    />
   );
 }
 
+/**
+ * Where Ouro UI's floating popups (menus, select and combobox lists, popovers, tooltips) render:
+ * the last thing in <main>, so screen reader users who move by landmark reach them. Layout owns the
+ * ref, because OuroProvider wraps App and the error boundary alike; each one's <main> renders it.
+ */
+const PopupLayerContext = createContext<RefObject<HTMLDivElement | null>>({ current: null });
+
+function PopupLayer() {
+  return <div ref={useContext(PopupLayerContext)} />;
+}
+
 export default function App() {
-  const { userId, oauthProviders } = useLoaderData<typeof loader>();
+  const { userId, oauthProviders, sourceSha } = useLoaderData<typeof loader>();
   const location = useLocation();
+  const navigation = useNavigation();
   const posthog = usePostHog();
+  // The cook's recipes in progress, read again on every page, for the nav's "Cooking" pill.
+  const cookingNowCount = useCookingNow(Boolean(userId), location.pathname).entries.length;
 
   // Apply storage schema migration after hydration (client-side only)
   useEffect(() => {
@@ -231,50 +245,34 @@ export default function App() {
   }, [userId, posthog]);
 
   return (
-    <DockContextProvider>
-      <ToastProvider isAuthenticated={!!userId}>
-        <RouteTransitionIndicator />
-        <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
+    <XrayProvider sourceSha={sourceSha}>
+      <DockContextProvider>
+        <RouteProgress active={navigation.state !== "idle"} />
+        {/* No isolation here or on <main>: popups render inside <main> and must stack over the top
+            bar and the phone tab bar, which a stacking context around them would stop. */}
+        <div className="sj-app-shell relative flex min-h-svh w-full flex-col">
           {userId ? null : <PhoneBrandBar />}
-          <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
-            <AppNavbar userId={userId} oauthProviders={oauthProviders} />
-          </header>
+          <div className="sj-desktop-topbar sticky top-0 z-30 hidden lg:block">
+            <AppNavbar userId={userId} oauthProviders={oauthProviders} cookingNowCount={cookingNowCount} />
+          </div>
           {/* The bottom padding clears the phone tab bar (MobileNav): its bottom margin,
               max(1rem, safe-area inset), plus its 4rem height and a gap, so the last thing on a
               page never sits under it. */}
           <main
             id="main"
             tabIndex={-1}
-            className="sj-desktop-surface sj-mobile-surface grow pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0 print:pb-0"
+            className="sj-desktop-surface sj-mobile-surface grow"
           >
             <Outlet />
+            <PopupLayer />
           </main>
+          <SiteFooter />
         </div>
-        <MobileNav isAuthenticated={!!userId} />
-        <InstallPromptCard />
-      </ToastProvider>
-    </DockContextProvider>
-  );
-}
-
-/**
- * Thin top-of-page brass bar that appears while React Router is loading a new
- * route or submitting a form. One global affordance covers every action that
- * used to feel "frozen" between click and response — Fork, Log-cook, account
- * settings, shopping-list submits, cookbook deletes — without each having to
- * wire its own pending UI. Disappears the moment navigation returns to idle.
- */
-function RouteTransitionIndicator() {
-  const navigation = useNavigation();
-  const isActive = navigation.state !== "idle";
-  if (!isActive) return null;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      aria-label="Loading"
-      className="sj-route-progress pointer-events-none fixed inset-x-0 top-0 z-50 h-[2px] motion-reduce:animate-none"
-    />
+        <MobileNav isAuthenticated={!!userId} cookingNowCount={cookingNowCount} />
+        <MobileNavInstallPrompt isAuthenticated={!!userId} />
+        <MobileNavToaster isAuthenticated={!!userId} />
+      </DockContextProvider>
+    </XrayProvider>
   );
 }
 
@@ -289,6 +287,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // Per-request CSP nonce (server-provided via NonceContext in entry.server).
   // Applied to every inline <script> below so script-src can drop 'unsafe-inline'.
   const nonce = useContext(NonceContext);
+  const popups = useRef<HTMLDivElement>(null);
+  useHydratedMark();
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -302,30 +302,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <Meta />
         <Links />
-        {/* Prevent flash of wrong theme */}
-        <script
-          nonce={nonce}
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                const stored = localStorage.getItem('spoonjoy-theme');
-                const theme = stored === 'light' || stored === 'dark'
-                  ? stored
-                  : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-                document.documentElement.classList.add(theme);
-              })();
-            `,
-          }}
-        />
+        {/* Applies the kept colour scheme before the page paints, so a reload never flashes the wrong one. */}
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: colorSchemeScript({ storageKey: THEME_STORAGE_KEY }) }} />
+        {/* Mark where a foldable screen (the iPhone Duo's inner screen) bends, before first paint, so
+            app/styles/fold.css can lay pages out as a two-page spread instead of across the fold. */}
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `(${FOLD_BOOTSTRAP})(window);` }} />
       </head>
       <body className="m-0 bg-[var(--sj-page)] p-0 text-[var(--sj-ink)] antialiased">
-        <ThemeProvider>
+        <ColorSchemeProvider storageKey={THEME_STORAGE_KEY}>
           {/* Ouro UI's links and link buttons navigate through React Router. */}
-          <OuroProvider linkComponent={OuroRouterLink}>
-            <SkipLink />
-            {children}
+          <OuroProvider linkComponent={OuroRouterLink} portalContainer={popups}>
+            <PopupLayerContext.Provider value={popups}>
+              <SkipLink />
+              {children}
+            </PopupLayerContext.Provider>
           </OuroProvider>
-        </ThemeProvider>
+        </ColorSchemeProvider>
         <ScrollRestoration nonce={nonce} />
         <Scripts nonce={nonce} />
       </body>
@@ -345,6 +337,7 @@ export function ErrorBoundary() {
   return (
     <main id="main" tabIndex={-1} className="sj-mobile-surface grow">
       <RouteErrorContent error={error} />
+      <PopupLayer />
     </main>
   );
 }

@@ -1,4 +1,5 @@
 import { Form } from "react-router";
+import { Button } from "~/components/ouro/button/button";
 
 const READINESS_PAYLOAD = { status: "ready" } as const;
 
@@ -19,7 +20,7 @@ export function action() {
 export default function ReleaseReadiness() {
   return (
     <Form method="post" className="p-6">
-      <button type="submit">Probe Worker mutation channel</button>
+      <Button type="submit">Probe Worker mutation channel</Button>
     </Form>
   );
 }

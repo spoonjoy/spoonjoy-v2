@@ -329,8 +329,9 @@ describe("Chefs drawer route", () => {
       render(<Stub initialEntries={["/chefs"]} />);
       const row = await screen.findByRole("link", { name: /chef-rosa/i });
       expect(await screen.findByText("Jun 2, 2026")).toBeInTheDocument();
-      expect(row).toHaveTextContent("Latest activity Jun 2, 2026");
-      expect(row.querySelector("time")).toHaveAttribute("datetime", "2026-06-01T20:00:00.000Z");
+      const item = row.closest('[data-ouro="item"]')!;
+      expect(item).toHaveTextContent("Latest activity Jun 2, 2026");
+      expect(item.querySelector("time")).toHaveAttribute("datetime", "2026-06-01T20:00:00.000Z");
     });
   });
 

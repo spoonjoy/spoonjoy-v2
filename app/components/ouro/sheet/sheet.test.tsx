@@ -807,6 +807,32 @@ describe("Sheet dev messages", () => {
 });
 
 describe("Sheet parts", () => {
+  it("mark the buttons they render as the sheet's, and leave a rendered Button its own marker", async () => {
+    await render(
+      <SheetRoot>
+        <SheetTrigger>Edit</SheetTrigger>
+        <SheetTrigger render={<Button>Rename</Button>} />
+        <SheetPortal>
+          <SheetViewport>
+            <SheetPopup>
+              <SheetTitle>Parts</SheetTitle>
+              <SheetContent>
+                <SheetClose>Close</SheetClose>
+                <SheetClose render={<Button>Done</Button>} />
+              </SheetContent>
+            </SheetPopup>
+          </SheetViewport>
+        </SheetPortal>
+      </SheetRoot>,
+    );
+    const marks = () => [...document.querySelectorAll("button")].map((element) => `${element.getAttribute("data-ouro-control")}/${element.getAttribute("data-ouro-part")}`);
+    expect(marks()).toEqual(["sheet/trigger", "button/root"]);
+    await userEvent.click(page.getByRole("button", { name: "Edit" }));
+    await expect.element(page.getByRole("dialog", { name: "Parts" })).toBeVisible();
+    expect(marks()).toEqual(["sheet/trigger", "button/root", "sheet/close", "button/root"]);
+    expect(document.querySelector("[data-ouro-sheet-content]")!.getAttribute("data-ouro-part")).toBe("content");
+  });
+
   it("renders a bottom SheetRoot for a side that is not one of the four, and warns once with the fix", async () => {
     await render(
       <SheetRoot {...({ side: "left-ish" } as object)} defaultOpen>

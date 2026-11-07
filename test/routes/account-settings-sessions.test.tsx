@@ -23,6 +23,12 @@ import { approveAgentConnectionRequest, pollAgentConnection, startAgentConnectio
 import { revokeAllAccountAccess } from "~/lib/account-revocation.server";
 import { sqliteD1 } from "../helpers/sqlite-d1";
 
+// HX's image field under Profile photo keeps its own status region; these are the page's.
+function pageStatuses(): HTMLElement[] {
+  return screen.queryAllByRole("status").filter((element) => !element.closest('[data-testid="profile-photo-section"]'));
+}
+
+
 async function pkceChallenge(verifier: string): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
   return btoa(String.fromCharCode(...digest)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -510,7 +516,7 @@ describe("Account settings - revocable sessions", () => {
         await answer;
       });
       await waitFor(() => expect(screen.queryByLabelText("New password")).not.toBeInTheDocument());
-      expect(screen.getByRole("status")).toHaveTextContent("Your password has been changed.");
+      expect(pageStatuses()[0]).toHaveTextContent("Your password has been changed.");
       expect(screen.getByRole("button", { name: "Change password" })).toBeEnabled();
     });
 

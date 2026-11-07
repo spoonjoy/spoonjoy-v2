@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient, RecipeSpoon } from "@prisma/client";
 import { RECIPE_IMAGE_TYPES, storeImage, validateImageFileForStorage } from "~/lib/image-storage.server";
 import { FOOD_IMAGE_SIZE_MESSAGE, FOOD_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
+import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 import { newReservationId as cuidShapedId } from "~/lib/api-idempotency.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 
@@ -153,6 +154,9 @@ export async function prepareSpoonContent(
 ): Promise<{ note: string | null; nextTime: string | null; photoUrl: string | null }> {
   const note = trimOrNull(input.note ?? null);
   const nextTime = trimOrNull(input.nextTime ?? null);
+  if (containsObjectionableContent(note) || containsObjectionableContent(nextTime)) {
+    throw new SpoonValidationError(OBJECTIONABLE_CONTENT_MESSAGE);
+  }
 
   let photoUrl: string | null = input.photoUrl ?? null;
   if (input.photoFile) {
@@ -234,6 +238,9 @@ export async function updateSpoon(
     throw new SpoonValidationError(
       "Spoon must include at least one of: photo, note, nextTime",
     );
+  }
+  if (containsObjectionableContent(data.note as string | null | undefined) || containsObjectionableContent(data.nextTime as string | null | undefined)) {
+    throw new SpoonValidationError(OBJECTIONABLE_CONTENT_MESSAGE);
   }
 
   // Sets the patch's values by id, so it runs again after a transient D1 error.

@@ -22,6 +22,7 @@ const defaultValue: DockContextValue = {
   isSuppressed: false,
 };
 
+// Whether a page hides the phone's tab bar, such as a cookbook while its title is being edited.
 export const DockContext = createContext<DockContextValue>(defaultValue);
 
 export interface DockContextProviderProps {

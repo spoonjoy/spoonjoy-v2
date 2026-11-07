@@ -1,4 +1,4 @@
-import clsx from 'clsx'
+import { Button } from '~/components/ouro/button/button'
 
 export interface StepsSectionHeadingProps {
   /** Whether any ingredient or step output is checked off, so there is progress to clear */
@@ -28,23 +28,23 @@ export function StepsSectionHeading({ hasProgress, onClearProgress }: StepsSecti
           Steps
         </h2>
       </div>
-      <button
-        type="button"
-        onClick={onClearProgress}
-        disabled={!hasProgress}
+      {/* Invisible, not removed, while there is nothing to clear, so its room is always kept. */}
+      <div
         aria-hidden={hasProgress ? undefined : true}
         data-state={hasProgress ? 'shown' : 'reserved'}
-        data-testid="clear-progress-button"
-        className={clsx(
-          // A 44px tap target whose negative margin keeps it as tall as a line of text.
-          'font-sj-ui col-start-2 row-start-1 -my-3.5 inline-flex min-h-11 items-center whitespace-nowrap text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] print:hidden',
-          // Fades in and out; with reduced motion it simply appears and disappears.
-          'motion-safe:transition-[opacity,visibility] motion-safe:duration-200 motion-safe:ease-out',
-          hasProgress ? 'visible opacity-100' : 'invisible opacity-0',
-        )}
+        className={`col-start-2 row-start-1 -my-1 print:hidden ${hasProgress ? 'visible' : 'invisible'}`}
       >
-        Clear progress
-      </button>
+        <Button
+          variant="plain"
+          tone="destructive"
+          size="sm"
+          onClick={onClearProgress}
+          disabled={!hasProgress}
+          data-testid="clear-progress-button"
+        >
+          Clear progress
+        </Button>
+      </div>
       <p className="text-base/6 text-[var(--sj-ink-soft)] col-span-2 row-start-2 font-sj-ui text-xs uppercase tracking-[0.18em] print:hidden sm:col-span-1 sm:col-start-3 sm:row-start-1">
         Tap ingredients as you go
       </p>

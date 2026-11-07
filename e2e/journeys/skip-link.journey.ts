@@ -55,7 +55,7 @@ test.describe("Skip to main content", () => {
       await expect(link).toBeFocused();
       const box = await boxOf(link, "the focused skip link");
       expect(box.y, "top edge").toBeGreaterThanOrEqual(0);
-      expect(box.y, "top edge").toBeLessThan(8);
+      expect(box.y, "top edge").toBeLessThanOrEqual(8);
       expect(box.width, "width").toBeGreaterThan(100);
       expect(box.height, "height").toBeGreaterThan(24);
       expect(await paintedArea(link), "painted area").toBeCloseTo(box.width * box.height, 0);

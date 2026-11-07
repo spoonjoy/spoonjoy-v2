@@ -4,14 +4,14 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_103",
+    "requestId": "opaque_104",
     "data": {
       "notifySpoonOnMyRecipe": true,
       "notifyForkOfMyRecipe": false,
       "notifyCookbookSaveOfMine": true,
       "notifyFellowChefOriginCook": false,
       "mutation": {
-        "clientMutationId": "opaque_104",
+        "clientMutationId": "opaque_105",
         "replayed": false
       }
     }

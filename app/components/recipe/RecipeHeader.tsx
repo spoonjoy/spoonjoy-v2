@@ -1,13 +1,17 @@
-import { ImageOff, Loader2 } from 'lucide-react'
+import { ImageOff } from 'lucide-react'
+import { Badge } from '~/components/ouro/badge/badge'
+import { Spinner } from '~/components/ouro/spinner/spinner'
 import type { ReactNode } from 'react'
-import { Link } from '../navigation/app-link'
+import { Link } from '~/components/ouro/link/link'
 import { Avatar } from '../ouro/avatar/avatar'
-import { ScaleSelector } from './ScaleSelector'
+import { NumberField } from '~/components/ouro/number-field/number-field'
+import { SCALE_RANGE } from '~/components/cook/cook-controller'
 import { scaleServingsText } from '~/lib/quantity'
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 import { CoverProvenanceBadge } from './CoverProvenanceBadge'
 import type { CookSyncStatus } from '~/lib/cook-session-sync'
-import { CookSyncStatusLine } from './CookSyncStatusLine'
+import { SyncStatus } from '~/components/ouro/sync-status/sync-status'
+import { cookSyncStatusProps } from '~/lib/cook-sync-status'
 import { HERO_IMAGE_PROPS } from '~/lib/image-loading'
 
 function normalizeCoverPlaceholderLabel(label: string) {
@@ -61,7 +65,7 @@ export interface RecipeHeaderProps {
  * Features:
  * - PROMINENT hero-style recipe image (or placeholder)
  * - Mobile-first design for kitchen use
- * - Integrated ScaleSelector with scaled servings text
+ * - The scale, as Ouro HX's NumberField, with the scaled servings under it
  * - Optional masthead actions for desktop and first-viewport clarity
  */
 // On paper the scale control is gone, so the printed page says what the quantities are for: the
@@ -117,11 +121,7 @@ export function RecipeHeader({
   )
 
   const chefLine = resolvedChefHref ? (
-    <Link
-      href={resolvedChefHref}
-      aria-label={chefName}
-      className="mt-5 inline-flex min-h-11 items-center gap-2 no-underline hover:[&_strong]:text-[var(--sj-brass)]"
-    >
+    <Link href={resolvedChefHref} aria-label={chefName} tone="secondary" inline={false} className="mt-5 inline-flex items-center gap-2">
       {chefIdentity}
     </Link>
   ) : (
@@ -152,14 +152,10 @@ export function RecipeHeader({
               className="absolute bottom-4 left-4 max-w-[calc(100%-2rem)] print:hidden"
             />
             {activeCoverProcessing ? (
-              <span
-                role="status"
-                aria-live="polite"
-                className="print:hidden absolute left-4 top-4 inline-flex min-h-7 max-w-[calc(100%-2rem)] items-center gap-2 border border-[rgba(255,252,246,0.76)] bg-[rgba(37,34,31,0.96)] px-2 font-sj-ui text-xs font-semibold text-[var(--sj-paper)] shadow-[0_3px_18px_rgba(0,0,0,0.45)] [text-shadow:0_1px_1px_rgba(0,0,0,0.62)]"
-              >
-                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                Styling cover
-              </span>
+              <Badge className="print:hidden absolute left-4 top-4 gap-2">
+                <Spinner size="sm" label="Styling cover" />
+                <span aria-hidden="true">Styling cover</span>
+              </Badge>
             ) : null}
           </div>
         ) : (
@@ -208,13 +204,22 @@ export function RecipeHeader({
 
           <div className="mt-8 max-w-[43rem] print:hidden" data-testid="recipe-header-controls">
             <div className="sm:max-w-[26rem]">
-              <ScaleSelector
+              <NumberField
+                label="Scale"
+                description={scaledServings}
                 value={scaleFactor}
-                onChange={onScaleChange}
-                displayValue={scaledServings}
+                {...SCALE_RANGE}
+                format={{ maximumFractionDigits: 2 }}
+                decrementLabel="Decrease scale"
+                incrementLabel="Increase scale"
+                onValueChange={(next) => {
+                  if (next !== null) onScaleChange(next)
+                }}
               />
             </div>
-            {progressSyncStatus ? <CookSyncStatusLine status={progressSyncStatus} /> : null}
+            {progressSyncStatus ? (
+              <SyncStatus className="mt-3" data-testid="cook-sync-status" {...cookSyncStatusProps(progressSyncStatus)} />
+            ) : null}
           </div>
         </div>
       </div>

@@ -6,11 +6,35 @@
 // title carries the project name and a timestamp; everything else the test touches belongs to that
 // recipe. AI ingredient parsing is switched off in favour of manual entry (QA may have no OpenAI
 // key), except for one deliberate parse on the Add Step page, which must not take the page down.
-import { test, expect } from "./support/journey";
+import { test as journeyTest, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
-import { pathUrl, waitForHydration } from "./support/navigation";
+import { openDisclosure, pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStatePath } from "./support/personas";
 import { requiredLabel } from "./support/forms";
+import { recordCookSyncRequests } from "./support/cook-sync-evidence";
+
+const test = journeyTest.extend<{ cookSyncEvidence: void }>({
+  cookSyncEvidence: [async ({ page }, use, testInfo) => {
+    const recording = recordCookSyncRequests(page);
+    try {
+      await use();
+    } finally {
+      recording.stop();
+      if (testInfo.status !== testInfo.expectedStatus) {
+        const browser = await page.evaluate(() => ({
+          visibility: document.visibilityState,
+          online: navigator.onLine,
+          readyState: document.readyState,
+          syncStatus: document.querySelector('[data-testid="cook-sync-status"]')?.getAttribute("data-status") ?? null,
+        })).catch(() => ({ unavailable: true }));
+        await testInfo.attach("cook-sync-request-phases", {
+          body: JSON.stringify({ ...recording.snapshot(), browser }, null, 2),
+          contentType: "application/json",
+        });
+      }
+    }
+  }, { auto: true }],
+});
 
 // A 1×1 PNG: enough to be a real photo file for the import form.
 const RECIPE_CARD_PNG = Buffer.from(
@@ -37,11 +61,11 @@ function ingredient(page: Page, name: string) {
 
 // Establish the initial synced state before checking deletion and its cache cleanup.
 async function expectCookProgressSynced(page: Page) {
-  await expect(page.getByTestId("cook-sync-status")).toHaveText("Progress synced");
+  await expect(page.getByTestId("cook-sync-status").locator("p:not([aria-hidden])")).toHaveText("Progress synced");
 }
 
 async function openMaintenance(page: Page) {
-  await page.getByRole("button", { name: /^Manage recipe/ }).click();
+  await openDisclosure(page.getByRole("button", { name: /^Manage recipe/ }));
   return page.locator("#recipe-owner-maintenance");
 }
 
@@ -285,7 +309,7 @@ test.describe("Recipe create and edit", () => {
     await waitForHydration(page);
     const importHeading = page.getByRole("heading", { name: "Start from a recipe you already have." });
     await expect(importHeading).toBeVisible();
-    await expect(page.getByRole("button", { name: "From a link", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("radio", { name: "From a link", exact: true })).toHaveAttribute("aria-checked", "true");
     // The answer shows under the field it is about, as that field's error.
     const importAnswer = page.getByText("Importing isn't switched on here yet. You can still write the recipe below.", { exact: true });
 
@@ -301,14 +325,14 @@ test.describe("Recipe create and edit", () => {
     await expect(linkField).toHaveAttribute("aria-invalid", "true");
     await expect(linkField).toBeFocused();
 
-    await page.getByRole("button", { name: "Paste text", exact: true }).click();
+    await page.getByRole("radio", { name: "Paste text", exact: true }).click();
     await expect(page.getByLabel(requiredLabel("Recipe text"), { exact: true })).toBeVisible();
     await expect(importAnswer).toHaveCount(0);
     await expectAccessible();
 
     // A photo reaches the server: one that went missing on the way would be answered with
     // "Choose a photo of the recipe." instead.
-    await page.getByRole("button", { name: "From a photo", exact: true }).click();
+    await page.getByRole("radio", { name: "From a photo", exact: true }).click();
     await page.getByLabel(requiredLabel("Recipe photo"), { exact: true }).setInputFiles({
       name: "recipe-card.png",
       mimeType: "image/png",
@@ -316,7 +340,7 @@ test.describe("Recipe create and edit", () => {
     });
     await page.getByRole("button", { name: "Import recipe", exact: true }).click();
     await expect(importAnswer).toBeVisible();
-    await expect(page.getByRole("button", { name: "From a photo", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("radio", { name: "From a photo", exact: true })).toHaveAttribute("aria-checked", "true");
     await expect(page).toHaveURL(pathUrl("/recipes/new"));
     await expectAccessible();
   });

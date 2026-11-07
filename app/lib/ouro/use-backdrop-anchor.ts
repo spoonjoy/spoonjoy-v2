@@ -20,6 +20,7 @@ import { attachRef } from "~/lib/ouro/refs";
  * function SheetBackdrop({ ref, ...props }) {
  *   return <Drawer.Backdrop {...props} ref={useBackdropAnchor(ref)} />;
  * }
+ * @claim "Elsewhere the backdrop is fixed and" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::Sheet iOS backdrop rule > covers the visible screen on a page scrolled 2000px)
  */
 export function useBackdropAnchor<T extends HTMLElement>(appRef: Ref<T> | undefined): RefCallback<T> {
   return useCallback(

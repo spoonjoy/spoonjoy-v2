@@ -1,9 +1,9 @@
 // Base `test`/`expect` for the QA journeys, extended with four fixtures:
 //   - verifyAfterReload(assertion): reloads the page and re-runs the assertion, so a
 //     `@mutates` journey can prove its write survived a fresh document load.
-//   - expectAccessible(): runs an axe scan of the whole page (default tags, no excluded
-//     elements) and fails only on `serious`/`critical` impacts, printing rule ids and
-//     target selectors for anything that fails.
+//   - expectAccessible(): audits the whole page in both themes with support/accessibility.ts and
+//     fails on every axe violation, whatever its impact, and on every check axe could not decide
+//     that a pixel measurement did not settle. Each audit is attached to the test as JSON.
 //   - expectConsoleError(pattern, options?): registers, for the current test only, a RegExp
 //     that the console gate below should treat as expected rather than a failure. `options.url`
 //     optionally also constrains the match to an issue whose (redacted) source location
@@ -18,15 +18,14 @@
 //     test) needs to call it directly.
 //
 // The axe injection itself (page.evaluate of the axe source, not an injected <script> tag,
-// since QA's CSP would block that) lives in support/axe.ts and is shared with the explore
-// suite, which records every violation instead of failing.
+// since QA's CSP would block that) lives in support/axe.ts.
 import { test as base, expect } from "@playwright/test";
-import type { ConsoleMessage, Page } from "@playwright/test";
-import { runAxe } from "./axe";
+import type { ConsoleMessage, Page, Request } from "@playwright/test";
+import { auditAccessibility, describeAuditFailures } from "./accessibility";
+import { waitForHydrationOnLoad } from "./app-ready";
 import { redactUrl, redactUrlsInText } from "./redact";
 import { isWebKitCancelledSameOriginFetch } from "./webkit-noise";
-
-const FAILING_IMPACTS = new Set(["serious", "critical"]);
+import { RequestLedger, isTransportFailureLog } from "./recovered-requests";
 
 // Escape hatch for the console gate: a message (console error text, or a pageerror's message)
 // matching any of these patterns is ignored, in every test, instead of failing it. Must start
@@ -106,9 +105,8 @@ function matchesExpectation(issue: ConsoleIssue, expectation: ExpectedConsolePat
 
 /**
  * Splits `issues` into the ones no registered `expectations` pattern accounts for, and lists
- * which `expectations` (if any) never matched anything. Each expectation can absorb at most one
- * issue's worth of matching — this only affects which issue an expectation is credited against
- * when several would match, not whether the check passes.
+ * which `expectations` (if any) never matched anything. Each expectation absorbs at most one
+ * issue, so a diagnostic that can legitimately repeat needs one registration per allowed copy.
  */
 function resolveConsoleExpectations(
   issues: ConsoleIssue[],
@@ -150,7 +148,7 @@ function assertConsoleExpectationsMet(issues: ConsoleIssue[], expectations: Expe
 
 export interface ConsoleWatcher {
   /** Collected so far; read after the page under test is done with, right before disposing. */
-  issues: ConsoleIssue[];
+  readonly issues: ConsoleIssue[];
   /** Detaches this watcher's listeners. Call once the page is no longer needed. */
   dispose(): void;
 }
@@ -170,31 +168,51 @@ export interface ConsoleWatcher {
  * other data that shouldn't end up verbatim in a test failure message or CI log.
  */
 export function watchConsole(page: Page): ConsoleWatcher {
-  const issues: ConsoleIssue[] = [];
+  const collected: Array<{ issue: ConsoleIssue; url?: string }> = [];
+  const requests = new RequestLedger();
 
   const onConsole = (message: ConsoleMessage) => {
     if (message.type() !== "error") return;
     const text = redactUrlsInText(message.text());
     if (isAllowed(text)) return;
     const url = message.location().url;
-    issues.push({ text, location: url ? redactUrl(url) : undefined });
+    collected.push({ issue: { text, location: url ? redactUrl(url) : undefined }, url: url || undefined });
   };
   const onPageError = (error: Error) => {
     // Not an app error: see support/webkit-noise.ts.
     if (isWebKitCancelledSameOriginFetch(error, process.env.SPOONJOY_JOURNEYS_BASE_URL)) return;
     const text = redactUrlsInText(error.message);
     if (isAllowed(text)) return;
-    issues.push({ text });
+    collected.push({ issue: { text } });
   };
+  const onRequestFailed = (request: Request) => requests.failed(request);
+  const onRequestFinished = (request: Request) => requests.answered(request);
 
   page.on("console", onConsole);
   page.on("pageerror", onPageError);
+  page.on("requestfailed", onRequestFailed);
+  page.on("requestfinished", onRequestFinished);
 
   return {
-    issues,
+    // A lost request the page sent again and got an answer to is not an issue (see
+    // support/recovered-requests.ts). Read at the end, once the second request has finished.
+    get issues() {
+      const excused = new Map<string, number>();
+      return collected
+        .filter(({ issue, url }) => {
+          if (!url || !isTransportFailureLog(issue.text)) return true;
+          const used = excused.get(url) ?? 0;
+          if (used >= requests.recoveredCount(url)) return true;
+          excused.set(url, used + 1);
+          return false;
+        })
+        .map(({ issue }) => issue);
+    },
     dispose() {
       page.off("console", onConsole);
       page.off("pageerror", onPageError);
+      page.off("requestfailed", onRequestFailed);
+      page.off("requestfinished", onRequestFinished);
     },
   };
 }
@@ -223,6 +241,13 @@ interface JourneyFixtures {
 }
 
 export const test = base.extend<JourneyFixtures>({
+  // Every page.goto and page.reload waits for the app to hydrate, so no journey taps a page React
+  // has not wired up yet (support/app-ready.ts).
+  page: async ({ page }, use) => {
+    waitForHydrationOnLoad(page);
+    await use(page);
+  },
+
   verifyAfterReload: async ({ page }, use) => {
     await use(async (assertion) => {
       await page.reload({ waitUntil: "load" });
@@ -230,21 +255,14 @@ export const test = base.extend<JourneyFixtures>({
     });
   },
 
-  expectAccessible: async ({ page }, use) => {
+  expectAccessible: async ({ page }, use, testInfo) => {
+    let audits = 0;
     await use(async () => {
-      const results = await runAxe(page);
-
-      const failing = results.violations.filter((violation) => FAILING_IMPACTS.has(violation.impact ?? ""));
-
-      if (failing.length > 0) {
-        const report = failing
-          .map((violation) => {
-            const targets = violation.nodes.map((node) => node.target.join(" ")).join(", ");
-            return `  [${violation.impact}] ${violation.id}: ${targets}`;
-          })
-          .join("\n");
-        throw new Error(`Accessibility violations (serious/critical impact):\n${report}`);
-      }
+      audits += 1;
+      const results = await auditAccessibility(page);
+      await testInfo.attach(`accessibility-${audits}`, { body: JSON.stringify(results, null, 2), contentType: "application/json" });
+      const failure = describeAuditFailures(results);
+      if (failure) throw new Error(failure);
     });
   },
 

@@ -70,9 +70,7 @@ describe("CookbookCoverArt", () => {
     const badge = screen.getByTestId("cover-provenance-badge");
     expect(badge).toHaveTextContent("Original photo");
     expect(screen.queryByText(legacyChefPhotoLabel)).not.toBeInTheDocument();
-    expect(badge).toHaveClass("bg-[rgba(37,34,31,0.96)]");
-    expect(badge).toHaveClass("text-[var(--sj-paper)]");
-    expect(badge.className).not.toContain("text-[var(--sj-ink-soft)]");
+    expect(badge).toHaveAttribute("data-ouro", "badge");
     expect(screen.queryByText(legacySpoonjoyCookbookLabel)).not.toBeInTheDocument();
     expect(screen.getAllByText("1 recipe").length).toBeGreaterThan(0);
   });

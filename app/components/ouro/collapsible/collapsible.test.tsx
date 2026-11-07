@@ -53,6 +53,17 @@ async function settled(element: Element) {
 const facts = <p>Calories 420, protein 18g</p>;
 
 describe("Collapsible", () => {
+  it("keeps the trigger's edge under forced colours, which drop its fill", async () => {
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      const { trigger } = await render(<Collapsible title="Nutrition facts">{facts}</Collapsible>);
+      expect(parseFloat(getComputedStyle(trigger).borderTopWidth)).toBeGreaterThan(0);
+      expect(getComputedStyle(trigger).borderTopStyle).toBe("solid");
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
   it("renders a closed disclosure button named by its title", async () => {
     const { root, trigger } = await render(<Collapsible title="Nutrition facts">{facts}</Collapsible>);
     expect(root.getAttribute("data-ouro")).toBe("collapsible");

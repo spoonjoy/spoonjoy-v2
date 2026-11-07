@@ -1,207 +1,102 @@
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestRoutesStub } from "../../utils";
+import type { ImageFieldProps } from "~/components/ouro/image-field/image-field";
 import { ProfilePhotoField } from "~/components/account/ProfilePhotoField";
+import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import type { AccountSettingsActionResult } from "~/lib/account-settings.server";
 
-// Mock useSubmit + useActionData so we can assert orchestration without a real
-// navigation, and inject server action results directly.
+// useSubmit and useActionData are mocked, so the test checks what the field posts and shows, and
+// HX's ImageField is replaced by a probe of the props it gets.
 const mockSubmit = vi.fn();
 let mockActionData: AccountSettingsActionResult | undefined;
 vi.mock("react-router", async () => {
   const actual = await vi.importActual<typeof import("react-router")>("react-router");
-  return {
-    ...actual,
-    useSubmit: () => mockSubmit,
-    useActionData: () => mockActionData,
-  };
+  return { ...actual, useSubmit: () => mockSubmit, useActionData: () => mockActionData };
 });
 
-// Mock the cropper so this test only exercises the field's orchestration.
-let cropperProps: { file: File; onConfirm: (blob: Blob) => void; onCancel: () => void } | null = null;
-vi.mock("~/components/account/ProfilePhotoCropper", () => ({
-  ProfilePhotoCropper: (props: { file: File; onConfirm: (blob: Blob) => void; onCancel: () => void }) => {
-    cropperProps = props;
-    return (
-      <div data-testid="mock-cropper">
-        <button type="button" onClick={() => props.onConfirm(new Blob(["x"], { type: "image/jpeg" }))}>
-          mock-save
-        </button>
-        <button type="button" onClick={() => props.onCancel()}>
-          mock-cancel
-        </button>
-      </div>
-    );
+let field: ImageFieldProps | undefined;
+vi.mock("~/components/ouro/image-field/image-field", () => ({
+  ImageField: (props: ImageFieldProps) => {
+    field = props;
+    return null;
   },
 }));
 
 function renderField(photoUrl: string | null, actionData?: AccountSettingsActionResult) {
   mockActionData = actionData;
   const Stub = createTestRoutesStub([
-    {
-      path: "/account/settings",
-      Component: () => <ProfilePhotoField photoUrl={photoUrl} />,
-      loader: () => null,
-    },
+    { path: "/account/settings", Component: () => <ProfilePhotoField photoUrl={photoUrl} />, loader: () => null },
   ]);
   return render(<Stub initialEntries={["/account/settings"]} />);
 }
 
-function getFileInput(): HTMLInputElement {
-  return document.querySelector('input[type="file"]') as HTMLInputElement;
+async function rendered(photoUrl: string | null, actionData?: AccountSettingsActionResult): Promise<ImageFieldProps> {
+  renderField(photoUrl, actionData);
+  await waitFor(() => expect(field).toBeDefined());
+  return field!;
 }
 
 beforeEach(() => {
-  cropperProps = null;
+  field = undefined;
   mockActionData = undefined;
   mockSubmit.mockClear();
 });
 
 describe("ProfilePhotoField", () => {
-  it("keeps a named profile preview when there is no photo", async () => {
-    renderField(null);
-    const preview = await screen.findByRole("img", { name: "Profile photo" });
-    expect(preview).toHaveTextContent("PP");
-  });
-
-  it("shows the Upload Photo button and no Remove Photo button without a photo", async () => {
-    renderField(null);
-    expect(await screen.findByRole("button", { name: /upload photo/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /remove photo/i })).not.toBeInTheDocument();
-  });
-
-  it("shows Change Photo and Remove Photo when a photo is present", async () => {
-    renderField("https://example.com/me.jpg");
-    expect(await screen.findByRole("button", { name: /change photo/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /remove photo/i })).toBeInTheDocument();
-  });
-
-  it("renders the Remove Photo form with the removePhoto intent", async () => {
-    renderField("https://example.com/me.jpg");
-    const removeButton = await screen.findByRole("button", { name: /remove photo/i });
-    const form = removeButton.closest("form") as HTMLFormElement;
-    expect(form.querySelector('input[name="intent"]')).toHaveValue("removePhoto");
-  });
-
-  it("clicking the upload button triggers the hidden file input", async () => {
-    const user = userEvent.setup();
-    renderField(null);
-    await screen.findByRole("button", { name: /upload photo/i });
-    const clickSpy = vi.spyOn(getFileInput(), "click");
-    await user.click(screen.getByRole("button", { name: /upload photo/i }));
-    expect(clickSpy).toHaveBeenCalled();
-  });
-
-  it("uses an explicit profile-photo allow-list that still includes GIF and WebP", async () => {
-    renderField(null);
-    await screen.findByRole("button", { name: /upload photo/i });
-
-    expect(getFileInput()).toHaveAttribute("accept", "image/jpeg,image/png,image/gif,image/webp");
-    expect(screen.getByText(/jpg, png, gif, or webp/i)).toBeInTheDocument();
-  });
-
-  it("opens the cropper when a valid file is selected", async () => {
-    renderField(null);
-    await screen.findByRole("button", { name: /upload photo/i });
-    const file = new File(["data"], "ok.png", { type: "image/png" });
-    fireEvent.change(getFileInput(), { target: { files: [file] } });
-
-    expect(await screen.findByTestId("mock-cropper")).toBeInTheDocument();
-    expect(cropperProps?.file).toBe(file);
-  });
-
-  it("submits a multipart FormData with the cropped blob on confirm", async () => {
-    renderField(null);
-    await screen.findByRole("button", { name: /upload photo/i });
-    const file = new File(["data"], "ok.png", { type: "image/png" });
-    fireEvent.change(getFileInput(), { target: { files: [file] } });
-
-    await screen.findByTestId("mock-cropper");
-    fireEvent.click(screen.getByText("mock-save"));
-
-    await waitFor(() => expect(mockSubmit).toHaveBeenCalledTimes(1));
-    const [formData, options] = mockSubmit.mock.calls[0];
-    expect(formData).toBeInstanceOf(FormData);
-    expect((formData as FormData).get("intent")).toBe("uploadPhoto");
-    const photo = (formData as FormData).get("photo") as File;
-    expect(photo).toBeInstanceOf(File);
-    expect(photo.name).toBe("avatar.jpg");
-    expect(photo.type).toBe("image/jpeg");
-    expect(options).toEqual({ method: "post", encType: "multipart/form-data" });
-
-    // The cropper closes after confirming.
-    await waitFor(() => expect(screen.queryByTestId("mock-cropper")).not.toBeInTheDocument());
-  });
-
-  it("defaults the photo MIME type when the blob has none", async () => {
-    renderField(null);
-    await screen.findByRole("button", { name: /upload photo/i });
-    fireEvent.change(getFileInput(), { target: { files: [new File(["d"], "ok.png", { type: "image/png" })] } });
-    await screen.findByTestId("mock-cropper");
-
-    // Directly invoke onConfirm with a typeless blob to hit the fallback branch.
-    act(() => {
-      cropperProps!.onConfirm(new Blob(["x"]));
+  it("is a round, cropped HX image field that takes JPG, PNG, GIF and WebP up to 5 MB", async () => {
+    const props = await rendered(null);
+    expect(props).toMatchObject({
+      label: "Profile photo",
+      alt: "Profile photo",
+      accept: "image/jpeg,image/png,image/gif,image/webp",
+      maxSize: 5 * 1024 * 1024,
+      shape: "circle",
+      crop: { title: "Crop your photo", outputWidth: 512 },
+      changeLabel: "Upload photo",
+      removeLabel: "Remove photo",
     });
-
-    await waitFor(() => expect(mockSubmit).toHaveBeenCalledTimes(1));
-    const photo = (mockSubmit.mock.calls[0][0] as FormData).get("photo") as File;
-    expect(photo.type).toBe("image/jpeg");
-    expect(screen.queryByTestId("mock-cropper")).not.toBeInTheDocument();
   });
 
-  it("closes the cropper and resets the input on cancel", async () => {
-    renderField(null);
-    await screen.findByRole("button", { name: /upload photo/i });
-    const input = getFileInput();
-    fireEvent.change(input, { target: { files: [new File(["d"], "ok.png", { type: "image/png" })] } });
-    await screen.findByTestId("mock-cropper");
+  it("shows the default avatar and offers no Remove without a photo", async () => {
+    const props = await rendered(null);
+    expect(props.src).toBe(resolveChefAvatarUrl(null));
+    expect(props.onRemove).toBeUndefined();
+  });
 
-    fireEvent.click(screen.getByText("mock-cancel"));
+  it("shows the saved photo, or the one the last upload returned", async () => {
+    expect(await rendered("https://example.com/me.jpg")).toMatchObject({ src: "https://example.com/me.jpg", changeLabel: "Change photo" });
+    field = undefined;
+    expect((await rendered("https://example.com/me.jpg", { success: true, intent: "uploadPhoto", photoUrl: "/photos/new.jpg" } as AccountSettingsActionResult)).src).toBe("/photos/new.jpg");
+  });
 
-    await waitFor(() => expect(screen.queryByTestId("mock-cropper")).not.toBeInTheDocument());
-    expect(input.value).toBe("");
+  it("posts a cropped photo as soon as it is chosen", async () => {
+    const props = await rendered(null);
+    const photo = new File(["x"], "photo.jpg", { type: "image/jpeg" });
+    props.onFileChange?.(photo);
+    const [formData, options] = mockSubmit.mock.calls[0]!;
+    expect((formData as FormData).get("intent")).toBe("uploadPhoto");
+    expect((formData as FormData).get("photo")).toBe(photo);
+    expect(options).toEqual({ method: "post", encType: "multipart/form-data" });
+  });
+
+  it("posts nothing when a chosen photo is taken back out of the field", async () => {
+    const props = await rendered(null);
+    props.onFileChange?.(null);
     expect(mockSubmit).not.toHaveBeenCalled();
   });
 
-  it("rejects a file with an unsupported type and does not open the cropper", async () => {
-    renderField(null);
-    await screen.findByRole("button", { name: /upload photo/i });
-    fireEvent.change(getFileInput(), { target: { files: [new File(["d"], "bad.svg", { type: "image/svg+xml" })] } });
-
-    expect(await screen.findByText(/please upload an image file/i)).toBeInTheDocument();
-    expect(screen.queryByTestId("mock-cropper")).not.toBeInTheDocument();
+  it("posts removePhoto when the chef removes the saved photo", async () => {
+    const props = await rendered("https://example.com/me.jpg");
+    props.onRemove?.();
+    const [formData, options] = mockSubmit.mock.calls[0]!;
+    expect((formData as FormData).get("intent")).toBe("removePhoto");
+    expect(options).toEqual({ method: "post" });
   });
 
-  it("rejects an oversized file and does not open the cropper", async () => {
-    renderField(null);
-    await screen.findByRole("button", { name: /upload photo/i });
-    const big = new File([new Uint8Array(6 * 1024 * 1024)], "big.png", { type: "image/png" });
-    fireEvent.change(getFileInput(), { target: { files: [big] } });
-
-    expect(await screen.findByText(/photo must be less than 5mb/i)).toBeInTheDocument();
-    expect(screen.queryByTestId("mock-cropper")).not.toBeInTheDocument();
-  });
-
-  it("displays the server action error message", async () => {
-    renderField(null, {
-      success: false,
-      intent: "uploadPhoto",
-      error: "file_too_large",
-      message: "File size exceeds 5MB limit",
-    });
-    expect(await screen.findByText(/file size exceeds 5mb limit/i)).toBeInTheDocument();
-  });
-
-  it("ignores an error from another account settings form", async () => {
-    renderField(null, {
-      success: false,
-      intent: "updateUserInfo",
-      error: "username_taken",
-      message: "This username is already taken",
-    });
-    await screen.findByRole("button", { name: /upload photo/i });
-    expect(screen.queryByText("This username is already taken")).not.toBeInTheDocument();
+  it("shows an upload's error, and not another form's", async () => {
+    expect((await rendered(null, { success: false, intent: "uploadPhoto", error: "file_too_large", message: "File size exceeds 5MB limit" } as AccountSettingsActionResult)).error).toBe("File size exceeds 5MB limit");
+    field = undefined;
+    expect((await rendered(null, { success: false, intent: "updateUserInfo", error: "x", message: "Other form" } as AccountSettingsActionResult)).error).toBeUndefined();
   });
 });

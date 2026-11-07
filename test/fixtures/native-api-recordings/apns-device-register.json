@@ -4,12 +4,12 @@
   "status": 201,
   "body": {
     "ok": true,
-    "requestId": "opaque_105",
+    "requestId": "opaque_106",
     "data": {
       "created": true,
       "device": {
         "id": "id_021",
-        "deviceId": "opaque_106",
+        "deviceId": "opaque_107",
         "platform": "ios",
         "environment": "development",
         "tokenPrefix": "aaaaaaaaaaaa",
@@ -22,7 +22,7 @@
         "updatedAt": "2026-01-01T00:00:00.000Z"
       },
       "mutation": {
-        "clientMutationId": "opaque_107",
+        "clientMutationId": "opaque_108",
         "replayed": false
       }
     }

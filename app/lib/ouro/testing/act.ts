@@ -10,6 +10,8 @@ type ActEnvironment = { IS_REACT_ACT_ENVIRONMENT?: boolean };
  *
  * @example
  * await act(() => root.render(<Sheet … />));
+ * @claim "Tests drive real browser events through" registry/ouro/lib/ouro/testing/act.ts verify:fileLine(registry/ouro/lib/ouro/testing/act.ts, /IS_REACT_ACT_ENVIRONMENT/)
+ * @claim "Tests drive real browser events through" https://react.dev/reference/react/act verify:urlOk(https://react.dev/reference/react/act)
  */
 export async function act(callback: () => unknown): Promise<void> {
   const environment = globalThis as ActEnvironment;

@@ -1,7 +1,7 @@
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { cleanup, render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import { createTestRoutesStub, findShownAlert, getShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta } from "~/routes/recipes.$id.steps.$stepId.edit";
@@ -2526,10 +2526,11 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
-      expect(await screen.findByText("2")).toBeInTheDocument();
-      expect(screen.getByText(/cups flour/)).toBeInTheDocument();
-      expect(screen.getByText("0.5")).toBeInTheDocument();
-      expect(screen.getByText(/tsp salt/)).toBeInTheDocument();
+      const ingredients = await screen.findByRole("list", { name: "Ingredients" });
+      expect(within(ingredients).getByText("flour")).toBeInTheDocument();
+      expect(within(ingredients).getByText("2 cups")).toBeInTheDocument();
+      expect(within(ingredients).getByText("salt")).toBeInTheDocument();
+      expect(within(ingredients).getByText("0.5 tsp")).toBeInTheDocument();
       // One remove button per ingredient, each named for its ingredient.
       expect(screen.getByRole("button", { name: "Remove flour" })).toHaveTextContent("Remove");
       expect(screen.getByRole("button", { name: "Remove salt" })).toHaveTextContent("Remove");
@@ -2740,8 +2741,9 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
       // Verify ingredient display
-      expect(await screen.findByText("2")).toBeInTheDocument();
-      expect(screen.getByText(/cups flour/)).toBeInTheDocument();
+      const ingredients = await screen.findByRole("list", { name: "Ingredients" });
+      expect(within(ingredients).getByText("flour")).toBeInTheDocument();
+      expect(within(ingredients).getByText("2 cups")).toBeInTheDocument();
 
       // Verify remove button exists
       const removeButton = screen.getByRole("button", { name: /^Remove / });

@@ -1,8 +1,7 @@
-import type { Ingredient } from "~/components/recipe/IngredientList";
-import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
-import type { CookTimersController } from "~/hooks/use-cook-timers";
+import type { Ingredient, StepReference } from "~/components/recipe/IngredientList";
+import type { CookTimer } from "~/lib/cook-timers";
 
-export type { Ingredient, StepReference, CookTimersController };
+export type { Ingredient, StepReference, CookTimer };
 
 /** One step as cook mode shows it. */
 export interface CookModeStep {
@@ -36,7 +35,8 @@ export interface CookController {
   scaleFactor: number;
   /** Cook mode is open; never true for a recipe without steps. */
   cookMode: boolean;
-  timers: CookTimersController;
+  /** Every step's timer, for the steps with a duration. */
+  timers: readonly CookTimer[];
   toggleIngredient(id: string): void;
   toggleStepOutput(id: string): void;
   setScale(value: number): void;
@@ -45,6 +45,9 @@ export interface CookController {
   exitCookMode(): void;
   clearProgress(): void;
 }
+
+/** How far a cook can scale a recipe, and by how much each step of the scale moves. */
+export const SCALE_RANGE = { min: 0.25, max: 50, step: 0.25 } as const;
 
 const NO_INGREDIENTS: Ingredient[] = [];
 const NO_STEP_OUTPUT_USES: StepReference[] = [];

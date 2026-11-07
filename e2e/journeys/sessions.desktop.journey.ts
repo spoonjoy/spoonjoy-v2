@@ -4,6 +4,7 @@
 // device-specific, and an iPhone instance running at the same time would revoke this one's
 // sessions (and the other way round) mid-run.
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
+import { waitForHydrationOnLoad } from "./support/app-ready";
 import { scratchStorageStatePath } from "./support/personas";
 import { signInScratchThroughForm } from "./support/sign-in";
 import { pathUrl, waitForHydration } from "./support/navigation";
@@ -23,6 +24,7 @@ test.describe("Sessions", () => {
     // fixture-provided `page`, so its console is watched by hand, as in sign-in.journey.ts.
     const otherContext = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const otherPage = await otherContext.newPage();
+    waitForHydrationOnLoad(otherPage);
     const otherConsole = watchConsole(otherPage);
     try {
       // B starts signed out: /login stays on /login and shows the form.

@@ -88,8 +88,19 @@ function FilterChips() {
   );
 }
 
+/** Filter chips: Badges with `onClick` are buttons that toggle with `aria-pressed`. */
+export const Filters: Story = {
+  parameters: { mode: "button" },
+  render: () => (
+    <Surface>
+      <FilterChips />
+    </Surface>
+  ),
+};
+
 /** Status labels, tag links and filter chips that toggle with `aria-pressed`. On phones, each link and button has a 44px touch target. */
 export const InContext: Story = {
+  parameters: { mode: "link" },
   render: () => (
     <Surface>
       <div style={row}>

@@ -66,7 +66,7 @@ function Dismissible() {
   const [error, setError] = useState(true);
   return (
     <Surface>
-      {error ? (
+      {error && (
         <Alert
           tone="destructive"
           title="Couldn't save"
@@ -78,11 +78,11 @@ function Dismissible() {
           }
           onDismiss={() => setError(false)}
         />
-      ) : (
-        <Button variant="outline" tone="secondary" onClick={() => setError(true)}>
-          Show the error again
-        </Button>
       )}
+      {/* Stays on the page, so it keeps focus when it brings the alert back; the alert hands focus here when it goes. */}
+      <Button variant="outline" tone="secondary" onClick={() => setError(true)}>
+        Show the error again
+      </Button>
     </Surface>
   );
 }

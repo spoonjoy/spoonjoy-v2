@@ -43,6 +43,8 @@ const inlineRootClass = "group/field box-border grid min-w-0 grid-cols-[auto_min
  * breakpoint with a fine pointer, so a landscape phone keeps the phone size.
  *
  * @internal
+ * @claim "The label beside an inline control" registry/ouro/components/ouro/checkbox/checkbox.touch.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox.touch.test.tsx::keeps the 20px box and 16px label on a landscape phone, past the sm breakpoint)
+ * @claim "The label beside an inline control" registry/ouro/components/ouro/field/field-styles.ts verify:fileLine(registry/ouro/components/ouro/field/field-styles.ts, /const\sinlineLabelClass\s=\s"text-base\sleading-6\ssm:pointer-fine:text-sm\ssm:pointer-fine:leading-5"/)
  */
 const inlineLabelClass = "text-base leading-6 sm:pointer-fine:text-sm sm:pointer-fine:leading-5";
 
@@ -52,6 +54,7 @@ const inlineLabelClass = "text-base leading-6 sm:pointer-fine:text-sm sm:pointer
  * stays clear of its neighbors'; with a fine pointer from the `sm` breakpoint, 12px.
  *
  * @internal
+ * @claim "On touch screens rows sit 20px" registry/ouro/components/ouro/field/field-styles.ts verify:fileLine(registry/ouro/components/ouro/field/field-styles.ts, /vertical:\s"grid\sgap-5\ssm:pointer-fine:gap-3"/)
  */
 const choicesClass = {
   vertical: "grid gap-5 sm:pointer-fine:gap-3",
@@ -73,6 +76,8 @@ const labelFrameClass = "block justify-self-start text-sm leading-5 select-none"
  * control's tap target on a phone. Vertical padding on an inline box does not move the lines.
  *
  * @internal
+ * @claim "Inline, so the required marker follows" registry/ouro/components/ouro/field/field.test.tsx verify:testExists(registry/ouro/components/ouro/field/field.test.tsx::Field wiring > shows the required marker beside the label, and in forced colors too)
+ * @claim "Inline, so the required marker follows" registry/ouro/components/ouro/field/field-styles.ts verify:fileLine(registry/ouro/components/ouro/field/field-styles.ts, /py-\[calc\(\(1lh-1em\)\/2\)\]/)
  */
 const labelClass = "m-0 inline py-[calc((1lh-1em)/2)] font-medium text-foreground data-disabled:opacity-50";
 
@@ -85,6 +90,8 @@ const labelClass = "m-0 inline py-[calc((1lh-1em)/2)] font-medium text-foregroun
  * generated text, so forced colors keep it visible. It fades when the field is disabled.
  *
  * @internal
+ * @claim "The required marker, on the element" registry/ouro/components/ouro/field/field.test.tsx verify:testExists(registry/ouro/components/ouro/field/field.test.tsx::Field wiring > sets required and aria-required, and marks the label without adding to its text or name)
+ * @claim "The required marker, on the element" registry/ouro/components/ouro/field/field.test.tsx verify:testExists(registry/ouro/components/ouro/field/field.test.tsx::Required marker > is an asterisk with empty alternative text, so screen readers do not read it)
  */
 const requiredMarkClass =
   "after:ms-0.5 after:font-medium after:text-destructive after:content-['*'] supports-[content:'*'_/_'']:after:content-['*'_/_''] " +
@@ -127,6 +134,9 @@ const legendClass = "m-0 p-0 text-base leading-6 font-semibold text-foreground d
  * unprefixed class that reads a variable, so an app's `h-*` replaces it at every width.
  *
  * @internal
+ * @claim "The text control: 44px tall with" registry/ouro/components/ouro/field/field.test.tsx verify:testExists(registry/ouro/components/ouro/field/field.test.tsx::Field looks > uses a 16px font on phones, so iOS does not zoom on focus, and steps down from sm)
+ * @claim "The text control: 44px tall with" registry/ouro/components/ouro/field/field-styles.ts verify:fileLine(registry/ouro/components/ouro/field/field-styles.ts, /h-\(--ouro-control-h\)/)
+ * @claim "Its height is one unprefixed class" registry/ouro/components/ouro/field/field-styles.ts verify:fileLine(registry/ouro/components/ouro/field/field-styles.ts, /h-\(--ouro-control-h\)/)
  */
 const controlClass =
   "m-0 box-border block w-full min-w-0 h-(--ouro-control-h) px-3 py-0 " +
@@ -167,6 +177,7 @@ interface ContractGuesses {
  * each naming the real prop. Development only.
  *
  * @internal
+ * @claim "The development messages for the contract's" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:fileLine(registry/ouro/components/ouro/text-field/text-field.test.tsx, /\["helperText",\s\{\shelperText:\s"Hint"\s\},\s"helperText\sis\snot\sa\sprop",\s'<TextField\sdescription="Hint">'\]/)
  */
 function contractWarnings(component: string, guesses: ContractGuesses): DevWarning[] {
   const { errorMessage, helperText, isInvalid, invalid, isRequired, isDisabled } = guesses;

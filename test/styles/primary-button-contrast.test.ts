@@ -12,7 +12,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { render, screen } from "@testing-library/react";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 
 const ROOT = resolve(__dirname, "../..");
 const CSS = readFileSync(resolve(ROOT, "app/styles/tailwind.css"), "utf8");
@@ -82,26 +82,29 @@ describe("primary button contrast", () => {
   });
 
   it.each([false, true])("binds the actual released primary button to the checked app tokens (disabled=%s)", (disabled) => {
-    // happy-dom can evaluate these app-owned CSS rules; actual compiled colour/hover/
-    // pressed/focus/alpha measurements additionally run in the isolated browser lane.
+    // happy-dom resolves the theme's declarations but not inherited custom properties.
+    // The browser lane measures actual compiled colour, states, alpha and typography.
     const style = document.createElement("style");
     style.textContent = CSS.slice(0, CSS.indexOf("/* Ouro UI's dialogs")).replace(/^@(import|source|config).*$/gm, "");
     document.head.append(style);
     try {
       render(createElement(Button, { disabled, children: "Checked action" }));
       const button = screen.getByRole("button", { name: "Checked action" });
-      const actual = getComputedStyle(button);
-      expect(actual.getPropertyValue("--primary").trim()).toBe(color(LIGHT, disabled ? "--sj-action-disabled" : "--sj-action"));
-      expect(actual.getPropertyValue("--primary-foreground").trim()).toBe(color(LIGHT, disabled ? "--sj-on-action-disabled" : "--sj-on-action"));
-      if (disabled) expect(actual.opacity).toBe("1");
-      expect(button).toHaveClass("bg-primary", "text-primary-foreground", "outline-ring", "outline-offset-2", "focus-visible:outline-2");
+      const theme = getComputedStyle(document.documentElement);
+      expect(theme.getPropertyValue(disabled ? "--ouro-action-disabled" : "--ouro-action").trim())
+        .toBe(color(LIGHT, disabled ? "--sj-action-disabled" : "--sj-action"));
+      expect(theme.getPropertyValue(disabled ? "--ouro-action-disabled-foreground" : "--ouro-action-foreground").trim())
+        .toBe(color(LIGHT, disabled ? "--sj-on-action-disabled" : "--sj-on-action"));
+      expect(theme.getPropertyValue("--ouro-action-disabled-opacity").trim()).toBe("1");
+      expect(getComputedStyle(button).getPropertyValue("--font-weight-medium").trim()).toBe("600");
+      expect(button).toHaveClass("bg-(--ouro-action,var(--primary))", "text-(--ouro-action-foreground,var(--primary-foreground))", "outline-ring", "outline-offset-2", "focus-visible:outline-2");
     } finally {
       style.remove();
     }
   });
 
-  it("the MCP page's primary link uses the same label and hover tokens", () => {
-    expect(MCP).toContain("text-[var(--sj-on-action)] hover:border-[var(--sj-action-hover)] hover:bg-[var(--sj-action-hover)]");
-    expect(MCP).not.toContain("bg-[var(--sj-action)] text-[var(--sj-on-photo)]");
+  it("the MCP page's primary link is the shared Button, so it uses the same label and hover tokens", () => {
+    expect(MCP).toContain('<Button href="/login" startIcon={Cable}>');
+    expect(MCP).not.toContain("bg-[var(--sj-action)]");
   });
 });

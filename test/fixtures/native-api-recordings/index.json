@@ -245,6 +245,11 @@
     "status": 200
   },
   {
+    "name": "cooking-now",
+    "endpoint": "GET /api/v1/cooking-now",
+    "status": 200
+  },
+  {
     "name": "me-sync",
     "endpoint": "GET /api/v1/me/sync",
     "status": 200
@@ -322,6 +327,31 @@
   {
     "name": "me-export",
     "endpoint": "GET /api/v1/me/export",
+    "status": 200
+  },
+  {
+    "name": "report-create",
+    "endpoint": "POST /api/v1/reports",
+    "status": 201
+  },
+  {
+    "name": "report-create-again",
+    "endpoint": "POST /api/v1/reports",
+    "status": 200
+  },
+  {
+    "name": "block-create",
+    "endpoint": "POST /api/v1/blocks",
+    "status": 200
+  },
+  {
+    "name": "blocks-list",
+    "endpoint": "GET /api/v1/blocks",
+    "status": 200
+  },
+  {
+    "name": "block-delete",
+    "endpoint": "DELETE /api/v1/blocks/{chefId}",
     "status": 200
   },
   {

@@ -8,6 +8,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createUserSessionCookie } from "../../app/lib/session.server";
+import { loader as apiV1Loader } from "../../app/routes/api.v1.$";
 import { applyRepositoryMigrations } from "./helpers/repository-migrations";
 
 interface TestD1Statement {
@@ -403,6 +404,17 @@ describe("CookSession lifecycle bootstrap", () => {
       const response = await SELF.fetch(requestForRoute(route, null, { cookie: sessionCookie }));
       await expectProtocolUnavailable(response);
     }
+  });
+
+  it("reads the first-party session's Cooking now list on the Worker", async () => {
+    const response = await apiV1Loader({
+      request: new Request(`${TEST_ORIGIN}/api/v1/cooking-now`, { headers: { Cookie: sessionCookie, Accept: "application/json" } }),
+      params: { "*": "cooking-now" },
+      context: { cloudflare: { env: { ...testEnvironment(), SESSION_SECRET: TEST_SESSION_SECRET, SPOONJOY_BASE_URL: TEST_ORIGIN } } },
+    } as never);
+    const body = await response.text();
+    expect({ status: response.status, body }).toMatchObject({ status: 200 });
+    expect(JSON.parse(body)).toMatchObject({ ok: true, data: { recipes: [] } });
   });
 
   itWithCookSessionNamespace("rejects a first-party session revoked by a session version bump", async () => {

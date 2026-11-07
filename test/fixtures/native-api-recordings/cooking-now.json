@@ -1,0 +1,30 @@
+{
+  "name": "cooking-now",
+  "endpoint": "GET /api/v1/cooking-now",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_090",
+    "data": {
+      "recipes": [
+        {
+          "recipe": {
+            "id": "id_004",
+            "title": "Lemon Pantry Pasta",
+            "coverImageUrl": null,
+            "href": "/recipes/id_004",
+            "canonicalUrl": "http://localhost/recipes/id_004"
+          },
+          "activeStepId": "id_005",
+          "activeStepIndex": 0,
+          "stepCount": 2,
+          "checkedCount": 1,
+          "totalCount": 5,
+          "allCheckedAt": null,
+          "touchedAt": "2026-01-01T00:00:00.000Z",
+          "expiresAt": "2026-01-01T00:00:00.000Z"
+        }
+      ]
+    }
+  }
+}

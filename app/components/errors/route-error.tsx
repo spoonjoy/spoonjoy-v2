@@ -1,7 +1,7 @@
 import { isRouteErrorResponse } from "react-router";
-import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
-import { Button } from "~/components/button";
-import { Text } from "~/components/text";
+import { CookbookPage } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
+import { Button } from "~/components/ouro/button/button";
 
 // The words for a route error: what happened, in plain language, by status.
 export function routeErrorCopy(error: unknown): { status: number; title: string; message: string } {
@@ -29,12 +29,10 @@ export function RouteErrorContent({ error }: { error: unknown }) {
   const { status, title, message } = routeErrorCopy(error);
   return (
     <CookbookPage>
-      <CookbookHeader eyebrow="Spoonjoy" title={title}>
-        <Text>{message}</Text>
-      </CookbookHeader>
+      <PageHeader eyebrow="Spoonjoy" title={title} size="lg" divider description={message} />
       <div className="mt-6 flex flex-wrap gap-3">
         <Button href="/">Go home</Button>
-        {status === 401 ? <Button href="/login" plain>Log in</Button> : null}
+        {status === 401 ? <Button href="/login" variant="outline" tone="secondary">Log in</Button> : null}
       </div>
     </CookbookPage>
   );

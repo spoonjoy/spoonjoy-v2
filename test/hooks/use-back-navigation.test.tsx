@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { Link } from "~/components/navigation/app-link";
+import { Link } from "~/components/ouro/link/link";
+import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
+import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import {
   currentHistoryIndex,
   findBackDistance,
@@ -36,12 +38,12 @@ function readTrail(): Record<string, HistoryTrailEntry> {
 function RecipePage() {
   const handleBack = useBackNavigation();
   return (
-    <>
+    <OuroProvider linkComponent={OuroRouterLink}>
       <h1>Recipe page</h1>
       <Link href="/recipes" onClick={handleBack}>
         Recipes
       </Link>
-    </>
+    </OuroProvider>
   );
 }
 

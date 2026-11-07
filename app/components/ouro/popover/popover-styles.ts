@@ -9,6 +9,7 @@ export { popoverCloseClass };
  * key), hidden from view until it has keyboard focus, then shown at the top corner.
  *
  * @internal
+ * @claim "The popover's close button: always present" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > has a close button for screen readers, hidden until it has keyboard focus, labelled by closeLabel)
  */
 const popoverCloseClass =
   "sr-only focus-visible:top-2 focus-visible:end-2 focus-visible:z-1 focus-visible:m-0 focus-visible:size-auto " +

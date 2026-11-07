@@ -36,7 +36,7 @@ pnpm exec wrangler d1 execute spoonjoy --remote --command \
   'SELECT "startedAt", "mode", "objectsScanned", "referencedObjects", "unreferencedObjects", "unreferencedBytes", "orphanVariants", "eligibleObjects", "quarantined", "purged", "failures", "truncated", "note" FROM "PhotoSweepRun" ORDER BY "startedAt" DESC LIMIT 5'
 ```
 
-Use `spoonjoy-qa` for QA.
+Use `spoonjoy-qa-2` for QA.
 
 ## Switching removal on
 

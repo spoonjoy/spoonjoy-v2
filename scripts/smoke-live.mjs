@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -126,6 +126,11 @@ function createImageCoverAdapters(page, baseUrl) {
   }
 }
 
+function readQaImageProviderPrimary() {
+  const wrangler = JSON.parse(readFileSync('wrangler.json', 'utf8'))
+  return wrangler?.env?.qa?.vars?.IMAGE_PROVIDER_PRIMARY
+}
+
 async function listQaSecretNames() {
   const { stdout } = await execFileAsync(
     'pnpm',
@@ -244,18 +249,27 @@ async function main() {
 
     await gotoApp(page, new URL(`/recipes/${recipeId}#cook`, baseUrl).toString())
     await expect(page.getByTestId('cook-mode-panel')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByText('Step 1 of 1')).toBeVisible()
+    // The step shows its own "Step 1 of 1" label and the pager below repeats it, so scope to each.
+    await expect(page.getByTestId('cook-mode-pager').getByText('Step 1 of 1')).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Cook steps' }).getByText('Step 1 of 1')).toBeVisible()
     await page.getByRole('checkbox', { name: 'rice' }).click()
     await expect(page.getByRole('checkbox', { name: 'rice' })).toHaveAttribute('aria-checked', 'true')
     report.screenshots.push(await screenshot(page, outDir, '03-cook-mode'))
+    // A tab reopens cook mode on its recipe after a reload, so leave it before using the header.
+    await page.getByTestId('cook-mode-panel').getByRole('button', { name: 'Exit cook mode', exact: true }).click()
+    await expect(page.getByTestId('cook-mode-panel')).toBeHidden()
 
     await gotoApp(page, new URL(`/recipes/${recipeId}`, baseUrl).toString())
-    const addToListResponse = page.waitForResponse((response) => {
-      const request = response.request()
-      return request.method() === 'POST' && new URL(response.url()).pathname.startsWith('/shopping-list')
-    }, { timeout: 15_000 })
-    await page.getByTestId('recipe-header-list-action').click()
-    expect((await addToListResponse).ok()).toBe(true)
+    // Awaited together, so a failed click is reported instead of the response wait's rejection
+    // crashing the process before the cleanup below runs.
+    const [addToListResponse] = await Promise.all([
+      page.waitForResponse((response) => {
+        const request = response.request()
+        return request.method() === 'POST' && new URL(response.url()).pathname.startsWith('/shopping-list')
+      }, { timeout: 15_000 }),
+      page.getByTestId('recipe-header-list-action').click(),
+    ])
+    expect(addToListResponse.ok()).toBe(true)
     await expect(page.getByTestId('recipe-header-list-action')).toContainText(/in list/i, { timeout: 10_000 })
 
     await gotoApp(page, new URL('/shopping-list', baseUrl).toString())
@@ -288,6 +302,7 @@ async function main() {
         stamp,
         maxPollAttempts: 30,
         pollDelayMs: 3_000,
+        qaImageProviderPrimary: readQaImageProviderPrimary(),
         listQaSecretNames,
         apiTool: adapters.apiTool,
         expectApiToolFailure: adapters.expectApiToolFailure,

@@ -19,5 +19,10 @@ expectTypeOf<{ href: "/x"; isExternal: true; children: "Recipes" }>().not.toExte
 expectTypeOf<{ href: "/x"; color: "red"; children: "Recipes" }>().not.toExtend<LinkProps>();
 expectTypeOf<{ href: "/x"; tone: "danger"; children: "Recipes" }>().not.toExtend<LinkProps>();
 
+// reloadDocument takes a full page load; download links do too.
+expectTypeOf<{ href: "/mcp"; reloadDocument: true; children: "MCP" }>().toExtend<LinkProps>();
+expectTypeOf<{ href: "/export.csv"; download: true; children: "Export" }>().toExtend<LinkProps>();
+expectTypeOf<{ href: "/mcp"; reloadDocument: "yes"; children: "MCP" }>().not.toExtend<LinkProps>();
+
 // @ts-expect-error href is required.
 createElement(Link, { to: "/recipes", children: "Recipes" });

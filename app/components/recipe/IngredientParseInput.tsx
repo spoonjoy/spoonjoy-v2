@@ -1,6 +1,6 @@
 import { RefreshCw } from 'lucide-react'
 import { useEffect, useRef } from 'react'
-import { Button } from '~/components/button'
+import { Button } from '~/components/ouro/button/button'
 import { Alert } from '~/components/ouro/alert/alert'
 import { TextArea } from '~/components/ouro/text-field/text-area'
 import { useIngredientParser } from '~/hooks/useIngredientParser'
@@ -183,7 +183,7 @@ export function IngredientParseInput({
               {errorInfo.isRetryable && parser.text.trim() && (
                 <Button
                   type="button"
-                  plain
+                  variant="outline" tone="secondary"
                   onClick={handleTryAgain}
                   disabled={parser.isLoading}
                   data-testid="try-again-button"
@@ -196,7 +196,7 @@ export function IngredientParseInput({
               {onSwitchToManual && (
                 <Button
                   type="button"
-                  plain
+                  variant="outline" tone="secondary"
                   onClick={handleSwitchToManual}
                   data-testid="switch-to-manual-button"
                   aria-label="Switch to manual ingredient entry"

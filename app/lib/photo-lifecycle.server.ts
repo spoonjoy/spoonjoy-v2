@@ -39,6 +39,11 @@ export const PHOTO_QUARANTINE_PREFIX = "quarantine/";
  * derived, so they follow their original: live with it, removed with it.
  */
 export const PHOTO_VARIANT_PREFIX = "variants/";
+/**
+ * QA's sample cover images (app/lib/sample-cover-images.server.ts). No row refers to them, but QA's
+ * covers are copied from them, so the sweep leaves them and their variants alone.
+ */
+export const PHOTO_SAMPLE_PREFIX = "samples/";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** How long an original must stay unreferenced before it may be moved to quarantine. */
@@ -345,8 +350,9 @@ export async function runPhotoSweep(options: RunPhotoSweepOptions): Promise<Phot
   const originals = new Map<string, number>();
   const variantsByOriginal = new Map<string, string[]>();
   for (const object of objects) {
-    if (object.key.startsWith(PHOTO_QUARANTINE_PREFIX)) continue;
+    if (object.key.startsWith(PHOTO_QUARANTINE_PREFIX) || object.key.startsWith(PHOTO_SAMPLE_PREFIX)) continue;
     const original = originalKeyOfVariant(object.key);
+    if (original?.startsWith(PHOTO_SAMPLE_PREFIX)) continue;
     if (original !== null) {
       variantsByOriginal.set(original, [...(variantsByOriginal.get(original) ?? []), object.key]);
     } else if (!object.key.startsWith(PHOTO_VARIANT_PREFIX)) {

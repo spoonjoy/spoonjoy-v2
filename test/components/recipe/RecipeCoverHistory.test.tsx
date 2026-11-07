@@ -12,6 +12,14 @@ const legacySpoonjoyCookbookLabel = ["Spoonjoy", "cookbook"].join(" ");
 const legacyCounterLabel = ["On", "the", "counter"].join(" ");
 const legacyEditorializedChefPhotoLabel = ["Editorialized", "chef", "photo"].join(" ");
 
+const activeCoverChoice = () => screen.getByRole("group", { name: "Active cover" });
+const savedCovers = () => screen.getByRole("group", { name: "Saved covers" });
+
+async function useCover(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(within(activeCoverChoice()).getByRole("radio", { name }));
+  await user.click(screen.getByRole("button", { name: "Use this cover" }));
+}
+
 function renderHistory(
   covers: RecipeCoverHistoryItem[],
   onSubmit?: (formData: FormData) => void,
@@ -50,7 +58,18 @@ describe("RecipeCoverHistory", () => {
         path: "/",
         Component: () => (
           <RecipeCoverHistory
-            covers={[]}
+            covers={[
+              {
+                id: "cover-1",
+                status: "ready",
+                generationStatus: "none",
+                sourceType: "chef-upload",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                isActive: true,
+                activeVariant: "image",
+                variants: [{ variant: "image", imageUrl: "/photos/cover.jpg", provenanceLabel: "Original photo", isActive: true }],
+              },
+            ]}
             spoonImages={[{ id: "spoon-1", photoUrl: "/photos/spoons/1.jpg", cookedAt: "2026-01-02T00:00:00.000Z", chef: { username: "cook" } }]}
           />
         ),
@@ -68,7 +87,7 @@ describe("RecipeCoverHistory", () => {
     await waitFor(() => expect(sent).toHaveLength(1));
     await placeholder();
     await waitFor(() => expect(sent).toHaveLength(2));
-    await user.click(screen.getByRole("button", { name: "Set no cover" }));
+    await useCover(user, "No cover");
     await waitFor(() => expect(sent).toHaveLength(3));
     await user.click(screen.getByRole("button", { name: "Make a styled cover from the cook photo by cook" }));
     await waitFor(() => expect(sent).toHaveLength(4));
@@ -85,10 +104,11 @@ describe("RecipeCoverHistory", () => {
     renderHistory([]);
 
     expect(await screen.findByRole("heading", { name: "Recipe covers" })).toBeInTheDocument();
-    expect(screen.getByText("No cover selected")).toBeInTheDocument();
-    expect(screen.getByText("Current setting")).toBeInTheDocument();
+    // With nothing saved, the only choice is No cover, already the current setting.
+    expect(within(activeCoverChoice()).getAllByRole("radio")).toHaveLength(1);
+    expect(within(activeCoverChoice()).getByRole("radio", { name: "No cover" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Use this cover" })).toBeDisabled();
     expect(screen.getByText("No saved covers yet.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Set no cover" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Spoon photos" })).toBeNull();
   });
 
@@ -197,15 +217,16 @@ describe("RecipeCoverHistory", () => {
     expect(screen.getAllByText("Generation failed")).toHaveLength(2);
     expect(screen.getByText("Editorial failed")).toBeInTheDocument();
     expect(screen.getAllByText("Archived")).toHaveLength(2);
-    expect(screen.getByText("Saved cover")).toBeInTheDocument();
+    expect(within(savedCovers()).getByText("Saved cover")).toBeInTheDocument();
     // The failed row shows its failure, not its unusable variant, so it adds no "Unavailable".
     expect(screen.getAllByText("Unavailable")).toHaveLength(4);
     expect(screen.getByText("No usable image variants.")).toBeInTheDocument();
     expect(screen.getByText("No image")).toBeInTheDocument();
     // Light on-photo text on the charcoal tile, in both themes.
     expect(screen.getByText("No image")).toHaveClass("text-[var(--sj-on-photo)]");
-    expect(screen.getAllByRole("button", { name: "Use Original photo cover" })).toHaveLength(1);
-    expect(screen.queryByRole("button", { name: "Use Imported photo cover" })).toBeNull();
+    // Only a ready or processing cover's variants are choices, beside No cover.
+    expect(within(activeCoverChoice()).getAllByRole("radio", { name: "Original photo" })).toHaveLength(1);
+    expect(within(activeCoverChoice()).queryByRole("radio", { name: "Imported photo" })).toBeNull();
     expect(screen.queryByText(legacyChefPhotoLabel)).toBeNull();
     expect(screen.getAllByRole("button", { name: "Regenerate with direction" })).toHaveLength(3);
     expect(screen.getAllByRole("button", { name: "Archive cover" })).toHaveLength(3);
@@ -252,8 +273,14 @@ describe("RecipeCoverHistory", () => {
     ]);
 
     const [current, child, first] = await screen.findAllByRole("article");
-    // The current cover still offers its original photo.
-    expect(within(current!).getByRole("button", { name: "Use Original photo cover" })).toBeInTheDocument();
+    // The current cover still offers its original photo; the failed attempts offer nothing.
+    expect(within(activeCoverChoice()).getAllByRole("radio").map((radio) => radio.getAttribute("value"))).toEqual([
+      "current-cover:image",
+      "current-cover:stylized",
+      "none",
+    ]);
+    expect(within(activeCoverChoice()).getByRole("radio", { name: "Editorial photo" })).toBeChecked();
+    expect(current!).toBeInTheDocument();
 
     for (const [card, label] of [[child!, "Regeneration failed"], [first!, "Generation failed"]] as const) {
       // The status and the thumbnail both name the failure.
@@ -344,10 +371,11 @@ describe("RecipeCoverHistory", () => {
 
     expect(await screen.findByText("Current")).toBeInTheDocument();
     expect(screen.getByText("Active variant")).toBeInTheDocument();
-    expect(screen.queryByText("No cover selected")).toBeNull();
+    expect(within(activeCoverChoice()).getByRole("radio", { name: "Editorial photo" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Use this cover" })).toBeDisabled();
 
-    expect(screen.getByText("Original photo")).toBeInTheDocument();
-    expect(screen.getByText("Editorial photo")).toBeInTheDocument();
+    expect(within(savedCovers()).getByText("Original photo")).toBeInTheDocument();
+    expect(within(savedCovers()).getByText("Editorial photo")).toBeInTheDocument();
     expect(screen.queryByText(legacyChefPhotoLabel)).toBeNull();
     expect(screen.queryByText(legacyEditorializedChefPhotoLabel)).toBeNull();
     expect(document.querySelector('img[src="/photos/raw.jpg"]')).toHaveAttribute("loading", "lazy");
@@ -355,7 +383,7 @@ describe("RecipeCoverHistory", () => {
     expect(document.querySelector('img[src="/photos/spoon-source.jpg"]')).toHaveAttribute("loading", "lazy");
     expect(document.querySelector('img[src="/photos/spoon-source.jpg"]')).toHaveAttribute("decoding", "async");
 
-    await user.click(screen.getByRole("button", { name: "Use Original photo cover" }));
+    await useCover(user, "Original photo");
     await waitFor(() => {
       expect(submitted).toContainEqual({
         intent: "setRecipeCover",
@@ -370,7 +398,7 @@ describe("RecipeCoverHistory", () => {
       });
     });
 
-    await user.click(screen.getByRole("button", { name: "Set no cover" }));
+    await useCover(user, "No cover");
     await waitFor(() => {
       expect(submitted).toContainEqual({
         intent: "setRecipeNoCover",
@@ -553,7 +581,8 @@ describe("RecipeCoverHistory", () => {
       },
     ]);
 
-    expect(await screen.findAllByText("Saved cover")).toHaveLength(2);
+    await screen.findByRole("group", { name: "Saved covers" });
+    expect(within(savedCovers()).getAllByText("Saved cover")).toHaveLength(2);
     expect(screen.queryByText(legacySpoonjoyCookbookLabel)).toBeNull();
     expect(screen.queryByText(legacyCounterLabel)).toBeNull();
   });

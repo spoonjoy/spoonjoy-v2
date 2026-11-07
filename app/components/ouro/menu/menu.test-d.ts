@@ -33,6 +33,10 @@ expectTypeOf<ComponentProps<typeof Menu>>().toEqualTypeOf<MenuProps>();
 expectTypeOf<{ trigger: ReactElement; contextTrigger: ReactElement; children: "Items" }>().not.toExtend<MenuProps>();
 expectTypeOf<{ trigger: ReactElement; label: "File"; children: "Items" }>().not.toExtend<MenuProps>();
 expectTypeOf<{ contextTrigger: ReactElement; side: "top"; children: "Items" }>().not.toExtend<MenuProps>();
+// A dropdown can leave the page live; a context menu and a MenuBar's menu always hold it.
+expectTypeOf<{ trigger: ReactElement; modal: false; children: "Items" }>().toExtend<MenuProps>();
+expectTypeOf<{ contextTrigger: ReactElement; modal: false; children: "Items" }>().not.toExtend<MenuProps>();
+expectTypeOf<{ label: "File"; modal: false; children: "Items" }>().not.toExtend<MenuProps>();
 // Named options only.
 expectTypeOf<{ trigger: ReactElement; side: "above"; children: "Items" }>().not.toExtend<MenuProps>();
 expectTypeOf<{ trigger: ReactElement; align: "left"; children: "Items" }>().not.toExtend<MenuProps>();

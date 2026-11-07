@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { Request as UndiciRequest } from "undici";
+import { NO_HIDES } from "~/lib/moderation.server";
 import { getLocalDb } from "~/lib/db.server";
 import { readRecipeDetailFromD1, readRecipeDetailWithPrisma } from "~/lib/recipe-detail-reads.server";
 import { createUserSessionCookie } from "~/lib/session.server";
@@ -206,6 +207,7 @@ describe("recipe detail reads", () => {
       isOriginCookCandidate: false,
       coverHistoryCovers: [],
       spoonImages: [],
+      hides: NO_HIDES,
     };
     await expect(readRecipeDetailFromD1(d1.binding, { recipeId: "missing", userId: owner.id })).resolves.toEqual(empty);
     await expect(readRecipeDetailWithPrisma(db, { recipeId: "missing", userId: owner.id })).resolves.toEqual(empty);
@@ -265,10 +267,6 @@ describe("recipe detail loader on a D1 binding", () => {
     vi.doMock("~/lib/route-platform.server", () => ({ getRequestDb }));
     const { loadRecipeDetail } = await import("~/lib/recipe-detail.server");
 
-    // Both loads stamp renderedAt (what the cooks' "3 hr ago" labels are measured from) with the
-    // clock, so the clock is held still for the comparison.
-    const renderedAt = Date.now();
-    const clock = vi.spyOn(Date, "now").mockReturnValue(renderedAt);
     for (const userId of [owner.id, friend.id, null]) {
       const headers = userId ? { Cookie: (await createUserSessionCookie(userId)).split(";")[0]! } : undefined;
       const request = () => new UndiciRequest(`http://localhost:3000/recipes/${recipe.id}`, { headers });
@@ -284,10 +282,8 @@ describe("recipe detail loader on a D1 binding", () => {
         params: { id: recipe.id },
         context: { cloudflare: { env: null } },
       } as never);
-      expect(fromD1.renderedAt).toBe(renderedAt);
       expect(fromD1).toEqual(fromPrisma);
     }
-    clock.mockRestore();
     expect(getRequestDb).not.toHaveBeenCalled();
 
     await expect(

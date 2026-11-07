@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import RecipeDetail from "~/routes/recipes.$id";
@@ -60,13 +61,12 @@ describe("Recipe View Scaling Integration", () => {
       // Wait for recipe to render
       expect(await screen.findByRole("heading", { name: "Test Recipe" })).toBeInTheDocument();
 
-      // Scale selector should be present
-      expect(screen.getByTestId("scale-display")).toBeInTheDocument();
-      expect(screen.getByTestId("scale-display")).toHaveTextContent("Serves 4");
-
-      // Scale buttons should be present
-      expect(screen.getByTestId("scale-plus")).toBeInTheDocument();
-      expect(screen.getByTestId("scale-minus")).toBeInTheDocument();
+      // The scale is Ouro HX's NumberField, described by the servings it makes
+      const scale = screen.getByRole("textbox", { name: "Scale" });
+      expect(scale).toHaveValue("1");
+      expect(scale).toHaveAccessibleDescription("Serves 4");
+      expect(screen.getByRole("button", { name: "Increase scale" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Decrease scale" })).toBeInTheDocument();
     });
 
     it("should update servings text when scale changes", async () => {
@@ -100,14 +100,12 @@ describe("Recipe View Scaling Integration", () => {
       expect(within(screen.getByTestId("recipe-header-controls")).getByText(/serves 4/i)).toBeInTheDocument();
 
       // Click plus button 4 times to get to 2× scale
-      const plusButton = screen.getByTestId("scale-plus");
-      fireEvent.click(plusButton);
-      fireEvent.click(plusButton);
-      fireEvent.click(plusButton);
-      fireEvent.click(plusButton);
+      const plusButton = screen.getByRole("button", { name: "Increase scale" });
+      for (const _ of [1, 2, 3, 4]) await userEvent.click(plusButton);
 
-      // Verify scale display shows 2×
-      expect(screen.getByTestId("scale-display")).toHaveTextContent("Serves 8");
+      // Verify the scale shows 2×
+      expect(screen.getByRole("textbox", { name: "Scale" })).toHaveValue("2");
+      expect(screen.getByRole("textbox", { name: "Scale" })).toHaveAccessibleDescription("Serves 8");
 
       // Servings should now show "Serves 8"
       expect(within(screen.getByTestId("recipe-header-controls")).getByText(/serves 8/i)).toBeInTheDocument();
@@ -174,21 +172,16 @@ describe("Recipe View Scaling Integration", () => {
       await screen.findByRole("heading", { name: "Multi-Step Recipe" });
 
       // Initial quantities
-      expect(screen.getByText("flour")).toBeInTheDocument();
-      expect(screen.getByTestId("ingredient-quantity-ing-1")).toHaveTextContent("1 cup");
-      expect(screen.getByText("sugar")).toBeInTheDocument();
-      expect(screen.getByTestId("ingredient-quantity-ing-2")).toHaveTextContent("½ cup");
+      expect(screen.getByRole("checkbox", { name: "flour" })).toHaveAccessibleDescription("Pantry 1 cup");
+      expect(screen.getByRole("checkbox", { name: "sugar" })).toHaveAccessibleDescription("Pantry ½ cup");
 
       // Scale to 2×
-      const plusButton = screen.getByTestId("scale-plus");
-      fireEvent.click(plusButton);
-      fireEvent.click(plusButton);
-      fireEvent.click(plusButton);
-      fireEvent.click(plusButton);
+      const plusButton = screen.getByRole("button", { name: "Increase scale" });
+      for (const _ of [1, 2, 3, 4]) await userEvent.click(plusButton);
 
       // Quantities should be doubled
-      expect(screen.getByTestId("ingredient-quantity-ing-1")).toHaveTextContent("2 cup");
-      expect(screen.getByTestId("ingredient-quantity-ing-2")).toHaveTextContent("1 cup");
+      expect(screen.getByRole("checkbox", { name: "flour" })).toHaveAccessibleDescription("Pantry 2 cups");
+      expect(screen.getByRole("checkbox", { name: "sugar" })).toHaveAccessibleDescription("Pantry 1 cup");
     });
 
     it("should preserve ingredient check state when scaling", async () => {
@@ -245,20 +238,19 @@ describe("Recipe View Scaling Integration", () => {
       const sugarCheckbox = screen.getByRole("checkbox", { name: "sugar" });
       expect(flourCheckbox).not.toBeChecked();
 
-      fireEvent.click(flourCheckbox);
+      await userEvent.click(flourCheckbox);
       expect(flourCheckbox).toBeChecked();
 
       // Click again to uncheck (tests the delete branch)
-      fireEvent.click(flourCheckbox);
+      await userEvent.click(flourCheckbox);
       expect(flourCheckbox).not.toBeChecked();
 
       // Check again and then scale
-      fireEvent.click(flourCheckbox);
+      await userEvent.click(flourCheckbox);
       expect(flourCheckbox).toBeChecked();
 
       // Now scale the recipe
-      const plusButton = screen.getByTestId("scale-plus");
-      fireEvent.click(plusButton);
+      await userEvent.click(screen.getByRole("button", { name: "Increase scale" }));
 
       // The checkbox should still be checked
       expect(screen.getByRole("checkbox", { name: "flour" })).toBeChecked();
@@ -444,12 +436,10 @@ describe("Recipe View Scaling Integration", () => {
 
       await screen.findByRole("heading", { name: "Recipe with Step References" });
 
-      // Step output uses section should be present (inline with ingredients)
-      const stepOutputSection = screen.getByTestId("step-output-uses-section");
-      expect(stepOutputSection).toBeInTheDocument();
-      // Verify the step reference appears in the section
-      expect(stepOutputSection).toHaveTextContent("Step 1");
-      expect(stepOutputSection).toHaveTextContent("Make the base");
+      // The earlier step's output is ticked off in the step's checklist, before its ingredients
+      const stepOutput = screen.getByRole("checkbox", { name: "Step 1: Make the base" });
+      expect(stepOutput).toHaveAccessibleDescription("Step output");
+      expect(stepOutput).not.toBeChecked();
     });
 
     it("should show owner controls when isOwner is true", async () => {
@@ -545,11 +535,8 @@ describe("Recipe View Scaling Integration", () => {
       expect(within(screen.getByTestId("recipe-header-controls")).getByText(/feeds 2-4 people/i)).toBeInTheDocument();
 
       // Scale to 2×
-      const plusButton = screen.getByTestId("scale-plus");
-      fireEvent.click(plusButton);
-      fireEvent.click(plusButton);
-      fireEvent.click(plusButton);
-      fireEvent.click(plusButton);
+      const plusButton = screen.getByRole("button", { name: "Increase scale" });
+      for (const _ of [1, 2, 3, 4]) await userEvent.click(plusButton);
 
       // Range should be doubled: 2-4 becomes 4-8
       expect(within(screen.getByTestId("recipe-header-controls")).getByText(/feeds 4-8 people/i)).toBeInTheDocument();

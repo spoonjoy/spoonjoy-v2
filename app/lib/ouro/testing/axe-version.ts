@@ -1,0 +1,35 @@
+export { axeMinimum, requireAxe };
+
+// The export list comes first because the shadcn CLI drops comments before a file's
+// first statement, which would take the JSDoc below with it.
+
+/**
+ * The oldest axe-core the test kit and the census run on. scripts/registry.mts states it in the
+ * ouro-testing message and in the kits' meta.requires, and writes the census's copy of this file.
+ *
+ * @claim "scripts/registry.mts states it in the" scripts/registry.test.mjs verify:testExists(scripts/registry.test.mjs::the ouro-testing message names axe-core's minimum, the one audit checks when it runs)
+ * @claim "scripts/registry.mts states it in the" scripts/registry.test.mjs verify:testExists(scripts/registry.test.mjs::audit and the census check axe-core with one minimum and one comparison: the census's copy is generated from the test kit's)
+ */
+const axeMinimum = "4.13.0";
+
+/**
+ * Throws unless `version` is {@link axeMinimum} or later, naming `user` and the version found.
+ * Versions compare by major, minor and patch, and a prerelease comes before its release.
+ *
+ * @claim "Throws unless `version` is" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > refuses an axe-core older than the kit's minimum, naming the version it needs and the version it found)
+ * @claim "Throws unless `version` is" scripts/kits/census-page.test.mjs verify:testExists(scripts/kits/census-page.test.mjs::collectCensus > refuses an axe-core older than the kit's minimum before it loads axe into the page, naming the version it found)
+ */
+function requireAxe(version: string, user: string): void {
+  if (!atLeast(version)) {
+    throw new Error(`${user} needs axe-core ${axeMinimum} or later, and found ${version}. Upgrade axe-core to ^${axeMinimum} where your package.json lists it.`);
+  }
+}
+
+function atLeast(version: string): boolean {
+  const parts = (text: string) => /^(\d+)\.(\d+)\.(\d+)(-)?/.exec(text);
+  const have = parts(version);
+  const need = parts(axeMinimum)!;
+  if (!have) return false;
+  const differs = [1, 2, 3].find((index) => Number(have[index]) !== Number(need[index]));
+  return differs === undefined ? !have[4] : Number(have[differs]) > Number(need[differs]);
+}

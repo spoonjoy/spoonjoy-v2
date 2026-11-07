@@ -2,6 +2,7 @@ import { makeFallbackPlaceholderSvg } from "~/lib/recipe-cover.server";
 import { getStoredImageKey, validateImageFileForStorage } from "~/lib/image-storage.server";
 import { FOOD_IMAGE_TYPES, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 import { fetchSafeImageBytes } from "~/lib/safe-image-fetch.server";
+import { putWithTransientRetry } from "~/lib/r2-transient-retry.server";
 
 export { makeFallbackPlaceholderSvg };
 
@@ -111,6 +112,12 @@ export const OPENAI_IMAGE_EDIT_MODELS = [
   "gpt-image-1",
   "gpt-image-1-mini",
 ] as const;
+
+/**
+ * The OpenAI model that draws a cover from text. OpenAI no longer serves dall-e-3 to our key, and
+ * gpt-image-1-mini answers a 1024x1024 image in about 12 seconds, inside IMAGE_ATTEMPT_TIMEOUT_MS.
+ */
+export const OPENAI_TEXT_TO_IMAGE_MODEL = "gpt-image-1-mini";
 
 export const IMAGE_PROMPT_ADDITION_MAX_LENGTH = 240;
 export const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image";
@@ -568,7 +575,7 @@ async function persistGeneratedImage(
   const randomId = deps.randomId ? deps.randomId() : crypto.randomUUID();
   const extension = extensionForContentType(image.contentType);
   const key = `covers/${stamp}-${randomId}.${extension}`;
-  await deps.bucket.put(key, image.bytes, {
+  await putWithTransientRetry(deps.bucket, key, image.bytes, {
     httpMetadata: { contentType: image.contentType },
   });
   return `/photos/${key}`;
@@ -586,7 +593,7 @@ export async function generatePlaceholderImage(
     runnerResult = await runWithinBudget(
       deps.budget,
       deps.budget?.attemptTimeoutMs ?? null,
-      (signal) => deps.runner.textToImage(prompt, { model: deps.model ?? "dall-e-3", signal }),
+      (signal) => deps.runner.textToImage(prompt, { model: deps.model ?? OPENAI_TEXT_TO_IMAGE_MODEL, signal }),
     );
   } catch (cause) {
     throw new ImageGenError("Placeholder image generation failed", { cause });

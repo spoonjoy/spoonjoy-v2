@@ -263,6 +263,16 @@ export function parseWranglerSecretNames(stdout) {
     .filter((name) => typeof name === "string" && name.length > 0);
 }
 
+/**
+ * QA makes covers from free sample images when wrangler.json's env.qa sets IMAGE_PROVIDER_PRIMARY
+ * to "sample" (app/lib/sample-cover-images.server.ts). Then no paid provider key is needed, so the
+ * smoke neither lists QA's secrets nor requires one.
+ */
+export function sampleImageProviderPreflight(imageProviderPrimary) {
+  if (String(imageProviderPrimary ?? "").trim().toLowerCase() !== "sample") return null;
+  return { placeholderProvider: "sample", editProviders: ["sample"] };
+}
+
 export function assertQaImageProviderSecrets(names) {
   const secrets = new Set(names);
   const hasOpenAi = secrets.has("OPENAI_API_KEY");
@@ -475,7 +485,8 @@ export async function runImageCoverSmokeFlow(options) {
   let flowError;
 
   try {
-    providerPreflight = assertQaImageProviderSecrets(await options.listQaSecretNames());
+    providerPreflight = sampleImageProviderPreflight(options.qaImageProviderPrimary)
+      ?? assertQaImageProviderSecrets(await options.listQaSecretNames());
 
     const tokenPayload = await options.apiTool("create_api_token", buildCreateSmokeTokenArgs(options.stamp));
     const bearerToken = tokenPayload?.token;

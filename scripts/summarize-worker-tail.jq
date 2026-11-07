@@ -21,14 +21,73 @@
 #   Without the switch (a production tail, or any other caller) no log line is kept.
 #   tailReconnects: how many times the tail had to reconnect after its connection dropped
 #   (default 0). Events between connections are lost, so a reconnected tail is incomplete too.
+#   tailConnections and suiteWindow (the Journeys workflow passes both): when the log came from
+#   overlapping tails, each connection's {tail, startedAt, endedAt} in epoch ms (endedAt null for
+#   one still open at the stop) and the {from, to} the suite ran in. The summary is then complete
+#   when at every moment of the suite at least one tail was connected, however often each
+#   reconnected; tailCoverage lists the gaps when none was.
+#   tailReads (with --slurpfile): scripts/read-worker-tail.mjs's counts of what each tail
+#   delivered. A tail Cloudflare put in sampling mode dropped events, so the summary is incomplete.
 #
 # Whatever the switches, `d1TransientErrors` counts the log lines whose message is a
 # d1_transient_error report (app/lib/d1-transient-retry.server.ts) or a d1_write_retry report
 # (app/lib/d1-write-retry.server.ts): only their fixed fields are read, and only counts leave the
-# program.
+# program, and so does `d1ReadReissues` for the d1_read_reissue lines. Likewise `stalledRequests`,
+# `slowCalls` and `isolates` read only the fixed fields of the slow_call, isolate_request and
+# isolate_colo lines (app/lib/slow-call.server.ts) a per-run QA Worker writes, each checked
+# against its expected shape, and `platformRetries` counts the platform_retry lines by their call
+# label alone.
 
 def keep_error_logs: ($ARGS.named.keepErrorLogs == true);
 def tail_reconnects: ($ARGS.named.tailReconnects // 0 | if type == "number" then . else 0 end);
+
+# A connection is counted from tail_open_ms after it started, because wrangler prints nothing when
+# its socket opens, until tail_drop_ms before it ended, because wrangler notices a dead socket only
+# when a 10 s ping goes unanswered. A connection still open at the stop counts to the end.
+def tail_open_ms: 5000;
+def tail_drop_ms: 20000;
+def tail_coverage:
+  ($ARGS.named.tailConnections // null) as $connections
+  | ($ARGS.named.suiteWindow // null) as $window
+  | if ($connections | type) != "array" or ($window | type) != "object"
+       or ($window.from | type) != "number" or ($window.to | type) != "number" then null
+    else
+      [$connections[] | select(type == "object" and (.startedAt | type) == "number")
+        | { from: (.startedAt + tail_open_ms),
+            to: (if (.endedAt | type) == "number" then .endedAt - tail_drop_ms else $window.to end) }
+        | select(.to > .from)]
+      | sort_by(.from)
+      | reduce .[] as $connected ({ cursor: $window.from, gaps: [] };
+          (if $connected.from > .cursor then .gaps += [{ from: .cursor, to: ([$connected.from, $window.to] | min) }] else . end)
+          | .cursor = ([.cursor, $connected.to] | max))
+      | (.gaps + (if .cursor < $window.to then [{ from: .cursor, to: $window.to }] else [] end))
+      | map(select(.to > .from) | . + { ms: (.to - .from) })
+      | { tails: ([$connections[] | objects | .tail | strings] | unique | length),
+          connections: ([$connections[] | objects] | length),
+          uncoveredMs: (map(.ms) | add // 0),
+          gapCount: length,
+          longestGapMs: (map(.ms) | max // 0),
+          gaps: .[0:10] }
+    end;
+def count_of($value): if ($value | type) == "number" and $value >= 0 then $value else 0 end;
+# Sampling-mode notices in the tails' streams, plus any wrangler wrote to its error output
+# (tailErrorOverloadNotices).
+def tail_sampling_notices($reads): ($reads.overloadNotices // 0) + count_of($ARGS.named.tailErrorOverloadNotices // 0);
+# tailReads (the Journeys workflow passes it, from scripts/read-worker-tail.mjs): what the tails
+# delivered, reduced to its counts. A sampling-mode notice means Cloudflare dropped events.
+def tail_reads:
+  ($ARGS.named.tailReads // null | if type == "array" then .[0] else . end) as $reads
+  | if ($reads | type) != "object" or ($reads.tails | type) != "object" then null
+    else
+      [$reads.tails[] | objects] as $tails
+      | { tails: ($tails | length),
+          eventsSeen: count_of($reads.eventsSeen),
+          eventsKept: count_of($reads.eventsKept),
+          eventsPerTail: [$tails[] | count_of(.events)],
+          overloadNotices: ([$tails[] | count_of(.overloadNotices)] | add // 0),
+          unreadableLines: ([$tails[] | count_of(.unreadableLines)] | add // 0),
+          cutOff: ([$tails[] | count_of(.cutOff)] | add // 0) }
+    end;
 
 # The d1_transient_error reports in an event's log lines, at any level, with only their fixed
 # fields: operation ("read" or "write") and willRetry.
@@ -47,6 +106,52 @@ def d1_write_retry_reports:
     | (if type == "string" then (try fromjson catch null) else . end)
     | select(type == "object" and .event == "d1_write_retry")
     | { outcome: (if .outcome == "retry" or .outcome == "applied" or .outcome == "gave_up" then .outcome else "other" end) }];
+
+# The slow_call reports in an event's log lines (app/lib/slow-call.server.ts): a D1 call or a
+# cook-session Durable Object call that waited past its threshold, with only their fixed fields, each
+# checked against the shape the Worker writes.
+def ident: if type == "string" and test("^[A-Za-z_][A-Za-z0-9_.]{0,63}$") then . else null end;
+def count_or_null: if type == "number" and . >= 0 then floor else null end;
+def slow_call_reports:
+  [(.logs // []) | if type == "array" then .[] else empty end | select(type == "object")
+    | (.message // []) | if type == "array" then .[] else . end
+    | (if type == "string" then (try fromjson catch null) else . end)
+    | select(type == "object" and .event == "slow_call")
+    | { call: (.call | ident),
+        operation: (if .operation == "read" or .operation == "write" then .operation else null end),
+        table: (.table | ident),
+        attempt: (.attempt | count_or_null),
+        waitedMs: (.waitedMs | count_or_null),
+        settled: (.settled == true),
+        outcome: (if .outcome == "ok" or .outcome == "error" then .outcome else null end) }];
+
+# The d1_read_reissue reports (app/lib/d1-transient-retry.server.ts): a read-only D1 try that had
+# not settled by its deadline and was sent once more, with only which try answered first, or
+# "neither" when both failed.
+def d1_read_reissue_reports:
+  [(.logs // []) | if type == "array" then .[] else empty end | select(type == "object")
+    | (.message // []) | if type == "array" then .[] else . end
+    | (if type == "string" then (try fromjson catch null) else . end)
+    | select(type == "object" and .event == "d1_read_reissue")
+    | { answeredBy: (if .answeredBy == "original" or .answeredBy == "reissue" or .answeredBy == "neither" then .answeredBy else "other" end) }];
+
+# The isolate_request and isolate_colo lines a per-run QA Worker writes (app/lib/slow-call.server.ts):
+# which isolate served the request, its count of requests, the location the request arrived at,
+# and, once per isolate, the location the isolate runs in. Each field is checked against its shape.
+def isolate_id: if type == "string" and test("^[0-9a-f]{8}$") then . else null end;
+def colo_or_null: if type == "string" and test("^[A-Z]{3,4}$") then . else null end;
+def log_objects($event):
+  [(.logs // []) | if type == "array" then .[] else empty end | select(type == "object")
+    | (.message // []) | if type == "array" then .[] else . end
+    | (if type == "string" then (try fromjson catch null) else . end)
+    | select(type == "object" and .event == $event)];
+def isolate_request_of:
+  (log_objects("isolate_request") | first)
+  | if . == null then null
+    else { isolate: (.isolate | isolate_id), request: (.request | count_or_null), arrivedAt: (.arrivedAt | colo_or_null) } end;
+def isolate_colos:
+  [.[] | log_objects("isolate_colo")[] | { isolate: (.isolate | isolate_id), runsIn: (.runsIn | colo_or_null) } | select(.isolate != null)]
+  | map({ key: .isolate, value: .runsIn }) | from_entries;
 
 # The URL's path: scheme, authority (including any user:pass@), query and fragment removed.
 def request_path:
@@ -152,6 +257,10 @@ def invocation: {
   cpuTime: (.cpuTime // null),
   wallTime: (.wallTime // null),
   eventTimestamp: (.eventTimestamp // null),
+  # Whether a Worker request or a Durable Object ran ("stateless", "durableObject"), and which
+  # class: fixed identifiers from Cloudflare, null when absent or not an identifier.
+  executionModel: (.executionModel | ident),
+  entrypoint: (.entrypoint | ident),
   exceptions: [(.exceptions // [])[] | { name: ((.name // null) | if . == null then null else tostring | .[0:100] end), message: ((.message // "") | redact_message) }]
 };
 
@@ -181,12 +290,22 @@ def timestamps: [.[] | .eventTimestamp | select(type == "number")];
 # CPU (outcome `exceededCpu`, Error 1102), so a route whose p95 CPU is over it fails requests.
 def cpu_budget_ms: 10;
 
+# How many invocations answered with each HTTP status ("none" when the event has no response, as
+# when the client went away first), so a run's 429s from the sign-in rate limiter are on record.
+def status_counts: map((.event.response.status // null) | if . == null then "none" else tostring end)
+  | group_by(.) | map({ key: .[0], value: length }) | from_entries;
+
 def by_path: group_by(path_pattern)
-  | map({ path: (.[0] | path_pattern), count: length, wallTime: timing("wallTime"), cpuTime: timing("cpuTime") })
+  | map({ path: (.[0] | path_pattern), count: length, statuses: status_counts, wallTime: timing("wallTime"), cpuTime: timing("cpuTime") })
   | sort_by(-(.wallTime.p95 // 0));
 
+def stalled: (.cpuTime | type) == "number" and (.wallTime | type) == "number" and .cpuTime < 5 and .wallTime > 2000;
+
 . as $events
-| ([range(0; $events | length) | select(($events[.].event.response.status // 0) >= 500)] | .[0:50]) as $serverErrorIndexes
+| ($events | isolate_colos) as $runsIn
+| def where_it_ran: isolate_request_of | if . == null then null else . + { runsIn: $runsIn[.isolate // ""] } end;
+  def with_wait_evidence: invocation + { ranOn: where_it_ran, slowCalls: (slow_call_reports | .[0:10]) };
+  ([range(0; $events | length) | select(($events[.].event.response.status // 0) >= 500)] | .[0:50]) as $serverErrorIndexes
 | ([range(0; $events | length) | select((($events[.].exceptions // []) | length) > 0)] | .[0:20]) as $exceptionIndexes
 # With keepErrorLogs: the error-level lines of each invocation in either list, in stream order, at
 # most per_invocation_log_cap per invocation and total_log_cap in all. An invocation in both lists
@@ -204,10 +323,17 @@ def by_path: group_by(path_pattern)
    else null end) as $errorLogs
 | def with_error_logs($index):
     $events[$index] | invocation + (if $errorLogs == null then {} else { errorLogs: ($errorLogs.lines[$index | tostring] // []) } end);
-{
-  complete: ($tailAliveAtStop == true and length > 0 and tail_reconnects == 0),
+  tail_coverage as $coverage
+| tail_reads as $reads
+| {
+  complete: ($tailAliveAtStop == true and length > 0
+    and (if $coverage == null then tail_reconnects == 0 else $coverage.uncoveredMs == 0 end)
+    and tail_sampling_notices($reads) == 0),
   tailAliveAtStop: ($tailAliveAtStop == true),
   tailReconnects: tail_reconnects,
+  tailCoverage: $coverage,
+  tailReads: $reads,
+  tailSamplingNotices: tail_sampling_notices($reads),
   firstEventTimestamp: (timestamps | if length == 0 then null else min end),
   lastEventTimestamp: (timestamps | if length == 0 then null else max end),
   totalInvocations: length,
@@ -221,7 +347,30 @@ def by_path: group_by(path_pattern)
   # generate a response" (a 500 with Error 1101 to the browser), whatever the outcome.
   hungInvocations: ([.[] | select(any((.exceptions // [])[]; (.message // "") | tostring | test("code had hung|would never generate a response")))] | length),
   # Requests that waited over 2 s on under 5 ms of CPU: stuck on a promise or on I/O, not working.
-  stalledInvocations: ([.[] | select((.cpuTime | type) == "number" and (.wallTime | type) == "number" and .cpuTime < 5 and .wallTime > 2000)] | length),
+  stalledInvocations: ([.[] | select(stalled)] | length),
+  # The first 20 of them, each with where it ran and the calls it reported waiting on, so a stall
+  # names the D1 call (and table) or the Durable Object call that held it. A stall with no slow
+  # call waited somewhere else.
+  stalledRequests: ([.[] | select(stalled) | with_wait_evidence] | .[0:20]),
+  # Every call that waited past its threshold, stalled request or not: how many, by call, and the first
+  # 40 requests that made one.
+  slowCalls: ([.[] | select(slow_call_reports | length > 0)] as $slow
+    | [$slow[] | slow_call_reports[] | select(.settled | not)] as $waits
+    | { total: ($waits | length),
+        byCall: ($waits | map(.call // "unknown") | group_by(.) | map({ key: .[0], value: length }) | from_entries),
+        requests: ([$slow[] | with_wait_evidence] | .[0:40]) }),
+  # The isolates that served requests, in order of first request (at most 50): where requests
+  # reached them, where they ran, and when, so cold isolates and Smart Placement moves can be lined
+  # up with the stalls. An isolate whose runsIn differs from arrivedAt served requests that Smart
+  # Placement moved.
+  isolates: ([.[] | { eventTimestamp: (.eventTimestamp // null), where: isolate_request_of } | select(.where.isolate != null)]
+    | group_by(.where.isolate)
+    | map({ isolate: .[0].where.isolate, runsIn: $runsIn[.[0].where.isolate],
+            arrivedAt: ([.[] | .where.arrivedAt | select(. != null)] | unique),
+            requests: length,
+            firstEventTimestamp: ([.[] | .eventTimestamp | select(type == "number")] | min),
+            lastEventTimestamp: ([.[] | .eventTimestamp | select(type == "number")] | max) })
+    | sort_by(.firstEventTimestamp // 0) | .[0:50]),
   firstExceptions: [$exceptionIndexes[] | with_error_logs(.)],
   # Transient D1 failures the Worker reported: retried ones a later attempt may have absorbed,
   # and ones that reached the caller (a write whose outcome is unknown, or a read out of retries).
@@ -242,6 +391,20 @@ def by_path: group_by(path_pattern)
           retried: ([$operations[] | select(.outcome == "retry")] | length),
           applied: ([$operations[] | select(.outcome == "applied")] | length),
           gaveUp: ([$operations[] | select(.outcome == "gave_up")] | length) } })),
+  # Read-only D1 tries that stalled past their deadline and were sent again, and how many of them
+  # the re-issued try answered, and how many failed both times.
+  d1ReadReissues: ([.[] | d1_read_reissue_reports[]]
+    | { total: length,
+        answeredByReissue: ([.[] | select(.answeredBy == "reissue")] | length),
+        failedBoth: ([.[] | select(.answeredBy == "neither")] | length) }),
+  # Platform faults our code absorbed by trying again (platform_retry lines: an R2 put R2 refused
+  # with its own error, a cook-session read or start the object failed as retryable or with
+  # Cloudflare's own internal error), by call, and how many of those errors Cloudflare had not
+  # marked retryable (`marked: false`).
+  platformRetries: ([.[] | log_objects("platform_retry")[]]
+    | { total: length,
+        byCall: (map((.call | ident) // "other") | group_by(.) | map({ key: .[0], value: length }) | from_entries),
+        unmarked: (map(select(.marked == false)) | length) }),
   slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
   byPath: by_path,
   # Routes whose p95 CPU time is over the budget, worst first. The Journeys workflow prints

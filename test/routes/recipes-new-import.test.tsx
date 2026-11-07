@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub, requiredLabel } from "../utils";
@@ -13,6 +13,16 @@ import EditRecipe, { loader as editLoader } from "~/routes/recipes.$id.edit";
 import * as sessionImport from "~/lib/recipe-import-session.server";
 import { IMPORT_MESSAGES } from "~/lib/recipe-import-session.server";
 import { ImportedRecipeNotice, RecipeImportPanel } from "~/components/recipe/RecipeImportPanel";
+
+// HX FileField writes the files it keeps back into its input, which user-event's upload stub
+// does not allow, so choose the file the way the system picker does: set the input's files and
+// fire change.
+function chooseFile(input: HTMLElement, file: File) {
+  const data = new DataTransfer();
+  data.items.add(file);
+  (input as HTMLInputElement).files = data.files;
+  fireEvent.change(input);
+}
 
 function extract(response: any): { data: any; status: number } {
   if (response && typeof response === "object" && response.type === "DataWithResponseInit") {
@@ -123,15 +133,15 @@ describe("RecipeImportPanel", () => {
     const importHeading = await screen.findByRole("heading", { name: "Start from a recipe you already have." });
     const cardHeading = screen.getByRole("heading", { name: "Give the dish a home." });
     expect(importHeading.compareDocumentPosition(cardHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole("button", { name: "From a link" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("radio", { name: "From a link" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByLabelText(requiredLabel("Recipe link"))).toHaveAttribute("type", "url");
   });
 
   it("switches to pasting the recipe, pointing paper recipes at the photo option", async () => {
     const user = userEvent.setup();
     renderPanel(() => null);
-    await user.click(await screen.findByRole("button", { name: "Paste text" }));
-    expect(screen.getByRole("button", { name: "Paste text" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(await screen.findByRole("radio", { name: "Paste text" }));
+    expect(screen.getByRole("radio", { name: "Paste text" })).toHaveAttribute("aria-checked", "true");
     expect(screen.queryByLabelText(requiredLabel("Recipe link"))).not.toBeInTheDocument();
     expect(screen.getByLabelText(requiredLabel("Recipe text")).tagName).toBe("TEXTAREA");
     expect(screen.getByText("Paste the title, ingredients and steps. Have it on paper? Choose From a photo instead.")).toBeInTheDocument();
@@ -151,15 +161,15 @@ describe("RecipeImportPanel", () => {
       posts.push({ kind: String(formData.get("importKind")), importId: String(formData.get("importId")) });
       return { importResult: { kind: "photo", message: "We couldn't read a recipe in that photo." } };
     });
-    await user.click(await screen.findByRole("button", { name: "From a photo" }));
-    expect(screen.getByRole("button", { name: "From a photo" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(await screen.findByRole("radio", { name: "From a photo" }));
+    expect(screen.getByRole("radio", { name: "From a photo" })).toHaveAttribute("aria-checked", "true");
     const field = screen.getByLabelText(requiredLabel("Recipe photo"));
     expect(field).toHaveAttribute("type", "file");
     expect(field).toHaveAttribute("accept", "image/jpeg,image/png,image/webp,image/gif");
     expect(field).toBeRequired();
     expect(screen.getByText(/A recipe card, a cookbook page or a screenshot/)).toBeInTheDocument();
 
-    await user.upload(field, new File([new Uint8Array([1, 2, 3])], "card.jpg", { type: "image/jpeg" }));
+    chooseFile(field, new File([new Uint8Array([1, 2, 3])], "card.jpg", { type: "image/jpeg" }));
     await user.click(screen.getByRole("button", { name: "Import recipe" }));
     // The answer shows under the field it is about, as that field's error.
     expect(await screen.findByText("We couldn't read a recipe in that photo.")).toBeInTheDocument();
@@ -173,7 +183,7 @@ describe("RecipeImportPanel", () => {
     expect(posts[1].importId).toBe(posts[0].importId);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Import recipe" })).toBeEnabled());
-    await user.upload(screen.getByLabelText(requiredLabel("Recipe photo")), new File([new Uint8Array([4, 5])], "page.png", { type: "image/png" }));
+    chooseFile(screen.getByLabelText(requiredLabel("Recipe photo")), new File([new Uint8Array([4, 5])], "page.png", { type: "image/png" }));
     await user.click(screen.getByRole("button", { name: "Import recipe" }));
     await waitFor(() => expect(posts).toHaveLength(3));
     expect(posts[2].importId).not.toBe(posts[0].importId);
@@ -219,7 +229,7 @@ describe("RecipeImportPanel", () => {
     expect(screen.getByLabelText(requiredLabel("Recipe link"))).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByLabelText(requiredLabel("Recipe link"))).toHaveAccessibleDescription("Any recipe page, or a YouTube or TikTok video with the recipe in its description. You already brought this one in as “Soup”. Open it");
 
-    await user.click(screen.getByRole("button", { name: "Paste text" }));
+    await user.click(screen.getByRole("radio", { name: "Paste text" }));
     expect(screen.queryByText("You already brought this one in as “Soup”.")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open it" })).not.toBeInTheDocument();
   });
@@ -231,8 +241,8 @@ describe("RecipeImportPanel", () => {
     await user.click(screen.getByRole("button", { name: "Import recipe" }));
     expect(await screen.findByText("That site took too long to answer.")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Paste text" }));
-    const linkTab = screen.getByRole("button", { name: "From a link" });
+    await user.click(screen.getByRole("radio", { name: "Paste text" }));
+    const linkTab = screen.getByRole("radio", { name: "From a link" });
     await user.click(linkTab);
 
     // The answer is back under the link field, and it is not treated as a new one.
@@ -245,7 +255,7 @@ describe("RecipeImportPanel", () => {
     const user = userEvent.setup();
     let finish: (value: unknown) => void = () => undefined;
     renderPanel(() => new Promise((resolve) => { finish = resolve; }));
-    await user.click(await screen.findByRole("button", { name: "Paste text" }));
+    await user.click(await screen.findByRole("radio", { name: "Paste text" }));
     await user.type(screen.getByLabelText(requiredLabel("Recipe text")), "Toast");
     await user.click(screen.getByRole("button", { name: "Import recipe" }));
     const busy = await screen.findByRole("button", { name: "Reading the recipe…" });

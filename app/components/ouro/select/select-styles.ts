@@ -43,6 +43,9 @@ function isGroup(entry: SelectOption | SelectOptionGroup): entry is SelectOption
  * count too: each `SelectItem` element, inside fragments and `SelectGroup`s.
  *
  * @internal
+ * @claim "Every option, groups flattened, as `{" registry/ouro/components/ouro/select/native-select.test.tsx verify:testExists(registry/ouro/components/ouro/select/native-select.test.tsx::NativeSelect > renders option groups and option children)
+ * @claim "Every option, groups flattened, as `{" registry/ouro/components/ouro/select/select.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.test.tsx::Select > renders groups from options, each named by its heading)
+ * @claim "Children count too: each `SelectItem` element" registry/ouro/components/ouro/select/select.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.test.tsx::Select > takes SelectItem and SelectGroup children, and shows a child's label in the trigger)
  */
 function flattenOptions(options: SelectOptions | undefined, children: ReactNode, itemType: unknown): Array<{ value: string; label: ReactNode }> {
   const found: Array<{ value: string; label: ReactNode }> = [];
@@ -80,6 +83,9 @@ const sheetQuery = "(max-width: 639.98px) and (pointer: coarse)";
  * height is one unprefixed class that reads a variable, so an app's `h-*` replaces it.
  *
  * @internal
+ * @claim "The trigger: Field's control look (44px" registry/ouro/components/ouro/select/select.touch.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.touch.test.tsx::keeps 44px controls and 16px text on a landscape phone, where the list opens by the trigger)
+ * @claim "The trigger: Field's control look (44px" registry/ouro/components/ouro/select/native-select.test.tsx verify:testExists(registry/ouro/components/ouro/select/native-select.test.tsx::NativeSelect > is 36px tall with a fine pointer from sm up)
+ * @claim "The trigger: Field's control look (44px" registry/ouro/components/ouro/select/select.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.test.tsx::Select > is 36px tall with a fine pointer from sm up, with 32px options)
  */
 const triggerClass =
   "relative m-0 box-border flex w-full min-w-0 items-center justify-between gap-2 h-(--ouro-control-h) px-3 py-0 " +
@@ -113,7 +119,7 @@ const positionerClass =
 const popupClass =
   "box-border flex max-h-(--available-height) min-w-(--anchor-width) flex-col overflow-hidden outline-none " +
   "rounded-md border border-solid border-border bg-popover p-1 text-popover-foreground " +
-  "[box-shadow:0_8px_24px_rgb(0_0_0/0.12)] origin-(--transform-origin) " +
+  "shadow-(--shadow-lg) origin-(--transform-origin) " +
   "[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out),scale_var(--ouro-duration-base)_var(--ouro-ease-out)] data-ending-style:duration-(--ouro-duration-fast) " +
   "data-starting-style:opacity-0 data-starting-style:scale-95 data-ending-style:opacity-0 data-ending-style:scale-95 " +
   "data-[side=none]:data-starting-style:scale-100 data-[side=none]:data-starting-style:opacity-100 " +
@@ -152,11 +158,15 @@ const sheetTitleClass = "m-0 shrink-0 px-3 pt-1 pb-2 text-base leading-6 font-se
  * front. The highlighted option (pointer or arrow keys) takes the accent color.
  *
  * @internal
+ * @claim "An option: 44px tall on coarse" registry/ouro/components/ouro/select/select.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.test.tsx::Select > is 36px tall with a fine pointer from sm up, with 32px options)
+ * @claim "An option: 44px tall on coarse" registry/ouro/components/ouro/select/select.touch.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.touch.test.tsx::chooses an option with a tap and closes, with 44px rows)
  */
 const itemClass =
   "relative box-border grid min-h-11 cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-sm px-2 py-1.5 " +
   "text-base leading-6 outline-none select-none pointer-fine:min-h-8 sm:pointer-fine:text-sm sm:pointer-fine:leading-5 " +
   "scroll-my-1 [-webkit-tap-highlight-color:transparent] data-highlighted:bg-accent data-highlighted:text-accent-foreground " +
+  // Forced colours drop the fill, so the highlight takes the system's pair.
+  "forced-colors:data-highlighted:bg-[Highlight] forced-colors:data-highlighted:text-[HighlightText] " +
   "not-data-disabled:active:bg-accent not-data-disabled:active:text-accent-foreground " +
   "data-disabled:opacity-50 [&_svg]:size-4";
 

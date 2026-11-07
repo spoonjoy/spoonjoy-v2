@@ -163,6 +163,16 @@ const STORYBOOK_REQUIRED_JOB_NAME =
 const REQUIRED_PNPM_PACKAGE_MANAGER = "pnpm@10.28.1";
 const PINNED_CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
 const PINNED_SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
+// e2e, like the other browser jobs that can, runs in Playwright's image, pinned by digest at the
+// version package.json pins (test/workflows/playwright-image.test.ts), on the runner whose Ubuntu
+// matches the image, with the runner's zstd mounted over the image's. setup-node's package cache is
+// off there.
+export const PLAYWRIGHT_RUNNER = "ubuntu-24.04";
+export const PLAYWRIGHT_CONTAINER = Object.freeze({
+  image: "mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f",
+  options: "--user 1001 -v /usr/bin/zstd:/usr/bin/zstd:ro",
+});
+const CONTAINER_SETUP_NODE_WITH = Object.freeze({ "node-version": "22", cache: "" });
 // The only artifacts canonical CI may upload: the Playwright report, and the full-page captures
 // e2e/screens.spec.ts writes for reviewing a visual change. Any other path could carry secrets.
 const CI_ARTIFACT_UPLOADS = [
@@ -454,9 +464,6 @@ const CI_INVOCATION_VALIDATION_COMMAND =
   `${WARNING_GATE_COMMAND_PREFIX}node scripts/workflow-security.mjs validate-ci-invocation`;
 const CI_DISPOSABLE_CLEANUP_COMMAND =
   `${WARNING_GATE_COMMAND_PREFIX}pnpm run cleanup:local:apply`;
-const PLAYWRIGHT_MAN_DB_PRESEED_COMMAND =
-  `sudo sh -c 'printf "%s\\n" "man-db man-db/auto-update boolean true" | debconf-set-selections'`;
-const PLAYWRIGHT_APT_INSTALL_COMMAND = "sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2";
 function actionStepSignature(action: string): string {
   return `action:${action}`;
 }
@@ -465,16 +472,19 @@ function commandStepSignature(...commands: string[]): string {
   return `run:${commands.join("\u0000")}`;
 }
 
-// unit-changed's base is the merge commit's first parent, read from the checkout, never from the
-// event payload, so it is always in the job's shallow history.
+// unit-changed's base is the merge commit's first parent, read from the checkout (fetch-depth 2),
+// never from the event payload or a later fetch, so it is always in the job's shallow history.
 const CI_CHANGED_TESTS_COMMAND =
   'SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed';
 
-// The HX source rule (scripts/hx-source-rules.mjs) runs in both unit lanes: vitest --changed skips
-// its test when only the app code it scans changes. On pull requests it also ratchets against the
-// base commit (the merge commit's first parent, as for unit-changed's tests).
+// The HX source rule (HX's ouro-source-rules kit, scripts/ouro-source-rules.mjs) runs in both unit
+// lanes. On pull requests it also ratchets against the base commit (the merge commit's first parent, as for unit-changed's tests).
 const CI_HX_SOURCE_RULES_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run hx:source-rules`;
 const CI_HX_SOURCE_RULES_RATCHET_COMMAND = `${CI_HX_SOURCE_RULES_COMMAND} --base "$(git rev-parse HEAD^1)"`;
+// HX's claims checker: every claim in the merge queue and on main, and on a pull request also the
+// ratchet and its title and body (scripts/claims-pr.mjs).
+const CI_CLAIMS_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run claims:check`;
+const CI_CLAIMS_PR_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run claims:pr`;
 
 const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
   ["advisory", [
@@ -528,6 +538,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature("pnpm run verify:clean:typecheck"),
     commandStepSignature("pnpm run verify:clean:generated-contract"),
     commandStepSignature(CI_HX_SOURCE_RULES_COMMAND),
+    commandStepSignature(CI_CLAIMS_COMMAND),
     commandStepSignature("pnpm run verify:clean:test:coverage"),
     commandStepSignature("pnpm run verify:clean:test:mcp-sdk-python"),
     commandStepSignature("pnpm run verify:clean:build"),
@@ -550,8 +561,8 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
     commandStepSignature("pnpm run verify:clean:typecheck"),
     commandStepSignature("pnpm run verify:clean:generated-contract"),
-    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"`),
     commandStepSignature(CI_HX_SOURCE_RULES_RATCHET_COMMAND),
+    commandStepSignature(CI_CLAIMS_PR_COMMAND),
     commandStepSignature(CI_CHANGED_TESTS_COMMAND),
     commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
   ]],
@@ -574,19 +585,11 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
       `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
       `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
     ),
-    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile`),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile --ignore-scripts`),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm prisma:generate`),
     commandStepSignature(
       `${WARNING_GATE_COMMAND_PREFIX}pnpm why blake3-wasm`,
       `${WARNING_GATE_COMMAND_PREFIX}pnpm why @c4312/blake3-internal`,
-    ),
-    commandStepSignature(
-      `${WARNING_GATE_COMMAND_PREFIX}sudo apt-get update`,
-      `${WARNING_GATE_COMMAND_PREFIX}${PLAYWRIGHT_MAN_DB_PRESEED_COMMAND}`,
-      `${WARNING_GATE_COMMAND_PREFIX}sudo touch /var/lib/man-db/auto-update`,
-      `${WARNING_GATE_COMMAND_PREFIX}${PLAYWRIGHT_APT_INSTALL_COMMAND}`,
-      `${WARNING_GATE_COMMAND_PREFIX}pnpm exec playwright install-deps --dry-run chromium`,
-      `${WARNING_GATE_COMMAND_PREFIX}pnpm exec playwright install chromium`,
     ),
     commandStepSignature("pnpm run verify:clean:migrations"),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
@@ -644,6 +647,7 @@ const CI_JOB_CONTRACTS = Object.freeze({
   e2e: Object.freeze({
     name: "${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}",
     timeoutMinutes: 10,
+    container: PLAYWRIGHT_CONTAINER,
     env: Object.freeze({
       NODE_ENV: "development",
       SESSION_SECRET: "ci-e2e-session-secret",
@@ -768,17 +772,25 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
   for (const [jobName, rawJob] of Object.entries(jobs)) {
     if (jobName === "queue-tested") continue;
     const job = objectRecord(rawJob);
-    const contract: { name: string; if?: string; timeoutMinutes: number; env?: Record<string, string> } =
-      CI_JOB_CONTRACTS[jobName as keyof typeof CI_JOB_CONTRACTS];
-    const expectedJobKeys = contract.env
-      ? ["name", "needs", "if", "runs-on", "timeout-minutes", "env", "steps"]
-      : ["name", "needs", "if", "runs-on", "timeout-minutes", "steps"];
+    const contract: {
+      name: string;
+      if?: string;
+      timeoutMinutes: number;
+      env?: Record<string, string>;
+      container?: Record<string, string>;
+    } = CI_JOB_CONTRACTS[jobName as keyof typeof CI_JOB_CONTRACTS];
+    const expectedJobKeys = [
+      "name", "needs", "if", "runs-on", "timeout-minutes", "steps",
+      ...(contract.env ? ["env"] : []),
+      ...(contract.container ? ["container"] : []),
+    ];
     if (
       !exactObjectKeys(job, expectedJobKeys) ||
       job.needs !== CI_CANONICAL_JOB_NEEDS ||
       job.if !== (contract.if ?? CI_CANONICAL_JOB_CONDITION) ||
       job.name !== contract.name ||
-      job["runs-on"] !== "ubuntu-latest" ||
+      job["runs-on"] !== (contract.container ? PLAYWRIGHT_RUNNER : "ubuntu-latest") ||
+      (contract.container && !exactWorkflowRecord(job.container, contract.container)) ||
       job["timeout-minutes"] !== contract.timeoutMinutes ||
       (contract.env ? !exactWorkflowRecord(job.env, contract.env) : job.env !== undefined)
     ) return false;
@@ -801,6 +813,8 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
             !exactObjectKeys(step, ["uses", "with"]) ||
             !exactWorkflowRecord(withValues, {
               ref: "${{ env.CI_SOURCE_SHA }}",
+              // unit-changed checks out the merge commit with its parents, so its base is in the checkout.
+              ...(jobName === "unit-changed" ? { "fetch-depth": 2 } : {}),
               "persist-credentials": false,
             })
           ) return false;
@@ -808,7 +822,7 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
           if (
             !exactObjectKeys(step, ["name", "uses", "with"]) ||
             typeof step.name !== "string" ||
-            !exactWorkflowRecord(withValues, { "node-version": "22" })
+            !exactWorkflowRecord(withValues, contract.container ? CONTAINER_SETUP_NODE_WITH : { "node-version": "22" })
           ) return false;
         } else if (step.uses === PINNED_SETUP_PYTHON_ACTION) {
           if (
@@ -1416,9 +1430,19 @@ function stepHasId(lines: WorkflowLine[], stepStart: number, stepEnd: number, id
   return stepPropertyValue(lines, stepStart, stepEnd, "id") === id;
 }
 
+// QA makes covers from free sample images, so the smoke must not depend on a paid provider key.
+const QA_SMOKE_FORBIDDEN_TERMS = [
+  "deploy:auto",
+  "wrangler deploy",
+  "--target-env production",
+  "OPENAI_API_KEY",
+  "GEMINI_API_KEY",
+  "GOOGLE_API_KEY",
+];
+
 function workflowHasForbiddenQaSmokeTerms(lines: WorkflowLine[]): boolean {
   const activeText = lines.map((line) => line.text).join("\n");
-  return ["deploy:auto", "wrangler deploy", "--target-env production"].some((term) => activeText.includes(term));
+  return QA_SMOKE_FORBIDDEN_TERMS.some((term) => activeText.includes(term));
 }
 
 function qaSmokeStepOrderIsValid(order: Record<string, number>): boolean {
@@ -1427,8 +1451,8 @@ function qaSmokeStepOrderIsValid(order: Record<string, number>): boolean {
     order.checkout > order.cloudflare &&
     order.install > order.checkout &&
     order.prisma > order.install &&
-    order.providerSecrets > order.prisma &&
-    order.smoke > order.providerSecrets &&
+    order.sampleCovers > order.prisma &&
+    order.smoke > order.sampleCovers &&
     order.artifact > order.smoke
   );
 }
@@ -1494,27 +1518,11 @@ function cloudflareGateRunIsSafe(run: string): boolean {
   ]);
 }
 
-function qaProviderGateRunIsSafe(run: string): boolean {
-  return commandLinesEqual(run, [
-    'secrets_json="$(pnpm exec wrangler secret list --env qa)"',
-    'echo "$secrets_json"',
-    `if ! printf '%s' "$secrets_json" | grep -Eq '"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)"'; then`,
-    'echo "ready=false" >> "$GITHUB_OUTPUT"',
-    'echo "Skipping QA image-cover smoke because no QA image-provider secret is configured."',
-    "exit 1",
-    "fi",
-    'echo "ready=true" >> "$GITHUB_OUTPUT"',
-  ]);
-}
-
 function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
   const lines = workflowLines(workflow);
   if (workflowHasForbiddenQaSmokeTerms(lines)) return false;
   const cloudflareReady = "steps.cloudflare.outputs.ready == 'true'";
-  const cloudflareAndProviderReady =
-    "steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'";
-  const artifactReady =
-    "always() && steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'";
+  const artifactReady = "always() && steps.cloudflare.outputs.ready == 'true'";
 
   for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
     const steps = childBlock(lines, jobStart, jobEnd, "steps");
@@ -1525,7 +1533,7 @@ function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
       checkout: -1,
       install: -1,
       prisma: -1,
-      providerSecrets: -1,
+      sampleCovers: -1,
       smoke: -1,
       artifact: -1,
     };
@@ -1549,7 +1557,7 @@ function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
       }
 
       if (
-        run === "pnpm install --frozen-lockfile" &&
+        run === "pnpm install --frozen-lockfile --ignore-scripts" &&
         stepIfEquals(lines, stepStart, stepEnd, cloudflareReady)
       ) {
         order.install = stepStart;
@@ -1563,12 +1571,11 @@ function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
       }
 
       if (
-        stepHasId(lines, stepStart, stepEnd, "qa-secrets") &&
+        run === "node scripts/qa-sample-covers.mjs" &&
         stepHasEnvKeys(lines, stepStart, stepEnd, ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]) &&
-        stepIfEquals(lines, stepStart, stepEnd, cloudflareReady) &&
-        qaProviderGateRunIsSafe(run)
+        stepIfEquals(lines, stepStart, stepEnd, cloudflareReady)
       ) {
-        order.providerSecrets = stepStart;
+        order.sampleCovers = stepStart;
       }
 
       if (
@@ -1579,7 +1586,7 @@ function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
           "SPOONJOY_QA_SMOKE_BASE_URL",
           "SPOONJOY_QA_SMOKE_TARGET",
         ]) &&
-        stepIfEquals(lines, stepStart, stepEnd, cloudflareAndProviderReady)
+        stepIfEquals(lines, stepStart, stepEnd, cloudflareReady)
       ) {
         order.smoke = stepStart;
       }
@@ -1842,8 +1849,8 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "QA resource isolation",
-      qaDb?.database_name === "spoonjoy-qa" &&
-        qaDb.database_id === "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34" &&
+      qaDb?.database_name === "spoonjoy-qa-2" &&
+        qaDb.database_id === "e29dc64f-e5ee-47a4-b17f-f68dbee5a1c1" &&
         qaDb.database_id !== productionDb?.database_id &&
         qaPhotos?.bucket_name === "spoonjoy-photos-qa" &&
         qaPhotos.bucket_name !== productionPhotos?.bucket_name &&
@@ -1927,7 +1934,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
         workflowHasQaImageCoverSmokeGuards(inputs.qaImageCoverSmokeWorkflow) &&
         workflowHasGitDefaultBranchConfig(inputs.qaImageCoverSmokeWorkflow) &&
         workflowUsesCorepackPnpmSetup(inputs.qaImageCoverSmokeWorkflow),
-      ".github/workflows/qa-image-cover-smoke.yml must run only on schedule/manual dispatch, guard Cloudflare and QA image-provider credentials, suppress checkout setup diagnostics, use Corepack pnpm activation, and run the QA-only image-cover smoke without deploy commands."
+      ".github/workflows/qa-image-cover-smoke.yml must run only on schedule/manual dispatch, guard Cloudflare credentials, put QA's sample cover images in place without requiring a paid image-provider key, suppress checkout setup diagnostics, use Corepack pnpm activation, and run the QA-only image-cover smoke without deploy commands."
     ),
     check(
       "Storybook deploy workflow",

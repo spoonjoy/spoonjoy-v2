@@ -12,9 +12,9 @@
  * - Save, remove, and reorder controls
  */
 
-import { ArrowDown, ArrowUp, Save, Trash2 } from 'lucide-react'
+import { Save, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Button } from '~/components/button'
+import { Button } from '~/components/ouro/button/button'
 import { Field } from '~/components/ouro/field/field'
 import { FieldControl } from '~/components/ouro/field/field-parts'
 import { TextArea } from '~/components/ouro/text-field/text-area'
@@ -45,13 +45,7 @@ export interface StepEditorCardProps {
    */
   onChange?: (step: Omit<StepData, 'id' | 'stepNum'>) => void
   onRemove: () => void
-  onMoveUp?: () => void
-  onMoveDown?: () => void
-  canMoveUp?: boolean
-  canMoveDown?: boolean
   disabled?: boolean
-  /** Render prop for drag handle */
-  dragHandle?: React.ReactNode
   /** Auto-focus the instructions textarea on mount */
   autoFocusInstructions?: boolean
   /** Callback when instructions textarea is focused */
@@ -65,12 +59,7 @@ export function StepEditorCard({
   onSave,
   onChange,
   onRemove,
-  onMoveUp,
-  onMoveDown,
-  canMoveUp = true,
-  canMoveDown = true,
   disabled = false,
-  dragHandle,
   autoFocusInstructions = false,
   onFocused,
 }: StepEditorCardProps) {
@@ -157,16 +146,6 @@ export function StepEditorCard({
     onRemove()
   }
 
-  const handleMoveUp = () => {
-    // Safe: button only renders when onMoveUp exists, and is disabled when disabled=true
-    onMoveUp?.()
-  }
-
-  const handleMoveDown = () => {
-    // Safe: button only renders when onMoveDown exists, and is disabled when disabled=true
-    onMoveDown?.()
-  }
-
   return (
     <article
       aria-label={`Step ${stepNumber}`}
@@ -174,7 +153,6 @@ export function StepEditorCard({
     >
       {/* Header with step number and title */}
       <div className="flex items-center gap-4 mb-4">
-        {dragHandle}
         <div
           className="font-sj-ui flex h-8 w-8 items-center justify-center rounded-[var(--sj-radius-small)] bg-[var(--sj-ink)] font-bold text-[var(--sj-paper)]"
         >
@@ -270,7 +248,7 @@ export function StepEditorCard({
 
         <Button
           type="button"
-          variant="destructive"
+          variant="soft" tone="destructive"
           onClick={handleRemove}
           disabled={disabled}
         >
@@ -278,29 +256,6 @@ export function StepEditorCard({
           Remove
         </Button>
 
-        {onMoveUp && (
-          <Button
-            type="button"
-            plain
-            onClick={handleMoveUp}
-            disabled={disabled || !canMoveUp}
-          >
-            <ArrowUp data-slot="icon" aria-hidden="true" />
-            Move up
-          </Button>
-        )}
-
-        {onMoveDown && (
-          <Button
-            type="button"
-            plain
-            onClick={handleMoveDown}
-            disabled={disabled || !canMoveDown}
-          >
-            <ArrowDown data-slot="icon" aria-hidden="true" />
-            Move down
-          </Button>
-        )}
       </div>
     </article>
   )

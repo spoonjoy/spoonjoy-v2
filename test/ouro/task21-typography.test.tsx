@@ -7,12 +7,11 @@ import type { AccountSettingsLoaderData } from "~/lib/account-settings.server";
 import { act } from "~/lib/ouro/testing/act";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
-import { ToastProvider } from "~/components/feedback/toast";
-import { Button } from "~/components/button";
+import { Toaster } from "~/components/ouro/toast/toaster";
+import { Button } from "~/components/ouro/button/button";
 import { StepCard } from "~/components/recipe/StepCard";
 import { StepsSectionHeading } from "~/components/recipe/StepsSectionHeading";
 import { StepOutputUseDisplay } from "~/components/StepOutputUseDisplay";
-import { BioCard } from "~/components/pantry/BioCard";
 import Index from "~/routes/_index";
 import RecipesIndex from "~/routes/recipes._index";
 import AccountSettings from "~/routes/account.settings";
@@ -25,9 +24,11 @@ vi.mock("~/lib/route-platform.server", () => ({ getRequestDb: vi.fn() }));
 vi.mock("~/lib/d1-read.server", () => ({ requestD1: vi.fn() }));
 vi.mock("~/lib/session.server", () => ({ getUserId: vi.fn() }));
 vi.mock("~/lib/kitchen-home.server", () => ({ readKitchenHomeFromD1: vi.fn(), readKitchenHomeWithPrisma: vi.fn() }));
+vi.mock("~/lib/cooking-now-entries.server", () => ({ cookingNowEntry: vi.fn(), readCookingNowEntries: vi.fn() }));
 vi.mock("~/lib/recipe-cover.server", () => ({ getRecipeCoverDisplay: vi.fn() }));
 vi.mock("~/lib/collection-reads.server", () => ({ readPublicRecipesFromD1: vi.fn(), readPublicRecipesWithPrisma: vi.fn() }));
 vi.mock("~/lib/account-settings.server", () => ({ loadAccountSettings: vi.fn(), handleAccountSettingsAction: vi.fn() }));
+vi.mock("~/lib/moderation.server", () => ({ hidesChef: vi.fn(), listBlockedChefs: vi.fn(), loadRequestViewerHides: vi.fn(), withoutHidden: vi.fn() }));
 vi.mock("~/lib/search.server", () => ({ normalizeSearchScope: vi.fn(), searchSpoonjoy: vi.fn(), searchSpoonjoyFromD1: vi.fn() }));
 
 const originalViewport = { width: innerWidth, height: innerHeight };
@@ -49,7 +50,7 @@ async function mount(Component: ComponentType, data: unknown = {}, path = "/", l
   }], { initialEntries: [path] });
   const root = createRoot(host);
   await act(async () => {
-    root.render(<OuroProvider linkComponent={OuroRouterLink}><ToastProvider><RouterProvider router={router} /></ToastProvider></OuroProvider>);
+    root.render(<OuroProvider linkComponent={OuroRouterLink}><><RouterProvider router={router} /><Toaster /></></OuroProvider>);
   });
   dispose = async () => {
     await act(async () => root.unmount());
@@ -81,7 +82,7 @@ function typography(element: HTMLElement) {
  * block/theme so line wrapping can be compared exactly, not with a tolerance.
  * This is test markup, not copied Catalyst runtime or a compatibility component.
  */
-function compareDelivered(candidate: HTMLElement, deliveredClasses: string) {
+function compareDelivered(candidate: HTMLElement, deliveredClasses: string, deliveredContent?: (baseline: HTMLElement) => void) {
   const parent = candidate.parentElement!;
   const parentStyle = getComputedStyle(parent);
   const witness = document.createElement("div");
@@ -90,7 +91,8 @@ function compareDelivered(candidate: HTMLElement, deliveredClasses: string) {
   witness.style.width = `${parent.getBoundingClientRect().width - parseFloat(parentStyle.paddingLeft) - parseFloat(parentStyle.paddingRight)}px`;
   const baseline = document.createElement(candidate.tagName);
   baseline.className = deliveredClasses;
-  baseline.textContent = candidate.textContent;
+  if (deliveredContent) deliveredContent(baseline);
+  else baseline.textContent = candidate.textContent;
   witness.append(baseline);
   parent.append(witness);
   try {
@@ -125,7 +127,7 @@ it("actual recipe Router/ShowMore holds one request, preserves rows/count and fo
   });
   try {
     await expect.poll(() => host.querySelector('a[href="/recipes/a"]')).toBeTruthy();
-    expect(getComputedStyle(host.querySelector('a[href="/recipes/a"]')!).borderBottomWidth).toBe("1px");
+    expect(getComputedStyle(host.querySelector('a[href="/recipes/a"]')!.closest('[data-ouro="item"]')!).borderBottomWidth).toBe("1px");
     const more = Array.from(host.querySelectorAll("a")).find((link) => link.textContent?.includes("Show more recipes"))!;
     expect(more.getAttribute("href")).toBe("/recipes?after=a");
     await userEvent.dblClick(more);
@@ -134,7 +136,7 @@ it("actual recipe Router/ShowMore holds one request, preserves rows/count and fo
     await act(async () => release());
     await expect.poll(() => host.querySelector('a[href="/recipes/b"]')).toBeTruthy();
     await expect.poll(() => document.activeElement).toBe(host.querySelector('a[href="/recipes/b"]'));
-    expect(getComputedStyle(host.querySelector('a[href="/recipes/b"]')!).borderBottomWidth).toBe("1px");
+    expect(getComputedStyle(host.querySelector('a[href="/recipes/b"]')!.closest('[data-ouro="item"]')!).borderBottomWidth).toBe("1px");
     expect(host.querySelector('a[href="/recipes/a"]')).not.toBeNull();
     expect(host.querySelector("[data-ouro-show-more-status]")!.textContent).toBe("Showing 2 recipes");
     expect(more.isConnected).toBe(false);
@@ -160,7 +162,7 @@ for (const theme of ["light", "dark"] as const) {
     await annotate(`T21_KITCHEN_TYPE ${JSON.stringify({ theme, measurements })}`);
   });
 
-  it(`${theme}: actual search hero and hover-colored result title retain delivered typography/semantics`, async ({ annotate }) => {
+  it(`${theme}: actual search hero keeps its delivered display scale, and a result is an HX Item named by type and title`, async ({ annotate }) => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     const result: SearchResult = {
       type: "recipe", id: "type-proof", ownerId: "chef", ownerUsername: "chef",
@@ -172,37 +174,35 @@ for (const theme of ["light", "dark"] as const) {
     await expect.poll(() => host.querySelector("h1")).toBeTruthy();
     const title = host.querySelector("h1")!;
     const resultLink = host.querySelector<HTMLAnchorElement>('a[href="/recipes/type-proof"]')!;
-    const resultTitle = resultLink.querySelector("h2")!;
-    const subheading = "font-sj-display text-base/7 font-semibold tracking-normal text-[var(--sj-ink)]";
     const measurements = [];
     for (const width of widths) {
       await page.viewport(width, 900);
       const actual = compareDelivered(title, `${heading} mt-3 text-5xl/12 sm:text-7xl/18 lg:text-[84px] lg:leading-[1.05]`);
       expect(actual.fontSize).toBe(width >= 1024 ? "84px" : width >= 640 ? "72px" : "48px");
-      measurements.push({ width, title: actual, resultTitle: compareDelivered(resultTitle, `${subheading} mt-2 line-clamp-2 text-2xl/8 group-hover:text-[var(--sj-tomato)]`) });
+      measurements.push({ width, title: actual });
     }
-    await userEvent.hover(resultLink);
-    const hovered = compareDelivered(resultTitle, `${subheading} mt-2 line-clamp-2 text-2xl/8 group-hover:text-[var(--sj-tomato)]`);
-    expect(resultLink.getAttribute("aria-labelledby")!.split(" ")).toContain(resultTitle.id);
+    // The result is an HX Item; its title is the result's <h2>, inside the link that it names with
+    // the type and the byline.
+    expect(resultLink.closest('[data-ouro="item"]')).not.toBeNull();
+    const resultTitle = resultLink.querySelector("h2")!;
     expect(resultTitle.tagName).toBe("H2");
-    await annotate(`T21_SEARCH_TYPE ${JSON.stringify({ theme, measurements, hovered })}`);
+    expect(resultTitle.textContent).toBe("Tomato soup for a crowded table");
+    expect(resultLink.textContent).toMatch(/^Recipe\s*Tomato soup for a crowded table\s*By chef$/);
+    await annotate(`T21_SEARCH_TYPE ${JSON.stringify({ theme, measurements })}`);
   });
 
-  it(`${theme}: the two unsupported 14px branded metadata headings keep their levels, ink and actual size`, async ({ annotate }) => {
+  it(`${theme}: the 14px branded step-output heading keeps its level, ink and actual size`, async ({ annotate }) => {
     document.documentElement.classList.toggle("dark", theme === "dark");
-    const host = await mount(() => <main className="sj-page"><StepOutputUseDisplay usingSteps={[{ id: "use-1", outputStepNum: 1, outputOfStep: { stepNum: 1, stepTitle: "Prep" } }]} /><BioCard name="Chef Rowan" bio="A practical kitchen." recipeCount={2} cookbookCount={1} /></main>);
+    const host = await mount(() => <main className="sj-page"><StepOutputUseDisplay usingSteps={[{ id: "use-1", outputStepNum: 1, outputOfStep: { stepNum: 1, stepTitle: "Prep" } }]} /></main>);
     await expect.poll(() => host.querySelector("h4")).toBeTruthy();
     const output = host.querySelector("h4")!;
-    const snapshot = Array.from(host.querySelectorAll("h3")).find((node) => node.textContent?.includes("Kitchen Snapshot"))!;
     const base = "font-sj-display text-base/7 font-semibold tracking-normal text-[var(--sj-ink)]";
     const measurements = [];
     for (const width of [390, 640, 1024]) {
       await page.viewport(width, 900);
       const outputs = compareDelivered(output, `${base} m-0 mb-3 text-sm uppercase text-[var(--sj-ink-soft)]`);
-      const kitchen = compareDelivered(snapshot, `${base} text-sm`);
       expect(outputs.fontSize).toBe("14px");
-      expect(kitchen.fontSize).toBe("14px");
-      measurements.push({ width, outputs, kitchen });
+      measurements.push({ width, outputs });
     }
     await annotate(`T21_METADATA_TYPE ${JSON.stringify({ theme, measurements })}`);
   });
@@ -231,11 +231,34 @@ for (const theme of ["light", "dark"] as const) {
     const title = host.querySelector("h1")!;
     const copy = title.nextElementSibling as HTMLElement;
     const measurements = [];
-    for (const width of widths) {
-      await page.viewport(width, 900);
-      const actual = compareDelivered(title, `${heading} mt-5 max-w-4xl text-4xl/10 text-[var(--sj-on-photo)] sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20`);
-      expect(actual.fontSize).toBe(width >= 1280 ? "96px" : width >= 1024 ? "72px" : width >= 640 ? "60px" : "36px");
-      measurements.push({ width, title: actual, copy: compareDelivered(copy, `${text} mt-5 max-w-2xl text-lg/8 text-[var(--sj-on-photo-muted)]`) });
+    // A short or narrow phone (the iPhone Duo's outer screen, 382 x 531; the SE, 320 wide) gets the
+    // compact hero, so its actions fit on the first screen above the tab bar
+    // (e2e/journeys/landing-first-screen.mobile.journey.ts): a 32/38 headline, 16/24 copy and only the
+    // copy's first clause. A phone at least 360 x 600 gets a 36/40 headline and the whole copy at 16/24.
+    // From 640px up the hero must still match the delivered ca829f3 classes exactly.
+    const viewports = [[382, 531], [320, 900], ...widths.map((width) => [width, 900])];
+    for (const [width, height] of viewports) {
+      await page.viewport(width, height);
+      const phone = width < 640;
+      const compact = phone && (width < 360 || height < 600);
+      const actual = !phone
+        ? compareDelivered(title, `${heading} mt-5 max-w-4xl text-4xl/10 text-[var(--sj-on-photo)] sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20`)
+        : compareDelivered(title, `font-sj-display ${compact ? "text-[2rem]/[2.375rem]" : "text-4xl/10"} font-semibold tracking-normal text-[var(--sj-on-photo)] max-w-4xl`);
+      expect(actual.fontSize).toBe(width >= 1280 ? "96px" : width >= 1024 ? "72px" : width >= 640 ? "60px" : compact ? "32px" : "36px");
+      // The rest of the sentence sits in a span that compact phones hide; the witness keeps the same
+      // three parts so its line boxes compare one for one.
+      const copyContent = (baseline: HTMLElement) => {
+        const rest = document.createElement("span");
+        if (compact) rest.className = "hidden";
+        rest.textContent = ", the notes you learn by doing, and the cookbooks that grow out of real meals";
+        baseline.append("Spoonjoy is a photo-first kitchen for the recipes you actually cook", rest, ".");
+      };
+      const copyActual = phone
+        ? compareDelivered(copy, "max-w-2xl text-base/6 text-[var(--sj-on-photo)]", copyContent)
+        : compareDelivered(copy, `${text} mt-5 max-w-2xl text-lg/8 text-[var(--sj-on-photo)]`, copyContent);
+      expect(copyActual.fontSize).toBe(phone ? "16px" : "18px");
+      expect(copy.innerText.includes("cookbooks that grow"), `${width} x ${height} shows the whole copy`).toBe(!compact);
+      measurements.push({ width, height, title: actual, copy: copyActual });
     }
     await annotate(`T21_PHOTO_TYPE ${JSON.stringify({ theme, measurements })}`);
   });
@@ -266,7 +289,8 @@ for (const theme of ["light", "dark"] as const) {
         measurements.push({
           media, width,
           title: compareDelivered(sectionTitle, `${heading} mt-3 print:mt-0 text-3xl/9 font-semibold tracking-normal sm:text-4xl/11`),
-          instructions: compareDelivered(instructions, `${text} m-0 whitespace-pre-wrap text-base leading-loose text-[var(--sj-ink)] sm:text-lg`),
+          // The method is set in full ink: it used to carry both ink colours, and the softer one won by CSS order.
+          instructions: compareDelivered(instructions, "font-sj-body m-0 whitespace-pre-wrap text-base leading-loose text-[var(--sj-ink)] sm:text-lg"),
         });
       }
       if (media === "print") {
@@ -286,6 +310,8 @@ for (const theme of ["light", "dark"] as const) {
     const measure = (element: HTMLElement) => {
       const css = getComputedStyle(element);
       const overlay = getComputedStyle(element, "::before");
+      expect(css.fontFamily).toContain("IBM Plex Sans Condensed");
+      expect(css.fontWeight).toBe("600");
       const fill = rgba(css.backgroundColor);
       const layer = rgba(overlay.backgroundColor);
       const alpha = Number(overlay.opacity) * layer[3];

@@ -448,6 +448,11 @@ describe("the swipe follows the finger (rule 12)", () => {
     // Back at rest at once: no spring ran.
     expect(item.style.translate).toBe("");
     expect(item.hasAttribute("data-ouro-settling")).toBe(false);
+    // The fade takes --ouro-duration-base (200ms). Held long here, so the toast is still on the page
+    // to be read after the finger lifts: at 200ms a slow runner could finish it, and the toast
+    // leave the page, before the next line ran (a detached toast has no computed style: NaN).
+    document.documentElement.style.setProperty("--ouro-duration-base", "20s");
+    cleanups.push(() => document.documentElement.style.removeProperty("--ouro-duration-base"));
     try {
       await dragTo(from, [[12, 0], [30, 0], [60, 0]]);
       await expect.poll(() => shift(item).x).toBe(60);
@@ -456,9 +461,13 @@ describe("the swipe follows the finger (rule 12)", () => {
       await commands.touchStep({ type: "touchEnd" });
     }
     // Dismissed: it fades where the finger left it.
+    expect(item.isConnected).toBe(true);
     expect(item.hasAttribute("data-ouro-swiped")).toBe(true);
     expect(shift(item).x).toBe(60);
     expect(getComputedStyle(item).transitionProperty).toBe("opacity");
+    await expect.poll(() => item.getAnimations().length).toBeGreaterThan(0);
+    // Then the fade ends, and the toast goes.
+    for (const animation of item.getAnimations()) animation.finish();
     await expect.poll(() => toastNamed("Calm")).toBeUndefined();
   });
 });

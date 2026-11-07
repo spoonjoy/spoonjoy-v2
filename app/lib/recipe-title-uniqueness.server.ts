@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
+import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 import type { ValidationResult } from "~/lib/validation";
 
 type Database = PrismaClientType | Prisma.TransactionClient;
@@ -35,6 +36,9 @@ export async function validateActiveRecipeTitleUnique(
   db: Database,
   input: ActiveTitleUniquenessInput
 ): Promise<ValidationResult> {
+  if (containsObjectionableContent(input.title)) {
+    return { valid: false, error: OBJECTIONABLE_CONTENT_MESSAGE };
+  }
   const conflict = await findActiveRecipeTitleConflict(db, input);
 
   if (conflict) {

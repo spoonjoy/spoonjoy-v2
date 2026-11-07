@@ -75,6 +75,7 @@ export async function cleanupDatabase() {
   // Clear self/cyclic recipe links before deleting recipe-adjacent rows.
   await db.recipe.updateMany({ data: { activeCoverId: null, sourceRecipeId: null } });
   await db.recipeCover.deleteMany({});
+  await db.cookingNow.deleteMany({});
   await db.recipeSpoon.deleteMany({});
   await db.recipe.deleteMany({});
   await db.ingredientRef.deleteMany({});

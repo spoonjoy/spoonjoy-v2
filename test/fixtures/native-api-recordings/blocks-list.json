@@ -1,0 +1,21 @@
+{
+  "name": "blocks-list",
+  "endpoint": "GET /api/v1/blocks",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_120",
+    "data": {
+      "blocks": [
+        {
+          "chef": {
+            "id": "id_001",
+            "username": "contract_chef",
+            "photoUrl": null
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z"
+        }
+      ]
+    }
+  }
+}

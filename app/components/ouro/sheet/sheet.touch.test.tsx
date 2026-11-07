@@ -45,6 +45,13 @@ async function settled() {
     .toBe(true);
 }
 
+/**
+ * A sheet's entry and its way back to rest, where a test only waits for them, take this instead of
+ * the theme's 500ms: each test then spends its time on the touches it checks, not on animations,
+ * which take many times longer on a CI runner whose CPU is busy (browser (1/4), run 39776130394).
+ */
+const QUICK = "50ms";
+
 async function openSheet(props: Partial<SheetProps> = {}, body: ReactNode = <p style={{ margin: 0, height: 320 }}>Pick a cookbook for this recipe.</p>) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -57,8 +64,10 @@ async function openSheet(props: Partial<SheetProps> = {}, body: ReactNode = <p s
       </Sheet>,
     ),
   );
+  document.documentElement.style.setProperty("--ouro-duration-sheet", QUICK);
   await commands.tap('[data-ouro="button"]');
   await settled();
+  document.documentElement.style.removeProperty("--ouro-duration-sheet");
   return popup()!;
 }
 
@@ -73,6 +82,18 @@ async function tapNow(element: Element) {
   const rect = element.getBoundingClientRect();
   await commands.touchStep({ type: "touchStart", x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
   await commands.touchStep({ type: "touchEnd" });
+}
+
+/**
+ * Stops the sheet where it stands, and resolves once it has stopped. `pause()` on a running
+ * animation is itself pending: the animation runs on until the next frame, which takes the
+ * hold time, so a read straight after `pause()` is a frame early (about 0.8px at 60 fps here,
+ * and more on a slow runner, whose frames are longer). Waiting for `ready` reads where it stopped.
+ */
+async function freeze(sheet: HTMLElement) {
+  const animations = sheet.getAnimations();
+  for (const animation of animations) animation.pause();
+  await Promise.all(animations.map((animation) => animation.ready));
 }
 
 /** Keeps the finger still until it has no velocity left. */
@@ -98,7 +119,7 @@ async function releaseAndFreeze(sheet: HTMLElement, dx: number, dy: number, from
     await commands.touchStep({ type: "touchEnd" });
   }
   await expect.poll(() => sheet.getAnimations().length).toBeGreaterThan(0);
-  for (const animation of sheet.getAnimations()) animation.pause();
+  await freeze(sheet);
   return translation(sheet);
 }
 
@@ -119,7 +140,7 @@ describe("Sheet on a phone", () => {
       await expect.poll(() => Math.abs(translation(sheet).y - (frozen + 20))).toBeLessThan(1);
       await restFinger();
     } finally {
-      document.documentElement.style.removeProperty("--ouro-duration-sheet");
+      document.documentElement.style.setProperty("--ouro-duration-sheet", QUICK);
       await commands.touchStep({ type: "touchEnd" });
     }
     // Let go, it comes to rest where it belongs.
@@ -143,7 +164,7 @@ describe("Sheet on a phone", () => {
     await commands.tap('[data-ouro="button"]');
     await expect.poll(() => (popup()?.getAnimations().length ?? 0) > 0 && !popup()!.hasAttribute("data-starting-style")).toBe(true);
     const sheet = popup()!;
-    for (const animation of sheet.getAnimations()) animation.pause();
+    await freeze(sheet);
     const frozen = translation(sheet).y;
     expect(frozen).toBeGreaterThan(40);
     const [x, y] = grip(sheet);
@@ -176,7 +197,7 @@ describe("Sheet on a phone", () => {
       await expect.poll(() => Math.abs(translation(sheet).y - (frozen + 20))).toBeLessThan(1);
       await restFinger();
     } finally {
-      document.documentElement.style.removeProperty("--ouro-duration-sheet");
+      document.documentElement.style.setProperty("--ouro-duration-sheet", QUICK);
       await commands.touchStep({ type: "touchEnd" });
     }
     await settled();
@@ -196,7 +217,7 @@ describe("Sheet on a phone", () => {
       await expect.poll(() => Math.abs(translation(sheet).x - (frozen + 20))).toBeLessThan(1);
       await restFinger();
     } finally {
-      document.documentElement.style.removeProperty("--ouro-duration-sheet");
+      document.documentElement.style.setProperty("--ouro-duration-sheet", QUICK);
       await commands.touchStep({ type: "touchEnd" });
     }
     await settled();
@@ -225,7 +246,7 @@ describe("Sheet on a phone", () => {
       await expect.poll(() => Math.abs(translation(sheet).y - (frozen + 30))).toBeLessThan(1);
       await restFinger();
     } finally {
-      document.documentElement.style.removeProperty("--ouro-duration-sheet");
+      document.documentElement.style.setProperty("--ouro-duration-sheet", QUICK);
       await commands.touchStep({ type: "touchEnd" });
     }
     await settled();

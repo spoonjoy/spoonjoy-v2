@@ -11,15 +11,16 @@ import { createUser } from "~/lib/auth.server";
 import { getUserId, sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
-import { shareContent } from "~/components/navigation";
+import { share } from "~/lib/ouro/share";
 
-vi.mock("~/components/navigation", () => ({
-  shareContent: vi.fn(async () => ({ success: true, method: "native" })),
-}));
+vi.mock("~/lib/ouro/share", async () => {
+  const actual = await vi.importActual<typeof import("~/lib/ouro/share")>("~/lib/ouro/share");
+  return { ...actual, share: vi.fn(async () => "shared" as const) };
+});
 
 describe("Kitchen Index Route", () => {
   beforeEach(async () => {
-    vi.mocked(shareContent).mockClear();
+    vi.mocked(share).mockClear();
     await cleanupDatabase();
   });
 
@@ -312,6 +313,8 @@ describe("Kitchen Index Route", () => {
         kitchenUser: null,
         recipes: [],
         cookbooks: [],
+        cookingNow: [],
+        renderedAt: expect.any(Number),
       });
     });
     it("returns an empty kitchen when the signed-in user is deleted after the session check", async () => {
@@ -334,6 +337,8 @@ describe("Kitchen Index Route", () => {
         kitchenUser: null,
         recipes: [],
         cookbooks: [],
+        cookingNow: [],
+        renderedAt: expect.any(Number),
       });
     });
   });
@@ -462,6 +467,14 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByText("The Recipe App")).toBeInTheDocument();
       expect(screen.getByText(/Spoonjoy is a photo-first kitchen for the recipes you actually cook/i)).toBeInTheDocument();
       expect(screen.getByText("Collect")).toBeInTheDocument();
+      // The photo is shaded for photo-white text, and the outline buttons take photo-white tokens.
+      expect(hero!.querySelector(".sj-landing-hero-shade")).not.toBeNull();
+      expect(screen.getByRole("link", { name: "Log in" }).closest(".sj-on-charcoal")).not.toBeNull();
+      expect(screen.getByRole("link", { name: "Search Recipes" }).closest(".sj-on-charcoal")).not.toBeNull();
+      // Every action's edge shows on the photo: a light amber main action and a stronger photo line.
+      for (const name of ["Start Your Kitchen", "Log in", "Search Recipes"]) {
+        expect(screen.getByRole("link", { name }).closest(".sj-landing-hero-actions")).not.toBeNull();
+      }
 
       const classTokens = Array.from(hero!.querySelectorAll<HTMLElement>("*"))
         .flatMap((element) => Array.from(element.classList));
@@ -498,8 +511,7 @@ describe("Kitchen Index Route", () => {
         expect.stringContaining("Newest Without Cover"),
         expect.stringContaining("Older With Cover"),
       ]);
-      expect(rows[0]).toHaveTextContent("01");
-      expect(rows[1]).toHaveTextContent("02");
+      expect(within(index).getByRole("list", { name: "Recipe index" }).tagName).toBe("OL");
       expect(screen.queryByRole("region", { name: "Recently Updated" })).not.toBeInTheDocument();
       expect(screen.queryByText("Recently Updated")).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Open Recipe" })).not.toBeInTheDocument();
@@ -575,7 +587,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByRole("link", { name: /Fondue/ })).toHaveAttribute("href", "/recipes/recipe-1");
       fireEvent.click(screen.getByRole("button", { name: "Share Fondue" }));
       await waitFor(() => {
-        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+        expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           title: "Fondue",
           url: expect.stringContaining("/recipes/recipe-1"),
         }));
@@ -585,7 +597,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByRole("button", { name: "Share Rosti" })).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Share Rosti" }));
       await waitFor(() => {
-        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+        expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           title: "Rosti",
           url: expect.stringContaining("/recipes/recipe-2"),
         }));
@@ -595,14 +607,15 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByRole("link", { name: /Broth/ })).toHaveAttribute("href", "/recipes/recipe-3");
       fireEvent.click(screen.getByRole("button", { name: "Share Broth" }));
       await waitFor(() => {
-        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+        expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           text: "Open this Spoonjoy recipe: Broth",
           title: "Broth",
           url: expect.stringContaining("/recipes/recipe-3"),
         }));
       });
 
-      const styles = container.querySelectorAll("[style]");
+      // HX components set their own custom properties (Text's line clamp); the app sets none.
+      const styles = container.querySelectorAll("[style]:not([data-ouro])");
       expect(styles.length).toBe(0);
     });
 
@@ -744,14 +757,14 @@ describe("Kitchen Index Route", () => {
       expect(screen.getAllByText("No Photo Book").length).toBeGreaterThan(0);
       fireEvent.click(screen.getByRole("button", { name: "Share Swiss Weeknight" }));
       await waitFor(() => {
-        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+        expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           title: "Swiss Weeknight",
           url: expect.stringContaining("/cookbooks/cookbook-1"),
         }));
       });
       fireEvent.click(screen.getByRole("button", { name: "Share No Photo Book" }));
       await waitFor(() => {
-        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+        expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           text: "No Photo Book has 2 recipes on Spoonjoy.",
           title: "No Photo Book",
           url: expect.stringContaining("/cookbooks/cookbook-2"),
@@ -820,6 +833,130 @@ describe("Kitchen Index Route", () => {
       await screen.findByText("e2e Chocolate Cake");
       expect(screen.getByRole("link", { name: /e2e Chocolate Cake/ })).toHaveAttribute("href", "/recipes/recipe-qa-title");
       expect(screen.getByRole("link", { name: /Pasta \(variation 2\)/ })).toHaveAttribute("href", "/recipes/recipe-variation");
+    });
+  });
+
+  describe("Cooking now", () => {
+    async function signedInAs(userId: string) {
+      const session = await sessionStorage.getSession();
+      session.set("userId", userId);
+      const headers = new Headers();
+      headers.set("Cookie", (await sessionStorage.commitSession(session)).split(";")[0]);
+      return headers;
+    }
+
+    async function cookWithRecipes() {
+      const cook = await createUser(db, faker.internet.email(), `cook_${faker.string.alphanumeric(8)}`, "testPassword123");
+      const plain = await db.recipe.create({ data: { title: "Plain Soup", chefId: cook.id } });
+      const pictured = await db.recipe.create({ data: { title: "Pictured Bread", chefId: cook.id } });
+      const cover = await db.recipeCover.create({
+        data: { recipeId: pictured.id, imageUrl: "/photos/bread.jpg", sourceType: "chef-upload" },
+      });
+      await db.recipe.update({ where: { id: pictured.id }, data: { activeCoverId: cover.id } });
+      const now = Date.now();
+      const row = { userId: cook.id, attemptId: "a", revision: 1, listed: true, activeStepIndex: 1, stepCount: 3, checkedCount: 1, totalCount: 4 };
+      await db.cookingNow.create({ data: { ...row, recipeId: plain.id, touchedAt: BigInt(now - 60_000) } });
+      await db.cookingNow.create({ data: { ...row, recipeId: pictured.id, activeStepId: "s2", touchedAt: BigInt(now), allCheckedAt: BigInt(now) } });
+      return { cook, plain, pictured };
+    }
+
+    it("lists the owner's recipes in progress, newest first, with their covers", async () => {
+      const { cook, plain, pictured } = await cookWithRecipes();
+      const result = await loader({
+        request: new UndiciRequest("http://localhost:3000/", { headers: await signedInAs(cook.id) }),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(result.cookingNow.map((entry) => entry.recipe.id)).toEqual([pictured.id, plain.id]);
+      expect(result.cookingNow[0]).toMatchObject({
+        recipe: { title: "Pictured Bread", coverImageUrl: expect.stringContaining("bread"), href: `/recipes/${pictured.id}` },
+        activeStepId: "s2",
+        activeStepIndex: 1,
+        allCheckedAt: expect.any(String),
+      });
+      expect(result.cookingNow[1].recipe.coverImageUrl).toBeNull();
+      expect(result.cookingNow[1].allCheckedAt).toBeNull();
+    });
+
+    it("never shows a visitor the kitchen owner's list", async () => {
+      const { cook } = await cookWithRecipes();
+      const visitor = await createUser(db, faker.internet.email(), `visitor_${faker.string.alphanumeric(8)}`, "testPassword123");
+      const result = await loader({
+        request: new UndiciRequest(`http://localhost:3000/?chefId=${cook.id}`, { headers: await signedInAs(visitor.id) }),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(result.isOwner).toBe(false);
+      expect(result.cookingNow).toEqual([]);
+    });
+
+    it("puts the Back to banner and the strip above the owner's kitchen", async () => {
+      const now = Date.now();
+      const entry = {
+        recipe: { id: "r1", title: "Lemon Herb Rice", coverImageUrl: null, href: "/recipes/r1" },
+        activeStepId: null,
+        activeStepIndex: 1,
+        stepCount: 3,
+        checkedCount: 1,
+        totalCount: 4,
+        allCheckedAt: null,
+        touchedAt: new Date(now - 60_000).toISOString(),
+        expiresAt: new Date(now + 60_000).toISOString(),
+      };
+      const Stub = createTestRoutesStub([
+        {
+          path: "/",
+          Component: Index,
+          loader: () => ({
+            tab: "recipes",
+            isOwner: true,
+            viewer: { id: "u1" },
+            kitchenUser: { id: "u1", username: "cook", photoUrl: null },
+            recipes: [],
+            cookbooks: [],
+            cookingNow: [entry],
+            renderedAt: now,
+          }),
+        },
+      ]);
+      render(<Stub initialEntries={["/"]} />);
+
+      expect(await screen.findByRole("region", { name: "Cooking now" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Back to Lemon Herb Rice" })).toHaveAttribute("href", "/recipes/r1");
+    });
+
+    it("shows a signed-out cook the recipes in progress in this browser", async () => {
+      window.localStorage.setItem("spoonjoy-cooking-now:v1", JSON.stringify({
+        r1: {
+          recipe: { id: "r1", title: "Lemon Herb Rice", coverImageUrl: null },
+          listed: true,
+          activeStepId: null,
+          activeStepIndex: 1,
+          stepCount: 3,
+          checkedCount: 1,
+          totalCount: 4,
+          allCheckedAt: null,
+          touchedAt: Date.now(),
+          progressKey: "k",
+        },
+      }));
+      try {
+        const Stub = createTestRoutesStub([
+          {
+            path: "/",
+            Component: Index,
+            loader: () => ({ tab: "recipes", isOwner: false, viewer: null, kitchenUser: null, recipes: [], cookbooks: [], cookingNow: [], renderedAt: Date.now() }),
+          },
+        ]);
+        render(<Stub initialEntries={["/"]} />);
+
+        expect(await screen.findByRole("region", { name: "Cooking now" })).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Back to Lemon Herb Rice" })).toBeInTheDocument();
+      } finally {
+        window.localStorage.clear();
+      }
     });
   });
 });

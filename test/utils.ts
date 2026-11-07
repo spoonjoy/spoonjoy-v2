@@ -1,5 +1,6 @@
 import { faker } from "@faker-js/faker";
-import { waitFor } from "@testing-library/react";
+import { fireEvent, waitFor } from "@testing-library/react";
+import { expect } from "vitest";
 import { createRoutesStub } from "react-router";
 import { createElement, type ComponentProps } from "react";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
@@ -163,4 +164,13 @@ export function findShownAlert(options: { container?: HTMLElement; timeout?: num
 /** The one alert that says something, or null when no alert does. */
 export function queryShownAlert(container?: HTMLElement): HTMLElement | null {
   return shownAlerts(container)[0] ?? null;
+}
+
+// Picks a photo in an HX ImageField, as choosing a file does. user-event's upload() pins the
+// input's files to a getter, and the field's own write (the input holds what the field shows)
+// then throws; a change event with a writable list leaves that write working. The field opens the
+// photo before it takes it, so this waits until the input holds it.
+export async function chooseImage(input: HTMLElement, file: File): Promise<void> {
+  fireEvent.change(input, { target: { files: [file] } });
+  await waitFor(() => expect((input as HTMLInputElement).files?.[0]).toBe(file));
 }

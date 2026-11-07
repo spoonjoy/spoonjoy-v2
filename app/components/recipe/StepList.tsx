@@ -4,18 +4,17 @@
  * Manages a collection of StepEditorCard instances with:
  * - '+ Add Step' button to add new steps at end
  * - Remove step with confirmation dialog
- * - Drag-to-reorder with Framer Motion
- * - Up/down buttons for accessible reordering
+ * - Reordering with Ouro HX Reorderable: drag a step's handle, or open its menu to move it
  * - Empty state handling
  * - Steps array management (controlled component)
  */
 
-import { Reorder, useDragControls } from 'motion/react'
-import { GripVertical, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { Button } from '~/components/button'
+import { Button } from '~/components/ouro/button/button'
 import { Link } from '~/components/ouro/link/link'
 import { ConfirmDialog } from '~/components/ouro/dialog/confirm-dialog'
+import { Reorderable } from '~/components/ouro/reorderable/reorderable'
 import { StepEditorCard, type StepData } from './StepEditorCard'
 
 export interface StepListProps {
@@ -27,86 +26,6 @@ export interface StepListProps {
    */
   onChange: Dispatch<SetStateAction<StepData[]>>
   disabled?: boolean
-}
-
-interface StepReorderItemProps {
-  step: StepData
-  index: number
-  stepCount: number
-  recipeId: string
-  disabled: boolean
-  autoFocusInstructions: boolean
-  onFocused: () => void
-  onSave: (data: Omit<StepData, 'id' | 'stepNum'>) => void
-  onChange: (data: Omit<StepData, 'id' | 'stepNum'>) => void
-  onRemove: () => void
-  onMoveUp: () => void
-  onMoveDown: () => void
-  onDragHandleKeyDown: (event: React.KeyboardEvent, index: number) => void
-}
-
-function StepReorderItem({
-  step,
-  index,
-  stepCount,
-  recipeId,
-  disabled,
-  autoFocusInstructions,
-  onFocused,
-  onSave,
-  onChange,
-  onRemove,
-  onMoveUp,
-  onMoveDown,
-  onDragHandleKeyDown,
-}: StepReorderItemProps) {
-  const dragControls = useDragControls()
-  const canDrag = !disabled && stepCount > 1
-
-  const handleDragPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      event.preventDefault()
-      dragControls.start(event, { snapToCursor: true })
-    },
-    [dragControls]
-  )
-
-  return (
-    <Reorder.Item
-      value={step}
-      dragListener={false}
-      dragControls={dragControls}
-    >
-      <StepEditorCard
-        stepNumber={step.stepNum}
-        step={step}
-        recipeId={recipeId}
-        onSave={onSave}
-        onChange={onChange}
-        onRemove={onRemove}
-        onMoveUp={onMoveUp}
-        onMoveDown={onMoveDown}
-        canMoveUp={index > 0}
-        canMoveDown={index < stepCount - 1}
-        disabled={disabled}
-        autoFocusInstructions={autoFocusInstructions}
-        onFocused={onFocused}
-        dragHandle={
-          <button
-            type="button"
-            aria-label="Drag to reorder"
-            title="Drag to reorder. Use Control + Arrow Up or Down from the keyboard."
-            disabled={!canDrag}
-            onPointerDown={canDrag ? handleDragPointerDown : undefined}
-            onKeyDown={(event) => onDragHandleKeyDown(event, index)}
-            className="inline-flex min-h-11 min-w-11 touch-none cursor-grab items-center justify-center rounded-[var(--sj-radius-control)] text-[var(--sj-ink-soft)] transition hover:bg-[var(--sj-flour)] hover:text-[var(--sj-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--sj-brass)] active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <GripVertical className="h-5 w-5" />
-          </button>
-        }
-      />
-    </Reorder.Item>
-  )
 }
 
 export function StepList({ steps, recipeId, onChange, disabled = false }: StepListProps) {
@@ -185,90 +104,39 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
     )
   }
 
-  // Renumber steps after reorder and call onChange
+  // Put the steps in the order Reorderable reports, renumbered.
   const handleReorder = useCallback(
-    (newOrder: StepData[]) => {
-      const renumberedSteps = newOrder.map((step, index) => ({
-        ...step,
-        stepNum: index + 1,
-      }))
-      onChange(renumberedSteps)
+    (ids: string[]) => {
+      const byId = new Map(steps.map((step) => [step.id, step]))
+      onChange(ids.map((id, index) => ({ ...byId.get(id)!, stepNum: index + 1 })))
     },
-    [onChange]
+    [steps, onChange]
   )
 
-  // Move step up in list
-  const handleMoveUp = useCallback(
-    (index: number) => {
-      if (index <= 0) return
-      const newSteps = [...steps]
-      const temp = newSteps[index]
-      newSteps[index] = newSteps[index - 1]
-      newSteps[index - 1] = temp
-      handleReorder(newSteps)
-    },
-    [steps, handleReorder]
-  )
-
-  // Move step down in list
-  const handleMoveDown = useCallback(
-    (index: number) => {
-      if (index >= steps.length - 1) return
-      const newSteps = [...steps]
-      const temp = newSteps[index]
-      newSteps[index] = newSteps[index + 1]
-      newSteps[index + 1] = temp
-      handleReorder(newSteps)
-    },
-    [steps, handleReorder]
-  )
-
-  // Handle keyboard reorder on drag handle
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent, index: number) => {
-      if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'ArrowUp') {
-          e.preventDefault()
-          handleMoveUp(index)
-        } else if (e.key === 'ArrowDown') {
-          e.preventDefault()
-          handleMoveDown(index)
-        }
-      }
-    },
-    [handleMoveUp, handleMoveDown]
-  )
+  const stepItems = steps.map((step) => ({
+    id: step.id,
+    label: `Step ${step.stepNum}`,
+    content: (
+      <StepEditorCard
+        stepNumber={step.stepNum}
+        step={step}
+        recipeId={recipeId}
+        onSave={(data) => handleStepSave(step.id, data)}
+        onChange={(data) => handleStepSave(step.id, data)}
+        onRemove={() => handleRemoveStep(step.id)}
+        disabled={disabled}
+        autoFocusInstructions={newlyAddedStepId === step.id}
+        onFocused={() => handleFocused(step.id)}
+      />
+    ),
+  }))
 
   return (
     <div>
       {steps.length === 0 ? (
         <p className="mb-4 text-sm text-[var(--sj-ink-soft)]">No steps yet. Add your first step below.</p>
       ) : (
-        <Reorder.Group
-          axis="y"
-          values={steps}
-          onReorder={handleReorder}
-          className="sj-list-ruled mb-4"
-        >
-          {steps.map((step, index) => (
-            <StepReorderItem
-              key={step.id}
-              step={step}
-              index={index}
-              stepCount={steps.length}
-              recipeId={recipeId}
-              disabled={disabled}
-              autoFocusInstructions={newlyAddedStepId === step.id}
-              onFocused={() => handleFocused(step.id)}
-              onSave={(data) => handleStepSave(step.id, data)}
-              onChange={(data) => handleStepSave(step.id, data)}
-              onRemove={() => handleRemoveStep(step.id)}
-              onMoveUp={() => handleMoveUp(index)}
-              onMoveDown={() => handleMoveDown(index)}
-              onDragHandleKeyDown={handleKeyDown}
-            />
-          ))}
-        </Reorder.Group>
+        <Reorderable label="Steps" className="mb-4" onReorder={handleReorder} items={stepItems} disabled={disabled} />
       )}
 
       {/* Use Link for existing recipes (edit mode), Button for new recipes (create mode) */}
@@ -284,7 +152,7 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
           type="button"
           onClick={handleAddStep}
           disabled={disabled}
-          plain
+          variant="outline" tone="secondary"
         >
           <Plus data-slot="icon" />
           Add step

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { createTestRoutesStub, findShownAlert, queryShownAlert } from "../../utils";
+import { createTestRoutesStub } from "../../utils";
 import { SpoonDialog } from "../../../app/components/recipe/SpoonDialog";
 import { withTimeZone } from "../../helpers/timezone";
 
@@ -22,6 +22,16 @@ function renderDialog(props: Partial<React.ComponentProps<typeof SpoonDialog>> =
     },
   ]);
   return { onClose, ...render(<Stub />) };
+}
+
+// HX FileField writes the files it keeps back into its input, which user-event's upload stub
+// does not allow, so choose the file the way the system picker does: set the input's files and
+// fire change.
+function chooseFile(input: HTMLInputElement, file: File) {
+  const data = new DataTransfer();
+  data.items.add(file);
+  input.files = data.files;
+  fireEvent.change(input);
 }
 
 function makeFile(name: string, type: string, size = 1024): File {
@@ -63,40 +73,25 @@ describe("SpoonDialog", () => {
     expect(screen.getByLabelText(/cooked at/i)).toBeInTheDocument();
   });
 
-  it("renders a clear photo picker target instead of the native file text", async () => {
+  it("takes one JPG, PNG or WebP photo through HX FileField", async () => {
     renderDialog();
-    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
-    const picker = screen.getByTestId("spoon-photo-picker");
-
-    expect(fileInput).toHaveClass("sr-only");
+    const fileInput = (await screen.findByLabelText("Photo")) as HTMLInputElement;
+    expect(fileInput).toHaveAttribute("type", "file");
     expect(fileInput).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
-    expect(picker).toHaveTextContent(/add photo/i);
-    expect(picker).toHaveTextContent(/no photo yet/i);
-    expect(picker).toHaveTextContent(/jpg, png, or webp/i);
-    expect(picker).not.toHaveTextContent(/gif/i);
-    expect(screen.queryByText(/no file selected/i)).toBeNull();
+    expect(fileInput).not.toHaveAttribute("multiple");
+    expect(fileInput).toHaveAccessibleDescription(/JPG, PNG, or WebP\. 5 MB max\./);
   });
 
-  it("shows the selected photo filename in the custom picker", async () => {
-    renderDialog();
-    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
-    await userEvent.upload(fileInput, makeFile("spoon-night.png", "image/png"));
+  it("lists the chosen photo, and forgets it when it is removed", async () => {
+    renderDialog({ coverPromptMode: "optional-update" });
+    const fileInput = (await screen.findByLabelText("Photo")) as HTMLInputElement;
+    chooseFile(fileInput, makeFile("spoon-night.png", "image/png"));
+    expect(await screen.findByText("spoon-night.png")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /use this photo as recipe cover/i })).toBeInTheDocument();
 
-    expect(screen.getByTestId("spoon-photo-picker")).toHaveTextContent("spoon-night.png");
-  });
-
-  it("returns the custom picker to its empty state when file selection is cancelled", async () => {
-    renderDialog();
-    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
-    const picker = screen.getByTestId("spoon-photo-picker");
-    await userEvent.upload(fileInput, makeFile("cook.png", "image/png"));
-    expect(picker).toHaveTextContent("cook.png");
-
-    Object.defineProperty(fileInput, "files", { value: [], configurable: true });
-    fireEvent.change(fileInput);
-
-    expect(picker).toHaveTextContent(/no photo yet/i);
-    expect(queryShownAlert()).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Remove spoon-night.png" }));
+    expect(screen.queryByText("spoon-night.png")).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: /use this photo as recipe cover/i })).toBeNull();
   });
 
   it("disables submit until at least one of {photo, note, nextTime} is non-empty", async () => {
@@ -122,19 +117,6 @@ describe("SpoonDialog", () => {
     expect(input.value).toBe("2025-06-01T12:00");
   });
 
-  it("clears the photo error when the user selects a valid file", async () => {
-    renderDialog();
-    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
-    const user = userEvent.setup({ applyAccept: false });
-    await user.upload(fileInput, makeFile("a.svg", "image/svg+xml"));
-    expect(await findShownAlert()).toHaveTextContent(/jpg, png, or webp/i);
-    await user.upload(fileInput, makeFile("cook.png", "image/png"));
-    await waitFor(() => {
-      expect(queryShownAlert()).toBeNull();
-    });
-    expect(screen.getByTestId("spoon-photo-picker")).toHaveTextContent("cook.png");
-  });
-
   it("shows the first-chef cover prompt without requiring a photo", async () => {
     renderDialog({ isOriginCookCandidate: true, coverPromptMode: "first-photo" });
     expect(await screen.findByText("Add a photo to create the recipe cover")).toBeInTheDocument();
@@ -144,7 +126,7 @@ describe("SpoonDialog", () => {
     expect(submit).not.toBeDisabled();
 
     const fileInput = screen.getByLabelText(/photo/i) as HTMLInputElement;
-    await userEvent.upload(fileInput, makeFile("a.png", "image/png"));
+    chooseFile(fileInput, makeFile("a.png", "image/png"));
     expect(submit).not.toBeDisabled();
   });
 
@@ -153,7 +135,7 @@ describe("SpoonDialog", () => {
     expect(screen.queryByRole("checkbox", { name: /use this photo as recipe cover/i })).toBeNull();
 
     const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
-    await userEvent.upload(fileInput, makeFile("spoon-cover.png", "image/png"));
+    chooseFile(fileInput, makeFile("spoon-cover.png", "image/png"));
 
     const checkbox = screen.getByRole("checkbox", { name: /use this photo as recipe cover/i });
     expect(checkbox).not.toBeChecked();
@@ -168,33 +150,21 @@ describe("SpoonDialog", () => {
     expect(screen.queryByRole("checkbox", { name: /recipe cover/i })).toBeNull();
   });
 
-  it("rejects MIME types not in the food-photo allow-list with an inline error", async () => {
+  it("leaves out a photo that is not JPG, PNG or WebP, and says why", async () => {
     renderDialog();
-    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
-    const user = userEvent.setup({ applyAccept: false });
-    await user.upload(fileInput, makeFile("a.svg", "image/svg+xml"));
-    expect(await findShownAlert()).toHaveTextContent(/jpg, png, or webp/i);
+    const fileInput = (await screen.findByLabelText("Photo")) as HTMLInputElement;
+    chooseFile(fileInput, makeFile("animated.gif", "image/gif"));
+    expect(await screen.findByText("Photos must be JPG, PNG, or WebP.")).toBeInTheDocument();
+    expect(screen.queryByText("animated.gif")).toBeNull();
+    expect(screen.getByRole("button", { name: /^log cook$/i })).toBeDisabled();
   });
 
-  it("rejects GIF photo files with an inline error", async () => {
+  it("leaves out a photo larger than 5 MB, and says why", async () => {
     renderDialog();
-    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
-    const user = userEvent.setup({ applyAccept: false });
-    await user.upload(fileInput, makeFile("animated.gif", "image/gif"));
-
-    expect(await findShownAlert()).toHaveTextContent("Photos must be JPG, PNG, or WebP.");
-    expect(screen.getByTestId("spoon-photo-picker")).toHaveTextContent(/no photo yet/i);
-  });
-
-  it("rejects files >5MB with an inline error", async () => {
-    renderDialog();
-    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
-    const user = userEvent.setup({ applyAccept: false });
-    await user.upload(
-      fileInput,
-      makeFile("big.png", "image/png", 6 * 1024 * 1024),
-    );
-    expect(await findShownAlert()).toHaveTextContent(/5\s*mb/i);
+    const fileInput = (await screen.findByLabelText("Photo")) as HTMLInputElement;
+    chooseFile(fileInput, makeFile("big.png", "image/png", 6 * 1024 * 1024));
+    expect(await screen.findByText(/5\s*MB/i, { selector: "[role=status] *, [role=status]" })).toBeInTheDocument();
+    expect(screen.queryByText("big.png")).toBeNull();
   });
 
   it("submits a multipart form with intent=createSpoon and the entered fields", async () => {
@@ -224,7 +194,7 @@ describe("SpoonDialog", () => {
     ]);
     render(<Stub initialEntries={["/"]} />);
     await userEvent.type(await screen.findByLabelText(/note/i), "tasted ok");
-    await userEvent.upload(screen.getByLabelText(/photo/i), makeFile("cover.png", "image/png"));
+    chooseFile(screen.getByLabelText("Photo") as HTMLInputElement, makeFile("cover.png", "image/png"));
     await userEvent.click(screen.getByRole("checkbox", { name: /use this photo as recipe cover/i }));
     await userEvent.click(screen.getByRole("button", { name: /^log cook$/i }));
     await waitFor(() => expect(captured).not.toBeNull());
@@ -305,7 +275,7 @@ describe("SpoonDialog", () => {
 
     render(<Stub initialEntries={["/"]} />);
     const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
-    await userEvent.upload(fileInput, makeFile("cook.png", "image/png"));
+    chooseFile(fileInput, makeFile("cook.png", "image/png"));
 
     const submit = screen.getByRole("button", { name: /^log cook$/i });
     const form = submit.closest("form");
@@ -315,7 +285,7 @@ describe("SpoonDialog", () => {
       expect(submissions).toBe(1);
     });
     expect(screen.getByRole("button", { name: /uploading photo/i })).toBeDisabled();
-    expect(screen.getByRole("status")).toHaveTextContent(/uploading photo/i);
+    expect(screen.getAllByRole("status").some((status) => /uploading photo/i.test(status.textContent ?? ""))).toBe(true);
 
     fireEvent.submit(form!);
     expect(submissions).toBe(1);

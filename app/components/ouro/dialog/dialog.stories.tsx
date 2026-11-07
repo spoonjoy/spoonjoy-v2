@@ -2,6 +2,18 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState, type CSSProperties } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { Dialog } from "~/components/ouro/dialog/dialog";
+import {
+  DialogBackdrop,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogPopup,
+  DialogPortal,
+  DialogRoot,
+  DialogTitle,
+  DialogTrigger,
+  DialogViewport,
+} from "~/components/ouro/dialog/dialog-parts";
 
 // Layout here uses inline styles and the theme's CSS variables (shadcn's names).
 
@@ -28,11 +40,11 @@ function RecipeForm() {
     <div style={stack}>
       <label style={{ ...stack, gap: 6, fontWeight: 500, fontSize: "14px", lineHeight: "20px" }}>
         Name
-        <input defaultValue="Shakshuka" style={input} />
+        <input data-test-harness="" defaultValue="Shakshuka" style={input} />
       </label>
       <label style={{ ...stack, gap: 6, fontWeight: 500, fontSize: "14px", lineHeight: "20px" }}>
         Serves
-        <input defaultValue="4" inputMode="numeric" style={input} />
+        <input data-test-harness="" defaultValue="4" inputMode="numeric" style={input} />
       </label>
     </div>
   );
@@ -155,4 +167,25 @@ export const Controlled: Story = {
       </div>
     );
   },
+};
+
+/** Built from parts. A part given no `render` is a plain button of its own: here the trigger and the close button. */
+export const Parts: Story = {
+  render: () => (
+    <DialogRoot>
+      <DialogTrigger>Edit recipe</DialogTrigger>
+      <DialogPortal>
+        <DialogBackdrop />
+        <DialogViewport>
+          <DialogPopup>
+            <DialogTitle>Edit recipe</DialogTitle>
+            <DialogContent>Changes are saved to every cookbook with this recipe.</DialogContent>
+            <DialogFooter>
+              <DialogClose>Close</DialogClose>
+            </DialogFooter>
+          </DialogPopup>
+        </DialogViewport>
+      </DialogPortal>
+    </DialogRoot>
+  ),
 };

@@ -115,6 +115,18 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Catch retries a read that failed with a transient D1 error and re-throws every other error, and the last transient one, unchanged; the route layer's handleError (entry.server.tsx) captures the surfaced exception. A second catch only keeps a throwing reporter from changing the query's outcome.",
   },
   {
+    file: "app/lib/slow-call.server.ts",
+    category: "rethrow",
+    reason:
+      "One catch clears the slow-call timer and re-throws a call's synchronous error unchanged; another only keeps a throwing reporter from changing the call's outcome; the last turns a failed lookup of the isolate's location, evidence for a per-run QA Worker's log only, into a null location. The caller's error handling sees every error of its own call as it was.",
+  },
+  {
+    file: "app/lib/r2-transient-retry.server.ts",
+    category: "rethrow",
+    reason:
+      "Catch puts the object again only after R2 refused it with its own internal error or unavailability, logging a platform_retry line, and re-throws every other error, and the last try's, unchanged; the caller's own error handling captures the surfaced exception.",
+  },
+  {
     file: "app/lib/d1-write-retry.server.ts",
     category: "rethrow",
     reason:
@@ -131,6 +143,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     category: "rethrow",
     reason:
       "Catch answers only D1WriteUnavailableError (the approve or deny write ran out of retries, which retryD1Write reports) with a retryable 503 the page shows, and re-throws every other error to the route layer's handleError (entry.server.tsx), which captures it.",
+  },
+  {
+    file: "app/routes/moderation.tsx",
+    category: "rethrow",
+    reason:
+      "Catch answers only ModerationError (an unknown target, a self-block or an unknown reason) with the 4xx the report and block forms show, and re-throws every other error to the route layer's handleError (entry.server.tsx), which captures it.",
   },
   {
     file: "app/lib/account-revocation.server.ts",

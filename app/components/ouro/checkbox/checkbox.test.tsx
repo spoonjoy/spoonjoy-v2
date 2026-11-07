@@ -7,6 +7,7 @@ import { Button } from "~/components/ouro/button/button";
 import { Checkbox, type CheckboxProps } from "~/components/ouro/checkbox/checkbox";
 import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
+import { expectMotion, expectNoMotion, expectTransition, parseDuration } from "~/lib/ouro/testing/motion";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -41,6 +42,18 @@ async function render(node: ReactNode) {
 const describedBy = (element: Element) => (element.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
 const textOf = (doc: Document | Element, ids: string[]) =>
   ids.map((id) => (doc instanceof Document ? doc : doc.ownerDocument).getElementById(id)?.textContent);
+
+/**
+ * Moves the mouse off the box and waits for it to rest, so a hover border left over from an
+ * earlier test does not change with the state under test.
+ */
+async function rest(box: HTMLElement) {
+  await userEvent.unhover(box);
+  await expect.poll(() => box.getAnimations().length).toBe(0);
+}
+
+/** A duration token's value in milliseconds. */
+const duration = (token: string) => parseDuration(getComputedStyle(document.documentElement).getPropertyValue(token));
 
 /** A theme variable as the browser computes it, so the test holds under any shadcn theme. */
 function themeColor(variable: string): string {
@@ -320,22 +333,135 @@ describe("Checkbox look", () => {
     expect(boxCenter).toBeCloseTo(labelLine / 2, 0);
   });
 
-  it("grows the tick in from 95% as it fades in when checked, and only fades it with reduced motion", async () => {
+  it("fills the box, then draws the tick along its path, and only fades and recolours with reduced motion", async () => {
     const { box, host } = await render(<Checkbox label="Basil" />);
-    const tick = host.querySelector("path")!;
-    expect(getComputedStyle(tick).opacity).toBe("0");
-    expect(Number.parseFloat(getComputedStyle(tick).scale)).toBeCloseTo(0.95, 2);
-    expect(getComputedStyle(tick).transitionProperty).toBe("opacity, scale");
-    expect(getComputedStyle(tick).transitionTimingFunction).toBe("cubic-bezier(0.23, 1, 0.32, 1), cubic-bezier(0.23, 1, 0.32, 1)");
-    await userEvent.click(box);
-    await expect.poll(() => getComputedStyle(tick).opacity).toBe("1");
-    await expect.poll(() => Number.parseFloat(getComputedStyle(tick).scale) || 1).toBeCloseTo(1, 3);
-    await commands.emulateMedia({ reducedMotion: "reduce" });
-    expect(getComputedStyle(tick).transitionProperty).toBe("opacity");
+    await rest(box);
+    const tick = host.querySelector<SVGPathElement>('[data-ouro-part="tick"]')!;
+    const fast = duration("--ouro-duration-fast");
+    const draw = duration("--ouro-duration-draw");
+    expect(draw).toBe(240);
+    const offset = () => Number.parseFloat(getComputedStyle(tick).strokeDashoffset);
+    expect(offset()).toBe(1);
+    expect(Number.parseFloat(getComputedStyle(tick).strokeDasharray)).toBe(1);
+    /** Toggles with a click in the page, not a real pointer, so the box's press scale stays out of its motion. */
+    const toggle = async (state: "data-checked" | "data-unchecked", reduced: boolean) => {
+      await act(() => box.click());
+      const tickMotion: Record<string, number> = reduced ? { opacity: fast } : { "stroke-dashoffset": state === "data-checked" ? draw : fast };
+      // Checking waits for the box to fill before the tick draws; unchecking takes the tick back at once.
+      const delays = tick.getAnimations().map((animation) => animation.effect?.getComputedTiming().delay);
+      expect(delays).toEqual([state === "data-checked" && !reduced ? fast : 0]);
+      await Promise.all([
+        expectMotion(tick, { stem: "checkbox", state, properties: tickMotion, reduced }),
+        expectMotion(box, { stem: "checkbox", state, properties: { "background-color": fast, "border-color": fast }, reduced }),
+      ]);
+    };
+    await toggle("data-checked", false);
+    expect(offset()).toBe(0);
     expect(getComputedStyle(tick).opacity).toBe("1");
-    await userEvent.click(box);
-    await expect.poll(() => getComputedStyle(tick).opacity).toBe("0");
-    expect(Number.parseFloat(getComputedStyle(tick).scale) || 1).toBeCloseTo(1, 3);
+    await toggle("data-unchecked", false);
+    expect(offset()).toBe(1);
+    await commands.emulateMedia({ reducedMotion: "reduce" });
+    await expect.poll(() => tick.getAnimations().length).toBe(0);
+    // Nothing draws or scales: the tick is drawn whole and only fades.
+    expect(getComputedStyle(tick).transitionProperty).toBe("opacity");
+    expect(offset()).toBe(0);
+    expect(getComputedStyle(tick).opacity).toBe("0");
+    await toggle("data-checked", true);
+    expect(getComputedStyle(tick).opacity).toBe("1");
+    await toggle("data-unchecked", true);
+    expect(getComputedStyle(tick).opacity).toBe("0");
+    expect(offset()).toBe(0);
+    expect(getComputedStyle(tick).scale).toBe("none");
+  });
+
+  it("ends in the last state when toggled during its animation", async () => {
+    const { box, host } = await render(<Checkbox label="Basil" />);
+    await rest(box);
+    const tick = host.querySelector<SVGPathElement>('[data-ouro-part="tick"]')!;
+    await act(() => box.click());
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(tick.getAnimations().length).toBeGreaterThan(0);
+    await act(() => box.click());
+    expectTransition({ stem: "checkbox", from: "data-checked", to: "data-unchecked", interrupt: true });
+    await expect.poll(() => [...box.getAnimations(), ...tick.getAnimations()].length).toBe(0);
+    expect(box).toHaveAttribute("aria-checked", "false");
+    expect(Number.parseFloat(getComputedStyle(tick).strokeDashoffset)).toBe(1);
+    expect(getComputedStyle(box).backgroundColor).not.toBe(themeColor("--primary"));
+  });
+
+  it("draws the same way right to left", async () => {
+    const ltr = await render(<Checkbox label="Basil" />);
+    const rtl = await render(
+      <div dir="rtl">
+        <Checkbox label="Basil" />
+      </div>,
+    );
+    await rest(rtl.box);
+    const tickOf = (host: HTMLElement) => host.querySelector<SVGPathElement>('[data-ouro-part="tick"]')!;
+    const tick = tickOf(rtl.host);
+    // The tick is a symbol, not text, so it is not mirrored.
+    expect(getComputedStyle(tick).direction).toBe("rtl");
+    expect(getComputedStyle(tick).transform).toBe(getComputedStyle(tickOf(ltr.host)).transform);
+    expect(tick.getBoundingClientRect().width).toBeCloseTo(tickOf(ltr.host).getBoundingClientRect().width, 3);
+    const fast = duration("--ouro-duration-fast");
+    await act(() => rtl.box.click());
+    await Promise.all([
+      expectMotion(tick, { stem: "checkbox", state: "data-checked", properties: { "stroke-dashoffset": duration("--ouro-duration-draw") }, reduced: false, dir: "rtl" }),
+      expectMotion(rtl.box, { stem: "checkbox", state: "data-checked", properties: { "background-color": fast, "border-color": fast }, reduced: false, dir: "rtl" }),
+    ]);
+    expect(Number.parseFloat(getComputedStyle(tick).strokeDashoffset)).toBe(0);
+  });
+
+  it("fills the box when it turns mixed after it renders, with reduced motion too", async () => {
+    const onCheckedChange = () => {};
+    const { box, rerender } = await render(<Checkbox label="All herbs" onCheckedChange={onCheckedChange} />);
+    await rest(box);
+    const fast = duration("--ouro-duration-fast");
+    for (const reduced of [false, true]) {
+      await commands.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
+      await rerender(<Checkbox label="All herbs" indeterminate onCheckedChange={onCheckedChange} />);
+      await expectMotion(box, { stem: "checkbox", state: "data-indeterminate", properties: { "background-color": fast, "border-color": fast }, reduced });
+      await rerender(<Checkbox label="All herbs" onCheckedChange={onCheckedChange} />);
+      await expect.poll(() => box.getAnimations().length).toBe(0);
+    }
+  });
+
+  it("fades the box when it becomes disabled after it renders, with reduced motion too", async () => {
+    const { box, rerender } = await render(<Checkbox label="Basil" />);
+    await rest(box);
+    const fast = duration("--ouro-duration-fast");
+    for (const reduced of [false, true]) {
+      await commands.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
+      await rerender(<Checkbox label="Basil" disabled />);
+      await expectMotion(box, { stem: "checkbox", state: "data-disabled", properties: { opacity: fast }, reduced });
+      expect(getComputedStyle(box).opacity).toBe("0.5");
+      await rerender(<Checkbox label="Basil" />);
+      await expect.poll(() => box.getAnimations().length).toBe(0);
+    }
+  });
+
+  it("turns the box's border red when an error arrives after it renders, with reduced motion too", async () => {
+    const { box, rerender } = await render(<Checkbox label="I accept the terms" />);
+    await rest(box);
+    const fast = duration("--ouro-duration-fast");
+    for (const reduced of [false, true]) {
+      await commands.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
+      await rerender(<Checkbox label="I accept the terms" error="Accept the terms to continue." />);
+      // The Field root around the box carries data-invalid; the box itself has aria-invalid.
+      await expectMotion(box, { stem: "checkbox", state: "data-invalid", properties: { "border-color": fast }, reduced });
+      await rerender(<Checkbox label="I accept the terms" />);
+      await expect.poll(() => box.getAnimations().length).toBe(0);
+    }
+  });
+
+  it("does not move when it becomes read-only after it renders", async () => {
+    const { box, host, rerender } = await render(<Checkbox label="Basil" />);
+    await rest(box);
+    await rerender(<Checkbox label="Basil" readOnly />);
+    await Promise.all([
+      expectNoMotion(box, { stem: "checkbox", state: "data-readonly", reduced: false }),
+      expectNoMotion(host.querySelector('[data-ouro-part="tick"]')!, { stem: "checkbox", state: "data-readonly", reduced: false }),
+    ]);
   });
 
   it("presses in while the pointer is down, but not with reduced motion", async () => {

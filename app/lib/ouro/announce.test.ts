@@ -45,6 +45,21 @@ describe("announce", () => {
     expect(raf).not.toHaveBeenCalled();
   });
 
+  it("waits the longer delay a caller asks for, never less than 100ms", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    announce("All done", { delayMs: 1500 });
+    const region = regions()[0]!;
+    vi.advanceTimersByTime(1499);
+    expect(region.textContent).toBe("");
+    vi.advanceTimersByTime(1);
+    expect(region.textContent).toBe("All done");
+    announce("Saved", { delayMs: 10 });
+    vi.advanceTimersByTime(99);
+    expect(region.textContent).toBe("");
+    vi.advanceTimersByTime(1);
+    expect(region.textContent).toBe("Saved");
+  });
+
   it("reuses the region across calls, keeping only the last message", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     announce("One");

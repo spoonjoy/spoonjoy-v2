@@ -48,7 +48,7 @@ export const Playground: Story = {};
 
 /** Cookbook tiles that are links, with a share action that stays its own tab stop, and a settings card. */
 export const InContext: Story = {
-  parameters: { screenshot: { name: "card" } },
+  parameters: { mode: "link", screenshot: { name: "card" } },
   render: () => (
     <Page>
       <Heading level={2}>Cookbooks</Heading>
@@ -106,6 +106,7 @@ export const SizesAndVariants: Story = {
 
 /** A cookbook tile with its share button over the cover: the button takes its own taps, and the rest of the tile opens the cookbook. */
 export const ShareOverCover: Story = {
+  parameters: { mode: "link" },
   render: () => (
     <Page>
       <Heading level={2}>Cookbooks</Heading>

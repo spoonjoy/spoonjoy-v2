@@ -7,6 +7,8 @@ import { useCallback, type Ref, type RefCallback } from "react";
  * callback refs, and React 19 callback refs that return their own cleanup.
  *
  * Internal: Ouro UI components use it; apps don't need to.
+ * @claim "Handles object refs, callback refs, and" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::Sheet parts > forwards a ref passed to SheetBackdrop, as an object or a callback)
+ * @claim "Handles object refs, callback refs, and" https://react.dev/blog/2024/12/05/react-19#cleanup-functions-for-refs verify:urlOk(https://react.dev/blog/2024/12/05/react-19#cleanup-functions-for-refs)
  */
 export function attachRef<T>(ref: Ref<T> | undefined, element: T): () => void {
   if (typeof ref === "function") {

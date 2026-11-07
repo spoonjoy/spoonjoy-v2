@@ -14,14 +14,16 @@ describe('StepsSectionHeading', () => {
   it('keeps Clear progress laid out but invisible, disabled and hidden while nothing is checked', () => {
     render(<StepsSectionHeading hasProgress={false} onClearProgress={vi.fn()} />)
     const clear = screen.getByTestId('clear-progress-button')
+    const room = clear.parentElement!
 
-    // Still in the layout at full size, so the first check moves nothing.
+    // Still in the layout, so the first check moves nothing.
     expect(clear).toHaveTextContent('Clear progress')
-    expect(clear).toHaveClass('invisible', 'opacity-0', 'min-h-11')
-    expect(clear).not.toHaveClass('hidden')
+    expect(clear).toHaveAttribute('data-ouro-control', 'button')
+    expect(room).toHaveClass('invisible')
+    expect(room).not.toHaveClass('hidden')
     expect(clear).toBeDisabled()
-    expect(clear).toHaveAttribute('aria-hidden', 'true')
-    expect(clear).toHaveAttribute('data-state', 'reserved')
+    expect(room).toHaveAttribute('aria-hidden', 'true')
+    expect(room).toHaveAttribute('data-state', 'reserved')
     expect(screen.queryByRole('button', { name: 'Clear progress' })).toBeNull()
   })
 
@@ -29,12 +31,13 @@ describe('StepsSectionHeading', () => {
     const onClearProgress = vi.fn()
     render(<StepsSectionHeading hasProgress onClearProgress={onClearProgress} />)
     const clear = screen.getByRole('button', { name: 'Clear progress' })
+    const room = clear.parentElement!
 
-    expect(clear).toHaveClass('visible', 'opacity-100')
-    expect(clear).not.toHaveClass('invisible')
+    expect(room).toHaveClass('visible')
+    expect(room).not.toHaveClass('invisible')
     expect(clear).toBeEnabled()
-    expect(clear).not.toHaveAttribute('aria-hidden')
-    expect(clear).toHaveAttribute('data-state', 'shown')
+    expect(room).not.toHaveAttribute('aria-hidden')
+    expect(room).toHaveAttribute('data-state', 'shown')
 
     await userEvent.click(clear)
     expect(onClearProgress).toHaveBeenCalledTimes(1)
@@ -45,18 +48,5 @@ describe('StepsSectionHeading', () => {
     render(<StepsSectionHeading hasProgress={false} onClearProgress={onClearProgress} />)
     await userEvent.click(screen.getByTestId('clear-progress-button'), { pointerEventsCheck: 0 })
     expect(onClearProgress).not.toHaveBeenCalled()
-  })
-
-  it('fades only when motion is welcome, and keeps the same size in both states', () => {
-    const { rerender } = render(<StepsSectionHeading hasProgress={false} onClearProgress={vi.fn()} />)
-    const reservedClassName = screen.getByTestId('clear-progress-button').className
-    expect(reservedClassName).toContain('motion-safe:transition-[opacity,visibility]')
-    expect(reservedClassName).not.toMatch(/(^|\s)transition/)
-
-    rerender(<StepsSectionHeading hasProgress onClearProgress={vi.fn()} />)
-    const shownClassName = screen.getByTestId('clear-progress-button').className
-    const sizing = (className: string) =>
-      className.split(/\s+/).filter((name) => !/^(visible|invisible|opacity-\d+)$/.test(name))
-    expect(sizing(shownClassName)).toEqual(sizing(reservedClassName))
   })
 })

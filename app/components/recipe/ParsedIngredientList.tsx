@@ -1,5 +1,5 @@
 import { Plus } from 'lucide-react'
-import { Button } from '~/components/button'
+import { Button } from '~/components/ouro/button/button'
 import { ParsedIngredientRow } from './ParsedIngredientRow'
 import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
 

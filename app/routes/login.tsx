@@ -1,22 +1,24 @@
 import type { Route } from "./+types/login";
 import { useRef } from "react";
-import { Form as RouterForm, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
+import { Form as RouterForm, redirect, data, useActionData, useLoaderData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { authenticateUserByEmailOrUsername, authenticateUserByEmailOrUsernameOnD1 } from "~/lib/auth.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { createUserSession, getUserId, sanitizeSessionRedirect } from "~/lib/session.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
-import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/oauth";
+import { OAuthButtonGroup, OAuthError } from "~/components/oauth";
+import { Separator } from "~/components/ouro/separator/separator";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { AuthPage } from "~/components/auth/auth-page";
 import { PasskeySignInButton } from "~/components/auth/PasskeySignInButton";
 import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
+import { useRedirectToWithHash } from "~/hooks/use-redirect-hash";
 
 interface ActionData {
   errors?: {
@@ -123,8 +125,7 @@ export default function Login() {
   const formErrors = useFormErrors(actionData?.errors, undefined, actionData);
   const loaderData = useLoaderData<LoaderData | null>();
   const oauthProviders = loaderData?.oauthProviders ?? [];
-  const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") ?? undefined;
+  const redirectTo = useRedirectToWithHash();
   // The identifier field is uncontrolled so React never writes to it. A
   // controlled `value` would reset anything typed before hydration: after
   // hydration any re-render of the input (a focus change, a router update)
@@ -144,7 +145,7 @@ export default function Login() {
         {oauthProviders.length > 0 && (
           <>
             <OAuthButtonGroup providers={oauthProviders} redirectTo={redirectTo} className="mt-8" />
-            <OAuthDivider className="my-6" />
+            <Separator label="or" className="my-6" data-testid="oauth-separator" />
           </>
         )}
 
@@ -175,7 +176,7 @@ export default function Login() {
         <div className="my-6 border-t border-[var(--sj-border)]" aria-hidden="true" />
         <PasskeySignInButton identifierRef={identifierRef} redirectTo={redirectTo} />
 
-        <Text align="center" className="mt-6">
+        <Text tone="muted" align="center" className="mt-6">
           Don't have an account?{" "}
           <Link href={redirectTo ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}` : "/signup"}>Sign up</Link>
         </Text>

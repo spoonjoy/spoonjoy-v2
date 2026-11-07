@@ -1070,7 +1070,7 @@ function parseWorkerVersionDetail(payload: string, expectedVersionId: string): W
   return { id, tag, createdAt, source: metadata.source };
 }
 
-function selectExactVersionSourceSha(payload: string, versionId: string): string {
+export function selectExactVersionSourceSha(payload: string, versionId: string): string {
   try {
     const candidate = JSON.parse(payload) as unknown;
     if (

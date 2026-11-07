@@ -444,7 +444,7 @@ describe("sweepStaleRunStacks", () => {
       listDatabases: vi.fn(async () => [
         { name: "spoonjoy-qa-run-1-1", uuid: "stale-db", created_at: old },
         { name: "spoonjoy-qa-run-2-1", uuid: "fresh-db", created_at: fresh },
-        { name: "spoonjoy-qa", uuid: "shared", created_at: old },
+        { name: "spoonjoy-qa-2", uuid: "shared", created_at: old },
         { name: "spoonjoy", uuid: "production", created_at: old },
         { name: "spoonjoy-qa-run-x", uuid: "odd", created_at: old },
         { name: "copy-of-spoonjoy-qa-run-4-1", uuid: "not-a-prefix", created_at: old },
@@ -889,6 +889,34 @@ describe("deploy", () => {
     expect(log).toHaveBeenLastCalledWith("Deployed\nwarning\n");
   });
 
+  // After a 10007 the script exists with its Durable Object migrations applied, but Cloudflare's
+  // reads can lag: the next deploy then sends the migrations again and is refused (code 10079).
+  const migrationTagLag = Object.assign(new Error("Command failed: pnpm exec wrangler deploy"), {
+    stdout: "",
+    stderr: "A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2) failed.\n  Actor migration tag precondition failed, got tag '' when expected tag is 'v1_cook_session'. Please make sure the tags match and try again. [code: 10079]\n",
+  });
+
+  it("deploys again when a retry finds the half-made script's migrations already applied (code 10079)", async () => {
+    const exec = vi.fn()
+      .mockRejectedValueOnce(notFound)
+      .mockRejectedValueOnce(migrationTagLag)
+      .mockResolvedValueOnce({ stdout: "Deployed\n", stderr: "" });
+    const sleep = vi.fn(async () => {});
+    const log = vi.fn();
+    expect(await deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log })).toBe(3);
+    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(DEPLOY_RETRY_DELAYS_MS.slice(0, 2));
+    expect(log).toHaveBeenCalledWith(`::warning::Cloudflare had not yet caught up with ${IDENTITY.workerName}'s Durable Object migrations (code 10079); deploying again in 15 s.`);
+    expect(log).toHaveBeenLastCalledWith("Deployed\n");
+  });
+
+  it("does not retry a migration tag refusal on a first deploy", async () => {
+    const exec = vi.fn().mockRejectedValueOnce(migrationTagLag);
+    const sleep = vi.fn(async () => {});
+    await expect(deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log: vi.fn() })).rejects.toBe(migrationTagLag);
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   const internalAuthServerError = Object.assign(new Error("Command failed: pnpm exec wrangler deploy"), {
     stdout: "",
     stderr: "A request to the Cloudflare API (/accounts/x/workers/scripts) failed.\n  Internal authentication error: internal server error [code: 10500]\n",
@@ -910,6 +938,64 @@ describe("deploy", () => {
     expect(log).toHaveBeenCalledWith(internalAuthServerError.stderr);
     expect(log).toHaveBeenCalledWith(`::warning::Cloudflare reported an internal authentication server error (code 10500) while deploying ${IDENTITY.workerName}; deploying again in 5 s.`);
     expect(log).toHaveBeenLastCalledWith("Deployed\n");
+  });
+
+  const failedDeploy = (stderr: string) =>
+    Object.assign(new Error("Command failed: pnpm exec wrangler deploy"), { stdout: "", stderr });
+
+  it.each([
+    [
+      "a lost API connection",
+      "✘ [ERROR] fetch failed\n\n  TypeError: fetch failed\n  [cause]: Error: read ECONNRESET\n",
+      `The connection to Cloudflare's API failed while deploying ${IDENTITY.workerName}`,
+    ],
+    [
+      "an API socket that closed",
+      "✘ [ERROR] other side closed\n  code: 'UND_ERR_SOCKET'\n",
+      `The connection to Cloudflare's API failed while deploying ${IDENTITY.workerName}`,
+    ],
+    [
+      "an API server error page",
+      "✘ [ERROR] Received a malformed response from the API\n\n  <html><head><title>502 Bad Gateway</title></head>\n  PUT /accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2 -> 502 Bad Gateway\n",
+      `Cloudflare's API answered 502 while deploying ${IDENTITY.workerName}`,
+    ],
+  ])("deploys again after %s, and then accepts the migrations the first try applied", async (_case, stderr, reason) => {
+    const exec = vi.fn()
+      .mockRejectedValueOnce(failedDeploy(stderr))
+      .mockRejectedValueOnce(migrationTagLag)
+      .mockResolvedValueOnce({ stdout: "Deployed\n", stderr: "" });
+    const sleep = vi.fn(async () => {});
+    const log = vi.fn();
+
+    expect(await deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log })).toBe(3);
+    expect(log).toHaveBeenCalledWith(`::warning::${reason}; deploying again in 5 s.`);
+    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(DEPLOY_RETRY_DELAYS_MS.slice(0, 2));
+  });
+
+  it.each([
+    ["a build error", "✘ [ERROR] Build failed with 1 error:\n  app/entry.ts:1:7: ERROR: Expected \";\" but found \"x\"\n"],
+    ["a config error", "✘ [ERROR] Processing wrangler.json configuration:\n  - \"env.qa.d1_databases[0]\" bindings should have a string \"database_id\" field.\n"],
+    ["an API error with a JSON answer", "A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2) failed.\n  Script startup exceeded CPU time limit. [code: 10021]\n"],
+    ["an API client error page", "✘ [ERROR] Received a malformed response from the API\n  PUT /accounts/x/workers/scripts/y -> 413 Payload Too Large\n"],
+    ["an API 501", "✘ [ERROR] Received a malformed response from the API\n  PUT /accounts/x/workers/scripts/y -> 501 Not Implemented\n"],
+    ["an app log line that mentions a failed fetch", "✘ [ERROR] Uncaught Error: Image fetch failed\n  at app/lib/safe-image-fetch.server.ts\n"],
+  ])("never deploys again after %s", async (_case, stderr) => {
+    const error = failedDeploy(stderr);
+    const exec = vi.fn().mockRejectedValueOnce(error);
+    const sleep = vi.fn(async () => {});
+
+    await expect(deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log: vi.fn() })).rejects.toBe(error);
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("stops deploying again after a bounded number of lost connections", async () => {
+    const error = failedDeploy("TypeError: fetch failed\n");
+    const exec = vi.fn().mockRejectedValue(error);
+    const sleep = vi.fn(async () => {});
+
+    await expect(deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log: vi.fn() })).rejects.toBe(error);
+    expect(exec).toHaveBeenCalledTimes(DEPLOY_RETRY_DELAYS_MS.length + 1);
   });
 
   it("preserves an exhausted internal server error instead of reporting a successful deploy", async () => {
@@ -1182,6 +1268,7 @@ describe("Journeys workflow", () => {
       "Migrate this run's QA database",
       "Deploy this build to this run's QA Worker",
       "Check this run's QA Worker is live",
+      "Put the sample cover images in QA's photo bucket",
       "Start QA Worker tail",
       "Seed the QA kitchen",
       "Run test suite",
@@ -1205,7 +1292,7 @@ describe("Journeys workflow", () => {
     expect(teardownStep.run).toBe("node scripts/qa-run-scope.mjs teardown");
     expect(report.name).toBe("Report Cloudflare API requests");
     expect(report.if).toBe("always()");
-    expect(report.run).toContain('node scripts/count-cloudflare-requests.mjs summary "$RUNNER_TEMP/cloudflare-requests.log"');
+    expect(report.run).toContain('node scripts/count-cloudflare-requests.mjs summary "$SPOONJOY_CF_REQUEST_LOG"');
   });
 
   it("migrates the run's empty database itself and never exports or copies shared QA", () => {
@@ -1223,19 +1310,22 @@ describe("Journeys workflow", () => {
       "Migrate this run's QA database",
       "Deploy this build to this run's QA Worker",
       "Check this run's QA Worker is live",
+      "Put the sample cover images in QA's photo bucket",
       "Start QA Worker tail",
       "Seed the QA kitchen",
       "Rotate persona passwords",
       "Clean up disposable QA data",
       "Delete this run's QA stack",
     ]);
-    // Every one of those steps also logs its Cloudflare API requests.
+    // Every one of those steps also logs its Cloudflare API requests, to the log the job's first
+    // step points into the container (the job runs in Playwright's image).
     for (const name of withToken) {
-      expect(step(name!).env, name).toMatchObject({
-        NODE_OPTIONS: "--import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs",
-        SPOONJOY_CF_REQUEST_LOG: "${{ runner.temp }}/cloudflare-requests.log",
-      });
+      expect(step(name!).env, name).toMatchObject({ NODE_OPTIONS: "${{ env.SPOONJOY_CF_REQUEST_COUNTER }}" });
     }
+    expect(steps[1].name).toBe("Point the shared paths into the container");
+    expect(steps[1].run).toContain('echo "SPOONJOY_CF_REQUEST_COUNTER=--import $GITHUB_WORKSPACE/scripts/count-cloudflare-requests.mjs"');
+    expect(steps[1].run).toContain('echo "SPOONJOY_CF_REQUEST_LOG=$RUNNER_TEMP/cloudflare-requests.log"');
+    expect(steps[1].run).toContain('echo "SPOONJOY_QA_CREDENTIALS=$GITHUB_WORKSPACE/.journeys/credentials.json"');
   });
 
   it("skips a pull request's suite only on an explicit no from the scope check, which never runs outside pull requests", () => {

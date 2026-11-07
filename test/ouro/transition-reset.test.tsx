@@ -9,8 +9,8 @@ import { act } from "~/lib/ouro/testing/act";
 // unlayered rule that beats Tailwind's layered transition utilities. Ouro UI's dialogs, sheets and
 // buttons animate with those utilities, so the rule leaves out every [data-ouro] root and its
 // descendants, and so does its reduced-motion rule, since Ouro UI honours reduced motion itself.
-// Spoonjoy's own controls inside an Ouro dialog opt out with sj-instant-state where their colours
-// show state (the Save dialog's cookbook toggles do). This runs in real browsers
+// Spoonjoy's own controls inside an Ouro dialog can opt out with sj-instant-state where their
+// colours show state. This runs in real browsers
 // (vitest.ouro.config.ts loads app/styles/tailwind.css), because happy-dom cannot match the selector.
 
 const roots: Root[] = [];

@@ -6,14 +6,18 @@
 //
 // Each persona's test visits every route in turn on the same page/context, recording per
 // visit: the final URL, the document's HTTP status, console errors/warnings, pageerrors,
-// failed requests (excluding third-party analytics/font hosts), axe violations of every
-// impact, a full-page screenshot, and — on the mobile project only — the dock's items. All of
+// failed requests (excluding third-party analytics/font hosts), an accessibility audit in each
+// theme (support/accessibility.ts: axe violations of every impact, the checks axe could not
+// decide, and the pixel contrast measurements that settled or failed them), a full-page
+// screenshot in each theme, and — on the mobile project only — the dock's items. All of
 // a test's records are attached as a single JSON attachment named "summary"; the reporter in
 // support/explore-report.ts merges every test's attachment into one explore-report/summary.json
 // once the whole run ends (see that file for why this isn't written directly here).
 //
-// A visit never fails the test except on a real navigation crash: page.goto() only throws for
-// an actual navigation failure (DNS, timeout, crash), never for a non-2xx response. Unlike the
+// A visit never stops the test except on a real navigation crash: page.goto() only throws for
+// an actual navigation failure (DNS, timeout, crash), never for a non-2xx response. Once every
+// route is recorded, the test fails if any visit had an accessibility failure, so a survey with
+// findings never reads as a pass; each record carries `accessibilityFailures` either way. Unlike the
 // rest of a visit's collection, that call IS wrapped in a try/catch — not to swallow the
 // crash (it is rethrown once this route's record and every prior route's evidence are safely
 // persisted), but so a crash on route N doesn't discard routes 1..N-1's already-collected
@@ -29,7 +33,8 @@ import path from "node:path";
 import type { ConsoleMessage, Locator, Page, Request, Response } from "@playwright/test";
 import { test } from "./support/journey";
 import { personaStorageStatePath } from "./support/personas";
-import { runAxe } from "./support/axe";
+import { auditAccessibility, auditFailures, settle, showColorScheme, type SchemeAudit } from "./support/accessibility";
+import { waitForHydration } from "./support/navigation";
 import { redactUrl, redactUrlsInText } from "./support/redact";
 import { SUMMARY_ATTACHMENT_NAME, SUMMARY_OUTPUT_PATH, type VisitRecord } from "./support/explore-report";
 
@@ -78,12 +83,6 @@ interface FailedRequestRecord {
   url: string;
   status?: number;
   failure?: string;
-}
-
-interface AxeViolationRecord {
-  id: string;
-  impact: string | null;
-  targets: string[];
 }
 
 type DockItemRecord = { name: string; href: string | null } | { name: string; control: "button" };
@@ -157,25 +156,25 @@ async function runExploreTest(page: Page, personaName: string): Promise<void> {
       page.on("response", onResponse);
 
       try {
-        // The only call in this file allowed to throw past its own visit: a rejection here is
-        // a real navigation crash (DNS, timeout, target crashed), never just a non-2xx
-        // response, so it must still fail the test — see the catch block below.
+        // A rejection here is a real navigation crash (DNS, timeout, target crashed), never just a
+        // non-2xx response, so it must still fail the test (see the catch block below). The
+        // hydration wait, the settle and the audit below can throw too, and fail it the same way.
         const response = await page.goto(route, { waitUntil: "load" });
-        // Gives late console/pageerror/network events (e.g. deferred scripts) a moment to
-        // arrive before this visit's listeners are detached below.
-        await page.waitForTimeout(300);
+        // Hydrated, fonts and images in view loaded and animations finished, so late console,
+        // pageerror and network events have arrived and the audit sees the finished page.
+        await waitForHydration(page);
+        await settle(page);
 
-        const axeResults = await runAxe(page);
+        const audits: SchemeAudit[] = await auditAccessibility(page);
         const isMobile = device === MOBILE_PROJECT_NAME;
-        const screenshot = await page.screenshot({ fullPage: true });
-        const attachmentName = `${personaName}--${device}--${slug(route)}`;
-        await test.info().attach(attachmentName, { body: screenshot, contentType: "image/png" });
-
-        const axeViolations: AxeViolationRecord[] = axeResults.violations.map((violation) => ({
-          id: violation.id,
-          impact: violation.impact ?? null,
-          targets: violation.nodes.map((node) => node.target.join(" ")),
-        }));
+        const screenshots: Record<string, string> = {};
+        for (const audit of audits) {
+          await showColorScheme(page, audit.scheme);
+          const attachmentName = `${personaName}--${device}--${slug(route)}--${audit.scheme}`;
+          await test.info().attach(attachmentName, { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+          screenshots[audit.scheme] = attachmentName;
+        }
+        await showColorScheme(page, audits[0].scheme);
 
         records.push({
           route,
@@ -187,8 +186,9 @@ async function runExploreTest(page: Page, personaName: string): Promise<void> {
           consoleWarnings,
           pageErrors,
           failedRequests,
-          axeViolations,
-          screenshot: attachmentName,
+          accessibility: audits,
+          accessibilityFailures: audits.flatMap(auditFailures),
+          screenshots,
           ...(isMobile ? { dockItems: await collectDockItems(page) } : {}),
         });
       } catch (error) {
@@ -220,6 +220,11 @@ async function runExploreTest(page: Page, personaName: string): Promise<void> {
         // explore-report/summary.json once every persona x device test has finished.
         writePartialFile(records, personaName, device);
       }
+    }
+    const failing = records.filter((record) => Array.isArray(record.accessibilityFailures) && record.accessibilityFailures.length > 0);
+    if (failing.length > 0) {
+      const lines = failing.flatMap((record) => (record.accessibilityFailures as string[]).map((line) => `  ${record.route}: ${line}`));
+      throw new Error(`Accessibility failures on ${failing.length} of ${records.length} routes:\n${lines.join("\n")}`);
     }
   } finally {
     // Runs whether the loop above finished cleanly or a route rethrew a crash, so the

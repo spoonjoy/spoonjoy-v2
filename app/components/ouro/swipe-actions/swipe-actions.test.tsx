@@ -69,8 +69,12 @@ function row(spies = calls(), props: Partial<SwipeActionsProps> = {}) {
   );
 }
 
-/** Rounds to hundredths of a px: a style serializes fewer decimals than a measured width has. */
-const hundredths = (value: number) => Math.round(value * 100) / 100;
+/**
+ * Rounds to hundredths of a px: a style serializes fewer decimals than a measured width has. Halves
+ * round away from zero, so an offset of -147.625 and a width of 147.625 agree (Math.round takes
+ * -14762.5 to -14762), as they did not with the fonts of Playwright's image.
+ */
+const hundredths = (value: number) => (Math.sign(value) * Math.round(Math.abs(value) * 100)) / 100;
 const track = (element: HTMLElement) => element.querySelector<HTMLElement>("[data-ouro-swipe-actions-track]")!;
 const content = (element: HTMLElement) => element.querySelector<HTMLElement>("[data-ouro-swipe-actions-content]")!;
 const strip = (element: HTMLElement, side: "leading" | "trailing") => element.querySelector<HTMLElement>(`[data-ouro-swipe-actions-side="${side}"]`);

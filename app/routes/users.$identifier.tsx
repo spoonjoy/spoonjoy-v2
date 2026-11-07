@@ -1,13 +1,16 @@
+import { Card } from "~/components/ouro/card/card";
 import type { Route } from "./+types/users.$identifier";
 import { chefDisplayName } from "~/lib/username";
 import { Form, redirect, useLoaderData } from "react-router";
 import { Settings } from "lucide-react";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
+import { hidesChef, loadRequestViewerHides, withoutHidden } from "~/lib/moderation.server";
+import { ReportOrBlockButton } from "~/components/moderation/ReportOrBlockButton";
 import { Avatar } from "~/components/ouro/avatar/avatar";
-import { Button } from "~/components/button";
-import { Subheading } from "~/components/heading";
-import { Text } from "~/components/text";
+import { Button } from "~/components/ouro/button/button";
+import { Heading } from "~/components/ouro/text/heading";
+import { Text } from "~/components/ouro/text/text";
 import { Link } from "~/components/ouro/link/link";
 import { RecipeGrid } from "~/components/pantry/RecipeGrid";
 import { CookbookCard } from "~/components/pantry/CookbookCard";
@@ -18,10 +21,10 @@ import { requestD1 } from "~/lib/d1-read.server";
 import { readChefProfileFromD1, readChefProfileWithPrisma } from "~/lib/chef-profile-reads.server";
 import { useAppendingList } from "~/hooks/use-appending-list";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
-import { LocalDate } from "~/components/local-date";
+import { LocalDate } from "~/components/ouro/local-date/local-date";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
-import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 
 type RecentSpoonItem = {
   id: string;
@@ -93,12 +96,19 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     throw new Response("User not found", { status: 404 });
   }
 
+  // A chef the viewer blocked or reported is hidden from them, as if there were no such chef.
+  const hides = await loadRequestViewerHides(context, currentUserId);
+  if (hidesChef(hides, profileUser.id)) {
+    throw new Response("User not found", { status: 404 });
+  }
+
   if (matchedBy === "id") {
     return redirect(`/users/${profileUser.username}${after ? `?after=${encodeURIComponent(after)}` : ""}`);
   }
 
-  const recipes = recipeRows.slice(0, PROFILE_RECIPE_LIMIT);
-  const nextCursor = recipeRows.length > PROFILE_RECIPE_LIMIT ? recipes[recipes.length - 1]!.id : null;
+  const pageRows = recipeRows.slice(0, PROFILE_RECIPE_LIMIT);
+  const nextCursor = recipeRows.length > PROFILE_RECIPE_LIMIT ? pageRows[pageRows.length - 1]!.id : null;
+  const recipes = withoutHidden(hides, pageRows, (recipe) => ({ type: "recipe", id: recipe.id, chefId: profileUser.id }));
 
   const recipesWithCover = recipes.map(({ covers, ...rest }) => {
     const coverDisplay = getRecipeCoverDisplay(rest, covers);
@@ -109,7 +119,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     };
   });
 
-  const cookbooksWithCover = cookbooks.map(({ recipes: cookbookRecipes, ...cookbook }) => ({
+  const cookbooksWithCover = withoutHidden(hides, cookbooks, (cookbook) => ({ type: "cookbook", id: cookbook.id, chefId: profileUser.id })).map(({ recipes: cookbookRecipes, ...cookbook }) => ({
     ...cookbook,
     recipes: cookbookRecipes.map((item) => ({
       ...item,
@@ -121,7 +131,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     })),
   }));
 
-  const recentSpoons = recentSpoonsRaw.map((spoon) => {
+  const recentSpoons = withoutHidden(hides, recentSpoonsRaw, (spoon) => ({ type: "spoon", id: spoon.id, chefId: spoon.chef.id })).map((spoon) => {
     const coverDisplay = getRecipeCoverDisplay(spoon.recipe, spoon.recipe.covers);
     return {
       id: spoon.id,
@@ -166,15 +176,13 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     canonicalUrl,
     ogImageUrl,
     isOwner: currentUserId === profileUser.id,
+    isAuthenticated: currentUserId !== null,
     recipes: recipesWithCover,
     recipeCount,
     after,
     nextCursor,
     cookbooks: cookbooksWithCover,
     recentSpoons,
-    // What the recent cooks' relative times ("3 hr ago") are measured from, so the server's
-    // render and the browser's hydration agree.
-    renderedAt: Date.now(),
     fellowChefsCount,
     kitchenVisitorsCount,
   };
@@ -198,13 +206,13 @@ export default function UserProfile() {
   const {
     profile,
     isOwner,
+    isAuthenticated = false,
     recipes: firstPage,
     recipeCount = firstPage.length,
     after = null,
     nextCursor = null,
     cookbooks,
     recentSpoons = EMPTY_SPOONS,
-    renderedAt,
     fellowChefsCount = 0,
     kitchenVisitorsCount = 0,
   } = useLoaderData<typeof loader>();
@@ -222,7 +230,7 @@ export default function UserProfile() {
     <CookbookPage>
       <section className="mx-auto max-w-6xl">
         <header className="sj-rule-block flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-4">
             <Avatar
               name={chefDisplayName(profile.username)}
               src={resolveChefAvatarUrl(profile.photoUrl)}
@@ -230,13 +238,14 @@ export default function UserProfile() {
               initials={profile.username.charAt(0).toUpperCase()}
               size="2xl"
             />
-            <div>
+            <div className="min-w-0">
               <p className="sj-eyebrow">Chef profile</p>
-              <h1 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-2 text-5xl/12 tracking-normal">
+              {/* Usernames are one long word, so let them break anywhere instead of running off a phone screen. */}
+              <h1 data-testid="chef-profile-name" className="font-sj-display mt-2 text-3xl/9 font-semibold tracking-normal text-[var(--sj-ink)] [overflow-wrap:anywhere] sm:text-5xl/12">
                 {chefDisplayName(profile.username)}
               </h1>
-              <Text size="sm" className="mt-1">
-                Joined <LocalDate value={profile.joinedAt} unit="month" /> • {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
+              <Text tone="muted" size="sm" className="mt-1">
+                Joined <LocalDate value={profile.joinedAt} format="month" /> • {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
               <p className="m-0 mt-2 text-sm">
                 <Link href={`/?chef=${profile.username}`} className="inline-flex min-h-11 items-center">
@@ -256,13 +265,24 @@ export default function UserProfile() {
 
           {isOwner ? (
             <div className="flex items-center gap-2">
-              <Button href="/account/settings" plain aria-label="Open settings">
+              <Button href="/account/settings" variant="outline" tone="secondary" aria-label="Open settings">
                 <Settings data-slot="icon" className="size-4" />
                 Settings
               </Button>
               <Form method="post" action="/logout" onSubmit={clearCookProgressCache}>
-                <Button type="submit" variant="destructive">Log out</Button>
+                <Button type="submit" variant="soft" tone="destructive">Log out</Button>
               </Form>
+            </div>
+          ) : isAuthenticated ? (
+            <div className="flex items-center gap-2">
+              <ReportOrBlockButton
+                targetType="chef"
+                targetId={profile.id}
+                chefId={profile.id}
+                chefUsername={profile.username}
+                targetLabel={`@${profile.username}`}
+                triggerTestId="profile-report-action"
+              />
             </div>
           ) : null}
         </header>
@@ -301,13 +321,13 @@ export default function UserProfile() {
               region instead of dropping to a plain <div>. */}
           <section aria-labelledby="chef-cookbooks-heading">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <Subheading id="chef-cookbooks-heading" level={2} size="xl">Cookbooks</Subheading>
+              <Heading id="chef-cookbooks-heading" level={2} size="xl">Cookbooks</Heading>
               <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs uppercase tracking-[0.14em]">{cookbooks.length} total</p>
             </div>
 
             {cookbooks.length === 0 ? (
               <div className="border-y border-dashed border-[var(--sj-border-strong)] py-5">
-                <Text>
+                <Text tone="muted">
                   {isOwner ? "No cookbooks yet." : `${chefDisplayName(profile.username)} has not shared any cookbooks yet.`}
                 </Text>
               </div>
@@ -331,11 +351,11 @@ export default function UserProfile() {
           </section>
         </div>
 
-        <SettingsPanel title="Recent cooks">
+        <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" title="Recent cooks">
           <div className="mt-4">
-            <SpoonsStrip spoons={recentSpoons} showRecipe now={renderedAt} />
+            <SpoonsStrip spoons={recentSpoons} showRecipe />
           </div>
-        </SettingsPanel>
+        </Card>
 
       </section>
     </CookbookPage>

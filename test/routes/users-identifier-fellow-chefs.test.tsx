@@ -77,7 +77,7 @@ describe("/users/:identifier/fellow-chefs route", () => {
       expect(data.total).toBe(1);
       expect(data.rows).toHaveLength(1);
       expect(data.rows[0].username).toBe(other.username);
-      expect(data.rows[0].latestInteractionLabel).toMatch(/ago|just now/);
+      expect(data.rows[0]).not.toHaveProperty("latestInteractionLabel");
       expect(data.page).toBe(1);
     });
 
@@ -290,7 +290,6 @@ describe("/users/:identifier/fellow-chefs route", () => {
                 latestInteractionAt: new Date(
                   Date.now() - 60 * 1000,
                 ).toISOString(),
-                latestInteractionLabel: "1 minute ago",
               },
             ],
             total: 1,
@@ -307,7 +306,7 @@ describe("/users/:identifier/fellow-chefs route", () => {
         );
       });
       expect(screen.getByText("2 spoons")).toBeInTheDocument();
-      expect(screen.getByText("1 minute ago")).toBeInTheDocument();
+      expect(screen.getByText("1 minute ago", { selector: "time" })).toBeInTheDocument();
     });
 
     it("renders next/prev pagination controls when total exceeds one page", async () => {
@@ -326,7 +325,6 @@ describe("/users/:identifier/fellow-chefs route", () => {
               latestInteractionAt: new Date(
                 Date.now() - i * 60_000,
               ).toISOString(),
-              latestInteractionLabel: `${i} minutes ago`,
             })),
             total: 75,
             page: 1,

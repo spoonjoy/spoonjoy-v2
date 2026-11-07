@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { faker } from "@faker-js/faker";
@@ -92,9 +92,6 @@ describe("Users $identifier route — recent spoons section", () => {
     expect(Array.isArray(data.recentSpoons)).toBe(true);
     expect(data.recentSpoons).toHaveLength(1);
     expect(data.recentSpoons[0].recipe.id).toBe(recipeId);
-    // The cooks' relative times are measured from this, on the server and in the browser alike.
-    expect(data.renderedAt).toBeGreaterThanOrEqual(Date.parse(data.recentSpoons[0].cookedAt));
-    expect(data.renderedAt).toBeLessThanOrEqual(Date.now());
     expect(data.recentSpoons[0].coverImageUrl).toBeNull();
   });
 
@@ -164,7 +161,8 @@ describe("Users $identifier route — recent spoons section", () => {
     expect(recipeLink).toHaveAttribute("href", "/recipes/r1");
   });
 
-  it("measures each recent cook's time from the loader's render time, not the browser's clock", async () => {
+  it("says how long ago each recent cook was, in a <time> carrying the exact instant", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2025-05-01T15:00:30Z"));
     const mockData = {
       profile: { id: "u1", username: "chefuser", photoUrl: null, joinedAt: "2025-05-15T12:00:00.000Z" },
       isOwner: false,
@@ -182,7 +180,6 @@ describe("Users $identifier route — recent spoons section", () => {
           coverImageUrl: null,
         },
       ],
-      renderedAt: Date.parse("2025-05-01T15:00:30Z"),
     };
     const Stub = createTestRoutesStub([
       { path: "/users/:identifier", Component: UserProfile, loader: () => mockData },
@@ -191,7 +188,8 @@ describe("Users $identifier route — recent spoons section", () => {
     await waitFor(() => {
       expect(screen.getByText(/recent cooks/i)).toBeInTheDocument();
     });
-    const times = screen.getAllByText("3 hr ago");
+    const times = screen.getAllByText("3 hours ago");
+    clock.mockRestore();
     expect(times.length).toBeGreaterThan(0);
     for (const time of times) {
       expect(time).toHaveAttribute("datetime", "2025-05-01T12:00:00.000Z");

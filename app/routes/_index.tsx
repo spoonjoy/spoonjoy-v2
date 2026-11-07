@@ -9,10 +9,14 @@ import {
   type KitchenUserWhere,
 } from "~/lib/kitchen-home.server";
 import { getUserId } from "~/lib/session.server";
-import { Button } from "~/components/button";
+import { hidesChef, withoutHidden } from "~/lib/moderation.server";
+import { Button } from "~/components/ouro/button/button";
 import { KitchenHome, absoluteKitchenUrl } from "~/components/cookbook/KitchenHome";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { HERO_IMAGE_PROPS } from "~/lib/image-loading";
+import { cookingNowEntry } from "~/lib/cooking-now-entries.server";
+import type { CookingNowEntry } from "~/lib/cooking-now";
+import { CookingNowStrip, LocalCookingNow } from "~/components/cooking-now/CookingNow";
 
 const LANDING_FOOD_PHOTOS = [
   {
@@ -78,6 +82,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       kitchenUser: null,
       recipes: [],
       cookbooks: [],
+      cookingNow: [] as CookingNowEntry[],
+      renderedAt: Date.now(),
     };
   }
 
@@ -90,8 +96,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // On the Worker the page's reads go to D1 as one batch; Prisma is only the fallback
   // where there is no binding (unit tests, local scripts).
   const d1 = requestD1(context);
-  const readInput = { viewerId: currentUserId, kitchenUserWhere };
-  const { viewer, kitchenUser, recipes, cookbooks } = d1
+  const renderedAt = Date.now();
+  const readInput = { viewerId: currentUserId, kitchenUserWhere, now: renderedAt };
+  const { viewer, kitchenUser, recipes, cookbooks, cookingNow, hides } = d1
     ? await readKitchenHomeFromD1(d1, readInput)
     : await readKitchenHomeWithPrisma(await getRequestDb(context), readInput);
 
@@ -107,10 +114,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       kitchenUser: null,
       recipes: [],
       cookbooks: [],
+      cookingNow: [] as CookingNowEntry[],
+      renderedAt: Date.now(),
     };
   }
 
-  const recipesWithCover = recipes.map(({ covers, ...rest }) => {
+  // Another chef's kitchen the viewer blocked or reported is hidden, as if there were none.
+  if (hidesChef(hides, kitchenUser.id)) {
+    throw new Response("Kitchen not found", { status: 404 });
+  }
+
+  const recipesWithCover = withoutHidden(hides, recipes, (recipe) => ({ type: "recipe", id: recipe.id, chefId: kitchenUser.id })).map(({ covers, ...rest }) => {
     const coverDisplay = getRecipeCoverDisplay(rest, covers);
     return {
       ...rest,
@@ -119,7 +133,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     };
   });
 
-  const cookbooksWithCover = cookbooks.map(({ recipes: cookbookRecipes, ...cookbook }) => ({
+  const cookbooksWithCover = withoutHidden(hides, cookbooks, (cookbook) => ({ type: "cookbook", id: cookbook.id, chefId: kitchenUser.id })).map(({ recipes: cookbookRecipes, ...cookbook }) => ({
     ...cookbook,
     recipes: cookbookRecipes.map((item) => ({
       ...item,
@@ -131,50 +145,70 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     })),
   }));
 
+  const isOwner = viewer?.id === kitchenUser.id;
   return {
     tab,
     viewer,
     kitchenUser,
-    isOwner: viewer?.id === kitchenUser.id,
+    isOwner,
     recipes: recipesWithCover,
     cookbooks: cookbooksWithCover,
+    // The cook's own recipes in progress; a visitor to another kitchen never sees them.
+    cookingNow: cookingNow.map(cookingNowEntry),
+    renderedAt,
   };
 }
 
 export default function Index() {
-  const { kitchenUser, isOwner, recipes, cookbooks } = useLoaderData<typeof loader>();
+  const { kitchenUser, isOwner, recipes, cookbooks, cookingNow = [], renderedAt } = useLoaderData<typeof loader>();
 
   if (!kitchenUser) {
     return (
       <div className="sj-page">
-        <section className="relative min-h-[clamp(24rem,56svh,42rem)] sm:min-h-[clamp(32rem,70svh,42rem)] overflow-hidden">
+        {/* A phone held sideways: the photo fills the screen below the 3.5rem header, and the bottom padding
+            keeps the text and actions above the tab bar (its 4rem height, the gap below it and a 1rem gap
+            above it, as html's scroll-padding-bottom). */}
+        <section className="relative min-h-[clamp(24rem,56svh,42rem)] tall-phone:min-h-[clamp(24rem,70svh,42rem)] sm:min-h-[clamp(32rem,70svh,56rem)] sideways-phone:min-h-[calc(100svh-3.5rem)] overflow-hidden">
           <img
             src={LANDING_FOOD_PHOTOS[2].src}
             alt={LANDING_FOOD_PHOTOS[2].alt}
             {...HERO_IMAGE_PROPS}
             className="absolute inset-0 h-full w-full object-cover"
           />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(34,32,28,0.82),rgba(34,32,28,0.34)_58%,rgba(34,32,28,0.10)),linear-gradient(0deg,rgba(34,32,28,0.56),transparent_42%)]" />
-          <div className="relative z-10 flex min-h-[clamp(24rem,56svh,42rem)] sm:min-h-[clamp(32rem,70svh,42rem)] flex-col justify-end px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-12 sm:pt-20 sm:px-8 sm:pb-20 lg:px-12 lg:pb-24">
-            <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.2em] text-[var(--sj-on-photo-muted)]">
+          <div className="sj-landing-hero-shade absolute inset-0" />
+          <div className="relative z-10 flex min-h-[clamp(24rem,56svh,42rem)] tall-phone:min-h-[clamp(24rem,70svh,42rem)] sm:min-h-[clamp(32rem,70svh,56rem)] sideways-phone:min-h-[calc(100svh-3.5rem)] flex-col justify-end px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-8 sm:pt-20 sm:px-8 sm:pb-20 lg:px-12 lg:pb-24 sideways-phone:pt-4 sideways-phone:pb-[calc(max(1rem,env(safe-area-inset-bottom))+5rem)]">
+            <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.2em] text-[var(--sj-on-photo)]">
               The Recipe App
             </p>
-            <h1 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-5 max-w-4xl text-4xl/10 text-[var(--sj-on-photo)] sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20">
+            <h1 className="font-sj-display mt-3 max-w-4xl text-[2rem]/[2.375rem] font-semibold tracking-normal text-[var(--sj-on-photo)] tall-phone:mt-5 tall-phone:text-4xl/10 sm:mt-5 sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20 sideways-phone:mt-2 sideways-phone:text-[2rem]/[2.375rem] low-sideways-phone:text-[1.5rem]/[1.875rem]">
               Your food should look as good as it tastes.
             </h1>
-            <p className="text-base/6 text-[var(--sj-ink-soft)] mt-5 max-w-2xl text-lg/8 text-[var(--sj-on-photo-muted)]">
-              Spoonjoy is a photo-first kitchen for the recipes you actually cook, the notes you learn by doing, and the cookbooks that grow out of real meals.
+            {/* A short, narrow or sideways phone shows the first clause only, so the actions fit on the first
+                screen above the tab bar (e2e/journeys/landing-first-screen.mobile.journey.ts). */}
+            <p className="mt-3 max-w-2xl text-base/6 text-[var(--sj-on-photo)] tall-phone:mt-5 sm:mt-5 sm:text-lg/8 sideways-phone:mt-2 sideways-phone:text-base/6">
+              Spoonjoy is a photo-first kitchen for the recipes you actually cook
+              <span className="hidden tall-phone:inline sm:inline sideways-phone:hidden">, the notes you learn by doing, and the cookbooks that grow out of real meals</span>.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button href="/signup">Start Your Kitchen</Button>
-              <Button href="/login" plain>Log in</Button>
-              <Button href="/search" plain>
+            {/* Photo-white labels, borders and focus rings for the outline buttons, and a light amber main
+                action, so every button's edge shows on the shaded photo. */}
+            {/* On a phone the main action takes the full width and the other two share a row; held sideways,
+                all three share one row. */}
+            <div className="sj-on-charcoal sj-landing-hero-actions mt-6 grid grid-cols-2 gap-3 tall-phone:mt-8 sm:mt-8 sm:flex sm:flex-row sideways-phone:mt-4 sideways-phone:flex sideways-phone:flex-wrap">
+              <Button href="/signup" className="col-span-2">Start Your Kitchen</Button>
+              <Button href="/login" variant="outline" tone="secondary">Log in</Button>
+              <Button href="/search" variant="outline" tone="secondary">
                 <SearchIcon data-slot="icon" className="size-4" aria-hidden="true" />
                 Search Recipes
               </Button>
             </div>
           </div>
         </section>
+
+        {/* Signed out, the recipes in progress live in this browser, so they appear after hydration. They
+            follow the hero, so the hero does not jump down once they appear and its actions stay on the
+            first screen (e2e/journeys/landing-first-screen.mobile.journey.ts). The desktop "Cooking"
+            pill's /#cooking-now link brings them into view. */}
+        <LocalCookingNow />
 
         <section className="mx-auto grid max-w-6xl gap-6 px-5 py-10 sm:grid-cols-3 sm:px-8 lg:px-12">
           {[
@@ -192,5 +226,15 @@ export default function Index() {
     );
   }
 
-  return <KitchenHome kitchenUser={kitchenUser} isOwner={isOwner} recipes={recipes} cookbooks={cookbooks} />;
+  return (
+    <KitchenHome
+      kitchenUser={kitchenUser}
+      isOwner={isOwner}
+      recipes={recipes}
+      cookbooks={cookbooks}
+      cookingNow={
+        cookingNow.length > 0 ? <CookingNowStrip entries={cookingNow} now={renderedAt} /> : null
+      }
+    />
+  );
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { MobileNav } from "~/components/navigation/mobile-nav";
+import { MobileNav, MobileNavInstallPrompt, MobileNavToaster } from "~/components/navigation/mobile-nav";
 import { DockContext } from "~/components/navigation";
 
 function renderAt(path: string, isAuthenticated = true) {
@@ -33,7 +33,7 @@ describe("MobileNav signed in", () => {
   it("is a phone-only bar of four labeled tabs plus Search in its own circle", () => {
     renderAt("/");
 
-    expect(tabBar()).toHaveClass("lg:hidden");
+    expect(tabBar().closest('[data-ouro="tab-bar"]')).toHaveClass("lg:hidden", "sj-tab-bar");
     expect(tabNames()).toEqual(["Kitchen", "Recipes", "Cookbooks", "Shopping", "Search"]);
     expect(screen.getByRole("link", { name: "Kitchen" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/my-recipes");
@@ -107,11 +107,10 @@ describe("MobileNav signed in", () => {
     expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
   });
 
-  it("draws the bar and the search circle on solid charcoal", () => {
+  it("draws the bar and the search circle on one solid surface, which tailwind.css turns charcoal", () => {
     renderAt("/");
-    expect(within(tabBar()).getByRole("list")).toHaveClass("bg-[var(--sj-photo-charcoal)]");
-    expect(screen.getByRole("link", { name: "Search" })).toHaveClass("bg-[var(--sj-photo-charcoal)]");
     for (const element of [within(tabBar()).getByRole("list"), screen.getByRole("link", { name: "Search" })]) {
+      expect(element).toHaveClass("bg-popover");
       expect(element.className).not.toMatch(/backdrop-blur|\/9\d\b/);
     }
   });
@@ -132,5 +131,69 @@ describe("MobileNav signed out", () => {
       expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
       unmount();
     }
+  });
+});
+
+describe("MobileNav Cooking now count", () => {
+  it("carries the count on the home tab, hidden from screen readers with the icon", () => {
+    render(
+      <MemoryRouter initialEntries={["/recipes"]}>
+        <MobileNav isAuthenticated cookingNowCount={2} />
+      </MemoryRouter>,
+    );
+    const kitchen = within(tabBar()).getByRole("link", { name: "Kitchen" });
+    expect(within(kitchen).getByTestId("tab-cooking-now-count")).toHaveTextContent("2");
+    expect(within(kitchen).getByTestId("tab-cooking-now-count").closest("[aria-hidden='true']")).not.toBeNull();
+    expect(screen.getAllByTestId("tab-cooking-now-count")).toHaveLength(1);
+  });
+
+  it("shows no count with nothing in progress", () => {
+    renderAt("/recipes");
+    expect(screen.queryByTestId("tab-cooking-now-count")).toBeNull();
+  });
+});
+
+describe("MobileNavToaster", () => {
+  it("raises HX's toasts above the tab bar on phones only while the tab bar shows", () => {
+    const toaster = (path: string) => {
+      const { unmount } = render(
+        <MemoryRouter initialEntries={[path]}>
+          <MobileNavToaster isAuthenticated />
+        </MemoryRouter>,
+      );
+      const viewport = screen.getByRole("region", { name: "Notifications", hidden: true });
+      const raised = viewport.classList.contains("max-lg:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)]");
+      unmount();
+      return raised;
+    };
+    expect(toaster("/")).toBe(true);
+    expect(toaster("/recipes/new")).toBe(false);
+  });
+});
+
+describe("MobileNavInstallPrompt", () => {
+  it("offers the install only on pages with the tab bar, never over sign-in, sign-up or a form", async () => {
+    window.dispatchEvent(Object.assign(new Event("beforeinstallprompt", { cancelable: true }), {
+      prompt: () => Promise.resolve(),
+      userChoice: Promise.resolve({ outcome: "dismissed" }),
+    }));
+    const offered = async (path: string, isAuthenticated: boolean) => {
+      const { unmount } = render(
+        <MemoryRouter initialEntries={[path]}>
+          <MobileNavInstallPrompt isAuthenticated={isAuthenticated} />
+        </MemoryRouter>,
+      );
+      await act(async () => {});
+      const shown = screen.queryByRole("heading", { name: "Install Spoonjoy" }) !== null;
+      unmount();
+      return shown;
+    };
+    expect(await offered("/", false)).toBe(true);
+    expect(await offered("/recipes", false)).toBe(true);
+    expect(await offered("/", true)).toBe(true);
+    expect(await offered("/login", false)).toBe(false);
+    expect(await offered("/signup", false)).toBe(false);
+    expect(await offered("/logout", true)).toBe(false);
+    expect(await offered("/recipes/new", true)).toBe(false);
   });
 });

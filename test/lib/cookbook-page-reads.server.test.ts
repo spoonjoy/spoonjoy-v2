@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { Request as UndiciRequest } from "undici";
+import { NO_HIDES } from "~/lib/moderation.server";
 import { getLocalDb } from "~/lib/db.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -210,7 +211,7 @@ describe("cookbook page reads", () => {
 
   it("returns no cookbook when the id is unknown", async () => {
     const input = { cookbookId: "missing-cookbook", viewerId: null };
-    expect(await readCookbookPageFromD1(d1.binding, input)).toEqual({ cookbook: null, availableRecipes: [] });
+    expect(await readCookbookPageFromD1(d1.binding, input)).toEqual({ cookbook: null, availableRecipes: [], hides: NO_HIDES });
   });
 
   it("fails closed on a D1 error or a malformed row", async () => {
@@ -223,12 +224,12 @@ describe("cookbook page reads", () => {
       batch: async () => rows.map((results) => ({ results })),
     });
     const cookbook = { id: "book", title: "Book", authorId: "u", createdAt: 1, updatedAt: 1, author_id: "u", author_username: "chef" };
-    await expect(readCookbookPageFromD1(rowsFor([[{ ...cookbook, author_username: 4 }], [], []]) as never, input))
+    await expect(readCookbookPageFromD1(rowsFor([[{ ...cookbook, author_username: 4 }], [], [], []]) as never, input))
       .rejects.toThrow("D1 column author_username");
-    await expect(readCookbookPageFromD1(rowsFor([[cookbook], [], [{ id: "r", title: null }]]) as never, input))
+    await expect(readCookbookPageFromD1(rowsFor([[cookbook], [], [{ id: "r", title: null }], []]) as never, input))
       .rejects.toThrow("D1 column title");
-    await expect(readCookbookPageFromD1(rowsFor([[cookbook], []]) as never, input))
-      .rejects.toThrow("D1 batch returned 2 results for 3 statements");
+    await expect(readCookbookPageFromD1(rowsFor([[cookbook], [], []]) as never, input))
+      .rejects.toThrow("D1 batch returned 3 results for 4 statements");
   });
 });
 

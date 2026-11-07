@@ -1,33 +1,11 @@
-import clsx from 'clsx'
 import { Pencil, Trash2, Check, X } from 'lucide-react'
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { Button } from '~/components/ouro/button/button'
 import { Field } from '~/components/ouro/field/field'
 import { FieldControl } from '~/components/ouro/field/field-parts'
 import { TextField } from '~/components/ouro/text-field/text-field'
 import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
 import { formatQuantity } from '~/lib/quantity'
-
-const iconButtonBaseStyles = [
-  'font-sj-ui relative isolate inline-flex items-center justify-center rounded-[var(--sj-radius-control)] border text-sm/6 font-semibold transition',
-  'min-h-11 min-w-11', // 44px minimum touch target
-  'focus:outline-2 focus:outline-offset-2 focus:outline-[var(--sj-brass)]',
-  'disabled:opacity-50 disabled:cursor-not-allowed',
-]
-
-const iconButtonPlainStyles = [
-  'border-transparent',
-  'text-[var(--sj-ink)] hover:bg-[var(--sj-flour)]',
-]
-
-const iconButtonActionStyles = [
-  'border-transparent',
-  'text-[var(--sj-action)] hover:bg-[color-mix(in_srgb,var(--sj-action)_10%,transparent)]',
-]
-
-const iconButtonRedStyles = [
-  'border-transparent',
-  'text-[var(--sj-tomato)] hover:bg-[color-mix(in_srgb,var(--sj-tomato)_10%,transparent)]',
-]
 
 interface ValidationErrors {
   quantity?: string
@@ -162,7 +140,7 @@ export function ParsedIngredientRow({
     const showIngredientNameError = showValidation && validationErrors.ingredientName
 
     return (
-      <li className="py-2" onKeyDown={handleKeyDown}>
+      <li className="py-2">
         <div className="flex flex-col sm:flex-row sm:items-start gap-2">
           <div className="flex-1 grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr] gap-2">
             {/* Ouro UI's TextField has no number type, so the quantity is its Field and control. */}
@@ -172,6 +150,7 @@ export function ParsedIngredientRow({
                 type="number"
                 value={editQuantity}
                 onChange={(e) => setEditQuantity(e.target.value)}
+                onKeyDown={handleKeyDown}
                 step="any"
                 min="0.001"
               />
@@ -182,6 +161,7 @@ export function ParsedIngredientRow({
               required
               value={editUnit}
               onChange={(e) => setEditUnit(e.target.value)}
+              onKeyDown={handleKeyDown}
               error={showUnitError || undefined}
             />
             <TextField
@@ -190,26 +170,17 @@ export function ParsedIngredientRow({
               required
               value={editIngredientName}
               onChange={(e) => setEditIngredientName(e.target.value)}
+              onKeyDown={handleKeyDown}
               error={showIngredientNameError || undefined}
             />
           </div>
           <div className="flex gap-1 sm:pt-0.5">
-            <button
-              type="button"
-              onClick={handleSave}
-              className={clsx(iconButtonBaseStyles, iconButtonActionStyles, 'cursor-default')}
-              aria-label="Save"
-            >
-              <Check className="size-4" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={handleCancel}
-              className={clsx(iconButtonBaseStyles, iconButtonPlainStyles, 'cursor-default')}
-              aria-label="Cancel"
-            >
-              <X className="size-4" aria-hidden="true" />
-            </button>
+            <Button type="button" onClick={handleSave} aria-label="Save">
+              <Check />
+            </Button>
+            <Button type="button" variant="outline" tone="secondary" onClick={handleCancel} aria-label="Cancel">
+              <X />
+            </Button>
           </div>
         </div>
       </li>
@@ -224,25 +195,25 @@ export function ParsedIngredientRow({
         <span>{ingredient.ingredientName}</span>
       </div>
       <div className="flex gap-1">
-        <button
+        <Button
           ref={editButtonRef}
           type="button"
+          variant="outline" tone="secondary"
           onClick={handleEditClick}
           disabled={disabled}
-          className={clsx(iconButtonBaseStyles, iconButtonPlainStyles, 'cursor-default')}
           aria-label={`Edit ${ingredient.ingredientName}`}
         >
-          <Pencil className="size-4" aria-hidden="true" />
-        </button>
-        <button
+          <Pencil />
+        </Button>
+        <Button
           type="button"
+          variant="soft" tone="destructive"
           onClick={() => onRemove(ingredient)}
           disabled={disabled}
-          className={clsx(iconButtonBaseStyles, iconButtonRedStyles, 'cursor-default')}
           aria-label={`Remove ${ingredient.ingredientName}`}
         >
-          <Trash2 className="size-4" aria-hidden="true" />
-        </button>
+          <Trash2 />
+        </Button>
       </div>
     </li>
   )

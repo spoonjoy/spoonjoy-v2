@@ -42,10 +42,11 @@ const rootClass = "box-border grid min-w-0 justify-items-start text-foreground";
  * The title button: 44px tall on a coarse pointer, 36px from `sm` with a fine one.
  *
  * @internal
+ * @claim "The title button: 44px tall on" registry/ouro/components/ouro/collapsible/collapsible.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/collapsible.test.tsx::Collapsible > gives the title a 44px row on a coarse pointer, or 36px otherwise)
  */
 const triggerClass =
   "group/trigger press relative m-0 box-border inline-flex cursor-pointer items-center gap-2 " +
-  "min-h-11 sm:pointer-fine:min-h-9 px-0 py-2 rounded-md border-0 bg-transparent text-start " +
+  "min-h-11 sm:pointer-fine:min-h-9 px-0 py-2 rounded-md border-0 bg-transparent text-start forced-colors:border forced-colors:border-solid " +
   "font-[inherit] text-base font-medium text-foreground sm:pointer-fine:text-sm " +
   "select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "underline-offset-4 not-data-disabled:pointer-fine:hover:underline not-data-disabled:active:opacity-70 " +
@@ -68,6 +69,8 @@ const iconClass =
  * its page search finds and opens it.
  *
  * @internal
+ * @claim "Closed, it stays mounted and hidden" registry/ouro/components/ouro/collapsible/collapsible.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/collapsible.test.tsx::Collapsible > lets the browser's page search find and open it, and hides it plainly where until-found is unsupported)
+ * @claim "The panel: it grows from 0" registry/ouro/components/ouro/collapsible/collapsible.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/collapsible.test.tsx::Collapsible > animates the panel to its measured height, and not with reduced motion)
  */
 const panelClass =
   "w-full h-(--collapsible-panel-height) overflow-hidden " +
@@ -81,6 +84,7 @@ const showMoreRootClass = "box-border grid min-w-0 justify-items-start gap-2";
  * The list: no bullets or indent, so the items are the app's own rows.
  *
  * @internal
+ * @claim "The list: no bullets or indent" registry/ouro/components/ouro/collapsible/collapsible-styles.ts verify:fileLine(registry/ouro/components/ouro/collapsible/collapsible-styles.ts, /const\slistClass\s=\s"m-0\sbox-border\sgrid\sw-full\slist-none\sgap-0\sp-0"/)
  */
 const listClass = "m-0 box-border grid w-full list-none gap-0 p-0";
 

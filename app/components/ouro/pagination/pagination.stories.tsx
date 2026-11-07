@@ -60,6 +60,7 @@ function Paged() {
 
 /** Buttons with `onPageChange`, for a list that pages in place. */
 export const Buttons: Story = {
+  parameters: { mode: "button" },
   render: () => <Paged />,
 };
 

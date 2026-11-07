@@ -71,6 +71,7 @@ vi.mock("../../app/lib/photo-lifecycle.server", async (importOriginal) => ({
 }));
 
 const worker = (await import("../../workers/app")).default;
+const { resetIsolateForTests } = await import("../../app/lib/slow-call.server");
 const WORKER_VERSION_ID = "22222222-2222-4222-8222-222222222222";
 const ACCOUNT_DELETE_INTENT_RESOURCE = "urn:spoonjoy:account-delete-intent:v1";
 
@@ -310,6 +311,38 @@ describe("Cloudflare worker app", () => {
 
     expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBe(WORKER_VERSION_ID);
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+  });
+
+  it("logs which isolate served each request, and once where it runs, on a per-run QA Worker only", async () => {
+    resetIsolateForTests();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("colo=ORD\n"));
+    try {
+      const arriving = () => Object.assign(new Request("https://spoonjoy.app/health"), { cf: { colo: "IAD" } });
+      await worker.fetch(arriving(), versionedEnvironment(), context());
+      expect(log).not.toHaveBeenCalled();
+
+      const qa = { ...versionedEnvironment(), SPOONJOY_QA_ERROR_LOGS: "1" } as CloudflareEnvironment;
+      const firstContext = context();
+      await worker.fetch(arriving(), qa, firstContext);
+      const secondContext = context();
+      await worker.fetch(arriving(), qa, secondContext);
+      await Promise.all(vi.mocked(firstContext.waitUntil).mock.calls.map(([promise]) => promise));
+
+      const lines = log.mock.calls.map(([line]) => JSON.parse(line as string));
+      const isolate = lines[0].isolate;
+      expect(lines).toEqual([
+        { event: "isolate_request", isolate, request: 1, arrivedAt: "IAD" },
+        { event: "isolate_request", isolate, request: 2, arrivedAt: "IAD" },
+        { event: "isolate_colo", isolate, runsIn: "ORD" },
+      ]);
+      expect(secondContext.waitUntil).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      log.mockRestore();
+      fetchMock.mockRestore();
+      resetIsolateForTests();
+    }
   });
 
   it("threads runtime PostHog host configuration into Worker CSP headers", async () => {

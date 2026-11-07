@@ -294,6 +294,26 @@ describe("cook-session protocol v1", () => {
     expect(cleared.progress).toEqual({ ...written.progress, checkedIngredientIds: [] });
   });
 
+  it("keeps the cook's Cooking now row in step with each write", async () => {
+    const row = () => database().prepare(
+      'SELECT "revision", "listed", "activeStepId", "activeStepIndex", "stepCount", "checkedCount", "totalCount" FROM "CookingNow" WHERE "userId" = ? AND "recipeId" = ?',
+    ).bind(USER_A, RECIPE) as unknown as { first<T>(): Promise<T | null> };
+
+    const started = await startSession();
+    expect(await row().first()).toEqual({
+      revision: 0, listed: 0, activeStepId: null, activeStepIndex: 0, stepCount: 3, checkedCount: 0, totalCount: 3,
+    });
+
+    const checked = await stateOf(await patch(started, { activeStepId: STEP_2, checkedIngredientIds: [RICE, STOCK] }));
+    expect(await row().first()).toEqual({
+      revision: 1, listed: 1, activeStepId: STEP_2, activeStepIndex: 1, stepCount: 3, checkedCount: 2, totalCount: 3,
+    });
+
+    // Clear progress empties the checklist and takes the recipe off the list.
+    await patch(checked, { checkedIngredientIds: [] });
+    expect(await row().first()).toMatchObject({ revision: 2, listed: 0, checkedCount: 0 });
+  });
+
   it("keeps each user's progress separate", async () => {
     const started = await startSession();
     await patch(started, { checkedIngredientIds: [RICE] });

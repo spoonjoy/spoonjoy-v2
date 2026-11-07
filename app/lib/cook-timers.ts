@@ -1,130 +1,121 @@
-// Cook-mode timers, as plain data anchored to wall-clock times.
-//
-// A timer belongs to a recipe step (keyed by step number) and stores when it ends rather than how
-// many ticks are left, so it survives moving between steps, a throttled background tab and a page
-// reload: the remaining time is always recomputed from `Date.now()`.
+// Cook-mode timers: one per step with a duration, run and kept by HX's Timer and TimerTray
+// under a timerId, so a timer carries on through moving between steps and a reload.
 
-export type StoredCookTimer =
-  | { status: "running"; durationSeconds: number; endsAt: number }
-  | { status: "paused"; durationSeconds: number; remainingMs: number }
-  | { status: "done"; durationSeconds: number; endedAt: number };
+import { restoreTimer, type TimerState } from "~/lib/ouro/use-timer";
 
-export type CookTimers = Record<string, StoredCookTimer>;
-
-// How long a finished timer keeps ringing before it falls quiet (it still shows "Time's up").
-export const ALARM_WINDOW_MS = 2 * 60 * 1000;
-
-export function timerKey(stepNum: number): string {
-  return String(stepNum);
+export interface CookTimerStepSource {
+  stepNum: number;
+  stepTitle?: string | null;
+  duration?: number | null;
 }
 
-export function startTimer(timers: CookTimers, key: string, durationSeconds: number, now: number): CookTimers {
-  return { ...timers, [key]: { status: "running", durationSeconds, endsAt: now + durationSeconds * 1000 } };
+export interface CookTimer {
+  stepNum: number;
+  /** "Step 2 · Boil pasta", or "Step 2" for a step without a title. */
+  label: string;
+  /** The step's duration, in whole seconds. */
+  duration: number;
+  timerId: string;
+  legacyStorageKey: string | null;
 }
 
-export function pauseTimer(timers: CookTimers, key: string, now: number): CookTimers {
-  const timer = timers[key];
-  if (!timer || timer.status !== "running") return timers;
-  return {
-    ...timers,
-    [key]: { status: "paused", durationSeconds: timer.durationSeconds, remainingMs: Math.max(0, timer.endsAt - now) },
-  };
+const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
+/** The start of the timerId of every timer under `scope` (a recipe's id): its steps' timers. */
+export function cookTimerIdPrefix(scope: string): string {
+  return `spoonjoy-cook-timer:${scope}:`;
 }
 
-export function resumeTimer(timers: CookTimers, key: string, now: number): CookTimers {
-  const timer = timers[key];
-  if (!timer || timer.status !== "paused") return timers;
-  return {
-    ...timers,
-    [key]: { status: "running", durationSeconds: timer.durationSeconds, endsAt: now + timer.remainingMs },
-  };
+/** Where HX's Timer keeps a timer with a timerId (app/lib/ouro/use-timer.ts). */
+const HX_TIMER_STORAGE_PREFIX = "ouro-timer:";
+
+/**
+ * Seconds left on the soonest running timer of the recipe in this browser, or null when none
+ * runs. Reads HX Timer's stored state, so a page without the recipe's timers on it (the Kitchen's
+ * Cooking now strip) can still count down.
+ */
+export function soonestRunningCookTimerSeconds(scope: string, now: number): number | null {
+  const prefix = HX_TIMER_STORAGE_PREFIX + cookTimerIdPrefix(scope);
+  let soonest: number | null = null;
+  try {
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key === null || !key.startsWith(prefix)) continue;
+      let value: unknown;
+      try {
+        value = JSON.parse(window.localStorage.getItem(key) ?? "");
+      } catch {
+        continue;
+      }
+      const timer = value as Record<string, unknown> | null;
+      if (!timer || timer.status !== "running" || !finite(timer.endsAt)) continue;
+      const seconds = Math.ceil((timer.endsAt - now) / 1000);
+      if (seconds > 0 && (soonest === null || seconds < soonest)) soonest = seconds;
+    }
+  } catch {
+    return null;
+  }
+  return soonest;
 }
 
-// Cancelling a running or paused timer and dismissing a finished one both remove it, so the step
-// goes back to its idle, full-length timer.
-export function clearTimer(timers: CookTimers, key: string): CookTimers {
-  if (!(key in timers)) return timers;
-  const next = { ...timers };
-  delete next[key];
-  return next;
-}
-
-// Turns every running timer whose end time has passed into a finished one. Returns the same object
-// when nothing finished, so callers can skip a state update.
-export function settleTimers(timers: CookTimers, now: number): { timers: CookTimers; finished: string[] } {
-  const finished = Object.keys(timers).filter((key) => {
-    const timer = timers[key];
-    return timer.status === "running" && timer.endsAt <= now;
+/** Every step's timer, for the steps whose duration is positive, in step order. */
+export function cookTimers(scope: string, steps: readonly CookTimerStepSource[], legacyRecipeId: string | null = scope): CookTimer[] {
+  return steps.flatMap((step) => {
+    const duration = Math.round((step.duration ?? 0) * 60);
+    if (duration <= 0) return [];
+    return [{
+      stepNum: step.stepNum,
+      label: step.stepTitle ? `Step ${step.stepNum} · ${step.stepTitle}` : `Step ${step.stepNum}`,
+      duration,
+      timerId: `${cookTimerIdPrefix(scope)}${step.stepNum}`,
+      legacyStorageKey: legacyRecipeId === null ? null : `spoonjoy-cook-timers:v1:${legacyRecipeId}`,
+    }];
   });
-  if (finished.length === 0) return { timers, finished };
-  const next = { ...timers };
-  for (const key of finished) {
-    const timer = timers[key] as Extract<StoredCookTimer, { status: "running" }>;
-    next[key] = { status: "done", durationSeconds: timer.durationSeconds, endedAt: timer.endsAt };
-  }
-  return { timers: next, finished };
 }
 
-export function remainingSeconds(timer: StoredCookTimer, now: number): number {
-  if (timer.status === "running") {
-    return Math.min(timer.durationSeconds, Math.max(0, Math.ceil((timer.endsAt - now) / 1000)));
-  }
-  if (timer.status === "paused") return Math.ceil(timer.remainingMs / 1000);
-  return 0;
-}
-
-export function isRinging(timer: StoredCookTimer, now: number): boolean {
-  return timer.status === "done" && now - timer.endedAt < ALARM_WINDOW_MS;
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function parseTimer(value: unknown): StoredCookTimer | null {
-  if (!value || typeof value !== "object") return null;
+function legacyState(value: unknown): TimerState | null {
+  if (typeof value !== "object" || value === null) return null;
   const timer = value as Record<string, unknown>;
-  if (!isFiniteNumber(timer.durationSeconds) || timer.durationSeconds <= 0) return null;
-  const durationSeconds = timer.durationSeconds;
-  if (timer.status === "running" && isFiniteNumber(timer.endsAt)) {
-    return { status: "running", durationSeconds, endsAt: timer.endsAt };
-  }
-  if (timer.status === "paused" && isFiniteNumber(timer.remainingMs) && timer.remainingMs >= 0) {
-    return { status: "paused", durationSeconds, remainingMs: timer.remainingMs };
-  }
-  if (timer.status === "done" && isFiniteNumber(timer.endedAt)) {
-    return { status: "done", durationSeconds, endedAt: timer.endedAt };
-  }
+  const duration = timer.durationSeconds;
+  if (!finite(duration) || duration <= 0) return null;
+  if (timer.status === "running" && finite(timer.endsAt)) return { status: "running", duration, endsAt: timer.endsAt };
+  if (timer.status === "paused" && finite(timer.remainingMs) && timer.remainingMs >= 0) return { status: "paused", duration, remainingMs: timer.remainingMs };
+  if (timer.status === "done" && finite(timer.endedAt)) return { status: "done", duration, endedAt: timer.endedAt };
   return null;
 }
 
-// Stored timers come from localStorage, so anything malformed is dropped rather than trusted.
-export function parseStoredTimers(raw: string | null): CookTimers {
-  if (!raw) return {};
-  let value: unknown;
+/** Transfers one legacy step without discarding other steps or unpersisted progress. */
+export function restoreCookTimer(timer: CookTimer): boolean {
+  const key = timer.legacyStorageKey;
+  if (key === null) return true;
+  let raw: string | null;
   try {
-    value = JSON.parse(raw);
+    raw = window.localStorage.getItem(key);
   } catch {
-    return {};
+    return false;
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const timers: CookTimers = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    const timer = parseTimer(entry);
-    if (timer) timers[key] = timer;
+  if (raw === null) return true;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return false;
   }
-  return timers;
-}
-
-export function cookTimersStorageKey(recipeId: string): string {
-  return `spoonjoy-cook-timers:v1:${recipeId}`;
-}
-
-export function formatTimerSeconds(totalSeconds: number): string {
-  const safeSeconds = Math.max(0, totalSeconds);
-  const hours = Math.floor(safeSeconds / 3600);
-  const minutes = Math.floor((safeSeconds % 3600) / 60);
-  const seconds = (safeSeconds % 60).toString().padStart(2, "0");
-  if (hours > 0) return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds}`;
-  return `${minutes.toString().padStart(2, "0")}:${seconds}`;
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
+  const records = parsed as Record<string, unknown>;
+  const step = String(timer.stepNum);
+  if (records[step] === undefined) return true;
+  const state = legacyState(records[step]);
+  if (!state || !restoreTimer(timer.timerId, state)) return false;
+  const remaining = { ...records };
+  delete remaining[step];
+  try {
+    // Another tab may have changed the legacy record while native storage was updated.
+    if (window.localStorage.getItem(key) !== raw) return false;
+    if (Object.keys(remaining).length > 0) window.localStorage.setItem(key, JSON.stringify(remaining));
+    else window.localStorage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -11,6 +11,8 @@ export { pageCss };
  *
  * @example
  * expect(pageCss()).toMatch(/@supports \(-webkit-touch-callout: ?none\)/);
+ * @claim "The CSS the page has loaded" registry/ouro/lib/ouro/testing/page-css.ts verify:fileLine(registry/ouro/lib/ouro/testing/page-css.ts, /document\.querySelectorAll\("style"\)/)
+ * @claim "Tests read it to check rules" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:fileLine(registry/ouro/components/ouro/dialog/dialog.test.tsx, /iOS-only\srules\s\(`@supports\s\(-webkit-touch-callout:\snone\)`\)/)
  */
 function pageCss(): string {
   return [...document.querySelectorAll("style")].map((style) => style.textContent).join("\n");

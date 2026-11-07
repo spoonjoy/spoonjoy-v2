@@ -1,11 +1,16 @@
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/my-recipes";
 import { Form, useLoaderData, useLocation } from "react-router";
 import { Plus, Search } from "lucide-react";
-import { Button } from "~/components/button";
-import { Link } from "~/components/navigation/app-link";
+import { Button } from "~/components/ouro/button/button";
+import { Link } from "~/components/ouro/link/link";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Pagination } from "~/components/ouro/pagination/pagination";
-import { Text } from "~/components/text";
-import { CookbookHeader, CookbookPage, ObjectRow, RuledEmptyState } from "~/components/cookbook/page";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
+import { Text } from "~/components/ouro/text/text";
+import { CookbookPage } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import {
   normalizeMyRecipesPage,
   normalizeMyRecipesQuery,
@@ -93,44 +98,44 @@ export default function MyRecipes() {
   return (
     <CookbookPage>
       <RecipesSectionNav />
-      <CookbookHeader
+      <PageHeader
         eyebrow="My Kitchen"
         title="My Recipes"
-        action={(
+        actions={(
           <Button href="/recipes/new">
             <Plus data-slot="icon" className="size-4" />
             Create recipe
           </Button>
         )}
-      >
-        Recipes you wrote and keep in your kitchen.
-      </CookbookHeader>
+        size="lg"
+        divider
+        description="Recipes you wrote and keep in your kitchen."
+      />
 
       <DrawerSearch label="Search my recipes" query={query} placeholder="sumac, beans, serves 4" />
 
       {recipes.length > 0 ? (
-        <section aria-label="My recipes" className="mt-6 divide-y divide-[var(--sj-border)]">
+        <ItemGroup aria-label="My recipes" variant="divided" className="mt-6">
           {recipes.map((recipe) => (
-            <ObjectRow
+            <Item
               key={recipe.id}
               href={`/recipes/${recipe.id}`}
               title={recipe.title}
-              subtitle={recipe.description ?? `By ${recipe.chef.username}`}
-              stamp={recipe.servings ?? undefined}
+              description={recipe.description ?? `By ${recipe.chef.username}`}
+              actions={recipe.servings ? <Text size="sm" tone="muted">{recipe.servings}</Text> : undefined}
             />
           ))}
-        </section>
+        </ItemGroup>
       ) : (
-        <RuledEmptyState
-          title={query ? "No matching recipes" : "No recipes yet"}
-          action={<Button href="/recipes/new">Create recipe</Button>}
-        >
-          <Text>
+        <Empty headingLevel={2} align="start" description={<>
+          <Text tone="muted">
             {query
               ? "Try another title, ingredient, serving size, or note."
               : "Start with the dish you make most often."}
           </Text>
-        </RuledEmptyState>
+        </>}
+          title={query ? "No matching recipes" : "No recipes yet"}
+          action={<Button href="/recipes/new">Create recipe</Button>} />
       )}
 
       {(hasPreviousPage || hasNextPage) ? (
@@ -170,20 +175,18 @@ export function DrawerSearch({
 }) {
   return (
     <Form method="get" role="search" className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-      <label className="sr-only" htmlFor="drawer-search">{label}</label>
-      <div className="flex min-h-12 flex-1 items-center border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-4">
-        <Search className="mr-2 size-4 shrink-0 text-[var(--sj-ink-soft)]" aria-hidden="true" />
-        <input
-          id="drawer-search"
-          type="search"
-          name="q"
-          defaultValue={query}
-          placeholder={placeholder}
-          className="min-h-11 w-full border-0 bg-transparent text-base text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)]"
-        />
-      </div>
-      <Button type="submit" plain>Search</Button>
-      {query ? <Link href="." className="font-sj-ui text-sm font-semibold">Clear</Link> : null}
+      <TextField
+        type="search"
+        name="q"
+        label={label}
+        hideLabel
+        defaultValue={query}
+        placeholder={placeholder}
+        startAdornment={<Search />}
+        className="flex-1"
+      />
+      <Button type="submit" variant="outline" tone="secondary">Search</Button>
+      {query ? <Link href=".">Clear</Link> : null}
     </Form>
   );
 }

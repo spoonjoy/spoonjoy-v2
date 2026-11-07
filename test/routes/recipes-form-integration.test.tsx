@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createTestRoutesStub, getShownAlert, requiredLabel } from "../utils";
+import { createTestRoutesStub, getShownAlert, requiredLabel, chooseImage } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader as newRecipeLoader, action as newRecipeAction } from "~/routes/recipes.new";
 import NewRecipe from "~/routes/recipes.new";
@@ -86,7 +86,7 @@ describe("RecipeBuilder Route Integration", () => {
         expect(screen.getByLabelText(/Servings/)).toBeInTheDocument();
 
         // RecipeBuilder has "Recipe Image" label for image upload, not "Image URL"
-        expect(screen.getByLabelText("Upload recipe image")).toBeInTheDocument();
+        expect(screen.getByLabelText("Recipe image", { selector: "input" })).toBeInTheDocument();
       });
 
       it("should render RecipeImageUpload component instead of URL input", async () => {
@@ -192,7 +192,7 @@ describe("RecipeBuilder Route Integration", () => {
         // Upload an image via RecipeImageUpload's file input
         const file = new File(["test image content"], "test.jpg", { type: "image/jpeg" });
         // Find the file input from RecipeImageUpload (aria-label="Upload recipe image")
-        const uploadInput = screen.getByLabelText(/Upload recipe image/i);
+        const uploadInput = screen.getByLabelText("Recipe image", { selector: "input" });
         fireEvent.change(uploadInput, { target: { files: [file] } });
 
         // Submit form
@@ -542,8 +542,8 @@ describe("RecipeBuilder Route Integration", () => {
 
         // Upload new image via RecipeImageUpload's file input
         const file = new File(["new image content"], "new-image.jpg", { type: "image/jpeg" });
-        const uploadInput = screen.getByLabelText(/Upload recipe image/i);
-        await user.upload(uploadInput, file);
+        const uploadInput = screen.getByLabelText("Recipe image", { selector: "input" });
+        await chooseImage(uploadInput, file);
 
         // Submit form
         await user.click(screen.getByRole("button", { name: "Save recipe" }));
@@ -778,25 +778,29 @@ describe("RecipeBuilder Route Integration", () => {
   });
 
   describe("encType for image upload", () => {
-    it("should use multipart/form-data encoding for new recipe form", async () => {
+    it("posts a new recipe as multipart/form-data", async () => {
+      let contentType: string | null = null;
       const Stub = createTestRoutesStub([
         {
           path: "/recipes/new",
           Component: NewRecipe,
           loader: () => null,
+          action: async ({ request }) => {
+            contentType = request.headers.get("Content-Type");
+            return { errors: { general: "Stop here" } };
+          },
         },
       ]);
 
       render(<Stub initialEntries={["/recipes/new"]} />);
+      const user = userEvent.setup();
+      await user.type(await screen.findByRole("textbox", { name: "Title", exact: true }), "Multipart soup");
+      await user.click(screen.getByRole("button", { name: "Create recipe" }));
 
-      await screen.findByRole("button", { name: "Create recipe" });
-
-      // Find the form element and check encType
-      const form = document.querySelector("form");
-      expect(form).toHaveAttribute("encType", "multipart/form-data");
+      await waitFor(() => expect(contentType).toMatch(/^multipart\/form-data/));
     });
 
-    it("should use multipart/form-data encoding for edit recipe form", async () => {
+    it("posts an edited recipe as multipart/form-data", async () => {
       const mockData = {
         recipe: {
           id: recipeId,
@@ -808,23 +812,25 @@ describe("RecipeBuilder Route Integration", () => {
           coverImageUrl: "",
         formattedSteps: [],
       };
+      let contentType: string | null = null;
 
       const Stub = createTestRoutesStub([
         {
           path: "/recipes/:id/edit",
           Component: EditRecipe,
           loader: () => mockData,
+          action: async ({ request }) => {
+            contentType = request.headers.get("Content-Type");
+            return { errors: { general: "Stop here" } };
+          },
         },
       ]);
 
       render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("button", { name: "Save recipe" }));
 
-      await screen.findByRole("button", { name: "Save recipe" });
-
-      // Find the main recipe form (not step reorder forms)
-      const forms = document.querySelectorAll("form");
-      const mainForm = Array.from(forms).find(f => f.querySelector('button[type="submit"]')?.textContent?.includes("Save recipe"));
-      expect(mainForm).toHaveAttribute("encType", "multipart/form-data");
+      await waitFor(() => expect(contentType).toMatch(/^multipart\/form-data/));
     });
   });
 });
