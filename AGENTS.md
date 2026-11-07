@@ -192,6 +192,7 @@ npm run test:coverage # With coverage
 - Don't leave agent-created recipes, users or cookbooks in QA or production outside the `qa-kitchen` personas. Throwaway users use the `codex-e2e-*` / `codex_e2e_*` naming so cleanup can find them.
 - The native (spoonjoy-apple) Journeys workflow creates its own `codex-native-*` / `codex_native_*` accounts per run; `scripts/cleanup-local-qa-data.mjs` leaves those alone while young so a concurrent native run is not swept mid-flight, then removes an account and everything it owns once it is at least 3 hours old.[^native-accounts]
 - The `Journeys` workflow runs `pnpm run cleanup:remote:qa:apply` after its journeys.[^qa-cleanup] Never run cleanup with `--apply` against production.
+- The `QA Data Cleanup` workflow sweeps shared QA daily, removing only disposable accounts (native ones included) created more than 6 hours before the run started (`--older-than-hours 6 --as-of <start>`), so an account a run is still using stays.[^qa-daily-cleanup]
 - `scripts/smoke-live.mjs` cleans its disposable user by default; pass `--keep-smoke-data` only when the human explicitly asks to preserve debugging data, and remove that data before the task is done.
 
 ## Git Workflow
@@ -313,5 +314,6 @@ When reporting status or issues:
 [^warnings]: scripts/warning-gate.ts; test/scripts/warning-gate.test.ts verify:fileLine(scripts/warning-gate.ts, /export function findUnexpectedDiagnosticOutput/) verify:fileLine(.github/workflows/ci.yml, /run: pnpm run verify.clean.test.coverage/)
 [^native-accounts]: scripts/cleanup-local-qa-data.mjs verify:fileLine(scripts/cleanup-local-qa-data.mjs, /export const NATIVE_JOURNEY_STALE_AFTER_SECONDS = 3 \* 60 \* 60;/)
 [^qa-cleanup]: .github/workflows/journeys.yml verify:fileLine(.github/workflows/journeys.yml, /pnpm run cleanup:remote:qa:apply/)
+[^qa-daily-cleanup]: .github/workflows/qa-data-cleanup.yml verify:fileLine(.github/workflows/qa-data-cleanup.yml, /cron: "23 7 \* \* \*"/)
 [^claims-surfaces]: claims.config.json verify:fileLine(claims.config.json, /"match": "\^\(README\|AGENTS\)\\\\\.md\$"/) verify:fileLine(claims.config.json, /building-with-ouro-hx/) verify:fileLine(claims.config.json, /llms-txt/)
 [^claims-ci]: .github/workflows/ci.yml; scripts/claims-pr.mjs verify:fileLine(.github/workflows/ci.yml, /run: node scripts\/warning-gate\.ts -- pnpm run claims:check/) verify:fileLine(.github/workflows/ci.yml, /run: node scripts\/warning-gate\.ts -- pnpm run claims:pr/) verify:testExists(test/scripts/claims-pr.test.ts::main > runs the ratchet, the title and body lint and the full check against the base commit)

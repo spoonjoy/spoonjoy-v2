@@ -384,6 +384,87 @@ describe("cleanup-local-qa-data", () => {
     });
   });
 
+  it("reads --older-than-hours as a fixed cutoff time, counted back from --as-of or now, and has none without it", () => {
+    const now = { nowSeconds: 1_800_000_000 };
+    expect(cleanup.parseCleanupArgs(["--target-env", "qa"], now)).toMatchObject({ createdBefore: 0 });
+    expect(cleanup.parseCleanupArgs(["--target-env", "qa", "--older-than-hours", "6"], now)).toMatchObject({ createdBefore: 1_800_000_000 - 21_600 });
+    expect(cleanup.parseCleanupArgs(["--target-env", "qa", "--older-than-hours", "6", "--as-of", "1700000000"], now)).toMatchObject({ createdBefore: 1_700_000_000 - 21_600 });
+    const before = Math.floor(Date.now() / 1000);
+    const { createdBefore } = cleanup.parseCleanupArgs(["--older-than-hours", "1"]);
+    expect(createdBefore).toBeGreaterThanOrEqual(before - 3600);
+    expect(createdBefore).toBeLessThanOrEqual(Math.floor(Date.now() / 1000) - 3600);
+    for (const bad of ["0", "-1", "1.5", "six", "06"]) {
+      expect(() => cleanup.parseCleanupArgs(["--target-env", "qa", "--older-than-hours", bad], now)).toThrow(/whole number of hours, at least 1/);
+    }
+    for (const bad of ["0", "-5", "1.5", "today"]) {
+      expect(() => cleanup.parseCleanupArgs(["--older-than-hours", "6", "--as-of", bad], now)).toThrow(/--as-of must be a time in whole seconds since 1970/);
+    }
+    expect(() => cleanup.parseCleanupArgs(["--as-of", "1700000000"], now)).toThrow("--as-of only applies with --older-than-hours.");
+    expect(() => cleanup.parseCleanupArgs(["--older-than-hours", "6", "--as-of", "100"], now)).toThrow("--as-of 100 minus --older-than-hours is before 1970.");
+    expect(() => cleanup.parseCleanupArgs(["--older-than-hours", "6"], { nowSeconds: 100 })).toThrow("--as-of 100 minus --older-than-hours is before 1970.");
+    expect(() => cleanup.parseCleanupArgs(["--older-than-hours"], now)).toThrow(/Missing value for --older-than-hours/);
+  });
+
+  it("leaves every SQL statement unchanged without a cutoff", () => {
+    expect(cleanup.disposableUserScope()).toEqual({
+      usersWhere: cleanup.DISPOSABLE_USER_WHERE,
+      staleNativeWhere: cleanup.STALE_NATIVE_JOURNEY_USER_WHERE,
+      keepYoungSql: "",
+      keptYoungCountSql: "",
+    });
+    expect(cleanup.buildApplySql({ createdBefore: 0 })).toBe(cleanup.buildApplySql());
+    expect(cleanup.buildDryRunSql({ createdBefore: 0 })).toBe(cleanup.buildDryRunSql());
+  });
+
+  it("puts the same fixed cutoff in every statement that chooses disposable accounts", () => {
+    const createdBefore = 1_700_000_000;
+    const cutoff = "<= 1700000000";
+    for (const sql of [
+      cleanup.buildQaR2CandidateSql({ createdBefore }),
+      cleanup.buildR2ReferenceSql(["profiles/old/a.jpg"], { createdBefore }),
+      cleanup.buildQaR2SearchReferenceSql(["profiles/old/a.jpg"], { createdBefore }),
+      cleanup.buildBlockerReportSql({ createdBefore }),
+      cleanup.buildDryRunSql({ createdBefore }),
+      cleanup.buildApplySql({ createdBefore }),
+    ]) {
+      expect(sql).toContain(cutoff);
+      expect(sql.replaceAll(cleanup.STALE_NATIVE_JOURNEY_USER_WHERE, "")).not.toContain("strftime('%s', 'now')");
+    }
+  });
+
+  it("applies the cutoff to every statement that chooses disposable accounts, on a QA apply", async () => {
+    const stdout = writableBuffer();
+    const runCommand = vi.fn(async () => ({ stdout: wranglerJson(), stderr: "" }));
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--apply", "--older-than-hours", "6", "--as-of", "1700021600"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: writableBuffer().stream,
+    });
+
+    expect(stdout.text()).toContain("Only disposable accounts created before 2023-11-14T22:13:20.000Z, with their data.");
+    const sql = runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "));
+    const choosing = sql.filter((command) => /disposable_users AS \(|INSERT INTO disposable_users/.test(command));
+    expect(choosing.length).toBeGreaterThan(5);
+    for (const command of choosing) expect(command).toContain("<= 1700000000");
+    const softDeleting = sql.filter((command) => /soft_delete_recipes AS \(|INSERT INTO soft_delete_recipes/.test(command));
+    expect(softDeleting.length).toBeGreaterThan(0);
+    for (const command of softDeleting) expect(command).toContain(`AND chefId NOT IN (SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE})`);
+  });
+
+  it("counts the accounts the cutoff keeps in a dry run, and stale native accounts only past the cutoff", async () => {
+    const runCommand = vi.fn(async () => ({ stdout: wranglerJson(), stderr: "" }));
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--older-than-hours", "6", "--as-of", "1700021600"],
+      runCommand,
+      stdout: writableBuffer().stream,
+      stderr: writableBuffer().stream,
+    });
+    const dryRun = (runCommand.mock.calls.at(-1)![1] as string[]).join(" ");
+    expect(dryRun).toContain("disposable users kept because they are newer than the cutoff");
+    expect(dryRun).toContain(`WHERE ${cleanup.STALE_NATIVE_JOURNEY_USER_WHERE}\n    AND `);
+  });
+
   it("keeps the backwards-compatible missing-target default as a local dry-run", () => {
     expect(cleanup.parseCleanupArgs([])).toMatchObject({
       apply: false,
@@ -625,6 +706,7 @@ describe("cleanup-local-qa-data", () => {
 
     expect(stdout.text()).toContain("Usage: node scripts/cleanup-local-qa-data.mjs");
     expect(stdout.text()).toContain("--target-env local|qa|production");
+    expect(stdout.text()).toContain("--older-than-hours N [--as-of SECONDS]");
     expect(runCommand).not.toHaveBeenCalled();
   });
 
