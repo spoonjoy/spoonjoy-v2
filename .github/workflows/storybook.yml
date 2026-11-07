@@ -8,9 +8,12 @@ on:
   merge_group:
   workflow_dispatch:
 
+# A newer push to a pull request cancels that pull request's run. Main runs share one group so
+# Storybook deploys land in order, and are never cancelled in progress; merge-queue groups have a
+# ref of their own.
 concurrency:
-  group: storybook-${{ github.ref }}
-  cancel-in-progress: true
+  group: storybook-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   GIT_CONFIG_COUNT: '1'

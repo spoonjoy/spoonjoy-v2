@@ -1334,7 +1334,12 @@ describe("Journeys workflow", () => {
     const changes = workflow.jobs.changes;
     expect(changes.if).toBe("github.event_name == 'pull_request'");
     expect(changes.permissions).toEqual({ contents: "read", "pull-requests": "read" });
-    expect(changes.outputs).toEqual({ journeys: "${{ steps.scope.outputs.journeys }}" });
+    expect(changes.outputs).toEqual({
+      journeys: "${{ steps.scope.outputs.journeys }}",
+      mode: "${{ steps.scope.outputs.mode }}",
+      census: "${{ steps.scope.outputs.census }}",
+      specs: "${{ steps.scope.outputs.specs }}",
+    });
     // The base branch's copy of the script decides, so a pull request cannot widen the list for its
     // own run, and the job never sees a secret.
     expect(changes.steps).toEqual([
@@ -1351,11 +1356,20 @@ describe("Journeys workflow", () => {
       {
         name: "Decide whether this pull request needs the suite",
         id: "scope",
-        env: { GH_TOKEN: "${{ github.token }}", PR_NUMBER: "${{ github.event.pull_request.number }}" },
+        env: {
+          GH_TOKEN: "${{ github.token }}",
+          PR_NUMBER: "${{ github.event.pull_request.number }}",
+          HEAD_SHA: "${{ github.event.pull_request.head.sha }}",
+        },
         run: "node scripts/journeys-scope.mjs",
       },
     ]);
     expect(JSON.stringify(changes)).not.toMatch(/secrets\./);
+    // Only a pull request's run can be cut down to the affected specs; a missing mode (a base-branch
+    // scope script without modes) runs the full suite.
+    expect(step("Run test suite").env).toMatchObject({
+      MODE: "${{ github.event_name == 'pull_request' && needs.changes.outputs.mode || 'full' }}",
+    });
     // A job skipped by its own `if` never evaluates an expression name, so the required check's
     // name must stay a plain string.
     expect(journeys.name).toBe("journeys");

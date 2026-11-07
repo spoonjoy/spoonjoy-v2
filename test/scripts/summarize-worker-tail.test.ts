@@ -1078,10 +1078,11 @@ describe("Journeys workflow tail wiring", () => {
     const allUploads = steps.filter((candidate) => candidate.name?.startsWith("Upload "));
     expect(allUploads.map((upload) => upload.name)).toEqual(["Upload the HX census", "Upload journeys report", "Upload explore report"]);
 
-    // The census artifact is one merged JSON file of control identities, uploaded on every run.
+    // The census artifact is one merged JSON file of control identities, uploaded on every run
+    // that ran the census.
     const census = step("Upload the HX census");
     expect(census.with?.path).toBe("census-actual.json");
-    expect(census.if).toBe("always() && env.SUITE == 'journeys' && steps.suite.outcome != 'skipped'");
+    expect(census.if).toBe("always() && env.SUITE == 'journeys' && steps.suite.outputs.census_ran == 'true'");
 
     const uploads = allUploads.filter((upload) => upload !== census);
     for (const upload of uploads) {
