@@ -2,8 +2,6 @@
 // ink on white paper, and a cook's ticked ingredients never print as struck-through rows. Browsers apply
 // these rules only under `@media print`, which happy-dom never matches, so this reads the real
 // stylesheet and checks the rules and the colours they produce.
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import postcss, { type AtRule, type Rule } from "postcss";
 import { describe, expect, it } from "vitest";
 import { THEME_CSS } from "./theme-css";
