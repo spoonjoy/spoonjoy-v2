@@ -590,6 +590,20 @@ jobs:
           retention-days: 30
           include-hidden-files: false
 
+      # The parity capture (e2e/journeys/parity.desktop.journey.ts): viewport screenshots of the
+      # canonical screens on four devices in both schemes, uploaded on every journeys run, pass or
+      # fail, for spoonjoy-apple's scripts/parity-sheet.rb. They sit inside test-results/, so they go
+      # up only after the same three gates as the report.
+      - name: Upload parity shots
+        if: ${{ !cancelled() && env.SUITE == 'journeys' && steps.rotate-passwords.outcome == 'success' && steps.cleanup-qa-data.outcome == 'success' && steps.strip-traces.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: parity-shots
+          path: test-results/**/parity-*.png
+          retention-days: 30
+          if-no-files-found: warn
+          include-hidden-files: false
+
       - name: Upload explore report
         if: ${{ !cancelled() && env.SUITE == 'explore' && steps.rotate-passwords.outcome == 'success' && steps.cleanup-qa-data.outcome == 'success' && steps.strip-traces.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
