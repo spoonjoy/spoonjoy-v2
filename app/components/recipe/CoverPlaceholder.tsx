@@ -18,7 +18,8 @@ export interface CoverPlaceholderProps extends HTMLAttributes<HTMLDivElement> {
  * the display serif. `.sj-cover-placeholder` in tailwind.css draws it; the caller sets its size.
  */
 export function CoverPlaceholder({ title, label, shape = "tile", className, ...rest }: CoverPlaceholderProps) {
-  const initial = title.trim().charAt(0).toUpperCase() || "S";
+  // Array.from splits by code point, so an emoji keeps both halves of its surrogate pair.
+  const initial = Array.from(title.trim())[0]?.toUpperCase() ?? "S";
   const classes = ["sj-cover-placeholder", shape === "bleed" ? "sj-cover-placeholder-bleed" : null, className].filter(Boolean).join(" ");
   return (
     <div {...rest} className={classes}>

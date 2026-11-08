@@ -574,6 +574,15 @@ body:has(#cook) .sj-site-footer {
   letter-spacing: 0;
 }
 
+/* ouro-ui-core's sj-type-instruction token (Fraunces 400, 1.25rem, 1.4): the current step's instruction on the recipe page. */
+@utility sj-type-instruction {
+  font-family: var(--font-sj-display);
+  font-weight: 400;
+  font-size: 1.25rem;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+
 /* ouro-ui-core's sj-type-display token (Fraunces 600, 3rem, 1.1): native's cook step, read at arm's length. */
 @utility sj-type-display {
   font-family: var(--font-sj-display);

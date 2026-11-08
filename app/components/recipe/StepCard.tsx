@@ -106,11 +106,11 @@ export function StepCard({
           </div>
         )}
 
-        {/* The step the cook is on reads in native's step role, Fraunces at sj-type-step; the rest stay body text. */}
+        {/* The step the cook is on reads in core's instruction role, Fraunces at sj-type-instruction; the rest stay body text. */}
         <p
           className={
             current
-              ? 'sj-step-method sj-type-step m-0 whitespace-pre-wrap text-[var(--sj-ink)]'
+              ? 'sj-step-method sj-type-instruction m-0 whitespace-pre-wrap text-[var(--sj-ink)]'
               : 'sj-step-method font-sj-body m-0 whitespace-pre-wrap text-base leading-loose text-[var(--sj-ink)] sm:text-lg'
           }
         >

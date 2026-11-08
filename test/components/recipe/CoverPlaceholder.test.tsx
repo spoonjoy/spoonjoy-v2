@@ -27,6 +27,11 @@ describe("CoverPlaceholder", () => {
     expect(screen.getByTestId("tile")).toHaveTextContent("S");
   });
 
+  it("takes the first character whole, so an emoji title keeps its emoji", () => {
+    render(<CoverPlaceholder title="🍋 Lemon tart" data-testid="tile" />);
+    expect(screen.getByTestId("tile").querySelector(".sj-cover-placeholder-initial")).toHaveTextContent("🍋");
+  });
+
   it("keeps a label for screen readers only", () => {
     render(<CoverPlaceholder title="Toast" label="Cover coming soon" data-testid="tile" />);
     expect(screen.getByText("Cover coming soon")).toHaveClass("sr-only");
@@ -81,6 +86,17 @@ describe("the sj-type-step role", () => {
   });
 });
 
+describe("the sj-type-instruction role", () => {
+  it("takes ouro-ui-core's sj-type-instruction token: Fraunces 400, 1.25rem, line height 1.4, no tracking", () => {
+    const instruction = rule("@utility sj-type-instruction");
+    expect(instruction).toContain("font-family: var(--font-sj-display);");
+    expect(instruction).toContain("font-weight: 400;");
+    expect(instruction).toContain("font-size: 1.25rem;");
+    expect(instruction).toContain("line-height: 1.4;");
+    expect(instruction).toContain("letter-spacing: 0;");
+  });
+});
+
 describe("the sj-type-display role", () => {
   it("takes ouro-ui-core's sj-type-display token: Fraunces 600, 3rem, line height 1.1, no tracking", () => {
     const display = rule("@utility sj-type-display");
@@ -99,5 +115,11 @@ describe("the cook timer ring", () => {
     const digits = rule('.sj-cook-timer [role="timer"]');
     expect(digits).toContain("font-weight: 300;");
     expect(digits).toContain("font-variant-numeric: tabular-nums;");
+  });
+
+  it("moves the arc without a transition under reduced motion", () => {
+    expect(THEME_CSS.replace(/\s+/g, " ")).toContain(
+      "@media (prefers-reduced-motion: reduce) { .sj-cook-timer-progress { transition: none; } }",
+    );
   });
 });
