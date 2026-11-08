@@ -1076,7 +1076,7 @@ describe("Journeys workflow tail wiring", () => {
 
   it("keeps the raw tail stream out of every upload, behind the unchanged gates", () => {
     const allUploads = steps.filter((candidate) => candidate.name?.startsWith("Upload "));
-    expect(allUploads.map((upload) => upload.name)).toEqual(["Upload the HX census", "Upload journeys report", "Upload explore report"]);
+    expect(allUploads.map((upload) => upload.name)).toEqual(["Upload the HX census", "Upload journeys report", "Upload parity shots", "Upload explore report"]);
 
     // The census artifact is one merged JSON file of control identities, uploaded on every run
     // that ran the census.
