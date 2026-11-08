@@ -71,7 +71,8 @@ describe("CoverPlaceholder", () => {
 
 describe("the sj-type-step role", () => {
   it("takes ouro-ui-core's sj-type-step token: Fraunces 600, 1.5rem, line height 1.25, no tracking", () => {
-    const step = rule(".sj-type-step");
+    // A Tailwind utility, so a breakpoint can switch to it (cook mode's md:sj-type-display).
+    const step = rule("@utility sj-type-step");
     expect(step).toContain("font-family: var(--font-sj-display);");
     expect(step).toContain("font-weight: 600;");
     expect(step).toContain("font-size: 1.5rem;");
@@ -82,7 +83,7 @@ describe("the sj-type-step role", () => {
 
 describe("the sj-type-display role", () => {
   it("takes ouro-ui-core's sj-type-display token: Fraunces 600, 3rem, line height 1.1, no tracking", () => {
-    const display = rule(".sj-type-display");
+    const display = rule("@utility sj-type-display");
     expect(display).toContain("font-family: var(--font-sj-display);");
     expect(display).toContain("font-weight: 600;");
     expect(display).toContain("font-size: 3rem;");
