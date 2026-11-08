@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
+import { CoverPlaceholder } from "~/components/recipe/CoverPlaceholder";
 import { useCookingNow } from "~/hooks/use-cooking-now";
 import { listImageProps } from "~/lib/image-loading";
 import {
@@ -59,7 +60,7 @@ export function CookingNowStrip({ entries, now }: { entries: readonly CookingNow
   );
 }
 
-/** The recipe's cover, or a quiet paper-toned plate with the dish's initial when it has none. */
+/** The recipe's cover, or native's initial tile when it has none. */
 function CookingNowCover({ entry, index, className }: { entry: CookingNowEntry; index: number; className: string }) {
   if (entry.recipe.coverImageUrl) {
     return (
@@ -69,15 +70,12 @@ function CookingNowCover({ entry, index, className }: { entry: CookingNowEntry; 
     );
   }
   return (
-    <div
+    <CoverPlaceholder
       aria-hidden="true"
       data-testid="cooking-now-cover-placeholder"
-      className={`flex items-center justify-center border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-brass)_9%,var(--sj-paper))] ${className}`}
-    >
-      <span className="font-sj-display text-5xl font-semibold text-[var(--sj-brass)]">
-        {entry.recipe.title.trim().charAt(0).toUpperCase()}
-      </span>
-    </div>
+      title={entry.recipe.title}
+      className={className}
+    />
   );
 }
 

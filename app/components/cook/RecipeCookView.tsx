@@ -210,7 +210,7 @@ function CookModePanel({
             >
               {stepTitle}
             </h2>
-            <p className="text-base/6 text-[var(--sj-ink-soft)] mt-7 max-w-3xl whitespace-pre-wrap text-xl/9 text-[var(--sj-ink)] sm:text-2xl/10">
+            <p className="sj-type-step md:sj-type-display mt-7 max-w-3xl whitespace-pre-wrap text-[var(--sj-ink)]">
               {step.description}
             </p>
             <CookStepTimer timer={timers.find((timer) => timer.stepNum === step.stepNum)} />

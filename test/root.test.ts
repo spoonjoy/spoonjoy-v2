@@ -69,6 +69,24 @@ describe("root.tsx links()", () => {
     );
   });
 
+  it("loads every Fraunces weight the type roles set, down to sj-type-instruction's 400", () => {
+    const fonts = links().find((link) => link.rel === "stylesheet" && link.href.includes("family=Fraunces"));
+    // Fraunces's axes are opsz, wght, SOFT, WONK; the second range is the weight range.
+    const range = /family=Fraunces:opsz,wght,SOFT,WONK@[^,]+,(\d+)\.\.(\d+),/.exec(fonts?.href ?? "");
+    expect(range).not.toBeNull();
+    const [min, max] = [Number(range![1]), Number(range![2])];
+    const css = readFileSync("app/styles/tailwind.css", "utf8");
+    const weights = Array.from(
+      css.matchAll(/@utility sj-type-[a-z]+ \{[^}]*font-family: var\(--font-sj-display\);[^}]*font-weight: (\d+);/g),
+      (match) => Number(match[1]),
+    );
+    expect(weights).toContain(400);
+    for (const weight of weights) {
+      expect(weight).toBeGreaterThanOrEqual(min);
+      expect(weight).toBeLessThanOrEqual(max);
+    }
+  });
+
   it("still includes the existing apple-touch-icon", () => {
     const result = links();
     expect(result).toContainEqual(

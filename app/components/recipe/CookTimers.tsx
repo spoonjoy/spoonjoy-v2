@@ -22,16 +22,48 @@ export function CookStepTimer({ timer }: { timer: CookTimer | undefined }) {
   }, [timer]);
   if (!timer) return null;
   return (
-    <Timer
-      data-testid="cook-mode-timer"
-      className="mt-6"
-      label={timer.label}
-      duration={timer.duration}
-      timerId={timer.timerId}
-      labels={LABELS}
-      alert="repeat"
-      onDone={(event) => notifyTimeUp(timer.label, event)}
-    />
+    <div className="sj-cook-timer mt-6 flex items-center gap-5 sm:gap-6">
+      <CookTimerRing timer={timer} />
+      <Timer
+        data-testid="cook-mode-timer"
+        className="min-w-0 flex-1"
+        label={timer.label}
+        duration={timer.duration}
+        timerId={timer.timerId}
+        labels={LABELS}
+        alert="repeat"
+        onDone={(event) => notifyTimeUp(timer.label, event)}
+      />
+    </div>
+  );
+}
+
+/**
+ * Native's timer ring (CookModeComponents.swift): a vellum track and a brass arc from twelve
+ * o'clock for the time left. It watches the timer the `Timer` beside it runs, and is decoration:
+ * the `Timer` says the time.
+ */
+function CookTimerRing({ timer }: { timer: CookTimer }) {
+  const { status, remaining, duration } = useTimer({ duration: timer.duration, timerId: timer.timerId, fallback: true });
+  const counting = status === "running" || status === "paused";
+  const fraction = counting && duration > 0 ? Math.min(1, Math.max(0, remaining / duration)) : 0;
+  return (
+    <svg data-testid="cook-timer-ring" aria-hidden="true" viewBox="0 0 100 100" className="size-20 shrink-0 sm:size-24">
+      <circle className="sj-cook-timer-track" cx="50" cy="50" r="44" fill="none" strokeWidth="8" />
+      <circle
+        className="sj-cook-timer-progress"
+        cx="50"
+        cy="50"
+        r="44"
+        fill="none"
+        strokeWidth="8"
+        pathLength={1}
+        strokeDasharray="1"
+        strokeDashoffset={String(Number((1 - fraction).toFixed(4)))}
+        transform="rotate(-90 50 50)"
+        opacity={fraction > 0 ? 1 : 0}
+      />
+    </svg>
   );
 }
 

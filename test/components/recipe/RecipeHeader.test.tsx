@@ -213,6 +213,18 @@ describe('RecipeHeader', () => {
       expect(screen.getByText('Cover coming soon')).toBeInTheDocument()
     })
 
+    it("shows native's initial tile when there is no cover, with the copy kept for screen readers", () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} />)
+      const placeholder = screen.getByTestId('recipe-image-placeholder')
+      const tile = placeholder.querySelector('.sj-cover-placeholder')
+      expect(tile).not.toBeNull()
+      expect(tile).toHaveTextContent(defaultProps.title.trim().charAt(0).toUpperCase())
+      expect(screen.getByText('Cover coming soon')).toHaveClass('sr-only')
+      // The shape a cover photo has in this slot: square, edge to edge.
+      expect(tile).toHaveClass('sj-cover-placeholder-bleed')
+      expect(Array.from(tile!.classList).filter((token) => /^border(-|$)/.test(token))).toEqual([])
+    })
+
     it('renders explicit awaiting-chef-photo placeholder copy for owners', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} coverPlaceholderLabel="Awaiting first chef photo" />)
       expect(screen.getByTestId('recipe-image-placeholder')).toBeInTheDocument()

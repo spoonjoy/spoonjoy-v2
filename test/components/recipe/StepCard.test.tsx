@@ -96,4 +96,18 @@ describe('StepCard', () => {
     expect(screen.queryByTestId('current-step-marker')).toBeNull()
     expect(screen.getByRole('article')).not.toHaveAttribute('data-current-step')
   })
+
+  it("sets the current step's instruction in the sj-type-instruction role, with a brass numeral", () => {
+    const { rerender } = render(
+      <StepCard {...progress} stepNumber={2} description="Simmer" ingredients={[]} stepOutputUses={[]} current />
+    )
+    // sj-type-step is the step-name role; the instruction under the name is core's instruction role.
+    expect(screen.getByText('Simmer')).toHaveClass('sj-type-instruction')
+    expect(screen.getByText('Simmer')).not.toHaveClass('sj-type-step')
+    expect(screen.getByTestId('step-number')).toHaveClass('text-[var(--sj-brass)]')
+
+    rerender(<StepCard {...progress} stepNumber={2} description="Simmer" ingredients={[]} stepOutputUses={[]} />)
+    expect(screen.getByText('Simmer')).not.toHaveClass('sj-type-instruction')
+    expect(screen.getByTestId('step-number')).not.toHaveClass('text-[var(--sj-brass)]')
+  })
 })
