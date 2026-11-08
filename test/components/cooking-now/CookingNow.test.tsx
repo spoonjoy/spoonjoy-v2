@@ -58,7 +58,11 @@ describe("CookingNowStrip", () => {
     expect(within(strip).queryByTestId("cooking-now-hero")).toBeNull();
     const bread = within(strip).getByRole("article", { name: "Bread" });
     expect(bread.querySelector("img")).toBeNull();
-    expect(within(bread).getByTestId("cooking-now-cover-placeholder")).toHaveTextContent("B");
+    const placeholder = within(bread).getByTestId("cooking-now-cover-placeholder");
+    expect(placeholder).toHaveTextContent("B");
+    expect(placeholder).toHaveClass("sj-cover-placeholder");
+    expect(placeholder).not.toHaveClass("sj-cover-placeholder-bleed");
+    expect(Array.from(placeholder.classList).filter((token) => /^border(-|$)/.test(token))).toEqual([]);
     expect(within(bread).queryByTestId("cooking-now-step")).toBeNull();
     expect(within(bread).queryByTestId("cooking-now-checked")).toBeNull();
   });

@@ -1,4 +1,3 @@
-import { ImageOff } from 'lucide-react'
 import { Badge } from '~/components/ouro/badge/badge'
 import { Spinner } from '~/components/ouro/spinner/spinner'
 import type { ReactNode } from 'react'
@@ -9,6 +8,7 @@ import { SCALE_RANGE } from '~/components/cook/cook-controller'
 import { scaleServingsText } from '~/lib/quantity'
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 import { CoverProvenanceBadge } from './CoverProvenanceBadge'
+import { CoverPlaceholder } from './CoverPlaceholder'
 import type { CookSyncStatus } from '~/lib/cook-session-sync'
 import { SyncStatus } from '~/components/ouro/sync-status/sync-status'
 import { cookSyncStatusProps } from '~/lib/cook-sync-status'
@@ -161,14 +161,9 @@ export function RecipeHeader({
         ) : (
           <div
             data-testid="recipe-image-placeholder"
-            className="flex h-[36svh] min-h-[16rem] max-h-[20rem] items-center justify-center bg-[var(--sj-flour)] lg:h-[clamp(34rem,72svh,50rem)] lg:max-h-none lg:min-h-0 print:hidden"
+            className="h-[36svh] min-h-[16rem] max-h-[20rem] lg:h-[clamp(34rem,72svh,50rem)] lg:max-h-none lg:min-h-0 print:hidden"
           >
-            <div className="flex flex-col items-center gap-3 text-[var(--sj-ink-soft)]">
-              <div className="rounded-[var(--sj-radius-control)] border border-[var(--sj-border-strong)] p-5">
-                <ImageOff className="size-12 sm:size-16" aria-hidden="true" />
-              </div>
-              <span className="font-sj-ui text-sm font-semibold">{displayCoverPlaceholderLabel}</span>
-            </div>
+            <CoverPlaceholder title={title} label={displayCoverPlaceholderLabel} shape="bleed" className="h-full w-full" />
           </div>
         )}
 

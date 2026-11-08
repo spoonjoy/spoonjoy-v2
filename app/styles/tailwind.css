@@ -538,6 +538,72 @@ body:has(#cook) .sj-site-footer {
   color: var(--sj-on-photo-warm);
 }
 
+/* A recipe with no cover: native's RecipeInitialTile (spoonjoy-apple RecipeIndexRow.swift). */
+.sj-cover-placeholder {
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--sj-radius-photo);
+  background: linear-gradient(135deg, var(--sj-vellum), color-mix(in srgb, var(--sj-brass) 32%, var(--sj-vellum)));
+}
+
+/* Square, where the slot's cover photo runs edge to edge (the recipe header). */
+.sj-cover-placeholder.sj-cover-placeholder-bleed {
+  border-radius: 0;
+}
+
+/* The letter is sized to the tile, 42% of its height, as native's is. */
+.sj-cover-placeholder-initial {
+  font-family: var(--font-sj-display);
+  font-weight: 600;
+  font-size: 42cqh;
+  line-height: 1;
+  color: var(--sj-brass);
+}
+
+/* ouro-ui-core's sj-type-step token (Fraunces 600, 1.5rem, 1.25), which core keeps from web's CSS. */
+.sj-type-step {
+  font-family: var(--font-sj-display);
+  font-weight: 600;
+  font-size: 1.5rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+/* ouro-ui-core's sj-type-display token (Fraunces 600, 3rem, 1.1): native's cook step, read at arm's length. */
+.sj-type-display {
+  font-family: var(--font-sj-display);
+  font-weight: 600;
+  font-size: 3rem;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+/* The cook step's timer ring: native CookModeComponents.swift's vellum track and brass arc. */
+.sj-cook-timer-track {
+  stroke: var(--sj-vellum);
+}
+
+.sj-cook-timer-progress {
+  stroke: var(--sj-brass);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease, opacity 0.25s ease;
+}
+
+.sj-cook-timer [role="timer"] {
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sj-cook-timer-progress {
+    transition: none;
+  }
+}
+
 .sj-receipt {
   border: 1px solid var(--sj-border);
   background:

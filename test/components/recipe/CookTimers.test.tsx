@@ -29,6 +29,27 @@ describe("cook-mode timers", () => {
     Reflect.deleteProperty(document, "visibilityState");
   });
 
+  it("rings the step's timer: the brass arc shows the time left, over a vellum track", async () => {
+    window.localStorage.setItem("ouro-timer:spoonjoy-cook-timer:cook-timers-test:1", JSON.stringify({
+      status: "running", duration: 60, endsAt: NOW + 30_000,
+    }));
+    render(<CookStepTimer timer={pasta} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+    const ring = screen.getByTestId("cook-timer-ring");
+    expect(ring).toHaveAttribute("aria-hidden", "true");
+    expect(ring.querySelector(".sj-cook-timer-track")).not.toBeNull();
+    const arc = ring.querySelector(".sj-cook-timer-progress")!;
+    expect(Number(arc.getAttribute("stroke-dashoffset"))).toBeCloseTo(0.5, 2);
+    expect(screen.getByTestId("cook-mode-timer").closest(".sj-cook-timer")).not.toBeNull();
+  });
+
+  it("leaves the arc empty before the timer starts", () => {
+    render(<CookStepTimer timer={pasta} />);
+    const arc = screen.getByTestId("cook-timer-ring").querySelector(".sj-cook-timer-progress")!;
+    expect(arc.getAttribute("stroke-dashoffset")).toBe("1");
+  });
+
   it("renders nothing for a step without a timer", () => {
     const { container } = render(<CookStepTimer timer={undefined} />);
     expect(container).toBeEmptyDOMElement();

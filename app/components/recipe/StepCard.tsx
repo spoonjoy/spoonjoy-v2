@@ -57,7 +57,7 @@ export function StepCard({
         <div className="flex items-baseline gap-3">
           <p
             data-testid="step-number"
-            className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-ink-soft)]"
+            className={`font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.22em] ${current ? 'text-[var(--sj-brass)]' : 'text-[var(--sj-ink-soft)]'}`}
           >
             Step {stepNumber}
           </p>
@@ -106,7 +106,14 @@ export function StepCard({
           </div>
         )}
 
-        <p className="sj-step-method font-sj-body m-0 whitespace-pre-wrap text-base leading-loose text-[var(--sj-ink)] sm:text-lg">
+        {/* The step the cook is on reads in native's step role, Fraunces at sj-type-step; the rest stay body text. */}
+        <p
+          className={
+            current
+              ? 'sj-step-method sj-type-step m-0 whitespace-pre-wrap text-[var(--sj-ink)]'
+              : 'sj-step-method font-sj-body m-0 whitespace-pre-wrap text-base leading-loose text-[var(--sj-ink)] sm:text-lg'
+          }
+        >
           {description}
         </p>
       </div>
