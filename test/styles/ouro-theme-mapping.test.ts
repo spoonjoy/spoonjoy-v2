@@ -5,8 +5,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { THEME_CSS } from "./theme-css";
 
-const CSS = readFileSync(resolve(__dirname, "../..", "app/styles/tailwind.css"), "utf8");
+const CSS = THEME_CSS;
 
 // The custom properties declared in the first block that opens with `selector {`.
 function block(selector: string, pattern: RegExp): Record<string, string> {
