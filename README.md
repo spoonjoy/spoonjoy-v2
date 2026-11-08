@@ -9,25 +9,25 @@
 
 # Spoonjoy for the web
 
-Spoonjoy on the web: the recipe app, its API and its MCP server, on Cloudflare.
+The recipe app for home cooks, with an API and MCP server for their agents, on Cloudflare Workers.
 
 [spoonjoy.app](https://spoonjoy.app) · [Test Kitchen](https://spoonjoy.app/test-kitchen) (cook a sample recipe) · [API and MCP](https://spoonjoy.app/developers) · [Storybook](https://spoonjoy-storybook-cp6.pages.dev/) · [iPhone, iPad and Mac app](https://github.com/spoonjoy/spoonjoy-apple)
 
 **Run it locally:** with Node 22 and pnpm 10, the commands in [Quick Start](#quick-start) open your own kitchen at http://localhost:5173.
 
-A recipe app for home cooks, and the reference app for building with [Ouro HX](https://ui.ouroboros.bot/): read [Building with Ouro HX](docs/building-with-ouro-hx.md).
+It is also the reference app for building with [Ouro HX](https://ui.ouroboros.bot/): read [Building with Ouro HX](docs/building-with-ouro-hx.md).
 
 ## Links
 
 - **Getting Started Guide**: [GUIDE.md](./GUIDE.md) — the clone-to-kitchen walkthrough
 - **Cloudflare Deployment Checklist**: [docs/deployment.md](./docs/deployment.md)
 - **Analytics & Privacy**: [docs/analytics-privacy.md](./docs/analytics-privacy.md)
-- **Agents**: [spoonjoy.app/llms.txt](https://spoonjoy.app/llms.txt), the [API](docs/api.md) and the [MCP connector](docs/claude-connector.md)
+- **Agents**: [spoonjoy.app/llms.txt](https://spoonjoy.app/llms.txt), the [API](docs/api.md) and the [MCP connector](docs/claude-connector.md); agents working in this repository start with [AGENTS.md](AGENTS.md)
 
 ## Tech Stack
 
 - **Framework**: React Router 7[^stack]
-- **Platform**: Cloudflare Pages/Workers
+- **Platform**: Cloudflare Workers
 - **Database**: Cloudflare D1 (local & production) via Prisma
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS
