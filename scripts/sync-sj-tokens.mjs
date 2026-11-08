@@ -9,11 +9,15 @@
 // --chart-* and --sidebar-* scales, and its prefers-color-scheme block) is for pages without an
 // app of their own, and would change what Spoonjoy shows.
 //
-//   node scripts/sync-sj-tokens.mjs          write the file
-//   node scripts/sync-sj-tokens.mjs --check  exit 1 if the file is not what this would write
+//   node scripts/sync-sj-tokens.mjs             write the file
+//   node scripts/sync-sj-tokens.mjs --check     exit 1 if the file is not what this would write
+//   node scripts/sync-sj-tokens.mjs --snapshot  rewrite test/styles/sj-tokens.snapshot.json from it
 //
 // To take a new core release: replace vendor/ouro-ui-core/cookbook.css with that release's
-// web/themes/cookbook.css, update pin.json's tag and sha256, and run this.
+// web/themes/cookbook.css, update pin.json's tag and sha256, and run this. Then run
+// test/styles/sj-token-parity.test.ts: it holds every token to test/styles/sj-tokens.snapshot.json,
+// so a release that changes what Spoonjoy paints fails there until you mean the change and run
+// `node scripts/sync-sj-tokens.mjs --snapshot`, which rewrites the snapshot from the new file.
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -23,15 +27,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const VENDOR = resolve(ROOT, "vendor/ouro-ui-core/cookbook.css");
 const PIN = resolve(ROOT, "vendor/ouro-ui-core/pin.json");
 const OUT = resolve(ROOT, "app/styles/sj-tokens.css");
-
-// Web's photo-action colours: Spoonjoy web added them after core's Cookbook theme was last synced
-// from the app, so core does not carry them yet. They move to core with the next theme sync.
-// Contrast is measured by e2e/journeys/landing-readability.journey.ts.
-export const WEB_ONLY_LIGHT = {
-  "--sj-photo-action": "#d6a46a",
-  "--sj-photo-action-hover": "#e2b57f",
-  "--sj-on-photo-action": "var(--sj-photo-charcoal)",
-};
+const SNAPSHOT = resolve(ROOT, "test/styles/sj-tokens.snapshot.json");
 
 const TOKEN = /(--(?:sj|font-sj)-[\w-]+)\s*:\s*([^;]+);/g;
 
@@ -46,7 +42,7 @@ export function declarations(css, selector) {
 }
 
 export function render(css, pin) {
-  const light = { ...declarations(css, ":root"), ...WEB_ONLY_LIGHT };
+  const light = declarations(css, ":root");
   const dark = declarations(css, ".dark");
   const lines = (tokens) => Object.entries(tokens).map(([name, value]) => `  ${name}: ${value};`).join("\n");
   return `/*
@@ -84,6 +80,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       console.error("app/styles/sj-tokens.css is out of date: run node scripts/sync-sj-tokens.mjs");
       process.exit(1);
     }
+  } else if (process.argv.includes("--snapshot")) {
+    const { tag } = JSON.parse(readFileSync(PIN, "utf8"));
+    const source = `app/styles/sj-tokens.css from ouro-ui-core ${tag}`;
+    const snapshot = { source, light: declarations(output, ":root"), dark: declarations(output, ".dark") };
+    writeFileSync(SNAPSHOT, `${JSON.stringify(snapshot, null, 2)}\n`);
   } else {
     writeFileSync(OUT, output);
   }

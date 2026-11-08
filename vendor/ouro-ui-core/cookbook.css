@@ -1,7 +1,7 @@
 /*
  * Ouro HX "Cookbook" theme as plain CSS: spoonjoy's own look, synced from the app. shadcn/ui's tokens,
  * --font-sans, --font-mono, --font-heading and the --shadow-* scale, in light and dark. Load
- * ouro-base.css with it. Preview: https://ui.ouro.bot/
+ * ouro-base.css with it. Preview: https://ui.ouroboros.bot/
  * Dark mode: a .dark class on <html> as in shadcn, or, with neither .light nor .dark there,
  * the system's setting (prefers-color-scheme).
  * Fonts: Geist, Geist Mono, Fraunces, from ../../fonts/ (SIL Open Font License; LICENSE.txt there).
@@ -79,6 +79,9 @@
   --sj-photo-shade-soft: color-mix(in srgb, var(--sj-photo-charcoal) 42%, transparent);
   --sj-photo-glass: color-mix(in srgb, var(--sj-bone) 10%, transparent);
   --sj-photo-line: color-mix(in srgb, var(--sj-bone) 24%, transparent);
+  --sj-photo-action: #d6a46a;
+  --sj-photo-action-hover: #e2b57f;
+  --sj-on-photo-action: var(--sj-photo-charcoal);
   --sj-shadow: 0 24px 80px color-mix(in srgb, var(--sj-charcoal) 14%, transparent);
   --sj-shadow-soft: 0 12px 36px color-mix(in srgb, var(--sj-charcoal) 8%, transparent);
   --sj-radius-control: 0.375rem;
@@ -102,6 +105,11 @@
   --ouro-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --ouro-duration-press: 160ms;
   --ouro-duration-sheet: 500ms;
+  --ouro-duration-draw: 240ms;
+  --ouro-shadow-sheet-bottom: 0 -1px 0 color-mix(in oklab, var(--border) 60%, transparent), 0 -8px 32px rgb(0 0 0 / 0.12);
+  --ouro-shadow-sheet-top: 0 1px 0 color-mix(in oklab, var(--border) 60%, transparent), 0 8px 32px rgb(0 0 0 / 0.12);
+  --ouro-shadow-sheet-left: 8px 0 32px rgb(0 0 0 / 0.12);
+  --ouro-shadow-sheet-right: -8px 0 32px rgb(0 0 0 / 0.12);
 }
 
 .dark {
@@ -193,10 +201,19 @@
 :root, .dark {
   --background: var(--sj-paper);
   --foreground: var(--sj-ink);
+  --card: var(--sj-panel-solid);
+  --card-foreground: var(--sj-ink);
   --popover: var(--sj-panel-solid);
   --popover-foreground: var(--sj-ink);
   --primary: var(--sj-brass);
   --primary-foreground: var(--sj-paper);
+  --ouro-action: var(--sj-action);
+  --ouro-action-foreground: var(--sj-on-action);
+  --ouro-action-hover: var(--sj-action-hover);
+  --ouro-action-active: var(--sj-action-hover);
+  --ouro-action-disabled: var(--sj-action-disabled);
+  --ouro-action-disabled-foreground: var(--sj-on-action-disabled);
+  --ouro-action-disabled-opacity: 1;
   --secondary: var(--sj-flour);
   --secondary-foreground: var(--sj-ink);
   --muted: var(--sj-flour);
@@ -211,6 +228,7 @@
   --input: var(--sj-border-strong);
   --ring: var(--sj-brass);
   --radius: var(--sj-radius-control);
+  --font-heading: var(--font-sj-display);
 }
 
 :root, .dark {
