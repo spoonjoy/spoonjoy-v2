@@ -10,12 +10,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { THEME_CSS } from "./theme-css";
 import { createElement } from "react";
 import { render, screen } from "@testing-library/react";
 import { Button } from "~/components/ouro/button/button";
 
 const ROOT = resolve(__dirname, "../..");
-const CSS = readFileSync(resolve(ROOT, "app/styles/tailwind.css"), "utf8");
+const CSS = THEME_CSS;
 const MCP = readFileSync(resolve(ROOT, "app/routes/mcp.tsx"), "utf8");
 
 // The custom properties declared in the first block that opens with `selector {`.

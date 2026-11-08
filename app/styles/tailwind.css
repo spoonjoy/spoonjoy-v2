@@ -1,64 +1,10 @@
 @import "tailwindcss" source(none);
+@import "./sj-tokens.css";
 @source "../**/*.{js,jsx,ts,tsx}";
 @source "../../stories/**/*.{js,jsx,ts,tsx,mdx}";
 @config "../../tailwind.config.js";
 
 :root {
-  color-scheme: light;
-  --font-sj-display: "Fraunces", Georgia, "Times New Roman", serif;
-  --font-sj-body: "Source Serif 4", Georgia, "Times New Roman", serif;
-  --font-sj-ui: "IBM Plex Sans Condensed", "Avenir Next Condensed", ui-sans-serif, system-ui, sans-serif;
-
-  /* Cookbook palette: clean bone paper and charcoal are the anchors; accents are sparse and role-bound. */
-  --sj-bone: #fbfaf4;
-  --sj-bone-lift: #fffefa;
-  --sj-vellum: #e8e9df;
-  --sj-charcoal: #28231d;
-  --sj-charcoal-soft: #635d54;
-  --sj-brass: #9b6834;
-  --sj-action: #28231d;
-  --sj-action-deep: #1f1b17;
-  /* The primary button: its label, and its hover/pressed and disabled fills. Every pair passes
-     WCAG AA 4.5:1 (test/styles/primary-button-contrast.test.ts). */
-  --sj-on-action: var(--sj-bone);
-  --sj-action-hover: var(--sj-action-deep);
-  --sj-action-disabled: #6b655c;
-  --sj-on-action-disabled: var(--sj-bone);
-  --sj-tomato: #a24a38;
-  --sj-herb: #596a4f;
-  --sj-ink: var(--sj-charcoal);
-  --sj-ink-soft: var(--sj-charcoal-soft);
-  --sj-paper: var(--sj-bone);
-  --sj-page: var(--sj-bone);
-  --sj-panel: color-mix(in srgb, var(--sj-bone-lift) 88%, transparent);
-  --sj-panel-solid: var(--sj-bone-lift);
-  --sj-field: color-mix(in srgb, var(--sj-bone-lift) 94%, var(--sj-vellum));
-  --sj-flour: var(--sj-vellum);
-  --sj-border: color-mix(in srgb, var(--sj-charcoal) 18%, transparent);
-  --sj-border-strong: color-mix(in srgb, var(--sj-charcoal) 32%, transparent);
-  --sj-on-photo: var(--sj-bone);
-  --sj-on-photo-muted: color-mix(in srgb, var(--sj-bone) 76%, transparent);
-  --sj-on-photo-soft: color-mix(in srgb, var(--sj-bone) 62%, transparent);
-  --sj-on-photo-warm: color-mix(in srgb, var(--sj-bone) 78%, var(--sj-brass));
-  --sj-photo-charcoal: #211f1b;
-  --sj-photo-shade: color-mix(in srgb, var(--sj-photo-charcoal) 82%, transparent);
-  --sj-photo-shade-soft: color-mix(in srgb, var(--sj-photo-charcoal) 42%, transparent);
-  --sj-photo-glass: color-mix(in srgb, var(--sj-bone) 10%, transparent);
-  --sj-photo-line: color-mix(in srgb, var(--sj-bone) 24%, transparent);
-  /* The main action on a shaded photo, in both themes: a light amber with a charcoal label. The
-     page's own action merges with the shaded photo in light mode (charcoal, 1:1) and clears 3:1 by
-     only 0.07 in dark mode (#b9854b amber, pressed on a phone), measured by
-     e2e/journeys/landing-readability.journey.ts. */
-  --sj-photo-action: #d6a46a;
-  --sj-photo-action-hover: #e2b57f;
-  --sj-on-photo-action: var(--sj-photo-charcoal);
-  --sj-shadow: 0 24px 80px color-mix(in srgb, var(--sj-charcoal) 14%, transparent);
-  --sj-shadow-soft: 0 12px 36px color-mix(in srgb, var(--sj-charcoal) 8%, transparent);
-  --sj-radius-control: 0.375rem;
-  --sj-radius-small: 0.25rem;
-  --sj-radius-surface: 0.5rem;
-  --sj-radius-photo: 0.5rem;
-  --sj-radius-hero: 0.5rem;
   --warning: #b05109;
   --warning-foreground: #ffffff;
   --ouro-spring-duration: 750ms;
@@ -84,46 +30,6 @@
 }
 
 .dark {
-  color-scheme: dark;
-  --sj-bone: #f2eee6;
-  --sj-bone-lift: #282522;
-  --sj-vellum: #34302b;
-  --sj-charcoal: #1f1d1a;
-  --sj-charcoal-soft: #c8c0b4;
-  --sj-brass: #c4945c;
-  --sj-action: #b9854b;
-  --sj-action-deep: #95683a;
-  /* A dark label on the amber: the light one measured 2.61:1. Hover lightens instead of deepening,
-     so the dark label keeps its contrast. */
-  --sj-on-action: var(--sj-charcoal);
-  --sj-action-hover: #cc9a62;
-  --sj-action-disabled: #463d33;
-  --sj-on-action-disabled: var(--sj-charcoal-soft);
-  /* Bumped from #d26850 (4.24:1 on --sj-panel-solid) to pass WCAG AA (≥4.5:1)
-   * — it's the error-text color, so it has to be readable. */
-  --sj-tomato: #e58263;
-  --sj-herb: #a4b578;
-  --sj-ink: var(--sj-bone);
-  --sj-ink-soft: var(--sj-charcoal-soft);
-  --sj-paper: var(--sj-charcoal);
-  --sj-page: #1e1c19;
-  --sj-panel: color-mix(in srgb, var(--sj-bone-lift) 84%, transparent);
-  --sj-panel-solid: var(--sj-bone-lift);
-  --sj-field: color-mix(in srgb, var(--sj-charcoal) 82%, var(--sj-vellum));
-  --sj-flour: var(--sj-vellum);
-  --sj-border: color-mix(in srgb, var(--sj-bone) 16%, transparent);
-  --sj-border-strong: color-mix(in srgb, var(--sj-bone) 28%, transparent);
-  --sj-on-photo: #f1e6d3;
-  --sj-on-photo-muted: color-mix(in srgb, var(--sj-on-photo) 76%, transparent);
-  --sj-on-photo-soft: color-mix(in srgb, var(--sj-on-photo) 62%, transparent);
-  --sj-on-photo-warm: color-mix(in srgb, var(--sj-on-photo) 78%, var(--sj-brass));
-  --sj-photo-charcoal: #1d1915;
-  --sj-photo-shade: color-mix(in srgb, var(--sj-photo-charcoal) 84%, transparent);
-  --sj-photo-shade-soft: color-mix(in srgb, var(--sj-photo-charcoal) 46%, transparent);
-  --sj-photo-glass: color-mix(in srgb, var(--sj-on-photo) 10%, transparent);
-  --sj-photo-line: color-mix(in srgb, var(--sj-on-photo) 22%, transparent);
-  --sj-shadow: 0 28px 90px color-mix(in srgb, var(--sj-photo-charcoal) 56%, transparent);
-  --sj-shadow-soft: 0 16px 44px color-mix(in srgb, var(--sj-photo-charcoal) 42%, transparent);
   --warning: #fbbf24;
   --warning-foreground: #000000;
   --ouro-backdrop-color: #000000;

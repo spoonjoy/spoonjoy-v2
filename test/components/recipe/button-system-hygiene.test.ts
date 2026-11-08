@@ -10,7 +10,7 @@ const RECIPE_BUTTON_SURFACE_FILES = [
   'app/components/recipe/IngredientParseInput.tsx',
 ]
 
-const THEME_FILE = 'app/styles/tailwind.css'
+const THEME_FILE = 'app/styles/sj-tokens.css'
 
 function readSourceFile(relativePath: string): string {
   return readFileSync(resolve(process.cwd(), relativePath), 'utf-8')
