@@ -215,7 +215,7 @@ The test suite has 68,000+ lines of tests covering auth, recipes, steps, ingredi
 
 ```bash
 # Run all tests
-pnpm test
+pnpm test -- --run
 
 # Run with a pretty UI
 pnpm test:ui
@@ -332,7 +332,7 @@ export default function Recipes() {
 |---------|--------------|
 | `pnpm dev` | Start the dev server |
 | `pnpm storybook` | Launch component explorer |
-| `pnpm test` | Run test suite |
+| `pnpm test -- --run` | Run unit tests once (`pnpm test` alone watches) |
 | `pnpm test:ui` | Tests with visual UI |
 | `pnpm prisma:generate` | Regenerate Prisma client |
 | `pnpm build` | Production build |
