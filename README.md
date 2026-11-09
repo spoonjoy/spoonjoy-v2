@@ -13,7 +13,7 @@ The recipe app for home cooks, with an API and MCP server for their agents, on C
 
 [spoonjoy.app](https://spoonjoy.app) · [Test Kitchen](https://spoonjoy.app/test-kitchen) (cook a sample recipe) · [API and MCP](https://spoonjoy.app/developers) · [Storybook](https://spoonjoy-storybook-cp6.pages.dev/) · [iPhone, iPad and Mac app](https://github.com/spoonjoy/spoonjoy-apple)
 
-**Run it locally:** with Node 22 and pnpm 10, the commands in [Quick Start](#quick-start) open your own kitchen at http://localhost:5173.
+**Run it locally:** with Node 22 and pnpm 10, the commands in [Quick Start](#quick-start) open your own kitchen at http://localhost:5173. Agents start with [AGENTS.md](AGENTS.md), which says how app behaviour is validated in CI.
 
 It is also the reference app for building with [Ouro HX](https://ui.ouroboros.bot/): read [Building with Ouro HX](docs/building-with-ouro-hx.md).
 
