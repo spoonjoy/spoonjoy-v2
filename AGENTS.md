@@ -2,6 +2,8 @@
 
 Spoonjoy is Ari's recipe app, built with React Router 7 on Cloudflare.[^stack]
 
+**Start here:** run unit tests with `pnpm test -- --run`, validate app behaviour through the `Journeys` workflow in CI ([Validation](#validation)), and publish with `gh ouro-pr` ([Merging pull requests](#merging-pull-requests)).
+
 ## Merging pull requests
 
 Follow ourostack's shared [PR merge rule](https://github.com/ourostack/.github/blob/main/agents/prs-merge-within-30-minutes.md). Finish, review and validate on your branch first, then publish with `gh ouro-pr`, which turns auto-merge on so green means merged. When a PR here shows on the [PR clock](https://github.com/ourostack/.github/issues?q=is%3Aissue+is%3Aopen+label%3Apr-clock), act on it now: merge it if green, fix the cause if red (file an issue before any rerun), rebase it if conflicted, or close it with a reason if it isn't going anywhere.
@@ -86,7 +88,7 @@ prisma/
 Local commands are for writing code and running unit tests. App behaviour is validated only by the `Journeys` workflow in CI (see Validation above), so do not start the app locally to check it.
 
 ```bash
-pnpm run test         # Run unit tests (Vitest, watch mode)
+pnpm test -- --run    # Run unit tests once (plain `pnpm test` watches and never exits)
 pnpm run test:ui      # Vitest UI mode
 pnpm run test:coverage # Unit test coverage report
 pnpm run typecheck    # Type-check the code
@@ -184,7 +186,8 @@ getOrCreateIngredientRef(db, name) // Idempotent ingredient
 
 ### Running Tests
 ```bash
-pnpm test             # Watch mode
+pnpm test -- --run    # Run once and exit
+pnpm test             # Watch mode, for a person at a terminal
 pnpm run test:coverage # With coverage
 ```
 
