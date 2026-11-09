@@ -67,8 +67,11 @@ The census measures, page by page and state by state, how many of the controls a
 ```
 app/
 ├── routes/          # Route modules (loaders, actions, components)
+│   ├── api.v1.$.ts  # REST API (/api/v1)
+│   └── mcp.tsx      # MCP server endpoint (/mcp)
 ├── components/      # Shared React components
 ├── lib/             # Utilities and database client
+│   ├── mcp/         # MCP protocol, auth and tools
 │   ├── db.server.ts # Prisma client setup (D1 adapter)
 │   └── session.server.ts
 ├── styles/          # Tailwind CSS entry
@@ -82,6 +85,8 @@ test/
 prisma/
 └── schema.prisma    # Database schema
 ```
+
+The API is documented in [`docs/api.md`](docs/api.md), and the MCP server and its connector in [`docs/claude-connector.md`](docs/claude-connector.md).
 
 ## Development Commands
 
@@ -98,11 +103,7 @@ pnpm run build        # Production build, to check the app compiles
 ## Work Suite Autopilot
 
 ### Default Planning/Execution Workflow
-- Use `$work-planner` for planning and planning-to-doing conversion.
-- Use `$work-doer` for execution.
-- Before invoking planner/doer, verify local skill files are up to date with source-of-truth files in the current repo when available (`subagents/work-planner.md`, `subagents/work-doer.md`).
-  - If those files are absent, continue with the installed local skills and note that the repo-local source files were unavailable.
-  - If those files exist and differ from the installed local skills, update the installed local skills first, then continue.
+- Plan before coding: with the work-suite skills, `$work-planner` writes the planning doc and turns it into a doing doc, and `$work-doer` carries the doing doc out unit by unit. Without them, write the plan in the task's doc first.
 - Call `$work-planner`/`$work-doer` again on each turn where that behavior is required.
 
 ### Human Gates Are Waived By Default

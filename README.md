@@ -99,7 +99,7 @@ For Ouroboros agent integration, see [`docs/ouroboros-mcp.md`](docs/ouroboros-mc
 |---------|---------|
 | `pnpm dev` | Start dev server |
 | `pnpm storybook` | Component explorer |
-| `pnpm test` | Run test suite |
+| `pnpm test -- --run` | Run unit tests once (`pnpm test` alone watches) |
 | `pnpm test:ui` | Tests with visual UI |
 | `pnpm test:coverage` | Coverage report |
 | `pnpm test:e2e` | Run Playwright e2e tests |
