@@ -77,6 +77,9 @@ app/
 ├── styles/          # Tailwind CSS entry
 └── root.tsx         # Root layout
 
+e2e/
+└── journeys/        # Journeys that validate the app in CI (see Validation)
+
 test/
 ├── utils.ts         # Test helpers (faker-based data generators)
 ├── setup.ts         # Vitest setup
