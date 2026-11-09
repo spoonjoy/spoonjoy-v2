@@ -34,6 +34,8 @@ It is also the reference app for building with [Ouro HX](https://ui.ouroboros.bo
 
 ## Quick Start
 
+These steps are for people working on the app. Agents validate app behaviour in CI through the Journeys workflow, as [AGENTS.md](AGENTS.md) describes.
+
 ```bash
 # Clone and install
 git clone https://github.com/spoonjoy/spoonjoy-v2.git
@@ -122,6 +124,8 @@ For Ouroboros agent integration, see [`docs/ouroboros-mcp.md`](docs/ouroboros-mc
 Builds and tests create local-only directories such as `build/`, `coverage/`, `.react-router/`, `playwright-report/`, `test-results/`, and `storybook-static/`. These paths are intentionally ignored and should not be staged; `pnpm test:coverage` includes a repo-hygiene test that fails if any of them become tracked.
 
 ## E2E Testing
+
+Local Playwright runs are for people writing tests; agents use the Journeys workflow in CI ([AGENTS.md](AGENTS.md)).
 
 End-to-end tests use [Playwright](https://playwright.dev/) and live in the `e2e/` folder.
 
