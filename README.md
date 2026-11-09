@@ -15,14 +15,13 @@ The recipe app for home cooks, with an API and MCP server for their agents, on C
 
 **Run it locally:** with Node 22 and pnpm 10, the commands in [Quick Start](#quick-start) open your own kitchen at http://localhost:5173. Agents start with [AGENTS.md](AGENTS.md), which says how app behaviour is validated in CI.
 
-It is also the reference app for building with [Ouro HX](https://ui.ouroboros.bot/): read [Building with Ouro HX](docs/building-with-ouro-hx.md).
-
 ## Links
 
 - **Getting Started Guide**: [GUIDE.md](./GUIDE.md) — the clone-to-kitchen walkthrough
 - **Cloudflare Deployment Checklist**: [docs/deployment.md](./docs/deployment.md)
 - **Analytics & Privacy**: [docs/analytics-privacy.md](./docs/analytics-privacy.md)
 - **Agents**: [spoonjoy.app/llms.txt](https://spoonjoy.app/llms.txt), the [API](docs/api.md) and the [MCP connector](docs/claude-connector.md); agents working in this repository start with [AGENTS.md](AGENTS.md)
+- **Built with Ouro HX**: Spoonjoy is the reference app for building with [Ouro HX](https://ui.ouroboros.bot/); see [Building with Ouro HX](docs/building-with-ouro-hx.md)
 
 ## Tech Stack
 
