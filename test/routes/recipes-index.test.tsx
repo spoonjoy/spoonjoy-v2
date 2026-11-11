@@ -467,6 +467,10 @@ describe("Recipes Index Route", () => {
     expect(result).not.toContainEqual({ name: "robots", content: "noindex" });
   });
 
+  it("treats an empty search as the plain list", () => {
+    expect(meta({ location: { search: "?q=%20" } } as any)).not.toContainEqual({ name: "robots", content: "noindex" });
+  });
+
   it("keeps search results out of the index", () => {
     const result = meta({ location: { search: "?q=pasta" } } as any);
     expect(result).toContainEqual({ name: "robots", content: "noindex" });
