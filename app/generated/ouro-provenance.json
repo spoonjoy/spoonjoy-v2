@@ -2766,6 +2766,7 @@
         "app/components/navigation/mobile-nav.tsx",
         "app/components/navigation/quick-actions.tsx",
         "app/components/navigation/recipes-section-nav.tsx",
+        "app/components/recipe/CoverPlaceholder.tsx",
         "app/components/recipe/CoverProvenanceBadge.tsx",
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-resend-lost-submission.ts",
