@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { assetRetryNote, loadRetryNote } from "../../e2e/journeys/support/app-ready";
+import { assetRetryNote, dataRequestRetryNote, loadRetryNote } from "../../e2e/journeys/support/app-ready";
 import {
   EXPECTED_PRISMA_D1_TRANSACTION_WARNING,
   JOURNEYS_RETRY_NOTE_PATTERN,
@@ -377,6 +377,11 @@ describe("warning gate", () => {
       assetRetryNote("/assets/root-Dx_9a.css", 504, 3),
       assetRetryNote("/assets/_user$id-Ab3_x.js", 503, 2),
       assetRetryNote("/assets/logo@2x-Q1w2.png", 502, 3),
+      // The data requests Journeys runs 43057324617 and 43063219006 lost (#666).
+      dataRequestRetryNote("POST", "/recipes/6fd4f6b4/steps/new.data", new Error("read ECONNRESET")),
+      dataRequestRetryNote("GET", "/recipes.data", new Error("socket hang up")),
+      dataRequestRetryNote("POST", "/login.data", new Error("Client network socket disconnected before secure TLS connection was established")),
+      dataRequestRetryNote("GET", "/recipes.data", Object.assign(new Error("route.fetch: Timeout 6000ms exceeded."), { name: "TimeoutError" })),
     ];
 
     it.each(notes)("tolerates %s", (line) => {
@@ -392,6 +397,10 @@ describe("warning gate", () => {
       ["a fourth try", assetRetryNote("/assets/a.js", 502, 4)],
       ["extra text after a note", `${assetRetryNote("/assets/a.js", 502, 2)} and a page error`],
       ["another note from the journeys", "Journeys: the page never hydrated"],
+      ["a data request that failed another way", dataRequestRetryNote("POST", "/login.data", new Error("getaddrinfo ENOTFOUND example.test"))],
+      ["a request that is not a data request", dataRequestRetryNote("POST", "/login", new Error("read ECONNRESET"))],
+      ["a submission resent after no answer", dataRequestRetryNote("POST", "/login.data", Object.assign(new Error("route.fetch: Timeout 6000ms exceeded."), { name: "TimeoutError" }))],
+      ["a data request whose retry note has more after it", `${dataRequestRetryNote("POST", "/login.data", new Error("read ECONNRESET"))} and then a page error`],
     ])("still fails %s", (_label, line) => {
       expect(JOURNEYS_RETRY_NOTE_PATTERN.test(line)).toBe(false);
       expect(findUnexpectedDiagnosticOutput("", `${line}\n`)).toEqual([line]);

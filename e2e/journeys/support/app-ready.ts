@@ -84,6 +84,15 @@ function reportLoadAgain(error: Error): void {
 const RETRYABLE_ASSET_STATUSES = new Set([502, 503, 504]);
 export const STATIC_ASSET_RETRY_DELAYS_MS: readonly number[] = [250, 1_000];
 
+/**
+ * How long a routed request waits for an answer. Without a limit, a request whose connection hangs
+ * waits for as long as the test runs, as in Journeys run 43070915438 (#666), where a built file
+ * and a /recipes.data each waited until their test ended while the run's Worker logged nothing
+ * stalled. The run's slowest Worker answer took 4.9 s. A data request with no answer twice takes
+ * twice this plus a second, under the 15 s a journey's URL and visibility checks wait.
+ */
+export const ROUTED_FETCH_TIMEOUT_MS = 6_000;
+
 type AssetRoute = Pick<Route, "fetch" | "fulfill" | "continue" | "request">;
 
 /**
@@ -98,7 +107,7 @@ export async function answerStaticAsset(
   for (let attempt = 0; ; attempt += 1) {
     let response: APIResponse;
     try {
-      response = await route.fetch();
+      response = await route.fetch({ timeout: ROUTED_FETCH_TIMEOUT_MS });
     } catch {
       await route.continue().catch(() => undefined);
       return;
@@ -120,11 +129,94 @@ function reportAssetAgain(path: string, status: number, attempt: number): void {
   console.warn(assetRetryNote(path, status, attempt));
 }
 
+// A React Router data request (a form submission's action, or a navigation's loaders: the
+// `.data` URLs) that lost its connection before any answer, as in Journeys runs 43057324617 and
+// 43063219006 (#666): the runner's connection to Cloudflare's edge was reset while the run's Worker
+// answered every request it finished, with no server error. The browser then logs "Failed to load
+// resource" and the journey fails on a page that did nothing wrong. Routed through Playwright, the
+// request is made by Node, which words a dropped connection like this. An answer of any status is
+// not one, and neither is any other error.
+const FETCH_TRANSPORT_FAILURE = /\b(?:ECONNRESET|EPIPE)\b|socket hang up|Client network socket disconnected before secure TLS connection was established/;
+
+/** True when route.fetch had no answer within its timeout. */
+export function isFetchTimeout(error: unknown): boolean {
+  return error instanceof Error && error.name === "TimeoutError" && /^route\.fetch: Timeout \d+ms exceeded\.$/.test(error.message.split("\n")[0]);
+}
+
+const SAFE_METHODS = new Set(["GET", "HEAD"]);
+
+/** True when route.fetch failed because its connection dropped before any answer. */
+export function isFetchTransportFailure(error: unknown): boolean {
+  return error instanceof Error && !error.name.includes("Timeout") && FETCH_TRANSPORT_FAILURE.test(error.message.split("\n")[0]);
+}
+
+export const DATA_REQUEST_RETRY_DELAY_MS = 1_000;
+
+type DataRoute = Pick<Route, "fetch" | "fulfill" | "abort" | "request">;
+
+/**
+ * Answers a data request, sending it once more, a second later, when its connection dropped
+ * before any answer, as a person on a flaky connection would submit again. It is sent at most
+ * twice. A GET or HEAD with no answer within ROUTED_FETCH_TIMEOUT_MS is sent once more too; a
+ * submission with none is not, since the Worker may be applying it. A submission is not always
+ * idempotent, but one whose connection dropped before an answer may never have reached the
+ * Worker, and a journey checks what the page shows next, so a submission applied twice still
+ * fails it. Every answer reaches the page unchanged, redirects included, though whole rather than
+ * streamed: the app has no deferred loader data, and one that streams would need this revisited.
+ * When both tries fail, or the request fails any other way, the page's fetch fails as a lost request ("Failed to
+ * fetch" in Chromium, "Load failed" in WebKit, both app/lib/network-failure.ts's), so the app's own
+ * handling runs. Unlike answerStaticAsset, it never falls back to route.continue(), which would
+ * send a submission a hidden third time. Playwright's own route.fetch({ maxRetries }) retries only
+ * ECONNRESET, and silently, so it is not used.
+ */
+export async function answerDataRequest(
+  route: DataRoute,
+  wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  onRetry: (method: string, path: string, error: Error) => void = reportDataRequestAgain,
+): Promise<void> {
+  const options = { maxRedirects: 0, timeout: ROUTED_FETCH_TIMEOUT_MS };
+  let response: APIResponse;
+  try {
+    response = await route.fetch(options);
+  } catch (error) {
+    const request = route.request();
+    const unanswered = isFetchTimeout(error) && SAFE_METHODS.has(request.method());
+    if (!unanswered && !isFetchTransportFailure(error)) {
+      await route.abort("connectionreset").catch(() => undefined);
+      return;
+    }
+    onRetry(request.method(), new URL(request.url()).pathname, error as Error);
+    await wait(DATA_REQUEST_RETRY_DELAY_MS);
+    try {
+      response = await route.fetch(options);
+    } catch {
+      await route.abort("connectionreset").catch(() => undefined);
+      return;
+    }
+  }
+  await route.fulfill({ response });
+}
+
+export function dataRequestRetryNote(method: string, path: string, error: Error): string {
+  const why = isFetchTimeout(error) ? "it had no answer" : "its connection was reset";
+  return `Journeys: sending ${method} ${path} again after ${why} (${error.message.split("\n")[0]})`;
+}
+
+function reportDataRequestAgain(method: string, path: string, error: Error): void {
+  console.warn(dataRequestRetryNote(method, path, error));
+}
+
+/** The app's data requests on `origin`: every path ending in `.data`, with any query. */
+export function dataRequestPattern(origin: string): RegExp {
+  return new RegExp(`^${origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/[^?#]*\\.data(?:[?#]|$)`);
+}
+
 /**
  * Makes every page.goto and page.reload on this page wait for hydration as well as the load, so a
  * journey's first tap reaches the app, and load once more after a reset connection
- * (loadAgainAfterTransportFailure), and routes the app's static files through answerStaticAsset,
- * which turns off the browser's HTTP cache for this page. A load with waitUntil "commit" is not
+ * (loadAgainAfterTransportFailure), and routes the app's static files through answerStaticAsset and
+ * its data requests through answerDataRequest, which turns off the browser's HTTP cache for this
+ * page. A load with waitUntil "commit" is not
  * waited on: it is how a journey types into the server's markup before hydration on purpose.
  * support/journey.ts applies this to the fixture's page; a journey that opens its own page applies
  * it there.
@@ -135,7 +227,11 @@ export function waitForHydrationOnLoad(page: Page): void {
   // A glob, not a function: Playwright pauses every request a function matcher might match.
   const base = process.env.SPOONJOY_JOURNEYS_BASE_URL;
   const assetsRouted = base
-    ? page.route(`${new URL(base).origin}/assets/**`, (route) => answerStaticAsset(route))
+    ? Promise.all([
+        page.route(`${new URL(base).origin}/assets/**`, (route) => answerStaticAsset(route)),
+        // A RegExp, like a glob, is handed to Playwright to match, so other requests are not paused.
+        page.route(dataRequestPattern(new URL(base).origin), (route) => answerDataRequest(route)),
+      ])
     : Promise.resolve();
   // Awaited by the first load; a page closed before any load must not leave it unhandled.
   assetsRouted.catch(() => undefined);
