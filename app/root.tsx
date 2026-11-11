@@ -49,6 +49,7 @@ import { useUnsavedFormGuard } from "~/hooks/use-unsaved-form-guard";
 import { useCookingNow } from "~/hooks/use-cooking-now";
 import { CookingNowPill } from "~/components/cooking-now/CookingNow";
 import { SiteFooter } from "~/components/navigation/site-footer";
+import { smartAppBannerContent } from "~/lib/app-store";
 import { XrayProvider } from "~/components/xray/xray-provider";
 import { UNKNOWN_SOURCE_SHA, buildSourceSha } from "~/lib/build-info.server";
 import "./styles/tailwind.css";
@@ -76,7 +77,8 @@ export function links() {
       href: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,400..900,60..100,0..1&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400..800&display=swap",
     },
     { rel: "icon", href: "/logos/sj_black.svg", type: "image/svg+xml" },
-    { rel: "apple-touch-icon", href: "/logos/sj_black.svg" },
+    // iOS ignores an SVG touch icon; this is the native app's own 180 px icon, so a saved page matches it.
+    { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
     { rel: "manifest", href: "/manifest.webmanifest" },
   ];
 }
@@ -288,6 +290,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // Applied to every inline <script> below so script-src can drop 'unsafe-inline'.
   const nonce = useContext(NonceContext);
   const popups = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  const appBanner = smartAppBannerContent(location.pathname, location.search);
   useHydratedMark();
   return (
     <html lang="en" suppressHydrationWarning>
@@ -300,6 +304,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="theme-color" content="#fbfaf6" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        {/* Safari's Smart App Banner: "Open" or "Get" for Spoonjoy on iPhone and iPad, landing on this page. */}
+        {appBanner ? <meta name="apple-itunes-app" content={appBanner} /> : null}
         <Meta />
         <Links />
         {/* Applies the kept colour scheme before the page paints, so a reload never flashes the wrong one. */}

@@ -68,6 +68,13 @@ describe("SiteFooter", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("points every visitor to the iPhone and iPad app on the App Store", () => {
+    renderSite();
+    const footer = screen.getByRole("contentinfo");
+    const app = within(footer).getByRole("link", { name: "Spoonjoy for iPhone and iPad" });
+    expect(app).toHaveAttribute("href", "https://apps.apple.com/app/id6787505444");
+  });
+
   it("turns X-ray on from \"See all the components\", listing the page's components with their docs and source", async () => {
     layOutComponents();
     const user = userEvent.setup();

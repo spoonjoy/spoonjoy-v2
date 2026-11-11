@@ -29,6 +29,7 @@
       "app/lib/analytics.ts",
       "app/lib/api-auth.server.ts",
       "app/lib/api-idempotency.server.ts",
+      "app/lib/app-store.ts",
       "app/lib/build-info.server.ts",
       "app/lib/canonical-host.server.ts",
       "app/lib/client-storage-schema.ts",
