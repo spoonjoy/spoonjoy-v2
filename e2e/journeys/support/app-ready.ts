@@ -4,6 +4,9 @@
 // starts, and the app hydrates in a transition that can pause, so a tap in between can be lost
 // (run 40239273524: an iPhone tap on search's Recipes scope link 1.3 s into the load started no
 // navigation).
+import { readdirSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { APIResponse, Page, Route } from "@playwright/test";
 
 /** Waits until React has finished hydrating the page's current document. */
@@ -83,6 +86,39 @@ function reportLoadAgain(error: Error): void {
 // nothing. Other statuses, and the last try's answer, reach the page unchanged.
 const RETRYABLE_ASSET_STATUSES = new Set([502, 503, 504]);
 export const STATIC_ASSET_RETRY_DELAYS_MS: readonly number[] = [250, 1_000];
+// A built file's 404 has lasted about a minute (#668, run 43071931597 attempt 2: 18:03:06Z to
+// 18:04:00Z), so it is asked again for longer, about 50 s in all. A CI ruling recorded on #668.
+export const BUILT_FILE_404_RETRY_DELAYS_MS: readonly number[] = [250, 1_000, 4_000, 15_000, 30_000];
+
+// It has also answered 404 for a built file it had served a minute before: in Journeys run
+// 43071931597 (#668), qa-run-scope.mjs verify saw all 239 built files answer 200, and then
+// /assets/button-CXqvcQew.js and /assets/last-input-Di7bn0GT.js answered 404 to the first page.
+// A file this run built cannot really be missing, so a 404 for one is asked again like a 502. A 404
+// for any other file is a real missing file and reaches the page at once.
+// The same folder, and the same file names, scripts/qa-run-scope.mjs verify checked were served,
+// found from this file (e2e/journeys/support/), so a suite started from another folder still finds
+// the build.
+export const CLIENT_ASSETS_DIR = `${path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")}/build/client/assets/`;
+const BUILT_FILE_NAME = /^[^/]+\.[A-Za-z0-9]+$/;
+
+let builtFiles: Set<string> | undefined;
+
+/** True when this run's build has `pathname` (an /assets/ path); without a build, never. */
+export function isBuiltAsset(pathname: string, list: (dir: string) => string[] = (dir) => readdirSync(dir)): boolean {
+  if (!builtFiles) {
+    try {
+      builtFiles = new Set(list(CLIENT_ASSETS_DIR).filter((name) => BUILT_FILE_NAME.test(name)).map((name) => `/assets/${name}`));
+    } catch {
+      builtFiles = new Set();
+    }
+  }
+  return builtFiles.has(pathname);
+}
+
+/** Forgets the build's file list, so a test can give isBuiltAsset another. */
+export function resetBuiltAssets(): void {
+  builtFiles = undefined;
+}
 
 /**
  * How long a routed request waits for an answer. Without a limit, a request whose connection hangs
@@ -97,13 +133,19 @@ type AssetRoute = Pick<Route, "fetch" | "fulfill" | "continue" | "request">;
 
 /**
  * Answers a static file request, asking Cloudflare again, at most twice, while it answers 502, 503
- * or 504. When the request itself fails, the browser makes it as if nothing were routed.
+ * or 504, and at most five times, over about 50 s, while it answers 404 for a file this run built.
+ * When the request itself fails, the browser makes it as if nothing were routed.
  */
 export async function answerStaticAsset(
   route: AssetRoute,
   wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-  onRetry: (path: string, status: number, attempt: number) => void = reportAssetAgain,
+  onRetry: (path: string, status: number, attempt: number, ray: string, tries: number) => void = reportAssetAgain,
+  isBuilt: (pathname: string) => boolean = (pathname) => isBuiltAsset(pathname),
+  onRecovered: (path: string, status: number, attempt: number, ray: string, tries: number) => void = reportAssetRecovered,
 ): Promise<void> {
+  const pathname = new URL(route.request().url()).pathname;
+  // How many tries the latest retried answer allowed, for the notes.
+  let tries = STATIC_ASSET_RETRY_DELAYS_MS.length + 1;
   for (let attempt = 0; ; attempt += 1) {
     let response: APIResponse;
     try {
@@ -112,21 +154,50 @@ export async function answerStaticAsset(
       await route.continue().catch(() => undefined);
       return;
     }
-    if (!RETRYABLE_ASSET_STATUSES.has(response.status()) || attempt >= STATIC_ASSET_RETRY_DELAYS_MS.length) {
-      await route.fulfill({ response });
+    const status = response.status();
+    const ray = cfRay(response);
+    const builtFile404 = status === 404 && isBuilt(pathname);
+    const delays = builtFile404 ? BUILT_FILE_404_RETRY_DELAYS_MS : STATIC_ASSET_RETRY_DELAYS_MS;
+    const retryable = RETRYABLE_ASSET_STATUSES.has(status) || builtFile404;
+    if (!retryable || attempt >= delays.length) {
+      if (attempt > 0) onRecovered(pathname, status, attempt + 1, ray, tries);
+      // After a long wait the test may have ended and closed the page; the answer then has nowhere to go.
+      await route.fulfill({ response }).catch(() => undefined);
       return;
     }
-    onRetry(new URL(route.request().url()).pathname, response.status(), attempt + 2);
-    await wait(STATIC_ASSET_RETRY_DELAYS_MS[attempt]);
+    tries = delays.length + 1;
+    onRetry(pathname, status, attempt + 2, ray, tries);
+    await wait(delays[attempt]);
   }
 }
 
-export function assetRetryNote(path: string, status: number, attempt: number): string {
-  return `Journeys: static file ${path} answered ${status}; asking again (try ${attempt} of ${STATIC_ASSET_RETRY_DELAYS_MS.length + 1})`;
+// What Cloudflare said about the answer: its request id, which a report to Cloudflare names, and
+// whether its cache served it (cf-cache-status) and how old that copy was (age), which say whether
+// the edge is replaying a 404.
+function cfRay(response: APIResponse): string {
+  const headers = response.headers();
+  return [
+    headers["cf-ray"] || "none",
+    headers["cf-cache-status"] ? `cf-cache-status ${headers["cf-cache-status"]}` : "",
+    headers.age ? `age ${headers.age}` : "",
+  ].filter(Boolean).join(", ");
 }
 
-function reportAssetAgain(path: string, status: number, attempt: number): void {
-  console.warn(assetRetryNote(path, status, attempt));
+export function assetRetryNote(path: string, status: number, attempt: number, ray = "none", tries = STATIC_ASSET_RETRY_DELAYS_MS.length + 1): string {
+  return `Journeys: static file ${path} answered ${status}; asking again (try ${attempt} of ${tries}, cf-ray ${ray})`;
+}
+
+// The answer to the last try, so the log says how a retried file ended, not only that it was retried.
+export function assetRecoveredNote(path: string, status: number, attempt: number, ray = "none", tries = STATIC_ASSET_RETRY_DELAYS_MS.length + 1): string {
+  return `Journeys: static file ${path} answered ${status} on try ${attempt} of ${tries} (cf-ray ${ray})`;
+}
+
+function reportAssetAgain(path: string, status: number, attempt: number, ray: string, tries: number): void {
+  console.warn(assetRetryNote(path, status, attempt, ray, tries));
+}
+
+function reportAssetRecovered(path: string, status: number, attempt: number, ray: string, tries: number): void {
+  console.warn(assetRecoveredNote(path, status, attempt, ray, tries));
 }
 
 // A React Router data request (a form submission's action, or a navigation's loaders: the

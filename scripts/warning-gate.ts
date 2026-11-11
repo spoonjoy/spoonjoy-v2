@@ -24,13 +24,14 @@ export const PNPM_SLOW_TARBALL_PATTERN =
 // each built file they ask for again after Cloudflare answered 502, 503 or 504
 // (e2e/journeys/support/app-ready.ts):
 //   Journeys: loading the page again after its connection was reset (page.goto: net::ERR_CONNECTION_RESET at https://…/login)
-//   Journeys: static file /assets/heading-BIJmUf4w.js answered 502; asking again (try 2 of 3)
+//   Journeys: static file /assets/heading-BIJmUf4w.js answered 502; asking again (try 2 of 3, cf-ray 8f1e2d3c4b5a6978-IAD)
+//   Journeys: static file /assets/heading-BIJmUf4w.js answered 200 on try 2 of 3 (cf-ray 8f1e2d3c4b5a6979-IAD)
 //   Journeys: sending POST /recipes/…/steps/new.data again after its connection was reset (read ECONNRESET)
 // A retry that worked must not fail the step (Journeys run 40634883359's gate rejected the first
 // note). Only those shapes, for a reset connection and those statuses, are tolerated; a retry that
 // fails again fails its test anyway.
 export const JOURNEYS_RETRY_NOTE_PATTERN =
-  /^Journeys: (?:loading the page again after its connection was reset \(page\.(?:goto|reload): .*?(?:Connection reset by peer|Peer failed to perform TLS handshake|net::ERR_(?:CONNECTION_(?:RESET|CLOSED)|SSL_PROTOCOL_ERROR)\b).*\)|static file \/assets\/\S+ answered 50[234]; asking again \(try [23] of 3\)|sending (?:GET|POST|PUT|PATCH|DELETE) \/\S*\.data again after its connection was reset \((?:[^)]*?)(?:\b(?:ECONNRESET|EPIPE)\b|socket hang up|Client network socket disconnected before secure TLS connection was established)[^)]*\)|sending (?:GET|HEAD) \/\S*\.data again after it had no answer \(route\.fetch: Timeout \d+ms exceeded\.\))$/;
+  /^Journeys: (?:loading the page again after its connection was reset \(page\.(?:goto|reload): .*?(?:Connection reset by peer|Peer failed to perform TLS handshake|net::ERR_(?:CONNECTION_(?:RESET|CLOSED)|SSL_PROTOCOL_ERROR)\b).*\)|static file \/assets\/\S+ (?:answered (?:50[234]; asking again \(try [23] of 3|404; asking again \(try (?:[23] of 3|[2-6] of 6)), cf-ray [\w-]+(?:, cf-cache-status [A-Z/]+)?(?:, age \d+)?\)|answered \d{3} on try (?:[23] of 3|[2-6] of 6) \(cf-ray [\w-]+(?:, cf-cache-status [A-Z/]+)?(?:, age \d+)?\))|sending (?:GET|POST|PUT|PATCH|DELETE) \/\S*\.data again after its connection was reset \((?:[^)]*?)(?:\b(?:ECONNRESET|EPIPE)\b|socket hang up|Client network socket disconnected before secure TLS connection was established)[^)]*\)|sending (?:GET|HEAD) \/\S*\.data again after it had no answer \(route\.fetch: Timeout \d+ms exceeded\.\))$/;
 
 // Ouro HX's touch test kit (app/lib/ouro/testing/commands.ts) reports a touch command that
 // succeeded but took longer than a second on stderr, with what it waited for, so a slow CI frame
