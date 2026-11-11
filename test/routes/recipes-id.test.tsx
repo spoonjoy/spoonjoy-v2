@@ -15,6 +15,7 @@ vi.mock("~/lib/ouro/share", async () => {
 
 import { DockContextProvider, MobileNav } from "~/components/navigation";
 import { share } from "~/lib/ouro/share";
+import { DELETED_CHEF_USERNAME } from "~/lib/username";
 import {
   loader,
   action,
@@ -346,7 +347,7 @@ describe("Recipes $id Route", () => {
   });
 
   describe("meta", () => {
-    it("returns recipe share metadata with on-demand OG image", () => {
+    it("returns recipe share metadata with Spoonjoy's PNG card when the recipe has no photo", () => {
       expect(
         meta({
           data: {
@@ -356,7 +357,7 @@ describe("Recipes $id Route", () => {
               chef: { username: "ari" },
             },
             canonicalUrl: "https://spoonjoy.app/recipes/recipe-1",
-            ogImageUrl: "https://spoonjoy.app/og/recipes/recipe-1.png",
+            ogImageUrl: "https://spoonjoy.app/og/spoonjoy-home.png",
           },
         } as any),
       ).toEqual([
@@ -367,14 +368,14 @@ describe("Recipes $id Route", () => {
         { property: "og:title", content: "Charred Tomato Toast" },
         { property: "og:description", content: "A fast lunch with real crunch." },
         { property: "og:url", content: "https://spoonjoy.app/recipes/recipe-1" },
-        { property: "og:image", content: "https://spoonjoy.app/og/recipes/recipe-1.png" },
+        { property: "og:image", content: "https://spoonjoy.app/og/spoonjoy-home.png" },
         { property: "og:image:width", content: "1200" },
         { property: "og:image:height", content: "630" },
-        { property: "og:image:type", content: "image/svg+xml" },
+        { property: "og:image:type", content: "image/png" },
+        { name: "twitter:image", content: "https://spoonjoy.app/og/spoonjoy-home.png" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: "Charred Tomato Toast" },
         { name: "twitter:description", content: "A fast lunch with real crunch." },
-        { name: "twitter:image", content: "https://spoonjoy.app/og/recipes/recipe-1.png" },
         { tagName: "link", rel: "canonical", href: "https://spoonjoy.app/recipes/recipe-1" },
       ]);
     });
@@ -436,7 +437,7 @@ describe("Recipes $id Route", () => {
       expect(result.savedInCookbookIds).toEqual([]);
       expect(result.hasIngredientsInShoppingList).toBe(false);
       expect(result.canonicalUrl).toBe(`http://localhost:3000/recipes/${recipeId}`);
-      expect(result.ogImageUrl).toBe(`http://localhost:3000/og/recipes/${recipeId}.png`);
+      expect(result.ogImageUrl).toBe("http://localhost:3000/og/spoonjoy-home.png");
       expect(result.coverImageUrl).toBeNull();
     });
 
@@ -491,6 +492,51 @@ describe("Recipes $id Route", () => {
 
       expect(result.coverImageUrl).toBe("/photos/detail-editorial.jpg");
       expect(result.coverProvenanceLabel).toBe("Editorial photo");
+      // Link previews show the dish itself, at an absolute URL.
+      expect(result.ogImageUrl).toBe("http://localhost:3000/photos/detail-editorial.jpg");
+    });
+
+    it("names the dish's photo in Recipe JSON-LD at an absolute URL, and links the chef's kitchen", async () => {
+      await db.recipeStep.create({ data: { recipeId, stepNum: 1, description: "Toast the bread." } });
+      const cover = await db.recipeCover.create({
+        data: { recipeId, imageUrl: "/photos/json-ld.jpg", sourceType: "chef-upload" },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { activeCoverId: cover.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+      const load = () => loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const result = await load();
+      expect(result.recipeJsonLd).toMatchObject({
+        image: "http://localhost:3000/photos/json-ld.jpg",
+        author: { url: expect.stringMatching(/^http:\/\/localhost:3000\/users\//) },
+      });
+
+      // An AI-made cover still previews in shares but is not offered to Google as a photo of the dish.
+      await db.recipeCover.update({ where: { id: cover.id }, data: { sourceType: "ai-placeholder" } });
+      const aiResult = await load();
+      expect(aiResult.ogImageUrl).toBe("http://localhost:3000/photos/json-ld.jpg");
+      expect(aiResult.recipeJsonLd).not.toHaveProperty("image");
+    });
+
+    it("links no kitchen in Recipe JSON-LD for a deleted chef's recipe", async () => {
+      await db.recipeStep.create({ data: { recipeId, stepNum: 1, description: "Toast the bread." } });
+      const { chefId } = await db.recipe.findUniqueOrThrow({ where: { id: recipeId }, select: { chefId: true } });
+      await db.user.update({ where: { id: chefId }, data: { username: DELETED_CHEF_USERNAME } });
+
+      const result = await loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result.recipeJsonLd).toHaveProperty("author");
+      expect(result.recipeJsonLd?.author).not.toHaveProperty("url");
     });
 
     it("returns active-cover processing data while editorialization is pending", async () => {

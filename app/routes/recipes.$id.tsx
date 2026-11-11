@@ -1,5 +1,6 @@
 import type { Route } from "./+types/recipes.$id";
 import { chefDisplayName } from "~/lib/username";
+import { shareImageMeta } from "~/lib/og-metadata";
 import {
   isRouteErrorResponse,
   useActionData,
@@ -81,14 +82,10 @@ export function meta({ data, error }: Route.MetaArgs) {
     { property: "og:title", content: data.recipe.title },
     { property: "og:description", content: description },
     { property: "og:url", content: data.canonicalUrl },
-    { property: "og:image", content: data.ogImageUrl },
-    { property: "og:image:width", content: "1200" },
-    { property: "og:image:height", content: "630" },
-    { property: "og:image:type", content: "image/svg+xml" },
+    ...shareImageMeta(data.ogImageUrl),
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: data.recipe.title },
     { name: "twitter:description", content: description },
-    { name: "twitter:image", content: data.ogImageUrl },
     { tagName: "link", rel: "canonical", href: data.canonicalUrl },
     ...(data.recipeJsonLd
       ? [{ "script:ld+json": data.recipeJsonLd }]
