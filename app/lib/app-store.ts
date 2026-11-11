@@ -7,11 +7,35 @@ export const SPOONJOY_APP_STORE_URL = `https://apps.apple.com/app/id${SPOONJOY_A
 const PRODUCTION_ORIGIN = "https://spoonjoy.app";
 
 /**
- * The `apple-itunes-app` meta content for Safari's Smart App Banner. The argument is the page's
- * production URL, which the app opens like a universal link, so "Open" lands on the same recipe.
- * Commas separate the attribute's fields, so a comma in the URL is percent-encoded.
+ * Pages the native app opens itself. This mirrors spoonjoy-apple's DeepLinkRouter; any other path
+ * would open the app on its "Link Not Found" screen, so the banner opens the app's home instead.
  */
-export function smartAppBannerContent(pathname: string, search: string): string {
+const APP_PATHS = [
+  /^\/$/,
+  /^\/recipes(?:\/new)?$/,
+  /^\/recipes\/[^/]+(?:\/edit)?$/,
+  /^\/saved-recipes$/,
+  /^\/cookbooks$/,
+  /^\/cookbooks\/(?!new$)[^/]+$/,
+  /^\/chefs$/,
+  /^\/users\/[^/]+(?:\/graph)?$/,
+  /^\/shopping-list$/,
+  /^\/search$/,
+  /^\/account\/settings$/,
+];
+
+/** Sign-in and consent flows must finish in Safari, so they get no banner inviting people out. */
+const NO_BANNER_PATHS = /^\/(?:oauth|auth|agent\/connect)(?:\/|$)/;
+
+/**
+ * The `apple-itunes-app` meta content for Safari's Smart App Banner, or null where it shouldn't
+ * show. On a page the app can open, the argument is that page's production URL, so "Open" lands on
+ * the same recipe. Commas separate the attribute's fields, so a comma in the URL is percent-encoded.
+ */
+export function smartAppBannerContent(pathname: string, search: string): string | null {
+  if (NO_BANNER_PATHS.test(pathname)) return null;
+  const appId = `app-id=${SPOONJOY_APP_STORE_ID}`;
+  if (!APP_PATHS.some((path) => path.test(pathname))) return appId;
   const url = new URL(`${pathname}${search}`, PRODUCTION_ORIGIN).toString().replaceAll(",", "%2C");
-  return `app-id=${SPOONJOY_APP_STORE_ID}, app-argument=${url}`;
+  return `${appId}, app-argument=${url}`;
 }

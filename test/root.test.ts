@@ -7,9 +7,10 @@ import { links, meta } from "~/root";
 describe("root.tsx safe area and dock clearance", () => {
   const source = readFileSync("app/root.tsx", "utf8");
 
-  it("shows Safari's Smart App Banner on every page, opening the app on the page being read", () => {
-    expect(source).toContain('<meta name="apple-itunes-app" content={smartAppBannerContent(location.pathname, location.search)} />');
-    expect(source).toMatch(/export function Layout\([^)]*\) \{[^}]*\n  const location = useLocation\(\);/);
+  it("shows Safari's Smart App Banner, opening the app on the page being read where it can", () => {
+    // test/lib/app-store.test.ts covers which pages get which banner.
+    expect(source).toContain("const appBanner = smartAppBannerContent(location.pathname, location.search);");
+    expect(source).toContain('{appBanner ? <meta name="apple-itunes-app" content={appBanner} /> : null}');
   });
 
   it("sets viewport-fit=cover so iOS reports its safe-area insets", () => {

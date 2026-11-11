@@ -291,6 +291,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const nonce = useContext(NonceContext);
   const popups = useRef<HTMLDivElement>(null);
   const location = useLocation();
+  const appBanner = smartAppBannerContent(location.pathname, location.search);
   useHydratedMark();
   return (
     <html lang="en" suppressHydrationWarning>
@@ -304,7 +305,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         {/* Safari's Smart App Banner: "Open" or "Get" for Spoonjoy on iPhone and iPad, landing on this page. */}
-        <meta name="apple-itunes-app" content={smartAppBannerContent(location.pathname, location.search)} />
+        {appBanner ? <meta name="apple-itunes-app" content={appBanner} /> : null}
         <Meta />
         <Links />
         {/* Applies the kept colour scheme before the page paints, so a reload never flashes the wrong one. */}
