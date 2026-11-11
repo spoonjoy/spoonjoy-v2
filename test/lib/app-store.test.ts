@@ -26,15 +26,15 @@ describe("Spoonjoy on the App Store", () => {
   });
 });
 
-describe("pages the app can't open", () => {
-  it.each(["/recipes/abc", "/recipes/abc/edit", "/recipes/new", "/cookbooks/cb1", "/users/ari", "/users/ari/graph", "/", "/shopping-list", "/account/settings"])(
+describe("which pages the banner opens in the app", () => {
+  it.each(["/recipes/abc", "/recipes/abc/edit", "/recipes/new", "/cookbooks/cb1", "/users/ari", "/users/ari/fellow-chefs", "/users/ari/kitchen-visitors", "/", "/shopping-list", "/account/settings"])(
     "opens %s in the app",
     (path) => {
       expect(smartAppBannerContent(path, "")).toBe(`app-id=6787505444, app-argument=https://spoonjoy.app${path}`);
     },
   );
 
-  it.each(["/login", "/signup", "/privacy", "/support", "/my-recipes", "/recipes/abc/fork", "/cookbooks/new", "/recipes/abc/", "/nope"])(
+  it.each(["/login", "/signup", "/privacy", "/support", "/my-recipes", "/recipes/abc/fork", "/cookbooks/new", "/recipes/new/edit", "/users/ari/graph", "/recipes/abc/", "/nope"])(
     "offers the app without a page for %s, so Open never lands on Link Not Found",
     (path) => {
       expect(smartAppBannerContent(path, "?redirectTo=/x")).toBe("app-id=6787505444");
