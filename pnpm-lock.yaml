@@ -46,6 +46,9 @@ patchedDependencies:
   '@prisma/adapter-d1@6.19.2':
     hash: e9689cdfdb869cc4ca76e29b717fb6b6456f71d7a7e74498da910497aa434879
     path: patches/@prisma__adapter-d1@6.19.2.patch
+  playwright-core@1.64.0:
+    hash: 61f8f6964d0d9d87b844fa219ea15024e88fe286c256e67eb7853caf614c6ef2
+    path: patches/playwright-core@1.64.0.patch
   react-router@7.18.2:
     hash: e7b901c76f0b120515a75c25c6e5cb80963ab8a8c11a9534bc0992a55d267be8
     path: patches/react-router@7.18.2.patch
@@ -5853,11 +5856,11 @@ snapshots:
       exsolve: 1.0.8
       pathe: 2.0.3
 
-  playwright-core@1.64.0: {}
+  playwright-core@1.64.0(patch_hash=61f8f6964d0d9d87b844fa219ea15024e88fe286c256e67eb7853caf614c6ef2): {}
 
   playwright@1.64.0:
     dependencies:
-      playwright-core: 1.64.0
+      playwright-core: 1.64.0(patch_hash=61f8f6964d0d9d87b844fa219ea15024e88fe286c256e67eb7853caf614c6ef2)
 
   pngjs@7.0.0: {}
 

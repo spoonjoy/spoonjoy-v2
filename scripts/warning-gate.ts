@@ -25,11 +25,12 @@ export const PNPM_SLOW_TARBALL_PATTERN =
 // (e2e/journeys/support/app-ready.ts):
 //   Journeys: loading the page again after its connection was reset (page.goto: net::ERR_CONNECTION_RESET at https://…/login)
 //   Journeys: static file /assets/heading-BIJmUf4w.js answered 502; asking again (try 2 of 3)
+//   Journeys: sending POST /recipes/…/steps/new.data again after its connection was reset (read ECONNRESET)
 // A retry that worked must not fail the step (Journeys run 40634883359's gate rejected the first
 // note). Only those shapes, for a reset connection and those statuses, are tolerated; a retry that
 // fails again fails its test anyway.
 export const JOURNEYS_RETRY_NOTE_PATTERN =
-  /^Journeys: (?:loading the page again after its connection was reset \(page\.(?:goto|reload): .*?(?:Connection reset by peer|Peer failed to perform TLS handshake|net::ERR_(?:CONNECTION_(?:RESET|CLOSED)|SSL_PROTOCOL_ERROR)\b).*\)|static file \/assets\/\S+ answered 50[234]; asking again \(try [23] of 3\))$/;
+  /^Journeys: (?:loading the page again after its connection was reset \(page\.(?:goto|reload): .*?(?:Connection reset by peer|Peer failed to perform TLS handshake|net::ERR_(?:CONNECTION_(?:RESET|CLOSED)|SSL_PROTOCOL_ERROR)\b).*\)|static file \/assets\/\S+ answered 50[234]; asking again \(try [23] of 3\)|sending (?:GET|POST|PUT|PATCH|DELETE) \/\S*\.data again after its connection was reset \((?:[^)]*?)(?:\b(?:ECONNRESET|EPIPE)\b|socket hang up|Client network socket disconnected before secure TLS connection was established)[^)]*\))$/;
 
 // Ouro HX's touch test kit (app/lib/ouro/testing/commands.ts) reports a touch command that
 // succeeded but took longer than a second on stderr, with what it waited for, so a slow CI frame

@@ -4,9 +4,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { expectConsoleWarning } from "./warning-policy";
 import {
+  DATA_REQUEST_RETRY_DELAY_MS,
   STATIC_ASSET_RETRY_DELAYS_MS,
   TRANSPORT_RETRY_DELAY_MS,
+  answerDataRequest,
   answerStaticAsset,
+  dataRequestPattern,
+  isFetchTransportFailure,
   isTransportFailure,
   loadAgainAfterTransportFailure,
   waitForHydrationOnLoad,
@@ -120,7 +124,7 @@ describe("loadAgainAfterTransportFailure", () => {
 });
 
 describe("waitForHydrationOnLoad", () => {
-  it("routes only the app's own built files, before the first load", async () => {
+  it("routes only the app's own built files and data requests, before the first load", async () => {
     const base = process.env.SPOONJOY_JOURNEYS_BASE_URL;
     process.env.SPOONJOY_JOURNEYS_BASE_URL = "https://spoonjoy-v2-qa-run-39850143035-1.mendelow-studio.workers.dev/";
     try {
@@ -134,8 +138,11 @@ describe("waitForHydrationOnLoad", () => {
       waitForHydrationOnLoad(page as never);
       await (page as unknown as { goto(url: string): Promise<unknown> }).goto("/recipes");
 
-      expect(page.route).toHaveBeenCalledExactlyOnceWith("https://spoonjoy-v2-qa-run-39850143035-1.mendelow-studio.workers.dev/assets/**", expect.any(Function));
-      expect(order).toEqual(["route", "goto"]);
+      expect(page.route.mock.calls).toEqual([
+        ["https://spoonjoy-v2-qa-run-39850143035-1.mendelow-studio.workers.dev/assets/**", expect.any(Function)],
+        [dataRequestPattern("https://spoonjoy-v2-qa-run-39850143035-1.mendelow-studio.workers.dev"), expect.any(Function)],
+      ]);
+      expect(order).toEqual(["route", "route", "goto"]);
     } finally {
       if (base === undefined) delete process.env.SPOONJOY_JOURNEYS_BASE_URL;
       else process.env.SPOONJOY_JOURNEYS_BASE_URL = base;
@@ -209,5 +216,131 @@ describe("answerStaticAsset", () => {
 
     await answerStaticAsset(assets as never, async () => undefined);
     expect(assets.fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("dataRequestPattern", () => {
+  const pattern = dataRequestPattern("https://spoonjoy-v2-qa-run-43057324617-1.mendelow-studio.workers.dev");
+
+  it.each([
+    "https://spoonjoy-v2-qa-run-43057324617-1.mendelow-studio.workers.dev/recipes/6fd4f6b4/steps/new.data",
+    "https://spoonjoy-v2-qa-run-43057324617-1.mendelow-studio.workers.dev/login.data?_routes=routes%2Flogin",
+    "https://spoonjoy-v2-qa-run-43057324617-1.mendelow-studio.workers.dev/_root.data",
+  ])("matches the app's data request %s", (url) => {
+    expect(pattern.test(url)).toBe(true);
+  });
+
+  it.each([
+    "https://spoonjoy-v2-qa-run-43057324617-1.mendelow-studio.workers.dev/recipes",
+    "https://spoonjoy-v2-qa-run-43057324617-1.mendelow-studio.workers.dev/assets/notes.database",
+    "https://spoonjoy-v2-qa-run-43057324617-1.mendelow-studio.workers.dev/search?q=.data",
+    "https://spoonjoy-v2-qa-run-43057324617-1xmendelow-studio.workers.dev/login.data",
+    "https://example.test/login.data",
+  ])("leaves %s alone", (url) => {
+    expect(pattern.test(url)).toBe(false);
+  });
+});
+
+describe("isFetchTransportFailure", () => {
+  it.each([
+    "read ECONNRESET",
+    "write EPIPE",
+    "socket hang up",
+    "Client network socket disconnected before secure TLS connection was established",
+  ])("is a request whose connection dropped: %s", (message) => {
+    expect(isFetchTransportFailure(new Error(message))).toBe(true);
+  });
+
+  it.each([
+    ["a timeout", Object.assign(new Error("Request timed out after 30000ms: read ECONNRESET"), { name: "TimeoutError" })],
+    ["a name that does not resolve", new Error("getaddrinfo ENOTFOUND example.test")],
+    ["a refused connection", new Error("connect ECONNREFUSED 127.0.0.1:443")],
+    ["a closed page", new Error("Target page, context or browser has been closed")],
+    ["a drop mentioned only after the first line", new Error("Request context disposed.\n  - read ECONNRESET")],
+    ["something that is not an Error", "read ECONNRESET"],
+  ])("is not %s", (_label, error) => {
+    expect(isFetchTransportFailure(error)).toBe(false);
+  });
+});
+
+describe("answerDataRequest", () => {
+  const url = "https://spoonjoy-v2-qa-run-43057324617-1.mendelow-studio.workers.dev/recipes/6fd4f6b4/steps/new.data?index";
+
+  function route(...answers: Array<number | Error>) {
+    let tries = 0;
+    return {
+      fetch: vi.fn(async (_options?: { maxRedirects?: number }) => {
+        const next = answers[tries++];
+        if (next instanceof Error) throw next;
+        return { status: () => next };
+      }),
+      fulfill: vi.fn(async (_options: { response: { status(): number } }) => undefined),
+      abort: vi.fn(async (_code?: string) => undefined),
+      request: () => ({ url: () => url, method: () => "POST" }),
+    };
+  }
+
+  it.each([200, 202, 204, 302, 400, 404, 500, 503])("hands the page a %s at once, as it was answered", async (status) => {
+    const data = route(status);
+    const wait = vi.fn(async () => undefined);
+
+    await answerDataRequest(data as never, wait, () => undefined);
+
+    expect(data.fetch).toHaveBeenCalledExactlyOnceWith({ maxRedirects: 0 });
+    expect(wait).not.toHaveBeenCalled();
+    expect(data.fulfill.mock.calls[0][0].response.status()).toBe(status);
+  });
+
+  it("sends it once more, a second later, after its connection dropped", async () => {
+    const data = route(new Error("read ECONNRESET"), 200);
+    const wait = vi.fn(async () => undefined);
+    const onRetry = vi.fn();
+
+    await answerDataRequest(data as never, wait, onRetry);
+
+    expect(data.fetch).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledExactlyOnceWith(DATA_REQUEST_RETRY_DELAY_MS);
+    expect(DATA_REQUEST_RETRY_DELAY_MS).toBe(1_000);
+    expect(onRetry).toHaveBeenCalledExactlyOnceWith("POST", "/recipes/6fd4f6b4/steps/new.data", expect.objectContaining({ message: "read ECONNRESET" }));
+    expect(data.fulfill.mock.calls[0][0].response.status()).toBe(200);
+    expect(data.abort).not.toHaveBeenCalled();
+  });
+
+  it("hands the page the second answer whatever it is, without trying a third time", async () => {
+    const data = route(new Error("socket hang up"), 500, 200);
+
+    await answerDataRequest(data as never, async () => undefined, () => undefined);
+
+    expect(data.fetch).toHaveBeenCalledTimes(2);
+    expect(data.fulfill.mock.calls[0][0].response.status()).toBe(500);
+  });
+
+  it("shows the page the reset when the second try drops too, instead of trying a third time", async () => {
+    const data = route(new Error("read ECONNRESET"), new Error("read ECONNRESET"), 200);
+
+    await answerDataRequest(data as never, async () => undefined, () => undefined);
+
+    expect(data.fetch).toHaveBeenCalledTimes(2);
+    expect(data.abort).toHaveBeenCalledExactlyOnceWith("connectionreset");
+    expect(data.fulfill).not.toHaveBeenCalled();
+  });
+
+  it("never sends it again after any other failure", async () => {
+    const data = route(new Error("getaddrinfo ENOTFOUND example.test"), 200);
+    const onRetry = vi.fn();
+
+    await answerDataRequest(data as never, async () => undefined, onRetry);
+
+    expect(data.fetch).toHaveBeenCalledTimes(1);
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(data.abort).toHaveBeenCalledExactlyOnceWith("connectionreset");
+  });
+
+  it("prints the new try in the test's output by default", async () => {
+    const data = route(new Error("read ECONNRESET"), 200);
+    expectConsoleWarning("Journeys: sending POST /recipes/6fd4f6b4/steps/new.data again after its connection was reset (read ECONNRESET)");
+
+    await answerDataRequest(data as never, async () => undefined);
+    expect(data.fetch).toHaveBeenCalledTimes(2);
   });
 });
