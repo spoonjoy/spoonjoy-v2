@@ -9,6 +9,7 @@ import {
   type KitchenUserWhere,
 } from "~/lib/kitchen-home.server";
 import { getUserId } from "~/lib/session.server";
+import { SPOONJOY_APP_STORE_URL } from "~/lib/app-store";
 import { hidesChef, withoutHidden } from "~/lib/moderation.server";
 import { Button } from "~/components/ouro/button/button";
 import { KitchenHome, absoluteKitchenUrl } from "~/components/cookbook/KitchenHome";
@@ -38,9 +39,6 @@ const HOMEPAGE_TITLE = "Spoonjoy — The Recipe App for Meals You Actually Cook"
 const HOMEPAGE_DESCRIPTION = "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen.";
 const HOMEPAGE_URL = "https://spoonjoy.app/";
 const HOMEPAGE_SOCIAL_IMAGE_URL = "https://spoonjoy.app/og/spoonjoy-home.png";
-
-// Spoonjoy for iPhone and iPad (app/lib/app-store.ts holds the same link once spoonjoy-v2#664 lands).
-const SPOONJOY_APP_STORE_URL = "https://apps.apple.com/app/id6787505444";
 
 /**
  * Tells search engines the site's name (Google shows it above results) and that Spoonjoy is also an

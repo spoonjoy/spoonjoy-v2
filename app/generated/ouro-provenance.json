@@ -156,6 +156,7 @@
         "app/lib/api-v1-contract.server.ts",
         "app/lib/api-v1-recipe-steps.server.ts",
         "app/lib/api-v1-recipe-writes.server.ts",
+        "app/lib/app-store.ts",
         "app/lib/chef-avatar.ts",
         "app/lib/cook-timers.ts",
         "app/lib/cookbook-membership-compat.server.ts",
