@@ -538,7 +538,8 @@ body:has(#cook) .sj-site-footer {
   color: var(--sj-on-photo-warm);
 }
 
-/* A recipe with no cover: native's RecipeInitialTile (spoonjoy-apple RecipeIndexRow.swift). */
+/* A recipe with no cover: native's RecipeInitialTile (spoonjoy-apple RecipeIndexRow.swift). Its gradient ends in brass at
+   32% opacity over whatever the tile sits on, as native's does, which keeps the brass initial above 3:1 on it. */
 .sj-cover-placeholder {
   container-type: size;
   display: flex;
@@ -547,7 +548,7 @@ body:has(#cook) .sj-site-footer {
   overflow: hidden;
   border: 0;
   border-radius: var(--sj-radius-photo);
-  background: linear-gradient(135deg, var(--sj-vellum), color-mix(in srgb, var(--sj-brass) 32%, var(--sj-vellum)));
+  background: linear-gradient(135deg, var(--sj-vellum), color-mix(in srgb, var(--sj-brass) 32%, transparent));
 }
 
 /* Square, where the slot's cover photo runs edge to edge (the recipe header). */

@@ -60,7 +60,7 @@ describe("CoverPlaceholder", () => {
     const tile = rule(".sj-cover-placeholder");
     expect(tile).toContain("border-radius: var(--sj-radius-photo);");
     expect(tile).toContain(
-      "background: linear-gradient(135deg, var(--sj-vellum), color-mix(in srgb, var(--sj-brass) 32%, var(--sj-vellum)));",
+      "background: linear-gradient(135deg, var(--sj-vellum), color-mix(in srgb, var(--sj-brass) 32%, transparent));",
     );
     expect(tile).toContain("border: 0;");
   });
