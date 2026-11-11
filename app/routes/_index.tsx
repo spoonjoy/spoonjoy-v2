@@ -34,10 +34,39 @@ const LANDING_FOOD_PHOTOS = [
 ];
 
 type KitchenTab = "recipes" | "cookbooks";
-const HOMEPAGE_TITLE = "Spoonjoy — The Recipe App";
+const HOMEPAGE_TITLE = "Spoonjoy — The Recipe App for Meals You Actually Cook";
 const HOMEPAGE_DESCRIPTION = "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen.";
 const HOMEPAGE_URL = "https://spoonjoy.app/";
 const HOMEPAGE_SOCIAL_IMAGE_URL = "https://spoonjoy.app/og/spoonjoy-home.png";
+
+// Spoonjoy for iPhone and iPad (app/lib/app-store.ts holds the same link once spoonjoy-v2#664 lands).
+const SPOONJOY_APP_STORE_URL = "https://apps.apple.com/app/id6787505444";
+
+/**
+ * Tells search engines the site's name (Google shows it above results) and that Spoonjoy is also an
+ * iPhone and iPad app, linked to its App Store listing.
+ */
+export const HOMEPAGE_JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${HOMEPAGE_URL}#website`,
+      name: "Spoonjoy",
+      url: HOMEPAGE_URL,
+      description: HOMEPAGE_DESCRIPTION,
+    },
+    {
+      "@type": "MobileApplication",
+      name: "Spoonjoy: Recipes & Cookbooks",
+      operatingSystem: "iOS, iPadOS",
+      applicationCategory: "LifestyleApplication",
+      url: HOMEPAGE_URL,
+      installUrl: SPOONJOY_APP_STORE_URL,
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    },
+  ],
+};
 
 function normalizeTab(value: string | null): KitchenTab {
   return value === "cookbooks" ? "cookbooks" : "recipes";
@@ -63,6 +92,7 @@ export function meta({}: Route.MetaArgs) {
     { name: "twitter:description", content: HOMEPAGE_DESCRIPTION },
     { name: "twitter:image", content: HOMEPAGE_SOCIAL_IMAGE_URL },
     { tagName: "link", rel: "canonical", href: HOMEPAGE_URL },
+    { "script:ld+json": HOMEPAGE_JSON_LD },
   ];
 }
 

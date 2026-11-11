@@ -5,7 +5,7 @@ import { Request as UndiciRequest } from "undici";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { absoluteKitchenUrl, loader, meta } from "~/routes/_index";
+import { HOMEPAGE_JSON_LD, absoluteKitchenUrl, loader, meta } from "~/routes/_index";
 import Index from "~/routes/_index";
 import { createUser } from "~/lib/auth.server";
 import { getUserId, sessionStorage } from "~/lib/session.server";
@@ -348,11 +348,11 @@ describe("Kitchen Index Route", () => {
       const result = meta({} as any);
 
       expect(result).toEqual([
-        { title: "Spoonjoy — The Recipe App" },
+        { title: "Spoonjoy — The Recipe App for Meals You Actually Cook" },
         { name: "description", content: "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen." },
         { property: "og:site_name", content: "Spoonjoy" },
         { property: "og:type", content: "website" },
-        { property: "og:title", content: "Spoonjoy — The Recipe App" },
+        { property: "og:title", content: "Spoonjoy — The Recipe App for Meals You Actually Cook" },
         { property: "og:description", content: "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen." },
         { property: "og:url", content: "https://spoonjoy.app/" },
         { property: "og:image", content: "https://spoonjoy.app/og/spoonjoy-home.png" },
@@ -360,10 +360,23 @@ describe("Kitchen Index Route", () => {
         { property: "og:image:height", content: "630" },
         { property: "og:image:type", content: "image/png" },
         { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:title", content: "Spoonjoy — The Recipe App" },
+        { name: "twitter:title", content: "Spoonjoy — The Recipe App for Meals You Actually Cook" },
         { name: "twitter:description", content: "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen." },
         { name: "twitter:image", content: "https://spoonjoy.app/og/spoonjoy-home.png" },
         { tagName: "link", rel: "canonical", href: "https://spoonjoy.app/" },
+        { "script:ld+json": HOMEPAGE_JSON_LD },
+      ]);
+    });
+
+    it("names the site and links its iPhone and iPad app for search engines", () => {
+      expect(HOMEPAGE_JSON_LD["@graph"]).toEqual([
+        expect.objectContaining({ "@type": "WebSite", name: "Spoonjoy", url: "https://spoonjoy.app/" }),
+        expect.objectContaining({
+          "@type": "MobileApplication",
+          name: "Spoonjoy: Recipes & Cookbooks",
+          installUrl: "https://apps.apple.com/app/id6787505444",
+          offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+        }),
       ]);
     });
 
