@@ -35,7 +35,7 @@ const PUBLIC_RECIPES_DESCRIPTION =
 
 export function meta({ location }: Route.MetaArgs) {
   // A search's results are a moving list, not a page worth indexing; older pages index as themselves.
-  const isSearch = (new URLSearchParams(location?.search ?? "").get("q") ?? "").trim() !== "";
+  const isSearch = (new URLSearchParams(location.search).get("q") ?? "").trim() !== "";
   return [
     { title: PUBLIC_RECIPES_TITLE },
     { name: "description", content: PUBLIC_RECIPES_DESCRIPTION },
