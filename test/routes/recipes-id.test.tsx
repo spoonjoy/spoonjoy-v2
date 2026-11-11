@@ -15,6 +15,7 @@ vi.mock("~/lib/ouro/share", async () => {
 
 import { DockContextProvider, MobileNav } from "~/components/navigation";
 import { share } from "~/lib/ouro/share";
+import { DELETED_CHEF_USERNAME } from "~/lib/username";
 import {
   loader,
   action,
@@ -521,6 +522,21 @@ describe("Recipes $id Route", () => {
       const aiResult = await load();
       expect(aiResult.ogImageUrl).toBe("http://localhost:3000/photos/json-ld.jpg");
       expect(aiResult.recipeJsonLd).not.toHaveProperty("image");
+    });
+
+    it("links no kitchen in Recipe JSON-LD for a deleted chef's recipe", async () => {
+      await db.recipeStep.create({ data: { recipeId, stepNum: 1, description: "Toast the bread." } });
+      const { chefId } = await db.recipe.findUniqueOrThrow({ where: { id: recipeId }, select: { chefId: true } });
+      await db.user.update({ where: { id: chefId }, data: { username: DELETED_CHEF_USERNAME } });
+
+      const result = await loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result.recipeJsonLd).toHaveProperty("author");
+      expect(result.recipeJsonLd?.author).not.toHaveProperty("url");
     });
 
     it("returns active-cover processing data while editorialization is pending", async () => {
