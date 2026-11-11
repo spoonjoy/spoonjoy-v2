@@ -144,8 +144,13 @@ type DataRoute = Pick<Route, "fetch" | "fulfill" | "abort" | "request">;
  * twice. A submission is not always idempotent, but one whose connection dropped before an answer
  * may never have reached the Worker, and a journey checks what the page shows next, so a
  * submission applied twice still fails it. Every answer reaches the page unchanged, redirects
- * included. When both tries fail, or the request fails any other way, the page sees the connection
- * reset, as it would have without this route.
+ * included, though whole rather than streamed: the app has no deferred loader data, and one that
+ * streams would need this revisited. When both tries
+ * fail, or the request fails any other way, the page's fetch fails as a lost request ("Failed to
+ * fetch" in Chromium, "Load failed" in WebKit, both app/lib/network-failure.ts's), so the app's own
+ * handling runs. Unlike answerStaticAsset, it never falls back to route.continue(), which would
+ * send a submission a hidden third time. Playwright's own route.fetch({ maxRetries }) retries only
+ * ECONNRESET, and silently, so it is not used.
  */
 export async function answerDataRequest(
   route: DataRoute,
