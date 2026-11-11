@@ -18,7 +18,7 @@ import {
 } from "~/lib/analytics-server";
 import { formatServingsLabel } from "~/lib/quantity";
 import { useEffect, useState } from "react";
-import { absoluteUrlFromRequest, cookbookOgPath } from "~/lib/og-image.server";
+import { absoluteUrlFromRequest, shareImageMeta, shareImageUrl } from "~/lib/og-metadata";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { listImageProps } from "~/lib/image-loading";
 
@@ -123,14 +123,10 @@ export function meta({ data }: Route.MetaArgs) {
     { property: "og:title", content: data.cookbook.title },
     { property: "og:description", content: description },
     { property: "og:url", content: data.canonicalUrl },
-    { property: "og:image", content: data.ogImageUrl },
-    { property: "og:image:width", content: "1200" },
-    { property: "og:image:height", content: "630" },
-    { property: "og:image:type", content: "image/svg+xml" },
+    ...shareImageMeta(data.ogImageUrl),
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: data.cookbook.title },
     { name: "twitter:description", content: description },
-    { name: "twitter:image", content: data.ogImageUrl },
     { tagName: "link", rel: "canonical", href: data.canonicalUrl },
   ];
 }
@@ -180,7 +176,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     cookbook: cookbookWithCovers,
     coverImageUrls: cookbookWithCovers.recipes.map((item) => item.recipe.coverImageUrl),
     canonicalUrl: absoluteUrlFromRequest(publicOrigin, `/cookbooks/${id}`),
-    ogImageUrl: absoluteUrlFromRequest(publicOrigin, cookbookOgPath(id)),
+    // The first recipe photo a link preview can show, or Spoonjoy's card (the /og/ cards are SVG).
+    ogImageUrl: shareImageUrl(publicOrigin, cookbookWithCovers.recipes.map((item) => item.recipe.coverImageUrl)),
     isOwner,
     availableRecipes,
   };

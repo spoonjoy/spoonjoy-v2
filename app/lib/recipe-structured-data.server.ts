@@ -55,7 +55,7 @@ export function minutesToIsoDuration(totalMinutes: number): string {
  */
 export function buildRecipeJsonLd(
   recipe: RecipeJsonLdInput,
-  options: { canonicalUrl: string; imageUrl: string | null },
+  options: { canonicalUrl: string; imageUrl: string | null; authorUrl?: string },
 ): Record<string, unknown> | null {
   if (!recipe.steps || recipe.steps.length === 0) {
     return null;
@@ -92,7 +92,11 @@ export function buildRecipeJsonLd(
     "@context": "https://schema.org",
     "@type": "Recipe",
     name: recipe.title,
-    author: { "@type": "Person", name: recipe.chef.username },
+    author: {
+      "@type": "Person",
+      name: recipe.chef.username,
+      ...(options.authorUrl ? { url: options.authorUrl } : {}),
+    },
     datePublished,
     url: options.canonicalUrl,
     recipeInstructions,

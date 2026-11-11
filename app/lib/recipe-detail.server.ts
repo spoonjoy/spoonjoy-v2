@@ -51,7 +51,7 @@ import { hidesContent, withoutHidden } from "~/lib/moderation.server";
 import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
-import { absoluteUrlFromRequest, recipeOgPath } from "~/lib/og-image.server";
+import { absoluteUrlFromRequest, isRasterImageUrl, shareImageUrl } from "~/lib/og-metadata";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { buildRecipeJsonLd } from "~/lib/recipe-structured-data.server";
 import {
@@ -317,10 +317,13 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   const activeCoverProcessing = activeCoverProcessingFor(recipe);
   const publicOrigin = resolveIssuerOrigin(request.url, context.cloudflare?.env?.SPOONJOY_BASE_URL);
   const canonicalUrl = absoluteUrlFromRequest(publicOrigin, `/recipes/${id}`);
-  const ogImageUrl = absoluteUrlFromRequest(publicOrigin, recipeOgPath(id));
+  // Link previews and Google's recipe results need a photo they can show: the dish's own, or
+  // Spoonjoy's PNG card for previews. The /og/ cards are SVG, which neither renders.
+  const ogImageUrl = shareImageUrl(publicOrigin, [coverImageUrl]);
   const recipeJsonLd = buildRecipeJsonLd(recipe, {
     canonicalUrl,
-    imageUrl: coverImageUrl ?? ogImageUrl,
+    imageUrl: isRasterImageUrl(coverImageUrl) ? absoluteUrlFromRequest(publicOrigin, coverImageUrl) : null,
+    authorUrl: absoluteUrlFromRequest(publicOrigin, `/users/${encodeURIComponent(recipe.chef.username)}`),
   });
 
   const userCookbooks = reads.userCookbooks;

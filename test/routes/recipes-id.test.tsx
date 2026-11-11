@@ -346,7 +346,7 @@ describe("Recipes $id Route", () => {
   });
 
   describe("meta", () => {
-    it("returns recipe share metadata with on-demand OG image", () => {
+    it("returns recipe share metadata with Spoonjoy's PNG card when the recipe has no photo", () => {
       expect(
         meta({
           data: {
@@ -356,7 +356,7 @@ describe("Recipes $id Route", () => {
               chef: { username: "ari" },
             },
             canonicalUrl: "https://spoonjoy.app/recipes/recipe-1",
-            ogImageUrl: "https://spoonjoy.app/og/recipes/recipe-1.png",
+            ogImageUrl: "https://spoonjoy.app/og/spoonjoy-home.png",
           },
         } as any),
       ).toEqual([
@@ -367,14 +367,14 @@ describe("Recipes $id Route", () => {
         { property: "og:title", content: "Charred Tomato Toast" },
         { property: "og:description", content: "A fast lunch with real crunch." },
         { property: "og:url", content: "https://spoonjoy.app/recipes/recipe-1" },
-        { property: "og:image", content: "https://spoonjoy.app/og/recipes/recipe-1.png" },
+        { property: "og:image", content: "https://spoonjoy.app/og/spoonjoy-home.png" },
         { property: "og:image:width", content: "1200" },
         { property: "og:image:height", content: "630" },
-        { property: "og:image:type", content: "image/svg+xml" },
+        { property: "og:image:type", content: "image/png" },
+        { name: "twitter:image", content: "https://spoonjoy.app/og/spoonjoy-home.png" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: "Charred Tomato Toast" },
         { name: "twitter:description", content: "A fast lunch with real crunch." },
-        { name: "twitter:image", content: "https://spoonjoy.app/og/recipes/recipe-1.png" },
         { tagName: "link", rel: "canonical", href: "https://spoonjoy.app/recipes/recipe-1" },
       ]);
     });
@@ -436,7 +436,7 @@ describe("Recipes $id Route", () => {
       expect(result.savedInCookbookIds).toEqual([]);
       expect(result.hasIngredientsInShoppingList).toBe(false);
       expect(result.canonicalUrl).toBe(`http://localhost:3000/recipes/${recipeId}`);
-      expect(result.ogImageUrl).toBe(`http://localhost:3000/og/recipes/${recipeId}.png`);
+      expect(result.ogImageUrl).toBe("http://localhost:3000/og/spoonjoy-home.png");
       expect(result.coverImageUrl).toBeNull();
     });
 
@@ -491,6 +491,8 @@ describe("Recipes $id Route", () => {
 
       expect(result.coverImageUrl).toBe("/photos/detail-editorial.jpg");
       expect(result.coverProvenanceLabel).toBe("Editorial photo");
+      // Link previews show the dish itself, at an absolute URL.
+      expect(result.ogImageUrl).toBe("http://localhost:3000/photos/detail-editorial.jpg");
     });
 
     it("returns active-cover processing data while editorialization is pending", async () => {
