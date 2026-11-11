@@ -1418,6 +1418,14 @@ describe("Cookbooks $id Route", () => {
       );
       expect(screen.getByText("4 servings")).toBeInTheDocument();
       expect(screen.queryByText("Serves 4 servings")).not.toBeInTheDocument();
+      // A recipe with no cover shows native's initial tile at the photo's size, not an icon.
+      const placeholder = screen.getByTestId("cookbook-recipe-cover-placeholder-recipe-2");
+      expect(placeholder).toHaveClass("sj-cover-placeholder", "sj-cover-placeholder-bleed");
+      expect(placeholder).toHaveAttribute("aria-hidden", "true");
+      expect(placeholder).toHaveTextContent(/^S$/);
+      expect(placeholder.querySelector("svg")).toBeNull();
+      expect(placeholder.parentElement).toHaveClass("size-16");
+      expect(placeholder.parentElement?.className).not.toMatch(/\bborder\b|bg-muted/);
       expect(within(recipesSection).queryByText("COOK")).not.toBeInTheDocument();
       expect(within(recipesSection).queryByRole("button", { name: /^Remove .* from cookbook$/ })).not.toBeInTheDocument();
     });
