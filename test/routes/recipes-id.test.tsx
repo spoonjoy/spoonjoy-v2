@@ -495,6 +495,34 @@ describe("Recipes $id Route", () => {
       expect(result.ogImageUrl).toBe("http://localhost:3000/photos/detail-editorial.jpg");
     });
 
+    it("names the dish's photo in Recipe JSON-LD at an absolute URL, and links the chef's kitchen", async () => {
+      await db.recipeStep.create({ data: { recipeId, stepNum: 1, description: "Toast the bread." } });
+      const cover = await db.recipeCover.create({
+        data: { recipeId, imageUrl: "/photos/json-ld.jpg", sourceType: "chef-upload" },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { activeCoverId: cover.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+      const load = () => loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const result = await load();
+      expect(result.recipeJsonLd).toMatchObject({
+        image: "http://localhost:3000/photos/json-ld.jpg",
+        author: { url: expect.stringMatching(/^http:\/\/localhost:3000\/users\//) },
+      });
+
+      // An AI-made cover still previews in shares but is not offered to Google as a photo of the dish.
+      await db.recipeCover.update({ where: { id: cover.id }, data: { sourceType: "ai-placeholder" } });
+      const aiResult = await load();
+      expect(aiResult.ogImageUrl).toBe("http://localhost:3000/photos/json-ld.jpg");
+      expect(aiResult.recipeJsonLd).not.toHaveProperty("image");
+    });
+
     it("returns active-cover processing data while editorialization is pending", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", testUserId);

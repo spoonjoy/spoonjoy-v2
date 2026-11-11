@@ -8,6 +8,7 @@ describe("share images that link previews can show", () => {
     expect(isRasterImageUrl("/photos/legacy-cloudinary/abc.jpg")).toBe(true);
     expect(isRasterImageUrl("https://spoonjoy.app/photos/covers/x.webp?v=2")).toBe(true);
     expect(isRasterImageUrl("/og/recipes/r1.png")).toBe(false);
+    expect(isRasterImageUrl("https://blog.example/og/dish.jpg")).toBe(true);
     expect(isRasterImageUrl("/photos/x.svg")).toBe(false);
     expect(isRasterImageUrl("data:image/svg+xml;base64,PHN2Zz4=")).toBe(false);
     expect(isRasterImageUrl("")).toBe(false);

@@ -93,7 +93,8 @@ export const SOCIAL_CARD_PATH = "/og/spoonjoy-home.png";
 export function isRasterImageUrl(url: string | null | undefined): url is string {
   if (!url || url.startsWith("data:")) return false;
   const path = url.split(/[?#]/)[0].toLowerCase();
-  return !path.endsWith(".svg") && !path.includes("/og/");
+  // Spoonjoy's own /og/ cards are SVG; only a root-relative path is ours for certain.
+  return !path.endsWith(".svg") && !path.startsWith("/og/");
 }
 
 /** The share image for a page: its first showable photo, made absolute, or Spoonjoy's card. */
@@ -104,7 +105,7 @@ export function shareImageUrl(origin: string, photoUrls: Array<string | null | u
 
 /** Open Graph and X image tags. Only the card's size is known; crawlers measure a photo themselves. */
 export function shareImageMeta(imageUrl: string) {
-  const isCard = new URL(imageUrl).pathname === SOCIAL_CARD_PATH;
+  const isCard = imageUrl.split(/[?#]/)[0].endsWith(SOCIAL_CARD_PATH);
   return [
     { property: "og:image", content: imageUrl },
     ...(isCard
