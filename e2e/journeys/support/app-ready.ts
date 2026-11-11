@@ -161,7 +161,8 @@ export async function answerStaticAsset(
     const retryable = RETRYABLE_ASSET_STATUSES.has(status) || builtFile404;
     if (!retryable || attempt >= delays.length) {
       if (attempt > 0) onRecovered(pathname, status, attempt + 1, ray, tries);
-      await route.fulfill({ response });
+      // After a long wait the test may have ended and closed the page; the answer then has nowhere to go.
+      await route.fulfill({ response }).catch(() => undefined);
       return;
     }
     tries = delays.length + 1;

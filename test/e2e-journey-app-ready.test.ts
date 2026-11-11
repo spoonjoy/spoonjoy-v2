@@ -280,6 +280,14 @@ describe("answerStaticAsset", () => {
     expect(onFirstTry).not.toHaveBeenCalled();
   });
 
+  it("stays quiet when the page closed before the answer could reach it", async () => {
+    const assets = route(404, 200);
+    assets.fulfill.mockRejectedValueOnce(new Error("route.fulfill: Target page, context or browser has been closed"));
+
+    await expect(answerStaticAsset(assets as never, async () => undefined, () => undefined, () => true, () => undefined)).resolves.toBeUndefined();
+    expect(assets.fulfill).toHaveBeenCalledTimes(1);
+  });
+
   it("hands the page a 404 at once for a file this run did not build", async () => {
     const assets = route(404, 200);
     const onRetry = vi.fn();

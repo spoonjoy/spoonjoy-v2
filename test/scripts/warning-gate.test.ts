@@ -388,6 +388,7 @@ describe("warning gate", () => {
       assetRecoveredNote("/assets/button-CXqvcQew.js", 200, 2, "8f1e2d3c4b5a6979-IAD"),
       assetRecoveredNote("/assets/button-CXqvcQew.js", 404, 6, "none", 6),
       assetRetryNote("/assets/button-CXqvcQew.js", 404, 2, "8f1e2d3c4b5a6978-IAD, cf-cache-status HIT, age 42", 6),
+      assetRetryNote("/assets/button-CXqvcQew.js", 404, 3, "8f1e2d3c4b5a6978-IAD, cf-cache-status NONE/UNKNOWN", 6),
     ];
 
     it.each(notes)("tolerates %s", (line) => {
