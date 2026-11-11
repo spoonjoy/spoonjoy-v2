@@ -361,7 +361,7 @@ describe("Recipes $id Route", () => {
           },
         } as any),
       ).toEqual([
-        { title: "Charred Tomato Toast - Spoonjoy" },
+        { title: "Charred Tomato Toast Recipe - Spoonjoy" },
         { name: "description", content: "A fast lunch with real crunch." },
         { property: "og:site_name", content: "Spoonjoy" },
         { property: "og:type", content: "article" },

@@ -9,6 +9,7 @@ import {
   type KitchenUserWhere,
 } from "~/lib/kitchen-home.server";
 import { getUserId } from "~/lib/session.server";
+import { SPOONJOY_APP_STORE_URL } from "~/lib/app-store";
 import { hidesChef, withoutHidden } from "~/lib/moderation.server";
 import { Button } from "~/components/ouro/button/button";
 import { KitchenHome, absoluteKitchenUrl } from "~/components/cookbook/KitchenHome";
@@ -34,10 +35,36 @@ const LANDING_FOOD_PHOTOS = [
 ];
 
 type KitchenTab = "recipes" | "cookbooks";
-const HOMEPAGE_TITLE = "Spoonjoy — The Recipe App";
+const HOMEPAGE_TITLE = "Spoonjoy — The Recipe App for Meals You Actually Cook";
 const HOMEPAGE_DESCRIPTION = "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen.";
 const HOMEPAGE_URL = "https://spoonjoy.app/";
 const HOMEPAGE_SOCIAL_IMAGE_URL = "https://spoonjoy.app/og/spoonjoy-home.png";
+
+/**
+ * Tells search engines the site's name (Google shows it above results) and that Spoonjoy is also an
+ * iPhone and iPad app, linked to its App Store listing.
+ */
+export const HOMEPAGE_JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${HOMEPAGE_URL}#website`,
+      name: "Spoonjoy",
+      url: HOMEPAGE_URL,
+      description: HOMEPAGE_DESCRIPTION,
+    },
+    {
+      "@type": "MobileApplication",
+      name: "Spoonjoy: Recipes & Cookbooks",
+      operatingSystem: "iOS, iPadOS",
+      applicationCategory: "LifestyleApplication",
+      url: HOMEPAGE_URL,
+      installUrl: SPOONJOY_APP_STORE_URL,
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    },
+  ],
+};
 
 function normalizeTab(value: string | null): KitchenTab {
   return value === "cookbooks" ? "cookbooks" : "recipes";
@@ -63,6 +90,7 @@ export function meta({}: Route.MetaArgs) {
     { name: "twitter:description", content: HOMEPAGE_DESCRIPTION },
     { name: "twitter:image", content: HOMEPAGE_SOCIAL_IMAGE_URL },
     { tagName: "link", rel: "canonical", href: HOMEPAGE_URL },
+    { "script:ld+json": HOMEPAGE_JSON_LD },
   ];
 }
 

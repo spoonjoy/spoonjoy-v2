@@ -453,10 +453,27 @@ describe("Recipes Index Route", () => {
     expect(screen.getByRole("link", { name: "Back to the newest" })).toHaveAttribute("href", "/recipes");
   });
 
-  it("returns public recipe metadata", () => {
-    expect(meta({} as any)).toEqual([
-      { title: "Recipes - Spoonjoy" },
-      { name: "description", content: "Browse public Spoonjoy recipes from every kitchen." },
-    ]);
+  it("returns public recipe metadata, canonical on the first page", () => {
+    const result = meta({ location: { search: "" } } as any);
+    expect(result[0]).toEqual({ title: "Recipes From Real Home Kitchens - Spoonjoy" });
+    expect(result).toContainEqual({ tagName: "link", rel: "canonical", href: "https://spoonjoy.app/recipes" });
+    expect(result).toContainEqual({ property: "og:url", content: "https://spoonjoy.app/recipes" });
+    expect(result).not.toContainEqual({ name: "robots", content: "noindex" });
+  });
+
+  it("lets an older page index as itself, without claiming the first page's canonical", () => {
+    const result = meta({ location: { search: "?after=abc" } } as any);
+    expect(result.some((tag: any) => tag.rel === "canonical")).toBe(false);
+    expect(result).not.toContainEqual({ name: "robots", content: "noindex" });
+  });
+
+  it("treats an empty search as the plain list", () => {
+    expect(meta({ location: { search: "?q=%20" } } as any)).not.toContainEqual({ name: "robots", content: "noindex" });
+  });
+
+  it("keeps search results out of the index", () => {
+    const result = meta({ location: { search: "?q=pasta" } } as any);
+    expect(result).toContainEqual({ name: "robots", content: "noindex" });
+    expect(result.some((tag: any) => tag.rel === "canonical")).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
 import { Empty } from "~/components/ouro/empty/empty";
+import { PUBLIC_RECIPES_TITLE } from "~/lib/seo-titles";
 import type { Route } from "./+types/recipes._index";
 import { chefDisplayName } from "~/lib/username";
 import { Form, useLoaderData } from "react-router";
@@ -28,10 +29,28 @@ import { listImageProps, type ImageLoadingProps } from "~/lib/image-loading";
 
 const PUBLIC_RECIPE_LIMIT = 48;
 
-export function meta({}: Route.MetaArgs) {
+const PUBLIC_RECIPES_URL = "https://spoonjoy.app/recipes";
+const PUBLIC_RECIPES_DESCRIPTION =
+  "Recipes real people cook, with notes and photos from everyone who made them. Fork one into your kitchen, with credit.";
+
+export function meta({ location }: Route.MetaArgs) {
+  // A search's results are a moving list, not a page worth indexing; older pages index as themselves.
+  const isSearch = (new URLSearchParams(location.search).get("q") ?? "").trim() !== "";
   return [
-    { title: "Recipes - Spoonjoy" },
-    { name: "description", content: "Browse public Spoonjoy recipes from every kitchen." },
+    { title: PUBLIC_RECIPES_TITLE },
+    { name: "description", content: PUBLIC_RECIPES_DESCRIPTION },
+    ...(isSearch
+      ? [{ name: "robots", content: "noindex" }]
+      : [
+          { property: "og:site_name", content: "Spoonjoy" },
+          { property: "og:type", content: "website" },
+          { property: "og:title", content: PUBLIC_RECIPES_TITLE },
+          { property: "og:description", content: PUBLIC_RECIPES_DESCRIPTION },
+          { property: "og:url", content: PUBLIC_RECIPES_URL },
+          { property: "og:image", content: "https://spoonjoy.app/og/spoonjoy-home.png" },
+          { name: "twitter:card", content: "summary_large_image" },
+          ...(location?.search ? [] : [{ tagName: "link", rel: "canonical", href: PUBLIC_RECIPES_URL }]),
+        ]),
   ];
 }
 

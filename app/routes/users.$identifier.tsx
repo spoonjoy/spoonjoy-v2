@@ -1,5 +1,6 @@
 import { Card } from "~/components/ouro/card/card";
 import type { Route } from "./+types/users.$identifier";
+import { kitchenPageTitle } from "~/lib/seo-titles";
 import { chefDisplayName } from "~/lib/username";
 import { Form, redirect, useLoaderData } from "react-router";
 import { Settings } from "lucide-react";
@@ -50,7 +51,7 @@ export function meta({ data }: Route.MetaArgs) {
   const username = data.profile.username;
   const description = `${username}'s Spoonjoy kitchen — recipes, cookbooks, and the dishes they cook.`;
   return [
-    { title: `${username} - Spoonjoy` },
+    { title: kitchenPageTitle(username) },
     { name: "description", content: description },
     { property: "og:site_name", content: "Spoonjoy" },
     { property: "og:type", content: "profile" },

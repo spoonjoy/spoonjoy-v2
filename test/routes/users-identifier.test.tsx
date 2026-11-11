@@ -296,7 +296,7 @@ describe("Users $identifier Route", () => {
           },
         } as any),
       ).toEqual([
-        { title: "chef-rowan - Spoonjoy" },
+        { title: "chef-rowan's Kitchen: Recipes & Cookbooks - Spoonjoy" },
         {
           name: "description",
           content:

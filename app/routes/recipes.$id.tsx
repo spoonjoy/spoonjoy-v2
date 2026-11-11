@@ -1,5 +1,6 @@
 import type { Route } from "./+types/recipes.$id";
 import { chefDisplayName } from "~/lib/username";
+import { recipePageTitle } from "~/lib/seo-titles";
 import { shareImageMeta } from "~/lib/og-metadata";
 import {
   isRouteErrorResponse,
@@ -75,7 +76,7 @@ export function meta({ data, error }: Route.MetaArgs) {
     || `A Spoonjoy recipe by ${chefDisplayName(data.recipe.chef.username)}.`;
 
   return [
-    { title: `${data.recipe.title} - Spoonjoy` },
+    { title: recipePageTitle(data.recipe.title) },
     { name: "description", content: description },
     { property: "og:site_name", content: "Spoonjoy" },
     { property: "og:type", content: "article" },
