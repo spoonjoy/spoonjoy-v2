@@ -144,7 +144,7 @@ function CookingNowCard({ entry, index }: { entry: CookingNowEntry; index: numbe
   return (
     <article aria-labelledby={titleId} data-testid={`cooking-now-card-${entry.recipe.id}`} className="flex h-full flex-col">
       <CookingNowCover entry={entry} index={index} className="aspect-[3/2] max-h-44 w-full" />
-      <h3 id={titleId} className="font-sj-display mt-4 line-clamp-2 text-xl/7 font-extrabold text-[var(--sj-ink)]">
+      <h3 id={titleId} className="font-sj-display mt-4 line-clamp-2 text-xl/7 font-semibold text-[var(--sj-ink)]">
         {entry.recipe.title}
       </h3>
       <CookingNowProgress entry={entry} />

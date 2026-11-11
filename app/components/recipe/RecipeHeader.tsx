@@ -175,7 +175,8 @@ export function RecipeHeader({
           ) : null}
 
           <div className="mt-6 max-w-[43rem] lg:mt-10 print:mt-0 print:max-w-none">
-            <h1 className="font-sj-display max-w-4xl break-words text-5xl/12 font-extrabold text-[var(--sj-ink)] sm:text-6xl/14 xl:text-7xl/16 2xl:text-8xl/18 print:text-4xl/11">
+            {/* Core's sj-type-display role (Fraunces 600), as native's displayTitle sets the name; it grows past the role's 3rem at wider breakpoints. */}
+            <h1 className="sj-type-display max-w-4xl break-words text-[var(--sj-ink)] sm:text-6xl/14 xl:text-7xl/16 2xl:text-8xl/18 print:text-4xl/11">
               {title}
             </h1>
             {chefLine}

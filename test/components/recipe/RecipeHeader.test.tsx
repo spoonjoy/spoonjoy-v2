@@ -20,6 +20,14 @@ describe('RecipeHeader', () => {
     onScaleChange: vi.fn(),
   }
 
+  it("sets the recipe name in core's sj-type-display role, Fraunces 600 as native's displayTitle, not 800", () => {
+    renderWithRouter(<RecipeHeader {...defaultProps} />)
+
+    const title = screen.getByRole('heading', { level: 1, name: 'Test Recipe' })
+    expect(title).toHaveClass('sj-type-display', 'sm:text-6xl/14', 'xl:text-7xl/16', '2xl:text-8xl/18')
+    expect(title.className).not.toMatch(/font-(extrabold|black|bold)\b/)
+  })
+
   describe('chef information', () => {
     it('renders chef name without link when chefId is not provided', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} />)

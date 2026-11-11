@@ -300,7 +300,7 @@ export default function ShoppingList() {
               {displayItems.length} {displayItems.length === 1 ? "item" : "items"}
             </span>
           </div>
-          <h1 ref={headingRef} tabIndex={-1} className="font-sj-display mt-7 text-5xl/12 font-extrabold text-[var(--sj-ink)]">
+          <h1 ref={headingRef} tabIndex={-1} className="sj-type-display mt-7 text-[var(--sj-ink)]">
             <span className="sr-only">Shopping list</span>
             <span aria-hidden="true">Shopping List</span>
           </h1>
