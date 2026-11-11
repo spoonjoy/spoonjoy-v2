@@ -1,9 +1,11 @@
 // The journeys load a page once more when the first load's connection was reset before any answer,
-// and ask again for a built static file Cloudflare answered 502, 503 or 504
-// (e2e/journeys/support/app-ready.ts), and only then.
-import { describe, expect, it, vi } from "vitest";
+// and ask again for a built static file Cloudflare answered 502, 503 or 504, or 404 for a file this
+// run built (e2e/journeys/support/app-ready.ts), and only then.
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectConsoleWarning } from "./warning-policy";
 import {
+  BUILT_FILE_404_RETRY_DELAYS_MS,
+  CLIENT_ASSETS_DIR,
   DATA_REQUEST_RETRY_DELAY_MS,
   ROUTED_FETCH_TIMEOUT_MS,
   STATIC_ASSET_RETRY_DELAYS_MS,
@@ -13,7 +15,9 @@ import {
   dataRequestPattern,
   isFetchTimeout,
   isFetchTransportFailure,
+  isBuiltAsset,
   isTransportFailure,
+  resetBuiltAssets,
   loadAgainAfterTransportFailure,
   waitForHydrationOnLoad,
 } from "../e2e/journeys/support/app-ready";
@@ -156,7 +160,8 @@ describe("answerStaticAsset", () => {
   const url = "https://spoonjoy-v2-qa-run-39850143035-1.mendelow-studio.workers.dev/assets/heading-BIJmUf4w.js?v=1";
 
   function route(...answers: Array<number | Error>) {
-    const responses = answers.map((answer) => (typeof answer === "number" ? { status: () => answer } : answer));
+    let ray = 0;
+    const responses = answers.map((answer) => (typeof answer === "number" ? { status: () => answer, headers: () => ({ "cf-ray": `ray${(ray += 1)}-IAD` }) } : answer));
     let tries = 0;
     return {
       fetch: vi.fn(async () => {
@@ -175,11 +180,11 @@ describe("answerStaticAsset", () => {
     const wait = vi.fn(async () => undefined);
     const onRetry = vi.fn();
 
-    await answerStaticAsset(assets as never, wait, onRetry);
+    await answerStaticAsset(assets as never, wait, onRetry, () => false, () => undefined);
 
     expect(assets.fetch).toHaveBeenCalledTimes(3);
     expect(wait.mock.calls.map(([ms]) => ms)).toEqual([...STATIC_ASSET_RETRY_DELAYS_MS]);
-    expect(onRetry.mock.calls).toEqual([["/assets/heading-BIJmUf4w.js", 502, 2], ["/assets/heading-BIJmUf4w.js", 503, 3]]);
+    expect(onRetry.mock.calls).toEqual([["/assets/heading-BIJmUf4w.js", 502, 2, "ray1-IAD", 3], ["/assets/heading-BIJmUf4w.js", 503, 3, "ray2-IAD", 3]]);
     expect(assets.fulfill).toHaveBeenCalledExactlyOnceWith({ response: expect.objectContaining({ status: expect.any(Function) }) });
     expect((assets.fulfill.mock.calls[0] as unknown as [{ response: { status(): number } }])[0].response.status()).toBe(200);
   });
@@ -187,7 +192,7 @@ describe("answerStaticAsset", () => {
   it("hands the page the last 5xx after three tries instead of asking a fourth time", async () => {
     const assets = route(504, 504, 504, 200);
 
-    await answerStaticAsset(assets as never, async () => undefined, () => undefined);
+    await answerStaticAsset(assets as never, async () => undefined, () => undefined, () => false, () => undefined);
 
     expect(assets.fetch).toHaveBeenCalledTimes(3);
     expect((assets.fulfill.mock.calls[0] as unknown as [{ response: { status(): number } }])[0].response.status()).toBe(504);
@@ -197,7 +202,7 @@ describe("answerStaticAsset", () => {
     const assets = route(status);
     const wait = vi.fn(async () => undefined);
 
-    await answerStaticAsset(assets as never, wait, () => undefined);
+    await answerStaticAsset(assets as never, wait, () => undefined, () => false);
 
     expect(assets.fetch).toHaveBeenCalledTimes(1);
     expect(wait).not.toHaveBeenCalled();
@@ -206,7 +211,7 @@ describe("answerStaticAsset", () => {
   it("gives each try ROUTED_FETCH_TIMEOUT_MS to be answered", async () => {
     const assets = route(502, 200);
 
-    await answerStaticAsset(assets as never, async () => undefined, () => undefined);
+    await answerStaticAsset(assets as never, async () => undefined, () => undefined, () => false, () => undefined);
 
     expect(assets.fetch.mock.calls).toEqual([[{ timeout: ROUTED_FETCH_TIMEOUT_MS }], [{ timeout: ROUTED_FETCH_TIMEOUT_MS }]]);
     expect(ROUTED_FETCH_TIMEOUT_MS).toBe(6_000);
@@ -215,17 +220,89 @@ describe("answerStaticAsset", () => {
   it("lets the browser make the request itself when no answer comes in time", async () => {
     const assets = route(timeoutError());
 
-    await answerStaticAsset(assets as never, async () => undefined, () => undefined);
+    await answerStaticAsset(assets as never, async () => undefined, () => undefined, () => false);
 
     expect(assets.fetch).toHaveBeenCalledTimes(1);
     expect(assets.continue).toHaveBeenCalledTimes(1);
     expect(assets.fulfill).not.toHaveBeenCalled();
   });
 
+  it("asks again, for about 50 s at most, when a file this run built answers 404", async () => {
+    const assets = route(404, 404, 200);
+    const wait = vi.fn(async () => undefined);
+    const onRetry = vi.fn();
+    const isBuilt = vi.fn((pathname: string) => pathname === "/assets/heading-BIJmUf4w.js");
+
+    await answerStaticAsset(assets as never, wait, onRetry, isBuilt, () => undefined);
+
+    expect(assets.fetch).toHaveBeenCalledTimes(3);
+    expect(wait.mock.calls.map(([ms]) => ms)).toEqual(BUILT_FILE_404_RETRY_DELAYS_MS.slice(0, 2));
+    expect(onRetry.mock.calls).toEqual([["/assets/heading-BIJmUf4w.js", 404, 2, "ray1-IAD", 6], ["/assets/heading-BIJmUf4w.js", 404, 3, "ray2-IAD", 6]]);
+    expect((assets.fulfill.mock.calls[0] as unknown as [{ response: { status(): number } }])[0].response.status()).toBe(200);
+  });
+
+  it("hands the page a built file's 404 after six tries, waiting 250 ms, 1 s, 4 s, 15 s and 30 s, instead of asking a seventh time", async () => {
+    const assets = route(404, 404, 404, 404, 404, 404, 200);
+    const wait = vi.fn(async () => undefined);
+
+    await answerStaticAsset(assets as never, wait, () => undefined, () => true, () => undefined);
+
+    expect(BUILT_FILE_404_RETRY_DELAYS_MS).toEqual([250, 1_000, 4_000, 15_000, 30_000]);
+    expect(wait.mock.calls.map(([ms]) => ms)).toEqual([...BUILT_FILE_404_RETRY_DELAYS_MS]);
+    expect(assets.fetch).toHaveBeenCalledTimes(6);
+    expect((assets.fulfill.mock.calls[0] as unknown as [{ response: { status(): number } }])[0].response.status()).toBe(404);
+  });
+
+  it("says how a retried file ended: its last answer, on which try, with Cloudflare's ray", async () => {
+    const recovered = route(404, 200);
+    const onRecovered = vi.fn();
+    await answerStaticAsset(recovered as never, async () => undefined, () => undefined, () => true, onRecovered);
+    expect(onRecovered).toHaveBeenCalledExactlyOnceWith("/assets/heading-BIJmUf4w.js", 200, 2, "ray2-IAD", 6);
+
+    const exhausted = route(404, 404, 404, 404, 404, 404);
+    const onExhausted = vi.fn();
+    await answerStaticAsset(exhausted as never, async () => undefined, () => undefined, () => true, onExhausted);
+    expect(onExhausted).toHaveBeenCalledExactlyOnceWith("/assets/heading-BIJmUf4w.js", 404, 6, "ray6-IAD", 6);
+
+    const cached = {
+      fetch: vi.fn(async () => ({ status: () => (cached.fetch.mock.calls.length === 1 ? 404 : 200), headers: () => ({ "cf-ray": "abc-IAD", "cf-cache-status": "HIT", age: "42" }) })),
+      fulfill: vi.fn(async () => undefined),
+      continue: vi.fn(async () => undefined),
+      request: () => ({ url: () => url }),
+    };
+    const onCachedRetry = vi.fn();
+    await answerStaticAsset(cached as never, async () => undefined, onCachedRetry, () => true, () => undefined);
+    expect(onCachedRetry).toHaveBeenCalledExactlyOnceWith("/assets/heading-BIJmUf4w.js", 404, 2, "abc-IAD, cf-cache-status HIT, age 42", 6);
+
+    const firstTry = route(200);
+    const onFirstTry = vi.fn();
+    await answerStaticAsset(firstTry as never, async () => undefined, () => undefined, () => true, onFirstTry);
+    expect(onFirstTry).not.toHaveBeenCalled();
+  });
+
+  it("hands the page a 404 at once for a file this run did not build", async () => {
+    const assets = route(404, 200);
+    const onRetry = vi.fn();
+
+    await answerStaticAsset(assets as never, async () => undefined, onRetry, () => false);
+
+    expect(assets.fetch).toHaveBeenCalledTimes(1);
+    expect(onRetry).not.toHaveBeenCalled();
+  });
+
+  it("prints a built file's 404 with its name and try in the test's output", async () => {
+    const assets = route(404, 200);
+    expectConsoleWarning("Journeys: static file /assets/heading-BIJmUf4w.js answered 404; asking again (try 2 of 6, cf-ray ray1-IAD)");
+    expectConsoleWarning("Journeys: static file /assets/heading-BIJmUf4w.js answered 200 on try 2 of 6 (cf-ray ray2-IAD)");
+
+    await answerStaticAsset(assets as never, async () => undefined, undefined, () => true);
+    expect(assets.fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("lets the browser make the request itself when asking fails", async () => {
     const assets = route(new Error("socket hang up"));
 
-    await answerStaticAsset(assets as never, async () => undefined, () => undefined);
+    await answerStaticAsset(assets as never, async () => undefined, () => undefined, () => false, () => undefined);
 
     expect(assets.continue).toHaveBeenCalledTimes(1);
     expect(assets.fulfill).not.toHaveBeenCalled();
@@ -233,7 +310,8 @@ describe("answerStaticAsset", () => {
 
   it("prints each new try in the test's output by default", async () => {
     const assets = route(502, 200);
-    expectConsoleWarning("Journeys: static file /assets/heading-BIJmUf4w.js answered 502; asking again (try 2 of 3)");
+    expectConsoleWarning("Journeys: static file /assets/heading-BIJmUf4w.js answered 502; asking again (try 2 of 3, cf-ray ray1-IAD)");
+    expectConsoleWarning("Journeys: static file /assets/heading-BIJmUf4w.js answered 200 on try 2 of 3 (cf-ray ray2-IAD)");
 
     await answerStaticAsset(assets as never, async () => undefined);
     expect(assets.fetch).toHaveBeenCalledTimes(2);
@@ -423,5 +501,30 @@ describe("answerDataRequest", () => {
 
     await answerDataRequest(data as never, async () => undefined);
     expect(data.fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("isBuiltAsset", () => {
+  afterEach(() => resetBuiltAssets());
+
+  it("knows this run's built files, reading the build's assets folder once", () => {
+    const list = vi.fn(() => ["heading-BIJmUf4w.js", "root-Dx_9a.css", "fonts"]);
+
+    expect(isBuiltAsset("/assets/heading-BIJmUf4w.js", list)).toBe(true);
+    expect(isBuiltAsset("/assets/root-Dx_9a.css", list)).toBe(true);
+    expect(isBuiltAsset("/assets/gone-0000.js", list)).toBe(false);
+    // Only file names count, as in qa-run-scope.mjs verify: a folder is not a built file.
+    expect(isBuiltAsset("/assets/fonts", list)).toBe(false);
+    expect(list).toHaveBeenCalledExactlyOnceWith(CLIENT_ASSETS_DIR);
+  });
+
+  it("reads the build next to the repository root, wherever the suite starts", () => {
+    expect(CLIENT_ASSETS_DIR).toBe(`${process.cwd()}/build/client/assets/`);
+  });
+
+  it("knows no file when there is no build", () => {
+    const list = vi.fn(() => { throw Object.assign(new Error("ENOENT: no such file or directory"), { code: "ENOENT" }); });
+
+    expect(isBuiltAsset("/assets/heading-BIJmUf4w.js", list)).toBe(false);
   });
 });

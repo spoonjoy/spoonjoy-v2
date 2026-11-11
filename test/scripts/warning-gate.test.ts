@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { assetRetryNote, dataRequestRetryNote, loadRetryNote } from "../../e2e/journeys/support/app-ready";
+import { assetRecoveredNote, assetRetryNote, dataRequestRetryNote, loadRetryNote } from "../../e2e/journeys/support/app-ready";
 import {
   EXPECTED_PRISMA_D1_TRANSACTION_WARNING,
   JOURNEYS_RETRY_NOTE_PATTERN,
@@ -382,6 +382,12 @@ describe("warning gate", () => {
       dataRequestRetryNote("GET", "/recipes.data", new Error("socket hang up")),
       dataRequestRetryNote("POST", "/login.data", new Error("Client network socket disconnected before secure TLS connection was established")),
       dataRequestRetryNote("GET", "/recipes.data", Object.assign(new Error("route.fetch: Timeout 6000ms exceeded."), { name: "TimeoutError" })),
+      // A built file Cloudflare answered 404 for (#668).
+      assetRetryNote("/assets/button-CXqvcQew.js", 404, 2, "none", 6),
+      assetRetryNote("/assets/button-CXqvcQew.js", 404, 6, "8f1e2d3c4b5a6978-IAD", 6),
+      assetRecoveredNote("/assets/button-CXqvcQew.js", 200, 2, "8f1e2d3c4b5a6979-IAD"),
+      assetRecoveredNote("/assets/button-CXqvcQew.js", 404, 6, "none", 6),
+      assetRetryNote("/assets/button-CXqvcQew.js", 404, 2, "8f1e2d3c4b5a6978-IAD, cf-cache-status HIT, age 42", 6),
     ];
 
     it.each(notes)("tolerates %s", (line) => {
@@ -395,6 +401,10 @@ describe("warning gate", () => {
       ["a file answered with another status", assetRetryNote("/assets/a.js", 500, 2)],
       ["a file outside the built files", assetRetryNote("/photos/covers/a.jpg", 502, 2)],
       ["a fourth try", assetRetryNote("/assets/a.js", 502, 4)],
+      ["a last answer on the first try", assetRecoveredNote("/assets/a.js", 200, 1)],
+      ["a 502 asked a fourth time", assetRetryNote("/assets/a.js", 502, 4, "none", 6)],
+      ["a built file's 404 asked a seventh time", assetRetryNote("/assets/a.js", 404, 7, "none", 7)],
+      ["a last answer for a file outside the built files", assetRecoveredNote("/photos/a.jpg", 200, 2)],
       ["extra text after a note", `${assetRetryNote("/assets/a.js", 502, 2)} and a page error`],
       ["another note from the journeys", "Journeys: the page never hydrated"],
       ["a data request that failed another way", dataRequestRetryNote("POST", "/login.data", new Error("getaddrinfo ENOTFOUND example.test"))],
