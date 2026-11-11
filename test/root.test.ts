@@ -7,6 +7,11 @@ import { links, meta } from "~/root";
 describe("root.tsx safe area and dock clearance", () => {
   const source = readFileSync("app/root.tsx", "utf8");
 
+  it("shows Safari's Smart App Banner on every page, opening the app on the page being read", () => {
+    expect(source).toContain('<meta name="apple-itunes-app" content={smartAppBannerContent(location.pathname, location.search)} />');
+    expect(source).toMatch(/export function Layout\([^)]*\) \{[^}]*\n  const location = useLocation\(\);/);
+  });
+
   it("sets viewport-fit=cover so iOS reports its safe-area insets", () => {
     expect(source).toContain('<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />');
   });
@@ -87,10 +92,11 @@ describe("root.tsx links()", () => {
     }
   });
 
-  it("still includes the existing apple-touch-icon", () => {
+  it("gives iOS a PNG touch icon, the app's own, since it ignores an SVG one", () => {
     const result = links();
-    expect(result).toContainEqual(
-      expect.objectContaining({ rel: "apple-touch-icon", href: "/logos/sj_black.svg" }),
-    );
+    expect(result).toContainEqual({ rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" });
+    const png = readFileSync("public/apple-touch-icon.png");
+    expect(png.subarray(1, 4).toString("latin1")).toBe("PNG");
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([180, 180]);
   });
 });
