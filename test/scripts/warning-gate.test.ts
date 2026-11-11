@@ -381,6 +381,7 @@ describe("warning gate", () => {
       dataRequestRetryNote("POST", "/recipes/6fd4f6b4/steps/new.data", new Error("read ECONNRESET")),
       dataRequestRetryNote("GET", "/recipes.data", new Error("socket hang up")),
       dataRequestRetryNote("POST", "/login.data", new Error("Client network socket disconnected before secure TLS connection was established")),
+      dataRequestRetryNote("GET", "/recipes.data", Object.assign(new Error("route.fetch: Timeout 6000ms exceeded."), { name: "TimeoutError" })),
     ];
 
     it.each(notes)("tolerates %s", (line) => {
@@ -398,6 +399,7 @@ describe("warning gate", () => {
       ["another note from the journeys", "Journeys: the page never hydrated"],
       ["a data request that failed another way", dataRequestRetryNote("POST", "/login.data", new Error("getaddrinfo ENOTFOUND example.test"))],
       ["a request that is not a data request", dataRequestRetryNote("POST", "/login", new Error("read ECONNRESET"))],
+      ["a submission resent after no answer", dataRequestRetryNote("POST", "/login.data", Object.assign(new Error("route.fetch: Timeout 6000ms exceeded."), { name: "TimeoutError" }))],
       ["a data request whose retry note has more after it", `${dataRequestRetryNote("POST", "/login.data", new Error("read ECONNRESET"))} and then a page error`],
     ])("still fails %s", (_label, line) => {
       expect(JOURNEYS_RETRY_NOTE_PATTERN.test(line)).toBe(false);

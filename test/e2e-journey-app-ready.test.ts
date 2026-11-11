@@ -5,11 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 import { expectConsoleWarning } from "./warning-policy";
 import {
   DATA_REQUEST_RETRY_DELAY_MS,
+  ROUTED_FETCH_TIMEOUT_MS,
   STATIC_ASSET_RETRY_DELAYS_MS,
   TRANSPORT_RETRY_DELAY_MS,
   answerDataRequest,
   answerStaticAsset,
   dataRequestPattern,
+  isFetchTimeout,
   isFetchTransportFailure,
   isTransportFailure,
   loadAgainAfterTransportFailure,
@@ -20,7 +22,7 @@ import {
 const WEBKIT_RESET = "page.goto: Error receiving data: Connection reset by peer";
 const WEBKIT_TLS_RESET = "page.goto: Peer failed to perform TLS handshake: Error receiving data: Connection reset by peer";
 
-function timeoutError(message: string) {
+function timeoutError(message = "route.fetch: Timeout 6000ms exceeded.") {
   return Object.assign(new Error(message), { name: "TimeoutError" });
 }
 
@@ -201,6 +203,25 @@ describe("answerStaticAsset", () => {
     expect(wait).not.toHaveBeenCalled();
   });
 
+  it("gives each try ROUTED_FETCH_TIMEOUT_MS to be answered", async () => {
+    const assets = route(502, 200);
+
+    await answerStaticAsset(assets as never, async () => undefined, () => undefined);
+
+    expect(assets.fetch.mock.calls).toEqual([[{ timeout: ROUTED_FETCH_TIMEOUT_MS }], [{ timeout: ROUTED_FETCH_TIMEOUT_MS }]]);
+    expect(ROUTED_FETCH_TIMEOUT_MS).toBe(6_000);
+  });
+
+  it("lets the browser make the request itself when no answer comes in time", async () => {
+    const assets = route(timeoutError());
+
+    await answerStaticAsset(assets as never, async () => undefined, () => undefined);
+
+    expect(assets.fetch).toHaveBeenCalledTimes(1);
+    expect(assets.continue).toHaveBeenCalledTimes(1);
+    expect(assets.fulfill).not.toHaveBeenCalled();
+  });
+
   it("lets the browser make the request itself when asking fails", async () => {
     const assets = route(new Error("socket hang up"));
 
@@ -263,20 +284,41 @@ describe("isFetchTransportFailure", () => {
   });
 });
 
+describe("isFetchTimeout", () => {
+  it("is route.fetch's own timeout", () => {
+    expect(isFetchTimeout(timeoutError())).toBe(true);
+  });
+
+  it.each([
+    ["a dropped connection", new Error("read ECONNRESET")],
+    ["a test that ended", new Error("route.fetch: Test ended.")],
+    ["the test's own timeout", new Error("route.fetch: Test timeout of 60000ms exceeded.")],
+    ["a timeout named otherwise", new Error("route.fetch: Timeout 6000ms exceeded.")],
+    ["another call's timeout", Object.assign(new Error("page.goto: Timeout 6000ms exceeded."), { name: "TimeoutError" })],
+    ["something that is not an Error", "route.fetch: Timeout 6000ms exceeded."],
+  ])("is not %s", (_label, error) => {
+    expect(isFetchTimeout(error)).toBe(false);
+  });
+});
+
 describe("answerDataRequest", () => {
   const url = "https://spoonjoy-v2-qa-run-43057324617-1.mendelow-studio.workers.dev/recipes/6fd4f6b4/steps/new.data?index";
 
   function route(...answers: Array<number | Error>) {
+    return routeFor("POST", ...answers);
+  }
+
+  function routeFor(method: string, ...answers: Array<number | Error>) {
     let tries = 0;
     return {
-      fetch: vi.fn(async (_options?: { maxRedirects?: number }) => {
+      fetch: vi.fn(async (_options?: { maxRedirects?: number; timeout?: number }) => {
         const next = answers[tries++];
         if (next instanceof Error) throw next;
         return { status: () => next };
       }),
       fulfill: vi.fn(async (_options: { response: { status(): number } }) => undefined),
       abort: vi.fn(async (_code?: string) => undefined),
-      request: () => ({ url: () => url, method: () => "POST" }),
+      request: () => ({ url: () => url, method: () => method }),
     };
   }
 
@@ -286,7 +328,7 @@ describe("answerDataRequest", () => {
 
     await answerDataRequest(data as never, wait, () => undefined);
 
-    expect(data.fetch).toHaveBeenCalledExactlyOnceWith({ maxRedirects: 0 });
+    expect(data.fetch).toHaveBeenCalledExactlyOnceWith({ maxRedirects: 0, timeout: ROUTED_FETCH_TIMEOUT_MS });
     expect(wait).not.toHaveBeenCalled();
     expect(data.fulfill.mock.calls[0][0].response.status()).toBe(status);
   });
@@ -334,6 +376,45 @@ describe("answerDataRequest", () => {
     expect(data.fetch).toHaveBeenCalledTimes(1);
     expect(onRetry).not.toHaveBeenCalled();
     expect(data.abort).toHaveBeenCalledExactlyOnceWith("connectionreset");
+  });
+
+  it.each(["GET", "HEAD"])("sends a %s once more after no answer in time", async (method) => {
+    const data = routeFor(method, timeoutError(), 200);
+    const onRetry = vi.fn();
+
+    await answerDataRequest(data as never, async () => undefined, onRetry);
+
+    expect(data.fetch).toHaveBeenCalledTimes(2);
+    expect(onRetry).toHaveBeenCalledExactlyOnceWith(method, "/recipes/6fd4f6b4/steps/new.data", expect.objectContaining({ name: "TimeoutError" }));
+    expect(data.fulfill.mock.calls[0][0].response.status()).toBe(200);
+  });
+
+  it("shows the page the reset when a GET has no answer twice, instead of trying a third time", async () => {
+    const data = routeFor("GET", timeoutError(), timeoutError(), 200);
+
+    await answerDataRequest(data as never, async () => undefined, () => undefined);
+
+    expect(data.fetch).toHaveBeenCalledTimes(2);
+    expect(data.abort).toHaveBeenCalledExactlyOnceWith("connectionreset");
+  });
+
+  it.each(["POST", "PUT", "PATCH", "DELETE"])("never sends a %s again after no answer in time, since it may be applying", async (method) => {
+    const data = routeFor(method, timeoutError(), 200);
+    const onRetry = vi.fn();
+
+    await answerDataRequest(data as never, async () => undefined, onRetry);
+
+    expect(data.fetch).toHaveBeenCalledTimes(1);
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(data.abort).toHaveBeenCalledExactlyOnceWith("connectionreset");
+  });
+
+  it("says in the test's output when a request is sent again for want of an answer", async () => {
+    const data = routeFor("GET", timeoutError(), 200);
+    expectConsoleWarning("Journeys: sending GET /recipes/6fd4f6b4/steps/new.data again after it had no answer (route.fetch: Timeout 6000ms exceeded.)");
+
+    await answerDataRequest(data as never, async () => undefined);
+    expect(data.fetch).toHaveBeenCalledTimes(2);
   });
 
   it("prints the new try in the test's output by default", async () => {
