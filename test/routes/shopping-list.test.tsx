@@ -1085,6 +1085,9 @@ describe("Shopping List Routes", () => {
       const heading = screen.getByRole("heading", { level: 1 });
       expect(heading).toBeInTheDocument();
       expect(heading).toHaveTextContent("Shopping list");
+      // Core's sj-type-display role, Fraunces 600, as native's displayTitle draws it.
+      expect(heading).toHaveClass("sj-type-display");
+      expect(heading.className).not.toMatch(/font-(extrabold|black|bold)\b/);
     });
 
     it("keeps action button markup free of app-authored inline styles", async () => {
