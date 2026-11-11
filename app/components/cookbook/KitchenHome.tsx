@@ -13,6 +13,7 @@ import { CookbookPage } from "~/components/cookbook/page";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { listImageProps } from "~/lib/image-loading";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
+import { CoverPlaceholder } from "~/components/recipe/CoverPlaceholder";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { formatServingsLabel } from "~/lib/quantity";
 import { share } from "~/lib/ouro/share";
@@ -195,9 +196,8 @@ function RecipeIndexRow({
       media={recipe.coverImageUrl ? (
         <img src={recipe.coverImageUrl} alt="" {...listImageProps(index)} />
       ) : (
-        <span className="flex items-center justify-center bg-[var(--sj-photo-charcoal)] text-[var(--sj-on-photo-muted)]">
-          <ChefHat className="size-5" aria-hidden="true" />
-        </span>
+        // Native's initial tile, square so the media slot's own corner rounds it as it does a photo.
+        <CoverPlaceholder aria-hidden="true" data-testid={`kitchen-recipe-cover-placeholder-${recipe.id}`} title={recipe.title} shape="bleed" />
       )}
       mediaSize="md"
       actions={

@@ -76,7 +76,6 @@ function captureCookbookActionFailure(
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { Button } from "~/components/ouro/button/button";
 import { Text } from "~/components/ouro/text/text";
-import { BookOpen } from "lucide-react";
 import { Collapsible } from "~/components/ouro/collapsible/collapsible";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
@@ -90,6 +89,7 @@ import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
+import { CoverPlaceholder } from "~/components/recipe/CoverPlaceholder";
 import { useDockSuppressed } from "~/components/navigation";
 import { ShareButton } from "~/components/ouro/share-button/share-button";
 import {
@@ -527,8 +527,11 @@ export default function CookbookDetail() {
                       {formatServingsLabel(item.recipe.servings) ? <Text size="sm">{formatServingsLabel(item.recipe.servings)}</Text> : null}
                     </>
                   }
-                  media={item.recipe.coverImageUrl ? <img src={item.recipe.coverImageUrl} alt="" {...listImageProps(index, { prioritizeFirst: false })} /> : <BookOpen />}
-                  mediaSize={item.recipe.coverImageUrl ? "md" : "icon"}
+                  media={item.recipe.coverImageUrl ? <img src={item.recipe.coverImageUrl} alt="" {...listImageProps(index, { prioritizeFirst: false })} /> : (
+                    // Native's initial tile, square so the media slot's own corner rounds it as it does a photo.
+                    <CoverPlaceholder aria-hidden="true" data-testid={`cookbook-recipe-cover-placeholder-${item.recipe.id}`} title={item.recipe.title} shape="bleed" />
+                  )}
+                  mediaSize="md"
                   actions={item.recipe.coverProvenanceLabel ? <CoverProvenanceBadge label={item.recipe.coverProvenanceLabel} /> : undefined}
                 />
               ))}
