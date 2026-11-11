@@ -1,0 +1,13 @@
+diff --git a/lib/coreBundle.js b/lib/coreBundle.js
+index 784c72f35ba86abda9d937b092f51078b559f4e3..fa9a97c280efe1ddf0fef81d5241a57c8066d6d4 100644
+--- a/lib/coreBundle.js
++++ b/lib/coreBundle.js
+@@ -28065,6 +28065,8 @@ ${text2}`;
+               return;
+             const protocol = socket.getProtocol() ?? void 0;
+             const peerCertificate = socket.getPeerCertificate();
++            if (!peerCertificate)
++              return;
+             if (!peerCertificate.valid_from) {
+               securityDetails = { ...this._certificateDetails.get(certificateCacheKey), protocol };
+               return;

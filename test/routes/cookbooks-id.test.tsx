@@ -137,7 +137,8 @@ describe("Cookbooks $id Route", () => {
       expect(result.cookbook.id).toBe(cookbookId);
       expect(result.isOwner).toBe(false);
       expect(result.availableRecipes).toEqual([]);
-      expect(result.ogImageUrl).toBe(`http://localhost:3000/og/cookbooks/${cookbookId}.png`);
+      // No recipe photo to show, so link previews get Spoonjoy's PNG card, not the SVG /og/ card.
+      expect(result.ogImageUrl).toBe("http://localhost:3000/og/spoonjoy-home.png");
     });
 
     it("should return cookbook data when logged in as owner", async () => {
@@ -1209,12 +1210,12 @@ describe("Cookbooks $id Route", () => {
       expect(result.coverImageUrls).toContain(null);
       expect(result.cookbook.recipes[0].recipe.coverProvenanceLabel).toBe("Editorial photo");
       expect(result.canonicalUrl).toBe(`http://localhost:3000/cookbooks/${cookbookId}`);
-      expect(result.ogImageUrl).toBe(`http://localhost:3000/og/cookbooks/${cookbookId}.png`);
+      expect(result.ogImageUrl).toBe("http://localhost:3000/photos/covered-editorial.jpg");
     });
   });
 
   describe("meta", () => {
-    it("returns cookbook share metadata with on-demand OG image", () => {
+    it("returns cookbook share metadata with a recipe photo link previews can show", () => {
       expect(
         meta({
           data: {
@@ -1224,7 +1225,7 @@ describe("Cookbooks $id Route", () => {
               recipes: [{ id: "join-1" }],
             },
             canonicalUrl: "https://spoonjoy.app/cookbooks/cb-1",
-            ogImageUrl: "https://spoonjoy.app/og/cookbooks/cb-1.png",
+            ogImageUrl: "https://spoonjoy.app/photos/covered-editorial.jpg",
           },
         } as any),
       ).toEqual([
@@ -1235,14 +1236,11 @@ describe("Cookbooks $id Route", () => {
         { property: "og:title", content: "Weeknight Book" },
         { property: "og:description", content: "Weeknight Book by ari on Spoonjoy with 1 recipe." },
         { property: "og:url", content: "https://spoonjoy.app/cookbooks/cb-1" },
-        { property: "og:image", content: "https://spoonjoy.app/og/cookbooks/cb-1.png" },
-        { property: "og:image:width", content: "1200" },
-        { property: "og:image:height", content: "630" },
-        { property: "og:image:type", content: "image/svg+xml" },
+        { property: "og:image", content: "https://spoonjoy.app/photos/covered-editorial.jpg" },
+        { name: "twitter:image", content: "https://spoonjoy.app/photos/covered-editorial.jpg" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: "Weeknight Book" },
         { name: "twitter:description", content: "Weeknight Book by ari on Spoonjoy with 1 recipe." },
-        { name: "twitter:image", content: "https://spoonjoy.app/og/cookbooks/cb-1.png" },
         { tagName: "link", rel: "canonical", href: "https://spoonjoy.app/cookbooks/cb-1" },
       ]);
     });

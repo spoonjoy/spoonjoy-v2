@@ -51,7 +51,8 @@ import { hidesContent, withoutHidden } from "~/lib/moderation.server";
 import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
-import { absoluteUrlFromRequest, recipeOgPath } from "~/lib/og-image.server";
+import { absoluteUrlFromRequest, isRasterImageUrl, shareImageUrl } from "~/lib/og-metadata";
+import { DELETED_CHEF_USERNAME } from "~/lib/username";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { buildRecipeJsonLd } from "~/lib/recipe-structured-data.server";
 import {
@@ -317,10 +318,19 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   const activeCoverProcessing = activeCoverProcessingFor(recipe);
   const publicOrigin = resolveIssuerOrigin(request.url, context.cloudflare?.env?.SPOONJOY_BASE_URL);
   const canonicalUrl = absoluteUrlFromRequest(publicOrigin, `/recipes/${id}`);
-  const ogImageUrl = absoluteUrlFromRequest(publicOrigin, recipeOgPath(id));
+  // Link previews and Google's recipe results need a photo they can show: the dish's own, or
+  // Spoonjoy's PNG card for previews. The /og/ cards are SVG, which neither renders.
+  const ogImageUrl = shareImageUrl(publicOrigin, [coverImageUrl]);
   const recipeJsonLd = buildRecipeJsonLd(recipe, {
     canonicalUrl,
-    imageUrl: coverImageUrl ?? ogImageUrl,
+    // Google asks for a photo of the dish, so an AI-made cover stays out of the recipe result.
+    imageUrl: isRasterImageUrl(coverImageUrl) && coverDisplay?.sourceType !== "ai-placeholder"
+      ? absoluteUrlFromRequest(publicOrigin, coverImageUrl)
+      : null,
+    // A deleted chef's recipes keep their placeholder name but link to no kitchen.
+    authorUrl: recipe.chef.username === DELETED_CHEF_USERNAME
+      ? undefined
+      : absoluteUrlFromRequest(publicOrigin, `/users/${encodeURIComponent(recipe.chef.username)}`),
   });
 
   const userCookbooks = reads.userCookbooks;
