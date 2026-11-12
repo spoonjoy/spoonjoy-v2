@@ -523,15 +523,62 @@ describe("native Sign in with Apple API", () => {
     )).resolves.toMatchObject({ email: "fallback@example.com" });
   });
 
-  it("rejects identity tokens missing required Apple account claims", async () => {
+  it("rejects identity tokens missing Apple's subject claim", async () => {
     await expectNativeAppleVerificationError(
       await nativeAppleTokenFixture({ sub: " " }),
       "invalid_identity_token",
     );
-    await expectNativeAppleVerificationError(
-      await nativeAppleTokenFixture({ email: undefined }),
-      "invalid_identity_token",
+  });
+
+  it("verifies a returning Apple ID's token that carries no email", async () => {
+    const fixture = await nativeAppleTokenFixture({ email: undefined, email_verified: undefined });
+    await expect(verifyNativeAppleIdentityToken(
+      { identityToken: fixture.identityToken, rawNonce: fixture.rawNonce },
+      { clientIds: APPLE_NATIVE_CLIENT_IDS },
+      { fetcher: fetchAppleKeys(fixture.jwks) },
+    )).resolves.toMatchObject({ id: "apple-user-123", email: null, emailVerified: false });
+  });
+
+  function emaillessSignIn(fixture: Awaited<ReturnType<typeof nativeAppleTokenFixture>>, requestId: string) {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify(fixture.jwks), {
+      headers: { "Content-Type": "application/json" },
+    }));
+    return action(routeArgs(new UndiciRequest("http://localhost/api/v1/auth/apple/native", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify({ identityToken: fixture.identityToken, rawNonce: fixture.rawNonce }),
+    }) as unknown as Request));
+  }
+
+  it("signs a linked Apple ID in by its subject when Apple's token carries no email", async () => {
+    const chef = await db.user.create({ data: { email: "linked-chef@example.com", username: "linked_chef" } });
+    await db.oAuth.create({ data: { provider: "apple", providerUserId: "apple-user-123", providerUsername: "Linked Chef", userId: chef.id } });
+
+    const response = await emaillessSignIn(
+      await nativeAppleTokenFixture({ email: undefined, email_verified: undefined }),
+      "req_native_apple_emailless_linked",
     );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(201);
+    expect(json.data).toMatchObject({ action: "user_logged_in", userId: chef.id });
+    await expect(db.user.count()).resolves.toBe(1);
+  });
+
+  it("explains, without creating an account, when an unlinked Apple ID's token carries no email", async () => {
+    const existing = await db.user.create({ data: { email: "someone@example.com", username: "someone" } });
+
+    const response = await emaillessSignIn(
+      await nativeAppleTokenFixture({ email: undefined, email_verified: undefined }),
+      "req_native_apple_emailless_unlinked",
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(400);
+    expect(json.error).toMatchObject({ code: "validation_error", details: { providerCode: "apple_email_unavailable" } });
+    expect(json.error.message).toContain("link Apple in Settings");
+    await expect(db.user.findMany({ select: { id: true } })).resolves.toEqual([{ id: existing.id }]);
+    await expect(db.oAuth.count()).resolves.toBe(0);
   });
 
   /** Sign out everywhere lands just before the sign-in's grant is written. */

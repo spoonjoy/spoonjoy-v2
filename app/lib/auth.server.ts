@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { newReservationId } from "~/lib/api-idempotency.server";
+import { redwoodPasswordFormat, verifyRedwoodPassword } from "~/lib/legacy-password.server";
 
 const SALT_ROUNDS = 10;
 
@@ -71,9 +72,31 @@ type AuthenticatedUser = {
   sessionVersion: number;
 };
 
+type PasswordLoginRow = AuthenticatedUser & { hashedPassword: string | null; salt: string | null };
+
+/** Replaces a Redwood-era hash with bcrypt, only while the row still holds that old hash. */
+type PasswordUpgradeWrite = (userId: string, previousHash: string, next: { hashedPassword: string; salt: string }) => Promise<void>;
+
+/**
+ * True when `password` matches the stored hash: bcrypt, or a Redwood dbAuth hash and salt left
+ * from before Spoonjoy moved off RedwoodJS (see legacy-password.server.ts).
+ */
+export async function verifyStoredPassword(
+  password: string,
+  stored: { hashedPassword: string; salt: string | null },
+): Promise<boolean> {
+  if (redwoodPasswordFormat(stored.hashedPassword)) {
+    // Pay the bcrypt cost as well, so a Redwood-era account answers in the same time as any other.
+    await verifyPassword(password, DECOY_PASSWORD_HASH);
+    return verifyRedwoodPassword(password, stored.hashedPassword, stored.salt);
+  }
+  return verifyPassword(password, stored.hashedPassword);
+}
+
 async function authenticatePasswordUser(
-  user: (AuthenticatedUser & { hashedPassword: string | null }) | null,
-  password: string
+  user: PasswordLoginRow | null,
+  password: string,
+  upgrade: PasswordUpgradeWrite,
 ): Promise<AuthenticatedUser | null> {
   // Always run a bcrypt comparison — against the stored hash when the account
   // exists with a password, otherwise against DECOY_PASSWORD_HASH — so the
@@ -81,10 +104,9 @@ async function authenticatePasswordUser(
   // registered (anti-enumeration). This equalizes the bcrypt window, not the
   // whole request: the preceding lookup still differs slightly for a hit vs
   // a miss, but that delta is negligible next to bcrypt.
-  const isValid = await verifyPassword(
-    password,
-    user?.hashedPassword ?? DECOY_PASSWORD_HASH
-  );
+  const isValid = user?.hashedPassword
+    ? await verifyStoredPassword(password, { hashedPassword: user.hashedPassword, salt: user.salt })
+    : await verifyPassword(password, DECOY_PASSWORD_HASH);
 
   // When user / hashedPassword is absent, `isValid` was computed against the
   // decoy and is intentionally ignored: the first two operands short-circuit to
@@ -93,7 +115,34 @@ async function authenticatePasswordUser(
     return null;
   }
 
+  if (redwoodPasswordFormat(user.hashedPassword)) {
+    // Upgrade the Redwood-era hash now that the password is proven, so this chef needs the old
+    // check only once. The write is conditional on the old hash, so a concurrent change wins. It is
+    // best-effort: if it fails, the old hash still signs in next time, so it never fails this sign-in.
+    await upgrade(user.id, user.hashedPassword, await hashPassword(password)).catch((error: unknown) => {
+      console.warn("password.upgrade_failed", { userId: user.id, error: error instanceof Error ? error.name : "unknown" });
+    });
+  }
+
   return { id: user.id, email: user.email, username: user.username, sessionVersion: user.sessionVersion };
+}
+
+function prismaPasswordUpgrade(db: PrismaClient): PasswordUpgradeWrite {
+  return async (userId, previousHash, next) => {
+    await retryD1Write({ scope: "user.password_upgrade" }, () => db.user.updateMany({
+      where: { id: userId, hashedPassword: previousHash },
+      data: next,
+    }));
+  };
+}
+
+function d1PasswordUpgrade(d1: D1ReadDatabase): PasswordUpgradeWrite {
+  return async (userId, previousHash, next) => {
+    await retryD1Write({ scope: "user.password_upgrade" }, () => d1.batch([
+      d1.prepare(`UPDATE "User" SET "hashedPassword" = ?, "salt" = ?, "updatedAt" = ? WHERE "id" = ? AND "hashedPassword" = ?`)
+        .bind(next.hashedPassword, next.salt, new Date().toISOString(), userId, previousHash),
+    ]));
+  };
 }
 
 // Authenticate user by email and password
@@ -109,11 +158,12 @@ export async function authenticateUser(
       email: true,
       username: true,
       hashedPassword: true,
+      salt: true,
       sessionVersion: true,
     },
   });
 
-  return authenticatePasswordUser(user, password);
+  return authenticatePasswordUser(user, password, prismaPasswordUpgrade(db));
 }
 
 // Authenticate first-party native app sign-in by email or exact username.
@@ -131,6 +181,7 @@ export async function authenticateUserByEmailOrUsername(
           email: true,
           username: true,
           hashedPassword: true,
+          salt: true,
           sessionVersion: true,
         },
       })
@@ -141,14 +192,15 @@ export async function authenticateUserByEmailOrUsername(
           email: true,
           username: true,
           hashedPassword: true,
+          salt: true,
           sessionVersion: true,
         },
       });
 
-  return authenticatePasswordUser(user, password);
+  return authenticatePasswordUser(user, password, prismaPasswordUpgrade(db));
 }
 
-const LOGIN_USER_COLUMNS = '"id", "email", "username", "hashedPassword", "sessionVersion"';
+const LOGIN_USER_COLUMNS = '"id", "email", "username", "hashedPassword", "salt", "sessionVersion"';
 
 /**
  * The same password login on the request's D1 binding: one statement finds the user by email
@@ -171,6 +223,7 @@ export async function authenticateUserByEmailOrUsernameOnD1(
       typeof row.email !== "string" ||
       typeof row.username !== "string" ||
       (row.hashedPassword !== null && typeof row.hashedPassword !== "string") ||
+      (row.salt !== undefined && row.salt !== null && typeof row.salt !== "string") ||
       typeof row.sessionVersion !== "number")
   ) {
     throw new Error("D1 user row is missing a login field");
@@ -181,10 +234,11 @@ export async function authenticateUserByEmailOrUsernameOnD1(
         email: row.email as string,
         username: row.username as string,
         hashedPassword: row.hashedPassword as string | null,
+        salt: (row.salt as string | null | undefined) ?? null,
         sessionVersion: row.sessionVersion as number,
       }
     : null;
-  return authenticatePasswordUser(user, password);
+  return authenticatePasswordUser(user, password, d1PasswordUpgrade(d1));
 }
 
 /**

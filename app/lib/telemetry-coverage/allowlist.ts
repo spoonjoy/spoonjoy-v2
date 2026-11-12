@@ -151,6 +151,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Catch answers only ModerationError (an unknown target, a self-block or an unknown reason) with the 4xx the report and block forms show, and re-throws every other error to the route layer's handleError (entry.server.tsx), which captures it.",
   },
   {
+    file: "app/lib/auth.server.ts",
+    category: "swallow",
+    reason:
+      "Sole catch is the best-effort upgrade of a Redwood-era password hash to bcrypt after the password was already proven; a failed write keeps the old hash, which still signs in next time, so the sign-in must not fail. It logs password.upgrade_failed with the user id and error name only.",
+  },
+  {
     file: "app/lib/account-revocation.server.ts",
     category: "rethrow",
     reason:
