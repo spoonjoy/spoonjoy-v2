@@ -129,6 +129,9 @@ async function checkAction(page: Page, measurements: Measurements, action: Locat
     await page.evaluate(() => window.scrollTo(0, 0));
     // A key press first, so the browser treats the focus that follows as keyboard focus.
     await page.keyboard.press("Tab");
+    // The Tab can land on a link further down (WebKit moves on from the last pressed action) and scroll
+    // there; return to the top so the focus below is measured from where the step says it starts.
+    await page.evaluate(() => window.scrollTo(0, 0));
     await action.focus();
     await expect(action).toBeFocused();
     await recordCovered(measurements, action, `${name}, focused`);
