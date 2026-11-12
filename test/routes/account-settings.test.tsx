@@ -4300,6 +4300,8 @@ describe("Account Settings Route", () => {
 
         const session = await sessionStorage.getSession();
         session.set("userId", testUserId);
+        // A blank current password needs a recent sign-in (issue #683).
+        session.set("authenticatedAt", Date.now());
         const setCookieHeader = await sessionStorage.commitSession(session);
         const cookieValue = setCookieHeader.split(";")[0];
 
@@ -4382,6 +4384,8 @@ describe("Account Settings Route", () => {
 
         const session = await sessionStorage.getSession();
         session.set("userId", testUserId);
+        // A blank current password needs a recent sign-in (issue #683).
+        session.set("authenticatedAt", Date.now());
         const setCookieHeader = await sessionStorage.commitSession(session);
         const cookieValue = setCookieHeader.split(";")[0];
 
