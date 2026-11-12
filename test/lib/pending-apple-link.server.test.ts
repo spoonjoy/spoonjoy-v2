@@ -10,6 +10,7 @@ import {
   appleSubSupportHash,
   claimPendingAppleLink,
   claimPendingAppleLinkFromCookie,
+  tryCreatePendingAppleLink,
   createPendingAppleLink,
   PENDING_APPLE_LINK_MESSAGE,
   PENDING_APPLE_LINK_TTL_MS,
@@ -218,6 +219,16 @@ describe("pending Apple links", () => {
     await createPendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null }, { now: new Date(old.getTime() + PENDING_APPLE_LINK_TTL_MS + 1) });
 
     await expect(db.pendingAppleLink.findMany({ select: { appleSub: true } })).resolves.toEqual([{ appleSub: APPLE_SUB }]);
+  });
+
+  it("answers null, logging why, when a pending link can't be saved", async () => {
+    vi.spyOn(db.pendingAppleLink, "create").mockRejectedValueOnce(new Error("boom")).mockRejectedValueOnce("odd");
+    expectConsoleWarning(JSON.stringify({ event: "apple.pending_link", outcome: "create_failed", error: "Error" }));
+    expectConsoleWarning(JSON.stringify({ event: "apple.pending_link", outcome: "create_failed", error: "unknown" }));
+
+    await expect(tryCreatePendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null })).resolves.toBeNull();
+    await expect(tryCreatePendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null })).resolves.toBeNull();
+    await expect(tryCreatePendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null })).resolves.toMatchObject({ token: expect.stringMatching(/^pal_/) });
   });
 
   it("still makes a pending link when clearing expired ones fails", async () => {
