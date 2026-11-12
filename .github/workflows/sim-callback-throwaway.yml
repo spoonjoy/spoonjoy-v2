@@ -1,0 +1,104 @@
+name: Sim Callback Throwaway
+
+# Seeds or removes one throwaway account on production for spoonjoy-apple's browser sign-in callback proof
+# (.github/workflows/browser-signin-callback.yml there). scripts/sim-callback-throwaway.ts accepts only the
+# proof's own account shape (probecb<18 hex>, simcallbackprobe<tag>, sim-callback-probe-<date>-<tag>@example.com),
+# so it can never touch a real account. The caller makes the password and passes only its bcrypt hash.
+#
+# cleanup counts the account's tokens, runs the app's own account deletion behind an exact-email guard, removes the
+# chef search document, asks spoonjoy.app's search to drain, and fails unless no column of any table mentions the
+# id, the username or the email.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: seed or cleanup
+        type: choice
+        required: true
+        options: [seed, cleanup]
+      account_id:
+        description: probecb<18 hex>
+        type: string
+        required: true
+      email:
+        description: sim-callback-probe-<YYYYMMDD>-<tag>@example.com
+        type: string
+        required: true
+      username:
+        description: simcallbackprobe<tag>
+        type: string
+        required: true
+      password_hash:
+        description: bcrypt cost-10 hash (seed only)
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sim-callback-throwaway-${{ inputs.account_id }}
+  cancel-in-progress: false
+
+jobs:
+  throwaway:
+    if: github.repository == 'spoonjoy/spoonjoy-v2' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ACCOUNT_ID: ${{ inputs.account_id }}
+      ACCOUNT_EMAIL: ${{ inputs.email }}
+      ACCOUNT_USERNAME: ${{ inputs.username }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Check the action
+        env:
+          ACTION: ${{ inputs.action }}
+        run: |
+          case "$ACTION" in seed|cleanup) ;; *) echo "::error::action must be seed or cleanup."; exit 1 ;; esac
+
+      - name: Seed the throwaway
+        if: inputs.action == 'seed'
+        # Only this step sees the hash. It is the bcrypt hash of a 192-bit random password, used for one run.
+        env:
+          PASSWORD_HASH: ${{ inputs.password_hash }}
+        run: pnpm exec tsx scripts/sim-callback-throwaway.ts seed
+
+      - name: Delete the throwaway's rows
+        if: inputs.action == 'cleanup'
+        run: pnpm exec tsx scripts/sim-callback-throwaway.ts cleanup
+
+      - name: Wait for search to drop the throwaway
+        if: inputs.action == 'cleanup'
+        run: |
+          # Deleting the user queues a search update; a search request drains the queue.
+          for attempt in 1 2 3 4 5 6; do
+            curl -fsS -o /dev/null "https://spoonjoy.app/search?q=simcallbackprobe" || true
+            sleep 15
+            if pnpm exec tsx scripts/sim-callback-throwaway.ts search-pending; then
+              exit 0
+            fi
+          done
+          exit 1
+
+      - name: Scan every table for the throwaway
+        if: inputs.action == 'cleanup'
+        run: pnpm exec tsx scripts/sim-callback-throwaway.ts scan
