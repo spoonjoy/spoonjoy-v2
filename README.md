@@ -296,6 +296,10 @@ The canonical proposed backlog lives in [`BACKLOG.md`](./BACKLOG.md). Agent task
 
 ## License
 
-ISC
+Spoonjoy is source-available under the [Functional Source License, Version 1.1, MIT Future License](LICENSE.md) (FSL-1.1-MIT), copyright Ari Mendelow.[^license] You may read, run, modify and learn from the code for any purpose except offering a competing commercial product or service.[^license-use] Each release becomes available under the MIT license two years after it is published.[^license-mit] The Ouro UI components it installs come from [ouro-ui](https://github.com/ourostack/ouro-ui) and [ouro-ui-core](https://github.com/ourostack/ouro-ui-core), which are MIT-licensed, so copy those from there.[^ouro-ui-mit]
 
 [^stack]: package.json verify:fileLine(package.json, /"react-router": "7\./)
+[^license]: LICENSE.md; package.json verify:fileLine(LICENSE.md, /^FSL-1\.1-MIT$/) verify:fileLine(LICENSE.md, /^Copyright 2026 Ari Mendelow$/) verify:equals(package.json#license)=FSL-1.1-MIT
+[^license-use]: LICENSE.md verify:fileLine(LICENSE.md, /^A Permitted Purpose is any purpose other than a Competing Use\./)
+[^license-mit]: LICENSE.md verify:fileLine(LICENSE.md, /^the MIT license that is effective on the second anniversary of the date we make$/)
+[^ouro-ui-mit]: https://github.com/ourostack/ouro-ui/blob/36c22fe62b8783402d000df776c78620c15eafd9/LICENSE; https://github.com/ourostack/ouro-ui-core/blob/d9de146f03df8e7f9c8d2bbbb872f323ebae1f64/LICENSE verify:fileLine(.github/ouro-hx-installed.json, /"tagCommit": "36c22fe62b8783402d000df776c78620c15eafd9"/) verify:fileLine(vendor/ouro-ui-core/pin.json, /ouro-ui-core\/releases\/tag\/v0\.4\.1/) verify:urlOk(https://github.com/ourostack/ouro-ui/blob/36c22fe62b8783402d000df776c78620c15eafd9/LICENSE) verify:urlOk(https://github.com/ourostack/ouro-ui-core/blob/d9de146f03df8e7f9c8d2bbbb872f323ebae1f64/LICENSE)
