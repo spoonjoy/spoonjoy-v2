@@ -12,10 +12,10 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: seed or cleanup
+        description: seed, cleanup, or scan (check an account that is already deleted)
         type: choice
         required: true
-        options: [seed, cleanup]
+        options: [seed, cleanup, scan]
       account_id:
         description: probecb<18 hex>
         type: string
@@ -73,7 +73,7 @@ jobs:
         env:
           ACTION: ${{ inputs.action }}
         run: |
-          case "$ACTION" in seed|cleanup) ;; *) echo "::error::action must be seed or cleanup."; exit 1 ;; esac
+          case "$ACTION" in seed|cleanup|scan) ;; *) echo "::error::action must be seed, cleanup or scan."; exit 1 ;; esac
 
       - name: Seed the throwaway
         if: inputs.action == 'seed'
@@ -87,7 +87,7 @@ jobs:
         run: pnpm exec tsx scripts/sim-callback-throwaway.ts cleanup
 
       - name: Wait for search to drop the throwaway
-        if: inputs.action == 'cleanup'
+        if: inputs.action == 'cleanup' || inputs.action == 'scan'
         run: |
           # Deleting the user queues a search update; a search request drains the queue.
           for attempt in 1 2 3 4 5 6; do
@@ -100,5 +100,5 @@ jobs:
           exit 1
 
       - name: Scan every table for the throwaway
-        if: inputs.action == 'cleanup'
+        if: inputs.action == 'cleanup' || inputs.action == 'scan'
         run: pnpm exec tsx scripts/sim-callback-throwaway.ts scan
