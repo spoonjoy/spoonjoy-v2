@@ -1390,7 +1390,7 @@ async function replayUnusedSuccessor(
  * Spoonjoy's own iPhone app: the native sign-in client, or the reserved "Spoonjoy Apple" OAuth
  * registration, which can only use Spoonjoy's own callback.
  */
-async function isFirstPartyNativeClient(db: Database, clientId: string): Promise<boolean> {
+export async function isFirstPartyNativeClient(db: Database, clientId: string): Promise<boolean> {
   if (clientId === SPOONJOY_APPLE_NATIVE_CLIENT_ID || clientId.startsWith(`${SPOONJOY_APPLE_NATIVE_CLIENT_ID}:`)) {
     return true;
   }

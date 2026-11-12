@@ -8,7 +8,7 @@ import {
 } from "~/lib/apple-native-auth.server";
 import { handleOAuthToken } from "~/lib/oauth-routes.server";
 import { cleanupDatabase } from "../helpers/cleanup";
-import { expectConsoleError } from "../warning-policy";
+import { expectConsoleError, expectConsoleWarning } from "../warning-policy";
 
 const APPLE_NATIVE_IOS_CLIENT_ID = "app.spoonjoy";
 const APPLE_NATIVE_MACOS_CLIENT_ID = "app.spoonjoy.mac";
@@ -576,9 +576,27 @@ describe("native Sign in with Apple API", () => {
 
     expect(response.status).toBe(400);
     expect(json.error).toMatchObject({ code: "validation_error", details: { providerCode: "apple_email_unavailable" } });
-    expect(json.error.message).toContain("link Apple in Settings");
+    expect(json.error.message).toBe("We couldn't find a Spoonjoy account for this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.");
+    expect(json.error.details.pendingAppleLinkToken).toMatch(/^pal_/);
+    await expect(db.pendingAppleLink.count()).resolves.toBe(1);
     await expect(db.user.findMany({ select: { id: true } })).resolves.toEqual([{ id: existing.id }]);
     await expect(db.oAuth.count()).resolves.toBe(0);
+  });
+
+  it("still explains, without a link token, when the pending link can't be saved", async () => {
+    vi.spyOn(db.pendingAppleLink, "create").mockRejectedValue(new Error("boom"));
+    expectConsoleWarning(JSON.stringify({ event: "apple.pending_link", outcome: "create_failed", error: "Error" }));
+
+    const response = await emaillessSignIn(
+      await nativeAppleTokenFixture({ email: undefined, email_verified: undefined }),
+      "req_native_apple_emailless_unsaved",
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(400);
+    expect(json.error.details.providerCode).toBe("apple_email_unavailable");
+    expect(json.error.message).toMatch(/^We couldn't find a Spoonjoy account for this Apple ID yet\./);
+    expect(json.error.details).not.toHaveProperty("pendingAppleLinkToken");
   });
 
   /** Sign out everywhere lands just before the sign-in's grant is written. */

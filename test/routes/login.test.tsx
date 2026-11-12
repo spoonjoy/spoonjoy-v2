@@ -368,6 +368,26 @@ describe("Login Route", () => {
       expect((response as Response).status).toBe(302);
     });
 
+    it("links this browser's pending Apple ID to the account a password sign-in lands on", async () => {
+      const { createPendingAppleLink, rememberPendingAppleLink } = await import("~/lib/pending-apple-link.server");
+      const username = `chef_${faker.string.alphanumeric(8).toLowerCase()}`;
+      const chef = await createUser(db, `${username}@example.com`, username, "correct-horse-1");
+      const link = await createPendingAppleLink(db, { appleSub: "apple-sub-pending-login", providerUsername: null });
+      const pendingCookie = (await rememberPendingAppleLink(null, new Request("http://localhost:3000/login"), link)).split(";")[0];
+      const form = new UndiciFormData();
+      form.set("identifier", username);
+      form.set("password", "correct-horse-1");
+      const request = new UndiciRequest("http://localhost:3000/login", { method: "POST", body: form, headers: { Cookie: pendingCookie } });
+
+      const response = await action({ request, context: { cloudflare: { env: null } }, params: {} } as any) as Response;
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get("Set-Cookie")).toContain("__apple_pending=;");
+      await expect(db.oAuth.findUnique({
+        where: { provider_providerUserId: { provider: "apple", providerUserId: "apple-sub-pending-login" } },
+      })).resolves.toMatchObject({ userId: chef.id });
+    });
+
     it("rejects a blank identifier", async () => {
       const { data, status } = extractResponseData(await submit({ identifier: "   ", password: "x" }));
       expect(status).toBe(400);

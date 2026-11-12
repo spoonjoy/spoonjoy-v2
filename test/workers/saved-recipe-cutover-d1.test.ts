@@ -27,6 +27,7 @@ import "./helpers/webauthn-sign-in-atomic-d1-suite";
 import "./helpers/transient-write-retry-d1-suite";
 import "./helpers/token-write-retry-d1-suite";
 import "./helpers/api-shopping-add-retry-d1-suite";
+import "./helpers/pending-apple-link-d1-suite";
 import { applyRepositoryMigrations } from "./helpers/repository-migrations";
 
 interface TestD1Statement {

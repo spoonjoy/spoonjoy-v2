@@ -59,6 +59,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "describeValue falls back to String(value) when JSON.stringify throws on a non-Error thrown value; the line it builds is itself the per-run QA error log, written beside handleError's PostHog capture.",
   },
   {
+    file: "app/lib/pending-apple-link.server.ts",
+    category: "swallow",
+    reason:
+      "Linking a pending Apple ID runs after a sign-in that already succeeded, so a database failure there is logged as a structured apple.pending_link warning and returns outcome \"error\" instead of failing the sign-in; the row is put back best-effort so a retry can still link.",
+  },
+  {
     file: "app/lib/db.server.ts",
     category: "swallow",
     reason:

@@ -447,6 +447,17 @@ dGVzdA==
         expect(result.appleUser?.email).toBeDefined();
       });
 
+      it("reads a missing or blank email in Apple's ID token as no email", async () => {
+        const callbackData: AppleCallbackData = { code: "valid-auth-code", state: "valid-state" };
+
+        for (const email of [undefined, "  "]) {
+          mockArcticState.email = email as unknown as string;
+          const result = await verifyAppleCallback(mockConfig, mockRedirectUri, callbackData);
+          expect(result.success).toBe(true);
+          expect(result.appleUser?.email).toBeNull();
+        }
+      });
+
       it("should handle Apple OAuth2RequestError", async () => {
         const callbackData: AppleCallbackData = {
           code: "code-that-triggers-oauth-error",

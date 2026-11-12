@@ -40,8 +40,11 @@ export interface AppleCallbackData {
 export interface AppleUser {
   /** Apple's unique user identifier (sub claim from ID token) */
   id: string;
-  /** User's email address */
-  email: string;
+  /**
+   * User's email address, or null when Apple's token carries none (a returning Apple ID whose
+   * first authorization did not share it, or an authorization that asked for no scopes)
+   */
+  email: string | null;
   /** Whether the email is verified (always true for Apple) */
   emailVerified: boolean;
   /** Whether this is a private relay email (Hide My Email) */
@@ -173,8 +176,8 @@ export function createRegisteredAppleAuthorizationURL(
  */
 interface AppleIdTokenClaims {
   sub: string;
-  email: string;
-  email_verified: string | boolean;
+  email?: string;
+  email_verified?: string | boolean;
   is_private_email?: string | boolean;
 }
 
@@ -272,7 +275,7 @@ export async function verifyAppleCallback(
 
     const appleUser: AppleUser = {
       id: claims.sub,
-      email: claims.email,
+      email: typeof claims.email === "string" && claims.email.trim() ? claims.email : null,
       emailVerified,
       isPrivateEmail,
       firstName,

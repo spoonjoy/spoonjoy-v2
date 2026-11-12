@@ -1,6 +1,7 @@
 import type { Route } from "./+types/auth.webauthn.authenticate.verify";
 import type { AuthenticationResponseJSON } from "@simplewebauthn/server";
 import { createUserSessionCookie, sanitizeSessionRedirect } from "~/lib/session.server";
+import { claimPendingAppleLinkFromCookie } from "~/lib/pending-apple-link.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { configFromRequest, finishAuthentication, webAuthnErrorResponse } from "~/lib/webauthn-route.server";
 import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
@@ -53,13 +54,12 @@ export async function action({ request, context }: Route.ActionArgs) {
     const cookie = await createUserSessionCookie(result.userId, env, request, {
       sessionVersion: result.sessionVersion,
     });
-    return new Response(JSON.stringify({ verified: true, redirectTo }), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Set-Cookie": cookie,
-      },
-    });
+    const headers = new Headers({ "Content-Type": "application/json" });
+    headers.append("Set-Cookie", cookie);
+    // An Apple sign-in in this browser that found no account left a pending link: connect it now.
+    const clearedPendingAppleLink = await claimPendingAppleLinkFromCookie(async () => db, request, env, result.userId);
+    if (clearedPendingAppleLink) headers.append("Set-Cookie", clearedPendingAppleLink);
+    return new Response(JSON.stringify({ verified: true, redirectTo }), { status: 200, headers });
   } catch (error) {
     return webAuthnErrorResponse(error, "Could not verify authentication");
   }

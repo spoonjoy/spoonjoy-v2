@@ -245,6 +245,22 @@ model OAuth {
   @@index([userId])
 }
 
+// A verified Apple ID (its `sub`) whose sign-in carried no email and matched no linked account,
+// kept for thirty minutes so the next sign-in by another method on the same device or browser links
+// Apple to that account (app/lib/pending-apple-link.server.ts). Keyed by the SHA-256 of a random
+// opaque token the client holds; single-use.
+model PendingAppleLink {
+  id               String    @id @default(cuid())
+  tokenHash        String    @unique
+  appleSub         String
+  providerUsername String?
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+
 // Spoonjoy acting as an OAuth 2.1 authorization server for remote MCP
 // connectors (e.g. the claude.ai one-click connector). Distinct from the
 // `OAuth` model above, which records Spoonjoy logging in *as a client* to

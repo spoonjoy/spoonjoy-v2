@@ -71,6 +71,7 @@ export function OAuthError({ error, className }: OAuthErrorProps) {
   if (!error) return null
 
   const messages: Record<string, string> = {
+    apple_email_unavailable: "We couldn't find a Spoonjoy account for this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.",
     account_exists: 'An account with this email already exists. Please log in to link your account.',
     account_exists_unverified: 'An account with this email already exists. Sign in to it the way you usually do, then link this sign-in from Account settings.',
     email_required: 'An email address is required to create an account. Please allow email access and try again.',
