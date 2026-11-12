@@ -16,9 +16,9 @@ const projects = ouroTestProjects({
     "test/ouro/**/*.test.{ts,tsx}",
   ],
 });
-// The mouse projects start each test with the mouse off the test frame (test/ouro/park-pointer.ts):
-// a mouse an earlier test left over the frame hovers whatever renders under it (spoonjoy-v2#678).
-// ouro-touch has no mouse to park.
+// In the mouse projects, the files test/ouro/park-pointer-setup.ts lists start each test with the
+// mouse off the test frame (test/ouro/park-pointer.ts): a mouse an earlier test left over the frame
+// hovers whatever renders under it (spoonjoy-v2#678). ouro-touch has no mouse to park.
 const parkPointerSetup = fileURLToPath(new URL("./test/ouro/park-pointer-setup.ts", import.meta.url));
 for (const project of projects) {
   const test = project.test;
