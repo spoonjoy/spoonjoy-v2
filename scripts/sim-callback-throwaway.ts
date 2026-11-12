@@ -103,34 +103,29 @@ export function cleanupSql(account: Partial<ThrowawayAccount>, now: Date): strin
   return statements.map(renderStatement).join("\n");
 }
 
-// Only text-affinity columns (declared TEXT, CHAR, CLOB or untyped) can hold the id, username or email.
 export const COLUMNS_SQL = `SELECT m."name" AS "table", p."name" AS "column"
   FROM sqlite_master AS m, pragma_table_info(m."name") AS p
   WHERE m."type" = 'table' AND m."name" NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND m."name" NOT LIKE '\\_cf\\_%' ESCAPE '\\'
     AND m."name" NOT LIKE 'd1\\_%' ESCAPE '\\' AND m."name" NOT LIKE 'SearchDocument\\_%' ESCAPE '\\'
-    AND (p."type" = '' OR upper(p."type") LIKE '%TEXT%' OR upper(p."type") LIKE '%CHAR%' OR upper(p."type") LIKE '%CLOB%')
   ORDER BY m."name", p."cid"`;
 
 const quoteName = (name: string) => `"${name.replaceAll('"', '""')}"`;
 
-/** Count queries over every text column of every scanned table, a few tables per query. */
-export function scanQueries(columns: { table: string; column: string }[], needles: string[], tablesPerQuery = 4): string[] {
+/**
+ * One count query per scanned table. Each row's columns are joined into one string, so a table costs three instr
+ * calls however wide it is. Run 43214337309 showed D1 rejecting a query that ORed every column of 8 tables.
+ */
+export function scanQueries(columns: { table: string; column: string }[], needles: string[]): string[] {
   const byTable = new Map<string, string[]>();
   for (const { table, column } of columns) {
     if (SKIPPED_TABLE_PATTERN.test(table)) continue;
     byTable.set(table, [...(byTable.get(table) ?? []), column]);
   }
-  const selects = [...byTable].map(([table, tableColumns]) => {
-    const condition = tableColumns
-      .flatMap((column) => needles.map((needle) => `instr(CAST(${quoteName(column)} AS TEXT), ${literal(needle)}) > 0`))
-      .join(" OR ");
+  return [...byTable].map(([table, tableColumns]) => {
+    const row = tableColumns.map((column) => `coalesce(CAST(${quoteName(column)} AS TEXT), '')`).join(" || char(31) || ");
+    const condition = needles.map((needle) => `instr(${row}, ${literal(needle)}) > 0`).join(" OR ");
     return `SELECT ${literal(table)} AS "t", count(*) AS "n" FROM ${quoteName(table)} WHERE ${condition}`;
   });
-  const queries: string[] = [];
-  for (let index = 0; index < selects.length; index += tablesPerQuery) {
-    queries.push(selects.slice(index, index + tablesPerQuery).join(" UNION ALL "));
-  }
-  return queries;
 }
 
 export function parseWranglerJson(stdout: string): Record<string, unknown>[] {
@@ -144,18 +139,20 @@ export function parseWranglerJson(stdout: string): Record<string, unknown>[] {
 type Run = (sql: string) => Promise<Record<string, unknown>[]>;
 
 async function d1(args: string[]) {
+  let stdout: string;
   try {
-    const { stdout } = await execFileAsync(
+    ({ stdout } = await execFileAsync(
       "pnpm",
       ["exec", "wrangler", "d1", "execute", DATABASE, "--remote", "--json", ...args],
       { maxBuffer: 1024 * 1024 * 16 },
-    );
-    return parseWranglerJson(stdout);
+    ));
   } catch (error) {
-    // execFile's own message is the whole command line; D1's reason is in wrangler's output.
-    const { stdout = "", stderr = "" } = error as { stdout?: string; stderr?: string };
-    throw new Error(`wrangler d1 execute failed: ${`${stderr}\n${stdout}`.trim().slice(-1200)}`);
+    // execFile's message is mostly the command line; D1's reason is in wrangler's own output.
+    const failed = error as Error & { stdout?: string; stderr?: string };
+    const output = [failed.stdout?.trim().slice(-600), failed.stderr?.trim().slice(-600)].filter(Boolean).join("\n");
+    throw new Error(`wrangler d1 execute failed: ${output || failed.message.slice(0, 600)}`);
   }
+  return parseWranglerJson(stdout);
 }
 
 const query: Run = (sql) => d1(["--command", sql]);
@@ -182,14 +179,7 @@ export async function scan(account: Partial<ThrowawayAccount>, run: Run = query)
   const hits: { table: string; rows: number }[] = [];
   const queries = scanQueries(columns, [id, username, email]);
   for (const sql of queries) {
-    // A query over several tables can exceed a D1 limit; then each table goes on its own, and a single table
-    // that still fails fails the scan.
-    const rows = await run(sql).catch(async (error: unknown) => {
-      const single = sql.split(" UNION ALL ");
-      if (single.length === 1) throw error;
-      return (await Promise.all(single.map((one) => run(one)))).flat();
-    });
-    for (const row of rows) {
+    for (const row of await run(sql)) {
       if (Number(row.n) > 0) hits.push({ table: String(row.t), rows: Number(row.n) });
     }
   }
