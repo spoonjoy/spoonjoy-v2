@@ -70,6 +70,7 @@ export interface NativeAppleCredentialInput {
   identityToken: string;
   rawNonce: string;
   fullName?: string | null;
+  /** Accepted from the app for compatibility and ignored: only the token's verified email counts. */
   email?: string | null;
 }
 
@@ -238,18 +239,19 @@ export async function verifyNativeAppleIdentityToken(
   }
 
   const id = stringClaim(payload.sub);
-  const tokenEmail = stringClaim(payload.email);
-  const email = tokenEmail ?? stringClaim(input.email);
   if (!id) {
     throw new NativeAppleAuthError("invalid_identity_token", "Apple identity token is missing required account claims.", 401);
   }
+  // Apple vouches only for the email in its signed token, and only when it marks it verified.
+  // An address the app sent in the request body is never used (#675), and an unverified one in
+  // the token is dropped, so neither can match or create an account.
+  const emailVerified = boolClaim(payload.email_verified);
+  const email = emailVerified ? stringClaim(payload.email) : null;
 
   return {
     id,
     email,
-    // Apple vouches only for the email in its signed token. An address the app sent alongside it
-    // is unproven, even if the token says its (absent) email is verified.
-    emailVerified: tokenEmail !== null && boolClaim(payload.email_verified),
+    emailVerified: email !== null,
     isPrivateEmail: boolClaim(payload.is_private_email),
     firstName: null,
     lastName: null,

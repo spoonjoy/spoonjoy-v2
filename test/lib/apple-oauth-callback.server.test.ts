@@ -93,17 +93,68 @@ describe("apple-oauth-callback.server", () => {
         expect(user?.emailVerifiedAt).toBeInstanceOf(Date);
       });
 
-      it("should create an unverified account when Apple does not vouch for the email", async () => {
+      // #675: an address Apple did not mark verified never matches or creates an account. The
+      // callback treats it as no email, so the Apple ID becomes a pending link instead.
+      it("refuses, creating nothing, when Apple does not vouch for the email", async () => {
+        const before = await db.user.count();
+        const appleUser = createMockAppleUser({ emailVerified: false });
+
+        const result = await handleAppleOAuthCallback({ db, appleUser, currentUserId: null, redirectTo: null });
+
+        expect(result).toMatchObject({ success: false, error: "apple_email_unavailable" });
+        await expect(db.user.count()).resolves.toBe(before);
+        await expect(db.user.findFirst({ where: { email: appleUser.email! } })).resolves.toBeNull();
+      });
+
+      it("never matches an existing account by an address Apple does not vouch for", async () => {
+        const existingUser = await db.user.create({ data: createTestUser() });
+        testUserIds.push(existingUser.id);
+
         const result = await handleAppleOAuthCallback({
           db,
-          appleUser: createMockAppleUser({ emailVerified: false }),
+          appleUser: createMockAppleUser({ email: existingUser.email, emailVerified: false }),
+          currentUserId: null,
+          redirectTo: null,
+        });
+
+        // Not "account_exists": an unproven address must not even reveal that the account exists.
+        expect(result).toMatchObject({ success: false, error: "apple_email_unavailable" });
+        await expect(db.oAuth.count({ where: { userId: existingUser.id } })).resolves.toBe(0);
+      });
+
+      it("creates an account under a verified private relay address and stores that address", async () => {
+        const relay = `${faker.string.alphanumeric(10).toLowerCase()}@privaterelay.appleid.com`;
+
+        const result = await handleAppleOAuthCallback({
+          db,
+          appleUser: createMockAppleUser({ email: relay, isPrivateEmail: true }),
           currentUserId: null,
           redirectTo: null,
         });
         if (result.userId) testUserIds.push(result.userId);
 
-        expect(result.action).toBe("user_created");
-        expect((await db.user.findUniqueOrThrow({ where: { id: result.userId! } })).emailVerifiedAt).toBeNull();
+        expect(result).toMatchObject({ success: true, action: "user_created" });
+        const user = await db.user.findUniqueOrThrow({ where: { id: result.userId! } });
+        expect(user.email).toBe(relay);
+        expect(user.emailVerifiedAt).toBeInstanceOf(Date);
+      });
+
+      it("never matches an account registered under a different address to a private relay address", async () => {
+        const existingUser = await db.user.create({ data: createTestUser() });
+        testUserIds.push(existingUser.id);
+        const relay = `${faker.string.alphanumeric(10).toLowerCase()}@privaterelay.appleid.com`;
+
+        const result = await handleAppleOAuthCallback({
+          db,
+          appleUser: createMockAppleUser({ email: relay, isPrivateEmail: true }),
+          currentUserId: null,
+          redirectTo: null,
+        });
+        if (result.userId) testUserIds.push(result.userId);
+
+        expect(result).toMatchObject({ success: true, action: "user_created" });
+        expect(result.userId).not.toBe(existingUser.id);
+        await expect(db.oAuth.count({ where: { userId: existingUser.id } })).resolves.toBe(0);
       });
 
       it("should generate username from Apple user name", async () => {
@@ -409,6 +460,17 @@ describe("apple-oauth-callback.server", () => {
 
         await expect(handleAppleOAuthCallback({ db, appleUser, currentUserId: null, redirectTo: null }))
           .resolves.toMatchObject({ success: true, action: "user_logged_in", userId: existingUser.id });
+      });
+
+      it("signs a linked Apple ID in by its sub, without verifying, when Apple does not vouch for the email", async () => {
+        const existingUser = await db.user.create({ data: createTestUser() });
+        testUserIds.push(existingUser.id);
+        const appleUser = createMockAppleUser({ email: existingUser.email, emailVerified: false });
+        await db.oAuth.create({ data: { provider: "apple", providerUserId: appleUser.id, providerUsername: "Chef", userId: existingUser.id } });
+
+        await expect(handleAppleOAuthCallback({ db, appleUser, currentUserId: null, redirectTo: null }))
+          .resolves.toMatchObject({ success: true, action: "user_logged_in", userId: existingUser.id });
+        expect((await db.user.findUniqueOrThrow({ where: { id: existingUser.id } })).emailVerifiedAt).toBeNull();
       });
 
       it("refuses, creating nothing, when an unlinked Apple ID's token carries no email", async () => {

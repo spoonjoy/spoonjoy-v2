@@ -480,7 +480,7 @@ describe("native Sign in with Apple API", () => {
     );
   });
 
-  it("accepts array audiences and boolean Apple email flags, and treats a fallback email as unverified", async () => {
+  it("accepts array audiences and boolean Apple email flags, and ignores an email in the request body", async () => {
     const fixture = await nativeAppleTokenFixture({
       aud: ["other.client", APPLE_NATIVE_IOS_CLIENT_ID],
       email: undefined,
@@ -499,12 +499,11 @@ describe("native Sign in with Apple API", () => {
       { fetcher: fetchAppleKeys(fixture.jwks) },
     );
 
-    // Review of audit finding 2: Apple vouches only for the email in its signed token. The app's
-    // fallback address is unproven even though the token says email_verified, so it must not
-    // create or link a verified account.
+    // #675: Apple vouches only for the email in its signed token. The app's address is unproven,
+    // so it is dropped entirely rather than used to match or create an account. The name is kept.
     expect(appleUser).toMatchObject({
       id: "apple-user-123",
-      email: "fallback@example.com",
+      email: null,
       emailVerified: false,
       isPrivateEmail: true,
       fullName: "Fallback Chef",
@@ -520,7 +519,36 @@ describe("native Sign in with Apple API", () => {
         email: "fallback@example.com",
       },
       { clientIds: APPLE_NATIVE_CLIENT_IDS },
-    )).resolves.toMatchObject({ email: "fallback@example.com" });
+    )).resolves.toMatchObject({ email: null });
+  });
+
+  it("keeps the token's email only when Apple marks it verified, as boolean or string", async () => {
+    const cases: Array<[unknown, boolean]> = [
+      [true, true],
+      ["true", true],
+      [false, false],
+      ["false", false],
+      [undefined, false],
+    ];
+    for (const [emailVerified, kept] of cases) {
+      const fixture = await nativeAppleTokenFixture({ email: "token@example.com", email_verified: emailVerified });
+      await expect(verifyNativeAppleIdentityToken(
+        { identityToken: fixture.identityToken, rawNonce: fixture.rawNonce },
+        { clientIds: APPLE_NATIVE_CLIENT_IDS },
+        { fetcher: fetchAppleKeys(fixture.jwks) },
+      )).resolves.toMatchObject(kept
+        ? { email: "token@example.com", emailVerified: true }
+        : { email: null, emailVerified: false });
+    }
+  });
+
+  it("prefers the token's verified email over a different one in the request body", async () => {
+    const fixture = await nativeAppleTokenFixture();
+    await expect(verifyNativeAppleIdentityToken(
+      { identityToken: fixture.identityToken, rawNonce: fixture.rawNonce, email: "victim@example.com" },
+      { clientIds: APPLE_NATIVE_CLIENT_IDS },
+      { fetcher: fetchAppleKeys(fixture.jwks) },
+    )).resolves.toMatchObject({ email: "native-apple@example.com", emailVerified: true });
   });
 
   it("rejects identity tokens missing Apple's subject claim", async () => {
@@ -581,6 +609,76 @@ describe("native Sign in with Apple API", () => {
     await expect(db.pendingAppleLink.count()).resolves.toBe(1);
     await expect(db.user.findMany({ select: { id: true } })).resolves.toEqual([{ id: existing.id }]);
     await expect(db.oAuth.count()).resolves.toBe(0);
+  });
+
+  function nativeSignIn(fixture: Awaited<ReturnType<typeof nativeAppleTokenFixture>>, requestId: string, extra: Record<string, unknown> = {}) {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify(fixture.jwks), {
+      headers: { "Content-Type": "application/json" },
+    }));
+    return action(routeArgs(new UndiciRequest("http://localhost/api/v1/auth/apple/native", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify({ identityToken: fixture.identityToken, rawNonce: fixture.rawNonce, ...extra }),
+    }) as unknown as Request));
+  }
+
+  // #675: a caller with any valid Apple ID cannot claim or squat an address by sending it.
+  it("never creates or matches an account by an email sent in the request body", async () => {
+    const victim = await db.user.create({ data: { email: "victim@example.com", username: "victim" } });
+
+    const response = await nativeSignIn(
+      await nativeAppleTokenFixture({ email: undefined, email_verified: undefined }),
+      "req_native_apple_body_email",
+      { email: "victim@example.com", fullName: "Squatter" },
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(400);
+    expect(json.error.details.providerCode).toBe("apple_email_unavailable");
+    await expect(db.user.findMany({ select: { id: true } })).resolves.toEqual([{ id: victim.id }]);
+    await expect(db.oAuth.count()).resolves.toBe(0);
+  });
+
+  it("never creates an account under an email Apple does not mark verified", async () => {
+    const response = await nativeSignIn(
+      await nativeAppleTokenFixture({ email: "unverified@example.com", email_verified: "false" }),
+      "req_native_apple_unverified_email",
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(400);
+    expect(json.error.details.providerCode).toBe("apple_email_unavailable");
+    await expect(db.user.count()).resolves.toBe(0);
+  });
+
+  it("creates a verified account under a private relay address", async () => {
+    const response = await nativeSignIn(
+      await nativeAppleTokenFixture({ email: "abc123@privaterelay.appleid.com", email_verified: true, is_private_email: true }),
+      "req_native_apple_private_relay",
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(201);
+    expect(json.data.action).toBe("user_created");
+    const user = await db.user.findUniqueOrThrow({ where: { id: json.data.userId } });
+    expect(user.email).toBe("abc123@privaterelay.appleid.com");
+    expect(user.emailVerifiedAt).toBeInstanceOf(Date);
+  });
+
+  it("signs a linked Apple ID in by its sub even when the token's email is unverified", async () => {
+    const chef = await db.user.create({ data: { email: "linked-chef@example.com", username: "linked_chef" } });
+    await db.oAuth.create({ data: { provider: "apple", providerUserId: "apple-user-123", providerUsername: "Linked Chef", userId: chef.id } });
+
+    const response = await nativeSignIn(
+      await nativeAppleTokenFixture({ email: "linked-chef@example.com", email_verified: "false" }),
+      "req_native_apple_linked_unverified",
+      { email: "other@example.com" },
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(201);
+    expect(json.data).toMatchObject({ action: "user_logged_in", userId: chef.id });
+    expect((await db.user.findUniqueOrThrow({ where: { id: chef.id } })).emailVerifiedAt).toBeNull();
   });
 
   it("still explains, without a link token, when the pending link can't be saved", async () => {
