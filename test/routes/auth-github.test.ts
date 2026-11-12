@@ -447,6 +447,28 @@ describe("GitHub OAuth routes", () => {
     await expect(getSessionAuthenticatedAt(reissued)).resolves.toBe(1_700_000_000_000);
   });
 
+  it("records a new sign-in time when a signed-out visitor's GitHub account is linked by verified email", async () => {
+    mocks.verifyGitHubCallback.mockResolvedValueOnce({
+      success: true,
+      githubUser: { id: "gh1", email: "gh@example.com", emailVerified: true, login: "ghchef", name: null, avatarUrl: null },
+    });
+    mocks.handleGitHubOAuthCallback.mockResolvedValueOnce({ success: true, userId: "user-1", action: "account_linked", redirectTo: "/" });
+    const oauthCookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/github"), "github", {
+      state: "state", redirectTo: "/", failureRedirect: "/login", linking: false,
+    });
+    const before = Date.now();
+
+    const response = await callbackLoader({
+      request: new Request("https://spoonjoy.app/auth/github/callback?state=state&code=code", { headers: { Cookie: cookieHeader(oauthCookie) } }),
+      context: { cloudflare: { env: githubEnv } },
+      params: {},
+    } as any);
+
+    const sessionCookie = response.headers.getSetCookie().find((value: string) => value.startsWith("__session="))!;
+    const signedInAt = await getSessionAuthenticatedAt(new Request("https://spoonjoy.app/", { headers: { Cookie: cookieHeader(sessionCookie) } }));
+    expect(signedInAt).toBeGreaterThanOrEqual(before);
+  });
+
   it("records a new sign-in time when signing in with GitHub", async () => {
     mocks.verifyGitHubCallback.mockResolvedValueOnce({
       success: true,

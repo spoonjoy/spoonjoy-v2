@@ -188,10 +188,18 @@ async function readFormPostParams(request: Request): Promise<URLSearchParams> {
 /**
  * Linking another sign-in method to the signed-in account is not a new sign-in: the re-issued
  * cookie keeps the existing sign-in time, so linking a provider account cannot stand in for the
- * recent sign-in that account deletion asks for (account-reauthentication.server.ts).
+ * recent sign-in that account deletion asks for (account-reauthentication.server.ts). A signed-out
+ * visitor whose provider account is linked by its verified email did sign in, so that cookie gets
+ * a new sign-in time.
  */
-async function sessionOptionsFor(action: string | undefined, request: Request, env: SessionEnv | null | undefined) {
-  return action === "account_linked" ? { authenticatedAt: await getSessionAuthenticatedAt(request, env) } : {};
+async function sessionOptionsFor(
+  callbackResult: { action?: string; userId?: string },
+  request: Request,
+  env: SessionEnv | null | undefined,
+) {
+  if (callbackResult.action !== "account_linked") return {};
+  if ((await getUserId(request, env)) !== callbackResult.userId) return {};
+  return { authenticatedAt: await getSessionAuthenticatedAt(request, env) };
 }
 
 export async function handleAppleCallback(request: Request, context: AppLoadContext) {
@@ -274,7 +282,7 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
     return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, callbackResult.error, "link_account", env);
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult.action, request, env));
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult, request, env));
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }
@@ -375,7 +383,7 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
     );
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult.action, request, env));
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult, request, env));
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }
@@ -481,7 +489,7 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
     );
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult.action, request, env));
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult, request, env));
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }

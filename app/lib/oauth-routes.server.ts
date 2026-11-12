@@ -9,7 +9,7 @@
  */
 
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
-import { getCurrentSessionIdentity, getUserId } from "~/lib/session.server";
+import { getCurrentSessionIdentity } from "~/lib/session.server";
 import { sessionVersionUnchanged } from "~/lib/session-version-fence.server";
 import { d1Binding } from "~/lib/d1-read.server";
 import {
@@ -36,7 +36,16 @@ import {
   revokeConnectorRefreshToken,
   rotateConnectorTokens,
   type IssuedConnectorTokens,
+  type RegisteredOAuthClient,
 } from "~/lib/oauth-server.server";
+import {
+  clearFirstPartyLoginMarkerCookie,
+  firstPartyLoginMarkerCookie,
+  firstPartySameFlowLogin,
+  isFirstPartyAutoApprovalRequest,
+  type FirstPartyLoginRoute,
+} from "~/lib/oauth-first-party-consent.server";
+import { getOAuthProviderHint } from "~/lib/oauth-route.server";
 import {
   isCanonicalMcpResource,
   mcpResourceUrl,
@@ -666,8 +675,19 @@ async function createConsentTransaction(
 type OAuthAuthorizeStateClass = "missing" | "short" | "present" | "unknown";
 
 export interface OAuthAuthorizeTelemetryMetadata {
-  outcome?: "login_redirect" | "consent" | "client_error" | "redirect_error" | "approved" | "denied" | "rate_limited" | "error";
+  outcome?:
+    | "login_redirect"
+    | "consent"
+    | "client_error"
+    | "redirect_error"
+    | "approved"
+    | "auto_approved"
+    | "denied"
+    | "rate_limited"
+    | "error";
   clientId?: string;
+  /** Where the authorize request sent the person to sign in, on a first-party auto-approval. */
+  loginRoute?: FirstPartyLoginRoute;
   principalId?: string;
   decision?: "approve" | "deny" | "other";
   errorCode?: string;
@@ -831,7 +851,7 @@ async function validateClientRedirect(
   params: AuthorizeRequestParams,
   issuer: string,
 ): Promise<
-  | { ok: true; clientName: string | null }
+  | { ok: true; client: RegisteredOAuthClient }
   | { ok: false; code: "invalid_client" | "invalid_redirect_uri"; message: string }
 > {
   const client = await getOAuthClient(db, params.clientId, issuer);
@@ -843,7 +863,7 @@ async function validateClientRedirect(
       message: "The redirect URI is not registered for this client.",
     };
   }
-  return { ok: true, clientName: client.clientName };
+  return { ok: true, client };
 }
 
 function redirectBackWithError(params: AuthorizeRequestParams, code: string, issuer: string): Response {
@@ -870,7 +890,7 @@ async function validateAuthorizeRequest(
   env: OAuthEnv | null | undefined,
   params: AuthorizeRequestParams,
 ): Promise<
-  | { ok: true; clientName: string | null; scope: string; resource: string | null }
+  | { ok: true; client: RegisteredOAuthClient; clientName: string | null; scope: string; resource: string | null }
   | { ok: false; kind: "local"; code: string; message: string }
   | { ok: false; kind: "redirect"; code: string; resource?: string | null }
 > {
@@ -885,7 +905,13 @@ async function validateAuthorizeRequest(
   const resource = normalizeAuthorizeResource(request, env, params.resource);
   if (resource === "") return { ok: false, kind: "redirect", code: "invalid_target" };
   try {
-    return { ok: true, clientName: validation.clientName, scope: normalizeScope(params.scope), resource };
+    return {
+      ok: true,
+      client: validation.client,
+      clientName: validation.client.clientName,
+      scope: normalizeScope(params.scope),
+      resource,
+    };
   } catch {
     return { ok: false, kind: "redirect", code: "invalid_scope", resource };
   }
@@ -945,19 +971,28 @@ async function loadOAuthAuthorizeView(
     );
   }
 
-  const userId = await getUserId(request, env);
-  if (!userId) {
+  const firstParty = isFirstPartyAutoApprovalRequest(validation.client, params, validation);
+  const identity = await getCurrentSessionIdentity(request, env);
+  if (!identity) {
     const returnTo = `${url.pathname}${url.search}`;
+    const headers: Record<string, string> = { Location: `/login?redirectTo=${encodeURIComponent(returnTo)}` };
+    // Marks this request as sent to sign in, so the sign-in it comes back with can skip consent.
+    if (firstParty) {
+      headers["Set-Cookie"] = await firstPartyLoginMarkerCookie(env, request, params, getOAuthProviderHint(request) ?? "login_page");
+    }
     return withOAuthAuthorizeTelemetry(
-      new Response(null, {
-        status: 302,
-        headers: { Location: `/login?redirectTo=${encodeURIComponent(returnTo)}` },
-      }),
+      new Response(null, { status: 302, headers }),
       {
         ...validatedAuthorizeTelemetry(params, validation),
         outcome: "login_redirect",
       },
     );
+  }
+
+  const userId = identity.userId;
+  const loginRoute = firstParty ? await firstPartySameFlowLogin(env, request, params) : null;
+  if (loginRoute) {
+    return autoApproveFirstParty(request, db, env, { params, validation, identity, issuer, loginRoute });
   }
 
   return withOAuthAuthorizeTelemetry(
@@ -976,6 +1011,67 @@ async function loadOAuthAuthorizeView(
     {
       ...validatedAuthorizeTelemetry(params, validation, userId),
       outcome: "consent",
+    },
+  );
+}
+
+/**
+ * Spoonjoy Apple, signed in during this request's own login round trip: mint the code without the
+ * consent screen. The code goes only to Spoonjoy's own callback, and the PKCE verifier stays in the
+ * app's web authentication session, so a code that reaches anything else cannot be exchanged.
+ */
+async function autoApproveFirstParty(
+  request: Request,
+  db: Database,
+  env: OAuthEnv | null | undefined,
+  input: {
+    params: AuthorizeRequestParams;
+    validation: { scope: string; resource: string | null };
+    identity: { userId: string; sessionVersion: number };
+    issuer: string;
+    loginRoute: FirstPartyLoginRoute;
+  },
+): Promise<Response> {
+  const { params, validation, identity, issuer, loginRoute } = input;
+  const code = await createAuthorizationCode(db, {
+    clientId: params.clientId,
+    userId: identity.userId,
+    redirectUri: params.redirectUri,
+    codeChallenge: params.codeChallenge,
+    scope: validation.scope,
+    resource: validation.resource,
+    issuer,
+  });
+  // The session-version fence, as on the consent form: a sign out everywhere that landed after
+  // this request's session was checked must not leave this code alive.
+  if (!(await sessionVersionUnchanged(db, identity.userId, identity.sessionVersion))) {
+    const codeHash = await hashOAuthOpaqueToken(code);
+    await retryD1Write({ scope: "oauth.code_withdraw" }, () => db.oAuthAuthCode.deleteMany({ where: { codeHash } }));
+    return withOAuthAuthorizeTelemetry(
+      redirectBackWithError(params, "access_denied", issuer),
+      {
+        ...validatedAuthorizeTelemetry(params, validation, identity.userId),
+        outcome: "error",
+        errorCode: "access_denied",
+        loginRoute,
+      },
+    );
+  }
+
+  const url = new URL(params.redirectUri);
+  url.searchParams.set("code", code);
+  url.searchParams.set("state", params.state);
+  url.searchParams.set("iss", issuer);
+  return withOAuthAuthorizeTelemetry(
+    new Response(null, {
+      status: 302,
+      headers: { Location: url.toString(), "Set-Cookie": await clearFirstPartyLoginMarkerCookie(env, request) },
+    }),
+    {
+      ...validatedAuthorizeTelemetry(params, validation, identity.userId),
+      outcome: "auto_approved",
+      decision: "approve",
+      loginRoute,
     },
   );
 }
