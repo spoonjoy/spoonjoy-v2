@@ -4,7 +4,7 @@
 // who has forgotten it, a sign-in within the last 10 minutes, the window account deletion uses.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { cleanup, act, render, screen, within } from "@testing-library/react";
+import { cleanup, act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
@@ -20,6 +20,7 @@ import AccountSettings, { action } from "~/routes/account.settings";
 import { cleanupDatabase } from "../helpers/cleanup";
 
 const PASSWORD = "testPassword123";
+const REMOVED = { success: true, intent: "removePassword", message: "Your password has been removed successfully" };
 const MINUTE = 60_000;
 
 function cookiePair(setCookie: string): string {
@@ -65,7 +66,7 @@ describe("Account settings - removing the password needs owner proof", () => {
     const { user, cookie } = await googleLinkedChef(Date.now() - 9 * MINUTE);
 
     await expect(postAction(cookie, { intent: "removePassword", currentPassword: "" }))
-      .resolves.toEqual({ success: true, message: "Password removed successfully" });
+      .resolves.toEqual(REMOVED);
     expect(await storedPassword(user.id)).toBeNull();
   });
 
@@ -103,7 +104,7 @@ describe("Account settings - removing the password needs owner proof", () => {
     const { user, cookie } = await googleLinkedChef(Date.now() - 24 * 60 * MINUTE);
 
     await expect(postAction(cookie, { intent: "removePassword", currentPassword: PASSWORD }))
-      .resolves.toEqual({ success: true, message: "Password removed successfully" });
+      .resolves.toEqual(REMOVED);
     expect(await storedPassword(user.id)).toBeNull();
   });
 
@@ -206,6 +207,68 @@ describe("Account settings - remove password confirmation", () => {
       { intent: "removePassword", currentPassword: "" },
       { intent: "reauthenticate", for: "password" },
     ]);
+  });
+
+  it("confirms a removal in the Password section, as Set password does", async () => {
+    const user = userEvent.setup();
+    const posted: Array<Record<string, string>> = [];
+    renderSettings(REMOVED, (f) => posted.push(f));
+
+    const section = await openRemoveConfirmation(user);
+    await user.click(within(section).getByRole("button", { name: "Confirm" }));
+
+    const status = await within(section).findByRole("status");
+    expect(status).toHaveTextContent("Your password has been removed successfully");
+    // The confirmation closes, and the message shows once, in the section, not in the page banner.
+    await waitFor(() => expect(within(section).queryByLabelText("Current password")).not.toBeInTheDocument());
+    expect(screen.getAllByText("Your password has been removed successfully")).toHaveLength(1);
+    expect(posted).toEqual([{ intent: "removePassword", currentPassword: "" }]);
+  });
+
+  it("doesn't show an earlier Set password message when the confirmation opens", async () => {
+    const user = userEvent.setup();
+    const answers: Array<Record<string, unknown>> = [
+      { success: true, intent: "setPassword", message: "Your password has been set successfully" },
+      REMOVED,
+    ];
+    let hasPassword = false;
+    const loaderData = () => ({
+      user: {
+        id: "u1",
+        email: "ada@example.com",
+        username: "ada",
+        hasPassword,
+        oauthAccounts: [{ provider: "google", providerUsername: "ada@gmail.com" }],
+        photoUrl: null,
+        passkeys: [],
+      },
+      notifications: { pushSubscribed: false, preferences: {} },
+    });
+    const Stub = createTestRoutesStub([
+      {
+        path: "/account/settings",
+        Component: AccountSettings,
+        loader: loaderData,
+        action: async () => {
+          const answer = answers.shift()!;
+          hasPassword = answer.intent === "setPassword";
+          return answer;
+        },
+      },
+    ]);
+    render(<Stub initialEntries={["/account/settings"]} />);
+
+    await user.click(await screen.findByRole("button", { name: "Set password" }));
+    const section = screen.getByTestId("password-section");
+    await user.type(within(section).getByLabelText("New password"), "brand-new-pass");
+    await user.type(within(section).getByLabelText("Confirm password"), "brand-new-pass");
+    await user.click(within(section).getByRole("button", { name: "Set password" }));
+    expect(await within(section).findByRole("status")).toHaveTextContent("Your password has been set successfully");
+
+    await user.click(await within(section).findByRole("button", { name: "Remove password" }));
+    expect(within(section).queryByRole("status")).not.toBeInTheDocument();
+    await user.click(within(section).getByRole("button", { name: "Confirm" }));
+    expect(await within(section).findByRole("status")).toHaveTextContent("Your password has been removed successfully");
   });
 
   it("shows a wrong current password on the field", async () => {

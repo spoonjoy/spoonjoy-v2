@@ -72,7 +72,6 @@ const USER_INFO_FIELDS = ["email", "username", "currentPassword"] as const;
 const NEW_PASSWORD_FIELDS = ["newPassword"] as const;
 const USER_INFO_INTENTS = ["updateUserInfo"] as const;
 const DELETE_INTENTS = ["deleteAccount"] as const;
-const REMOVE_PASSWORD_INTENTS = ["removePassword"] as const;
 const REMOVE_PASSWORD_FIELDS = ["currentPassword"] as const;
 
 export default function AccountSettings() {
@@ -86,21 +85,23 @@ export default function AccountSettings() {
   const passwordAnswer = passwordFetcher.data;
   const passwordData = passwordAnswer ?? passwordBaseline;
   const deleteAnswer = useIntentAnswer(actionData, DELETE_INTENTS);
-  // Remove password is a plain router form; its refusals show inside its confirmation.
-  const removePasswordAnswer = useIntentAnswer(actionData, REMOVE_PASSWORD_INTENTS);
-  const removePasswordRefusal = removePasswordAnswer?.success === false ? removePasswordAnswer : undefined;
+  // Remove password posts through the password fetcher too, so its success shows in the Password
+  // section like Set password's, and its refusals show inside its confirmation.
+  const removePasswordRefusal = passwordData?.intent === "removePassword" && passwordData.success === false ? passwordData : undefined;
   const removePasswordErrors = useFormErrors(
     removePasswordRefusal?.error === "invalid_current_password"
       ? { currentPassword: removePasswordRefusal.message }
       : { general: removePasswordRefusal?.message },
     REMOVE_PASSWORD_FIELDS,
-    removePasswordAnswer,
+    passwordAnswer,
   );
   const removePasswordNeedsFreshSignIn = removePasswordRefusal?.error === "recent_sign_in_required";
   const userInfoErrors = useFormErrors((userInfoAnswer ?? initialActionData)?.fieldErrors, USER_INFO_FIELDS, userInfoAnswer);
   const newPasswordErrors = useFormErrors({
     ...passwordData?.fieldErrors,
-    general: passwordData?.success === false && !passwordData.fieldErrors ? passwordData.message : undefined,
+    general: passwordData?.success === false && !passwordData.fieldErrors && passwordData.intent !== "removePassword"
+      ? passwordData.message
+      : undefined,
   }, NEW_PASSWORD_FIELDS, passwordAnswer);
   const revalidator = useRevalidator();
   const [isEditing, setIsEditing] = useState(false);
@@ -130,7 +131,7 @@ export default function AccountSettings() {
     if (passwordAnswer?.success) setPasswordFormState("idle");
   }, [passwordAnswer]);
 
-  const openPasswordForm = (mode: "change" | "set") => {
+  const openPasswordForm = (mode: "change" | "set" | "removeConfirm") => {
     passwordFetcher.reset();
     setPasswordBaseline(undefined);
     setPasswordFormState(mode);
@@ -183,7 +184,7 @@ export default function AccountSettings() {
 
       {/* Success/Error Messages (only show global banner when there are no field-level errors; a
           photo upload's error shows next to the photo instead) */}
-      {actionData?.message && !actionData?.fieldErrors && actionData.intent !== "uploadPhoto" && actionData.intent !== "deleteAccount" && actionData.intent !== "removePassword" && (
+      {actionData?.message && !actionData?.fieldErrors && actionData.intent !== "uploadPhoto" && actionData.intent !== "deleteAccount" && (
         <div
           role={actionData.success ? "status" : "alert"}
           className={`mt-4 border-y py-4 ${
@@ -594,7 +595,7 @@ export default function AccountSettings() {
             ) : passwordFormState === "removeConfirm" ? (
               <div className="space-y-4">
                 <Text tone="muted">Are you sure you want to remove your password? You will only be able to sign in using your linked OAuth accounts.</Text>
-                <Form method="post" errors={removePasswordErrors} render={<RouterForm />} className="gap-4">
+                <Form method="post" errors={removePasswordErrors} render={<passwordFetcher.Form />} className="gap-4">
                   <input type="hidden" name="intent" value="removePassword" />
                   <TextField
                     label="Current password"
@@ -604,10 +605,16 @@ export default function AccountSettings() {
                     autoComplete="current-password"
                   />
                   <div className="flex flex-wrap gap-3">
-                    <Button type="submit" variant="soft" tone="destructive">
+                    <Button
+                      type="submit"
+                      variant="soft"
+                      tone="destructive"
+                      disabled={passwordFetcher.state !== "idle"}
+                      aria-busy={passwordFetcher.state !== "idle"}
+                    >
                       Confirm
                     </Button>
-                    <Button type="button" variant="outline" tone="secondary" onClick={() => setPasswordFormState("idle")}>
+                    <Button type="button" variant="outline" tone="secondary" onClick={cancelPasswordForm}>
                       Cancel
                     </Button>
                   </div>
@@ -628,7 +635,7 @@ export default function AccountSettings() {
                   Change password
                 </Button>
                 {canRemovePassword && (
-                  <Button type="button" variant="soft" tone="destructive" onClick={() => setPasswordFormState("removeConfirm")}>
+                  <Button type="button" variant="soft" tone="destructive" onClick={() => openPasswordForm("removeConfirm")}>
                     Remove password
                   </Button>
                 )}
