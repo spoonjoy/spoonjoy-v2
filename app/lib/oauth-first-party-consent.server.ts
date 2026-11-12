@@ -35,7 +35,12 @@ export const FIRST_PARTY_AUTO_APPROVE_SCOPES: readonly string[] = [
 /** How long the login round trip may take before the marker no longer counts. */
 export const FIRST_PARTY_LOGIN_MARKER_MAX_AGE_SECONDS = 10 * 60;
 
-export type FirstPartyLoginProvider = "google" | "github" | "login_page";
+/**
+ * Where the authorize request sent the person to sign in: straight to Google or GitHub (the app's
+ * provider hint), or to the login page (password, passkey, Apple, or a provider picked there). It
+ * is the route, not proof of the method the person finally used.
+ */
+export type FirstPartyLoginRoute = "google" | "github" | "login_page";
 
 export interface FirstPartyAuthorizeParams {
   clientId: string;
@@ -101,19 +106,25 @@ export async function firstPartyLoginMarkerCookie(
   env: MarkerEnv | null | undefined,
   request: Request,
   params: FirstPartyAuthorizeParams,
-  provider: FirstPartyLoginProvider,
+  provider: FirstPartyLoginRoute,
   now: number = Date.now(),
 ): Promise<string> {
   return markerCookie(env, request).serialize({ h: await authorizeFingerprint(params), at: now, p: provider });
 }
 
-/** The Set-Cookie value that removes the marker, so it is used once. */
+/**
+ * The Set-Cookie value that removes the marker once it has been used. The browser applies it; the
+ * server keeps no record, so within its lifetime an identical authorize URL (same state and PKCE
+ * challenge) with the same marker would be approved again, for the same verifier holder. One cookie
+ * name means a second concurrent flow in the same browser replaces the first one's marker, and the
+ * first then sees consent.
+ */
 export async function clearFirstPartyLoginMarkerCookie(env: MarkerEnv | null | undefined, request: Request): Promise<string> {
   return markerCookie(env, request).serialize("", { maxAge: 0 });
 }
 
 /**
- * The sign-in provider when the request's session was created during this request's own login round
+ * The login route (see FirstPartyLoginRoute) when the request's session was created during this request's own login round
  * trip, or null. The marker must name these exact parameters, be fresh, and predate the sign-in.
  */
 export async function firstPartySameFlowLogin(
@@ -121,7 +132,7 @@ export async function firstPartySameFlowLogin(
   request: Request,
   params: FirstPartyAuthorizeParams,
   now: number = Date.now(),
-): Promise<FirstPartyLoginProvider | null> {
+): Promise<FirstPartyLoginRoute | null> {
   const value = await markerCookie(env, request).parse(request.headers.get("Cookie"));
   if (!value || typeof value !== "object") return null;
   const { h, at, p } = value as { h?: unknown; at?: unknown; p?: unknown };

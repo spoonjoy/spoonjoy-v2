@@ -90,7 +90,7 @@ function observeOAuthAuthorizeResult(
       outcome: telemetry.outcome ?? (input.response.status >= 400 ? "error" : undefined),
       client_id: telemetry.clientId,
       principal_id: telemetry.principalId,
-      login_provider: telemetry.loginProvider,
+      login_route: telemetry.loginRoute,
       decision: telemetry.decision,
       error_code: telemetry.errorCode,
       state_class: telemetry.stateClass,

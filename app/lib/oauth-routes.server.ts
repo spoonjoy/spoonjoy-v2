@@ -43,7 +43,7 @@ import {
   firstPartyLoginMarkerCookie,
   firstPartySameFlowLogin,
   isFirstPartyAutoApprovalRequest,
-  type FirstPartyLoginProvider,
+  type FirstPartyLoginRoute,
 } from "~/lib/oauth-first-party-consent.server";
 import { getOAuthProviderHint } from "~/lib/oauth-route.server";
 import {
@@ -686,8 +686,8 @@ export interface OAuthAuthorizeTelemetryMetadata {
     | "rate_limited"
     | "error";
   clientId?: string;
-  /** How the person signed in, on a first-party auto-approval. */
-  loginProvider?: FirstPartyLoginProvider;
+  /** Where the authorize request sent the person to sign in, on a first-party auto-approval. */
+  loginRoute?: FirstPartyLoginRoute;
   principalId?: string;
   decision?: "approve" | "deny" | "other";
   errorCode?: string;
@@ -990,9 +990,9 @@ async function loadOAuthAuthorizeView(
   }
 
   const userId = identity.userId;
-  const loginProvider = firstParty ? await firstPartySameFlowLogin(env, request, params) : null;
-  if (loginProvider) {
-    return autoApproveFirstParty(request, db, env, { params, validation, identity, issuer, loginProvider });
+  const loginRoute = firstParty ? await firstPartySameFlowLogin(env, request, params) : null;
+  if (loginRoute) {
+    return autoApproveFirstParty(request, db, env, { params, validation, identity, issuer, loginRoute });
   }
 
   return withOAuthAuthorizeTelemetry(
@@ -1029,10 +1029,10 @@ async function autoApproveFirstParty(
     validation: { scope: string; resource: string | null };
     identity: { userId: string; sessionVersion: number };
     issuer: string;
-    loginProvider: FirstPartyLoginProvider;
+    loginRoute: FirstPartyLoginRoute;
   },
 ): Promise<Response> {
-  const { params, validation, identity, issuer, loginProvider } = input;
+  const { params, validation, identity, issuer, loginRoute } = input;
   const code = await createAuthorizationCode(db, {
     clientId: params.clientId,
     userId: identity.userId,
@@ -1048,12 +1048,12 @@ async function autoApproveFirstParty(
     const codeHash = await hashOAuthOpaqueToken(code);
     await retryD1Write({ scope: "oauth.code_withdraw" }, () => db.oAuthAuthCode.deleteMany({ where: { codeHash } }));
     return withOAuthAuthorizeTelemetry(
-      Response.json({ error: "invalid_request", error_description: "The session is no longer valid." }, { status: 400 }),
+      redirectBackWithError(params, "access_denied", issuer),
       {
         ...validatedAuthorizeTelemetry(params, validation, identity.userId),
         outcome: "error",
-        errorCode: "invalid_request",
-        loginProvider,
+        errorCode: "access_denied",
+        loginRoute,
       },
     );
   }
@@ -1071,7 +1071,7 @@ async function autoApproveFirstParty(
       ...validatedAuthorizeTelemetry(params, validation, identity.userId),
       outcome: "auto_approved",
       decision: "approve",
-      loginProvider,
+      loginRoute,
     },
   );
 }

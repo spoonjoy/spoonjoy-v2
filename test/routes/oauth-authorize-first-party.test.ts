@@ -90,7 +90,7 @@ describe("oauth.authorize first-party consent skip", () => {
     expect(events.at(-1)).toMatchObject({
       event: "spoonjoy.oauth.authorize",
       distinctId: userId,
-      properties: { outcome: "auto_approved", client_id: clientId, principal_id: userId, login_provider: "google" },
+      properties: { outcome: "auto_approved", client_id: clientId, principal_id: userId, login_route: "google" },
     });
   });
 

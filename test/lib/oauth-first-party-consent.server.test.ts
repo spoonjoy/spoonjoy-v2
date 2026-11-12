@@ -131,14 +131,15 @@ describe("first-party consent skip", () => {
     expect(location.searchParams.get("iss")).toBe("https://spoonjoy.app");
     const code = location.searchParams.get("code")!;
     expect(code).toMatch(/^oac_/);
-    // The marker is single use.
-    expect(result.headers.get("Set-Cookie")).toMatch(/^__sj_fp_authorize=;.*Max-Age=0/);
+    // The only cookie set clears the marker: skipping consent never creates a session.
+    expect(result.headers.getSetCookie()).toHaveLength(1);
+    expect(result.headers.getSetCookie()[0]).toMatch(/^__sj_fp_authorize=;.*Max-Age=0/);
     // Condition 5: the auto-approval is recorded with client, user and flow.
     expect(oauthAuthorizeTelemetryFor(result)).toMatchObject({
       outcome: "auto_approved",
       clientId: appClientId,
       principalId: userId,
-      loginProvider: "login_page",
+      loginRoute: "login_page",
       scope: APP_SCOPES,
     });
     expect(await db.oAuthConsentTransaction.count()).toBe(0);
@@ -156,10 +157,10 @@ describe("first-party consent skip", () => {
     expect(token.status).toBe(200);
   });
 
-  it("records the provider hint as the flow's login provider", async () => {
+  it("records the provider hint as the flow's login route", async () => {
     const query = await appQuery({ provider: "google" });
     const result = await loadOAuthAuthorize(authorizeRequest(query, await sameFlowCookies(query)), db, null) as Response;
-    expect(oauthAuthorizeTelemetryFor(result)).toMatchObject({ outcome: "auto_approved", loginProvider: "google" });
+    expect(oauthAuthorizeTelemetryFor(result)).toMatchObject({ outcome: "auto_approved", loginRoute: "google" });
   });
 
   it("accepts a subset of the app's scopes", async () => {
@@ -174,8 +175,11 @@ describe("first-party consent skip", () => {
     fence.fail = true;
     const result = await loadOAuthAuthorize(authorizeRequest(query, cookies), db, null) as Response;
 
-    expect(result.status).toBe(400);
-    expect(oauthAuthorizeTelemetryFor(result)).toMatchObject({ outcome: "error", errorCode: "invalid_request" });
+    const location = new URL(result.headers.get("Location")!);
+    expect(`${location.origin}${location.pathname}`).toBe(SPOONJOY_APPLE_OAUTH_REDIRECT_URI);
+    expect(location.searchParams.get("error")).toBe("access_denied");
+    expect(location.searchParams.get("code")).toBeNull();
+    expect(oauthAuthorizeTelemetryFor(result)).toMatchObject({ outcome: "error", errorCode: "access_denied" });
     expect(await db.oAuthAuthCode.count()).toBe(0);
   });
 
@@ -362,7 +366,7 @@ describe("first-party consent skip", () => {
         .resolves.toBeNull();
     });
 
-    it("reports an unknown provider in the marker as the login page", async () => {
+    it("reports an unknown route in the marker as the login page", async () => {
       const query = await appQuery();
       const params = paramsFor(query);
       const marker = cookiePair(await firstPartyLoginMarkerCookie(null, authorizeRequest(query), params, "something" as never));
