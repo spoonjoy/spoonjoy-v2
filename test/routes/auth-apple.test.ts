@@ -1,8 +1,13 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, onTestFinished } from "vitest";
-import { sessionStorage } from "~/lib/session.server";
+import { getSessionSignInMethod, sessionStorage } from "~/lib/session.server";
 import { commitOAuthStartSession, readOAuthStartSession } from "~/lib/oauth-route.server";
 import { expectConsoleWarning } from "../warning-policy";
+
+async function sessionSignInMethod(response: Response) {
+  const sessionCookie = response.headers.getSetCookie().find((value: string) => value.startsWith("__session="))!;
+  return getSessionSignInMethod(new Request("https://spoonjoy.app/", { headers: { Cookie: sessionCookie.split(";")[0] } }));
+}
 
 const mocks = vi.hoisted(() => ({
   createAppleAuthorizationURL: vi.fn(() => new URL("https://appleid.apple.com/auth/authorize?state=mock-state")),
@@ -752,6 +757,7 @@ describe("Apple OAuth routes", () => {
     expect(response.headers.get("Location")).toBe("/cookbooks");
     expect(response.headers.get("Set-Cookie")).toContain("__session=");
     expect(response.headers.get("Set-Cookie")).toContain("__oauth=");
+    await expect(sessionSignInMethod(response)).resolves.toBe("apple");
     expect(mocks.handleAppleOAuthCallback).toHaveBeenCalledWith({
       db: { source: "db" },
       d1: null,

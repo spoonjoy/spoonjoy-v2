@@ -6,7 +6,7 @@ import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
 import { getLocalDb } from "~/lib/db.server";
 import { createUser, verifyPassword } from "~/lib/auth.server";
-import { createUserSessionCookie, getSessionAuthenticatedAt, getSessionIdentity, getUserId } from "~/lib/session.server";
+import { createUserSessionCookie, getSessionIdentity, getSessionSignIn, getUserId } from "~/lib/session.server";
 import type { AccountSettingsActionResult } from "~/lib/account-settings.server";
 import AccountSettings, { action } from "~/routes/account.settings";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -106,13 +106,13 @@ describe("Account settings - revocable sessions", () => {
       await expect(getUserId(pageRequest(otherBrowser))).resolves.toBeNull();
     });
 
-    it("keeps this browser's sign-in time on the re-issued session", async () => {
-      const thisBrowser = cookiePair(await createUserSessionCookie(userId, null, null, { authenticatedAt: 1_700_000_000_000 }));
+    it("keeps this browser's sign-in time and method on the re-issued session", async () => {
+      const thisBrowser = cookiePair(await createUserSessionCookie(userId, null, null, { authenticatedAt: 1_700_000_000_000, signInMethod: "google" }));
 
       const result = (await postAction(thisBrowser, { intent: "signOutEverywhere" })) as unknown as DataResult;
 
       const reissued = cookiePair(result.init.headers["Set-Cookie"]);
-      await expect(getSessionAuthenticatedAt(pageRequest(reissued))).resolves.toBe(1_700_000_000_000);
+      await expect(getSessionSignIn(pageRequest(reissued))).resolves.toEqual({ authenticatedAt: 1_700_000_000_000, signInMethod: "google" });
     });
 
     it("revokes a cookie issued before session versions existed", async () => {

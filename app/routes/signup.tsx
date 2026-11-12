@@ -145,7 +145,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   // access), sanitised as log-in does, or else in its own Kitchen, which starts with what to do
   // first. A new account starts at session version 0.
   const redirectTo = sanitizeSessionRedirect(new URL(request.url).searchParams.get("redirectTo"), "/");
-  const response = await createUserSession(user.id, redirectTo, context.cloudflare?.env, request, { sessionVersion: 0 });
+  const response = await createUserSession(user.id, redirectTo, context.cloudflare?.env, request, { sessionVersion: 0, signInMethod: "password" });
   // The connector consent screen must load as a document, as after log-in.
   if (new URL(redirectTo, "https://spoonjoy.app").pathname === "/oauth/authorize") {
     response.headers.set("X-Remix-Reload-Document", "true");

@@ -1,5 +1,5 @@
 import type { AppLoadContext } from "react-router";
-import { createUserSession, getSessionAuthenticatedAt, getUserId, isSessionIdentityCurrent, type SessionEnv } from "~/lib/session.server";
+import { createUserSession, getSessionSignIn, getUserId, isSessionIdentityCurrent, type SessionEnv, type SignInMethod } from "~/lib/session.server";
 import { getAppleOAuthConfig, getGitHubOAuthConfig, getGoogleOAuthConfig } from "~/lib/env.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
@@ -199,13 +199,15 @@ async function readFormPostParams(request: Request): Promise<URLSearchParams> {
  * a new sign-in time.
  */
 async function sessionOptionsFor(
+  provider: SignInMethod,
   callbackResult: { action?: string; userId?: string },
   request: Request,
   env: SessionEnv | null | undefined,
 ) {
-  if (callbackResult.action !== "account_linked") return {};
-  if ((await getUserId(request, env)) !== callbackResult.userId) return {};
-  return { authenticatedAt: await getSessionAuthenticatedAt(request, env) };
+  if (callbackResult.action !== "account_linked") return { signInMethod: provider };
+  if ((await getUserId(request, env)) !== callbackResult.userId) return { signInMethod: provider };
+  // Linking another method to the signed-in account is not a new sign-in: keep the existing one.
+  return getSessionSignIn(request, env);
 }
 
 export async function handleAppleCallback(request: Request, context: AppLoadContext) {
@@ -302,7 +304,7 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
     return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, callbackResult.error, "link_account", env);
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult, request, env));
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor("apple", callbackResult, request, env));
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }
@@ -409,7 +411,7 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
     );
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult, request, env));
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor("github", callbackResult, request, env));
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   await appendPendingAppleLinkClaim(response, request, context, callbackResult.userId);
   return response;
@@ -516,7 +518,7 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
     );
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult, request, env));
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor("google", callbackResult, request, env));
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   await appendPendingAppleLinkClaim(response, request, context, callbackResult.userId);
   return response;

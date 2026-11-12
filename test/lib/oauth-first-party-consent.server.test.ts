@@ -163,6 +163,30 @@ describe("first-party consent skip", () => {
     expect(oauthAuthorizeTelemetryFor(result)).toMatchObject({ outcome: "auto_approved", loginRoute: "google" });
   });
 
+  it("reports the method the person signed in with, which the provider hint does not decide", async () => {
+    const query = await appQuery({ provider: "google" });
+    const marker = cookiePair((await loginRedirect(query)).headers.get("Set-Cookie"));
+    const session = cookiePair(await createUserSessionCookie(userId, null, null, { signInMethod: "apple" }));
+    const result = await loadOAuthAuthorize(authorizeRequest(query, [marker, session]), db, null) as Response;
+    expect(oauthAuthorizeTelemetryFor(result)).toMatchObject({ outcome: "auto_approved", loginRoute: "google", loginMethod: "apple" });
+  });
+
+  it("leaves the login method out for a session that records none", async () => {
+    const query = await appQuery();
+    const result = await loadOAuthAuthorize(authorizeRequest(query, await sameFlowCookies(query)), db, null) as Response;
+    expect(oauthAuthorizeTelemetryFor(result)).toMatchObject({ outcome: "auto_approved" });
+    expect(oauthAuthorizeTelemetryFor(result)?.loginMethod).toBeUndefined();
+  });
+
+  it("reports the login method on a code withdrawn because the session was revoked", async () => {
+    const query = await appQuery();
+    const marker = cookiePair((await loginRedirect(query)).headers.get("Set-Cookie"));
+    const session = cookiePair(await createUserSessionCookie(userId, null, null, { signInMethod: "passkey" }));
+    fence.fail = true;
+    const result = await loadOAuthAuthorize(authorizeRequest(query, [marker, session]), db, null) as Response;
+    expect(oauthAuthorizeTelemetryFor(result)).toMatchObject({ outcome: "error", errorCode: "access_denied", loginMethod: "passkey" });
+  });
+
   it("accepts a subset of the app's scopes", async () => {
     const query = await appQuery({ scope: "shopping_list:read shopping_list:write" });
     const result = await loadOAuthAuthorize(authorizeRequest(query, await sameFlowCookies(query)), db, null);

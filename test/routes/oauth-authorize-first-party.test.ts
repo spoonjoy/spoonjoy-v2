@@ -80,7 +80,8 @@ describe("oauth.authorize first-party consent skip", () => {
     const marker = toGoogle.headers.get("Set-Cookie")!.split(";")[0];
     expect(marker).toMatch(/^__sj_fp_authorize=/);
 
-    const session = (await createUserSessionCookie(userId)).split(";")[0];
+    // The app hinted Google, but the person signed in with a password on the way back.
+    const session = (await createUserSessionCookie(userId, null, null, { signInMethod: "password" })).split(";")[0];
     const back = await thrown(new Request(url, { headers: { Cookie: `${marker}; ${session}` } }));
     const location = new URL(back.headers.get("Location")!);
     expect(`${location.origin}${location.pathname}`).toBe(SPOONJOY_APPLE_OAUTH_REDIRECT_URI);
@@ -90,7 +91,7 @@ describe("oauth.authorize first-party consent skip", () => {
     expect(events.at(-1)).toMatchObject({
       event: "spoonjoy.oauth.authorize",
       distinctId: userId,
-      properties: { outcome: "auto_approved", client_id: clientId, principal_id: userId, login_route: "google" },
+      properties: { outcome: "auto_approved", client_id: clientId, principal_id: userId, login_route: "google", login_method: "password" },
     });
   });
 

@@ -91,6 +91,7 @@ function observeOAuthAuthorizeResult(
       client_id: telemetry.clientId,
       principal_id: telemetry.principalId,
       login_route: telemetry.loginRoute,
+      login_method: telemetry.loginMethod,
       decision: telemetry.decision,
       error_code: telemetry.errorCode,
       state_class: telemetry.stateClass,

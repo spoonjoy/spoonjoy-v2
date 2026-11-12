@@ -9,7 +9,7 @@
  */
 
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
-import { getCurrentSessionIdentity } from "~/lib/session.server";
+import { getCurrentSessionIdentity, getSessionSignInMethod, type SignInMethod } from "~/lib/session.server";
 import { sessionVersionUnchanged } from "~/lib/session-version-fence.server";
 import { d1Binding } from "~/lib/d1-read.server";
 import { claimPendingAppleLink } from "~/lib/pending-apple-link.server";
@@ -699,6 +699,8 @@ export interface OAuthAuthorizeTelemetryMetadata {
   clientId?: string;
   /** Where the authorize request sent the person to sign in, on a first-party auto-approval. */
   loginRoute?: FirstPartyLoginRoute;
+  /** The method the person signed in with, as the session records it, on a first-party auto-approval. */
+  loginMethod?: SignInMethod;
   principalId?: string;
   decision?: "approve" | "deny" | "other";
   errorCode?: string;
@@ -1044,6 +1046,8 @@ async function autoApproveFirstParty(
   },
 ): Promise<Response> {
   const { params, validation, identity, issuer, loginRoute } = input;
+  // A session from before sign-in methods were recorded has none; the property is then left out.
+  const loginMethod = (await getSessionSignInMethod(request, env)) ?? undefined;
   const code = await createAuthorizationCode(db, {
     clientId: params.clientId,
     userId: identity.userId,
@@ -1065,6 +1069,7 @@ async function autoApproveFirstParty(
         outcome: "error",
         errorCode: "access_denied",
         loginRoute,
+        loginMethod,
       },
     );
   }
@@ -1083,6 +1088,7 @@ async function autoApproveFirstParty(
       outcome: "auto_approved",
       decision: "approve",
       loginRoute,
+      loginMethod,
     },
   );
 }
