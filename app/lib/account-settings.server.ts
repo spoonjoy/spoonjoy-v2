@@ -8,7 +8,7 @@ import { verifyAccountOwnerProof } from "~/lib/account-reauthentication.server";
 import { AccountDeletionError, deleteAccount } from "~/lib/account-deletion.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
 import { unlinkOAuthAccount } from "~/lib/oauth-user.server";
-import { hashPassword, verifyPassword } from "~/lib/auth.server";
+import { hashPassword, verifyStoredPassword } from "~/lib/auth.server";
 import { removeUserPasskey, renameUserPasskey } from "~/lib/webauthn-route.server";
 import {
   deleteStoredImageWithCapture,
@@ -793,7 +793,7 @@ async function handleAccountSettingsIntent({
     // Check if user has a password set
     const user = await database.user.findUnique({
       where: { id: userId },
-      select: { hashedPassword: true },
+      select: { hashedPassword: true, salt: true },
     });
 
     if (!user?.hashedPassword) {
@@ -844,7 +844,7 @@ async function handleAccountSettingsIntent({
     }
 
     // Verify current password
-    const isValid = await verifyPassword(currentPassword, user.hashedPassword);
+    const isValid = await verifyStoredPassword(currentPassword, { hashedPassword: user.hashedPassword, salt: user.salt });
     if (!isValid) {
       return {
         success: false,
@@ -854,7 +854,7 @@ async function handleAccountSettingsIntent({
     }
 
     // Check if new password is same as current
-    const isSamePassword = await verifyPassword(newPassword, user.hashedPassword);
+    const isSamePassword = await verifyStoredPassword(newPassword, { hashedPassword: user.hashedPassword, salt: user.salt });
     if (isSamePassword) {
       return {
         success: false,
@@ -981,6 +981,7 @@ async function handleAccountSettingsIntent({
       where: { id: userId },
       select: {
         hashedPassword: true,
+        salt: true,
         _count: {
           select: { OAuth: true, credentials: true },
         },
@@ -1007,7 +1008,7 @@ async function handleAccountSettingsIntent({
 
     // Verify current password if provided (for extra security)
     if (currentPassword) {
-      const isValid = await verifyPassword(currentPassword, user.hashedPassword);
+      const isValid = await verifyStoredPassword(currentPassword, { hashedPassword: user.hashedPassword, salt: user.salt });
       if (!isValid) {
         return {
           success: false,

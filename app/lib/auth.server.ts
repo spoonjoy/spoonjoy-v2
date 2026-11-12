@@ -117,8 +117,11 @@ async function authenticatePasswordUser(
 
   if (redwoodPasswordFormat(user.hashedPassword)) {
     // Upgrade the Redwood-era hash now that the password is proven, so this chef needs the old
-    // check only once. The write is conditional on the old hash, so a concurrent change wins.
-    await upgrade(user.id, user.hashedPassword, await hashPassword(password));
+    // check only once. The write is conditional on the old hash, so a concurrent change wins. It is
+    // best-effort: if it fails, the old hash still signs in next time, so it never fails this sign-in.
+    await upgrade(user.id, user.hashedPassword, await hashPassword(password)).catch((error: unknown) => {
+      console.warn("password.upgrade_failed", { userId: user.id, error: error instanceof Error ? error.name : "unknown" });
+    });
   }
 
   return { id: user.id, email: user.email, username: user.username, sessionVersion: user.sessionVersion };

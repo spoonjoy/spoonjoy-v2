@@ -8,6 +8,8 @@ import {
   authenticateUserByEmailOrUsernameOnD1,
 } from "~/lib/auth.server";
 import { redwoodPasswordFormat, verifyRedwoodPassword } from "~/lib/legacy-password.server";
+import { verifyAccountOwnerProof } from "~/lib/account-reauthentication.server";
+import { expectConsoleWarning } from "../warning-policy";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
 
@@ -105,5 +107,21 @@ describe("Redwood-era password hashes", () => {
     await expect(authenticateUserByEmailOrUsername(db, "redwood_timing", "wrong")).resolves.toBeNull();
 
     expect(compare).toHaveBeenCalledTimes(1);
+  });
+
+  it("still signs in when the upgrade write fails, and keeps the old hash", async () => {
+    const chef = await db.user.create({ data: { email: "redwood-upgrade@example.com", username: "redwood_upgrade", ...REDWOOD_LEGACY } });
+    vi.spyOn(db.user, "updateMany").mockRejectedValue(new TypeError("write refused"));
+    expectConsoleWarning("password.upgrade_failed", { userId: chef.id, error: "TypeError" });
+
+    await expect(authenticateUserByEmailOrUsername(db, "redwood_upgrade", PASSWORD)).resolves.toMatchObject({ id: chef.id });
+    await expect(db.user.findUnique({ where: { id: chef.id } })).resolves.toMatchObject(REDWOOD_LEGACY);
+  });
+
+  it("accepts a Redwood-era password when a signed-in chef confirms it's them", async () => {
+    const chef = await db.user.create({ data: { email: "redwood-proof@example.com", username: "redwood_proof", ...REDWOOD_SCRYPT } });
+
+    await expect(verifyAccountOwnerProof(db, chef.id, { password: PASSWORD })).resolves.toEqual({ ok: true, method: "password" });
+    await expect(verifyAccountOwnerProof(db, chef.id, { password: `${PASSWORD}x` })).resolves.toMatchObject({ ok: false, reason: "password_incorrect" });
   });
 });

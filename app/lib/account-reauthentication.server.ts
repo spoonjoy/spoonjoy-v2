@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { verifyPassword } from "~/lib/auth.server";
+import { verifyStoredPassword } from "~/lib/auth.server";
 import type { NativeAppleCredentialInput } from "~/lib/apple-native-auth.server";
 
 // Proof that the person asking for a dangerous account change (deleting the account) is its owner
@@ -44,7 +44,7 @@ export async function verifyAccountOwnerProof(
 ): Promise<AccountOwnerProofResult> {
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { hashedPassword: true, OAuth: { where: { provider: "apple" }, select: { providerUserId: true } } },
+    select: { hashedPassword: true, salt: true, OAuth: { where: { provider: "apple" }, select: { providerUserId: true } } },
   });
   if (!user) return { ok: false, reason: "account_not_found", message: "Account not found." };
 
@@ -52,7 +52,7 @@ export async function verifyAccountOwnerProof(
     if (!proof.password) {
       return { ok: false, reason: "password_required", message: "Enter your current password to confirm it's you." };
     }
-    return (await verifyPassword(proof.password, user.hashedPassword))
+    return (await verifyStoredPassword(proof.password, { hashedPassword: user.hashedPassword, salt: user.salt }))
       ? { ok: true, method: "password" }
       : { ok: false, reason: "password_incorrect", message: "That password isn't right." };
   }
