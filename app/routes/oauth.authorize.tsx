@@ -90,6 +90,7 @@ function observeOAuthAuthorizeResult(
       outcome: telemetry.outcome ?? (input.response.status >= 400 ? "error" : undefined),
       client_id: telemetry.clientId,
       principal_id: telemetry.principalId,
+      login_provider: telemetry.loginProvider,
       decision: telemetry.decision,
       error_code: telemetry.errorCode,
       state_class: telemetry.stateClass,
@@ -191,6 +192,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       const providerStartPath = resolveOAuthProviderHintStartPath(request, client);
       if (providerStartPath) {
         const providerResponse = withOAuthAuthorizeTelemetry(redirectTo(providerStartPath), telemetry);
+        // Keeps the first-party login marker the sign-in redirect set.
+        const marker = result.headers.get("Set-Cookie");
+        if (marker) providerResponse.headers.append("Set-Cookie", marker);
         throw observeOAuthAuthorizeResult({ request, context }, {
           phase: "loader",
           response: providerResponse,

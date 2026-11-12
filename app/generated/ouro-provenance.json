@@ -3817,6 +3817,7 @@
         "app/lib/ingredient-parse.server.ts",
         "app/lib/llm-telemetry.server.ts",
         "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-first-party-consent.server.ts",
         "app/lib/oauth-metadata.server.ts",
         "app/lib/oauth-route.server.ts",
         "app/lib/oauth-routes.server.ts",
