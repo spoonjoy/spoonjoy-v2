@@ -186,7 +186,7 @@ describe("account settings", () => {
       intent: "removePassword",
       scope: "removing the password",
       before: () => db.oAuth.create({ data: { provider: "google", providerUserId: `g-${userId}`, providerUsername: "chef", userId } }),
-      fields: () => ({ intent: "removePassword" }),
+      fields: () => ({ intent: "removePassword", currentPassword: "testPassword123" }),
       check: async () => expect((await userRow()).hashedPassword).toBeNull(),
       unchanged: async () => expect((await userRow()).hashedPassword).not.toBeNull(),
     },

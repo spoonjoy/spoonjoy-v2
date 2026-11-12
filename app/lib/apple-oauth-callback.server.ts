@@ -80,7 +80,12 @@ export interface AppleOAuthCallbackResult {
 export async function handleAppleOAuthCallback(
   params: AppleOAuthCallbackParams
 ): Promise<AppleOAuthCallbackResult> {
-  const { db, d1 = null, appleUser, currentUserId, redirectTo } = params;
+  const { db, d1 = null, currentUserId, redirectTo } = params;
+  // Only an address Apple marked verified in its signed token may match, create or verify an
+  // account (#675). Both verifiers already drop an unverified one; this holds the rule here too.
+  const appleUser: AppleUser = params.appleUser.emailVerified
+    ? params.appleUser
+    : { ...params.appleUser, email: null };
 
   // Default redirect destination
   const defaultRedirect = redirectTo ?? "/";

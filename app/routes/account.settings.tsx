@@ -72,6 +72,8 @@ const USER_INFO_FIELDS = ["email", "username", "currentPassword"] as const;
 const NEW_PASSWORD_FIELDS = ["newPassword"] as const;
 const USER_INFO_INTENTS = ["updateUserInfo"] as const;
 const DELETE_INTENTS = ["deleteAccount"] as const;
+const REMOVE_PASSWORD_INTENTS = ["removePassword"] as const;
+const REMOVE_PASSWORD_FIELDS = ["currentPassword"] as const;
 
 export default function AccountSettings() {
   const { user, oauthError, notifications, blockedChefs = [] } = useLoaderData<AccountSettingsLoaderData & { blockedChefs?: BlockedChefRow[] }>();
@@ -84,6 +86,17 @@ export default function AccountSettings() {
   const passwordAnswer = passwordFetcher.data;
   const passwordData = passwordAnswer ?? passwordBaseline;
   const deleteAnswer = useIntentAnswer(actionData, DELETE_INTENTS);
+  // Remove password is a plain router form; its refusals show inside its confirmation.
+  const removePasswordAnswer = useIntentAnswer(actionData, REMOVE_PASSWORD_INTENTS);
+  const removePasswordRefusal = removePasswordAnswer?.success === false ? removePasswordAnswer : undefined;
+  const removePasswordErrors = useFormErrors(
+    removePasswordRefusal?.error === "invalid_current_password"
+      ? { currentPassword: removePasswordRefusal.message }
+      : { general: removePasswordRefusal?.message },
+    REMOVE_PASSWORD_FIELDS,
+    removePasswordAnswer,
+  );
+  const removePasswordNeedsFreshSignIn = removePasswordRefusal?.error === "recent_sign_in_required";
   const userInfoErrors = useFormErrors((userInfoAnswer ?? initialActionData)?.fieldErrors, USER_INFO_FIELDS, userInfoAnswer);
   const newPasswordErrors = useFormErrors({
     ...passwordData?.fieldErrors,
@@ -170,7 +183,7 @@ export default function AccountSettings() {
 
       {/* Success/Error Messages (only show global banner when there are no field-level errors; a
           photo upload's error shows next to the photo instead) */}
-      {actionData?.message && !actionData?.fieldErrors && actionData.intent !== "uploadPhoto" && actionData.intent !== "deleteAccount" && (
+      {actionData?.message && !actionData?.fieldErrors && actionData.intent !== "uploadPhoto" && actionData.intent !== "deleteAccount" && actionData.intent !== "removePassword" && (
         <div
           role={actionData.success ? "status" : "alert"}
           className={`mt-4 border-y py-4 ${
@@ -540,7 +553,8 @@ export default function AccountSettings() {
         </div>
       </Card>
 
-      {/* Password Section */}
+      {/* Password Section (the anchor brings a chef back here after "Sign in again") */}
+      <div id="password">
       <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="password-section" title="Password">
         <Text tone="muted" className="mt-1">A first-class fallback for any client, browser, or future importer.</Text>
         {passwordAnswer?.success && passwordAnswer.message ? (
@@ -580,9 +594,15 @@ export default function AccountSettings() {
             ) : passwordFormState === "removeConfirm" ? (
               <div className="space-y-4">
                 <Text tone="muted">Are you sure you want to remove your password? You will only be able to sign in using your linked OAuth accounts.</Text>
-                <RouterForm method="post" className="grid gap-4">
+                <Form method="post" errors={removePasswordErrors} render={<RouterForm />} className="gap-4">
                   <input type="hidden" name="intent" value="removePassword" />
-                  <TextField label="Current password" type="password" name="currentPassword" autoComplete="current-password" />
+                  <TextField
+                    label="Current password"
+                    description="Forgotten it? Leave this blank if you signed in within the last 10 minutes."
+                    type="password"
+                    name="currentPassword"
+                    autoComplete="current-password"
+                  />
                   <div className="flex flex-wrap gap-3">
                     <Button type="submit" variant="soft" tone="destructive">
                       Confirm
@@ -591,7 +611,16 @@ export default function AccountSettings() {
                       Cancel
                     </Button>
                   </div>
-                </RouterForm>
+                </Form>
+                {removePasswordNeedsFreshSignIn ? (
+                  <RouterForm method="post">
+                    <input type="hidden" name="intent" value="reauthenticate" />
+                    <input type="hidden" name="for" value="password" />
+                    <Button type="submit" variant="outline" tone="secondary">
+                      Sign in again
+                    </Button>
+                  </RouterForm>
+                ) : null}
               </div>
             ) : (
               <div className="flex flex-wrap gap-3">
@@ -667,6 +696,7 @@ export default function AccountSettings() {
           )}
         </div>
       </Card>
+      </div>
 
       <NotificationsSection
         initiallySubscribed={notifications.pushSubscribed}

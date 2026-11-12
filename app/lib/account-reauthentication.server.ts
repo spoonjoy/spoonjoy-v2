@@ -12,6 +12,11 @@ import type { NativeAppleCredentialInput } from "~/lib/apple-native-auth.server"
 
 export const RECENT_SIGN_IN_WINDOW_MS = 10 * 60 * 1000;
 
+/** Whether a session's sign-in time (ms since the epoch, or null) is within the recent sign-in window. */
+export function isRecentSignIn(signedInAt: number | null | undefined, now: number = Date.now()): boolean {
+  return typeof signedInAt === "number" && signedInAt <= now && now - signedInAt <= RECENT_SIGN_IN_WINDOW_MS;
+}
+
 export interface AccountOwnerProof {
   password?: string | null;
   /** A fresh native Sign in with Apple credential. */
@@ -65,9 +70,7 @@ export async function verifyAccountOwnerProof(
       : { ok: false, reason: "apple_account_mismatch", message: "That Apple ID isn't the one linked to this account." };
   }
 
-  const now = (deps.now ?? Date.now)();
-  const signedInAt = proof.sessionAuthenticatedAt;
-  if (typeof signedInAt === "number" && signedInAt <= now && now - signedInAt <= RECENT_SIGN_IN_WINDOW_MS) {
+  if (isRecentSignIn(proof.sessionAuthenticatedAt, (deps.now ?? Date.now)())) {
     return { ok: true, method: "recent_sign_in" };
   }
   return {

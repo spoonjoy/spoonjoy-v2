@@ -8,8 +8,8 @@ const { mockArcticState } = vi.hoisted(() => {
     mockArcticState: {
       appleUserId: "default-user-id",
       email: "default@example.com",
-      emailVerified: "true" as string | boolean,
-      isPrivateEmail: false,
+      emailVerified: "true" as string | boolean | undefined,
+      isPrivateEmail: false as string | boolean,
       lastPrivateKey: null as Uint8Array | null,
     },
   };
@@ -655,6 +655,49 @@ not-base64-@@@
 
         expect(result.success).toBe(true);
         expect(result.appleUser?.emailVerified).toBe(true);
+      });
+
+      // #675: only an address Apple marks verified, as boolean true or the string "true", is used.
+      it("keeps the token's email only when Apple marks it verified", async () => {
+        const callbackData: AppleCallbackData = { code: "valid-auth-code", state: "valid-state" };
+        const cases: Array<[string | boolean | undefined, boolean]> = [
+          [true, true],
+          ["true", true],
+          [false, false],
+          ["false", false],
+          [undefined, false],
+        ];
+        for (const [emailVerified, kept] of cases) {
+          mockArcticState.email = "token@example.com";
+          mockArcticState.emailVerified = emailVerified;
+          const result = await verifyAppleCallback(mockConfig, mockRedirectUri, callbackData);
+          expect(result.appleUser).toMatchObject(kept
+            ? { email: "token@example.com", emailVerified: true }
+            : { email: null, emailVerified: false });
+        }
+      });
+
+      it("never reads an email from the client-supplied user form field", async () => {
+        mockArcticState.email = undefined as unknown as string;
+        const result = await verifyAppleCallback(mockConfig, mockRedirectUri, {
+          code: "valid-auth-code",
+          state: "valid-state",
+          user: JSON.stringify({ name: { firstName: "Ada" }, email: "victim@example.com" }),
+        });
+
+        expect(result.appleUser).toMatchObject({ email: null, fullName: "Ada" });
+      });
+
+      it("keeps a verified private relay address as the email", async () => {
+        mockArcticState.email = "abc123@privaterelay.appleid.com";
+        mockArcticState.isPrivateEmail = "true";
+        const result = await verifyAppleCallback(mockConfig, mockRedirectUri, { code: "valid-auth-code", state: "valid-state" });
+
+        expect(result.appleUser).toMatchObject({
+          email: "abc123@privaterelay.appleid.com",
+          emailVerified: true,
+          isPrivateEmail: true,
+        });
       });
 
       it("should construct full name from firstName and lastName", async () => {

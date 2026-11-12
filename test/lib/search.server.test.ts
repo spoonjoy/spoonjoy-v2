@@ -509,7 +509,7 @@ describe("search.server", () => {
       `SELECT "sourceFingerprint" FROM "SearchIndexMetadata" WHERE "id" = 'current' LIMIT 1`,
     );
     // The metadata row only marks the maintenance scheme; it holds no recipe or cover data.
-    expect(metadataRows[0]!.sourceFingerprint).toBe("per-entity-triggers-v1");
+    expect(metadataRows[0]!.sourceFingerprint).toBe("per-entity-triggers-v2");
   });
 
   it("keeps shopping-list search private to the signed-in owner", async () => {

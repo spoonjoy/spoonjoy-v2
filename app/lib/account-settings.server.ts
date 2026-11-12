@@ -4,7 +4,7 @@ import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { readAccountSettingsFromD1, readAccountSettingsWithPrisma } from "~/lib/account-settings-reads.server";
 import { createUserSessionCookie, destroyUserSession, getSessionAuthenticatedAt, getSessionSignIn, requireUserId } from "~/lib/session.server";
-import { verifyAccountOwnerProof } from "~/lib/account-reauthentication.server";
+import { isRecentSignIn, verifyAccountOwnerProof } from "~/lib/account-reauthentication.server";
 import { AccountDeletionError, deleteAccount } from "~/lib/account-deletion.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
 import { unlinkOAuthAccount } from "~/lib/oauth-user.server";
@@ -111,13 +111,26 @@ export interface AccountSettingsLoaderData {
 // information form, a successful password change or set closes the password form, and a photo
 // upload's error shows next to the photo instead of in the page banner.
 // A failed account deletion shows its error inside the deletion form.
-export type AccountSettingsFormIntent = "updateUserInfo" | "changePassword" | "setPassword" | "uploadPhoto" | "deleteAccount";
+export type AccountSettingsFormIntent =
+  | "updateUserInfo"
+  | "changePassword"
+  | "setPassword"
+  | "removePassword"
+  | "uploadPhoto"
+  | "deleteAccount";
 
 /** Where "Sign in again" sends a passwordless chef, so they come back to finish deleting. */
 export const DELETE_ACCOUNT_REAUTH_REDIRECT = "/login?redirectTo=%2Faccount%2Fsettings%23delete-account";
 
 /** Where "Sign in again" sends a passwordless chef, so they come back to finish changing their email. */
 export const EMAIL_CHANGE_REAUTH_REDIRECT = "/login?redirectTo=%2Faccount%2Fsettings%23user-info";
+
+/** Where "Sign in again" sends a chef who can't remove their password yet, so they come back to it. */
+export const REMOVE_PASSWORD_REAUTH_REDIRECT = "/login?redirectTo=%2Faccount%2Fsettings%23password";
+
+/** What a chef sees when they leave the current password blank and their sign-in is too old to remove it. */
+export const REMOVE_PASSWORD_RECENT_SIGN_IN_MESSAGE =
+  "For your safety, enter your current password, or sign in again and then remove it within 10 minutes.";
 
 /** What a passwordless chef sees when their sign-in is too old to change their email. */
 export const EMAIL_CHANGE_RECENT_SIGN_IN_MESSAGE =
@@ -907,7 +920,10 @@ async function handleAccountSettingsIntent({
   if (intent === "reauthenticate") {
     // Sign out, then back in: the new session's sign-in time lets a passwordless chef delete the
     // account or change its email, and the sign-in returns them to the form they came from.
-    const redirectTo = formData.get("for") === "email" ? EMAIL_CHANGE_REAUTH_REDIRECT : DELETE_ACCOUNT_REAUTH_REDIRECT;
+    const reauthFor = formData.get("for");
+    const redirectTo = reauthFor === "email"
+      ? EMAIL_CHANGE_REAUTH_REDIRECT
+      : reauthFor === "password" ? REMOVE_PASSWORD_REAUTH_REDIRECT : DELETE_ACCOUNT_REAUTH_REDIRECT;
     throw await destroyUserSession(request, redirectTo, getCloudflareEnv(context));
   }
 
@@ -975,6 +991,12 @@ async function handleAccountSettingsIntent({
 
   if (intent === "removePassword") {
     const currentPassword = formData.get("currentPassword")?.toString() || "";
+    const failure = (error: AccountSettingsActionResult["error"], message: string): AccountSettingsActionResult => ({
+      success: false,
+      intent: "removePassword",
+      error,
+      message,
+    });
 
     // Check if user has a password to remove
     const user = await database.user.findUnique({
@@ -989,33 +1011,29 @@ async function handleAccountSettingsIntent({
     });
 
     if (!user?.hashedPassword) {
-      return {
-        success: false,
-        error: "no_password_to_remove",
-        message: "You don't have a password to remove",
-      };
+      return failure("no_password_to_remove", "You don't have a password to remove");
     }
 
     // Check if the password is the only auth method. A linked OAuth account or
     // an enrolled passkey both count as a remaining way to log in.
     if (user._count.OAuth === 0 && user._count.credentials === 0) {
-      return {
-        success: false,
-        error: "last_auth_method",
-        message: "Cannot remove password. You must have at least one way to log in.",
-      };
+      return failure("last_auth_method", "Cannot remove password. You must have at least one way to log in.");
     }
 
-    // Verify current password if provided (for extra security)
+    // Removing the password, then setting a new one, takes over password sign-in, so it needs proof
+    // the owner is here right now (issue #683): the current password, or, for a chef who has
+    // forgotten it, a sign-in within the last 10 minutes (the same window account deletion uses).
+    // Every sign-in (password, passkey, Google, GitHub, Apple) stamps the session's sign-in time.
     if (currentPassword) {
+      // A stolen session must not become a password-guessing oracle.
+      const rateLimit = await enforceAuthRateLimit(request, getCloudflareEnv(context)?.AUTH_IP_RATE_LIMITER);
+      if (!rateLimit.allowed) return failure("rate_limited", "Too many attempts. Try again in a few minutes.");
       const isValid = await verifyStoredPassword(currentPassword, { hashedPassword: user.hashedPassword, salt: user.salt });
       if (!isValid) {
-        return {
-          success: false,
-          error: "invalid_current_password",
-          message: "Your current password is incorrect",
-        };
+        return failure("invalid_current_password", "Your current password is incorrect");
       }
+    } else if (!isRecentSignIn(await getSessionAuthenticatedAt(request, getCloudflareEnv(context)))) {
+      return failure("recent_sign_in_required", REMOVE_PASSWORD_RECENT_SIGN_IN_MESSAGE);
     }
 
     // Remove password
