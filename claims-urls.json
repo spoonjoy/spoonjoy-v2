@@ -1,4 +1,12 @@
 {
+  "https://github.com/ourostack/ouro-ui-core/blob/d9de146f03df8e7f9c8d2bbbb872f323ebae1f64/LICENSE": {
+    "status": 200,
+    "checked": "2026-11-12"
+  },
+  "https://github.com/ourostack/ouro-ui/blob/36c22fe62b8783402d000df776c78620c15eafd9/LICENSE": {
+    "status": 200,
+    "checked": "2026-11-12"
+  },
   "https://github.com/ourostack/ouro-ui/blob/96542d72b60b436dd6a60447d888a4c9e9d5edf7/docs/guides/claims.md": {
     "status": 200,
     "checked": "2026-10-22"
