@@ -31,7 +31,7 @@ const PUBLIC_RECIPE_LIMIT = 48;
 
 const PUBLIC_RECIPES_URL = "https://spoonjoy.app/recipes";
 const PUBLIC_RECIPES_DESCRIPTION =
-  "Recipes real people cook, with notes and photos from everyone who made them. Fork one into your kitchen, with credit.";
+  "Recipes home cooks make, with photos and notes from the people who cooked them. Fork one and the original cook keeps the credit.";
 
 export function meta({ location }: Route.MetaArgs) {
   // A search's results are a moving list, not a page worth indexing; older pages index as themselves.

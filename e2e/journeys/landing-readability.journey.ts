@@ -129,6 +129,9 @@ async function checkAction(page: Page, measurements: Measurements, action: Locat
     await page.evaluate(() => window.scrollTo(0, 0));
     // A key press first, so the browser treats the focus that follows as keyboard focus.
     await page.keyboard.press("Tab");
+    // The Tab can land on a link further down (WebKit moves on from the last pressed action) and scroll
+    // there; return to the top so the focus below is measured from where the step says it starts.
+    await page.evaluate(() => window.scrollTo(0, 0));
     await action.focus();
     await expect(action).toBeFocused();
     await recordCovered(measurements, action, `${name}, focused`);
@@ -152,12 +155,12 @@ async function heroIsReadable(page: Page, testInfo: TestInfo, scheme: Scheme): P
     await openLanding(page, scheme);
     await testInfo.attach(`landing-${scheme}-top`, { body: await page.screenshot({ animations: "disabled" }), contentType: "image/png" });
 
-    const heading = page.getByRole("heading", { level: 1, name: "Your food should look as good as it tastes." });
+    const heading = page.getByRole("heading", { level: 1, name: "Cook any recipe one step at a time." });
     const hero = page.locator("section").filter({ has: heading });
     await test.step("the eyebrow, heading and description read against the photo", async () => {
-      await checkHeroText(page, measurements, hero.getByText("The Recipe App", { exact: true }), "Eyebrow");
+      await checkHeroText(page, measurements, hero.getByText("For home cooks", { exact: true }), "Eyebrow");
       await checkHeroText(page, measurements, heading, "Heading");
-      await checkHeroText(page, measurements, hero.getByText(/^Spoonjoy is a photo-first kitchen/), "Description");
+      await checkHeroText(page, measurements, hero.getByText(/^Paste a link and skip the life story/), "Description");
     });
 
     await checkAction(page, measurements, hero.getByRole("link", { name: "Start Your Kitchen", exact: true }), "Start Your Kitchen");

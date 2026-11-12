@@ -411,7 +411,7 @@ describe("Recipes $id Route", () => {
             ogImageUrl: "https://spoonjoy.app/og/recipes/recipe-2.png",
           },
         } as any),
-      ).toContainEqual({ name: "description", content: "A Spoonjoy recipe by rowan." });
+      ).toContainEqual({ name: "description", content: "Plain Rice, a recipe by rowan. Cook it step by step on Spoonjoy." });
 
       expect(meta({ data: undefined } as any)).toEqual([
         { title: "Recipe - Spoonjoy" },

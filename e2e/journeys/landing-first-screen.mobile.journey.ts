@@ -137,7 +137,7 @@ const COOKING: Phone[] = [
 /** QA's Lemon Herb Rice, one of five ingredients checked a moment ago, as the recipe page stores it. */
 const LEMON_RICE = "qa-kitchen-recipe-lemon-rice";
 
-const REST_OF_DESCRIPTION = ", the notes you learn by doing, and the cookbooks that grow out of real meals";
+const REST_OF_DESCRIPTION = ", then cook it with notes from everyone who made it before you";
 
 const ACTIONS = ["Start Your Kitchen", "Log in", "Search Recipes"] as const;
 
@@ -212,7 +212,7 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
       return window.innerHeight - inset;
     });
     const viewportWidth = await page.evaluate(() => window.innerWidth);
-    const heading = page.getByRole("heading", { level: 1, name: "Your food should look as good as it tastes." });
+    const heading = page.getByRole("heading", { level: 1, name: "Cook any recipe one step at a time." });
     const hero = page.locator("section").filter({ has: heading });
     shape = {
       headlinePx: await heading.evaluate((element) => parseFloat(getComputedStyle(element).fontSize)),

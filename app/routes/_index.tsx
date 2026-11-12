@@ -35,8 +35,8 @@ const LANDING_FOOD_PHOTOS = [
 ];
 
 type KitchenTab = "recipes" | "cookbooks";
-const HOMEPAGE_TITLE = "Spoonjoy — The Recipe App for Meals You Actually Cook";
-const HOMEPAGE_DESCRIPTION = "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen.";
+const HOMEPAGE_TITLE = "Spoonjoy Recipe App: Save Recipes, Cook Step by Step";
+const HOMEPAGE_DESCRIPTION = "Save recipes from any site or type up your own, then cook them one big step at a time. Copy a friend's recipe and their name stays on it.";
 const HOMEPAGE_URL = "https://spoonjoy.app/";
 const HOMEPAGE_SOCIAL_IMAGE_URL = "https://spoonjoy.app/og/spoonjoy-home.png";
 
@@ -206,16 +206,16 @@ export default function Index() {
           <div className="sj-landing-hero-shade absolute inset-0" />
           <div className="relative z-10 flex min-h-[clamp(24rem,56svh,42rem)] tall-phone:min-h-[clamp(24rem,70svh,42rem)] sm:min-h-[clamp(32rem,70svh,56rem)] sideways-phone:min-h-[calc(100svh-3.5rem)] flex-col justify-end px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-8 sm:pt-20 sm:px-8 sm:pb-20 lg:px-12 lg:pb-24 sideways-phone:pt-4 sideways-phone:pb-[calc(max(1rem,env(safe-area-inset-bottom))+5rem)]">
             <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.2em] text-[var(--sj-on-photo)]">
-              The Recipe App
+              For home cooks
             </p>
             <h1 className="font-sj-display mt-3 max-w-4xl text-[2rem]/[2.375rem] font-semibold tracking-normal text-[var(--sj-on-photo)] tall-phone:mt-5 tall-phone:text-4xl/10 sm:mt-5 sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20 sideways-phone:mt-2 sideways-phone:text-[2rem]/[2.375rem] low-sideways-phone:text-[1.5rem]/[1.875rem]">
-              Your food should look as good as it tastes.
+              Cook any recipe one step at a time.
             </h1>
             {/* A short, narrow or sideways phone shows the first clause only, so the actions fit on the first
                 screen above the tab bar (e2e/journeys/landing-first-screen.mobile.journey.ts). */}
             <p className="mt-3 max-w-2xl text-base/6 text-[var(--sj-on-photo)] tall-phone:mt-5 sm:mt-5 sm:text-lg/8 sideways-phone:mt-2 sideways-phone:text-base/6">
-              Spoonjoy is a photo-first kitchen for the recipes you actually cook
-              <span className="hidden tall-phone:inline sm:inline sideways-phone:hidden">, the notes you learn by doing, and the cookbooks that grow out of real meals</span>.
+              Paste a link and skip the life story above the recipe
+              <span className="hidden tall-phone:inline sm:inline sideways-phone:hidden">, then cook it with notes from everyone who made it before you</span>.
             </p>
             {/* Photo-white labels, borders and focus rings for the outline buttons, and a light amber main
                 action, so every button's edge shows on the shaded photo. */}
@@ -240,9 +240,9 @@ export default function Index() {
 
         <section className="mx-auto grid max-w-6xl gap-6 px-5 py-10 sm:grid-cols-3 sm:px-8 lg:px-12">
           {[
-            ["Collect", "Write recipes with the context future-you needs."],
-            ["Cook", "Log the dishes you made and what changed."],
-            ["Share", "Open a kitchen without turning dinner into social media."],
+            ["Save", "Paste a link, or type up the card that's been in the drawer for years."],
+            ["Cook", "One step on the screen at a time. Afterward, note the one thing you'd change."],
+            ["Fork", "Change a friend's recipe as much as you like. Their name stays on it."],
           ].map(([title, copy]) => (
             <div key={title} className="border-t border-[var(--sj-border)] pt-5">
               <h2 className="font-sj-ui text-sm font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink)]">{title}</h2>

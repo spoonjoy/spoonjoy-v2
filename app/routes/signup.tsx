@@ -45,7 +45,7 @@ interface LoaderData {
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Sign up - Spoonjoy" },
-    { name: "description", content: "Create a Spoonjoy account." },
+    { name: "description", content: "Start a free Spoonjoy kitchen and save your first recipe from a link." },
   ];
 }
 

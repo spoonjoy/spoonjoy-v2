@@ -1230,17 +1230,17 @@ describe("Cookbooks $id Route", () => {
         } as any),
       ).toEqual([
         { title: "Weeknight Book - Spoonjoy" },
-        { name: "description", content: "Weeknight Book by ari on Spoonjoy with 1 recipe." },
+        { name: "description", content: "Weeknight Book: 1 recipe gathered by ari on Spoonjoy." },
         { property: "og:site_name", content: "Spoonjoy" },
         { property: "og:type", content: "article" },
         { property: "og:title", content: "Weeknight Book" },
-        { property: "og:description", content: "Weeknight Book by ari on Spoonjoy with 1 recipe." },
+        { property: "og:description", content: "Weeknight Book: 1 recipe gathered by ari on Spoonjoy." },
         { property: "og:url", content: "https://spoonjoy.app/cookbooks/cb-1" },
         { property: "og:image", content: "https://spoonjoy.app/photos/covered-editorial.jpg" },
         { name: "twitter:image", content: "https://spoonjoy.app/photos/covered-editorial.jpg" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: "Weeknight Book" },
-        { name: "twitter:description", content: "Weeknight Book by ari on Spoonjoy with 1 recipe." },
+        { name: "twitter:description", content: "Weeknight Book: 1 recipe gathered by ari on Spoonjoy." },
         { tagName: "link", rel: "canonical", href: "https://spoonjoy.app/cookbooks/cb-1" },
       ]);
     });
@@ -1260,7 +1260,7 @@ describe("Cookbooks $id Route", () => {
         } as any),
       ).toContainEqual({
         name: "description",
-        content: "Dinner Book by ari on Spoonjoy with 2 recipes.",
+        content: "Dinner Book: 2 recipes gathered by ari on Spoonjoy.",
       });
     });
 
