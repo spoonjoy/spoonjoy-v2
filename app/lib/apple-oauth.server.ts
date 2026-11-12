@@ -45,7 +45,7 @@ export interface AppleUser {
    * first authorization did not share it, or an authorization that asked for no scopes)
    */
   email: string | null;
-  /** Whether the email is verified (always true for Apple) */
+  /** Whether Apple marked the email verified; `email` is null whenever this is false */
   emailVerified: boolean;
   /** Whether this is a private relay email (Hide My Email) */
   isPrivateEmail: boolean;
@@ -275,7 +275,9 @@ export async function verifyAppleCallback(
 
     const appleUser: AppleUser = {
       id: claims.sub,
-      email: typeof claims.email === "string" && claims.email.trim() ? claims.email : null,
+      // Only an address Apple marks verified may match or create an account (#675). The `user`
+      // form field's email is client-supplied and never read.
+      email: emailVerified && typeof claims.email === "string" && claims.email.trim() ? claims.email : null,
       emailVerified,
       isPrivateEmail,
       firstName,
