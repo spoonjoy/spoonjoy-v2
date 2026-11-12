@@ -429,6 +429,50 @@ describe("Account settings - revocable sessions", () => {
 
       expect(await currentVersion(userId)).toBe(0);
     });
+
+    it("ends any unused password reset link when the password is changed, removed or set", async () => {
+      const db = await getLocalDb();
+      const thisBrowser = cookiePair(await createUserSessionCookie(userId));
+      await db.oAuth.create({
+        data: { provider: "google", providerUserId: `google-${userId}`, providerUsername: "chef@gmail.com", userId },
+      });
+      const { email } = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { email: true } });
+      const liveLink = () => db.accountEmailToken.create({
+        data: {
+          userId,
+          purpose: "reset_password",
+          tokenHash: faker.string.hexadecimal({ length: 64, prefix: "" }),
+          email,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+      const liveLinks = () => db.accountEmailToken.count({ where: { userId, purpose: "reset_password", usedAt: null } });
+
+      await liveLink();
+      let session = thisBrowser;
+      const changed = (await postAction(session, {
+        intent: "changePassword",
+        currentPassword: PASSWORD,
+        newPassword: "changedPassword456!",
+        confirmPassword: "changedPassword456!",
+      })) as unknown as DataResult;
+      expect(changed.data).toMatchObject({ success: true });
+      expect(await liveLinks()).toBe(0);
+      session = cookiePair(changed.init.headers["Set-Cookie"]);
+
+      await liveLink();
+      await expect(postAction(session, { intent: "removePassword", currentPassword: "changedPassword456!" }))
+        .resolves.toMatchObject({ success: true });
+      expect(await liveLinks()).toBe(0);
+
+      await liveLink();
+      await expect(postAction(session, {
+        intent: "setPassword",
+        newPassword: "anotherPassword789!",
+        confirmPassword: "anotherPassword789!",
+      })).resolves.toMatchObject({ success: true });
+      expect(await liveLinks()).toBe(0);
+    });
   });
 
   describe("component - sign out everywhere", () => {

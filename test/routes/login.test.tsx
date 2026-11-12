@@ -66,7 +66,7 @@ describe("Login Route", () => {
         params: {},
       } as any);
 
-      expect(result).toEqual({ oauthProviders: ["google"] });
+      expect(result).toEqual({ oauthProviders: ["google"], passwordReset: false });
     });
 
     it("should redirect when user is already logged in", async () => {
@@ -104,7 +104,7 @@ describe("Login Route", () => {
         params: {},
       } as any);
 
-      expect(result).toEqual({ oauthError: "account_exists", oauthProviders: [] });
+      expect(result).toEqual({ oauthError: "account_exists", oauthProviders: [], passwordReset: false });
     });
   });
 
@@ -400,6 +400,28 @@ describe("Login Route", () => {
       const { data, status } = extractResponseData(await submit({ identifier: username, password: "nope" }));
       expect(status).toBe(401);
       expect(data.errors.general).toBe("Invalid username, email, or password");
+    });
+  });
+
+  describe("forgot password", () => {
+    it("offers the reset link where account mail can be sent", async () => {
+      const result = await loader({
+        request: new UndiciRequest("http://localhost:3000/login"),
+        context: { cloudflare: { env: { SPOONJOY_EMAIL_MODE: "capture", SPOONJOY_BASE_URL: "http://localhost:3000" } } },
+        params: {},
+      } as any);
+      expect(result).toEqual({ oauthProviders: [], passwordReset: true });
+
+      const Stub = createTestRoutesStub([{ path: "/login", Component: Login, loader: () => ({ oauthProviders: [], passwordReset: true }) }]);
+      render(<Stub initialEntries={["/login"]} />);
+      expect(await screen.findByRole("link", { name: "Forgot password?" })).toHaveAttribute("href", "/forgot-password");
+    });
+
+    it("hides it where no mail can be sent", async () => {
+      const Stub = createTestRoutesStub([{ path: "/login", Component: Login, loader: () => ({ oauthProviders: [], passwordReset: false }) }]);
+      render(<Stub initialEntries={["/login"]} />);
+      expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Forgot password?" })).toBeNull();
     });
   });
 

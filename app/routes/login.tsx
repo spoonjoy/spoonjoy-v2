@@ -11,6 +11,7 @@ import { OAuthButtonGroup, OAuthError } from "~/components/oauth";
 import { Separator } from "~/components/ouro/separator/separator";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
+import { passwordResetAvailable } from "~/lib/password-reset.server";
 import { AuthPage } from "~/components/auth/auth-page";
 import { PasskeySignInButton } from "~/components/auth/PasskeySignInButton";
 import { Form } from "~/components/ouro/form/form";
@@ -32,6 +33,8 @@ interface ActionData {
 interface LoaderData {
   oauthError?: string;
   oauthProviders: OAuthProvider[];
+  /** True where reset links can be mailed, so "Forgot password?" leads somewhere. */
+  passwordReset: boolean;
 }
 
 function requiresPostLoginDocumentReload(redirectTo: string): boolean {
@@ -56,12 +59,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const oauthError = url.searchParams.get("oauthError");
   const oauthProviders = getConfiguredOAuthProviders(getOAuthEnv(context));
+  const passwordReset = passwordResetAvailable(context.cloudflare?.env);
 
   if (oauthError) {
-    return { oauthError, oauthProviders } as LoaderData;
+    return { oauthError, oauthProviders, passwordReset } as LoaderData;
   }
 
-  return { oauthProviders } as LoaderData;
+  return { oauthProviders, passwordReset } as LoaderData;
 }
 
 // Action - handle login form submission
@@ -172,6 +176,11 @@ export default function Login() {
             ref={identifierRef}
           />
           <TextField label="Password" type="password" name="password" autoComplete="current-password" required />
+          {loaderData?.passwordReset ? (
+            <Text tone="muted" align="end" className="-mt-4">
+              <Link href="/forgot-password">Forgot password?</Link>
+            </Text>
+          ) : null}
 
           <Button type="submit" className="w-full">
             Log in

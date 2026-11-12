@@ -268,6 +268,7 @@
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-redirect-hash.ts",
         "app/lib/account-identity.server.ts",
+        "app/lib/account-revocation.server.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
         "app/lib/api-auth.server.ts",
@@ -291,6 +292,8 @@
         "app/lib/oauth-user.server.ts",
         "app/lib/openai-client.server.ts",
         "app/lib/openai-error.server.ts",
+        "app/lib/password-policy.ts",
+        "app/lib/password-reset.server.ts",
         "app/lib/pending-apple-link.server.ts",
         "app/lib/qa-error-logs.server.ts",
         "app/lib/rate-limit.server.ts",
@@ -298,6 +301,7 @@
         "app/lib/session-version-fence.server.ts",
         "app/lib/session.server.ts",
         "app/lib/slow-call.server.ts",
+        "app/lib/transactional-email.server.ts",
         "app/lib/username.ts",
         "app/lib/webauthn-client.ts"
       ],
@@ -412,6 +416,150 @@
         ],
         "text-field": [
           "app/routes/signup.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/forgot-password",
+      "file": "app/routes/forgot-password.tsx",
+      "sources": [
+        "app/routes/forgot-password.tsx",
+        "app/components/auth/auth-page.tsx",
+        "app/components/spoonjoy-logo.tsx",
+        "app/hooks/use-form-errors.ts",
+        "app/lib/account-revocation.server.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/auth.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/legacy-password.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/password-policy.ts",
+        "app/lib/password-reset.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/slow-call.server.ts",
+        "app/lib/transactional-email.server.ts"
+      ],
+      "components": [
+        "alert",
+        "auth-layout",
+        "button",
+        "form",
+        "link",
+        "text",
+        "text-field"
+      ],
+      "renders": {
+        "alert": [
+          "app/routes/forgot-password.tsx"
+        ],
+        "auth-layout": [
+          "app/components/auth/auth-page.tsx"
+        ],
+        "button": [
+          "app/routes/forgot-password.tsx"
+        ],
+        "form": [
+          "app/routes/forgot-password.tsx"
+        ],
+        "link": [
+          "app/components/auth/auth-page.tsx",
+          "app/routes/forgot-password.tsx"
+        ],
+        "text": [
+          "app/routes/forgot-password.tsx"
+        ],
+        "text-field": [
+          "app/routes/forgot-password.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/reset-password",
+      "file": "app/routes/reset-password.tsx",
+      "sources": [
+        "app/routes/reset-password.tsx",
+        "app/components/auth/auth-page.tsx",
+        "app/components/spoonjoy-logo.tsx",
+        "app/hooks/use-form-errors.ts",
+        "app/lib/account-revocation.server.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/auth.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/legacy-password.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/password-policy.ts",
+        "app/lib/password-reset.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/slow-call.server.ts",
+        "app/lib/transactional-email.server.ts"
+      ],
+      "components": [
+        "alert",
+        "auth-layout",
+        "button",
+        "form",
+        "link",
+        "text",
+        "text-field"
+      ],
+      "renders": {
+        "alert": [
+          "app/routes/reset-password.tsx"
+        ],
+        "auth-layout": [
+          "app/components/auth/auth-page.tsx"
+        ],
+        "button": [
+          "app/routes/reset-password.tsx"
+        ],
+        "form": [
+          "app/routes/reset-password.tsx"
+        ],
+        "link": [
+          "app/components/auth/auth-page.tsx",
+          "app/routes/reset-password.tsx"
+        ],
+        "text": [
+          "app/routes/reset-password.tsx"
+        ],
+        "text-field": [
+          "app/routes/reset-password.tsx"
         ]
       }
     },
@@ -3073,6 +3221,8 @@
         "app/lib/objectionable-terms.ts",
         "app/lib/openai-client.server.ts",
         "app/lib/openai-error.server.ts",
+        "app/lib/password-policy.ts",
+        "app/lib/password-reset.server.ts",
         "app/lib/pending-apple-link.server.ts",
         "app/lib/photo-lifecycle.server.ts",
         "app/lib/photo-variants.ts",

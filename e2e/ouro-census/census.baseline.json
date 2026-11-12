@@ -2362,6 +2362,74 @@
         }
       ]
     },
+    "forgot-password": {
+      "default": [
+        {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"Log in\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "button \"Send reset link\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Back to log in\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Privacy\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Sign up\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy for iPhone and iPad\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy kitchen\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Terms\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Email\" [text-field/input] in main",
+          "count": 1
+        }
+      ]
+    },
     "home-chef": {
       "default": [
         {
@@ -5330,6 +5398,70 @@
         }
       ]
     },
+    "reset-password": {
+      "default": [
+        {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"Log in\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Back to log in\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Privacy\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Send a new link\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Sign up\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy for iPhone and iPad\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy kitchen\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Terms\" [link/root] in main",
+          "count": 1
+        }
+      ]
+    },
     "saved-recipes": {
       "default": [
         {
@@ -6260,6 +6392,10 @@
         },
         {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Forgot password?\" [link/root] in main",
           "count": 1
         },
         {
@@ -9492,6 +9628,74 @@
         }
       ]
     },
+    "forgot-password": {
+      "default": [
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "button \"Send reset link\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Back to log in\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Privacy\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"SPOONJOY\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Sign up\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy for iPhone and iPad\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Terms\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Email\" [text-field/input] in main",
+          "count": 1
+        }
+      ]
+    },
     "home-chef": {
       "default": [
         {
@@ -11856,6 +12060,70 @@
         }
       ]
     },
+    "reset-password": {
+      "default": [
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Back to log in\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Privacy\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"SPOONJOY\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Send a new link\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Sign up\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy for iPhone and iPad\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Terms\" [link/root] in main",
+          "count": 1
+        }
+      ]
+    },
     "saved-recipes": {
       "default": [
         {
@@ -12594,6 +12862,10 @@
         },
         {
           "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Forgot password?\" [link/root] in main",
           "count": 1
         },
         {

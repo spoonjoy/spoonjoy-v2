@@ -25,6 +25,7 @@ import { isValidEmail, normalizeEmail } from "~/lib/email";
 import { saveAccountIdentity } from "~/lib/account-identity.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { changePasswordKeepingConnections, revokeAllAccountAccess } from "~/lib/account-revocation.server";
+import { endPasswordResetLinksAfterPasswordChange } from "~/lib/password-reset.server";
 import {
   D1_WRITE_UNAVAILABLE_CODE,
   D1_WRITE_UNAVAILABLE_MESSAGE,
@@ -891,6 +892,8 @@ async function handleAccountSettingsIntent({
         password: { hashedPassword, salt },
       })).sessionVersion
       : await changePasswordKeepingConnections(database, userId, { hashedPassword, salt });
+    // A password change ends any reset link still in the inbox.
+    await endPasswordResetLinksAfterPasswordChange(database, userId, getCloudflareEnv(context));
 
     return withSessionForVersion({
       success: true,
@@ -981,6 +984,7 @@ async function handleAccountSettingsIntent({
       where: { id: userId },
       data: { hashedPassword, salt },
     }));
+    await endPasswordResetLinksAfterPasswordChange(database, userId, getCloudflareEnv(context));
 
     return {
       success: true,
@@ -1041,6 +1045,7 @@ async function handleAccountSettingsIntent({
       where: { id: userId },
       data: { hashedPassword: null, salt: null },
     }));
+    await endPasswordResetLinksAfterPasswordChange(database, userId, getCloudflareEnv(context));
 
     return {
       success: true,
