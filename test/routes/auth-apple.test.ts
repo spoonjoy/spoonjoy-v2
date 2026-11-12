@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, onTestFinished } from "vitest";
 import { sessionStorage } from "~/lib/session.server";
 import { commitOAuthStartSession, readOAuthStartSession } from "~/lib/oauth-route.server";
+import { expectConsoleWarning } from "../warning-policy";
 
 const mocks = vi.hoisted(() => ({
   createAppleAuthorizationURL: vi.fn(() => new URL("https://appleid.apple.com/auth/authorize?state=mock-state")),
@@ -704,6 +705,7 @@ describe("Apple OAuth routes", () => {
     mocks.handleAppleOAuthCallback.mockResolvedValueOnce({ success: false, error: "apple_email_unavailable", redirectTo: "/recipes" });
     const failing = vi.fn().mockRejectedValue(new Error("Database down"));
     mocks.getRequestDb.mockResolvedValueOnce({ pendingAppleLink: { deleteMany: failing, create: failing, findUnique: failing } } as any);
+    expectConsoleWarning(JSON.stringify({ event: "apple.pending_link", outcome: "prune_failed", error: "Error" }));
     const cookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/apple"), "apple", {
       state: "state",
       redirectTo: "/recipes",
