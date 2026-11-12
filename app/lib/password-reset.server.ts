@@ -5,6 +5,10 @@ import { revokeAllAccountAccess } from "~/lib/account-revocation.server";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { canSendAccountEmail, sendTransactionalEmail, type TransactionalEmailEnv } from "~/lib/transactional-email.server";
+import { captureEvent, resolvePostHogServerConfig, type PostHogServerEnv } from "~/lib/analytics-server";
+import { PASSWORD_MIN_LENGTH } from "~/lib/password-policy";
+
+export { PASSWORD_MIN_LENGTH };
 
 // Forgot-password links. A link is a random token sent to the account's address; only the SHA-256
 // of the token is stored, in AccountEmailToken with purpose "reset_password" (migration 0029). A
@@ -18,7 +22,6 @@ export const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
 /** Reset mails one account can be sent per PASSWORD_RESET_WINDOW_MS, so the form can't mail-bomb anyone. */
 export const PASSWORD_RESET_MAX_PER_WINDOW = 3;
 export const PASSWORD_RESET_WINDOW_MS = 60 * 60 * 1000;
-export const PASSWORD_MIN_LENGTH = 8;
 
 type Database = PrismaClientType;
 
@@ -113,6 +116,40 @@ export async function requestPasswordReset(
     return "send_failed";
   }
   return "sent";
+}
+
+/**
+ * Ends the account's unused reset links after a password set, change or removal that has already
+ * been written. Best effort: the password change stands even if this write fails, so a failure is
+ * recorded rather than turned into an error for a change that happened.
+ */
+export async function endPasswordResetLinksAfterPasswordChange(
+  db: Database,
+  userId: string,
+  env: PostHogServerEnv | null | undefined,
+): Promise<void> {
+  try {
+    await invalidatePasswordResetTokens(db, userId);
+  } catch (error) {
+    await recordPasswordResetEvent(env, "spoonjoy.password_reset.invalidate_failed", {
+      error_name: errorName(error),
+    });
+  }
+}
+
+/** An error's class name for telemetry, never its message (which can hold an address). */
+export function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error;
+}
+
+/** A password-reset event in PostHog, with no address and no token. */
+export async function recordPasswordResetEvent(
+  env: PostHogServerEnv | null | undefined,
+  event: string,
+  properties: Record<string, string>,
+): Promise<void> {
+  if (!env) return;
+  await captureEvent(resolvePostHogServerConfig(env), { event, distinctId: "system", properties });
 }
 
 /** Ends every reset link the account has not used yet. Called on any password change. */

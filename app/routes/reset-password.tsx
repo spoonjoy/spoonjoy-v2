@@ -3,8 +3,8 @@ import { Form as RouterForm, data, useActionData, useLoaderData } from "react-ro
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
+import { PASSWORD_MIN_LENGTH } from "~/lib/password-policy";
 import {
-  PASSWORD_MIN_LENGTH,
   findUsablePasswordResetToken,
   resetPasswordWithToken,
   type PasswordResetFieldErrors,

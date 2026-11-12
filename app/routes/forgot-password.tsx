@@ -2,7 +2,7 @@ import type { Route } from "./+types/forgot-password";
 import { Form as RouterForm, data, useActionData, useLoaderData } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
-import { passwordResetAvailable, requestPasswordReset } from "~/lib/password-reset.server";
+import { errorName, passwordResetAvailable, recordPasswordResetEvent, requestPasswordReset } from "~/lib/password-reset.server";
 import { AuthPage } from "~/components/auth/auth-page";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Form } from "~/components/ouro/form/form";
@@ -56,7 +56,12 @@ export async function action({ request, context }: Route.ActionArgs) {
   // on Workers the lookup and the mail run after the response is sent.
   const work = getRequestDb(context)
     .then((db) => requestPasswordReset(db, env, email))
-    .catch(() => undefined);
+    // Recorded without the address, so a broken mailer shows up without leaking who asked.
+    .then((outcome) => recordPasswordResetEvent(env, "spoonjoy.password_reset.requested", { outcome }))
+    .catch((error: unknown) => recordPasswordResetEvent(env, "spoonjoy.password_reset.requested", {
+      outcome: "error",
+      error_name: errorName(error),
+    }));
   const waitUntil = context.cloudflare?.ctx?.waitUntil?.bind(context.cloudflare.ctx);
   if (waitUntil) waitUntil(work);
   else await work;

@@ -14,7 +14,10 @@ import {
   findUsablePasswordResetToken,
   generatePasswordResetToken,
   hashPasswordResetToken,
+  endPasswordResetLinksAfterPasswordChange,
+  errorName,
   invalidatePasswordResetTokens,
+  recordPasswordResetEvent,
   passwordResetAvailable,
   requestPasswordReset,
   resetPasswordWithToken,
@@ -193,6 +196,38 @@ describe("password reset", () => {
     const token = await issue();
     await invalidatePasswordResetTokens(db, user.id);
     expect(await findUsablePasswordResetToken(db, token)).toBeNull();
+  });
+
+  it("keeps a password change standing when ending its reset links fails, and records the failure", async () => {
+    const token = await issue();
+    await endPasswordResetLinksAfterPasswordChange(db, user.id, QA_ENV);
+    expect(await findUsablePasswordResetToken(db, token)).toBeNull();
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+    const broken = new Proxy(db, {
+      get: (target, prop) => prop === "accountEmailToken"
+        ? new Proxy(target.accountEmailToken, {
+          get: (tokens, method) => method === "updateMany" ? async () => { throw new TypeError("constraint"); } : Reflect.get(tokens, method),
+        })
+        : Reflect.get(target, prop),
+    }) as PrismaClient;
+    await expect(endPasswordResetLinksAfterPasswordChange(broken, user.id, { POSTHOG_KEY: "phc_test" })).resolves.toBeUndefined();
+    const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
+    expect(body).toMatchObject({ event: "spoonjoy.password_reset.invalidate_failed", properties: { error_name: "TypeError" } });
+    await expect(endPasswordResetLinksAfterPasswordChange(broken, user.id, null)).resolves.toBeUndefined();
+    fetchSpy.mockRestore();
+  });
+
+  it("names an error by its class only", () => {
+    expect(errorName(new TypeError("chef@example.com"))).toBe("TypeError");
+    expect(errorName("chef@example.com")).toBe("string");
+  });
+
+  it("records nothing without an environment", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await recordPasswordResetEvent(undefined, "spoonjoy.password_reset.requested", { outcome: "sent" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 
   describe("when D1's connection drops", () => {
