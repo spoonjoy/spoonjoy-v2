@@ -106,9 +106,11 @@ interface SearchDirtyRow {
 /**
  * Marks an index kept current by the per-entity triggers. The column is still called
  * `sourceFingerprint` because earlier releases stored a whole-database fingerprint there;
- * any other value (or no row) means the triggers and index must be (re)built.
+ * any other value (or no row) means the triggers and index must be (re)built. v2: a re-index
+ * also drops the keys of entities that are gone, and the one rebuild on upgrade clears the
+ * keys v1 left behind (issue #684).
  */
-const SEARCH_MAINTENANCE_VERSION = "per-entity-triggers-v1";
+const SEARCH_MAINTENANCE_VERSION = "per-entity-triggers-v2";
 
 /** Past this many queued entities, one full rebuild is cheaper than re-indexing each. */
 const MAX_DIRTY_ENTITIES_PER_SEARCH = 200;
@@ -184,6 +186,8 @@ const DELETE_SEARCH_DOCUMENT_KEYS_SQL = `DELETE FROM "SearchDocumentKey"`;
 
 const DELETE_SEARCH_DOCUMENTS_BY_KEY_SQL = `DELETE FROM "SearchDocument"
   WHERE rowid IN (SELECT "docRowid" FROM "SearchDocumentKey" WHERE "docKey" IN (SELECT value FROM json_each(?)))`;
+
+const DELETE_SEARCH_DOCUMENT_KEYS_BY_KEY_SQL = `DELETE FROM "SearchDocumentKey" WHERE "docKey" IN (SELECT value FROM json_each(?))`;
 
 const SEARCH_DIRTY_SQL = `SELECT "seq", "entityType", "entityId" FROM "SearchDirtyEntity" ORDER BY "seq" ASC LIMIT ${MAX_DIRTY_ENTITIES_PER_SEARCH + 1}`;
 
@@ -868,7 +872,8 @@ function isDirtyEntityType(value: string): value is keyof DirtyEntityIds {
 }
 
 // Re-indexes only the queued entities: their documents are deleted and rebuilt (or just
-// deleted, when the entity is gone or no longer searchable) in one batch.
+// deleted, when the entity is gone or no longer searchable) in one batch. An entity left
+// without a document also loses its key row, so a deleted account leaves no `chef:<id>`.
 async function reindexDirtySearchEntities(run: SearchRunner, dirtyRows: SearchDirtyRow[]): Promise<void> {
   const ids: DirtyEntityIds = { recipe: [], cookbook: [], chef: [], "shopping-list-item": [] };
   const keys = new Set<string>();
@@ -884,9 +889,12 @@ async function reindexDirtySearchEntities(run: SearchRunner, dirtyRows: SearchDi
     : buildSearchDocuments(mapSearchSources(await run(targetedSearchSourceQueries(ids))))
       .filter((document) => keys.has(`${document.type}:${document.id}`));
   const lastSeq = Math.max(...dirtyRows.map((row) => row.seq));
+  const kept = new Set(documents.map((document) => `${document.type}:${document.id}`));
+  const gone = [...keys].filter((key) => !kept.has(key));
 
   await run([
     [DELETE_SEARCH_DOCUMENTS_BY_KEY_SQL, JSON.stringify([...keys])],
+    [DELETE_SEARCH_DOCUMENT_KEYS_BY_KEY_SQL, JSON.stringify(gone)],
     ...searchInsertStatements(documents),
     [CLEAR_SEARCH_DIRTY_KEYS_SQL, lastSeq, claimed],
   ], "search.reindex");
