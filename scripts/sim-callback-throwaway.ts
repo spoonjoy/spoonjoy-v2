@@ -111,24 +111,21 @@ export const COLUMNS_SQL = `SELECT m."name" AS "table", p."name" AS "column"
 
 const quoteName = (name: string) => `"${name.replaceAll('"', '""')}"`;
 
-/** Count queries over every column of every scanned table, a few tables per query. */
-export function scanQueries(columns: { table: string; column: string }[], needles: string[], tablesPerQuery = 8): string[] {
+/**
+ * One count query per scanned table. Each row's columns are joined into one string, so a table costs three instr
+ * calls however wide it is. Run 43214337309 showed D1 rejecting a query that ORed every column of 8 tables.
+ */
+export function scanQueries(columns: { table: string; column: string }[], needles: string[]): string[] {
   const byTable = new Map<string, string[]>();
   for (const { table, column } of columns) {
     if (SKIPPED_TABLE_PATTERN.test(table)) continue;
     byTable.set(table, [...(byTable.get(table) ?? []), column]);
   }
-  const selects = [...byTable].map(([table, tableColumns]) => {
-    const condition = tableColumns
-      .flatMap((column) => needles.map((needle) => `instr(CAST(${quoteName(column)} AS TEXT), ${literal(needle)}) > 0`))
-      .join(" OR ");
+  return [...byTable].map(([table, tableColumns]) => {
+    const row = tableColumns.map((column) => `coalesce(CAST(${quoteName(column)} AS TEXT), '')`).join(" || char(31) || ");
+    const condition = needles.map((needle) => `instr(${row}, ${literal(needle)}) > 0`).join(" OR ");
     return `SELECT ${literal(table)} AS "t", count(*) AS "n" FROM ${quoteName(table)} WHERE ${condition}`;
   });
-  const queries: string[] = [];
-  for (let index = 0; index < selects.length; index += tablesPerQuery) {
-    queries.push(selects.slice(index, index + tablesPerQuery).join(" UNION ALL "));
-  }
-  return queries;
 }
 
 export function parseWranglerJson(stdout: string): Record<string, unknown>[] {
@@ -142,11 +139,19 @@ export function parseWranglerJson(stdout: string): Record<string, unknown>[] {
 type Run = (sql: string) => Promise<Record<string, unknown>[]>;
 
 async function d1(args: string[]) {
-  const { stdout } = await execFileAsync(
-    "pnpm",
-    ["exec", "wrangler", "d1", "execute", DATABASE, "--remote", "--json", ...args],
-    { maxBuffer: 1024 * 1024 * 16 },
-  );
+  let stdout: string;
+  try {
+    ({ stdout } = await execFileAsync(
+      "pnpm",
+      ["exec", "wrangler", "d1", "execute", DATABASE, "--remote", "--json", ...args],
+      { maxBuffer: 1024 * 1024 * 16 },
+    ));
+  } catch (error) {
+    // execFile's message is mostly the command line; D1's reason is in wrangler's own output.
+    const failed = error as Error & { stdout?: string; stderr?: string };
+    const output = [failed.stdout?.trim().slice(-600), failed.stderr?.trim().slice(-600)].filter(Boolean).join("\n");
+    throw new Error(`wrangler d1 execute failed: ${output || failed.message.slice(0, 600)}`);
+  }
   return parseWranglerJson(stdout);
 }
 

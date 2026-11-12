@@ -57,20 +57,24 @@ describe("sim callback throwaway accounts", () => {
     expect(tokenCountSql(account)).toContain(`"OAuthRefreshToken" WHERE "userId" = '${account.id}'`);
   });
 
-  it("scans every column of every table except FTS shadow tables, in a few queries", () => {
+  it("scans every column of every table except FTS shadow tables, one query per table", () => {
     const queries = scanQueries(
       [
         { table: "User", column: "email" },
+        { table: "User", column: "createdAt" },
         { table: "Counter", column: "n" },
         { table: "SearchDocument", column: "title" },
         { table: "SearchDocument_content", column: "c0" },
         { table: "sqlite_sequence", column: "name" },
       ],
-      ["a"],
-      2,
+      ["a", "b"],
     );
-    expect(queries).toHaveLength(2);
-    expect(queries.join(" ")).toContain(`instr(CAST("n" AS TEXT), 'a') > 0`);
+    expect(queries).toHaveLength(3);
+    expect(queries[0]).toBe(
+      `SELECT 'User' AS "t", count(*) AS "n" FROM "User" WHERE ` +
+        `instr(coalesce(CAST("email" AS TEXT), '') || char(31) || coalesce(CAST("createdAt" AS TEXT), ''), 'a') > 0 OR ` +
+        `instr(coalesce(CAST("email" AS TEXT), '') || char(31) || coalesce(CAST("createdAt" AS TEXT), ''), 'b') > 0`,
+    );
     expect(queries.join(" ")).not.toContain("SearchDocument_content");
     expect(queries.join(" ")).not.toContain("sqlite_sequence");
   });
