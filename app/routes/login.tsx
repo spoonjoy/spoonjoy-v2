@@ -114,6 +114,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   // Create session and redirect, at the session version read with the password hash.
   const response = await createUserSession(user.id, redirectTo, context.cloudflare?.env, request, {
     sessionVersion: user.sessionVersion,
+    signInMethod: "password",
   });
   // An Apple sign-in in this browser that found no account left a pending link: connect it now.
   const clearedPendingAppleLink = await claimPendingAppleLinkFromCookie(() => getRequestDb(context), request, context.cloudflare?.env, user.id);

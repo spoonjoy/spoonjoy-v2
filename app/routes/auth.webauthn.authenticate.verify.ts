@@ -53,6 +53,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
     const cookie = await createUserSessionCookie(result.userId, env, request, {
       sessionVersion: result.sessionVersion,
+      signInMethod: "passkey",
     });
     const headers = new Headers({ "Content-Type": "application/json" });
     headers.append("Set-Cookie", cookie);

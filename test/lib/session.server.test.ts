@@ -7,6 +7,8 @@ import {
   createUserSessionCookie,
   destroyUserSession,
   getSessionAuthenticatedAt,
+  getSessionSignIn,
+  getSessionSignInMethod,
   getSessionIdentity,
   getUserId,
   isCurrentSession,
@@ -101,6 +103,29 @@ describe("revocable sessions", () => {
     const unrecorded = (await createUserSessionCookie(userId, null, null, { authenticatedAt: null })).split(";")[0];
     await expect(getSessionAuthenticatedAt(requestWithCookie(unrecorded))).resolves.toBeNull();
     await expect(getUserId(requestWithCookie(unrecorded))).resolves.toBe(userId);
+  });
+
+  it("records the sign-in method in a new session cookie, and keeps a re-issued cookie's", async () => {
+    const userId = await createSessionUser(0);
+    for (const method of ["password", "passkey", "google", "github", "apple"] as const) {
+      const cookie = (await createUserSessionCookie(userId, null, null, { signInMethod: method })).split(";")[0];
+      await expect(getSessionSignInMethod(requestWithCookie(cookie))).resolves.toBe(method);
+    }
+
+    const signedIn = (await createUserSessionCookie(userId, null, null, { authenticatedAt: 1_700_000_000_000, signInMethod: "passkey" })).split(";")[0];
+    const reissued = (await createUserSessionCookie(userId, null, null, await getSessionSignIn(requestWithCookie(signedIn)))).split(";")[0];
+    await expect(getSessionSignIn(requestWithCookie(reissued))).resolves.toEqual({ authenticatedAt: 1_700_000_000_000, signInMethod: "passkey" });
+
+    const unrecorded = (await createUserSessionCookie(userId, null, null, { signInMethod: null })).split(";")[0];
+    await expect(getSessionSignInMethod(requestWithCookie(unrecorded))).resolves.toBeNull();
+  });
+
+  it("reads no sign-in method from an older cookie or an unknown value", async () => {
+    const userId = await createSessionUser(0);
+    await expect(getSessionSignInMethod(requestWithCookie(await cookieFor({ userId })))).resolves.toBeNull();
+    for (const signInMethod of ["magic_link", "", 1, null]) {
+      await expect(getSessionSignInMethod(requestWithCookie(await cookieFor({ userId, signInMethod })))).resolves.toBeNull();
+    }
   });
 
   it("reads no sign-in time from an older cookie or a malformed value", async () => {

@@ -21,6 +21,12 @@ const SESSION_VERSION_KEY = "sessionVersion";
 // When the person last proved who they are by signing in (ms since the epoch). Re-issuing a cookie
 // for the same sign-in (a session version bump, linking another sign-in method) keeps it.
 const AUTHENTICATED_AT_KEY = "authenticatedAt";
+// How the person signed in at authenticatedAt. Re-issuing the cookie keeps it, like the time.
+const SIGN_IN_METHOD_KEY = "signInMethod";
+
+/** The method a sign-in used, as its session cookie records it. */
+export type SignInMethod = "password" | "passkey" | "google" | "github" | "apple";
+const SIGN_IN_METHODS: readonly SignInMethod[] = ["password", "passkey", "google", "github", "apple"];
 
 /** Who a signed session cookie says the visitor is, before any database check. */
 export interface SessionIdentity {
@@ -338,6 +344,9 @@ export interface CreateUserSessionOptions {
   // null: the existing cookie's value (see getSessionAuthenticatedAt), for a cookie re-issued
   // without a new sign-in; null records none.
   authenticatedAt?: number | null;
+  // How the person signed in. Set by each sign-in path; a re-issued cookie passes the existing
+  // cookie's value (see getSessionSignIn). Omitted or null records none.
+  signInMethod?: SignInMethod | null;
 }
 
 /**
@@ -347,6 +356,26 @@ export interface CreateUserSessionOptions {
 export async function getSessionAuthenticatedAt(request: Request, env?: SessionEnv | null): Promise<number | null> {
   const value = (await getSession(request, env)).get(AUTHENTICATED_AT_KEY);
   return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+/** How the request's session cookie says the person signed in, or null when it records none. */
+export async function getSessionSignInMethod(request: Request, env?: SessionEnv | null): Promise<SignInMethod | null> {
+  const value = (await getSession(request, env)).get(SIGN_IN_METHOD_KEY);
+  return SIGN_IN_METHODS.includes(value) ? value : null;
+}
+
+/**
+ * The existing cookie's sign-in (its time and method), for a cookie re-issued without a new
+ * sign-in, such as a session version bump or linking another sign-in method.
+ */
+export async function getSessionSignIn(
+  request: Request,
+  env?: SessionEnv | null,
+): Promise<{ authenticatedAt: number | null; signInMethod: SignInMethod | null }> {
+  return {
+    authenticatedAt: await getSessionAuthenticatedAt(request, env),
+    signInMethod: await getSessionSignInMethod(request, env),
+  };
 }
 
 // Helper to mint a `__session` Set-Cookie string for a user, without
@@ -366,6 +395,7 @@ export async function createUserSessionCookie(
   session.set(SESSION_VERSION_KEY, sessionVersion);
   const authenticatedAt = options.authenticatedAt === undefined ? Date.now() : options.authenticatedAt;
   if (authenticatedAt !== null) session.set(AUTHENTICATED_AT_KEY, authenticatedAt);
+  if (options.signInMethod) session.set(SIGN_IN_METHOD_KEY, options.signInMethod);
   return storage.commitSession(session);
 }
 

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi, beforeEach, onTestFinished } from "vitest";
-import { getSessionAuthenticatedAt, sessionStorage } from "~/lib/session.server";
+import { getSessionAuthenticatedAt, getSessionSignIn, getSessionSignInMethod, sessionStorage } from "~/lib/session.server";
 import { commitOAuthStartSession, readOAuthStartSession } from "~/lib/oauth-route.server";
 
 const mocks = vi.hoisted(() => ({
@@ -422,6 +422,7 @@ describe("GitHub OAuth routes", () => {
     const loginSession = await sessionStorage.getSession();
     loginSession.set("userId", "user-1");
     loginSession.set("authenticatedAt", 1_700_000_000_000);
+    loginSession.set("signInMethod", "passkey");
     const loginCookie = await sessionStorage.commitSession(loginSession);
     const oauthCookie = await commitOAuthStartSession(
       new Request("https://spoonjoy.app/auth/github", { headers: { Cookie: cookieHeader(loginCookie) } }),
@@ -444,7 +445,7 @@ describe("GitHub OAuth routes", () => {
 
     const sessionCookie = response.headers.getSetCookie().find((value: string) => value.startsWith("__session="))!;
     const reissued = new Request("https://spoonjoy.app/account/settings", { headers: { Cookie: cookieHeader(sessionCookie) } });
-    await expect(getSessionAuthenticatedAt(reissued)).resolves.toBe(1_700_000_000_000);
+    await expect(getSessionSignIn(reissued)).resolves.toEqual({ authenticatedAt: 1_700_000_000_000, signInMethod: "passkey" });
   });
 
   it("records a new sign-in time when a signed-out visitor's GitHub account is linked by verified email", async () => {
@@ -467,6 +468,7 @@ describe("GitHub OAuth routes", () => {
     const sessionCookie = response.headers.getSetCookie().find((value: string) => value.startsWith("__session="))!;
     const signedInAt = await getSessionAuthenticatedAt(new Request("https://spoonjoy.app/", { headers: { Cookie: cookieHeader(sessionCookie) } }));
     expect(signedInAt).toBeGreaterThanOrEqual(before);
+    await expect(getSessionSignInMethod(new Request("https://spoonjoy.app/", { headers: { Cookie: cookieHeader(sessionCookie) } }))).resolves.toBe("github");
   });
 
   it("records a new sign-in time when signing in with GitHub", async () => {
@@ -489,6 +491,7 @@ describe("GitHub OAuth routes", () => {
     const sessionCookie = response.headers.getSetCookie().find((value: string) => value.startsWith("__session="))!;
     const signedInAt = await getSessionAuthenticatedAt(new Request("https://spoonjoy.app/", { headers: { Cookie: cookieHeader(sessionCookie) } }));
     expect(signedInAt).toBeGreaterThanOrEqual(before);
+    await expect(getSessionSignInMethod(new Request("https://spoonjoy.app/", { headers: { Cookie: cookieHeader(sessionCookie) } }))).resolves.toBe("github");
   });
 
   it("rejects linking callbacks without a current user", async () => {

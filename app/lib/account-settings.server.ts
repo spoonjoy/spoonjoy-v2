@@ -3,7 +3,7 @@ import { data, redirect } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { readAccountSettingsFromD1, readAccountSettingsWithPrisma } from "~/lib/account-settings-reads.server";
-import { createUserSessionCookie, destroyUserSession, getSessionAuthenticatedAt, requireUserId } from "~/lib/session.server";
+import { createUserSessionCookie, destroyUserSession, getSessionAuthenticatedAt, getSessionSignIn, requireUserId } from "~/lib/session.server";
 import { isRecentSignIn, verifyAccountOwnerProof } from "~/lib/account-reauthentication.server";
 import { AccountDeletionError, deleteAccount } from "~/lib/account-deletion.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
@@ -387,10 +387,10 @@ async function handleAccountSettingsIntent({
   const withSessionForVersion = async (result: AccountSettingsActionResult, sessionVersion: number) =>
     data(result, {
       headers: {
-        // The same sign-in, so the cookie keeps its sign-in time.
+        // The same sign-in, so the cookie keeps its sign-in time and method.
         "Set-Cookie": await createUserSessionCookie(userId, getCloudflareEnv(context), request, {
           sessionVersion,
-          authenticatedAt: await getSessionAuthenticatedAt(request, getCloudflareEnv(context)),
+          ...(await getSessionSignIn(request, getCloudflareEnv(context))),
         }),
       },
     });

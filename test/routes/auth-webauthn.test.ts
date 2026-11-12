@@ -27,7 +27,7 @@ import { action as authenticateOptions } from "~/routes/auth.webauthn.authentica
 import { action as authenticateVerify } from "~/routes/auth.webauthn.authenticate.verify";
 import { getLocalDb } from "~/lib/db.server";
 import { WebAuthnError } from "~/lib/webauthn-route.server";
-import { getSessionIdentity, getUserId, sessionStorage } from "~/lib/session.server";
+import { getSessionIdentity, getSessionSignInMethod, getUserId, sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
 
@@ -341,6 +341,8 @@ describe("WebAuthn routes", () => {
       )));
       expect(res.status).toBe(200);
       expect(res.headers.get("Set-Cookie") ?? "").toContain("__session=");
+      await expect(getSessionSignInMethod(new Request("https://spoonjoy.app/", { headers: { Cookie: (res.headers.get("Set-Cookie") ?? "").split(";")[0] } })))
+        .resolves.toBe("passkey");
       await expect(res.json()).resolves.toMatchObject({ verified: true, redirectTo: "/recipes" });
     });
 

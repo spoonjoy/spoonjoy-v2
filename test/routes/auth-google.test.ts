@@ -1,7 +1,12 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, onTestFinished } from "vitest";
-import { sessionStorage } from "~/lib/session.server";
+import { getSessionSignInMethod, sessionStorage } from "~/lib/session.server";
 import { commitOAuthStartSession, readOAuthStartSession } from "~/lib/oauth-route.server";
+
+async function sessionSignInMethod(response: Response) {
+  const sessionCookie = response.headers.getSetCookie().find((value: string) => value.startsWith("__session="))!;
+  return getSessionSignInMethod(new Request("https://spoonjoy.app/", { headers: { Cookie: sessionCookie.split(";")[0] } }));
+}
 
 const mocks = vi.hoisted(() => ({
   createGoogleAuthorizationURL: vi.fn(() => new URL("https://accounts.google.com/o/oauth2/v2/auth?state=mock-state")),
@@ -413,6 +418,7 @@ describe("Google OAuth routes", () => {
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("/cookbooks");
     expect(response.headers.get("Set-Cookie")).toBeTruthy();
+    await expect(sessionSignInMethod(response)).resolves.toBe("google");
     expect(mocks.handleGoogleOAuthCallback).toHaveBeenCalledWith({
       db: { source: "db" },
       d1: null,
