@@ -149,7 +149,7 @@
     "cloudflare"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "FSL-1.1-MIT",
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "@block65/webcrypto-web-push": "^1.0.2",

@@ -296,6 +296,8 @@ The canonical proposed backlog lives in [`BACKLOG.md`](./BACKLOG.md). Agent task
 
 ## License
 
-ISC
+Spoonjoy is source-available under the [Functional Source License, Version 1.1, MIT Future License](LICENSE.md) (FSL-1.1-MIT), copyright Ari Mendelow.[^license] You may read, run, modify and learn from the code, including copying its Ouro UI patterns into your own app, for any purpose except offering a competing commercial product or service.[^license-terms] Each release becomes available under the MIT license two years after it is published.[^license-terms]
 
 [^stack]: package.json verify:fileLine(package.json, /"react-router": "7\./)
+[^license]: LICENSE.md; package.json verify:fileLine(LICENSE.md, /^FSL-1\.1-MIT$/) verify:fileLine(LICENSE.md, /^Copyright 2026 Ari Mendelow$/) verify:equals(package.json#license)=FSL-1.1-MIT
+[^license-terms]: LICENSE.md verify:fileLine(LICENSE.md, /^A Permitted Purpose is any purpose other than a Competing Use\./) verify:fileLine(LICENSE.md, /^the MIT license that is effective on the second anniversary of the date we make$/)
