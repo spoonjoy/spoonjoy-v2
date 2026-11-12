@@ -223,6 +223,28 @@ describe("sim callback throwaway accounts", () => {
       expect(prod.state).toMatchObject({ user: 0, pending: 0, oauth: 0 });
     });
 
+    it("keeps cleaning up after a cleanup step fails, and reports every failure", async () => {
+      const prod = fakeProduction(["linked", "consumed"]);
+      const run = async (sql: string) => {
+        if (sql.startsWith(`DELETE FROM "PendingAppleLink"`)) throw new Error("D1 hiccup");
+        return prod.run(sql);
+      };
+      await expect(pendingAppleLinkProof(account, { ...prod, run, ...quiet })).rejects.toThrow(/pending link cleanup: D1 hiccup.*leftover check/);
+      expect(prod.state.user).toBe(0);
+    });
+
+    it("never deletes an account it did not seed", async () => {
+      const prod = fakeProduction(["linked", "consumed"]);
+      prod.state.user = 1;
+      const run = async (sql: string) => {
+        if (sql.startsWith(`INSERT INTO "User"`)) throw new Error("UNIQUE constraint failed: User.id");
+        return prod.run(sql);
+      };
+      await expect(pendingAppleLinkProof(account, { ...prod, run, ...quiet })).rejects.toThrow(/UNIQUE/);
+      expect(prod.state.user).toBe(1);
+      expect(prod.bodies).toHaveLength(0);
+    });
+
     it("runs from main with the throwaway's identity", async () => {
       const prod = fakeProduction(["linked", "consumed"]);
       await main(["pending-apple-link-proof"], env, prod.run, prod.runBatch, { fetch: prod.fetch, ...quiet });

@@ -284,8 +284,10 @@ export async function pendingAppleLinkProof(account: Partial<ThrowawayAccount>, 
   const userRows = async () =>
     Number((await deps.run(renderStatement([`SELECT count(*) AS "n" FROM "User" WHERE "id" = ?`, throwaway.id])))[0]?.n);
 
+  let seeded = false;
   try {
     await deps.run(seedSql(throwaway, await hashPassword(password), now()));
+    seeded = true;
     if ((await userRows()) !== 1) throw new Error("The seeded user row is not there.");
     step("seeded account", { id: throwaway.id });
     await deps.run(pendingLinkSeedSql(link, now()));
@@ -313,19 +315,44 @@ export async function pendingAppleLinkProof(account: Partial<ThrowawayAccount>, 
   } catch (error) {
     failures.push(error instanceof Error ? error.message : String(error));
   } finally {
-    await deps.run(pendingLinkCleanupSql(link));
-    step("tokens before cleanup", (await deps.run(tokenCountSql(throwaway)))[0] ?? null);
-    if ((await userRows()) === 1) await deps.runBatch(cleanupSql(throwaway, now()));
-    if ((await userRows()) !== 0) failures.push("The user row is still there after cleanup.");
-    const leftover = Number((await deps.run(pendingLinkLeftoverSql(link)))[0]?.n);
-    const columns = (await deps.run(COLUMNS_SQL)) as { table: string; column: string }[];
-    const hits: { table: string; rows: number }[] = [];
-    for (const sql of scanQueries(columns, [link.appleSub, link.tokenHash])) {
-      for (const row of await deps.run(sql)) if (Number(row.n) > 0) hits.push({ table: String(row.t), rows: Number(row.n) });
+    // Each cleanup step runs on its own, so one failure never skips the rest. The account is deleted only when
+    // this run seeded it: an account that was already there belongs to another proof.
+    const attempt = async (name: string, work: () => Promise<void>) => {
+      try {
+        await work();
+      } catch (error) {
+        failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    };
+    const cleanup: Record<string, unknown> = {};
+    result.cleanup = cleanup;
+    await attempt("pending link cleanup", async () => {
+      await deps.run(pendingLinkCleanupSql(link));
+    });
+    if (seeded) {
+      await attempt("token count", async () => {
+        cleanup.tokensBefore = (await deps.run(tokenCountSql(throwaway)))[0] ?? null;
+      });
+      await attempt("account cleanup", async () => {
+        if ((await userRows()) === 1) await deps.runBatch(cleanupSql(throwaway, now()));
+        cleanup.userRowsAfter = await userRows();
+        if (cleanup.userRowsAfter !== 0) throw new Error("The user row is still there after cleanup.");
+      });
     }
-    result.cleanup = { pendingLinkAndOAuthLeft: leftover, subAndHashScan: { tables: new Set(columns.map((c) => c.table)).size, hits } };
-    step("cleanup", result.cleanup);
-    if (leftover !== 0 || hits.length > 0) failures.push("Rows still mention the synthetic sub or the token's hash.");
+    await attempt("leftover check", async () => {
+      cleanup.pendingLinkAndOAuthLeft = Number((await deps.run(pendingLinkLeftoverSql(link)))[0]?.n);
+      if (cleanup.pendingLinkAndOAuthLeft !== 0) throw new Error("Rows still hold the synthetic sub or the token's hash.");
+    });
+    await attempt("sub and hash scan", async () => {
+      const columns = (await deps.run(COLUMNS_SQL)) as { table: string; column: string }[];
+      const hits: { table: string; rows: number }[] = [];
+      for (const sql of scanQueries(columns, [link.appleSub, link.tokenHash])) {
+        for (const row of await deps.run(sql)) if (Number(row.n) > 0) hits.push({ table: String(row.t), rows: Number(row.n) });
+      }
+      cleanup.subAndHashScan = { tables: new Set(columns.map((c) => c.table)).size, hits };
+      if (hits.length > 0) throw new Error("Rows still mention the synthetic sub or the token's hash.");
+    });
+    step("cleanup", cleanup);
   }
   log(`RESULT ${JSON.stringify(result)}`);
   if (failures.length > 0) throw new Error(failures.join(" "));
