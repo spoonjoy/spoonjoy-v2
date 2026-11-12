@@ -133,6 +133,7 @@ import {
   NativeAppleAuthError,
   verifyNativeAppleIdentityToken,
 } from "~/lib/apple-native-auth.server";
+import { claimPendingAppleLink } from "~/lib/pending-apple-link.server";
 import { AccountDeletionError, deleteAccount } from "~/lib/account-deletion.server";
 import { accountExportFileName, buildAccountExport } from "~/lib/account-export.server";
 import { verifyAccountOwnerProof } from "~/lib/account-reauthentication.server";
@@ -7344,7 +7345,16 @@ async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: s
   } catch (error) {
     if (error instanceof NativeAppleAuthError) {
       const code = error.status === 401 ? "invalid_token" : "validation_error";
-      throw new ApiV1Error(code, error.message, { providerCode: error.code });
+      throw new ApiV1Error(code, error.message, {
+        providerCode: error.code,
+        // The app sends this back with its next sign-in by another method, which links Apple then.
+        ...(error.pendingLink
+          ? {
+              pendingAppleLinkToken: error.pendingLink.token,
+              pendingAppleLinkExpiresAt: error.pendingLink.expiresAt.toISOString(),
+            }
+          : {}),
+      });
     }
     if (revokedDuringSignIn(error)) {
       throw new ApiV1Error("validation_error", "Your account was signed out everywhere while you were signing in. Try again.", {
@@ -7375,9 +7385,10 @@ async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId
   }
 
   const body = await parseApiV1JsonBody(args.request);
-  assertKnownFields(body, ["emailOrUsername", "password"]);
+  assertKnownFields(body, ["emailOrUsername", "password", "pendingAppleLinkToken"]);
   const emailOrUsername = nonblankString(body.emailOrUsername, "emailOrUsername", 320);
   const password = nonblankString(body.password, "password", 1024);
+  const pendingAppleLinkToken = optionalNativeAppleText(body, "pendingAppleLinkToken", 128);
   const db = await getRequestDb(args.context);
 
   try {
@@ -7386,10 +7397,15 @@ async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId
       { emailOrUsername, password },
       { issuer: resolveIssuerOrigin(args.request.url, args.context.cloudflare?.env?.SPOONJOY_BASE_URL) },
     );
+    // An Apple sign-in on this device that found no account left a pending link: connect it now.
+    const appleLink = pendingAppleLinkToken
+      ? await claimPendingAppleLink(db, pendingAppleLinkToken, result.userId)
+      : null;
     return withApiV1Telemetry(
       apiV1SamePartyPrivateSuccess(requestId, {
         action: result.action,
         userId: result.userId,
+        ...(appleLink ? { appleLink } : {}),
         ...nativeSignInTokenPayload(result.clientId, result.tokens),
       }, 201, TOKEN_RESPONSE_HEADERS),
       { idempotencyOutcome: "none" },

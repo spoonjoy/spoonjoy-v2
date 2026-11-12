@@ -4,7 +4,12 @@ import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { normalizeCredentialScopes } from "~/lib/api-auth.server";
 import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
 import type { AppleUser } from "~/lib/apple-oauth.server";
-import { findExistingOAuthAccount } from "~/lib/oauth-user.server";
+import {
+  APPLE_EMAIL_UNAVAILABLE,
+  createPendingAppleLink,
+  PENDING_APPLE_LINK_MESSAGE,
+  type PendingAppleLink,
+} from "~/lib/pending-apple-link.server";
 import type { AppleNativeAuthConfig } from "~/lib/env.server";
 import {
   issueConnectorTokens,
@@ -73,7 +78,7 @@ export interface NativeAppleCredentialInput {
  * address in a returning Apple ID's token only when the app's first authorization shared it, and
  * a reauthentication that asks for no scopes gets no address either.
  */
-export type NativeAppleUser = Omit<AppleUser, "email"> & { email: string | null };
+export type NativeAppleUser = AppleUser;
 
 export interface NativeAppleAuthResult {
   action: "user_created" | "user_logged_in";
@@ -85,12 +90,15 @@ export interface NativeAppleAuthResult {
 export class NativeAppleAuthError extends Error {
   status: number;
   code: string;
+  /** Set when the Apple ID verified but carried no email and matched no account. */
+  pendingLink?: PendingAppleLink;
 
-  constructor(code: string, message: string, status = 400) {
+  constructor(code: string, message: string, status = 400, pendingLink?: PendingAppleLink) {
     super(message);
     this.name = "NativeAppleAuthError";
     this.code = code;
     this.status = status;
+    this.pendingLink = pendingLink;
   }
 }
 
@@ -259,28 +267,21 @@ export async function handleNativeAppleSignIn(
     fetcher: options.fetcher,
     now: options.now,
   });
-  let callback;
-  if (verified.email === null) {
-    // No address to create or match an account with, so only an Apple ID already linked to a
-    // Spoonjoy account can sign in: `sub` is Apple's stable id for this person and this app.
-    const existing = await findExistingOAuthAccount(db, "apple", verified.id);
-    if (!existing) {
-      throw new NativeAppleAuthError(
-        "apple_email_unavailable",
-        "Apple didn't share an email for this Apple ID, so Spoonjoy can't find or create your account with it. Sign in another way, then link Apple in Settings.",
-        409,
-      );
-    }
-    callback = { success: true, userId: existing.userId, action: "user_logged_in" as const, error: undefined, message: undefined };
-  } else {
-    const appleUser: AppleUser = { ...verified, email: verified.email };
-    callback = await handleAppleOAuthCallback({
-      db,
-      d1: options.d1,
-      appleUser,
-      currentUserId: null,
-      redirectTo: null,
-    });
+  const callback = await handleAppleOAuthCallback({
+    db,
+    d1: options.d1,
+    appleUser: verified,
+    currentUserId: null,
+    redirectTo: null,
+  });
+  if (callback.error === APPLE_EMAIL_UNAVAILABLE) {
+    // A verified Apple ID with no email and no linked account: keep it as a pending link the app
+    // sends back with its next sign-in by another method, which then links Apple to that account.
+    const pendingLink = await createPendingAppleLink(db, {
+      appleSub: verified.id,
+      providerUsername: verified.fullName,
+    }, { now: options.now });
+    throw new NativeAppleAuthError(APPLE_EMAIL_UNAVAILABLE, PENDING_APPLE_LINK_MESSAGE, 409, pendingLink);
   }
   if (!callback.success || !callback.userId) {
     throw new NativeAppleAuthError(callback.error ?? "apple_sign_in_failed", callback.message ?? "Apple sign-in failed.", 409);

@@ -667,6 +667,37 @@ describe("Apple OAuth routes", () => {
     expect(response.headers.get("Location")).toBe("/login?oauthError=account_exists");
   });
 
+  it("keeps an unlinked Apple ID whose token has no email as a pending link in this browser", async () => {
+    const { db } = await import("~/lib/db.server");
+    const appleUser = { id: "apple-sub-pending-web", email: null, emailVerified: false, isPrivateEmail: false, firstName: null, lastName: null, fullName: null };
+    mocks.verifyAppleCallback.mockResolvedValueOnce({ success: true, appleUser });
+    mocks.handleAppleOAuthCallback.mockResolvedValueOnce({ success: false, error: "apple_email_unavailable", redirectTo: "/recipes" });
+    mocks.getRequestDb.mockResolvedValueOnce(db as any);
+    onTestFinished(async () => { await db.pendingAppleLink.deleteMany({ where: { appleSub: appleUser.id } }); });
+    const cookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/apple"), "apple", {
+      state: "state",
+      redirectTo: "/recipes",
+      failureRedirect: "/login",
+      linking: false,
+    });
+    const formData = new FormData();
+    formData.set("state", "state");
+    formData.set("code", "code");
+    const request = new Request("https://spoonjoy.app/auth/apple/callback", {
+      method: "POST",
+      body: formData,
+      headers: { Cookie: cookieHeader(cookie) },
+    });
+
+    const response = await callbackAction({ request, context: { cloudflare: { env: appleEnv } }, params: {} } as any);
+
+    expect(response.headers.get("Location")).toBe("/login?oauthError=apple_email_unavailable");
+    const setCookie = response.headers.get("Set-Cookie") ?? "";
+    expect(setCookie).toContain("__oauth=");
+    expect(setCookie).toContain("__apple_pending=");
+    await expect(db.pendingAppleLink.count({ where: { appleSub: appleUser.id, consumedAt: null } })).resolves.toBe(1);
+  });
+
   it("creates a session on successful Apple callback", async () => {
     const appleUser = { id: "a1", email: "a@example.com", emailVerified: true, isPrivateEmail: false, firstName: "A", lastName: "User", fullName: "A User" };
     mocks.verifyAppleCallback.mockResolvedValueOnce({ success: true, appleUser });

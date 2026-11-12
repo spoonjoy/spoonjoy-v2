@@ -344,6 +344,30 @@ describe("WebAuthn routes", () => {
       await expect(res.json()).resolves.toMatchObject({ verified: true, redirectTo: "/recipes" });
     });
 
+    it("links this browser's pending Apple ID to the account a passkey sign-in lands on", async () => {
+      const { createPendingAppleLink, rememberPendingAppleLink } = await import("~/lib/pending-apple-link.server");
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "passkey-pending@example.com", webAuthnChallenge: "ac" },
+      });
+      await db.userCredential.create({ data: { id: "vc-pending", userId: user.id, publicKey: new Uint8Array([1]), counter: 1n } });
+      vi.mocked(verifyAuthentication).mockResolvedValue({ verified: true, authenticationInfo: { newCounter: 2 } } as never);
+      const link = await createPendingAppleLink(db, { appleSub: "apple-sub-pending-passkey", providerUsername: null });
+      const pendingCookie = (await rememberPendingAppleLink(null, new Request("https://spoonjoy.app/login"), link)).split(";")[0];
+
+      const res = await authenticateVerify(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/verify",
+        { email: user.email, response: { id: "vc-pending" } },
+        { Cookie: pendingCookie },
+      )));
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Set-Cookie") ?? "").toContain("__session=");
+      expect(res.headers.get("Set-Cookie") ?? "").toContain("__apple_pending=;");
+      await expect(db.oAuth.findUnique({
+        where: { provider_providerUserId: { provider: "apple", providerUserId: "apple-sub-pending-passkey" } },
+      })).resolves.toMatchObject({ userId: user.id });
+    });
+
     it("mints the session at the version read when the passkey login began, not a later one", async () => {
       const user = await db.user.create({
         data: { ...createTestUser(), email: "passkey-race@example.com", webAuthnChallenge: "ac" },

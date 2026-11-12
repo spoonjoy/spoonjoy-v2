@@ -281,6 +281,7 @@ const schemas = {
     redirect_uri: redirectUriSchema,
     code: { type: "string", minLength: 1 },
     code_verifier: { type: "string", minLength: 43 },
+    pending_apple_link_token: { type: "string", maxLength: 128, description: "Spoonjoy extension for its own native app: the pendingAppleLinkToken from an Apple sign-in on this device that found no Spoonjoy account. When the code exchange succeeds, Apple is linked to the code's account, once, within thirty minutes of that Apple sign-in." },
   }),
   OAuthTokenRefreshRequest: objectSchema(["grant_type", "client_id", "refresh_token"], {
     grant_type: { const: "refresh_token" },
@@ -301,6 +302,7 @@ const schemas = {
   NativePasswordSignInRequest: objectSchema(["emailOrUsername", "password"], {
     emailOrUsername: { type: "string", minLength: 1, maxLength: 320, description: "Spoonjoy account email address or exact username. This first-party native app endpoint is not OAuth grant_type=password." },
     password: { type: "string", minLength: 1, maxLength: 1024, description: "Spoonjoy account password. Native clients must submit it only over HTTPS and must never persist it." },
+    pendingAppleLinkToken: { type: ["string", "null"], maxLength: 128, description: "The pendingAppleLinkToken from an Apple sign-in on this device that found no Spoonjoy account (error providerCode apple_email_unavailable). After this sign-in succeeds, Apple is linked to the account, once, within thirty minutes of that Apple sign-in." },
   }),
   NativeTelemetryRequest: objectSchema(["event"], {
     event: { type: "string", enum: ["bootstrap_failed", "bootstrap_offline", "app_intent_completed", "app_intent_failed", "auth_flow_started", "auth_flow_completed", "auth_flow_failed", "search_started", "search_completed", "search_failed", "settings_refresh_failed", "sync_failed"], description: "Constrained native diagnostic event name. Raw search text, error messages, and response bodies are not accepted." },
@@ -367,6 +369,7 @@ const schemas = {
   NativePasswordSignInTokenData: objectSchema(["action", "userId", "client_id", "access_token", "refresh_token", "token_type", "expires_in", "scope"], {
     action: { type: "string", enum: ["user_logged_in"] },
     userId: idSchema,
+    appleLink: { type: "string", enum: ["linked", "already_linked", "taken", "provider_already_linked", "expired", "consumed", "invalid"], description: "Present only when the request sent a pending Apple link token: what became of it. linked means Apple now signs this account in; taken means that Apple ID is linked to another account and stays there." },
     client_id: idSchema,
     access_token: { type: "string", pattern: "^sj_" },
     refresh_token: { type: "string", pattern: "^ort_" },
@@ -389,6 +392,7 @@ const schemas = {
       description: "Seconds until the access token expires: 900 (15 minutes) for generic OAuth clients and 7776000 (90 days) for MCP-bound connections. Refresh before it runs out; each refresh_token is accepted for 180 days after it was issued.",
     },
     scope: { type: "string" },
+    apple_link: { type: "string", enum: ["linked", "already_linked", "taken", "provider_already_linked", "expired", "consumed", "invalid"], description: "Present only when an authorization_code request sent pending_apple_link_token: what became of it." },
   }),
   OAuthErrorResponse: objectSchema(["error", "error_description"], {
     error: { type: "string" },

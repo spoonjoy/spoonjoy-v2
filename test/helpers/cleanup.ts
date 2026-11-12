@@ -98,6 +98,7 @@ export async function cleanupDatabase() {
   await db.oAuthRefreshToken.deleteMany({});
   await db.oAuthClient.deleteMany({});
   await db.userCredential.deleteMany({});
+  await db.pendingAppleLink.deleteMany({});
   await db.oAuth.deleteMany({});
   await db.user.deleteMany({});
 }

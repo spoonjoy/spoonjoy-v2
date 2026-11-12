@@ -384,6 +384,51 @@ describe("apple-oauth-callback.server", () => {
         expect(oauth?.providerUsername).toBe(mockAppleUser.email);
       });
 
+      it("links an Apple ID that shared neither a name nor an email as \"Apple ID\"", async () => {
+        const existingUser = await db.user.create({ data: createTestUser() });
+        testUserIds.push(existingUser.id);
+
+        const result = await handleAppleOAuthCallback({
+          db,
+          appleUser: createMockAppleUser({ email: null, emailVerified: false, firstName: null, lastName: null, fullName: null }),
+          currentUserId: existingUser.id,
+          redirectTo: "/settings",
+        });
+
+        expect(result).toMatchObject({ success: true, action: "account_linked" });
+        await expect(db.oAuth.findUniqueOrThrow({
+          where: { userId_provider: { userId: existingUser.id, provider: "apple" } },
+        })).resolves.toMatchObject({ providerUsername: "Apple ID" });
+      });
+
+      it("signs a linked Apple ID in when its token carries no email", async () => {
+        const existingUser = await db.user.create({ data: createTestUser() });
+        testUserIds.push(existingUser.id);
+        const appleUser = createMockAppleUser({ email: null, emailVerified: false });
+        await db.oAuth.create({ data: { provider: "apple", providerUserId: appleUser.id, providerUsername: "Chef", userId: existingUser.id } });
+
+        await expect(handleAppleOAuthCallback({ db, appleUser, currentUserId: null, redirectTo: null }))
+          .resolves.toMatchObject({ success: true, action: "user_logged_in", userId: existingUser.id });
+      });
+
+      it("refuses, creating nothing, when an unlinked Apple ID's token carries no email", async () => {
+        const before = await db.user.count();
+
+        const result = await handleAppleOAuthCallback({
+          db,
+          appleUser: createMockAppleUser({ email: null, emailVerified: false }),
+          currentUserId: null,
+          redirectTo: null,
+        });
+
+        expect(result).toMatchObject({
+          success: false,
+          error: "apple_email_unavailable",
+          message: "We couldn't find a Spoonjoy account for this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.",
+        });
+        await expect(db.user.count()).resolves.toBe(before);
+      });
+
       it("should return error when Apple account already linked to different user", async () => {
         // Create first user with Apple OAuth
         const mockAppleUser = createMockAppleUser();

@@ -17,6 +17,12 @@ import {
   linkOAuthAccount,
   markEmailVerifiedByProvider,
 } from "./oauth-user.server";
+import { APPLE_EMAIL_UNAVAILABLE, PENDING_APPLE_LINK_MESSAGE } from "./pending-apple-link.server";
+
+/** What Account settings shows for a linked Apple ID: the name Apple shared, else the address. */
+export function appleProviderUsername(appleUser: Pick<AppleUser, "fullName" | "email">): string {
+  return appleUser.fullName ?? appleUser.email ?? "Apple ID";
+}
 
 /**
  * Parameters for handling Apple OAuth callback.
@@ -84,7 +90,7 @@ export async function handleAppleOAuthCallback(
     const linkResult = await linkOAuthAccount(db, currentUserId, {
       provider: "apple",
       providerUserId: appleUser.id,
-      providerUsername: appleUser.fullName ?? appleUser.email,
+      providerUsername: appleProviderUsername(appleUser),
     });
 
     if (!linkResult.success) {
@@ -125,6 +131,17 @@ export async function handleAppleOAuthCallback(
     };
   }
 
+  // Without an email there is nothing to match or create an account with. The caller keeps the
+  // verified sub as a pending link (pending-apple-link.server.ts) instead of a dead end.
+  if (appleUser.email === null) {
+    return {
+      success: false,
+      error: APPLE_EMAIL_UNAVAILABLE,
+      message: PENDING_APPLE_LINK_MESSAGE,
+      redirectTo: defaultRedirect,
+    };
+  }
+
   // Flow 3: Check if email exists (case-insensitive)
   // Use raw SQL for case-insensitive email comparison in SQLite
   const normalizedEmail = appleUser.email.toLowerCase();
@@ -146,7 +163,7 @@ export async function handleAppleOAuthCallback(
   const createResult = await createOAuthUser(db, {
     provider: "apple",
     providerUserId: appleUser.id,
-    providerUsername: appleUser.fullName ?? appleUser.email,
+    providerUsername: appleProviderUsername(appleUser),
     email: appleUser.email,
     name: appleUser.fullName,
     emailVerified: appleUser.emailVerified,

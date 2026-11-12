@@ -5,6 +5,12 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { D1_WRITE_UNAVAILABLE_CODE, isD1Unavailable } from "~/lib/d1-write-retry.server";
 import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
+import {
+  APPLE_EMAIL_UNAVAILABLE,
+  claimPendingAppleLinkFromCookie,
+  createPendingAppleLink,
+  rememberPendingAppleLink,
+} from "~/lib/pending-apple-link.server";
 import { verifyAppleCallback } from "~/lib/apple-oauth.server";
 import { handleGitHubOAuthCallback } from "~/lib/github-oauth-callback.server";
 import { verifyGitHubCallback } from "~/lib/github-oauth.server";
@@ -270,6 +276,15 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
     redirectTo: stored.redirectTo,
   }));
 
+  if (callbackResult.error === APPLE_EMAIL_UNAVAILABLE) {
+    // A verified Apple ID with no email and no linked account: this browser keeps it as a pending
+    // link, and its next sign-in by another method links Apple to that account.
+    const pendingLink = await createPendingAppleLink(database, { appleSub: appleUser.id, providerUsername: appleUser.fullName });
+    const response = await redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, callbackResult.error, "link_account", env);
+    response.headers.append("Set-Cookie", await rememberPendingAppleLink(env, request, pendingLink));
+    return response;
+  }
+
   if (!callbackResult.success || !callbackResult.userId) {
     return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, callbackResult.error, "link_account", env);
   }
@@ -277,6 +292,12 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
   const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult.action, request, env));
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
+}
+
+/** After a successful Google or GitHub sign-in: connect a pending Apple link this browser holds. */
+async function appendPendingAppleLinkClaim(response: Response, request: Request, context: AppLoadContext, userId: string) {
+  const cleared = await claimPendingAppleLinkFromCookie(() => getRequestDb(context), request, context.cloudflare?.env, userId);
+  if (cleared) response.headers.append("Set-Cookie", cleared);
 }
 
 export async function handleGitHubCallback(request: Request, context: AppLoadContext) {
@@ -377,6 +398,7 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
 
   const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult.action, request, env));
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
+  await appendPendingAppleLinkClaim(response, request, context, callbackResult.userId);
   return response;
 }
 
@@ -483,5 +505,6 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
 
   const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult.action, request, env));
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
+  await appendPendingAppleLinkClaim(response, request, context, callbackResult.userId);
   return response;
 }

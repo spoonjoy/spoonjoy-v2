@@ -422,6 +422,43 @@ describe("Google OAuth routes", () => {
     });
   });
 
+  it("links this browser's pending Apple ID to the account a Google sign-in lands on", async () => {
+    const { db } = await import("~/lib/db.server");
+    const { createPendingAppleLink, rememberPendingAppleLink } = await import("~/lib/pending-apple-link.server");
+    const chef = await db.user.create({ data: { email: "google-pending@example.com", username: "google_pending_chef" } });
+    onTestFinished(async () => {
+      await db.oAuth.deleteMany({ where: { userId: chef.id } });
+      await db.pendingAppleLink.deleteMany({ where: { appleSub: "apple-sub-pending-google" } });
+      await db.user.delete({ where: { id: chef.id } });
+    });
+    const link = await createPendingAppleLink(db, { appleSub: "apple-sub-pending-google", providerUsername: null });
+    const pendingCookie = cookieHeader(await rememberPendingAppleLink(googleEnv, new Request("https://spoonjoy.app/login"), link));
+    mocks.verifyGoogleCallback.mockResolvedValueOnce({
+      success: true,
+      googleUser: { id: "g-pending", email: "google-pending@example.com", emailVerified: true, name: null, givenName: null, familyName: null, picture: null },
+    });
+    mocks.handleGoogleOAuthCallback.mockResolvedValueOnce({ success: true, userId: chef.id, action: "user_logged_in", redirectTo: "/recipes" });
+    mocks.getRequestDb.mockReturnValueOnce({ source: "db" }).mockReturnValueOnce(db as any);
+    const oauthCookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/google"), "google", {
+      state: "state",
+      codeVerifier: "verifier",
+      redirectTo: "/recipes",
+      failureRedirect: "/login",
+      linking: false,
+    });
+    const request = new Request("https://spoonjoy.app/auth/google/callback?state=state&code=code", {
+      headers: { Cookie: `${cookieHeader(oauthCookie)}; ${pendingCookie}` },
+    });
+
+    const response = await callbackLoader({ request, context: { cloudflare: { env: googleEnv } }, params: {} } as any);
+
+    expect(response.headers.get("Location")).toBe("/recipes");
+    expect(response.headers.get("Set-Cookie")).toContain("__apple_pending=;");
+    await expect(db.oAuth.findUnique({
+      where: { provider_providerUserId: { provider: "apple", providerUserId: "apple-sub-pending-google" } },
+    })).resolves.toMatchObject({ userId: chef.id });
+  });
+
   it("passes current user ID for successful linking callbacks", async () => {
     onTestFinished(await ensureSessionUser("user-1"));
     const loginSession = await sessionStorage.getSession();
