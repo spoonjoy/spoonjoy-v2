@@ -9,8 +9,11 @@
 // behind a guard that the account exists with exactly this email, then removes the account's chef search
 // document and its key. scan then looks for the id, username and email in every column of every table.
 import { execFile } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+
+import bcrypt from "bcryptjs";
 
 import { accountDeletionStatements } from "~/lib/account-deletion.server";
 import type { D1Query } from "~/lib/d1-read.server";
@@ -128,6 +131,207 @@ export function scanQueries(columns: { table: string; column: string }[], needle
   });
 }
 
+export const PROBE_APPLE_SUB_PATTERN = /^probe-apple-sub-[0-9a-f]{16}$/;
+const TOKEN_HASH_PATTERN = /^[0-9a-f]{64}$/;
+const PENDING_LINK_ID_PATTERN = /^probepal[0-9a-f]{18}$/;
+export const PENDING_APPLE_LINK_TTL_MS = 30 * 60 * 1000;
+
+export interface ProbePendingLink {
+  id: string;
+  tokenHash: string;
+  appleSub: string;
+}
+
+/** Validates a probe pending link; throws on any sub that is not the synthetic probe shape. */
+export function probePendingLink({ id, tokenHash, appleSub }: Partial<ProbePendingLink>): ProbePendingLink {
+  if (!PENDING_LINK_ID_PATTERN.test(id ?? "")) throw new Error("pending link id must look like probepal<18 hex>.");
+  if (!TOKEN_HASH_PATTERN.test(tokenHash ?? "")) throw new Error("token hash must be 64 hex characters.");
+  if (!PROBE_APPLE_SUB_PATTERN.test(appleSub ?? "")) throw new Error("Apple sub must look like probe-apple-sub-<16 hex>.");
+  return { id: id!, tokenHash: tokenHash!, appleSub: appleSub! };
+}
+
+/** The pending link's token, made the way createPendingAppleLink makes it, and the SHA-256 hex the row keeps. */
+export function makePendingLinkToken(random: (size: number) => Buffer = randomBytes) {
+  const token = `pal_${random(32).toString("base64url")}`;
+  return { token, tokenHash: createHash("sha256").update(token).digest("hex") };
+}
+
+/** The row createPendingAppleLink writes: hash, sub, no name, thirty minutes to live. */
+export function pendingLinkSeedSql(link: Partial<ProbePendingLink>, now: Date): string {
+  const { id, tokenHash, appleSub } = probePendingLink(link);
+  return renderStatement([
+    `INSERT INTO "PendingAppleLink" ("id", "tokenHash", "appleSub", "providerUsername", "expiresAt", "consumedAt", "createdAt")
+     VALUES (?, ?, ?, NULL, ?, NULL, ?)`,
+    id,
+    tokenHash,
+    appleSub,
+    new Date(now.getTime() + PENDING_APPLE_LINK_TTL_MS).toISOString(),
+    now.toISOString(),
+  ]);
+}
+
+export function pendingLinkReadSql(link: Partial<ProbePendingLink>): string {
+  const { tokenHash, appleSub } = probePendingLink(link);
+  return renderStatement([
+    `SELECT "appleSub", "expiresAt", "consumedAt", "createdAt" FROM "PendingAppleLink" WHERE "tokenHash" = ? AND "appleSub" = ?`,
+    tokenHash,
+    appleSub,
+  ]);
+}
+
+/** Apple links on the throwaway, and every account's links to the synthetic sub. */
+export function appleLinkReadSql(account: Partial<ThrowawayAccount>, link: Partial<ProbePendingLink>): string {
+  const { id } = throwawayAccount(account);
+  const { appleSub } = probePendingLink(link);
+  return renderStatement([
+    `SELECT (SELECT count(*) FROM "OAuth" WHERE "userId" = ? AND "provider" = 'apple') AS "accountAppleLinks",
+            (SELECT count(*) FROM "OAuth" WHERE "userId" = ? AND "provider" = 'apple' AND "providerUserId" = ?) AS "accountLinksToSub",
+            (SELECT count(*) FROM "OAuth" WHERE "provider" = 'apple' AND "providerUserId" = ?) AS "allLinksToSub",
+            (SELECT "providerUsername" FROM "OAuth" WHERE "userId" = ? AND "provider" = 'apple') AS "providerUsername"`,
+    id,
+    id,
+    appleSub,
+    appleSub,
+    id,
+  ]);
+}
+
+export function pendingLinkCleanupSql(link: Partial<ProbePendingLink>): string {
+  const { tokenHash, appleSub } = probePendingLink(link);
+  return renderStatement([`DELETE FROM "PendingAppleLink" WHERE "tokenHash" = ? AND "appleSub" = ?`, tokenHash, appleSub]);
+}
+
+export function pendingLinkLeftoverSql(link: Partial<ProbePendingLink>): string {
+  const { tokenHash, appleSub } = probePendingLink(link);
+  return renderStatement([
+    `SELECT (SELECT count(*) FROM "PendingAppleLink" WHERE "tokenHash" = ? OR "appleSub" = ?)
+          + (SELECT count(*) FROM "OAuth" WHERE "providerUserId" = ?) AS "n"`,
+    tokenHash,
+    appleSub,
+    appleSub,
+  ]);
+}
+
+export interface NativeSignInSummary {
+  status: number;
+  requestId: unknown;
+  action: unknown;
+  userId: unknown;
+  appleLink: unknown;
+  errorCode: unknown;
+  /** The response's data keys, with every token value left out. */
+  dataKeys: string[];
+}
+
+/** What a native sign-in answered, with no token in it. */
+export function summarizeNativeSignIn(status: number, body: unknown): NativeSignInSummary {
+  const json = (body ?? {}) as { requestId?: unknown; data?: Record<string, unknown>; error?: { code?: unknown } };
+  const data = json.data ?? {};
+  return {
+    status,
+    requestId: json.requestId ?? null,
+    action: data.action ?? null,
+    userId: data.userId ?? null,
+    appleLink: data.appleLink ?? null,
+    errorCode: json.error?.code ?? null,
+    dataKeys: Object.keys(data).sort(),
+  };
+}
+
+export const SPOONJOY_ORIGIN = "https://spoonjoy.app";
+
+export interface ProofDeps {
+  run: Run;
+  runBatch: (sql: string) => Promise<unknown>;
+  fetch: typeof fetch;
+  random?: (size: number) => Buffer;
+  hashPassword?: (password: string) => Promise<string>;
+  now?: () => Date;
+  log?: (line: string) => void;
+}
+
+/**
+ * Seeds the throwaway and one pending link, signs in twice with the link's token, reads the rows back, and
+ * always cleans up. Fails unless the first sign-in links Apple, the second finds the link spent, and nothing
+ * is left that mentions the sub or the token's hash.
+ */
+export async function pendingAppleLinkProof(account: Partial<ThrowawayAccount>, deps: ProofDeps) {
+  const throwaway = throwawayAccount(account);
+  const random = deps.random ?? randomBytes;
+  const now = deps.now ?? (() => new Date());
+  const log = deps.log ?? ((line: string) => console.log(line));
+  const hashPassword = deps.hashPassword ?? ((password: string) => bcrypt.hash(password, 10));
+  const step = (name: string, detail: unknown) => log(`${now().toISOString()} ${name} ${JSON.stringify(detail)}`);
+
+  const password = random(24).toString("base64url");
+  const { token, tokenHash } = makePendingLinkToken(random);
+  const link = probePendingLink({
+    id: `probepal${random(9).toString("hex")}`,
+    tokenHash,
+    appleSub: `probe-apple-sub-${random(8).toString("hex")}`,
+  });
+  const failures: string[] = [];
+  const result: Record<string, unknown> = { account: throwaway.id, appleSub: link.appleSub, tokenHashPrefix: tokenHash.slice(0, 12) };
+
+  const signIn = async () => {
+    const response = await deps.fetch(`${SPOONJOY_ORIGIN}/api/v1/auth/password/native`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ emailOrUsername: throwaway.email, password, pendingAppleLinkToken: token }),
+    });
+    return summarizeNativeSignIn(response.status, await response.json().catch(() => null));
+  };
+  const userRows = async () =>
+    Number((await deps.run(renderStatement([`SELECT count(*) AS "n" FROM "User" WHERE "id" = ?`, throwaway.id])))[0]?.n);
+
+  try {
+    await deps.run(seedSql(throwaway, await hashPassword(password), now()));
+    if ((await userRows()) !== 1) throw new Error("The seeded user row is not there.");
+    step("seeded account", { id: throwaway.id });
+    await deps.run(pendingLinkSeedSql(link, now()));
+    result.seededRow = (await deps.run(pendingLinkReadSql(link)))[0] ?? null;
+    step("seeded pending link", { appleSub: link.appleSub, tokenHashPrefix: result.tokenHashPrefix, row: result.seededRow });
+
+    const first = await signIn();
+    step("first sign-in", first);
+    result.first = first;
+    if (first.status !== 201 || first.appleLink !== "linked") failures.push("The first sign-in did not answer 201 with appleLink linked.");
+    result.afterFirst = { pendingLink: (await deps.run(pendingLinkReadSql(link)))[0] ?? null, oauth: (await deps.run(appleLinkReadSql(throwaway, link)))[0] ?? null };
+    step("rows after first sign-in", result.afterFirst);
+    const afterFirst = result.afterFirst as { pendingLink: { consumedAt?: unknown } | null; oauth: { accountLinksToSub?: unknown } | null };
+    if (!afterFirst.pendingLink?.consumedAt) failures.push("The pending link was not spent.");
+    if (Number(afterFirst.oauth?.accountLinksToSub) !== 1) failures.push("The Apple sub is not linked to the throwaway.");
+
+    const second = await signIn();
+    step("second sign-in, same token", second);
+    result.second = second;
+    if (second.status !== 201 || second.appleLink !== "consumed") failures.push("The second sign-in did not answer 201 with appleLink consumed.");
+    result.afterSecond = { pendingLink: (await deps.run(pendingLinkReadSql(link)))[0] ?? null, oauth: (await deps.run(appleLinkReadSql(throwaway, link)))[0] ?? null };
+    step("rows after second sign-in", result.afterSecond);
+    const afterSecond = result.afterSecond as { oauth: { allLinksToSub?: unknown } | null };
+    if (Number(afterSecond.oauth?.allLinksToSub) !== 1) failures.push("The second sign-in changed the Apple links.");
+  } catch (error) {
+    failures.push(error instanceof Error ? error.message : String(error));
+  } finally {
+    await deps.run(pendingLinkCleanupSql(link));
+    step("tokens before cleanup", (await deps.run(tokenCountSql(throwaway)))[0] ?? null);
+    if ((await userRows()) === 1) await deps.runBatch(cleanupSql(throwaway, now()));
+    if ((await userRows()) !== 0) failures.push("The user row is still there after cleanup.");
+    const leftover = Number((await deps.run(pendingLinkLeftoverSql(link)))[0]?.n);
+    const columns = (await deps.run(COLUMNS_SQL)) as { table: string; column: string }[];
+    const hits: { table: string; rows: number }[] = [];
+    for (const sql of scanQueries(columns, [link.appleSub, link.tokenHash])) {
+      for (const row of await deps.run(sql)) if (Number(row.n) > 0) hits.push({ table: String(row.t), rows: Number(row.n) });
+    }
+    result.cleanup = { pendingLinkAndOAuthLeft: leftover, subAndHashScan: { tables: new Set(columns.map((c) => c.table)).size, hits } };
+    step("cleanup", result.cleanup);
+    if (leftover !== 0 || hits.length > 0) failures.push("Rows still mention the synthetic sub or the token's hash.");
+  }
+  log(`RESULT ${JSON.stringify(result)}`);
+  if (failures.length > 0) throw new Error(failures.join(" "));
+  return result;
+}
+
 export function parseWranglerJson(stdout: string): Record<string, unknown>[] {
   // wrangler's --json output is one array; banners or warnings may come before it on their own lines.
   const start = stdout.startsWith("[") ? 0 : stdout.indexOf("\n[") + 1;
@@ -186,7 +390,13 @@ export async function scan(account: Partial<ThrowawayAccount>, run: Run = query)
   return { tables: new Set(columns.map((column) => column.table)).size, queries: queries.length, hits };
 }
 
-export async function main(argv: string[], env: NodeJS.ProcessEnv, run: Run = query, runBatch = batch) {
+export async function main(
+  argv: string[],
+  env: NodeJS.ProcessEnv,
+  run: Run = query,
+  runBatch = batch,
+  proofDeps: Partial<ProofDeps> = {},
+) {
   const action = argv[0];
   const account = throwawayAccount({ id: env.ACCOUNT_ID, email: env.ACCOUNT_EMAIL, username: env.ACCOUNT_USERNAME });
   const userRows = async () =>
@@ -216,7 +426,11 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv, run: Run = qu
     if (result.hits.length > 0) throw new Error(`Rows still mention ${account.id}, its username or its email.`);
     return;
   }
-  throw new Error("action must be seed, cleanup, search-pending or scan.");
+  if (action === "pending-apple-link-proof") {
+    await pendingAppleLinkProof(account, { run, runBatch, fetch: globalThis.fetch, ...proofDeps });
+    return;
+  }
+  throw new Error("action must be seed, cleanup, search-pending, scan or pending-apple-link-proof.");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
