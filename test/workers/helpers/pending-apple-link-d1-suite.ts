@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import type { PrismaClient } from "@prisma/client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getDb } from "../../../app/lib/db.server";
 import { claimPendingAppleLink, createPendingAppleLink } from "../../../app/lib/pending-apple-link.server";
@@ -11,6 +11,12 @@ import { applyRepositoryMigrations } from "./repository-migrations";
 // D1, where DateTime values are stored as text and compared by the code.
 
 const PREFIX = "pending-apple-d1";
+// Linking writes through a Prisma transaction, which the D1 adapter announces once on Linux.
+const PRISMA_D1_TRANSACTION_WARNING =
+  "prisma:warn Cloudflare D1 does not support transactions yet. When using Prisma's D1 adapter, " +
+  "implicit & explicit transactions will be ignored and run as individual queries, which breaks " +
+  "the guarantees of the ACID properties of transactions. For more details see " +
+  "https://pris.ly/d/d1-transactions";
 let prisma: PrismaClient;
 
 function database(): D1Database {
@@ -23,6 +29,20 @@ describe("pending Apple links on D1", () => {
     prisma = await getDb({ DB: database() });
     await database().prepare(`INSERT INTO "User" ("id", "email", "username", "createdAt", "updatedAt")
       VALUES (?, ?, ?, ?, ?)`).bind(`${PREFIX}-chef`, `${PREFIX}@example.com`, `${PREFIX}_chef`, "2026-11-11T00:00:00.000Z", "2026-11-11T00:00:00.000Z").run();
+  });
+
+  let restoreInfo = () => {};
+  beforeEach(() => {
+    const originalInfo = console.info;
+    const spy = vi.spyOn(console, "info").mockImplementation((...args: unknown[]) => {
+      if (args.length === 1 && args[0] === PRISMA_D1_TRANSACTION_WARNING) return;
+      Reflect.apply(originalInfo, console, args);
+    });
+    restoreInfo = () => spy.mockRestore();
+  });
+
+  afterEach(() => {
+    restoreInfo();
   });
 
   afterAll(async () => {
