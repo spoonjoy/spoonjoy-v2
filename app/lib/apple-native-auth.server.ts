@@ -6,7 +6,7 @@ import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
 import type { AppleUser } from "~/lib/apple-oauth.server";
 import {
   APPLE_EMAIL_UNAVAILABLE,
-  createPendingAppleLink,
+  tryCreatePendingAppleLink,
   PENDING_APPLE_LINK_MESSAGE,
   type PendingAppleLink,
 } from "~/lib/pending-apple-link.server";
@@ -277,11 +277,12 @@ export async function handleNativeAppleSignIn(
   if (callback.error === APPLE_EMAIL_UNAVAILABLE) {
     // A verified Apple ID with no email and no linked account: keep it as a pending link the app
     // sends back with its next sign-in by another method, which then links Apple to that account.
-    const pendingLink = await createPendingAppleLink(db, {
+    // If the link can't be saved, the chef still gets the explanation, just without a token.
+    const pendingLink = await tryCreatePendingAppleLink(db, {
       appleSub: verified.id,
       providerUsername: verified.fullName,
     }, { now: options.now });
-    throw new NativeAppleAuthError(APPLE_EMAIL_UNAVAILABLE, PENDING_APPLE_LINK_MESSAGE, 409, pendingLink);
+    throw new NativeAppleAuthError(APPLE_EMAIL_UNAVAILABLE, PENDING_APPLE_LINK_MESSAGE, 409, pendingLink ?? undefined);
   }
   if (!callback.success || !callback.userId) {
     throw new NativeAppleAuthError(callback.error ?? "apple_sign_in_failed", callback.message ?? "Apple sign-in failed.", 409);

@@ -40,6 +40,10 @@ describe("pending Apple links on D1", () => {
     await expect(claimPendingAppleLink(prisma, stale.token, `${PREFIX}-chef`, { now: stale.expiresAt })).resolves.toBe("expired");
     await expect(claimPendingAppleLink(prisma, fresh.token, `${PREFIX}-chef`, { now: almost })).resolves.toBe("linked");
     await expect(claimPendingAppleLink(prisma, fresh.token, `${PREFIX}-chef`, { now: almost })).resolves.toBe("consumed");
+    // A link made after the stale one expired clears it; the fresh, spent one stays.
+    await createPendingAppleLink(prisma, { appleSub: `${PREFIX}-later`, providerUsername: null }, { now: new Date(stale.expiresAt.getTime() + 1) });
+    await expect(database().prepare(`SELECT COUNT(*) AS "n" FROM "PendingAppleLink" WHERE "appleSub" = ?`)
+      .bind(`${PREFIX}-stale`).first<{ n: number }>()).resolves.toEqual({ n: 0 });
     await expect(database().prepare(`SELECT "userId" FROM "OAuth" WHERE "provider" = 'apple' AND "providerUserId" = ?`)
       .bind(`${PREFIX}-sub`).first<{ userId: string }>()).resolves.toEqual({ userId: `${PREFIX}-chef` });
   });

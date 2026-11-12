@@ -220,6 +220,17 @@ describe("pending Apple links", () => {
     await expect(db.pendingAppleLink.findMany({ select: { appleSub: true } })).resolves.toEqual([{ appleSub: APPLE_SUB }]);
   });
 
+  it("still makes a pending link when clearing expired ones fails", async () => {
+    vi.spyOn(db.pendingAppleLink, "deleteMany").mockRejectedValueOnce(new Error("boom")).mockRejectedValueOnce("odd");
+    expectConsoleWarning(JSON.stringify({ event: "apple.pending_link", outcome: "prune_failed", error: "Error" }));
+    expectConsoleWarning(JSON.stringify({ event: "apple.pending_link", outcome: "prune_failed", error: "unknown" }));
+
+    await createPendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null });
+    await createPendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null });
+
+    await expect(db.pendingAppleLink.count()).resolves.toBe(2);
+  });
+
   it("answers \"error\" instead of failing the sign-in when the database fails", async () => {
     const chef = await createUser(db, "db-down@example.com", "db_down_chef", PASSWORD);
     const { token } = await createPendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null });
@@ -403,6 +414,18 @@ describe("pending Apple links", () => {
       await expect(claimPendingAppleLinkFromCookie(getDb, request(), env, "user-id")).resolves.toBeNull();
       await expect(claimPendingAppleLinkFromCookie(getDb, request("x__apple_pending=1"), env, "user-id")).resolves.toBeNull();
       expect(getDb).not.toHaveBeenCalled();
+    });
+
+    it("keeps the sign-in and still clears the cookie when the database can't be opened", async () => {
+      const link = await createPendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null });
+      const cookie = (await rememberPendingAppleLink(env, request(), link)).split(";")[0];
+      expectConsoleWarning(JSON.stringify({ event: "apple.pending_link", outcome: "error", source: "cookie", error: "Error" }));
+      expectConsoleWarning(JSON.stringify({ event: "apple.pending_link", outcome: "error", source: "cookie", error: "unknown" }));
+
+      const failing = vi.fn().mockRejectedValueOnce(new Error("boom")).mockRejectedValueOnce("odd");
+      await expect(claimPendingAppleLinkFromCookie(failing, request(cookie), env, "user-id")).resolves.toContain("Max-Age=0");
+      await expect(claimPendingAppleLinkFromCookie(failing, request(cookie), env, "user-id")).resolves.toContain("Max-Age=0");
+      await expect(appleLinkOwner()).resolves.toBeNull();
     });
 
     it("rejects a pending link cookie whose signature does not match, and clears it", async () => {

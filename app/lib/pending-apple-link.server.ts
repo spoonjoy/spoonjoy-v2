@@ -73,10 +73,17 @@ export async function createPendingAppleLink(
   const expiresAt = new Date(now.getTime() + PENDING_APPLE_LINK_TTL_MS);
   const tokenHash = await sha256Hex(token);
   // The token hash is unique, so a retry after a write that had committed finds its own row.
-  // Spent and expired rows are no use to anyone: clear them as new ones arrive.
+  // Expired rows are no use to anyone: clear them as new ones arrive. This is housekeeping, so a
+  // failure is logged and the new link is made anyway.
   await retryD1Write({ scope: "pending_apple_link.prune" }, () => db.pendingAppleLink.deleteMany({
     where: { expiresAt: { lt: now } },
-  }));
+  })).catch((error: unknown) => {
+    console.warn(JSON.stringify({
+      event: "apple.pending_link",
+      outcome: "prune_failed",
+      error: error instanceof Error ? error.name : "unknown",
+    }));
+  });
   await retryD1Write({
     scope: "pending_apple_link.create",
     applied: () => db.pendingAppleLink.findUnique({ where: { tokenHash } }),
@@ -193,6 +200,27 @@ export async function rememberPendingAppleLink(
 }
 
 /**
+ * `createPendingAppleLink` that answers null instead of throwing, for a caller that still has to
+ * explain the refusal when the link can't be saved.
+ */
+export async function tryCreatePendingAppleLink(
+  db: PrismaClient,
+  input: { appleSub: string; providerUsername: string | null },
+  options: { now?: Date } = {},
+): Promise<PendingAppleLink | null> {
+  try {
+    return await createPendingAppleLink(db, input, options);
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: "apple.pending_link",
+      outcome: "create_failed",
+      error: error instanceof Error ? error.name : "unknown",
+    }));
+    return null;
+  }
+}
+
+/**
  * After a web sign-in as `userId`: claim the browser's pending Apple link, if it has one, and
  * return the Set-Cookie value that clears it. Returns null, without touching the database, when the
  * request carries no pending link (a cookie whose signature fails reads as none).
@@ -206,11 +234,21 @@ export async function claimPendingAppleLinkFromCookie(
   const cookieHeader = request.headers.get("Cookie");
   if (!cookieHeader || !new RegExp(`(?:^|;\\s*)${PENDING_APPLE_LINK_COOKIE}=`).test(cookieHeader)) return null;
   const cookie = pendingAppleLinkCookie(env, request);
-  const token = await cookie.parse(cookieHeader);
-  if (typeof token === "string") {
-    await claimPendingAppleLink(await getDb(), token, userId);
-  } else {
-    await logPendingAppleLink("invalid", null, { source: "cookie" });
+  try {
+    const token = await cookie.parse(cookieHeader);
+    if (typeof token === "string") {
+      await claimPendingAppleLink(await getDb(), token, userId);
+    } else {
+      await logPendingAppleLink("invalid", null, { source: "cookie" });
+    }
+  } catch (error) {
+    // The sign-in already succeeded; a link that can't be claimed must not undo it.
+    console.warn(JSON.stringify({
+      event: "apple.pending_link",
+      outcome: "error",
+      source: "cookie",
+      error: error instanceof Error ? error.name : "unknown",
+    }));
   }
   return cookie.serialize("", { maxAge: 0, expires: new Date(0) });
 }
