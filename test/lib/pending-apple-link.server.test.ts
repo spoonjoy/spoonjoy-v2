@@ -16,6 +16,9 @@ import {
   rememberPendingAppleLink,
 } from "~/lib/pending-apple-link.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { expectConsoleWarning } from "../warning-policy";
+
+const CLAIM_ERROR_LOG = JSON.stringify({ event: "apple.pending_link", outcome: "error", error: "Error" });
 
 const APPLE_CLIENT_ID = "app.spoonjoy";
 const APPLE_SUB = "apple-user-pending-123";
@@ -179,6 +182,86 @@ describe("pending Apple links", () => {
     expect(plain.json).not.toHaveProperty("apple_link");
   });
 
+  it("ignores a pending link sent by a third-party OAuth client the chef approved", async () => {
+    const chef = await createUser(db, "victim@example.com", "victim_chef", PASSWORD);
+    const { token } = await createPendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null });
+    const clientId = "third-party-connector";
+    const redirectUri = "https://attacker.example/callback";
+    const verifier = "verifier-0123456789-abcdefghijklmnopqrstuvwxyz";
+    await db.oAuthClient.create({ data: { id: clientId, clientName: "Spoonjoy Apple", redirectUris: redirectUri, issuer: "https://spoonjoy.app" } });
+    const code = await createAuthorizationCode(db, {
+      clientId,
+      userId: chef.id,
+      redirectUri,
+      codeChallenge: base64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)))),
+      scope: "kitchen:read",
+      resource: null,
+      issuer: "https://spoonjoy.app",
+    });
+
+    const response = await handleOAuthToken(new Request("https://spoonjoy.app/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "authorization_code", code, client_id: clientId, redirect_uri: redirectUri, code_verifier: verifier, pending_apple_link_token: token }),
+    }), db, { SPOONJOY_BASE_URL: "https://spoonjoy.app" } as any);
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json).not.toHaveProperty("apple_link");
+    await expect(appleLinkOwner()).resolves.toBeNull();
+    await expect(db.pendingAppleLink.findFirstOrThrow()).resolves.toMatchObject({ consumedAt: null });
+  });
+
+  it("clears expired pending links as new ones are made", async () => {
+    const old = new Date("2026-11-11T10:00:00.000Z");
+    await createPendingAppleLink(db, { appleSub: "apple-user-old", providerUsername: null }, { now: old });
+    await createPendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null }, { now: new Date(old.getTime() + PENDING_APPLE_LINK_TTL_MS + 1) });
+
+    await expect(db.pendingAppleLink.findMany({ select: { appleSub: true } })).resolves.toEqual([{ appleSub: APPLE_SUB }]);
+  });
+
+  it("answers \"error\" instead of failing the sign-in when the database fails", async () => {
+    const chef = await createUser(db, "db-down@example.com", "db_down_chef", PASSWORD);
+    const { token } = await createPendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null });
+    vi.spyOn(db.pendingAppleLink, "findUnique").mockRejectedValueOnce(new Error("boom"));
+    expectConsoleWarning(CLAIM_ERROR_LOG);
+
+    await expect(claimPendingAppleLink(db, token, chef.id)).resolves.toBe("error");
+    await expect(db.pendingAppleLink.findFirstOrThrow()).resolves.toMatchObject({ consumedAt: null });
+  });
+
+  it("puts a spent pending link back when linking fails, so the next sign-in can still link", async () => {
+    const chef = await createUser(db, "retry@example.com", "retry_chef", PASSWORD);
+    const { token } = await createPendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null });
+    vi.spyOn(db.oAuth, "create").mockRejectedValueOnce(new Error("boom"));
+    expectConsoleWarning(CLAIM_ERROR_LOG);
+
+    await expect(claimPendingAppleLink(db, token, chef.id)).resolves.toBe("error");
+    await expect(db.pendingAppleLink.findFirstOrThrow()).resolves.toMatchObject({ consumedAt: null });
+    await expect(claimPendingAppleLink(db, token, chef.id)).resolves.toBe("linked");
+  });
+
+  it("still answers \"error\" when putting the spent link back fails too", async () => {
+    const chef = await createUser(db, "double@example.com", "double_chef", PASSWORD);
+    const { token } = await createPendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null });
+    const realUpdateMany = db.pendingAppleLink.updateMany.bind(db.pendingAppleLink);
+    vi.spyOn(db.pendingAppleLink, "updateMany")
+      .mockImplementationOnce(realUpdateMany as any)
+      .mockRejectedValueOnce(new Error("still down"));
+    vi.spyOn(db.oAuth, "create").mockRejectedValueOnce(new Error("boom"));
+    expectConsoleWarning(CLAIM_ERROR_LOG);
+
+    await expect(claimPendingAppleLink(db, token, chef.id)).resolves.toBe("error");
+  });
+
+  it("logs a thrown non-Error as unknown", async () => {
+    const { token } = await createPendingAppleLink(db, { appleSub: APPLE_SUB, providerUsername: null });
+    vi.spyOn(db.pendingAppleLink, "findUnique").mockRejectedValueOnce("not an error");
+    expectConsoleWarning(JSON.stringify({ event: "apple.pending_link", outcome: "error", error: "unknown" }));
+
+    await expect(claimPendingAppleLink(db, token, "user-id")).resolves.toBe("error");
+  });
+
   it("does not link a pending Apple ID once thirty minutes have passed", async () => {
     const chef = await createUser(db, "late-chef@example.com", "late_chef", PASSWORD);
     const created = new Date("2026-11-11T12:00:00.000Z");
@@ -318,6 +401,7 @@ describe("pending Apple links", () => {
       const getDb = vi.fn();
       await expect(claimPendingAppleLinkFromCookie(getDb, request("other=1"), env, "user-id")).resolves.toBeNull();
       await expect(claimPendingAppleLinkFromCookie(getDb, request(), env, "user-id")).resolves.toBeNull();
+      await expect(claimPendingAppleLinkFromCookie(getDb, request("x__apple_pending=1"), env, "user-id")).resolves.toBeNull();
       expect(getDb).not.toHaveBeenCalled();
     });
 

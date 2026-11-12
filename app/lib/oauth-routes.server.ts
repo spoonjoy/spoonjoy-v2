@@ -29,6 +29,7 @@ import {
   getOAuthClient,
   hashOAuthOpaqueToken,
   issueConnectorTokens,
+  isFirstPartyNativeClient,
   normalizeScope,
   OAUTH_ACCESS_TOKEN_TTL_SECONDS,
   OAuthError,
@@ -467,8 +468,10 @@ export async function handleOAuthToken(
       });
       // Spoonjoy's native app signs in with Google, GitHub or a passkey through this exchange. An
       // Apple sign-in on that device that found no account left a pending link: connect it now.
+      // Only for Spoonjoy's own app: a third-party client the chef approved must not be able to
+      // attach an Apple ID of its choosing to the chef's account.
       const pendingAppleLinkToken = field("pending_apple_link_token");
-      const appleLink = pendingAppleLinkToken
+      const appleLink = pendingAppleLinkToken && await isFirstPartyNativeClient(db, field("client_id"))
         ? await claimPendingAppleLink(db, pendingAppleLinkToken, grant.userId)
         : null;
       return withOAuthTokenTelemetry(

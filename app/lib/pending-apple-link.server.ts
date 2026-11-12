@@ -31,7 +31,8 @@ export type PendingAppleLinkOutcome =
   | "provider_already_linked"
   | "expired"
   | "consumed"
-  | "invalid";
+  | "invalid"
+  | "error";
 
 export interface PendingAppleLink {
   token: string;
@@ -72,6 +73,10 @@ export async function createPendingAppleLink(
   const expiresAt = new Date(now.getTime() + PENDING_APPLE_LINK_TTL_MS);
   const tokenHash = await sha256Hex(token);
   // The token hash is unique, so a retry after a write that had committed finds its own row.
+  // Spent and expired rows are no use to anyone: clear them as new ones arrive.
+  await retryD1Write({ scope: "pending_apple_link.prune" }, () => db.pendingAppleLink.deleteMany({
+    where: { expiresAt: { lt: now } },
+  }));
   await retryD1Write({
     scope: "pending_apple_link.create",
     applied: () => db.pendingAppleLink.findUnique({ where: { tokenHash } }),
@@ -86,6 +91,9 @@ export async function createPendingAppleLink(
  * Link the pending Apple sub behind `token` to `userId`, which has just signed in another way.
  * The row is spent first, atomically, so two sign-ins racing on one token link it at most once.
  * An Apple sub already linked to an account stays where it is.
+ *
+ * It never throws: the sign-in it follows has already succeeded, so a database failure here
+ * returns "error" and, when the row was already spent, puts it back so a retry can still link.
  */
 export async function claimPendingAppleLink(
   db: PrismaClient,
@@ -93,7 +101,29 @@ export async function claimPendingAppleLink(
   userId: string,
   options: { now?: Date } = {},
 ): Promise<PendingAppleLinkOutcome> {
-  const now = options.now ?? new Date();
+  const spent: { id: string | null } = { id: null };
+  try {
+    return await claimPendingAppleLinkOnce(db, token, userId, options.now ?? new Date(), spent);
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: "apple.pending_link",
+      outcome: "error",
+      error: error instanceof Error ? error.name : "unknown",
+    }));
+    if (spent.id) {
+      await db.pendingAppleLink.updateMany({ where: { id: spent.id }, data: { consumedAt: null } }).catch(() => undefined);
+    }
+    return "error";
+  }
+}
+
+async function claimPendingAppleLinkOnce(
+  db: PrismaClient,
+  token: string,
+  userId: string,
+  now: Date,
+  spent: { id: string | null },
+): Promise<PendingAppleLinkOutcome> {
   if (!token.startsWith(PENDING_APPLE_LINK_TOKEN_PREFIX) || token.length > MAX_TOKEN_LENGTH) {
     await logPendingAppleLink("invalid", null);
     return "invalid";
@@ -119,6 +149,7 @@ export async function claimPendingAppleLink(
     await logPendingAppleLink("consumed", row.appleSub);
     return "consumed";
   }
+  spent.id = row.id;
 
   const existing = await findExistingOAuthAccount(db, "apple", row.appleSub);
   if (existing) {
@@ -173,7 +204,7 @@ export async function claimPendingAppleLinkFromCookie(
   userId: string,
 ): Promise<string | null> {
   const cookieHeader = request.headers.get("Cookie");
-  if (!cookieHeader?.includes(`${PENDING_APPLE_LINK_COOKIE}=`)) return null;
+  if (!cookieHeader || !new RegExp(`(?:^|;\\s*)${PENDING_APPLE_LINK_COOKIE}=`).test(cookieHeader)) return null;
   const cookie = pendingAppleLinkCookie(env, request);
   const token = await cookie.parse(cookieHeader);
   if (typeof token === "string") {

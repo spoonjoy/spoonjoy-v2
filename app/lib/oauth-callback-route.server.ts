@@ -279,9 +279,14 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
   if (callbackResult.error === APPLE_EMAIL_UNAVAILABLE) {
     // A verified Apple ID with no email and no linked account: this browser keeps it as a pending
     // link, and its next sign-in by another method links Apple to that account.
-    const pendingLink = await createPendingAppleLink(database, { appleSub: appleUser.id, providerUsername: appleUser.fullName });
+    // If the link can't be saved, the chef still gets the same explanation, just without the link.
+    const pendingLink = await createPendingAppleLink(database, { appleSub: appleUser.id, providerUsername: appleUser.fullName })
+      .catch((error: unknown) => {
+        telemetry.captureException(error, { provider: "apple", phase: "link_account", step: "pending_apple_link" });
+        return null;
+      });
     const response = await redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, callbackResult.error, "link_account", env);
-    response.headers.append("Set-Cookie", await rememberPendingAppleLink(env, request, pendingLink));
+    if (pendingLink) response.headers.append("Set-Cookie", await rememberPendingAppleLink(env, request, pendingLink));
     return response;
   }
 

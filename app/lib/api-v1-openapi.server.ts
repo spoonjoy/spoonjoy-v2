@@ -281,7 +281,7 @@ const schemas = {
     redirect_uri: redirectUriSchema,
     code: { type: "string", minLength: 1 },
     code_verifier: { type: "string", minLength: 43 },
-    pending_apple_link_token: { type: "string", maxLength: 128, description: "Spoonjoy extension for its own native app: the pendingAppleLinkToken from an Apple sign-in on this device that found no Spoonjoy account. When the code exchange succeeds, Apple is linked to the code's account, once, within thirty minutes of that Apple sign-in." },
+    pending_apple_link_token: { type: "string", maxLength: 128, description: "Spoonjoy extension, honored only for Spoonjoy's own native app client and ignored for every other client: the pendingAppleLinkToken from an Apple sign-in on this device that found no Spoonjoy account. When the code exchange succeeds, Apple is linked to the code's account, once, within thirty minutes of that Apple sign-in." },
   }),
   OAuthTokenRefreshRequest: objectSchema(["grant_type", "client_id", "refresh_token"], {
     grant_type: { const: "refresh_token" },
@@ -369,7 +369,7 @@ const schemas = {
   NativePasswordSignInTokenData: objectSchema(["action", "userId", "client_id", "access_token", "refresh_token", "token_type", "expires_in", "scope"], {
     action: { type: "string", enum: ["user_logged_in"] },
     userId: idSchema,
-    appleLink: { type: "string", enum: ["linked", "already_linked", "taken", "provider_already_linked", "expired", "consumed", "invalid"], description: "Present only when the request sent a pending Apple link token: what became of it. linked means Apple now signs this account in; taken means that Apple ID is linked to another account and stays there." },
+    appleLink: { type: "string", enum: ["linked", "already_linked", "taken", "provider_already_linked", "expired", "consumed", "invalid", "error"], description: "Present only when the request sent a pending Apple link token: what became of it. linked means Apple now signs this account in; taken means that Apple ID is linked to another account and stays there; error means the link could not be saved and the sign-in still succeeded." },
     client_id: idSchema,
     access_token: { type: "string", pattern: "^sj_" },
     refresh_token: { type: "string", pattern: "^ort_" },
@@ -392,7 +392,7 @@ const schemas = {
       description: "Seconds until the access token expires: 900 (15 minutes) for generic OAuth clients and 7776000 (90 days) for MCP-bound connections. Refresh before it runs out; each refresh_token is accepted for 180 days after it was issued.",
     },
     scope: { type: "string" },
-    apple_link: { type: "string", enum: ["linked", "already_linked", "taken", "provider_already_linked", "expired", "consumed", "invalid"], description: "Present only when an authorization_code request sent pending_apple_link_token: what became of it." },
+    apple_link: { type: "string", enum: ["linked", "already_linked", "taken", "provider_already_linked", "expired", "consumed", "invalid", "error"], description: "Present only when an authorization_code request sent pending_apple_link_token: what became of it." },
   }),
   OAuthErrorResponse: objectSchema(["error", "error_description"], {
     error: { type: "string" },
