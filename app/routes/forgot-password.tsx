@@ -2,7 +2,7 @@ import type { Route } from "./+types/forgot-password";
 import { Form as RouterForm, data, useActionData, useLoaderData } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
-import { errorName, passwordResetAvailable, recordPasswordResetEvent, requestPasswordReset } from "~/lib/password-reset.server";
+import { passwordResetAvailable, requestPasswordResetAndRecord } from "~/lib/password-reset.server";
 import { AuthPage } from "~/components/auth/auth-page";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Form } from "~/components/ouro/form/form";
@@ -54,14 +54,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // The answer never depends on whether the address has an account, and neither does its timing:
   // on Workers the lookup and the mail run after the response is sent.
-  const work = getRequestDb(context)
-    .then((db) => requestPasswordReset(db, env, email))
-    // Recorded without the address, so a broken mailer shows up without leaking who asked.
-    .then((outcome) => recordPasswordResetEvent(env, "spoonjoy.password_reset.requested", { outcome }))
-    .catch((error: unknown) => recordPasswordResetEvent(env, "spoonjoy.password_reset.requested", {
-      outcome: "error",
-      error_name: errorName(error),
-    }));
+  const work = requestPasswordResetAndRecord(getRequestDb(context), env, email);
   const waitUntil = context.cloudflare?.ctx?.waitUntil?.bind(context.cloudflare.ctx);
   if (waitUntil) waitUntil(work);
   else await work;

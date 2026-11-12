@@ -137,6 +137,27 @@ export async function endPasswordResetLinksAfterPasswordChange(
   }
 }
 
+/**
+ * Runs `requestPasswordReset` for the forgot-password form and records its outcome, never throwing.
+ * The event carries the outcome and, on a failure, the error's class name, never the address, so a
+ * broken mailer shows up without leaking who asked.
+ */
+export async function requestPasswordResetAndRecord(
+  db: Promise<Database>,
+  env: TransactionalEmailEnv | null | undefined,
+  email: string,
+): Promise<void> {
+  try {
+    const outcome = await requestPasswordReset(await db, env, email);
+    await recordPasswordResetEvent(env, "spoonjoy.password_reset.requested", { outcome });
+  } catch (error) {
+    await recordPasswordResetEvent(env, "spoonjoy.password_reset.requested", {
+      outcome: "error",
+      error_name: errorName(error),
+    });
+  }
+}
+
 /** An error's class name for telemetry, never its message (which can hold an address). */
 export function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
