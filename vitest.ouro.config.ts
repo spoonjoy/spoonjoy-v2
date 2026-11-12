@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import { ouroTestProjects } from "./app/lib/ouro/testing/vitest.ts";
 import { nativeShoppingInput, shoppingInputBounds, task21PrintMedia } from "./test/ouro/native-shopping-input";
+import { parkPointer } from "./test/ouro/park-pointer";
 
 // Native touchCancel is a CDP input capability, not a product/library API gap.
 // Register app-owned native input/print commands; preserve published coverage inputs.
@@ -15,9 +16,15 @@ const projects = ouroTestProjects({
     "test/ouro/**/*.test.{ts,tsx}",
   ],
 });
+// The mouse projects start each test with the mouse off the test frame (test/ouro/park-pointer.ts):
+// a mouse an earlier test left over the frame hovers whatever renders under it (spoonjoy-v2#678).
+// ouro-touch has no mouse to park.
+const parkPointerSetup = fileURLToPath(new URL("./test/ouro/park-pointer-setup.ts", import.meta.url));
 for (const project of projects) {
-  const browser = project.test?.browser;
-  if (browser) browser.commands = { ...browser.commands, nativeShoppingInput, shoppingInputBounds, task21PrintMedia };
+  const test = project.test;
+  const browser = test?.browser;
+  if (browser) browser.commands = { ...browser.commands, nativeShoppingInput, shoppingInputBounds, task21PrintMedia, parkPointer };
+  if (test && test.name !== "ouro-touch") test.setupFiles = [...[test.setupFiles ?? []].flat(), parkPointerSetup];
 }
 
 // Registry tests run only in CI browsers, with Spoonjoy's real theme and pinned Vitest 4.
