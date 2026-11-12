@@ -9,6 +9,8 @@ const DISALLOWED = [
   "/auth/",
   "/login",
   "/signup",
+  "/forgot-password",
+  "/reset-password",
   "/logout",
   "/shopping-list",
   "/search",

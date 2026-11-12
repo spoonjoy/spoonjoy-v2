@@ -88,6 +88,9 @@ export const census: Journey[] = [
   { id: "home-newbie", enrolled: true, persona: "newbie", path: "/", states: [DEFAULT] },
   { id: "sign-in", enrolled: true, persona: "signed-out", path: "/login", states: [DEFAULT] },
   { id: "sign-up", enrolled: true, persona: "signed-out", path: "/signup", states: [DEFAULT] },
+  { id: "forgot-password", enrolled: true, persona: "signed-out", path: "/forgot-password", states: [DEFAULT] },
+  // A token that never existed: the expired-link state, the same on every run.
+  { id: "reset-password", enrolled: true, persona: "signed-out", path: "/reset-password?token=hxcensusnotoken", states: [DEFAULT] },
   { id: "log-out", enrolled: true, persona: "chef", path: "/logout", states: [DEFAULT] },
   { id: "privacy", enrolled: true, persona: "signed-out", path: "/privacy", states: [DEFAULT] },
   { id: "terms", enrolled: true, persona: "signed-out", path: "/terms", states: [DEFAULT] },

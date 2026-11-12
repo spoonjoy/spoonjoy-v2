@@ -48,6 +48,8 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/_index.tsx", "/", "user-product", { universalLink: true }),
   route("routes/login.tsx", "/login", "secure-web-handoff"),
   route("routes/signup.tsx", "/signup", "secure-web-handoff"),
+  route("routes/forgot-password.tsx", "/forgot-password", "secure-web-handoff"),
+  route("routes/reset-password.tsx", "/reset-password", "secure-web-handoff"),
   route("routes/logout.tsx", "/logout", "secure-web-handoff"),
   route("routes/auth.google.tsx", "/auth/google", "secure-web-handoff"),
   route("routes/auth.google.callback.tsx", "/auth/google/callback", "secure-web-handoff"),
