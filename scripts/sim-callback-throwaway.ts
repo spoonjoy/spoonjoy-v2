@@ -103,16 +103,18 @@ export function cleanupSql(account: Partial<ThrowawayAccount>, now: Date): strin
   return statements.map(renderStatement).join("\n");
 }
 
+// Only text-affinity columns (declared TEXT, CHAR, CLOB or untyped) can hold the id, username or email.
 export const COLUMNS_SQL = `SELECT m."name" AS "table", p."name" AS "column"
   FROM sqlite_master AS m, pragma_table_info(m."name") AS p
   WHERE m."type" = 'table' AND m."name" NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND m."name" NOT LIKE '\\_cf\\_%' ESCAPE '\\'
     AND m."name" NOT LIKE 'd1\\_%' ESCAPE '\\' AND m."name" NOT LIKE 'SearchDocument\\_%' ESCAPE '\\'
+    AND (p."type" = '' OR upper(p."type") LIKE '%TEXT%' OR upper(p."type") LIKE '%CHAR%' OR upper(p."type") LIKE '%CLOB%')
   ORDER BY m."name", p."cid"`;
 
 const quoteName = (name: string) => `"${name.replaceAll('"', '""')}"`;
 
-/** Count queries over every column of every scanned table, a few tables per query. */
-export function scanQueries(columns: { table: string; column: string }[], needles: string[], tablesPerQuery = 8): string[] {
+/** Count queries over every text column of every scanned table, a few tables per query. */
+export function scanQueries(columns: { table: string; column: string }[], needles: string[], tablesPerQuery = 4): string[] {
   const byTable = new Map<string, string[]>();
   for (const { table, column } of columns) {
     if (SKIPPED_TABLE_PATTERN.test(table)) continue;
@@ -142,12 +144,18 @@ export function parseWranglerJson(stdout: string): Record<string, unknown>[] {
 type Run = (sql: string) => Promise<Record<string, unknown>[]>;
 
 async function d1(args: string[]) {
-  const { stdout } = await execFileAsync(
-    "pnpm",
-    ["exec", "wrangler", "d1", "execute", DATABASE, "--remote", "--json", ...args],
-    { maxBuffer: 1024 * 1024 * 16 },
-  );
-  return parseWranglerJson(stdout);
+  try {
+    const { stdout } = await execFileAsync(
+      "pnpm",
+      ["exec", "wrangler", "d1", "execute", DATABASE, "--remote", "--json", ...args],
+      { maxBuffer: 1024 * 1024 * 16 },
+    );
+    return parseWranglerJson(stdout);
+  } catch (error) {
+    // execFile's own message is the whole command line; D1's reason is in wrangler's output.
+    const { stdout = "", stderr = "" } = error as { stdout?: string; stderr?: string };
+    throw new Error(`wrangler d1 execute failed: ${`${stderr}\n${stdout}`.trim().slice(-1200)}`);
+  }
 }
 
 const query: Run = (sql) => d1(["--command", sql]);
@@ -174,7 +182,14 @@ export async function scan(account: Partial<ThrowawayAccount>, run: Run = query)
   const hits: { table: string; rows: number }[] = [];
   const queries = scanQueries(columns, [id, username, email]);
   for (const sql of queries) {
-    for (const row of await run(sql)) {
+    // A query over several tables can exceed a D1 limit; then each table goes on its own, and a single table
+    // that still fails fails the scan.
+    const rows = await run(sql).catch(async (error: unknown) => {
+      const single = sql.split(" UNION ALL ");
+      if (single.length === 1) throw error;
+      return (await Promise.all(single.map((one) => run(one)))).flat();
+    });
+    for (const row of rows) {
       if (Number(row.n) > 0) hits.push({ table: String(row.t), rows: Number(row.n) });
     }
   }

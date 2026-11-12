@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   cleanupSql,
+  COLUMNS_SQL,
   main,
   parseWranglerJson,
   renderStatement,
@@ -57,7 +58,7 @@ describe("sim callback throwaway accounts", () => {
     expect(tokenCountSql(account)).toContain(`"OAuthRefreshToken" WHERE "userId" = '${account.id}'`);
   });
 
-  it("scans every column of every table except FTS shadow tables, in a few queries", () => {
+  it("scans every listed column of every table except FTS shadow tables, in a few queries", () => {
     const queries = scanQueries(
       [
         { table: "User", column: "email" },
@@ -73,6 +74,24 @@ describe("sim callback throwaway accounts", () => {
     expect(queries.join(" ")).toContain(`instr(CAST("n" AS TEXT), 'a') > 0`);
     expect(queries.join(" ")).not.toContain("SearchDocument_content");
     expect(queries.join(" ")).not.toContain("sqlite_sequence");
+  });
+
+  it("scans only text columns, and retries a failed multi-table query one table at a time", async () => {
+    expect(COLUMNS_SQL).toContain(`LIKE '%TEXT%'`);
+    const seen: string[] = [];
+    const run = async (sql: string) => {
+      seen.push(sql);
+      if (sql.startsWith(`SELECT m."name"`)) return [{ table: "A", column: "x" }, { table: "B", column: "y" }];
+      if (sql.includes("UNION ALL")) throw new Error("D1 limit");
+      return [{ t: sql.includes(`FROM "A"`) ? "A" : "B", n: sql.includes(`FROM "B"`) ? 1 : 0 }];
+    };
+    await expect(scan(account, run)).resolves.toMatchObject({ hits: [{ table: "B", rows: 1 }] });
+    expect(seen).toHaveLength(4);
+    const failing = async (sql: string) => {
+      if (sql.startsWith(`SELECT m."name"`)) return [{ table: "A", column: "x" }];
+      throw new Error("D1 limit");
+    };
+    await expect(scan(account, failing)).rejects.toThrow(/D1 limit/);
   });
 
   it("reports tables that still mention the throwaway", async () => {
