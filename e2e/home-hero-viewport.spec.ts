@@ -16,13 +16,13 @@ test.describe("guest home hero viewport reveal", () => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto("/");
 
-      const brandSignal = page.getByText("The Recipe App");
-      const headline = page.getByRole("heading", { name: "Your food should look as good as it tastes." });
-      const continuation = page.getByRole("heading", { name: "Collect" });
+      const brandSignal = page.getByText("For home cooks");
+      const headline = page.getByRole("heading", { name: "Cook any recipe one step at a time." });
+      const continuation = page.getByRole("heading", { name: "Save" });
 
       await expect(brandSignal).toBeVisible();
       await expect(headline).toBeVisible();
-      await expect(page.getByText(/Spoonjoy is a photo-first kitchen for the recipes you actually cook/i)).toBeVisible();
+      await expect(page.getByText(/Paste a link and skip the life story above the recipe/i)).toBeVisible();
 
       const heroBox = await headline.locator("xpath=ancestor::section[1]").boundingBox();
       const brandBox = await brandSignal.boundingBox();

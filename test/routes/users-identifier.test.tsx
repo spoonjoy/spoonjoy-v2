@@ -300,7 +300,7 @@ describe("Users $identifier Route", () => {
         {
           name: "description",
           content:
-            "chef-rowan's Spoonjoy kitchen — recipes, cookbooks, and the dishes they cook.",
+            "What chef-rowan cooks: their recipes and cookbooks on Spoonjoy. Fork any recipe into your own kitchen.",
         },
         { property: "og:site_name", content: "Spoonjoy" },
         { property: "og:type", content: "profile" },
@@ -308,7 +308,7 @@ describe("Users $identifier Route", () => {
         {
           property: "og:description",
           content:
-            "chef-rowan's Spoonjoy kitchen — recipes, cookbooks, and the dishes they cook.",
+            "What chef-rowan cooks: their recipes and cookbooks on Spoonjoy. Fork any recipe into your own kitchen.",
         },
         { property: "og:url", content: "https://spoonjoy.app/users/chef-rowan" },
         {
@@ -320,7 +320,7 @@ describe("Users $identifier Route", () => {
         {
           name: "twitter:description",
           content:
-            "chef-rowan's Spoonjoy kitchen — recipes, cookbooks, and the dishes they cook.",
+            "What chef-rowan cooks: their recipes and cookbooks on Spoonjoy. Fork any recipe into your own kitchen.",
         },
         {
           tagName: "link",

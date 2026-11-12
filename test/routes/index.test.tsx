@@ -348,20 +348,20 @@ describe("Kitchen Index Route", () => {
       const result = meta({} as any);
 
       expect(result).toEqual([
-        { title: "Spoonjoy — The Recipe App for Meals You Actually Cook" },
-        { name: "description", content: "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen." },
+        { title: "Spoonjoy Recipe App: Save Recipes, Cook Step by Step" },
+        { name: "description", content: "Save recipes from any site or type up your own, then cook them one big step at a time. Copy a friend's recipe and their name stays on it." },
         { property: "og:site_name", content: "Spoonjoy" },
         { property: "og:type", content: "website" },
-        { property: "og:title", content: "Spoonjoy — The Recipe App for Meals You Actually Cook" },
-        { property: "og:description", content: "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen." },
+        { property: "og:title", content: "Spoonjoy Recipe App: Save Recipes, Cook Step by Step" },
+        { property: "og:description", content: "Save recipes from any site or type up your own, then cook them one big step at a time. Copy a friend's recipe and their name stays on it." },
         { property: "og:url", content: "https://spoonjoy.app/" },
         { property: "og:image", content: "https://spoonjoy.app/og/spoonjoy-home.png" },
         { property: "og:image:width", content: "1200" },
         { property: "og:image:height", content: "630" },
         { property: "og:image:type", content: "image/png" },
         { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:title", content: "Spoonjoy — The Recipe App for Meals You Actually Cook" },
-        { name: "twitter:description", content: "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen." },
+        { name: "twitter:title", content: "Spoonjoy Recipe App: Save Recipes, Cook Step by Step" },
+        { name: "twitter:description", content: "Save recipes from any site or type up your own, then cook them one big step at a time. Copy a friend's recipe and their name stays on it." },
         { name: "twitter:image", content: "https://spoonjoy.app/og/spoonjoy-home.png" },
         { tagName: "link", rel: "canonical", href: "https://spoonjoy.app/" },
         { "script:ld+json": HOMEPAGE_JSON_LD },
@@ -435,12 +435,12 @@ describe("Kitchen Index Route", () => {
 
       render(<Stub initialEntries={["/"]} />);
 
-      expect(await screen.findByRole("heading", { name: /your food should look as good as it tastes/i })).toBeInTheDocument();
-      expect(screen.getByText("The Recipe App")).toBeInTheDocument();
-      expect(screen.getByText(/photo-first kitchen/i)).toBeInTheDocument();
-      expect(screen.getByText("Collect")).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: /cook any recipe one step at a time/i })).toBeInTheDocument();
+      expect(screen.getByText("For home cooks")).toBeInTheDocument();
+      expect(screen.getByText(/skip the life story/i)).toBeInTheDocument();
+      expect(screen.getByText("Save")).toBeInTheDocument();
       expect(screen.getByText("Cook")).toBeInTheDocument();
-      expect(screen.getByText("Share")).toBeInTheDocument();
+      expect(screen.getByText("Fork")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Start Your Kitchen" })).toHaveAttribute("href", "/signup");
       expect(screen.getByRole("link", { name: "Log in" })).toHaveAttribute("href", "/login");
       expect(screen.getByRole("link", { name: "Search Recipes" })).toHaveAttribute("href", "/search");
@@ -465,7 +465,7 @@ describe("Kitchen Index Route", () => {
 
       const { container } = render(<Stub initialEntries={["/"]} />);
 
-      const heading = await screen.findByRole("heading", { name: /your food should look as good as it tastes/i });
+      const heading = await screen.findByRole("heading", { name: /cook any recipe one step at a time/i });
       const hero = heading.closest("section");
       expect(hero).not.toBeNull();
       expect(hero).toHaveClass("overflow-hidden");
@@ -477,9 +477,9 @@ describe("Kitchen Index Route", () => {
       const heroImage = container.querySelector<HTMLImageElement>('img[src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=2400&q=90"]');
       expect(heroImage).not.toBeNull();
       expect(heroImage).toHaveAttribute("alt", "Dinner table with shared dishes");
-      expect(screen.getByText("The Recipe App")).toBeInTheDocument();
-      expect(screen.getByText(/Spoonjoy is a photo-first kitchen for the recipes you actually cook/i)).toBeInTheDocument();
-      expect(screen.getByText("Collect")).toBeInTheDocument();
+      expect(screen.getByText("For home cooks")).toBeInTheDocument();
+      expect(screen.getByText(/Paste a link and skip the life story above the recipe/i)).toBeInTheDocument();
+      expect(screen.getByText("Save")).toBeInTheDocument();
       // The photo is shaded for photo-white text, and the outline buttons take photo-white tokens.
       expect(hero!.querySelector(".sj-landing-hero-shade")).not.toBeNull();
       expect(screen.getByRole("link", { name: "Log in" }).closest(".sj-on-charcoal")).not.toBeNull();

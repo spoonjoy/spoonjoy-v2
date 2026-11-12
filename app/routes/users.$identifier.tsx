@@ -49,7 +49,7 @@ export function meta({ data }: Route.MetaArgs) {
     ];
   }
   const username = data.profile.username;
-  const description = `${username}'s Spoonjoy kitchen — recipes, cookbooks, and the dishes they cook.`;
+  const description = `What ${username} cooks: their recipes and cookbooks on Spoonjoy. Fork any recipe into your own kitchen.`;
   return [
     { title: kitchenPageTitle(username) },
     { name: "description", content: description },

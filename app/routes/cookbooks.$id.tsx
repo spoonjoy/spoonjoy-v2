@@ -113,7 +113,7 @@ export function meta({ data }: Route.MetaArgs) {
   }
 
   const recipeLabel = `${data.cookbook.recipes.length} ${data.cookbook.recipes.length === 1 ? "recipe" : "recipes"}`;
-  const description = `${data.cookbook.title} by ${data.cookbook.author.username} on Spoonjoy with ${recipeLabel}.`;
+  const description = `${data.cookbook.title}: ${recipeLabel} gathered by ${data.cookbook.author.username} on Spoonjoy.`;
 
   return [
     { title: `${data.cookbook.title} - Spoonjoy` },

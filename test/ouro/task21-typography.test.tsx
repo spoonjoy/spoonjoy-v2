@@ -250,14 +250,14 @@ for (const theme of ["light", "dark"] as const) {
       const copyContent = (baseline: HTMLElement) => {
         const rest = document.createElement("span");
         if (compact) rest.className = "hidden";
-        rest.textContent = ", the notes you learn by doing, and the cookbooks that grow out of real meals";
-        baseline.append("Spoonjoy is a photo-first kitchen for the recipes you actually cook", rest, ".");
+        rest.textContent = ", then cook it with notes from everyone who made it before you";
+        baseline.append("Paste a link and skip the life story above the recipe", rest, ".");
       };
       const copyActual = phone
         ? compareDelivered(copy, "max-w-2xl text-base/6 text-[var(--sj-on-photo)]", copyContent)
         : compareDelivered(copy, `${text} mt-5 max-w-2xl text-lg/8 text-[var(--sj-on-photo)]`, copyContent);
       expect(copyActual.fontSize).toBe(phone ? "16px" : "18px");
-      expect(copy.innerText.includes("cookbooks that grow"), `${width} x ${height} shows the whole copy`).toBe(!compact);
+      expect(copy.innerText.includes("everyone who made it"), `${width} x ${height} shows the whole copy`).toBe(!compact);
       measurements.push({ width, height, title: actual, copy: copyActual });
     }
     await annotate(`T21_PHOTO_TYPE ${JSON.stringify({ theme, measurements })}`);

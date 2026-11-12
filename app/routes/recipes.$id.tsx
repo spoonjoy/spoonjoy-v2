@@ -73,7 +73,7 @@ export function meta({ data, error }: Route.MetaArgs) {
   }
 
   const description = data.recipe.description?.trim()
-    || `A Spoonjoy recipe by ${chefDisplayName(data.recipe.chef.username)}.`;
+    || `${data.recipe.title.trim()}, a recipe by ${chefDisplayName(data.recipe.chef.username)}. Cook it step by step on Spoonjoy.`;
 
   return [
     { title: recipePageTitle(data.recipe.title) },

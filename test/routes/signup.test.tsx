@@ -32,7 +32,7 @@ describe("Signup Route", () => {
   it("returns the signup document title", () => {
     expect(meta({} as any)).toEqual([
       { title: "Sign up - Spoonjoy" },
-      { name: "description", content: "Create a Spoonjoy account." },
+      { name: "description", content: "Start a free Spoonjoy kitchen and save your first recipe from a link." },
     ]);
   });
 
