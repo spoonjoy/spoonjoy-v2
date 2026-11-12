@@ -4,6 +4,7 @@ import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { normalizeCredentialScopes } from "~/lib/api-auth.server";
 import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
 import type { AppleUser } from "~/lib/apple-oauth.server";
+import { findExistingOAuthAccount } from "~/lib/oauth-user.server";
 import type { AppleNativeAuthConfig } from "~/lib/env.server";
 import {
   issueConnectorTokens,
@@ -66,6 +67,13 @@ export interface NativeAppleCredentialInput {
   fullName?: string | null;
   email?: string | null;
 }
+
+/**
+ * A verified native Apple identity. `email` is null when Apple's token carries none: Apple puts the
+ * address in a returning Apple ID's token only when the app's first authorization shared it, and
+ * a reauthentication that asks for no scopes gets no address either.
+ */
+export type NativeAppleUser = Omit<AppleUser, "email"> & { email: string | null };
 
 export interface NativeAppleAuthResult {
   action: "user_created" | "user_logged_in";
@@ -173,7 +181,7 @@ export async function verifyNativeAppleIdentityToken(
   input: NativeAppleCredentialInput,
   config: AppleNativeAuthConfig,
   options: { fetcher?: typeof fetch; now?: Date } = {},
-): Promise<AppleUser> {
+): Promise<NativeAppleUser> {
   const parts = input.identityToken.split(".");
   if (parts.length !== 3 || parts.some((part) => !part)) {
     throw new NativeAppleAuthError("invalid_identity_token", "Apple identity token is malformed.", 400);
@@ -224,7 +232,7 @@ export async function verifyNativeAppleIdentityToken(
   const id = stringClaim(payload.sub);
   const tokenEmail = stringClaim(payload.email);
   const email = tokenEmail ?? stringClaim(input.email);
-  if (!id || !email) {
+  if (!id) {
     throw new NativeAppleAuthError("invalid_identity_token", "Apple identity token is missing required account claims.", 401);
   }
 
@@ -247,17 +255,33 @@ export async function handleNativeAppleSignIn(
   config: AppleNativeAuthConfig,
   options: { issuer: string; fetcher?: typeof fetch; now?: Date; d1?: D1ReadDatabase | null },
 ): Promise<NativeAppleAuthResult> {
-  const appleUser = await verifyNativeAppleIdentityToken(input, config, {
+  const verified = await verifyNativeAppleIdentityToken(input, config, {
     fetcher: options.fetcher,
     now: options.now,
   });
-  const callback = await handleAppleOAuthCallback({
-    db,
-    d1: options.d1,
-    appleUser,
-    currentUserId: null,
-    redirectTo: null,
-  });
+  let callback;
+  if (verified.email === null) {
+    // No address to create or match an account with, so only an Apple ID already linked to a
+    // Spoonjoy account can sign in: `sub` is Apple's stable id for this person and this app.
+    const existing = await findExistingOAuthAccount(db, "apple", verified.id);
+    if (!existing) {
+      throw new NativeAppleAuthError(
+        "apple_email_unavailable",
+        "Apple didn't share an email for this Apple ID, so Spoonjoy can't find or create your account with it. Sign in another way, then link Apple in Settings.",
+        409,
+      );
+    }
+    callback = { success: true, userId: existing.userId, action: "user_logged_in" as const, error: undefined, message: undefined };
+  } else {
+    const appleUser: AppleUser = { ...verified, email: verified.email };
+    callback = await handleAppleOAuthCallback({
+      db,
+      d1: options.d1,
+      appleUser,
+      currentUserId: null,
+      redirectTo: null,
+    });
+  }
   if (!callback.success || !callback.userId) {
     throw new NativeAppleAuthError(callback.error ?? "apple_sign_in_failed", callback.message ?? "Apple sign-in failed.", 409);
   }
