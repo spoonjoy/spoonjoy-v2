@@ -1044,7 +1044,8 @@ async function handleAccountSettingsIntent({
 
     return {
       success: true,
-      message: "Password removed successfully",
+      intent: "removePassword",
+      message: "Your password has been removed successfully",
     };
   }
 
