@@ -9,9 +9,6 @@
 // behind a guard that the account exists with exactly this email, then removes the account's chef search
 // document and its key. scan then looks for the id, username and email in every column of every table.
 import { execFile } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
@@ -49,6 +46,9 @@ export function throwawayAccount({ id, email, username }: Partial<ThrowawayAccou
 function literal(value: unknown): string {
   if (value === null || value === undefined) return "NULL";
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "bigint") return String(value);
+  if (typeof value === "boolean") return value ? "1" : "0";
+  if (value instanceof Date) return `'${value.toISOString()}'`;
   if (typeof value === "string") return `'${value.replaceAll("'", "''")}'`;
   throw new Error(`Cannot write ${typeof value} as SQL.`);
 }
@@ -105,7 +105,8 @@ export function cleanupSql(account: Partial<ThrowawayAccount>, now: Date): strin
 
 export const COLUMNS_SQL = `SELECT m."name" AS "table", p."name" AS "column"
   FROM sqlite_master AS m, pragma_table_info(m."name") AS p
-  WHERE m."type" = 'table'
+  WHERE m."type" = 'table' AND m."name" NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND m."name" NOT LIKE '\\_cf\\_%' ESCAPE '\\'
+    AND m."name" NOT LIKE 'd1\\_%' ESCAPE '\\' AND m."name" NOT LIKE 'SearchDocument\\_%' ESCAPE '\\'
   ORDER BY m."name", p."cid"`;
 
 const quoteName = (name: string) => `"${name.replaceAll('"', '""')}"`;
@@ -131,7 +132,10 @@ export function scanQueries(columns: { table: string; column: string }[], needle
 }
 
 export function parseWranglerJson(stdout: string): Record<string, unknown>[] {
-  const parsed = JSON.parse(stdout.slice(stdout.indexOf("["))) as { results?: Record<string, unknown>[] }[];
+  // wrangler's --json output is one array; banners or warnings may come before it on their own lines.
+  const start = stdout.startsWith("[") ? 0 : stdout.indexOf("\n[") + 1;
+  if (start === 0 && !stdout.startsWith("[")) throw new Error(`wrangler printed no JSON: ${stdout.slice(0, 300)}`);
+  const parsed = JSON.parse(stdout.slice(start)) as { results?: Record<string, unknown>[] }[];
   return parsed.flatMap((entry) => (Array.isArray(entry?.results) ? entry.results : []));
 }
 
@@ -148,10 +152,20 @@ async function d1(args: string[]) {
 
 const query: Run = (sql) => d1(["--command", sql]);
 
-async function batch(sql: string) {
-  const file = join(await mkdtemp(join(tmpdir(), "sim-callback-")), "batch.sql");
-  await writeFile(file, sql);
-  return d1(["--file", file]);
+// --command sends the statements to D1's query endpoint as one batch, so a failed guard or statement leaves
+// nothing half-done; --file would go through D1's import path instead.
+const batch = (sql: string) => d1(["--command", sql]);
+
+/** Rows still waiting for the search drain, or still in the search index, for this account. */
+export function searchPendingSql(account: Partial<ThrowawayAccount>): string {
+  const { id } = throwawayAccount(account);
+  return renderStatement([
+    `SELECT (SELECT count(*) FROM "SearchDirtyEntity" WHERE instr("entityId", ?) > 0)
+          + (SELECT count(*) FROM "SearchDocument" WHERE "entityId" = ? OR "ownerId" = ?) AS "n"`,
+    id,
+    id,
+    id,
+  ]);
 }
 
 export async function scan(account: Partial<ThrowawayAccount>, run: Run = query) {
@@ -185,13 +199,19 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv, run: Run = qu
     console.log(`Deleted ${account.id}.`);
     return;
   }
+  if (action === "search-pending") {
+    const pending = Number((await run(searchPendingSql(account)))[0]?.n);
+    console.log(`Search rows pending for ${account.id}: ${pending}`);
+    if (pending !== 0) throw new Error("Search still has rows for the account.");
+    return;
+  }
   if (action === "scan") {
     const result = await scan(account, run);
     console.log(JSON.stringify(result));
     if (result.hits.length > 0) throw new Error(`Rows still mention ${account.id}, its username or its email.`);
     return;
   }
-  throw new Error("action must be seed, cleanup or scan.");
+  throw new Error("action must be seed, cleanup, search-pending or scan.");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

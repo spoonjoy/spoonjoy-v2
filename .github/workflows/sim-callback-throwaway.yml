@@ -52,7 +52,6 @@ jobs:
       ACCOUNT_ID: ${{ inputs.account_id }}
       ACCOUNT_EMAIL: ${{ inputs.email }}
       ACCOUNT_USERNAME: ${{ inputs.username }}
-      PASSWORD_HASH: ${{ inputs.password_hash }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -78,22 +77,28 @@ jobs:
 
       - name: Seed the throwaway
         if: inputs.action == 'seed'
+        # Only this step sees the hash. It is the bcrypt hash of a 192-bit random password, used for one run.
+        env:
+          PASSWORD_HASH: ${{ inputs.password_hash }}
         run: pnpm exec tsx scripts/sim-callback-throwaway.ts seed
 
       - name: Delete the throwaway's rows
         if: inputs.action == 'cleanup'
         run: pnpm exec tsx scripts/sim-callback-throwaway.ts cleanup
 
-      - name: Scan every table until nothing mentions the throwaway
+      - name: Wait for search to drop the throwaway
         if: inputs.action == 'cleanup'
         run: |
           # Deleting the user queues a search update; a search request drains the queue.
-          for attempt in 1 2 3 4; do
+          for attempt in 1 2 3 4 5 6; do
             curl -fsS -o /dev/null "https://spoonjoy.app/search?q=simcallbackprobe" || true
-            sleep 20
-            if pnpm exec tsx scripts/sim-callback-throwaway.ts scan; then
+            sleep 15
+            if pnpm exec tsx scripts/sim-callback-throwaway.ts search-pending; then
               exit 0
             fi
-            echo "Attempt $attempt: rows still match; draining search and scanning again."
           done
           exit 1
+
+      - name: Scan every table for the throwaway
+        if: inputs.action == 'cleanup'
+        run: pnpm exec tsx scripts/sim-callback-throwaway.ts scan

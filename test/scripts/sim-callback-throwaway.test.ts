@@ -33,7 +33,10 @@ describe("sim callback throwaway accounts", () => {
   });
 
   it("renders bound statements as quoted SQL", () => {
-    expect(renderStatement([`SELECT ? AS "a", ? AS "b", ? AS "c"`, "it's", 3, null])).toBe(`SELECT 'it''s' AS "a", 3 AS "b", NULL AS "c";`);
+    expect(renderStatement([`SELECT ? AS "a", ? AS "b", ? AS "c", ? AS "d"`, "it's", 3, null, true])).toBe(
+      `SELECT 'it''s' AS "a", 3 AS "b", NULL AS "c", 1 AS "d";`,
+    );
+    expect(() => renderStatement([`SELECT ?`, {}])).toThrow(/Cannot write/);
     expect(() => renderStatement([`SELECT ?`, "a", "b"])).toThrow(/placeholders/);
   });
 
@@ -83,10 +86,24 @@ describe("sim callback throwaway accounts", () => {
     let batched = "";
     await expect(main(["cleanup"], env, run, async (sql) => ((batched = sql), []))).rejects.toThrow(/still there/);
     expect(batched).toContain(`DELETE FROM "User"`);
-    await expect(main([""], env, run)).rejects.toThrow(/seed, cleanup or scan/);
+    await expect(main([""], env, run)).rejects.toThrow(/seed, cleanup, search-pending or scan/);
   });
 
-  it("reads wrangler's JSON after any banner", () => {
-    expect(parseWranglerJson('banner\n[{"results":[{"n":1}],"success":true}]')).toEqual([{ n: 1 }]);
+  it("reads wrangler's JSON after any banner, and says so when there is none", () => {
+    expect(parseWranglerJson('banner [x]\n[{"results":[{"n":1}],"success":true}]')).toEqual([{ n: 1 }]);
+    expect(parseWranglerJson('[{"results":[],"success":true}]')).toEqual([]);
+    expect(() => parseWranglerJson("Not logged in.")).toThrow(/no JSON/);
+  });
+
+  it("seeds, then checks the row is there", async () => {
+    const statements: string[] = [];
+    const run = async (sql: string) => (statements.push(sql), sql.includes(`count(*) AS "n" FROM "User"`) ? [{ n: 1 }] : []);
+    await main(["seed"], { ...env, PASSWORD_HASH: passwordHash }, run);
+    expect(statements[0]).toContain(`INSERT INTO "User"`);
+  });
+
+  it("fails the search check while search still holds the account", async () => {
+    await expect(main(["search-pending"], env, async () => [{ n: 2 }])).rejects.toThrow(/Search still has rows/);
+    await expect(main(["search-pending"], env, async () => [{ n: 0 }])).resolves.toBeUndefined();
   });
 });
