@@ -56,6 +56,7 @@ describe("Redwood-era password hashes", () => {
     await expect(verifyRedwoodPassword(`${PASSWORD}x`, REDWOOD_SCRYPT.hashedPassword, REDWOOD_SCRYPT.salt)).resolves.toBe(false);
     await expect(verifyRedwoodPassword(PASSWORD, REDWOOD_LEGACY.hashedPassword, null)).resolves.toBe(false);
     await expect(verifyRedwoodPassword(PASSWORD, REDWOOD_LEGACY.hashedPassword, REDWOOD_SCRYPT.salt)).resolves.toBe(false);
+    await expect(verifyRedwoodPassword(PASSWORD, bcrypt.hashSync(PASSWORD, 4), REDWOOD_LEGACY.salt)).resolves.toBe(false);
   });
 
   it("refuses a stored scrypt work factor outside Redwood's", async () => {
@@ -116,6 +117,14 @@ describe("Redwood-era password hashes", () => {
 
     await expect(authenticateUserByEmailOrUsername(db, "redwood_upgrade", PASSWORD)).resolves.toMatchObject({ id: chef.id });
     await expect(db.user.findUnique({ where: { id: chef.id } })).resolves.toMatchObject(REDWOOD_LEGACY);
+  });
+
+  it("still signs in when the upgrade write rejects with a non-Error value", async () => {
+    const chef = await db.user.create({ data: { email: "redwood-odd@example.com", username: "redwood_odd", ...REDWOOD_LEGACY } });
+    vi.spyOn(db.user, "updateMany").mockRejectedValue("write refused");
+    expectConsoleWarning("password.upgrade_failed", { userId: chef.id, error: "unknown" });
+
+    await expect(authenticateUserByEmailOrUsername(db, "redwood_odd", PASSWORD)).resolves.toMatchObject({ id: chef.id });
   });
 
   it("accepts a Redwood-era password when a signed-in chef confirms it's them", async () => {
