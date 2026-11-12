@@ -8,14 +8,19 @@ name: Sim Callback Throwaway
 # cleanup counts the account's tokens, runs the app's own account deletion behind an exact-email guard, removes the
 # chef search document, asks spoonjoy.app's search to drain, and fails unless no column of any table mentions the
 # id, the username or the email.
+#
+# pending-apple-link-proof proves #679's pending Apple link on production without an Apple-signed token: it
+# seeds the throwaway with a password made in the job, stores one pending link for a synthetic sub
+# (probe-apple-sub-<16 hex>), signs in twice through /api/v1/auth/password/native with the link's token, reads
+# the rows back, and cleans up; the search wait and the scan below then run as for cleanup.
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: seed, cleanup, or scan (check an account that is already deleted)
+        description: seed, cleanup, scan (check an account that is already deleted), or pending-apple-link-proof
         type: choice
         required: true
-        options: [seed, cleanup, scan]
+        options: [seed, cleanup, scan, pending-apple-link-proof]
       account_id:
         description: probecb<18 hex>
         type: string
@@ -73,7 +78,7 @@ jobs:
         env:
           ACTION: ${{ inputs.action }}
         run: |
-          case "$ACTION" in seed|cleanup|scan) ;; *) echo "::error::action must be seed, cleanup or scan."; exit 1 ;; esac
+          case "$ACTION" in seed|cleanup|scan|pending-apple-link-proof) ;; *) echo "::error::action must be seed, cleanup, scan or pending-apple-link-proof."; exit 1 ;; esac
 
       - name: Seed the throwaway
         if: inputs.action == 'seed'
@@ -86,8 +91,13 @@ jobs:
         if: inputs.action == 'cleanup'
         run: pnpm exec tsx scripts/sim-callback-throwaway.ts cleanup
 
+      - name: Prove the pending Apple link, then clean up
+        if: inputs.action == 'pending-apple-link-proof'
+        # The password and the pending link's token are made inside this step and never printed.
+        run: pnpm exec tsx scripts/sim-callback-throwaway.ts pending-apple-link-proof
+
       - name: Wait for search to drop the throwaway
-        if: inputs.action == 'cleanup' || inputs.action == 'scan'
+        if: ${{ !cancelled() && (inputs.action == 'cleanup' || inputs.action == 'scan' || inputs.action == 'pending-apple-link-proof') }}
         run: |
           # Deleting the user queues a search update; a search request drains the queue.
           for attempt in 1 2 3 4 5 6; do
@@ -100,5 +110,5 @@ jobs:
           exit 1
 
       - name: Scan every table for the throwaway
-        if: inputs.action == 'cleanup' || inputs.action == 'scan'
+        if: ${{ !cancelled() && (inputs.action == 'cleanup' || inputs.action == 'scan' || inputs.action == 'pending-apple-link-proof') }}
         run: pnpm exec tsx scripts/sim-callback-throwaway.ts scan
