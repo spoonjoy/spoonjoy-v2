@@ -172,6 +172,16 @@ describe("Apple app-site-association and route classification contract", () => {
     expect(details.components).toEqual(APPLE_APP_LINK_COMPONENTS);
   });
 
+  it("lists every app under webcredentials so https sign-in callbacks return to the app", () => {
+    // ASWebAuthenticationSession's .https callback needs the webcredentials
+    // service for the callback host, not applinks.
+    const aasa = buildAppleAppSiteAssociation({ APPLE_TEAM_ID: "abcde12345" });
+
+    expect(aasa.webcredentials).toEqual({
+      apps: APPLE_BUNDLE_IDS.map((bundleID) => `ABCDE12345.${bundleID}`),
+    });
+  });
+
   it("serves the AASA response as cacheable JSON", async () => {
     const response = loader({
       context: { cloudflare: { env: { APPLE_TEAM_ID: "ZYXWV98765" } } },

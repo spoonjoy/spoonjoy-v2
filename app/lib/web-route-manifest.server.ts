@@ -181,5 +181,10 @@ export function buildAppleAppSiteAssociation(env?: Pick<Env, "APPLE_TEAM_ID"> | 
         },
       ],
     },
+    // The apps' https OAuth callback (ASWebAuthenticationSession .https) is
+    // matched through this service, not applinks.
+    webcredentials: {
+      apps: appIDs,
+    },
   };
 }
