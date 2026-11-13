@@ -748,7 +748,7 @@ describe("Shopping List Routes", () => {
       expect(
         screen.getByPlaceholderText("e.g., 2 lbs chicken breast or a dozen eggs")
       ).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Add to list" })).toBeInTheDocument();
     });
 
     it("should render checked items as checked rows of an Ouro HX checklist", async () => {

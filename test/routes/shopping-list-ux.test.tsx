@@ -176,7 +176,7 @@ describe("shopping list UX updates", () => {
     render(<Stub initialEntries={["/shopping-list"]} />);
     const input = (await screen.findByTestId("shopping-list-checklist-board"), document.querySelector("input[name='ingredientText']") as HTMLInputElement);
     fireEvent.change(input, { target: { value: "2 lemons" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to list" }));
 
     expect(await screen.findByTestId("shopping-list-action-error")).toHaveTextContent(message);
     expect(input.value).toBe("2 lemons");
@@ -210,7 +210,7 @@ describe("shopping list UX updates", () => {
     const input = document.querySelector("input[name='ingredientText']") as HTMLInputElement;
     const addItem = async (count: number) => {
       fireEvent.change(input, { target: { value: "2 lemons" } });
-      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      fireEvent.click(screen.getByRole("button", { name: "Add to list" }));
       await waitFor(() => expect(tokens).toHaveLength(count));
     };
     await addItem(1);
@@ -536,7 +536,7 @@ describe("shopping list UX updates", () => {
     render(<Stub initialEntries={["/shopping-list"]} />);
 
     fireEvent.change(await screen.findByLabelText(requiredLabel("Item")), { target: { value: "2 apples" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to list" }));
 
     expect(await screen.findByText("Review the parsed item before adding.")).toBeInTheDocument();
     expect(screen.getByDisplayValue("2")).toBeInTheDocument();
