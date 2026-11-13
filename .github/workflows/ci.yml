@@ -215,6 +215,11 @@ jobs:
         if: github.event_name != 'pull_request'
         run: pnpm run verify:clean:generated-contract
 
+      # Ouro UI's one action model: actions/generated/ must equal what actions/spoonjoy.actions.mts generates.
+      - name: 🎬 Declared actions match what they generate
+        if: github.event_name != 'pull_request'
+        run: node scripts/warning-gate.ts -- pnpm run actions:check
+
       # Hand-rolled controls in app code may only fall: the scan must equal
       # ouro-source-rules.baseline.json (see AGENTS.md, "The HX source rule").
       - name: 🧭 HX source rule
@@ -300,6 +305,10 @@ jobs:
 
       - name: 🔐 Verify generated API contract
         run: pnpm run verify:clean:generated-contract
+
+      # Ouro UI's one action model: actions/generated/ must equal what actions/spoonjoy.actions.mts generates.
+      - name: 🎬 Declared actions match what they generate
+        run: node scripts/warning-gate.ts -- pnpm run actions:check
 
       # Runs on every pull request and ratchets: no fingerprint may rise against the base commit's baseline unless
       # the new baseline records why under allowedRegressions.

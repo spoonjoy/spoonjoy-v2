@@ -1,0 +1,87 @@
+{
+  "generator": "ouro-actions 0.6.0",
+  "set": "spoonjoy",
+  "tool": "spoonjoy",
+  "actions": [
+    {
+      "id": "add_shopping_list_item",
+      "consent": "write",
+      "label": "Add to list",
+      "description": "Add an item to your shopping list.",
+      "agent": "Add or restore one item on the person's shopping list. It adds to the quantity of a matching item still on the list (same ingredient and unit); a removed or cleared matching item comes back at the added quantity, not on top of its old one.",
+      "input": {
+        "name": {
+          "label": "Item",
+          "description": "What to buy, such as eggs or flour.",
+          "arg": true,
+          "ask": "What should I add to your shopping list?",
+          "kind": "string"
+        },
+        "quantity": {
+          "label": "Quantity",
+          "description": "How many or how much, as a number above 0. Leave it out when it doesn't matter.",
+          "optional": true,
+          "min": 0,
+          "kind": "number"
+        },
+        "unit": {
+          "label": "Unit",
+          "description": "The unit for the quantity, such as grams, cups or cans. Leave it out for a plain count.",
+          "optional": true,
+          "kind": "string"
+        },
+        "categoryKey": {
+          "label": "Category",
+          "description": "Optional. The aisle's category key, such as produce or pantry.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "iconKey": {
+          "label": "Icon",
+          "description": "Optional. The item's icon key, such as wheat or package.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "idempotencyKey": {
+          "label": "Idempotency key",
+          "description": "Optional. Send the same key again when retrying this exact call, such as after a timeout, and the item is added once.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "ownerEmail": {
+          "label": "Owner",
+          "description": "Optional. Whose list, for a local server with no signed-in person; a signed-in caller always acts on their own list.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        }
+      },
+      "output": {},
+      "cli": "list add"
+    },
+    {
+      "id": "approve_agent_connection",
+      "consent": "person-only",
+      "label": "Approve access",
+      "description": "Let this agent, app or device use your Spoonjoy account.",
+      "agent": "Approve a pending agent connection request, which gives that client access to the person's Spoonjoy account.",
+      "input": {
+        "requestId": {
+          "label": "Request",
+          "description": "The connection request's id, from start_agent_connection.",
+          "arg": true,
+          "kind": "string"
+        }
+      },
+      "output": {},
+      "personOnly": {
+        "reason": "You can't approve access to the person's Spoonjoy account; only they can.",
+        "how": "with Approve access on the connection page, after typing the code you showed them"
+      },
+      "cli": "connection approve"
+    }
+  ]
+}

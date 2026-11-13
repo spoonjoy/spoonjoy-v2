@@ -6,7 +6,7 @@ import type { JsonRpcToolRouter } from "../app/lib/mcp/json-rpc.server";
 import { spoonjoyRemoteAuthorizationHeader } from "../app/lib/mcp/spoonjoy-remote-auth.server";
 import { getSpoonjoyMcpEnv } from "../app/lib/mcp/spoonjoy-mcp-env.server";
 import { readSpoonjoyMcpCachedToken, writeSpoonjoyMcpCachedToken } from "../app/lib/mcp/spoonjoy-token-cache.server";
-import { callSpoonjoyMcpTool, listSpoonjoyMcpTools } from "../app/lib/mcp/spoonjoy-tools.server";
+import { callSpoonjoyMcpTool, listSpoonjoyMcpTools, refuseSpoonjoyMcpTool } from "../app/lib/mcp/spoonjoy-tools.server";
 
 type RemoteOperation = {
   name: string;
@@ -109,6 +109,8 @@ const router: JsonRpcToolRouter = {
     return { tools: remoteToolList ?? listSpoonjoyMcpTools() };
   },
   async callTool(name, args) {
+    const refused = refuseSpoonjoyMcpTool(name);
+    if (refused) return refused;
     if (baseUrl) {
       const data = await remoteJson(baseUrl, `/api/tools/${encodeURIComponent(name)}`, {
         method: "POST",

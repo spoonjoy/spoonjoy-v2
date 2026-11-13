@@ -37,6 +37,7 @@ import {
 import {
   callSpoonjoyMcpTool,
   listSpoonjoyMcpTools,
+  refuseSpoonjoyMcpTool,
 } from "~/lib/mcp/spoonjoy-tools.server";
 import {
   buildSpoonjoyApiContext,
@@ -437,6 +438,8 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
       return { tools: listSpoonjoyMcpTools() };
     },
     async callTool(name, args) {
+      const refused = refuseSpoonjoyMcpTool(name);
+      if (refused) return refused;
       const context = buildSpoonjoyApiContext({ db, principal, cloudflareEnv, waitUntil, request });
       try {
         const text = await callSpoonjoyMcpTool(name, args, context);

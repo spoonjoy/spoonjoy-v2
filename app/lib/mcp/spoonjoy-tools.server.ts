@@ -4,6 +4,13 @@ import {
   type SpoonjoyApiContext,
   type SpoonjoyMcpToolDescriptor,
 } from "~/lib/spoonjoy-api.server";
+import { personOnlyMcpResult } from "~/lib/mcp/declared-actions.server";
+
+/**
+ * The answer to a call to a person-only action (actions/spoonjoy.actions.mts): no agent door offers it, so a call is
+ * refused with its typed refusal, which says how the person does it. Null for every other tool.
+ */
+export const refuseSpoonjoyMcpTool = personOnlyMcpResult;
 
 export type SpoonjoyMcpContext = SpoonjoyApiContext;
 

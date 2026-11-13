@@ -91,6 +91,8 @@
     "census:update": "node e2e/ouro-census/census-update.mjs",
     "census:compare": "node e2e/ouro-census/census-compare.mjs",
     "explore:qa": "node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.explore.config.ts",
+    "actions:generate": "node tools/ouro-actions/ouro-actions.mts generate actions/spoonjoy.actions.mts actions/generated",
+    "actions:check": "node tools/ouro-actions/ouro-actions.mts check actions/spoonjoy.actions.mts actions/generated",
     "typecheck": "pnpm run api:playground:generate && react-router typegen && tsc && tsc -p tsconfig.e2e.json",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "test": "pnpm run api:playground:generate && vitest",

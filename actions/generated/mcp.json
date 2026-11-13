@@ -1,0 +1,83 @@
+{
+  "generator": "ouro-actions 0.6.0",
+  "set": "spoonjoy",
+  "tools": [
+    {
+      "name": "add_shopping_list_item",
+      "title": "Add to list",
+      "description": "Add or restore one item on the person's shopping list. It adds to the quantity of a matching item still on the list (same ingredient and unit); a removed or cleared matching item comes back at the added quantity, not on top of its old one.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "What to buy, such as eggs or flour."
+          },
+          "quantity": {
+            "type": "number",
+            "description": "How many or how much, as a number above 0. Leave it out when it doesn't matter.",
+            "minimum": 0
+          },
+          "unit": {
+            "type": "string",
+            "description": "The unit for the quantity, such as grams, cups or cans. Leave it out for a plain count."
+          },
+          "categoryKey": {
+            "type": "string",
+            "description": "Optional. The aisle's category key, such as produce or pantry."
+          },
+          "iconKey": {
+            "type": "string",
+            "description": "Optional. The item's icon key, such as wheat or package."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "Optional. Send the same key again when retrying this exact call, such as after a timeout, and the item is added once."
+          },
+          "ownerEmail": {
+            "type": "string",
+            "description": "Optional. Whose list, for a local server with no signed-in person; a signed-in caller always acts on their own list."
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    }
+  ],
+  "refusals": {
+    "approve_agent_connection": {
+      "ax": "outcome/1",
+      "action": "connection approve",
+      "effect": "private",
+      "audience": {
+        "only": true,
+        "who": "only you"
+      },
+      "target": null,
+      "state": "refused",
+      "summary": "connection approve: You can't approve access to the person's Spoonjoy account; only they can. Ask the person, who does it with Approve access on the connection page, after typing the code you showed them.",
+      "postcondition": {
+        "checked": false,
+        "holds": null,
+        "how": "not checked"
+      },
+      "receipt": null,
+      "next": [],
+      "error": {
+        "code": "person-only",
+        "exit": 2,
+        "thing": "connection approve",
+        "problem": "You can't approve access to the person's Spoonjoy account; only they can. Ask the person, who does it with Approve access on the connection page, after typing the code you showed them",
+        "fix": null,
+        "message": "connection approve: You can't approve access to the person's Spoonjoy account; only they can. Ask the person, who does it with Approve access on the connection page, after typing the code you showed them."
+      }
+    }
+  }
+}

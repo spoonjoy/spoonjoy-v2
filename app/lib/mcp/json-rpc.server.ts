@@ -29,7 +29,8 @@ export type ParsedJsonRpcLine =
 
 export interface JsonRpcToolRouter {
   listTools(): { tools: unknown[] };
-  callTool(name: string, args: Record<string, unknown>): Promise<{ content: unknown[] }>;
+  /** A tool's result; `isError` marks a tool error the agent repairs from, such as a person-only refusal. */
+  callTool(name: string, args: Record<string, unknown>): Promise<{ content: unknown[]; structuredContent?: unknown; isError?: boolean }>;
 }
 
 const PARSE_ERROR = -32700;
@@ -206,7 +207,7 @@ export async function handleJsonRpcMessage(
           jsonrpc: "2.0",
           id,
           result: options.era === "modern"
-            ? { resultType: "complete", ...result, isError: false, _meta: MCP_SERVER_INFO_META }
+            ? { resultType: "complete", ...result, isError: result.isError ?? false, _meta: MCP_SERVER_INFO_META }
             : result,
         };
       }

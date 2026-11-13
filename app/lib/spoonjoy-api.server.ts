@@ -109,6 +109,7 @@ import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { retryD1Write as retryApiTokenRevoke } from "~/lib/d1-write-retry.server";
 import { assertAcceptableText } from "~/lib/objectionable-terms";
+import { declaredMcpTool } from "~/lib/mcp/declared-actions.server";
 import {
   addRecipeToCookbook,
   asCompatibleCookbookD1Database,
@@ -3390,24 +3391,14 @@ async function addShoppingListItemOnceOnD1(
   return putShoppingListItemOnceOnD1(d1, { ...put, itemId: crypto.randomUUID(), writeKey, now: new Date() });
 }
 
+// Declared once in actions/spoonjoy.actions.mts: its name, description and input schema are the generated MCP tool's.
+const addShoppingListItemDeclared = declaredMcpTool("add_shopping_list_item");
+
 const addShoppingListItemTool: SpoonjoyApiOperation = {
-  name: "add_shopping_list_item",
-  description: "Add or restore one manual item on the configured owner shopping list. It adds to the quantity of a matching item still on the list (same ingredient and unit); a removed or cleared matching item comes back at the added quantity, not on top of its old one.",
+  name: addShoppingListItemDeclared.name,
+  description: addShoppingListItemDeclared.description,
   requiredScopes: ["shopping_list:write"],
-  inputSchema: {
-    type: "object",
-    properties: {
-      ownerEmail: { type: "string" },
-      name: { type: "string" },
-      quantity: { type: "number", exclusiveMinimum: 0 },
-      unit: { type: "string" },
-      categoryKey: { type: "string" },
-      iconKey: { type: "string" },
-      idempotencyKey: { type: "string", description: "Optional. Send the same key again when retrying this exact call, such as after a timeout, and the item is added once." },
-    },
-    required: ["name"],
-    additionalProperties: false,
-  },
+  inputSchema: addShoppingListItemDeclared.inputSchema,
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
     const name = requiredString(args, "name");
@@ -4221,7 +4212,7 @@ const TOOL_ANNOTATIONS = {
   create_cookbook: { title: "Create cookbook", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   add_recipe_to_cookbook: { title: "Add recipe to cookbook", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   remove_recipe_from_cookbook: { title: "Remove recipe from cookbook", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
-  add_shopping_list_item: { title: "Add shopping-list item", readOnlyHint: false, destructiveHint: false },
+  add_shopping_list_item: { title: addShoppingListItemDeclared.title, ...addShoppingListItemDeclared.annotations },
   set_shopping_list_item_checked: { title: "Check shopping-list item", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   remove_shopping_list_item: { title: "Remove shopping-list item", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   get_shopping_list: { title: "Get shopping list", readOnlyHint: true },
