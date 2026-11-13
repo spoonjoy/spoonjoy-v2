@@ -198,6 +198,18 @@ describe("json-rpc MCP server", () => {
     });
   });
 
+  it("keeps a tool error a tool error in a modern result, and marks every other result not an error", async () => {
+    const refusal = { content: [{ type: "text", text: "refused" }], structuredContent: { state: "refused" }, isError: true };
+    const refusing = router({ callTool: vi.fn(async () => refusal) });
+    const call = { jsonrpc: "2.0", id: "call-modern", method: "tools/call", params: { name: "approve_agent_connection", arguments: {} } };
+    await expect(handleJsonRpcMessage(call, refusing, { era: "modern" })).resolves.toMatchObject({
+      result: { resultType: "complete", content: refusal.content, structuredContent: { state: "refused" }, isError: true },
+    });
+    await expect(handleJsonRpcMessage(call, router(), { era: "modern" })).resolves.toMatchObject({
+      result: { resultType: "complete", isError: false },
+    });
+  });
+
   it("adds deterministic private caching hints to a modern tool list", async () => {
     const testRouter = router();
     await expect(handleJsonRpcMessage(

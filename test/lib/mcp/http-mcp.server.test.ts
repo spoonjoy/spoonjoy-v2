@@ -376,6 +376,26 @@ describe("handleMcpHttpRequest", () => {
     expect(payload).toHaveProperty("shoppingList");
   });
 
+  it("refuses a call to a person-only action with its typed refusal, a tool error, and never runs it", async () => {
+    const callTool = vi.spyOn(spoonjoyTools, "callSpoonjoyMcpTool");
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(6, "tools/call", { name: "approve_agent_connection", arguments: { requestId: "req_synthetic" } }), bearer(await mintToken())),
+      db,
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      result: { isError: boolean; content: { text: string }[]; structuredContent: { state: string; error: { code: string; exit: number } } };
+    };
+    expect(body.result.isError).toBe(true);
+    expect(body.result.structuredContent.state).toBe("refused");
+    expect(body.result.structuredContent.error).toMatchObject({ code: "person-only", exit: 2 });
+    expect(body.result.content[0].text).toBe(
+      "connection approve: You can't approve access to the person's Spoonjoy account; only they can. Ask the person, who does it with Approve access on the connection page, after typing the code you showed them.",
+    );
+    expect(callTool).not.toHaveBeenCalled();
+    callTool.mockRestore();
+  });
+
   it("returns typed -32001 and retry headers when a real add-membership trigger closes the cutover fence", async () => {
     const principal = await mintCredential({ scopes: ["kitchen:read", "kitchen:write"] });
     const fixture = await createCookbookMembershipFixture(principal.user.id);
