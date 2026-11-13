@@ -76,7 +76,9 @@ export function links() {
       rel: "stylesheet",
       href: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,400..900,60..100,0..1&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400..800&display=swap",
     },
-    { rel: "icon", href: "/logos/sj_black.svg", type: "image/svg+xml" },
+    // Square, so Google's favicon service (which Claude's connector rows use) doesn't squash the 5:3 mark.
+    { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+    { rel: "icon", href: "/icons/sj-192.png", type: "image/png", sizes: "192x192" },
     // iOS ignores an SVG touch icon; this is the native app's own 180 px icon, so a saved page matches it.
     { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
     { rel: "manifest", href: "/manifest.webmanifest" },
