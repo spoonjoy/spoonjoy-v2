@@ -93,6 +93,17 @@ describe("root.tsx links()", () => {
     }
   });
 
+  it("uses a square favicon, so services that force a square don't squash the mark", () => {
+    const result = links();
+    expect(result).toContainEqual(expect.objectContaining({ rel: "icon", href: "/favicon.svg" }));
+    expect(result).not.toContainEqual(expect.objectContaining({ rel: "icon", href: "/logos/sj_black.svg" }));
+    const svg = readFileSync("public/favicon.svg", "utf8");
+    const [, , w, h] = /viewBox="([-\d.]+) ([-\d.]+) ([\d.]+) ([\d.]+)"/.exec(svg)!.slice(1).map(Number);
+    expect(w).toBe(h);
+    const ico = readFileSync("public/favicon.ico");
+    expect([ico.readUInt16LE(0), ico.readUInt16LE(2)]).toEqual([0, 1]);
+  });
+
   it("gives iOS a PNG touch icon, the app's own, since it ignores an SVG one", () => {
     const result = links();
     expect(result).toContainEqual({ rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" });

@@ -39,6 +39,18 @@ const INVALID_PARAMS = -32602;
 const INTERNAL_ERROR = -32603;
 export const MCP_MODERN_PROTOCOL_VERSION = "2026-07-28";
 export const MCP_LEGACY_PROTOCOL_VERSION = "2025-06-18";
+// Square icons for clients that show one beside the connector's tool calls.
+export const MCP_SERVER_INFO = {
+  name: "spoonjoy",
+  title: "Spoonjoy",
+  version: "1.0.0",
+  websiteUrl: "https://spoonjoy.app",
+  icons: [
+    { src: "https://spoonjoy.app/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+    { src: "https://spoonjoy.app/icons/sj-192.png", mimeType: "image/png", sizes: ["192x192"] },
+    { src: "https://spoonjoy.app/icons/sj-512.png", mimeType: "image/png", sizes: ["512x512"] },
+  ],
+};
 const MCP_SERVER_INFO_META = {
   "io.modelcontextprotocol/serverInfo": { name: "spoonjoy", version: "1.0.0" },
 };
@@ -169,7 +181,7 @@ export async function handleJsonRpcMessage(
               options.protocolVersion === undefined ? parsed.params : undefined,
               options.protocolVersion ?? options.defaultProtocolVersion ?? DEFAULT_PROTOCOL_VERSION,
             ),
-            serverInfo: { name: "spoonjoy", version: "1.0.0" },
+            serverInfo: MCP_SERVER_INFO,
             capabilities: { tools: {} },
           },
         };

@@ -90,6 +90,20 @@ describe("json-rpc MCP server", () => {
     });
   });
 
+  it("advertises square icons in serverInfo", async () => {
+    const response = await handleJsonRpcLine(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize" }), router());
+    const icons = (response as { result: { serverInfo: { icons: Array<{ src: string; sizes: string[] }> } } }).result.serverInfo.icons;
+    expect(icons.map((icon) => icon.src)).toEqual([
+      "https://spoonjoy.app/favicon.svg",
+      "https://spoonjoy.app/icons/sj-192.png",
+      "https://spoonjoy.app/icons/sj-512.png",
+    ]);
+    for (const icon of icons.slice(1)) {
+      const [w, h] = icon.sizes[0].split("x");
+      expect(w).toBe(h);
+    }
+  });
+
   it("lists tools", async () => {
     const testRouter = router();
     const response = await handleJsonRpcLine(JSON.stringify({ jsonrpc: "2.0", id: "tools", method: "tools/list" }), testRouter);
