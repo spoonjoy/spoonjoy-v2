@@ -165,7 +165,7 @@ describe("cropImageToBlob", () => {
     } as unknown as HTMLCanvasElement;
 
     await expect(cropImageToBlob(image, crop, 512, { createCanvas: () => canvas })).rejects.toThrow(
-      "Could not get 2d context"
+      "This browser gave no 2d canvas context to crop with"
     );
   });
 
@@ -173,7 +173,7 @@ describe("cropImageToBlob", () => {
     const { canvas } = makeFakeCanvas(((cb) => cb(null)) as HTMLCanvasElement["toBlob"]);
 
     await expect(cropImageToBlob(image, crop, 512, { createCanvas: () => canvas })).rejects.toThrow(
-      "Could not export image"
+      "The canvas returned no image for the crop"
     );
   });
 });

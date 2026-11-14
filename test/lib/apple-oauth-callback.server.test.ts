@@ -486,7 +486,7 @@ describe("apple-oauth-callback.server", () => {
         expect(result).toMatchObject({
           success: false,
           error: "apple_email_unavailable",
-          message: "We couldn't find a Spoonjoy account for this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.",
+          message: "No Spoonjoy account uses this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.",
         });
         await expect(db.user.count()).resolves.toBe(before);
       });

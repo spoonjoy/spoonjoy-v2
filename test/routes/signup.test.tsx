@@ -1042,7 +1042,7 @@ describe("Signup Route", () => {
         render(<Stub initialEntries={["/signup"]} />);
 
         await screen.findByRole("heading", { name: "Sign up" });
-        expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
+        expect(screen.getByText(/Sign-in stopped with an answer Spoonjoy doesn't recognise/)).toBeInTheDocument();
       });
     });
 

@@ -43,8 +43,9 @@ const preview: Preview = {
     controls: {
       matchers: {
         // Not a bare `color`: Ouro UI components declare `color` as a typed hint that is not a
-        // prop (an object type), and a colour control on it makes Storybook warn.
-        color: /^(background|.+Color)$/,
+        // prop (an object type), and a colour control on it makes Storybook warn. Nor `idForColor`
+        // (Avatar's): it is an id that picks a colour, typed string | undefined, not a colour.
+        color: /^(background|(?!idFor).+Color)$/,
         date: /Date$/i,
       },
     },

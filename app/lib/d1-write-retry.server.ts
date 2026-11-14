@@ -28,7 +28,7 @@ import { qaErrorLogsEnabled } from "./qa-error-logs.server";
  */
 
 export const D1_WRITE_UNAVAILABLE_CODE = "temporarily_unavailable";
-export const D1_WRITE_UNAVAILABLE_MESSAGE = "Spoonjoy couldn't save that just now. Please try again in a moment.";
+export const D1_WRITE_UNAVAILABLE_MESSAGE = "Spoonjoy's database is busy and didn't save that. Try again in a moment.";
 export const D1_WRITE_RETRY_AFTER_SECONDS = 1;
 
 /** Every try of a write failed with a transient D1 error. */

@@ -3114,7 +3114,7 @@ describe("Recipes $id Route", () => {
     });
 
     it("says when the list could not be saved, and taps again with the same token until an add succeeds", async () => {
-      const message = "Spoonjoy couldn't save that just now. Please try again in a moment.";
+      const message = "Spoonjoy's database is busy and didn't save that. Try again in a moment.";
       const tokens: string[] = [];
       const answers = [
         { intent: "addFromRecipe", error: message, errorCode: "temporarily_unavailable", retryable: true },
@@ -4621,15 +4621,9 @@ describe("Recipes $id Route", () => {
           await Promise.resolve();
         });
 
-        expect(loader.mock.calls.length).toBe(initialLoaderCalls);
-
-        visibilityState = "visible";
-        await act(async () => {
-          document.dispatchEvent(new Event("visibilitychange"));
-          await Promise.resolve();
-        });
-
+        // The poll runs while the tab is hidden too, so the cover is ready when the cook returns.
         expect(loader.mock.calls.length).toBeGreaterThan(initialLoaderCalls);
+        visibilityState = "visible";
         const visibleLoaderCalls = loader.mock.calls.length;
 
         isReady = true;

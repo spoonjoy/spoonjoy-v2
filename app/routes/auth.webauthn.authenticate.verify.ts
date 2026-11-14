@@ -62,6 +62,6 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (clearedPendingAppleLink) headers.append("Set-Cookie", clearedPendingAppleLink);
     return new Response(JSON.stringify({ verified: true, redirectTo }), { status: 200, headers });
   } catch (error) {
-    return webAuthnErrorResponse(error, "Could not verify authentication");
+    return webAuthnErrorResponse(error, "Passkey sign-in didn't finish: the server hit an unexpected fault");
   }
 }

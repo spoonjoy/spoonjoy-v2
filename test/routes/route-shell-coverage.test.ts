@@ -506,7 +506,7 @@ describe("route shell coverage", () => {
     const response = await loader(routeArgs(new Request("https://spoonjoy.app/api/push/public-key")));
 
     expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toEqual({ error: "VAPID configuration error" });
+    await expect(response.json()).resolves.toEqual({ error: "VAPID keys are missing or malformed on the server" });
   });
 
   it("uses the registration verify fallback for non-Error orchestration failures", async () => {
@@ -531,7 +531,7 @@ describe("route shell coverage", () => {
     ));
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: "Could not verify registration" });
+    await expect(response.json()).resolves.toEqual({ error: "Passkey setup didn't finish: the server hit an unexpected fault" });
   });
 
   it("uses the authentication verify fallback for non-Error orchestration failures", async () => {
@@ -552,6 +552,6 @@ describe("route shell coverage", () => {
     ));
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: "Could not verify authentication" });
+    await expect(response.json()).resolves.toEqual({ error: "Passkey sign-in didn't finish: the server hit an unexpected fault" });
   });
 });

@@ -362,7 +362,7 @@ describe("Spoonjoy REST API route", () => {
       await expect(readJson(response)).resolves.toEqual({
         ok: false,
         error: {
-          message: "Spoonjoy couldn't save that just now. Please try again in a moment.",
+          message: "Spoonjoy's database is busy and didn't save that. Try again in a moment.",
           status: 503,
           code: "temporarily_unavailable",
         },

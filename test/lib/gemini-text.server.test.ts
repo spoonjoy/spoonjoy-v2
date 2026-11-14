@@ -177,7 +177,7 @@ describe('geminiGenerateJson', () => {
       const geminiError = error as GeminiTextError
       expect(geminiError).toBeInstanceOf(GeminiTextError)
       expect(geminiError.code).toBe('network')
-      expect(geminiError.message).toBe('Gemini request failed')
+      expect(geminiError.message).toBe('Gemini request got no answer: the network call threw')
       expect((geminiError as { cause?: unknown }).cause).toBe(cause)
     }
   })

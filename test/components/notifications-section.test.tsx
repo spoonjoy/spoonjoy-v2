@@ -117,7 +117,7 @@ describe("NotificationsSection", () => {
     );
   });
 
-  it("falls back to the generic 'Unable to enable notifications' copy when reason is unknown", async () => {
+  it("falls back to the generic copy when reason is unknown", async () => {
     (isPushSupported as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ supported: true });
     (subscribeToPush as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: false,
@@ -125,7 +125,7 @@ describe("NotificationsSection", () => {
     });
     renderWithToast({ initiallySubscribed: false });
     fireEvent.click(screen.getByRole("button", { name: /enable notifications/i }));
-    expect(await screen.findByRole("alertdialog", { name: "Unable to enable notifications." })).toBeInTheDocument();
+    expect(await screen.findByRole("alertdialog", { name: "Notifications didn't switch on, and the browser gave no reason." })).toBeInTheDocument();
   });
 
   it("clicking Disable on server error keeps the user marked as enabled and surfaces an error toast", async () => {
@@ -136,7 +136,7 @@ describe("NotificationsSection", () => {
     });
     renderWithToast({ initiallySubscribed: true });
     fireEvent.click(screen.getByRole("button", { name: /disable/i }));
-    expect(await screen.findByRole("alertdialog", { name: "Unable to disable notifications. Please try again." })).toBeInTheDocument();
+    expect(await screen.findByRole("alertdialog", { name: "Notifications are still on: the browser kept the subscription. Try again." })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /disable/i }),
     ).toBeInTheDocument();
@@ -213,7 +213,7 @@ describe("NotificationsSection — preference toggles", () => {
     // Rolled back to ON.
     await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("true"));
     expect(
-      await screen.findByRole("alertdialog", { name: "Unable to update notification preferences. Please try again." }),
+      await screen.findByRole("alertdialog", { name: "That setting is back as it was: Spoonjoy's server didn't save the change. Try again." }),
     ).toBeInTheDocument();
   });
 
@@ -226,7 +226,7 @@ describe("NotificationsSection — preference toggles", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("true"));
     expect(
-      await screen.findByRole("alertdialog", { name: "Unable to update notification preferences. Please try again." }),
+      await screen.findByRole("alertdialog", { name: "That setting is back as it was: Spoonjoy's server didn't save the change. Try again." }),
     ).toBeInTheDocument();
   });
 

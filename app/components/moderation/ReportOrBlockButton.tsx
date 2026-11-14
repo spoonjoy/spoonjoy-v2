@@ -41,7 +41,7 @@ export function ReportOrBlockButton({ targetType, targetId, chefId, chefUsername
   const fetcher = useFetcher<ActionAnswer>();
   const busy = fetcher.state !== "idle";
   const answer = fetcher.state === "idle" ? fetcher.data : undefined;
-  const failure = answer && answer.success === false ? answer.error ?? "Something went wrong. Try again." : null;
+  const failure = answer && answer.success === false ? answer.error ?? "Spoonjoy didn't record that and sent back no reason. Try again." : null;
 
   useEffect(() => {
     if (answer?.success !== true) return;

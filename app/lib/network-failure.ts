@@ -3,7 +3,7 @@ import type { ShouldRevalidateFunctionArgs } from "react-router";
 // A form submission whose request never got an answer (the connection dropped or was refused, as
 // in Journeys run 39838941793, where a TLS handshake to the server was reset). Without this, React
 // Router renders the root error boundary and the cook loses the page and what they typed.
-export const NETWORK_FAILURE_MESSAGE = "Spoonjoy couldn't be reached. Check your connection and try again.";
+export const NETWORK_FAILURE_MESSAGE = "No answer from Spoonjoy: the connection dropped before a response came back. Check your connection and try again.";
 
 export interface NetworkFailureResult {
   intent: string | null;
@@ -19,16 +19,13 @@ export interface NetworkFailureResult {
 // Safari's, Firefox's, and the reason WebKit on Linux gave in Journeys run 39838941793. A TypeError
 // alone is not enough: under `react-router dev` a server error keeps its class and message, so a
 // TypeError thrown by the action reaches the client as a TypeError, and that is an answer.
-const FETCH_FAILURE_MESSAGES = new Set([
-  "Failed to fetch",
-  "Load failed",
-  "NetworkError when attempting to fetch resource.",
-]);
+// A pattern, not strings: these are the browsers' own words to match, not copy Spoonjoy shows.
+const FETCH_FAILURE_MESSAGES = /^(?:Failed to fetch|Load failed|NetworkError when attempting to fetch resource\.)$/;
 const WEBKIT_LINUX_TLS_FAILURE = "Peer failed to perform TLS handshake";
 
 export function isNetworkFailure(error: unknown): boolean {
   return error instanceof TypeError &&
-    (FETCH_FAILURE_MESSAGES.has(error.message) || error.message.startsWith(WEBKIT_LINUX_TLS_FAILURE));
+    (FETCH_FAILURE_MESSAGES.test(error.message) || error.message.startsWith(WEBKIT_LINUX_TLS_FAILURE));
 }
 
 export function isNetworkFailureResult(value: unknown): value is NetworkFailureResult {

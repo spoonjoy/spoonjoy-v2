@@ -108,7 +108,7 @@ describe("native Sign in with Apple callback failure handling", () => {
       { fetcher: fixture.fetcher },
     )).rejects.toMatchObject({
       code: "apple_sign_in_failed",
-      message: "Apple sign-in failed.",
+      message: "Apple sign-in didn't finish: Spoonjoy returned no account for it.",
       status: 409,
     });
   });

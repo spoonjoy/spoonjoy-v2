@@ -212,7 +212,7 @@ describe('IngredientParseInput', () => {
 
       await waitFor(() => {
         // The actionable message transforms "Failed to parse" errors to user-friendly text
-        expect(screen.getByRole('alert')).toHaveTextContent(/unable to connect|try again/i)
+        expect(screen.getByRole('alert')).toHaveTextContent(/didn't answer|try again/i)
       })
     })
 
@@ -416,7 +416,7 @@ describe('IngredientParseInput', () => {
 
       await waitFor(() => {
         const alert = screen.getByRole('alert')
-        expect(alert).toHaveTextContent(/unable to connect|try again/i)
+        expect(alert).toHaveTextContent(/didn't answer|try again/i)
       })
     })
 
@@ -437,7 +437,7 @@ describe('IngredientParseInput', () => {
 
       await waitFor(() => {
         const alert = screen.getByRole('alert')
-        expect(alert).toHaveTextContent(/unable to connect/i)
+        expect(alert).toHaveTextContent(/didn't answer/i)
       })
     })
 
@@ -458,7 +458,7 @@ describe('IngredientParseInput', () => {
 
       await waitFor(() => {
         const alert = screen.getByRole('alert')
-        expect(alert).toHaveTextContent(/unable to connect/i)
+        expect(alert).toHaveTextContent(/didn't answer/i)
       })
     })
 
@@ -479,7 +479,7 @@ describe('IngredientParseInput', () => {
 
       await waitFor(() => {
         const alert = screen.getByRole('alert')
-        expect(alert).toHaveTextContent(/unable to connect/i)
+        expect(alert).toHaveTextContent(/didn't answer/i)
       })
     })
 

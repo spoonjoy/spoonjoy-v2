@@ -34,7 +34,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       }
     }
     return Response.json(
-      { error: err instanceof Error ? err.message : "VAPID configuration error" },
+      { error: err instanceof Error ? err.message : "VAPID keys are missing or malformed on the server" },
       { status: 500 },
     );
   }

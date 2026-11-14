@@ -1103,7 +1103,7 @@ async function handleAccountSettingsIntent({
       return {
         success: false,
         error: "passkey_not_found",
-        message: "That passkey could not be found",
+        message: "That passkey isn't on this account any more",
       };
     }
 
@@ -1130,7 +1130,7 @@ async function handleAccountSettingsIntent({
       return {
         success: false,
         error: "passkey_not_found",
-        message: "That passkey could not be found",
+        message: "That passkey isn't on this account any more",
       };
     }
 

@@ -130,7 +130,7 @@ export async function geminiGenerateJson(input: {
     );
   } catch (cause) {
     const timedOut = controller.signal.aborted;
-    throw new GeminiTextError(timedOut ? "Gemini request timed out" : "Gemini request failed", {
+    throw new GeminiTextError(timedOut ? "Gemini request timed out" : "Gemini request got no answer: the network call threw", {
       code: timedOut ? "timeout" : "network",
       cause,
     });

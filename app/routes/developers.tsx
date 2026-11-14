@@ -325,7 +325,7 @@ const authImplementationSteps = [
   },
   {
     title: "Auth failures",
-    mode: "Errors",
+    mode: "Error codes",
     body: "Treat authentication_required and invalid_token as 401 responses, insufficient_scope as 403, and malformed Authorization headers as validation_error. Public endpoints can be anonymous; Omit `Authorization` on public calls unless you require authenticated behavior. If you send credentials to an optional endpoint, Spoonjoy validates them and checks scopes. Log requestId or X-Request-Id for support.",
     sample: "{\n  \"ok\": false,\n  \"requestId\": \"client-shopping-list\",\n  \"error\": { \"code\": \"insufficient_scope\", \"status\": 403 }\n}",
   },
@@ -575,7 +575,7 @@ export default function Developers() {
           ["Version", "v1"],
           ["Base path", "REST v1"],
           ["Spec", "Machine-readable"],
-          ["Errors", `${Object.keys(errorStatus).length} codes`],
+          ["Error codes", `${Object.keys(errorStatus).length} codes`],
         ].map(([label, value]) => (
           <div key={label} className="border-l border-[var(--sj-border)] pl-4">
             <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">{label}</p>
@@ -953,7 +953,7 @@ export default function Developers() {
             ["Public catalog", "GET /api/v1/recipes and GET /api/v1/cookbooks need no token.", BookOpen],
             ["Recipe import", "POST /api/v1/recipes/import uses kitchen:write plus a stable clientMutationId.", Braces],
             ["Private list", "Use shopping-list read and write scopes for pantry-style clients.", RefreshCw],
-            ["Machine errors", "Every v1 error returns ok false, requestId, code, message, and status.", Braces],
+            ["Error envelope", "Every v1 error returns ok false, requestId, code, message, and status.", Braces],
           ].map(([title, body, Icon]) => (
             <article key={title as string} className="border-t border-[var(--sj-border)] pt-4">
               <Icon className="size-5 text-[var(--sj-brass)]" aria-hidden="true" />

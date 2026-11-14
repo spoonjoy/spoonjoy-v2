@@ -858,7 +858,7 @@ describe("API v1 shopping-list read and sync", () => {
     expectEnvelopeHeaders(response, "req_compat_non_finite_sum");
     expectErrorEnvelope(payload, "req_compat_non_finite_sum", "internal_error", 500);
     expectExactKeys(payload.error, ["code", "message", "status"]);
-    expect(payload.error.message).toBe("Internal error");
+    expect(payload.error.message).toBe("Internal error: Spoonjoy's server hit an unexpected fault");
     expect(transactionSpy).not.toHaveBeenCalled();
     expect(await db.shoppingListItem.count({
       where: { shoppingListId: fixture.list.id, ingredientRefId: ingredients[0].ingredientRefId },
@@ -894,7 +894,7 @@ describe("API v1 shopping-list read and sync", () => {
     expectEnvelopeHeaders(response, "req_compat_non_finite_product");
     expectErrorEnvelope(payload, "req_compat_non_finite_product", "internal_error", 500);
     expectExactKeys(payload.error, ["code", "message", "status"]);
-    expect(payload.error.message).toBe("Internal error");
+    expect(payload.error.message).toBe("Internal error: Spoonjoy's server hit an unexpected fault");
     expect(transactionSpy).not.toHaveBeenCalled();
     expect(await db.shoppingListItem.count({
       where: { shoppingListId: fixture.list.id, ingredientRefId: ingredient.ingredientRefId },

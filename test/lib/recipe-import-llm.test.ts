@@ -216,7 +216,7 @@ describe("createOpenAIRecipeLlmRunner", () => {
     await expect(runner.extract("t")).rejects.toThrow(/rate limit/i);
   });
 
-  it("throws RecipeLlmError on OpenAI 5xx temporary", async () => {
+  it("throws RecipeLlmError on an OpenAI 5xx", async () => {
     const err = Object.assign(new Error("bad gateway"), { status: 502 });
     const create = vi.fn(async () => {
       throw err;
@@ -224,7 +224,7 @@ describe("createOpenAIRecipeLlmRunner", () => {
     const runner = createOpenAIRecipeLlmRunner(env, {
       clientFactory: () => makeClient(create),
     });
-    await expect(runner.extract("t")).rejects.toThrow(/temporary/i);
+    await expect(runner.extract("t")).rejects.toThrow(/server error 5\d\d/);
   });
 
   it("throws RecipeLlmError when refusal is set", async () => {

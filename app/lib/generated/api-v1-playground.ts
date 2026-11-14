@@ -438,7 +438,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -462,7 +462,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         },
         {
           "status": "503",
@@ -579,7 +579,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -603,7 +603,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         },
         {
           "status": "503",
@@ -719,7 +719,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -743,7 +743,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         },
         {
           "status": "503",
@@ -859,7 +859,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -883,7 +883,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         },
         {
           "status": "503",
@@ -999,7 +999,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -1023,7 +1023,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         },
         {
           "status": "503",
@@ -1157,7 +1157,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -1181,7 +1181,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         },
         {
           "status": "503",
@@ -1315,7 +1315,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -1339,7 +1339,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         },
         {
           "status": "503",
@@ -1473,7 +1473,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -1497,7 +1497,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         },
         {
           "status": "503",
@@ -1677,7 +1677,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -1713,7 +1713,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
@@ -1899,7 +1899,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "400",
@@ -1935,7 +1935,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
@@ -2097,7 +2097,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -2271,7 +2271,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -2307,7 +2307,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
@@ -2477,7 +2477,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -2701,7 +2701,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -2899,7 +2899,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -3104,7 +3104,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -3296,7 +3296,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -3506,7 +3506,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -3740,7 +3740,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -3938,7 +3938,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -4148,7 +4148,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -4394,7 +4394,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -4591,7 +4591,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -4799,7 +4799,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "400",
@@ -5013,7 +5013,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -5224,7 +5224,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -5459,7 +5459,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -5716,7 +5716,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -5926,7 +5926,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -6131,7 +6131,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -6330,7 +6330,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -6541,7 +6541,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -6776,7 +6776,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -6975,7 +6975,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -7174,7 +7174,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -7385,7 +7385,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -7601,7 +7601,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "400",
@@ -7637,7 +7637,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
@@ -7799,7 +7799,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -7973,7 +7973,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -8009,7 +8009,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
@@ -8179,7 +8179,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -8403,7 +8403,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -8627,7 +8627,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -8857,7 +8857,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -9067,7 +9067,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
@@ -9226,7 +9226,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -9262,7 +9262,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
@@ -9421,7 +9421,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -9457,7 +9457,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
@@ -9580,7 +9580,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -9773,7 +9773,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -9944,7 +9944,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -10098,7 +10098,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -10299,7 +10299,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -10452,7 +10452,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -10654,7 +10654,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -10871,7 +10871,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -11019,7 +11019,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -11055,7 +11055,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
@@ -11207,7 +11207,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -11400,7 +11400,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -11616,7 +11616,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -11763,7 +11763,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -11799,7 +11799,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
@@ -11933,7 +11933,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -12112,7 +12112,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         },
         {
           "status": "503",
@@ -12270,7 +12270,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -12437,7 +12437,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         },
         {
           "status": "503",
@@ -12584,7 +12584,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -12769,7 +12769,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         },
         {
           "status": "503",
@@ -12902,7 +12902,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -12938,7 +12938,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
@@ -13102,7 +13102,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -13306,7 +13306,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -13504,7 +13504,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -13732,7 +13732,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -13924,7 +13924,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -14111,7 +14111,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -14298,7 +14298,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -14445,7 +14445,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -14481,7 +14481,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "500",
           "name": "internal_error",
           "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error: Spoonjoy's server hit an unexpected fault\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
@@ -14610,7 +14610,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "400",
@@ -14774,7 +14774,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed: a field is missing or malformed\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -14872,7 +14872,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
-          "description": "OAuth error"
+          "description": "OAuth error response"
         },
         {
           "status": "429",
@@ -15113,7 +15113,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
-          "description": "OAuth error"
+          "description": "OAuth error response"
         },
         {
           "status": "429",
@@ -15194,7 +15194,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
-          "description": "OAuth error"
+          "description": "OAuth error response"
         },
         {
           "status": "429",
@@ -15277,7 +15277,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
-          "description": "Tool error"
+          "description": "Tool error envelope"
         },
         {
           "status": "429",
@@ -15358,7 +15358,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
-          "description": "Tool error"
+          "description": "Tool error envelope"
         },
         {
           "status": "429",

@@ -495,7 +495,7 @@ describe("/developers/playground", () => {
 
     fetchMock.mockRejectedValueOnce(new Error("offline"));
     fireEvent.click(screen.getByRole("button", { name: "Send request" }));
-    expect(await screen.findByText("0 NETWORK ERROR")).toBeInTheDocument();
+    expect(await screen.findByText("0 NO RESPONSE")).toBeInTheDocument();
     expect(screen.getByText("offline")).toBeInTheDocument();
   });
 
@@ -1441,7 +1441,7 @@ describe("/developers/playground", () => {
 
     expect(response).toEqual({
       status: 429,
-      statusText: "ERROR",
+      statusText: "HTTP 429",
       requestId: null,
       headers: [
         { name: "Retry-After", value: "60" },
@@ -1455,7 +1455,7 @@ describe("/developers/playground", () => {
   it("formats Error network failures", () => {
     expect(playgroundNetworkError(new Error("offline"))).toEqual({
       status: 0,
-      statusText: "NETWORK ERROR",
+      statusText: "NO RESPONSE",
       requestId: null,
       headers: [],
       body: "offline",
@@ -1466,10 +1466,10 @@ describe("/developers/playground", () => {
   it("formats non-Error network failures", () => {
     expect(playgroundNetworkError("offline")).toEqual({
       status: 0,
-      statusText: "NETWORK ERROR",
+      statusText: "NO RESPONSE",
       requestId: null,
       headers: [],
-      body: "Request failed",
+      body: "The request threw before a response came back",
       elapsedMs: 0,
     });
   });

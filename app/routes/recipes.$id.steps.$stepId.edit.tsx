@@ -236,7 +236,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       }
       // Unexpected errors
       return data(
-        { errors: { parse: "An unexpected error occurred while parsing ingredients" } },
+        { errors: { parse: "The ingredient reader stopped on a fault Spoonjoy doesn't recognise. Add the ingredients by hand, or try again." } },
         { status: 500 }
       );
     }

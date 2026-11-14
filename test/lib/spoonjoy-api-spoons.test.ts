@@ -2006,7 +2006,7 @@ describe("spoonjoy-api spoon operations", () => {
         { db: rawErrorDb, principal: chef },
       )).rejects.toMatchObject({
         status: 400,
-        message: "Cover mutation failed",
+        message: "The cover change threw a value that is not an Error",
       });
     });
   });

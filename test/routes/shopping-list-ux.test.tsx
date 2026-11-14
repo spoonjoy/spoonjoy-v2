@@ -163,7 +163,7 @@ describe("shopping list UX updates", () => {
   });
 
   it("shows a retryable message and keeps the typed item when the add could not be saved", async () => {
-    const message = "Spoonjoy couldn't save that just now. Please try again in a moment.";
+    const message = "Spoonjoy's database is busy and didn't save that. Try again in a moment.";
     const Stub = createTestRoutesStub([
       {
         path: "/shopping-list",
@@ -183,7 +183,7 @@ describe("shopping list UX updates", () => {
   });
 
   it("sends the same write token for a resubmit after a 503, and a fresh one after each success", async () => {
-    const message = "Spoonjoy couldn't save that just now. Please try again in a moment.";
+    const message = "Spoonjoy's database is busy and didn't save that. Try again in a moment.";
     const tokens: Array<{ intent: string; token: string }> = [];
     const answers = [
       { intent: "addItem", error: message, errorCode: "temporarily_unavailable", retryable: true },

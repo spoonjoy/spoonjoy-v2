@@ -2045,7 +2045,7 @@ describe("API v1 recipe cover management", () => {
       error: {
         code: "internal_error",
         status: 500,
-        message: "Internal error",
+        message: "Internal error: Spoonjoy's server hit an unexpected fault",
       },
     });
 
@@ -2886,7 +2886,7 @@ describe("API v1 recipe cover management", () => {
       error: {
         code: "validation_error",
         status: 400,
-        message: "Cover mutation failed",
+        message: "The cover change threw a value that is not an Error",
       },
     });
   });

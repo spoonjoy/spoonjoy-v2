@@ -41,7 +41,7 @@ describe("parseJsonRpcLine", () => {
       error: {
         jsonrpc: "2.0",
         id: null,
-        error: { code: -32700, message: "Parse error" },
+        error: { code: -32700, message: "Parse error: the message is not valid JSON" },
       },
     });
   });
@@ -51,7 +51,7 @@ describe("json-rpc MCP server", () => {
   it("returns parse and invalid request errors", async () => {
     await expect(handleJsonRpcLine("{", router())).resolves.toMatchObject({
       id: null,
-      error: { code: -32700, message: "Parse error" },
+      error: { code: -32700, message: "Parse error: the message is not valid JSON" },
     });
 
     await expect(handleJsonRpcLine(JSON.stringify({ jsonrpc: "2.0", id: { nope: true } }), router())).resolves.toMatchObject({

@@ -35,7 +35,7 @@ function getActionableErrorMessage(error: string): { message: string; isRetryabl
     error.includes('timeout')
   ) {
     return {
-      message: 'Unable to connect to AI service. Please try again or add ingredients manually.',
+      message: 'The AI ingredient reader didn\'t answer: the connection dropped or timed out. Try again, or add ingredients manually.',
       isRetryable: true,
     }
   }
@@ -62,7 +62,7 @@ function getActionableErrorMessage(error: string): { message: string; isRetryabl
 
   // Default fallback - assume retryable
   return {
-    message: 'Something went wrong. Please try again or add ingredients manually.',
+    message: 'The AI ingredient reader stopped with an answer Spoonjoy doesn\'t recognise. Try again, or add ingredients manually.',
     isRetryable: true,
   }
 }

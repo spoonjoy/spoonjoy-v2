@@ -369,7 +369,7 @@ const schemas = {
   NativePasswordSignInTokenData: objectSchema(["action", "userId", "client_id", "access_token", "refresh_token", "token_type", "expires_in", "scope"], {
     action: { type: "string", enum: ["user_logged_in"] },
     userId: idSchema,
-    appleLink: { type: "string", enum: ["linked", "already_linked", "taken", "provider_already_linked", "expired", "consumed", "invalid", "error"], description: "Present only when the request sent a pending Apple link token: what became of it. linked means Apple now signs this account in; taken means that Apple ID is linked to another account and stays there; error means the link could not be saved and the sign-in still succeeded." },
+    appleLink: { type: "string", enum: ["linked", "already_linked", "taken", "provider_already_linked", "expired", "consumed", "invalid", "error"], description: "Present only when the request sent a pending Apple link token: what became of it. linked means Apple now signs this account in; taken means that Apple ID is linked to another account and stays there; error means Spoonjoy didn't save the link and the sign-in still succeeded." },
     client_id: idSchema,
     access_token: { type: "string", pattern: "^sj_" },
     refresh_token: { type: "string", pattern: "^ort_" },
@@ -3201,7 +3201,7 @@ function responseExampleFor(schemaName: string, path: ResourcePath, method: Http
 
 const errorMessages: Record<ApiV1ErrorCode, string> = {
   invalid_json: "Invalid JSON body",
-  validation_error: "Request validation failed",
+  validation_error: "Request validation failed: a field is missing or malformed",
   invalid_cursor: "cursor must be a valid Spoonjoy cursor",
   invalid_scope: "Unknown API credential scope: recipes:delete",
   authentication_required: "Authentication required",
@@ -3218,7 +3218,7 @@ const errorMessages: Record<ApiV1ErrorCode, string> = {
   product_activation_pending: PRODUCT_ACTIVATION_PENDING_MESSAGE,
   temporarily_unavailable: API_V1_TEMPORARILY_UNAVAILABLE_MESSAGE,
   upstream_timeout: "Upstream import provider timed out",
-  internal_error: "Internal error",
+  internal_error: "Internal error: Spoonjoy's server hit an unexpected fault",
 };
 
 function successResponse(schemaName: string, options: { publicCache?: boolean; noStore?: boolean; example: unknown }) {
@@ -3902,7 +3902,7 @@ function authOperationPaths() {
         },
         responses: {
           201: { description: "Registered client", content: jsonContent(ref("OAuthRegisterResponse"), oauthRegisterResponseExample) },
-          400: { description: "OAuth error", content: jsonContent(ref("OAuthErrorResponse"), oauthErrorExample) },
+          400: { description: "OAuth error response", content: jsonContent(ref("OAuthErrorResponse"), oauthErrorExample) },
           429: oauthRateLimitResponse(),
         },
       },
@@ -3964,7 +3964,7 @@ function authOperationPaths() {
             },
             content: jsonContent(ref("OAuthTokenResponse"), oauthTokenResponseExample),
           },
-          400: { description: "OAuth error", content: jsonContent(ref("OAuthErrorResponse"), oauthErrorExample) },
+          400: { description: "OAuth error response", content: jsonContent(ref("OAuthErrorResponse"), oauthErrorExample) },
           429: oauthRateLimitResponse(),
         },
       },
@@ -3986,7 +3986,7 @@ function authOperationPaths() {
         },
         responses: {
           200: { description: "Refresh token revoked or already unusable." },
-          400: { description: "OAuth error", content: jsonContent(ref("OAuthErrorResponse"), oauthErrorExample) },
+          400: { description: "OAuth error response", content: jsonContent(ref("OAuthErrorResponse"), oauthErrorExample) },
           429: oauthRateLimitResponse(),
         },
       },
@@ -4007,7 +4007,7 @@ function authOperationPaths() {
         },
         responses: {
           200: { description: "Delegated connection started", content: jsonContent(ref("AgentStartEnvelope"), agentStartResponseExample) },
-          400: { description: "Tool error", content: jsonContent(ref("LegacyToolErrorEnvelope"), legacyToolErrorExample) },
+          400: { description: "Tool error envelope", content: jsonContent(ref("LegacyToolErrorEnvelope"), legacyToolErrorExample) },
           429: oauthRateLimitResponse(),
         },
       },
@@ -4036,7 +4036,7 @@ function authOperationPaths() {
               claimed: agentPollClaimedExample,
             }),
           },
-          400: { description: "Tool error", content: jsonContent(ref("LegacyToolErrorEnvelope"), legacyToolErrorExample) },
+          400: { description: "Tool error envelope", content: jsonContent(ref("LegacyToolErrorEnvelope"), legacyToolErrorExample) },
           429: oauthRateLimitResponse(),
         },
       },

@@ -202,7 +202,7 @@ describe("Test Kitchen", () => {
     });
     try {
       fireEvent.click(screen.getByRole("button", { name: "Reset the kitchen" }));
-      expect(screen.getByRole("alert")).toHaveTextContent("Some timer resets could not be saved. They may return after a reload.");
+      expect(screen.getByRole("alert")).toHaveTextContent("Spoonjoy didn't save some timer resets, so those timers may come back after a reload.");
       fireEvent.click(screen.getByRole("button", { name: "Start cooking" }));
       expect(within(screen.getByTestId("cook-mode-timer")).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
     } finally {

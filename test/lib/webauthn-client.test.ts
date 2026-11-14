@@ -92,7 +92,7 @@ describe("registerPasskey", () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({ challenge: "c" }));
     const startRegistration = vi.fn().mockRejectedValue("string failure");
     const result = await registerPasskey({ fetchImpl, startRegistration });
-    expect(result).toEqual({ ok: false, error: "Passkey ceremony failed." });
+    expect(result).toEqual({ ok: false, error: "The passkey prompt stopped without saying why." });
   });
 
   it("returns an error when verification fails", async () => {

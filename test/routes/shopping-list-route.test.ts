@@ -542,7 +542,7 @@ describe("Shopping List Route", () => {
         init: { status: 400 },
         data: {
           errors: {
-            parse: "Couldn't confidently parse one item. Review and correct before adding.",
+            parse: "Spoonjoy isn't sure how to read this item. Review and correct before adding.",
           },
           parseDraft: {
             quantity: "",

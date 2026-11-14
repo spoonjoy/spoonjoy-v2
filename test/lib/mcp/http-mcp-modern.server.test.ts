@@ -220,7 +220,7 @@ describe("modern MCP HTTP requests", () => {
     await expect(response.json()).resolves.toEqual({
       jsonrpc: "2.0",
       id: null,
-      error: { code: -32700, message: "Parse error" },
+      error: { code: -32700, message: "Parse error: the message is not valid JSON" },
     });
   });
 
@@ -294,7 +294,7 @@ describe("modern MCP HTTP requests", () => {
     await expect(response.json()).resolves.toEqual({
       jsonrpc: "2.0",
       id: null,
-      error: { code: -32700, message: "Parse error" },
+      error: { code: -32700, message: "Parse error: the request body is not valid UTF-8" },
     });
   });
 });

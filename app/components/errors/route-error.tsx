@@ -20,7 +20,7 @@ export function routeErrorCopy(error: unknown): { status: number; title: string;
     const message = typeof error.data === "string" && error.data.trim() ? error.data : "Try again, or head back home.";
     return { status, title: "We can't open that.", message };
   }
-  return { status, title: "Something went wrong.", message: "We hit an unexpected snag. Try again in a moment." };
+  return { status, title: "That's on our side.", message: "We hit an unexpected snag. Try again in a moment." };
 }
 
 // The generic error screen, used by the root boundary (inside its own <main>) and by route

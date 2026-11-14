@@ -1622,10 +1622,10 @@ describe('Ingredient Parsing', () => {
       }
     })
 
-    it('wraps a non-IngredientParseError Gemini failure as "Gemini fallback failed"', async () => {
+    it('wraps a non-IngredientParseError Gemini failure as "Gemini fallback threw something other than a parse error"', async () => {
       // OpenAI 429 -> retryable; the Gemini HTTP fetch throws a transport error,
       // which the adapter surfaces as a GeminiTextError (already an Error, not an
-      // IngredientParseError) -> wrapped into "Gemini fallback failed" telemetry.
+      // IngredientParseError) -> wrapped into "Gemini fallback threw something other than a parse error" telemetry.
       openAIRejectsWithStatus(429)
       const analyticsFetch = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
       const geminiFetch = vi
@@ -1644,7 +1644,7 @@ describe('Ingredient Parsing', () => {
           .map((call) => JSON.parse((call[1] as RequestInit).body as string))
           .filter((body) => body.event === 'spoonjoy.llm_call.failed')
         const geminiFailure = failureBodies.find((body) => body.properties.provider === 'gemini')
-        expect(geminiFailure?.properties.errorMessage).toBe('Gemini fallback failed')
+        expect(geminiFailure?.properties.errorMessage).toBe('Gemini fallback threw something other than a parse error')
       } finally {
         geminiFetch.mockRestore()
       }

@@ -176,13 +176,13 @@ function getStatus(err: unknown): number | undefined {
 function mapOpenAIError(err: unknown): RecipeLlmError {
   const status = getStatus(err);
   if (status === 401 || status === 403) {
-    return new RecipeLlmError("OpenAI authentication failed", err);
+    return new RecipeLlmError("OpenAI rejected the API key (authentication)", err);
   }
   if (status === 429) {
     return new RecipeLlmError("OpenAI rate limit exceeded", err);
   }
   if (status !== undefined && status >= 500) {
-    return new RecipeLlmError("OpenAI temporary failure", err);
+    return new RecipeLlmError(`OpenAI answered with server error ${status}`, err);
   }
   return new RecipeLlmError("Recipe LLM call failed", err);
 }

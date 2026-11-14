@@ -1956,7 +1956,7 @@ describe("Cookbooks $id Route", () => {
       it("keeps the editor open with the new title when the database was briefly unavailable", async () => {
         renderRenameStub(() =>
           routerData(
-            { intent: "updateTitle", error: "Spoonjoy couldn't save that just now. Please try again in a moment.", errorCode: "temporarily_unavailable", retryable: true },
+            { intent: "updateTitle", error: "Spoonjoy's database is busy and didn't save that. Try again in a moment.", errorCode: "temporarily_unavailable", retryable: true },
             { status: 503 },
           ),
         );
@@ -1965,7 +1965,7 @@ describe("Cookbooks $id Route", () => {
         fireEvent.change(input, { target: { value: "Renamed Title" } });
         fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-        expect(await screen.findByText(/Spoonjoy couldn't save that just now\./)).toBeInTheDocument();
+        expect(await screen.findByText(/Spoonjoy's database is busy and didn't save that\./)).toBeInTheDocument();
         expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Renamed Title");
         expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).not.toBeInTheDocument();
         expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("alertdialog")).not.toBeInTheDocument();
@@ -2025,8 +2025,8 @@ describe("Cookbooks $id Route", () => {
           expect(await screen.findByRole("dialog", { name: "Cookbook renamed." })).toBeInTheDocument();
           // Byte for byte the same body, so the journeys' console gate pairs the two requests.
           expect(sent).toEqual(["intent=updateTitle&title=Renamed+Title", "intent=updateTitle&title=Renamed+Title"]);
-          expect(screen.queryByRole("heading", { name: "Something went wrong." })).not.toBeInTheDocument();
-          expect(screen.queryByText(/couldn't be reached/)).not.toBeInTheDocument();
+          expect(screen.queryByRole("heading", { name: "That's on our side." })).not.toBeInTheDocument();
+          expect(screen.queryByText(/No answer from Spoonjoy/)).not.toBeInTheDocument();
         });
 
         it("keeps the editor open, with what the cook typed and the field described by the reason, when no try is answered", async () => {
@@ -2038,7 +2038,7 @@ describe("Cookbooks $id Route", () => {
           fireEvent.change(input, { target: { value: "Renamed Title" } });
           fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-          const reason = "Spoonjoy couldn't be reached. Check your connection and try again.";
+          const reason = "No answer from Spoonjoy: the connection dropped before a response came back. Check your connection and try again.";
           expect(await screen.findByText(reason)).toBeInTheDocument();
           const field = screen.getByRole("textbox", { name: "Cookbook title" });
           expect(field).toHaveValue("Renamed Title");
@@ -2060,7 +2060,7 @@ describe("Cookbooks $id Route", () => {
           const input = await openTitleEditor();
           fireEvent.change(input, { target: { value: "Renamed Title" } });
           fireEvent.click(screen.getByRole("button", { name: "Save" }));
-          expect(await screen.findByText(/couldn't be reached/)).toBeInTheDocument();
+          expect(await screen.findByText(/No answer from Spoonjoy/)).toBeInTheDocument();
 
           fireEvent.click(screen.getByRole("button", { name: "Save" }));
           expect(await screen.findByRole("dialog", { name: "Cookbook renamed." })).toBeInTheDocument();
@@ -2080,7 +2080,7 @@ describe("Cookbooks $id Route", () => {
           const serverAction = vi.fn().mockRejectedValue(noAnswer());
           await expect(clientAction({ request, params: { id: "cookbook-1" }, serverAction } as never)).resolves.toEqual({
             intent,
-            error: "Spoonjoy couldn't be reached. Check your connection and try again.",
+            error: "No answer from Spoonjoy: the connection dropped before a response came back. Check your connection and try again.",
             errorCode: "network_failure",
             retryable: true,
             resend,
@@ -2105,7 +2105,7 @@ describe("Cookbooks $id Route", () => {
           fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
           fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
-          expect(await screen.findByRole("alertdialog", { name: "Spoonjoy couldn't be reached. Check your connection and try again." })).toBeInTheDocument();
+          expect(await screen.findByRole("alertdialog", { name: "No answer from Spoonjoy: the connection dropped before a response came back. Check your connection and try again." })).toBeInTheDocument();
           expect(sent).toEqual(["intent=delete"]);
           await waitFor(() => {
             expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
@@ -2117,7 +2117,7 @@ describe("Cookbooks $id Route", () => {
       it("says so when deleting could not be saved because the database was briefly unavailable", async () => {
         renderRenameStub(() =>
           routerData(
-            { intent: "delete", error: "Spoonjoy couldn't save that just now. Please try again in a moment.", errorCode: "temporarily_unavailable", retryable: true },
+            { intent: "delete", error: "Spoonjoy's database is busy and didn't save that. Try again in a moment.", errorCode: "temporarily_unavailable", retryable: true },
             { status: 503 },
           ),
         );
@@ -2126,7 +2126,7 @@ describe("Cookbooks $id Route", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
         fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
-        expect(await screen.findByRole("alertdialog", { name: "Spoonjoy couldn't save that just now. Please try again in a moment." })).toBeInTheDocument();
+        expect(await screen.findByRole("alertdialog", { name: "Spoonjoy's database is busy and didn't save that. Try again in a moment." })).toBeInTheDocument();
         // The page stays, and the dialog finishes closing before the test ends.
         await waitFor(() => {
           expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();

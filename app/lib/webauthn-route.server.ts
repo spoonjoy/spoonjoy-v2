@@ -180,7 +180,7 @@ export async function finishRegistration(
     });
     captureWebAuthnUnexpected(telemetry, error, "register_verify", userId);
     throw new WebAuthnError(
-      error instanceof Error ? error.message : "Registration verification failed",
+      error instanceof Error ? error.message : "Registration verification threw a value that is not an Error",
       400,
     );
   }
@@ -194,7 +194,7 @@ export async function finishRegistration(
       phase: "register_verify",
       outcome: "unverified",
     });
-    throw new WebAuthnError("Registration could not be verified", 400);
+    throw new WebAuthnError("The passkey's registration response did not verify", 400);
   }
 
   // Copy into a fresh ArrayBuffer-backed view so it satisfies Prisma's
@@ -424,7 +424,7 @@ export async function finishAuthentication(
     });
     captureWebAuthnUnexpected(telemetry, error, "authenticate_verify", distinctId);
     throw new WebAuthnError(
-      error instanceof Error ? error.message : "Authentication verification failed",
+      error instanceof Error ? error.message : "Authentication verification threw a value that is not an Error",
       400,
     );
   }
@@ -437,7 +437,7 @@ export async function finishAuthentication(
       phase: "authenticate_verify",
       outcome: "unverified",
     });
-    throw new WebAuthnError("Authentication could not be verified", 400);
+    throw new WebAuthnError("The passkey's signature did not verify", 400);
   }
 
   // Rotate the signature counter and consume the one-time challenge, only if the
@@ -465,7 +465,7 @@ export async function finishAuthentication(
       phase: "authenticate_verify",
       outcome: "challenge_or_counter_stale",
     });
-    throw new WebAuthnError("Authentication could not be completed", 400);
+    throw new WebAuthnError("This passkey sign-in was already used or is out of date: start sign-in again", 400);
   }
 
   return { verified: true, userId: user.id, sessionVersion: user.sessionVersion };

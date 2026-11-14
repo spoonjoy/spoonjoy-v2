@@ -71,7 +71,7 @@ export interface RecipeBuilderProps {
 
 function recipeImageRejection(reason: ImageFieldRejection, file: File): string {
   if (reason === 'size') return RECIPE_IMAGE_SIZE_MESSAGE
-  if (reason === 'unreadable') return `${file.name} could not be opened as a photo.`
+  if (reason === 'unreadable') return `${file.name} isn't a photo this browser can open.`
   return file.type === 'image/gif' ? FOOD_IMAGE_TYPE_MESSAGE : `Invalid image type. ${FOOD_IMAGE_TYPE_MESSAGE}`
 }
 

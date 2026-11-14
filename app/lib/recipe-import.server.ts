@@ -420,7 +420,7 @@ async function runExtraction(
     throw new ImportRecipeError(
       "no-content",
       422,
-      "Could not extract a recipe from the page",
+      "The page held no recipe the reader could extract",
     );
   }
   return {
@@ -508,7 +508,7 @@ async function runTextExtraction(
     throw new ImportRecipeError(
       "no-content",
       422,
-      "Could not extract a recipe from the captured text",
+      "The captured text held no recipe the reader could extract",
     );
   }
   return {
@@ -549,7 +549,7 @@ async function runPhotoExtraction(
   }
   await captureRecipeLlmSuccess(deps, chefId, llmRunner, Date.now() - startedAt);
   if (!extracted.title.trim()) {
-    throw new ImportRecipeError("no-content", 422, "Could not read a recipe in the photo");
+    throw new ImportRecipeError("no-content", 422, "The photo held no recipe the reader could read");
   }
   return {
     draft: {
@@ -614,7 +614,7 @@ async function runVideoExtraction(
     throw new ImportRecipeError(
       "no-content",
       422,
-      "Could not extract a recipe from the video metadata",
+      "The video metadata held no recipe the reader could extract",
     );
   }
   return {

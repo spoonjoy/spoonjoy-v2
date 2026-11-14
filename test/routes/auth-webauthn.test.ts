@@ -124,7 +124,7 @@ describe("WebAuthn routes", () => {
         { Cookie: await sessionCookie(user.id) },
       )));
       expect(res.status).toBe(400);
-      await expect(res.json()).resolves.toMatchObject({ error: "Could not start registration" });
+      await expect(res.json()).resolves.toMatchObject({ error: "Passkey setup didn't start: the server hit an unexpected fault" });
     });
   });
 
@@ -287,7 +287,7 @@ describe("WebAuthn routes", () => {
         { email: user.email },
       )));
       expect(res.status).toBe(400);
-      await expect(res.json()).resolves.toMatchObject({ error: "Could not start authentication" });
+      await expect(res.json()).resolves.toMatchObject({ error: "Passkey sign-in didn't start: the server hit an unexpected fault" });
     });
 
     it("uses Error messages from authentication option orchestration failures", async () => {

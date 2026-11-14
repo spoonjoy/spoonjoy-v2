@@ -2718,7 +2718,7 @@ describe("importRecipeFromSource — native capture inputs", () => {
     }, baseDeps({ llmRunner }))).rejects.toMatchObject({
       code: "no-content",
       status: 422,
-      message: "Could not extract a recipe from the captured text",
+      message: "The captured text held no recipe the reader could extract",
     });
   });
 });

@@ -63,6 +63,6 @@ describe("ReportOrBlockButton", () => {
     await user.click(await screen.findByRole("button", { name: "Block @loud_chef" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("You can't block yourself.");
     await user.click(screen.getByRole("button", { name: "Block @loud_chef" }));
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Something went wrong. Try again."));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Spoonjoy didn't record that and sent back no reason. Try again."));
   });
 });

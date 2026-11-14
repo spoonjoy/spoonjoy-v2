@@ -34,6 +34,6 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
     return Response.json(result);
   } catch (error) {
-    return webAuthnErrorResponse(error, "Could not verify registration");
+    return webAuthnErrorResponse(error, "Passkey setup didn't finish: the server hit an unexpected fault");
   }
 }

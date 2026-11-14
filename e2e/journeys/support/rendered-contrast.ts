@@ -55,6 +55,8 @@ interface TextRun {
   fontWeight: number;
   lines: number;
   blocker?: string;
+  /** False when the glyphs are transparent with no shadow or stroke, so nothing of them is drawn. */
+  painted: boolean;
 }
 
 type LineResult = { box: Box; run: number } | { blocker: string } | { inactive: string };
@@ -132,6 +134,13 @@ function installHelpers(): void {
         fontWeight: Number(style.fontWeight),
         lines: source.rects().length,
         blocker: undefined as string | undefined,
+        // Transparent glyphs with no shadow or stroke paint nothing: a mirror of a field's text,
+        // drawn only to place marks under its words, has no contrast to keep.
+        painted: !(
+          transparent(style.getPropertyValue("-webkit-text-fill-color") || style.color) &&
+          style.textShadow === "none" &&
+          !(parseFloat(style.getPropertyValue("-webkit-text-stroke-width")) > 0)
+        ),
       };
       const clip = style.getPropertyValue("-webkit-background-clip") || style.backgroundClip;
       if (clip === "text") run.blocker = `${describe(parent)} paints its text with background-clip: text`;
@@ -201,6 +210,13 @@ function installHelpers(): void {
   // Hides what is drawn with the text: the glyphs, their decorations and any line drawnWithText.
   // Everything behind the text, and any other overlay, keeps painting.
   const hideText = (element: Element) => {
+    // A hidden mirror of the text (aria-hidden, its glyphs transparent) draws marks under the
+    // words, as a field's highlight layer does: its underlines are the text's decorations, not
+    // what the text sits on. Its tints keep painting.
+    for (const node of Array.from(document.querySelectorAll('[aria-hidden="true"], [aria-hidden="true"] *'))) {
+      const style = getComputedStyle(node);
+      if (transparent(style.getPropertyValue("-webkit-text-fill-color") || style.color)) override(node, "text-decoration-color", "transparent");
+    }
     for (const node of [element, ...Array.from(element.querySelectorAll("*"))]) {
       override(node, "-webkit-text-fill-color", "transparent");
       override(node, "text-decoration-color", "transparent");
@@ -443,6 +459,9 @@ export async function measureTextContrast(page: Page, selector: string, axeReaso
     if (empty) return { ...base, passed: true, note: "it is an empty field with no placeholder, so it shows no text" };
     return { ...base, passed: false, error: "it has no visible text" };
   }
+  if (runs.every((run) => !run.painted)) {
+    return { ...base, passed: true, note: "its text is transparent, with no shadow or stroke, so it paints no glyphs" };
+  }
   const colors: Rgba[] = [];
   for (const run of runs) {
     if (run.blocker) return { ...base, passed: false, error: run.blocker };
@@ -469,6 +488,7 @@ export async function measureTextContrast(page: Page, selector: string, axeReaso
       return { ...base, passed: false, textColor: runs[0].fill, error: line.blocker };
     }
     const run = runs[line.run];
+    if (!run.painted) continue;
     await locator.evaluate((element) => (window as unknown as { __sjContrast: Helpers }).__sjContrast.hideText(element));
     let rgba: Uint8Array;
     let unfaded: Uint8Array | undefined;
