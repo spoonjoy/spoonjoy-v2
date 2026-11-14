@@ -6,17 +6,17 @@ import { Button } from "~/components/ouro/button/button";
 import { createTestRoutesStub } from "../../utils";
 
 describe("Spoonjoy actions using released Button directly", () => {
+  // What each look paints is in test/ouro/spoonjoy-paint.test.tsx, from computed styles.
   it.each([
-    [{}, "solid", "[--ouro-bg:var(--ouro-action,var(--primary))]"],
-    [{ variant: "solid" as const }, "solid", "[--ouro-bg:var(--ouro-action,var(--primary))]"],
-    [{ variant: "soft" as const, tone: "destructive" as const }, "soft", "[--ouro-bg:color-mix(in_oklab,var(--destructive)_10%,transparent)]"],
-    [{ variant: "outline" as const, tone: "secondary" as const }, "outline", "[--ouro-bd:var(--border)]"],
-  ])("keeps the action's explicit native appearance %j", (props, variant, colorClass) => {
+    [{}, "solid"],
+    [{ variant: "solid" as const }, "solid"],
+    [{ variant: "soft" as const, tone: "destructive" as const }, "soft"],
+    [{ variant: "outline" as const, tone: "secondary" as const }, "outline"],
+  ])("keeps the action's explicit native appearance %j", (props, variant) => {
     render(<Button {...props}>Action</Button>);
     const button = screen.getByRole("button", { name: "Action" });
     expect(button).toHaveAttribute("data-variant", variant);
     expect(button).not.toHaveAttribute("data-sj-action");
-    expect(button).toHaveClass(colorClass);
     expect(button).toHaveAttribute("type", "button");
   });
 
