@@ -8,8 +8,10 @@
 //
 // Each area's actions live in their own file beside this one; this file gathers them into the set.
 import { defineAction, defineActions, field } from "../tools/ouro-actions/ouro-actions.mts";
+import { access } from "./access.mts";
 import { cookbooks } from "./cookbooks.mts";
 import { covers } from "./covers.mts";
+import { recipes } from "./recipes.mts";
 import { shopping } from "./shopping.mts";
 import { spoons } from "./spoons.mts";
 
@@ -35,4 +37,4 @@ export const approveAgentConnection = defineAction({
   cli: "connection approve",
 });
 
-export default defineActions("spoonjoy", [...shopping, ...cookbooks, ...spoons, ...covers, approveAgentConnection], { tool: "spoonjoy" });
+export default defineActions("spoonjoy", [...access, ...recipes, ...shopping, ...cookbooks, ...spoons, ...covers, approveAgentConnection], { tool: "spoonjoy" });

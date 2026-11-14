@@ -1353,9 +1353,7 @@ function withRaceRetry<T>(attempt: () => Promise<T>): Promise<T> {
 const RECIPE_CHANGED_DURING_REQUEST_MESSAGE = "This recipe changed while this request ran; reload it and try again.";
 
 const healthTool: SpoonjoyApiOperation = {
-  name: "health",
-  description: "Check Spoonjoy API readiness and whether the caller can use owner-scoped write operations.",
-  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  ...declaredOperation("health"),
   async handle(_args, context) {
     return json({
       ok: true,
@@ -1381,10 +1379,7 @@ function formatPrincipal(principal: ApiPrincipal | null | undefined) {
 }
 
 const authStatusTool: SpoonjoyApiOperation = {
-  name: "auth_status",
-  description:
-    "Report the current Spoonjoy MCP authentication state and how an agent should obtain delegated access without asking for raw user credentials.",
-  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  ...declaredOperation("auth_status"),
   async handle(_args, context) {
     const defaultOwnerEmail = context.defaultOwnerEmail?.toLowerCase() ?? null;
     const defaultOwner = defaultOwnerEmail
@@ -1412,18 +1407,7 @@ const authStatusTool: SpoonjoyApiOperation = {
 };
 
 const startAgentConnectionTool: SpoonjoyApiOperation = {
-  name: "start_agent_connection",
-  description:
-    "Start a browser-approved delegated Spoonjoy connection for this agent. Show the user authorizationUrl and, separately, userCode: they open the link, sign in and type the code to approve. Then poll with deviceCode. Grants kitchen and shopping-list scopes only, never account access.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      agentName: { type: "string" },
-      baseUrl: { type: "string" },
-      scopes: { type: "string" },
-    },
-    additionalProperties: false,
-  },
+  ...declaredOperation("start_agent_connection"),
   async handle(args, context) {
     const started = await startAgentConnection(context.db, {
       agentName: optionalString(args.agentName),
@@ -1448,19 +1432,7 @@ const startAgentConnectionTool: SpoonjoyApiOperation = {
 };
 
 const pollAgentConnectionTool: SpoonjoyApiOperation = {
-  name: "poll_agent_connection",
-  description:
-    "Poll a pending delegated Spoonjoy connection. When approved, the Spoonjoy MCP bridge activates and caches access; never ask for a Spoonjoy password.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      deviceCode: { type: "string" },
-      tokenName: { type: "string" },
-      baseUrl: { type: "string" },
-    },
-    required: ["deviceCode"],
-    additionalProperties: false,
-  },
+  ...declaredOperation("poll_agent_connection"),
   async handle(args, context) {
     return json(await pollAgentConnection(context.db, {
       deviceCode: requiredString(args, "deviceCode"),
@@ -1471,31 +1443,8 @@ const pollAgentConnectionTool: SpoonjoyApiOperation = {
 };
 
 const createApiTokenTool: SpoonjoyApiOperation = {
-  name: "create_api_token",
-  description: "Create an owner-scoped Spoonjoy API token. The token is returned once and is stored hashed.",
+  ...declaredOperation("create_api_token"),
   requiredScopes: ["tokens:write"],
-  inputSchema: {
-    type: "object",
-    properties: {
-      ownerEmail: { type: "string" },
-      name: { type: "string" },
-      scopes: {
-        oneOf: [
-          { type: "string" },
-          { type: "array", items: { type: "string" } },
-        ],
-      },
-      expiresInDays: {
-        description: "Days until the token expires, 1 to 365. Defaults to 90. Pass null or \"never\" for a token that never expires.",
-        oneOf: [
-          { type: "integer", minimum: 1, maximum: 365 },
-          { type: "null" },
-          { type: "string", enum: ["never"] },
-        ],
-      },
-    },
-    additionalProperties: false,
-  },
   async handle(args, context) {
     const owner = await getCredentialOwner(args, context);
     const name = optionalString(args.name) ?? "Spoonjoy API token";
@@ -1517,16 +1466,8 @@ const createApiTokenTool: SpoonjoyApiOperation = {
 };
 
 const listApiTokensTool: SpoonjoyApiOperation = {
-  name: "list_api_tokens",
-  description: "List API token metadata for the configured owner. Token secrets are never returned.",
+  ...declaredOperation("list_api_tokens"),
   requiredScopes: ["tokens:read"],
-  inputSchema: {
-    type: "object",
-    properties: {
-      ownerEmail: { type: "string" },
-    },
-    additionalProperties: false,
-  },
   async handle(args, context) {
     const owner = await getCredentialOwner(args, context);
     const credentials = await context.db.apiCredential.findMany({
@@ -1539,18 +1480,8 @@ const listApiTokensTool: SpoonjoyApiOperation = {
 };
 
 const revokeApiTokenTool: SpoonjoyApiOperation = {
-  name: "revoke_api_token",
-  description: "Revoke one API token owned by the configured owner.",
+  ...declaredOperation("revoke_api_token"),
   requiredScopes: ["tokens:write"],
-  inputSchema: {
-    type: "object",
-    properties: {
-      ownerEmail: { type: "string" },
-      credentialId: { type: "string" },
-    },
-    required: ["credentialId"],
-    additionalProperties: false,
-  },
   async handle(args, context) {
     const owner = await getCredentialOwner(args, context);
     const credentialId = requiredString(args, "credentialId");
@@ -1577,19 +1508,8 @@ const revokeApiTokenTool: SpoonjoyApiOperation = {
 };
 
 const searchRecipesTool: SpoonjoyApiOperation = {
-  name: "search_recipes",
-  description: "Full-text search Spoonjoy recipes by title, description, source URL, steps and ingredients, optionally limited to one chef by username, or to your own recipes by your own chefEmail. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
+  ...declaredOperation("search_recipes"),
   requiredScopes: ["recipes:read"],
-  inputSchema: {
-    type: "object",
-    properties: {
-      query: { type: "string" },
-      chefUsername: { type: "string", description: "Only recipes by the chef with this username." },
-      chefEmail: { type: "string", description: "Only your own recipes: must be your own email. Any other address returns no recipes." },
-      limit: { type: "number", minimum: 1, maximum: MAX_LIMIT },
-    },
-    additionalProperties: false,
-  },
   async handle(args, context) {
     const query = optionalString(args.query);
     const chefEmail = optionalString(args.chefEmail)?.toLowerCase();
@@ -1651,22 +1571,8 @@ const searchRecipesTool: SpoonjoyApiOperation = {
 };
 
 const searchSpoonjoyTool: SpoonjoyApiOperation = {
-  name: "search_spoonjoy",
-  description: "Full-text search Spoonjoy recipes, cookbooks, chefs, and the configured owner's private shopping list. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
+  ...declaredOperation("search_spoonjoy"),
   requiredScopes: ["recipes:read", "cookbooks:read", "shopping_list:read"],
-  inputSchema: {
-    type: "object",
-    properties: {
-      query: { type: "string" },
-      scope: {
-        type: "string",
-        enum: ["all", "recipes", "cookbooks", "chefs", "shopping-list", "shopping"],
-      },
-      ownerEmail: { type: "string" },
-      limit: { type: "number", minimum: 1, maximum: MAX_LIMIT },
-    },
-    additionalProperties: false,
-  },
   async handle(args, context) {
     const query = optionalString(args.query);
     const scope = normalizeSearchScope(optionalString(args.scope));
@@ -1711,17 +1617,8 @@ const searchShoppingListTool: SpoonjoyApiOperation = {
 };
 
 const getRecipeTool: SpoonjoyApiOperation = {
-  name: "get_recipe",
-  description: "Fetch a Spoonjoy recipe by id or exact title with ordered steps and ingredients.",
+  ...declaredOperation("get_recipe"),
   requiredScopes: ["recipes:read"],
-  inputSchema: {
-    type: "object",
-    properties: {
-      id: { type: "string" },
-      title: { type: "string" },
-    },
-    additionalProperties: false,
-  },
   async handle(args, context) {
     const recipe = await findRecipeByIdOrTitle(context.db, args);
     return json({ recipe: recipe ? formatRecipe(recipe) : null });
@@ -2372,48 +2269,8 @@ const archiveRecipeCoverTool: SpoonjoyApiOperation = {
 };
 
 const createRecipeTool: SpoonjoyApiOperation = {
-  name: "create_recipe",
-  description: "Create a Spoonjoy recipe for the configured owner, including steps and ingredients.",
+  ...declaredOperation("create_recipe"),
   requiredScopes: ["kitchen:write"],
-  inputSchema: {
-    type: "object",
-    properties: {
-      ownerEmail: { type: "string" },
-      title: { type: "string" },
-      description: { type: "string" },
-      servings: { type: "string" },
-      sourceUrl: { type: "string" },
-      imageUrl: { type: "string" },
-      steps: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            title: { type: "string" },
-            description: { type: "string" },
-            duration: { type: "number" },
-            ingredients: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  name: { type: "string" },
-                  quantity: { type: "number" },
-                  unit: { type: "string" },
-                },
-                required: ["name", "quantity", "unit"],
-                additionalProperties: false,
-              },
-            },
-          },
-          required: ["description"],
-          additionalProperties: false,
-        },
-      },
-    },
-    required: ["title"],
-    additionalProperties: false,
-  },
   async handle(args, context) {
     // Only the checks and the write retry on a lost race: nothing after the write may run twice.
     const { owner, title, imageUrl, created, coverId } = await withRaceRetry(async () => {
@@ -2545,59 +2402,8 @@ const createRecipeTool: SpoonjoyApiOperation = {
 };
 
 const updateRecipeTool: SpoonjoyApiOperation = {
-  name: "update_recipe",
-  description:
-    "Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: "
-    + "a step with an id updates that step, a step without one updates the step at its position or is added, and steps "
-    + "left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps "
-    + "whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only.",
+  ...declaredOperation("update_recipe"),
   requiredScopes: ["kitchen:write"],
-  inputSchema: {
-    type: "object",
-    properties: {
-      ownerEmail: { type: "string" },
-      id: { type: "string" },
-      title: { type: "string" },
-      description: { anyOf: [{ type: "string" }, { type: "null" }] },
-      servings: { anyOf: [{ type: "string" }, { type: "null" }] },
-      sourceUrl: { anyOf: [{ type: "string" }, { type: "null" }] },
-      imageUrl: { anyOf: [{ type: "string" }, { type: "null" }] },
-      steps: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            id: { type: "string", description: "The id of the step this one updates." },
-            title: { type: "string" },
-            description: { type: "string" },
-            duration: { type: "number" },
-            outputStepNums: {
-              type: "array",
-              items: { type: "integer", minimum: 1 },
-              description: "Earlier step numbers, in this list's order, whose output this step uses.",
-            },
-            ingredients: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  name: { type: "string" },
-                  quantity: { type: "number" },
-                  unit: { type: "string" },
-                },
-                required: ["name", "quantity", "unit"],
-                additionalProperties: false,
-              },
-            },
-          },
-          required: ["description"],
-          additionalProperties: false,
-        },
-      },
-    },
-    required: ["id"],
-    additionalProperties: false,
-  },
   async handle(args, context) {
     // Only the checks and the write retry on a lost race: nothing after the write may run twice.
     const { owner, title, imageUrl, existing, coverId } = await withRaceRetry(async () => {
@@ -2729,18 +2535,8 @@ const updateRecipeTool: SpoonjoyApiOperation = {
 };
 
 const deleteRecipeTool: SpoonjoyApiOperation = {
-  name: "delete_recipe",
-  description: "Soft-delete a recipe owned by the configured owner.",
+  ...declaredOperation("delete_recipe"),
   requiredScopes: ["kitchen:write"],
-  inputSchema: {
-    type: "object",
-    properties: {
-      ownerEmail: { type: "string" },
-      id: { type: "string" },
-    },
-    required: ["id"],
-    additionalProperties: false,
-  },
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
     const id = requiredString(args, "id");
@@ -2793,20 +2589,8 @@ async function uploadFoodImageForOwner(
 }
 
 const uploadRecipeImageTool: SpoonjoyApiOperation = {
-  name: "upload_recipe_image",
-  description: "Upload a recipe photo from base64 bytes and return a Spoonjoy image URL for recipe cover assignment.",
+  ...declaredOperation("upload_recipe_image"),
   requiredScopes: ["kitchen:write"],
-  inputSchema: {
-    type: "object",
-    properties: {
-      ownerEmail: { type: "string" },
-      imageBase64: { type: "string" },
-      mimeType: { type: "string", enum: [...FOOD_IMAGE_TYPES] },
-      filename: { type: "string" },
-    },
-    required: ["imageBase64", "mimeType", "filename"],
-    additionalProperties: false,
-  },
   async handle(args, context) {
     return json(await uploadFoodImageForOwner(args, context, "recipes"));
   },
@@ -3741,25 +3525,8 @@ async function resolveImportChefId(context: SpoonjoyApiContext): Promise<string>
 }
 
 const forkRecipeTool: SpoonjoyApiOperation = {
-  name: "fork_recipe",
-  description:
-    "Fork an existing Spoonjoy recipe into the authenticated principal's kitchen. Clones title, description, servings, steps, ingredients, and step-output uses; snapshots the source's latest cover; sets sourceRecipeId on the new recipe. "
-    + "Retrying the same fork (the same idempotencyKey, or the same source and title without a key) within 24 hours returns the first fork instead of creating another, unless that fork was deleted.",
+  ...declaredOperation("fork_recipe"),
   requiredScopes: ["kitchen:write"],
-  inputSchema: {
-    type: "object",
-    properties: {
-      sourceRecipeId: { type: "string" },
-      title: {
-        type: "string",
-        description:
-          "Optional title override. Subject to the same `(chefId, title)` collision suffixing as the default title.",
-      },
-      idempotencyKey: { type: "string", description: "Stable key for a replay-safe fork; reuse it when retrying." },
-    },
-    required: ["sourceRecipeId"],
-    additionalProperties: false,
-  },
   async handle(args, context) {
     rejectOwnerEmail(args);
     const principal = requireApiPrincipal(context.principal);
@@ -3890,17 +3657,17 @@ const tools: SpoonjoyApiOperation[] = [
  * has an entry and that there are no orphans.
  */
 const TOOL_ANNOTATIONS = {
-  health: { title: "Health check", readOnlyHint: true },
-  auth_status: { title: "Authentication status", readOnlyHint: true },
-  start_agent_connection: { title: "Start delegated connection", readOnlyHint: false, destructiveHint: false },
-  poll_agent_connection: { title: "Poll delegated connection", readOnlyHint: false, destructiveHint: false },
-  create_api_token: { title: "Create API token", readOnlyHint: false, destructiveHint: false },
-  list_api_tokens: { title: "List API tokens", readOnlyHint: true },
-  revoke_api_token: { title: "Revoke API token", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
-  search_spoonjoy: { title: "Search Spoonjoy", readOnlyHint: true },
-  search_recipes: { title: "Search recipes", readOnlyHint: true },
+  health: declaredAnnotations("health"),
+  auth_status: declaredAnnotations("auth_status"),
+  start_agent_connection: declaredAnnotations("start_agent_connection"),
+  poll_agent_connection: declaredAnnotations("poll_agent_connection"),
+  create_api_token: declaredAnnotations("create_api_token"),
+  list_api_tokens: declaredAnnotations("list_api_tokens"),
+  revoke_api_token: declaredAnnotations("revoke_api_token"),
+  search_spoonjoy: declaredAnnotations("search_spoonjoy"),
+  search_recipes: declaredAnnotations("search_recipes"),
   search_shopping_list: declaredAnnotations("search_shopping_list"),
-  get_recipe: { title: "Get recipe", readOnlyHint: true },
+  get_recipe: declaredAnnotations("get_recipe"),
   list_recipe_covers: declaredAnnotations("list_recipe_covers"),
   list_recipe_spoon_images: declaredAnnotations("list_recipe_spoon_images"),
   create_recipe_cover_from_upload: declaredAnnotations("create_recipe_cover_from_upload"),
@@ -3911,13 +3678,13 @@ const TOOL_ANNOTATIONS = {
   set_active_recipe_cover: declaredAnnotations("set_active_recipe_cover"),
   set_recipe_no_cover: declaredAnnotations("set_recipe_no_cover"),
   archive_recipe_cover: declaredAnnotations("archive_recipe_cover"),
-  create_recipe: { title: "Create recipe", readOnlyHint: false, destructiveHint: false },
-  update_recipe: { title: "Update recipe", readOnlyHint: false, destructiveHint: true },
-  delete_recipe: { title: "Delete recipe", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
-  upload_recipe_image: { title: "Upload recipe image", readOnlyHint: false, destructiveHint: false },
+  create_recipe: declaredAnnotations("create_recipe"),
+  update_recipe: declaredAnnotations("update_recipe"),
+  delete_recipe: declaredAnnotations("delete_recipe"),
+  upload_recipe_image: declaredAnnotations("upload_recipe_image"),
   upload_spoon_photo: declaredAnnotations("upload_spoon_photo"),
   import_recipe_from_url: { title: "Import recipe from URL", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-  fork_recipe: { title: "Fork recipe", readOnlyHint: false, destructiveHint: false },
+  fork_recipe: declaredAnnotations("fork_recipe"),
   add_recipe_to_shopping_list: declaredAnnotations("add_recipe_to_shopping_list"),
   list_cookbooks: declaredAnnotations("list_cookbooks"),
   get_cookbook: declaredAnnotations("get_cookbook"),

@@ -3,6 +3,637 @@
   "set": "spoonjoy",
   "tools": [
     {
+      "name": "health",
+      "title": "Health check",
+      "description": "Check Spoonjoy API readiness and whether the caller can use owner-scoped write operations.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "auth_status",
+      "title": "Authentication status",
+      "description": "Report the current Spoonjoy MCP authentication state and how an agent should obtain delegated access without asking for raw user credentials.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "start_agent_connection",
+      "title": "Start delegated connection",
+      "description": "Start a browser-approved delegated Spoonjoy connection for this agent. Show the user authorizationUrl and, separately, userCode: they open the link, sign in and type the code to approve. Then poll with deviceCode. Grants kitchen and shopping-list scopes only, never account access.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "agentName": {
+            "type": "string",
+            "description": "The agent's name, shown to the person when they approve."
+          },
+          "baseUrl": {
+            "type": "string",
+            "description": "The Spoonjoy server's URL, when it isn't the default."
+          },
+          "scopes": {
+            "type": "string",
+            "description": "The scopes to ask for, separated by spaces or commas."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "poll_agent_connection",
+      "title": "Poll delegated connection",
+      "description": "Poll a pending delegated Spoonjoy connection. When approved, the Spoonjoy MCP bridge activates and caches access; never ask for a Spoonjoy password.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "deviceCode": {
+            "type": "string",
+            "description": "The deviceCode from start_agent_connection."
+          },
+          "tokenName": {
+            "type": "string",
+            "description": "The name to give the token once approved."
+          },
+          "baseUrl": {
+            "type": "string",
+            "description": "The Spoonjoy server's URL, when it isn't the default."
+          }
+        },
+        "required": [
+          "deviceCode"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "create_api_token",
+      "title": "Create API token",
+      "description": "Create an owner-scoped Spoonjoy API token. The token is returned once and is stored hashed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ownerEmail": {
+            "type": "string",
+            "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+          },
+          "name": {
+            "type": "string",
+            "description": "What the token is for."
+          },
+          "scopes": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "The scopes, separated by spaces or commas."
+              },
+              {
+                "type": "array",
+                "description": "The scopes, one per item.",
+                "items": {
+                  "type": "string",
+                  "description": "One scope, such as recipes:read."
+                }
+              }
+            ],
+            "description": "The token's scopes, as one string separated by spaces or commas, or as a list."
+          },
+          "expiresInDays": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "description": "Days until it expires, 1 to 365.",
+                "minimum": 1,
+                "maximum": 365
+              },
+              {
+                "type": "string",
+                "description": "A token that never expires.",
+                "enum": [
+                  "never"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Days until the token expires, 1 to 365. Defaults to 90. Pass null or \"never\" for a token that never expires."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "list_api_tokens",
+      "title": "List API tokens",
+      "description": "List API token metadata for the configured owner. Token secrets are never returned.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ownerEmail": {
+            "type": "string",
+            "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "revoke_api_token",
+      "title": "Revoke API token",
+      "description": "Revoke one API token owned by the configured owner.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ownerEmail": {
+            "type": "string",
+            "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+          },
+          "credentialId": {
+            "type": "string",
+            "description": "The token's credentialId, from list_api_tokens."
+          }
+        },
+        "required": [
+          "credentialId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "search_spoonjoy",
+      "title": "Search Spoonjoy",
+      "description": "Full-text search Spoonjoy recipes, cookbooks, chefs, and the configured owner's private shopping list. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The words to search for. Every word must match; commas separate alternatives, any of which may match."
+          },
+          "scope": {
+            "type": "string",
+            "description": "What to search: all, or one kind of result.",
+            "enum": [
+              "all",
+              "recipes",
+              "cookbooks",
+              "chefs",
+              "shopping-list",
+              "shopping"
+            ]
+          },
+          "ownerEmail": {
+            "type": "string",
+            "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+          },
+          "limit": {
+            "type": "number",
+            "description": "The most results to return, 1 to 25.",
+            "minimum": 1,
+            "maximum": 25
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "search_recipes",
+      "title": "Search recipes",
+      "description": "Full-text search Spoonjoy recipes by title, description, source URL, steps and ingredients, optionally limited to one chef by username, or to your own recipes by your own chefEmail. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The words to search for. Every word must match; commas separate alternatives, any of which may match."
+          },
+          "chefUsername": {
+            "type": "string",
+            "description": "Only recipes by the chef with this username."
+          },
+          "chefEmail": {
+            "type": "string",
+            "description": "Only your own recipes: must be your own email. Any other address returns no recipes."
+          },
+          "limit": {
+            "type": "number",
+            "description": "The most results to return, 1 to 25.",
+            "minimum": 1,
+            "maximum": 25
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_recipe",
+      "title": "Get recipe",
+      "description": "Fetch a Spoonjoy recipe by id or exact title with ordered steps and ingredients.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The recipe's id. Give this or its title."
+          },
+          "title": {
+            "type": "string",
+            "description": "The recipe's exact title, when you don't have its id."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "create_recipe",
+      "title": "Create recipe",
+      "description": "Create a Spoonjoy recipe for the configured owner, including steps and ingredients.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ownerEmail": {
+            "type": "string",
+            "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+          },
+          "title": {
+            "type": "string",
+            "description": "The recipe's title."
+          },
+          "description": {
+            "type": "string",
+            "description": "A short description of the recipe."
+          },
+          "servings": {
+            "type": "string",
+            "description": "How many it serves, such as 4 or 4-6."
+          },
+          "sourceUrl": {
+            "type": "string",
+            "description": "Where the recipe came from, as a URL."
+          },
+          "imageUrl": {
+            "type": "string",
+            "description": "A Spoonjoy image URL from upload_recipe_image."
+          },
+          "steps": {
+            "type": "array",
+            "description": "The recipe's steps, in order, each with its ingredients.",
+            "items": {
+              "type": "object",
+              "description": "One step.",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "description": "The step's short title."
+                },
+                "description": {
+                  "type": "string",
+                  "description": "What to do in this step."
+                },
+                "duration": {
+                  "type": "number",
+                  "description": "How long the step takes, in minutes."
+                },
+                "ingredients": {
+                  "type": "array",
+                  "description": "The ingredients this step uses.",
+                  "items": {
+                    "type": "object",
+                    "description": "One ingredient of a step.",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "What it is, such as flour."
+                      },
+                      "quantity": {
+                        "type": "number",
+                        "description": "How much, as a number."
+                      },
+                      "unit": {
+                        "type": "string",
+                        "description": "The unit for the quantity, such as grams or cups."
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "quantity",
+                      "unit"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "description"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "update_recipe",
+      "title": "Update recipe",
+      "description": "Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: a step with an id updates that step, a step without one updates the step at its position or is added, and steps left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ownerEmail": {
+            "type": "string",
+            "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+          },
+          "id": {
+            "type": "string",
+            "description": "The recipe's id."
+          },
+          "title": {
+            "type": "string",
+            "description": "The recipe's new title."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A short description of the recipe, or null to clear it."
+          },
+          "servings": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How many it serves, or null to clear it."
+          },
+          "sourceUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where the recipe came from, as a URL, or null to clear it."
+          },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A Spoonjoy image URL from upload_recipe_image, or null to clear it."
+          },
+          "steps": {
+            "type": "array",
+            "description": "The recipe's steps, in order; steps left out are removed.",
+            "items": {
+              "type": "object",
+              "description": "One step.",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The id of the step this one updates."
+                },
+                "title": {
+                  "type": "string",
+                  "description": "The step's short title."
+                },
+                "description": {
+                  "type": "string",
+                  "description": "What to do in this step."
+                },
+                "duration": {
+                  "type": "number",
+                  "description": "How long the step takes, in minutes."
+                },
+                "ingredients": {
+                  "type": "array",
+                  "description": "The ingredients this step uses.",
+                  "items": {
+                    "type": "object",
+                    "description": "One ingredient of a step.",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "What it is, such as flour."
+                      },
+                      "quantity": {
+                        "type": "number",
+                        "description": "How much, as a number."
+                      },
+                      "unit": {
+                        "type": "string",
+                        "description": "The unit for the quantity, such as grams or cups."
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "quantity",
+                      "unit"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "outputStepNums": {
+                  "type": "array",
+                  "description": "Earlier step numbers, in this list's order, whose output this step uses.",
+                  "items": {
+                    "type": "integer",
+                    "description": "An earlier step's number, from 1.",
+                    "minimum": 1
+                  }
+                }
+              },
+              "required": [
+                "description"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "delete_recipe",
+      "title": "Delete recipe",
+      "description": "Soft-delete a recipe owned by the configured owner.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ownerEmail": {
+            "type": "string",
+            "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+          },
+          "id": {
+            "type": "string",
+            "description": "The recipe's id."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "upload_recipe_image",
+      "title": "Upload recipe image",
+      "description": "Upload a recipe photo from base64 bytes and return a Spoonjoy image URL for recipe cover assignment.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ownerEmail": {
+            "type": "string",
+            "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+          },
+          "imageBase64": {
+            "type": "string",
+            "description": "The photo's bytes, base64-encoded."
+          },
+          "mimeType": {
+            "type": "string",
+            "description": "The photo's type.",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ]
+          },
+          "filename": {
+            "type": "string",
+            "description": "The photo's file name, such as lasagna.jpg."
+          }
+        },
+        "required": [
+          "imageBase64",
+          "mimeType",
+          "filename"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "fork_recipe",
+      "title": "Fork recipe",
+      "description": "Fork an existing Spoonjoy recipe into the authenticated principal's kitchen. Clones title, description, servings, steps, ingredients, and step-output uses; snapshots the source's latest cover; sets sourceRecipeId on the new recipe. Retrying the same fork (the same idempotencyKey, or the same source and title without a key) within 24 hours returns the first fork instead of creating another, unless that fork was deleted.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sourceRecipeId": {
+            "type": "string",
+            "description": "The recipe to fork, by id."
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional title override. Subject to the same `(chefId, title)` collision suffixing as the default title."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "Stable key for a replay-safe fork; reuse it when retrying."
+          }
+        },
+        "required": [
+          "sourceRecipeId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
       "name": "add_shopping_list_item",
       "title": "Add to list",
       "description": "Add or restore one item on the person's shopping list. It adds to the quantity of a matching item still on the list (same ingredient and unit); a removed or cleared matching item comes back at the added quantity, not on top of its old one.",
