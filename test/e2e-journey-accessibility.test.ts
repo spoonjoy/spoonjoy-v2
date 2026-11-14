@@ -5,8 +5,8 @@
 // could not be taken. The contrast arithmetic it judges with is e2e/journeys/support/contrast.ts.
 import { describe, expect, it } from "vitest";
 import type { CheckResult, NodeResult, Result } from "axe-core";
-import { SCROLL_FADE_HOLD_CSS, auditFailures, classifyAxeResults, describeAuditFailures, type SchemeAudit } from "../e2e/journeys/support/accessibility";
-import { scrollFadeClass } from "~/lib/ouro/scroll-fade";
+import { FOCUS_RING_HOLD_CSS, auditFailures, classifyAxeResults, describeAuditFailures, type SchemeAudit } from "../e2e/journeys/support/accessibility";
+import { readFileSync } from "node:fs";
 import { planVerification } from "../e2e/journeys/support/undecided-checks";
 import {
   composite,
@@ -130,10 +130,12 @@ describe("contrast", () => {
   });
 });
 
-describe("scroll fade hold", () => {
-  it("turns off the mask Ouro UI's scroll fade puts on the box it marks", () => {
-    expect(scrollFadeClass).toMatch(/^data-ouro-scroll-fade:\[mask-image:/);
-    expect(SCROLL_FADE_HOLD_CSS).toBe("[data-ouro-scroll-fade] { mask-image: none !important; -webkit-mask-image: none !important; }");
+describe("code focus ring hold", () => {
+  it("takes out only the empty focus-ring span Ouro UI's CodeBlock stacks over its code", () => {
+    const source = readFileSync("app/components/ouro/code-block/code-block.tsx", "utf8");
+    expect(source).toMatch(/aria-hidden\s+data-slot="focus-ring"/);
+    expect(source).toContain('data-ouro="code-block"');
+    expect(FOCUS_RING_HOLD_CSS).toBe('[data-ouro="code-block"] > [data-slot="focus-ring"] { display: none !important; }');
   });
 });
 

@@ -246,35 +246,36 @@ function recorder(audit: SchemeAudit): Recorder {
  * can close a popup, so it runs after every other measurement (walkFocus).
  */
 /**
- * Ouro UI's scroll fade (`data-ouro-scroll-fade`, a CodeBlock or table row whose content runs past
- * its side) masks the last 2rem at each side that hides more, as a sign that the line goes on. It
- * is a cue over text a person reads by scrolling, as clipped overflow is, so the audit judges that
- * text without it. With the mask on, axe cannot decide the contrast of any text in the box, and
- * measuring each line from screenshots instead took /developers past the test timeout.
+ * Ouro UI's CodeBlock (v1.3.33) draws its focus ring on an empty, aria-hidden span stacked over the
+ * code in the same grid cell (`data-slot="focus-ring"`, `relative z-1`). It paints nothing until the
+ * code has keyboard focus, but axe sees an element over the code and cannot decide its contrast
+ * ("bgOverlap"), so each line was measured from screenshots instead: on /developers, 57 code
+ * blocks, 484 screenshots and 1,027 element waits, past the test's 60 s (journeys run 43596941633).
+ * The audit takes the empty span out while it measures, so axe judges the code as painted.
  */
-export const SCROLL_FADE_HOLD_CSS = "[data-ouro-scroll-fade] { mask-image: none !important; -webkit-mask-image: none !important; }";
-const SCROLL_FADE_HOLD_ID = "sj-audit-scroll-fade-hold";
+export const FOCUS_RING_HOLD_CSS = '[data-ouro="code-block"] > [data-slot="focus-ring"] { display: none !important; }';
+const FOCUS_RING_HOLD_ID = "sj-audit-code-focus-ring-hold";
 
-async function holdScrollFades(page: Page): Promise<void> {
+async function holdCodeFocusRings(page: Page): Promise<void> {
   await page.evaluate(({ id, css }) => {
     if (document.getElementById(id)) return;
     const style = document.createElement("style");
     style.id = id;
     style.textContent = css;
     document.head.append(style);
-  }, { id: SCROLL_FADE_HOLD_ID, css: SCROLL_FADE_HOLD_CSS });
+  }, { id: FOCUS_RING_HOLD_ID, css: FOCUS_RING_HOLD_CSS });
 }
 
-async function releaseScrollFades(page: Page): Promise<void> {
-  await page.evaluate((id) => document.getElementById(id)?.remove(), SCROLL_FADE_HOLD_ID);
+async function releaseCodeFocusRings(page: Page): Promise<void> {
+  await page.evaluate((id) => document.getElementById(id)?.remove(), FOCUS_RING_HOLD_ID);
 }
 
 async function measureShownScheme(page: Page, options: AuditOptions): Promise<{ audit: SchemeAudit; walks: FocusWalk[] }> {
-  await holdScrollFades(page);
+  await holdCodeFocusRings(page);
   try {
     return await measureShownSchemeHeld(page, options);
   } finally {
-    await releaseScrollFades(page);
+    await releaseCodeFocusRings(page);
   }
 }
 
