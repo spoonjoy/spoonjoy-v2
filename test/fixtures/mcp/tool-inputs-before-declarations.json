@@ -1,0 +1,1065 @@
+{
+  "_note": "Each MCP tool's inputSchema as hand-written before it was declared (tools/list on ac81a24d). A declaration must accept exactly these inputs; the test compares them with descriptions left out.",
+  "tools": {
+    "add_recipe_to_cookbook": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "cookbookId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "cookbookTitle": {
+          "type": "string"
+        },
+        "recipeId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "recipeId"
+      ],
+      "additionalProperties": false
+    },
+    "add_recipe_to_shopping_list": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "recipeId": {
+          "type": "string"
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Optional. Send the same key again when retrying this exact call, such as after a timeout, and the items are added once."
+        }
+      },
+      "required": [
+        "recipeId"
+      ],
+      "additionalProperties": false
+    },
+    "add_shopping_list_item": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "What to buy, such as eggs or flour."
+        },
+        "quantity": {
+          "type": "number",
+          "description": "How many or how much, as a number above 0. Leave it out when it doesn't matter.",
+          "minimum": 0
+        },
+        "unit": {
+          "type": "string",
+          "description": "The unit for the quantity, such as grams, cups or cans. Leave it out for a plain count."
+        },
+        "categoryKey": {
+          "type": "string",
+          "description": "Optional. The aisle's category key, such as produce or pantry."
+        },
+        "iconKey": {
+          "type": "string",
+          "description": "Optional. The item's icon key, such as wheat or package."
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Optional. Send the same key again when retrying this exact call, such as after a timeout, and the item is added once."
+        },
+        "ownerEmail": {
+          "type": "string",
+          "description": "Optional. Whose list, for a local server with no signed-in person; a signed-in caller always acts on their own list."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "archive_recipe_cover": {
+      "type": "object",
+      "properties": {
+        "recipeId": {
+          "type": "string",
+          "description": "Recipe that owns the cover candidate."
+        },
+        "coverId": {
+          "type": "string",
+          "description": "Cover candidate to archive."
+        },
+        "replacementCoverId": {
+          "type": "string",
+          "description": "Replacement cover candidate to activate when archiving the active cover."
+        },
+        "replacementVariant": {
+          "type": "string",
+          "enum": [
+            "image",
+            "stylized"
+          ],
+          "description": "Replacement variant to activate: image or stylized."
+        },
+        "confirmNoCover": {
+          "type": "boolean",
+          "description": "Use explicit no-cover mode when archiving the active cover without a replacement."
+        },
+        "deleteSafeObjects": {
+          "type": "boolean",
+          "description": "Request deletion of safe owned image objects after archive when supported."
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Stable key for replay-safe archiving."
+        }
+      },
+      "required": [
+        "recipeId",
+        "coverId"
+      ],
+      "additionalProperties": false
+    },
+    "auth_status": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "create_api_token": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "scopes": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "expiresInDays": {
+          "description": "Days until the token expires, 1 to 365. Defaults to 90. Pass null or \"never\" for a token that never expires.",
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365
+            },
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "enum": [
+                "never"
+              ]
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "create_cookbook": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Stable key (8-100 letters, digits, '_' or '-') for replay-safe creation: a repeat with the same key returns the cookbook the first call made, with created: true and mutation.replayed: true."
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "create_recipe": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "servings": {
+          "type": "string"
+        },
+        "sourceUrl": {
+          "type": "string"
+        },
+        "imageUrl": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "duration": {
+                "type": "number"
+              },
+              "ingredients": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "quantity",
+                    "unit"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "description"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "create_recipe_cover_from_upload": {
+      "type": "object",
+      "properties": {
+        "recipeId": {
+          "type": "string",
+          "description": "Recipe that will receive the cover candidate."
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Spoonjoy uploaded recipe or spoon photo URL to use as the original cover source."
+        },
+        "activateWhenReady": {
+          "type": "boolean",
+          "description": "Make the cover active when the editorial image is ready."
+        },
+        "generateEditorial": {
+          "type": "boolean",
+          "description": "Generate an editorialized cover from the uploaded original photo."
+        },
+        "promptAddition": {
+          "type": "string",
+          "maxLength": 240,
+          "description": "Optional bounded instruction to guide editorial cover generation."
+        },
+        "postAsSpoon": {
+          "type": "boolean",
+          "description": "Also create a Spoon entry to preserve the original photo with optional cook notes."
+        },
+        "note": {
+          "type": "string",
+          "description": "Spoon note used when postAsSpoon preserves the original photo."
+        },
+        "nextTime": {
+          "type": "string",
+          "description": "Spoon next-time note used when postAsSpoon preserves the original photo."
+        },
+        "cookedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO date-time for the Spoon cook when postAsSpoon preserves the original photo."
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Stable key for replay-safe cover creation."
+        },
+        "dryRun": {
+          "type": "boolean",
+          "description": "Validate inputs and return planned next actions without writing a cover."
+        }
+      },
+      "required": [
+        "recipeId",
+        "imageUrl"
+      ],
+      "additionalProperties": false
+    },
+    "create_spoon": {
+      "type": "object",
+      "properties": {
+        "recipeId": {
+          "type": "string"
+        },
+        "photoUrl": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "nextTime": {
+          "type": "string"
+        },
+        "cookedAt": {
+          "type": "string"
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Stable key (8-100 letters, digits, '_' or '-') for replay-safe creation: a repeat with the same key returns the spoon the first call made instead of logging a second cook."
+        }
+      },
+      "required": [
+        "recipeId"
+      ],
+      "additionalProperties": false
+    },
+    "delete_recipe": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "delete_spoon": {
+      "type": "object",
+      "properties": {
+        "spoonId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "spoonId"
+      ],
+      "additionalProperties": false
+    },
+    "fork_recipe": {
+      "type": "object",
+      "properties": {
+        "sourceRecipeId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional title override. Subject to the same `(chefId, title)` collision suffixing as the default title."
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Stable key for a replay-safe fork; reuse it when retrying."
+        }
+      },
+      "required": [
+        "sourceRecipeId"
+      ],
+      "additionalProperties": false
+    },
+    "generate_recipe_cover_placeholder": {
+      "type": "object",
+      "properties": {
+        "recipeId": {
+          "type": "string",
+          "description": "Recipe that will receive the generated AI placeholder cover."
+        },
+        "promptAddition": {
+          "type": "string",
+          "maxLength": 240,
+          "description": "Optional bounded instruction to guide AI placeholder generation."
+        },
+        "activateWhenReady": {
+          "type": "boolean",
+          "description": "Make the generated cover active when the generated cover is ready."
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Stable key for replay-safe placeholder generation."
+        },
+        "dryRun": {
+          "type": "boolean",
+          "description": "Validate inputs and return planned next actions without writing a cover."
+        }
+      },
+      "required": [
+        "recipeId",
+        "idempotencyKey"
+      ],
+      "additionalProperties": false
+    },
+    "get_cookbook": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "cookbookId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "cookbookTitle": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "get_cover_generation_status": {
+      "type": "object",
+      "properties": {
+        "recipeId": {
+          "type": "string",
+          "description": "Recipe that owns the cover candidate."
+        },
+        "coverId": {
+          "type": "string",
+          "description": "Recipe cover candidate whose generation status should be fetched."
+        }
+      },
+      "required": [
+        "recipeId",
+        "coverId"
+      ],
+      "additionalProperties": false
+    },
+    "get_recipe": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "get_shopping_list": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "health": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "list_api_tokens": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "list_cookbooks": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 25
+        }
+      },
+      "additionalProperties": false
+    },
+    "list_recipe_covers": {
+      "type": "object",
+      "properties": {
+        "recipeId": {
+          "type": "string",
+          "description": "Recipe whose cover candidates should be listed."
+        },
+        "includeArchived": {
+          "type": "boolean",
+          "description": "Include archived cover candidates in the owner-only history."
+        },
+        "limit": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 25,
+          "description": "Maximum number of cover candidates to return."
+        },
+        "offset": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Zero-based pagination offset."
+        }
+      },
+      "required": [
+        "recipeId"
+      ],
+      "additionalProperties": false
+    },
+    "list_recipe_spoon_images": {
+      "type": "object",
+      "properties": {
+        "recipeId": {
+          "type": "string",
+          "description": "Recipe whose Spoon photos should be listed."
+        },
+        "limit": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 25,
+          "description": "Maximum number of Spoon photos to return."
+        },
+        "offset": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Zero-based pagination offset."
+        }
+      },
+      "required": [
+        "recipeId"
+      ],
+      "additionalProperties": false
+    },
+    "list_spoons_by_chef": {
+      "type": "object",
+      "properties": {
+        "chefIdOrUsername": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "offset": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "chefIdOrUsername"
+      ],
+      "additionalProperties": false
+    },
+    "list_spoons_for_recipe": {
+      "type": "object",
+      "properties": {
+        "recipeId": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "offset": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "recipeId"
+      ],
+      "additionalProperties": false
+    },
+    "poll_agent_connection": {
+      "type": "object",
+      "properties": {
+        "deviceCode": {
+          "type": "string"
+        },
+        "tokenName": {
+          "type": "string"
+        },
+        "baseUrl": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "deviceCode"
+      ],
+      "additionalProperties": false
+    },
+    "regenerate_recipe_cover": {
+      "type": "object",
+      "properties": {
+        "recipeId": {
+          "type": "string",
+          "description": "Recipe that owns the cover candidate."
+        },
+        "coverId": {
+          "type": "string",
+          "description": "Existing cover candidate to regenerate."
+        },
+        "promptAddition": {
+          "type": "string",
+          "maxLength": 240,
+          "description": "Optional bounded instruction to guide regenerated editorial output."
+        },
+        "activateWhenReady": {
+          "type": "boolean",
+          "description": "Make the regenerated cover active when the regenerated cover is ready."
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Stable key for replay-safe regeneration."
+        },
+        "dryRun": {
+          "type": "boolean",
+          "description": "Validate inputs and return planned next actions without writing a cover."
+        }
+      },
+      "required": [
+        "recipeId",
+        "coverId",
+        "idempotencyKey"
+      ],
+      "additionalProperties": false
+    },
+    "remove_recipe_from_cookbook": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "cookbookId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "cookbookTitle": {
+          "type": "string"
+        },
+        "recipeId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "recipeId"
+      ],
+      "additionalProperties": false
+    },
+    "remove_shopping_list_item": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "itemId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "itemId"
+      ],
+      "additionalProperties": false
+    },
+    "revoke_api_token": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "credentialId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "credentialId"
+      ],
+      "additionalProperties": false
+    },
+    "search_recipes": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "chefUsername": {
+          "type": "string",
+          "description": "Only recipes by the chef with this username."
+        },
+        "chefEmail": {
+          "type": "string",
+          "description": "Only your own recipes: must be your own email. Any other address returns no recipes."
+        },
+        "limit": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 25
+        }
+      },
+      "additionalProperties": false
+    },
+    "search_shopping_list": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 25
+        }
+      },
+      "additionalProperties": false
+    },
+    "search_spoonjoy": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "all",
+            "recipes",
+            "cookbooks",
+            "chefs",
+            "shopping-list",
+            "shopping"
+          ]
+        },
+        "ownerEmail": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 25
+        }
+      },
+      "additionalProperties": false
+    },
+    "set_active_recipe_cover": {
+      "type": "object",
+      "properties": {
+        "recipeId": {
+          "type": "string",
+          "description": "Recipe that owns the cover candidate."
+        },
+        "coverId": {
+          "type": "string",
+          "description": "Cover candidate to activate."
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "image",
+            "stylized"
+          ],
+          "description": "Cover variant to activate: image or stylized."
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Stable key for replay-safe activation."
+        }
+      },
+      "required": [
+        "recipeId",
+        "coverId",
+        "variant"
+      ],
+      "additionalProperties": false
+    },
+    "set_recipe_no_cover": {
+      "type": "object",
+      "properties": {
+        "recipeId": {
+          "type": "string",
+          "description": "Recipe that should intentionally display no cover."
+        },
+        "confirmNoCover": {
+          "const": true,
+          "description": "Required explicit confirmation before entering no-cover mode."
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Stable key for replay-safe no-cover changes."
+        }
+      },
+      "required": [
+        "recipeId",
+        "confirmNoCover",
+        "idempotencyKey"
+      ],
+      "additionalProperties": false
+    },
+    "set_shopping_list_item_checked": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "itemId": {
+          "type": "string"
+        },
+        "checked": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "itemId",
+        "checked"
+      ],
+      "additionalProperties": false
+    },
+    "start_agent_connection": {
+      "type": "object",
+      "properties": {
+        "agentName": {
+          "type": "string"
+        },
+        "baseUrl": {
+          "type": "string"
+        },
+        "scopes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "update_recipe": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "servings": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceUrl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "imageUrl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "The id of the step this one updates."
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "duration": {
+                "type": "number"
+              },
+              "outputStepNums": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "description": "Earlier step numbers, in this list's order, whose output this step uses."
+              },
+              "ingredients": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "quantity",
+                    "unit"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "description"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "update_spoon": {
+      "type": "object",
+      "properties": {
+        "spoonId": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "nextTime": {
+          "type": "string"
+        },
+        "photoUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cookedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "spoonId"
+      ],
+      "additionalProperties": false
+    },
+    "upload_recipe_image": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "imageBase64": {
+          "type": "string"
+        },
+        "mimeType": {
+          "type": "string",
+          "enum": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "filename": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "imageBase64",
+        "mimeType",
+        "filename"
+      ],
+      "additionalProperties": false
+    },
+    "upload_spoon_photo": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "imageBase64": {
+          "type": "string"
+        },
+        "mimeType": {
+          "type": "string",
+          "enum": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "filename": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "imageBase64",
+        "mimeType",
+        "filename"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

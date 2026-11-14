@@ -16,7 +16,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 /** The generator's version, written into every generated file; it is core's version. */
-export const ACTIONS_VERSION = "0.6.0";
+export const ACTIONS_VERSION = "0.10.0";
 const GENERATOR = `ouro-actions ${ACTIONS_VERSION}`;
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -45,17 +45,70 @@ interface FieldBase {
    */
   ask?: string;
   /**
-   * Input only, and optional: a field only programs send, such as an idempotency key or a server-side owner. MCP,
-   * WebMCP and the CLI carry it; the App Intent and Reins, which stand for the person, leave it out, and the Swift
-   * input passes nil.
+   * Input only: a field only programs send, such as an idempotency key or a server-side owner. MCP, WebMCP and the CLI
+   * carry it; the App Intent and Reins, which stand for the person, leave it out, and in the Swift input it is optional
+   * and nil. A required protocol-only field (an existing tool's required idempotency key) is one the app's handler
+   * supplies when the person's door leaves it nil.
    */
   protocolOnly?: boolean;
+  /**
+   * Output only: the App Intent hands this field to Shortcuts as its result (`ReturnsValue`). One per action, required,
+   * a string, number, integer or boolean.
+   */
+  returned?: boolean;
+  /**
+   * Input only, and optional: the CLI flag's name when the field's own kebab-case name is a flag web's kit already
+   * takes, such as `flag: "plan-only"` for an existing MCP input named `dryRun`. `fromCli` renames it back.
+   */
+  flag?: string;
+  /** Input only, and optional: the value may also be null, which a program sends to clear it (JSON Schema's `null`). */
+  nullable?: boolean;
 }
-export interface StringField extends FieldBase { kind: "string"; arg?: boolean }
+/** A JSON Schema `format` a string can name; MCP and WebMCP carry it, and the CLI and Swift take the string as it is. */
+export const STRING_FORMATS = Object.freeze(["date-time", "date", "uri", "email"] as const);
+export interface StringField extends FieldBase {
+  kind: "string";
+  arg?: boolean;
+  /** The longest the string may be, in characters (JSON Schema's `maxLength`). */
+  maxLength?: number;
+  format?: (typeof STRING_FORMATS)[number];
+  /**
+   * Input only: the app's own App Entity type, such as `"MarkdownDocumentEntity"`. The App Intent's parameter takes it, so
+   * Shortcuts shows its picker; Input, MCP and the CLI keep a string, its `id`. The type must be `public`, with
+   * `init(id: String)` and `id: String`.
+   */
+  entity?: string;
+  /**
+   * Input only: the value is long text, such as Markdown or a message. The App Intent's parameter opens a multiline editor
+   * (`String.IntentInputOptions(multiline: true)`), and the description MCP, WebMCP and the CLI show says it may run over
+   * several lines. Not for a positional `arg`, an `entity` or a `protocolOnly` field.
+   */
+  multiline?: boolean;
+  /**
+   * Input only: this string is an id the person never reads, such as `rcp_lemon_orzo`, and `shownAs` names the optional
+   * sibling input string that carries their word for it, such as `recipeTitle`. A confirm sheet shows that name in its
+   * place, with the id beside it as `raw`. The agent prepares both; the app's own resolver (A2UI `label`) can override
+   * the name from its own data. MCP, the CLI and the App Intent just see two inputs, so a tool that doesn't want the
+   * name there uses the resolver alone.
+   */
+  shownAs?: string;
+}
 export interface NumberField extends FieldBase { kind: "number" | "integer"; min?: number; max?: number }
-export interface BooleanField extends FieldBase { kind: "boolean" }
+export interface BooleanField extends FieldBase {
+  kind: "boolean";
+  /** The one value it takes: `const: true` is an explicit confirmation a program must send, such as `confirmNoCover`. */
+  const?: true;
+}
 export interface EnumField<V extends string = string> extends FieldBase { kind: "enum"; values: readonly V[] }
-export type Field = StringField | NumberField | BooleanField | EnumField;
+/**
+ * The structured fields, for an existing MCP tool's inputs that a person's door can't carry: a list of values, a group
+ * of named fields, or one of several shapes. They are protocol-only input fields: MCP and WebMCP carry their JSON
+ * Schema and the CLI takes them as JSON; the App Intent, Reins and the Swift input leave them out.
+ */
+export interface ListField extends FieldBase { kind: "list"; of: Field }
+export interface GroupField extends FieldBase { kind: "group"; fields: Fields }
+export interface OneOfField extends FieldBase { kind: "one-of"; options: readonly Field[] }
+export type Field = StringField | NumberField | BooleanField | EnumField | ListField | GroupField | OneOfField;
 export type Fields = Readonly<Record<string, Field>>;
 
 type Opt = { optional?: boolean };
@@ -66,13 +119,26 @@ export const field = Object.freeze({
   integer: <O extends Omit<NumberField, "kind">>(o: O) => ({ ...o, kind: "integer" as const }),
   boolean: <O extends Omit<BooleanField, "kind">>(o: O) => ({ ...o, kind: "boolean" as const }),
   enum: <const V extends string, O extends Omit<EnumField<V>, "kind">>(o: O & { values: readonly V[] }) => ({ ...o, kind: "enum" as const }),
+  /** A list of values, each the field `of` describes (its label and description describe one item). */
+  list: <const O extends Omit<ListField, "kind">>(o: O) => ({ ...o, kind: "list" as const }),
+  /** A group of named fields: a JSON object, nothing extra. */
+  group: <const O extends Omit<GroupField, "kind">>(o: O) => ({ ...o, kind: "group" as const }),
+  /** Exactly one of several shapes, such as a number of days or the word "never" (JSON Schema's `oneOf`). */
+  oneOf: <const O extends Omit<OneOfField, "kind">>(o: O) => ({ ...o, kind: "one-of" as const }),
 });
+const KINDS = Object.freeze(["string", "number", "integer", "boolean", "enum", "list", "group", "one-of"]);
+const STRUCTURED = Object.freeze(["list", "group", "one-of"]);
+const isStructured = (f: Field) => STRUCTURED.includes(f.kind);
 
-type ValueOf<F> = F extends { kind: "string" } ? string
+type Nullable<F, T> = F extends { nullable: true } ? T | null : T;
+type ValueOf<F> = Nullable<F, F extends { kind: "string" } ? string
   : F extends { kind: "number" | "integer" } ? number
   : F extends { kind: "boolean" } ? boolean
   : F extends { kind: "enum"; values: readonly (infer V)[] } ? V
-  : never;
+  : F extends { kind: "list"; of: infer I } ? ValueOf<I>[]
+  : F extends { kind: "group"; fields: infer G } ? ValuesOf<G>
+  : F extends { kind: "one-of"; options: readonly (infer U)[] } ? ValueOf<U>
+  : never>;
 type OptionalKeys<F> = { [K in keyof F]: F[K] extends Opt & { optional: true } ? K : never }[keyof F];
 type RequiredKeys<F> = Exclude<keyof F, OptionalKeys<F>>;
 /** The value an action's fields describe, optional fields optional. */
@@ -106,6 +172,15 @@ export interface ActionDef<I extends Fields = Fields, O extends Fields = Fields>
   reaches?: "private" | "others";
   /** The CLI words, such as `list add`; defaults to the id in kebab case. */
   cli?: string;
+  /** The App Intent opens the app when it runs (`openAppWhenRun`), for an action whose point is to show a window. */
+  opensApp?: boolean;
+  /**
+   * A write that removes or overwrites some of the person's own things, such as deleting a list item: MCP's
+   * `destructiveHint`, so a client may ask before it runs. A consequential action is destructive already.
+   */
+  destructive?: true;
+  /** Calling it again with the same input changes nothing more: MCP's `idempotentHint`, so a client may retry it. */
+  idempotent?: true;
 }
 
 export interface Action<I extends Fields = Fields, O extends Fields = Fields> extends Readonly<ActionDef<I, O>> {
@@ -130,11 +205,15 @@ export interface Names {
 const ID = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
 const FIELD_NAME = /^[a-z][a-zA-Z0-9]*$/;
 /**
- * Input field names a surface already uses: web's kit's own flags (`--json`, `--help`, `--why`, `--why-file`,
- * `--dry-run`, `--agent`, `--quiet`), which the field's flag would shadow, and the generated App Intent's own members
- * (`input`, `perform`), which its `@Parameter` would clash with. Swift keywords are escaped, so they are allowed.
+ * What an input field may not take: web's kit's own flags (`--json`, `--help`, `--why`, `--why-file`, `--dry-run`,
+ * `--agent`, `--quiet`), which the field's flag would shadow (a field keeps its name and takes another with `flag`), and
+ * the generated App Intent's own members (`input`, `perform`), which its `@Parameter` would clash with. Swift keywords
+ * are escaped, so they are allowed.
  */
-const RESERVED_INPUTS = Object.freeze(["json", "help", "why", "whyFile", "dryRun", "agent", "quiet", "input", "perform"]);
+const KIT_FLAGS = Object.freeze(["json", "help", "why", "why-file", "dry-run", "agent", "quiet"]);
+const INTENT_MEMBERS = Object.freeze(["input", "perform"]);
+/** An enum value: lowercase words and digits, joined by -, _, / or . (`shopping-list`, `image/jpeg`). */
+const ENUM_VALUE = /^[a-z][a-z0-9]*([-_/.][a-z0-9]+)*$/;
 /**
  * Ids web's `defineComponentAx` reserves for the person (its `RESERVED_PERSON_ONLY`), which only a person-only action may
  * take. Web also reads an id's meaning (`share-screen`, `mic-on`); its defineComponentAx and X-ray still apply that.
@@ -151,20 +230,115 @@ export function names(id: string): Names {
   return { kebab: parts.join("-"), camel: parts[0] + parts.slice(1).map(cap).join(""), pascal: parts.map(cap).join("") };
 }
 
-function checkFields(where: string, fields: unknown, input: boolean): void {
+/** Checks one field, wherever it sits: `top` is an action's input or output field; otherwise it is inside a list, group or one-of. */
+function checkField(at: string, f: Field, input: boolean, top: boolean): void {
+  if (!KINDS.includes(f?.kind)) throw new Error(`${at}: has no kind. Fix: build it with field.string, field.number, field.integer, field.boolean, field.enum, field.list, field.group or field.oneOf.`);
+  if (!oneLine(f.label)) throw new Error(`${at}: label is empty or more than one line. Fix: the person's word for it, such as "Quantity".`);
+  if (!oneLine(f.description)) throw new Error(`${at}: description is empty or more than one line. Fix: one sentence for the agent.`);
+  if (!top) {
+    for (const key of ["ask", "protocolOnly", "returned", "flag", "arg", "entity", "multiline", "shownAs"] as const) {
+      if (key in f && (f as unknown as Record<string, unknown>)[key] !== undefined) throw new Error(`${at}: ${key} is for an action's own input or output field, not one inside a list, group or one-of. Fix: drop ${key}.`);
+    }
+  }
+  if (f.ask !== undefined && (!input || !oneLine(f.ask))) throw new Error(`${at}: ask is the one-line question Siri asks for a missing input value. Fix: drop it from an output field, or write it in one line.`);
+  if (f.protocolOnly !== undefined && (f.protocolOnly !== true || !input || ("arg" in f && f.arg))) throw new Error(`${at}: protocolOnly is for an input field that only programs send, never a CLI argument. Fix: protocolOnly: true without arg, or drop protocolOnly.`);
+  if (top && input && isStructured(f) && !f.protocolOnly) throw new Error(`${at}: a ${f.kind} field is only for programs, since the App Intent and Reins can't take one. Fix: add protocolOnly: true, or split it into plain fields.`);
+  if (!input && isStructured(f)) throw new Error(`${at}: an output field can't be a ${f.kind}. Fix: return it as a string field holding JSON.`);
+  if (f.flag !== undefined && (!input || !/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(f.flag))) throw new Error(`${at}: flag is an input field's CLI flag name, in kebab case. Fix: such as flag: "plan-only".`);
+  if (f.nullable !== undefined && (f.nullable !== true || !input || (top && !f.optional) || f.kind === "enum" || f.kind === "list" || f.kind === "group")) {
+    throw new Error(`${at}: nullable is for an optional string, number, integer, boolean or one-of input field that a program clears with null. Fix: make it optional, or drop nullable.`);
+  }
+  if ("returned" in f && f.returned !== undefined) {
+    if (input) throw new Error(`${at}: returned is only for an output field. Fix: drop returned.`);
+    if (!["string", "number", "integer", "boolean"].includes(f.kind)) throw new Error(`${at}: returned must be a string, number, integer or boolean field, which Shortcuts can take. Fix: return a text field.`);
+    if (f.optional) throw new Error(`${at}: returned must be required, so the intent always has a value to hand on. Fix: drop optional.`);
+  }
+  if (!input && f.kind === "enum") throw new Error(`${at}: an output field can't be an enum, since the Swift output has no type for it. Fix: return it as a string field and name its values in the description.`);
+  if ("entity" in f && f.entity !== undefined) {
+    if (f.kind !== "string" || !input) throw new Error(`${at}: entity is only for an input string field, whose value is the entity's id. Fix: drop entity.`);
+    if (!/^[A-Z][A-Za-z0-9]*$/.test(f.entity)) throw new Error(`${at}: entity is not a Swift type name. Fix: the app's App Entity, such as "MarkdownDocumentEntity".`);
+    if (f.protocolOnly) throw new Error(`${at}: entity is for the person's doors, and a protocol-only field isn't on them. Fix: drop entity or protocolOnly.`);
+  }
+  if ("multiline" in f && f.multiline !== undefined) {
+    if (f.kind !== "string") throw new Error(`${at}: multiline is only for a string field. Fix: drop multiline.`);
+    if (!input) throw new Error(`${at}: multiline is only for an input field. Fix: drop multiline.`);
+    if (f.arg) throw new Error(`${at}: multiline can't be a positional arg, which is one word on the command line. Fix: drop arg or multiline.`);
+    if (f.entity !== undefined) throw new Error(`${at}: multiline is for typed text, and an entity is picked. Fix: drop entity or multiline.`);
+    if (f.protocolOnly) throw new Error(`${at}: multiline is for the person's doors, and a protocol-only field isn't on them. Fix: drop multiline or protocolOnly.`);
+  }
+  if ("arg" in f && f.arg && (f.kind !== "string" || f.optional || !input)) throw new Error(`${at}: arg is only for a required string input field, since web's CLI arguments are strings. Fix: drop arg, or make it a required string.`);
+  if (f.kind === "string") {
+    if (f.maxLength !== undefined && !(Number.isInteger(f.maxLength) && f.maxLength > 0)) throw new Error(`${at}: maxLength is ${JSON.stringify(f.maxLength)}. Fix: a whole number above 0.`);
+    if (f.format !== undefined && !(STRING_FORMATS as readonly string[]).includes(f.format)) throw new Error(`${at}: format is ${JSON.stringify(f.format)}. Fix: one of ${STRING_FORMATS.join(", ")}, or leave it out.`);
+  }
+  if (f.kind === "boolean" && f.const !== undefined && f.const !== true) throw new Error(`${at}: const is ${JSON.stringify(f.const)}. Fix: const: true, for a confirmation a program must send, or leave it out.`);
+  if (f.kind === "boolean" && f.const !== undefined && f.nullable) throw new Error(`${at}: a const field can't be nullable, since const: true takes only true. Fix: drop nullable.`);
+  if (f.kind === "enum") {
+    if (!Array.isArray(f.values) || f.values.length === 0 || !f.values.every((v) => ENUM_VALUE.test(v))) {
+      throw new Error(`${at}: values is empty or not lowercase words. Fix: values: ["all", "unchecked"]; words may be joined by -, _, / or ., as in "image/jpeg".`);
+    }
+    // Only an action's own enum fields become Swift enums, so only they must keep their cases apart.
+    const cases = new Map<string, string>();
+    for (const v of top ? f.values : []) {
+      const other = cases.get(caseName(v));
+      if (other !== undefined) throw new Error(`${at}: values "${other}" and "${v}" are the same Swift case, ${caseName(v)}. Fix: drop or rename one.`);
+      cases.set(caseName(v), v);
+    }
+  }
+  if (f.kind === "list") {
+    if (f.of?.optional) throw new Error(`${at} item: an item can't be optional. Fix: drop optional from of.`);
+    checkField(`${at} item`, f.of, input, false);
+  }
+  if (f.kind === "group") checkFields(`${at}`, f.fields, input, false);
+  if (f.kind === "one-of") {
+    if (!Array.isArray(f.options) || f.options.length < 2) throw new Error(`${at}: options needs two shapes or more. Fix: options: [field.integer({ ... }), field.enum({ ... })], or use the one field.`);
+    // JSON Schema's oneOf takes a value that matches exactly one option, so no two options may take the same value.
+    const shapes = new Map<string, number>();
+    f.options.forEach((o, i) => {
+      if (o?.optional) throw new Error(`${at} option ${i + 1}: an option can't be optional. Fix: drop optional from the option; make the one-of field optional instead.`);
+      if (o?.nullable) throw new Error(`${at} option ${i + 1}: an option can't be nullable. Fix: make the one-of field nullable instead.`);
+      checkField(`${at} option ${i + 1}`, o, input, false);
+      const shape = o?.kind === "enum" ? "string" : o?.kind === "integer" ? "number" : o?.kind;
+      const other = shapes.get(shape);
+      if (other !== undefined) throw new Error(`${at} options ${other + 1} and ${i + 1}: both can take the same ${shape} value, and a one-of takes a value that matches exactly one. Fix: keep one option per kind of value, counting an enum as a string and an integer as a number.`);
+      shapes.set(shape, i);
+    });
+  }
+}
+
+function checkFields(where: string, fields: unknown, input: boolean, top = true): void {
   if (typeof fields !== "object" || fields === null || Array.isArray(fields)) throw new Error(`${where}: is not an object of fields. Fix: { <name>: field.string({ ... }) }, or {}.`);
   for (const [name, f] of Object.entries(fields as Record<string, Field>)) {
     const at = `${where} "${name}"`;
     if (!FIELD_NAME.test(name)) throw new Error(`${at}: a field name is camelCase letters and digits. Fix: rename it, such as "canEdit".`);
-    if (!["string", "number", "integer", "boolean", "enum"].includes(f?.kind)) throw new Error(`${at}: has no kind. Fix: build it with field.string, field.number, field.integer, field.boolean or field.enum.`);
-    if (!oneLine(f.label)) throw new Error(`${at}: label is empty or more than one line. Fix: the person's word for it, such as "Quantity".`);
-    if (!oneLine(f.description)) throw new Error(`${at}: description is empty or more than one line. Fix: one sentence for the agent.`);
-    if (input && RESERVED_INPUTS.includes(name)) throw new Error(`${at}: the name is taken by a surface (web's kit's own flags, or the App Intent's members: ${RESERVED_INPUTS.join(", ")}). Fix: rename it, such as "${name}Value".`);
-    if (f.ask !== undefined && (!input || !oneLine(f.ask))) throw new Error(`${at}: ask is the one-line question Siri asks for a missing input value. Fix: drop it from an output field, or write it in one line.`);
-    if (f.protocolOnly !== undefined && (!input || !f.optional || ("arg" in f && f.arg))) throw new Error(`${at}: protocolOnly is for an optional input field that only programs send. Fix: make it optional, drop arg, or drop protocolOnly.`);
-    if ("arg" in f && f.arg && (f.kind !== "string" || f.optional || !input)) throw new Error(`${at}: arg is only for a required string input field, since web's CLI arguments are strings. Fix: drop arg, or make it a required string.`);
-    if (f.kind === "enum" && (!Array.isArray(f.values) || f.values.length === 0 || !f.values.every((v) => /^[a-z][a-z0-9-]*$/.test(v)))) {
-      throw new Error(`${at}: values is empty or not lowercase words. Fix: values: ["all", "unchecked"].`);
+    if (top && input && INTENT_MEMBERS.includes(name)) throw new Error(`${at}: the name is taken by the App Intent's own members (${INTENT_MEMBERS.join(", ")}). Fix: rename it, such as "${name}Value".`);
+    if (top && input && KIT_FLAGS.includes(f?.flag ?? flagName(name))) {
+      throw new Error(`${at}: its CLI flag --${f?.flag ?? flagName(name)} is taken by web's kit, whose own flags are (${KIT_FLAGS.map((k) => `--${k}`).join(", ")}). Fix: rename it, such as "${name}Value", or keep the name and give it its own flag, such as flag: "${flagName(name)}-value".`);
+    }
+    if (top && "shownAs" in f && f.shownAs !== undefined) {
+      const to = f.shownAs;
+      const sibling = (fields as Record<string, Field>)[to];
+      if (f.kind !== "string") throw new Error(`${at}: shownAs is only for a string field, the id. Fix: drop shownAs.`);
+      if (!input) throw new Error(`${at}: shownAs is only for an input field. Fix: drop shownAs.`);
+      if (to === name) throw new Error(`${at}: shownAs names the field itself. Fix: name the sibling that holds the person's word for it, such as "recipeTitle".`);
+      if (typeof to !== "string" || !sibling) throw new Error(`${at}: shownAs ${JSON.stringify(to)} is not another input field. Fix: declare it beside this one, such as recipeTitle: field.string({ ..., optional: true }).`);
+      if (sibling.kind !== "string" || !sibling.optional) throw new Error(`${at}: shownAs ${JSON.stringify(to)} must be an optional string input, so a call without a name still works. Fix: make "${to}" an optional string.`);
+      if (sibling.protocolOnly) throw new Error(`${at}: shownAs ${JSON.stringify(to)} is protocolOnly, so the person's doors don't carry it. Fix: drop protocolOnly from "${to}".`);
+      if ("shownAs" in sibling && sibling.shownAs !== undefined) throw new Error(`${at}: shownAs ${JSON.stringify(to)} is itself shown as another field, and a name has no name. Fix: drop shownAs from "${to}".`);
+    }
+    checkField(at, f, input, top);
+  }
+  if (top && !input) {
+    const returned = Object.entries(fields as Record<string, Field>).filter(([, f]) => f.returned);
+    if (returned.length > 1) throw new Error(`${where}: ${returned.map(([n]) => `"${n}"`).join(" and ")} are both returned, and only one output field can be returned. Fix: keep returned on the one Shortcuts should get.`);
+  }
+  if (top && input) {
+    const flags = new Map<string, string>();
+    for (const [name, f] of Object.entries(fields as Record<string, Field>)) {
+      const flag = f.flag ?? flagName(name);
+      const other = flags.get(flag);
+      if (other !== undefined) throw new Error(`${where}: "${other}" and "${name}" share the CLI flag --${flag}. Fix: give one its own flag.`);
+      flags.set(flag, name);
     }
   }
 }
@@ -189,6 +363,13 @@ export function defineAction<const I extends Fields, const O extends Fields>(def
   if (def.consent !== "person-only" && WEB_RESERVED_IDS.includes(id)) throw new Error(`${at}: web reserves "${names(id).kebab}" for the person, so only a person-only action may use it. Fix: consent "person-only" with personOnly, or another id.`);
   if (def.reaches !== undefined && def.reaches !== "private" && def.reaches !== "others") throw new Error(`${at}: reaches is ${JSON.stringify(def.reaches)}. Fix: "private" or "others".`);
   if (def.cli !== undefined && !/^[a-z][a-z0-9-]*( [a-z][a-z0-9-]*)*$/.test(def.cli)) throw new Error(`${at}: cli is not lowercase words. Fix: such as "list add".`);
+  if (def.opensApp !== undefined && typeof def.opensApp !== "boolean") throw new Error(`${at}: opensApp is ${JSON.stringify(def.opensApp)}. Fix: true or false.`);
+  if (def.destructive !== undefined && (def.destructive !== true || def.consent !== "write")) {
+    throw new Error(`${at}: destructive is for a write that removes or overwrites the person's own things; a consequential action is destructive already, a read changes nothing and no agent door offers a person-only one. Fix: destructive: true on a write, or drop it.`);
+  }
+  if (def.idempotent !== undefined && (def.idempotent !== true || (def.consent !== "write" && def.consent !== "consequential"))) {
+    throw new Error(`${at}: idempotent is for a write or consequential action that changes nothing more when called again with the same input; a read is idempotent already. Fix: idempotent: true, or drop it.`);
+  }
   checkFields(`${at} input`, def.input, true);
   checkFields(`${at} output`, def.output, false);
   const n = names(id);
@@ -226,10 +407,22 @@ export function effectOf(a: Action): "private" | "others" {
   return "private";
 }
 
-/** MCP tool annotations, exactly web's `effectAnnotations(effect, readOnly)`. */
-export function annotationsOf(a: Action): { readOnlyHint: boolean; destructiveHint: boolean; openWorldHint: boolean } {
+export interface McpAnnotations {
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+  openWorldHint: boolean;
+  idempotentHint?: true;
+}
+
+/**
+ * MCP tool annotations: web's `effectAnnotations(effect, readOnly)`, with `destructiveHint` also on a write declared
+ * `destructive`, and `idempotentHint` on an action declared `idempotent` (MCP's default for it is false).
+ */
+export function annotationsOf(a: Action): McpAnnotations {
   const others = effectOf(a) === "others";
-  return { readOnlyHint: a.consent === "read", destructiveHint: others, openWorldHint: others };
+  const out: McpAnnotations = { readOnlyHint: a.consent === "read", destructiveHint: others || a.destructive === true, openWorldHint: others };
+  if (a.idempotent) out.idempotentHint = true;
+  return out;
 }
 
 export interface Refusal {
@@ -279,11 +472,25 @@ export function refusal(a: Action): Refusal {
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 
+/** The field's description as an agent reads it: long text says it may run over several lines. */
+const describe = (f: Field) => (f.kind === "string" && f.multiline ? `${f.description} It may run over several lines.` : f.description);
+
 function fieldSchema(f: Field): Record<string, Json> {
-  const s: Record<string, Json> = { type: f.kind === "enum" ? "string" : f.kind, description: f.description };
+  if (f.kind === "one-of") {
+    const options: Json[] = f.options.map((o) => fieldSchema(o));
+    if (f.nullable) options.push({ type: "null" });
+    return { oneOf: options, description: describe(f) };
+  }
+  const type = f.kind === "enum" ? "string" : f.kind === "list" ? "array" : f.kind === "group" ? "object" : f.kind;
+  const s: Record<string, Json> = { type: f.nullable ? [type, "null"] : type, description: describe(f) };
   if (f.kind === "enum") s["enum"] = [...f.values];
   if ((f.kind === "number" || f.kind === "integer") && f.min !== undefined) s["minimum"] = f.min;
   if ((f.kind === "number" || f.kind === "integer") && f.max !== undefined) s["maximum"] = f.max;
+  if (f.kind === "string" && f.maxLength !== undefined) s["maxLength"] = f.maxLength;
+  if (f.kind === "string" && f.format !== undefined) s["format"] = f.format;
+  if (f.kind === "boolean" && f.const !== undefined) s["const"] = f.const;
+  if (f.kind === "list") s["items"] = fieldSchema(f.of);
+  if (f.kind === "group") Object.assign(s, objectSchema(f.fields));
   return s;
 }
 
@@ -313,7 +520,9 @@ export interface CommandJson {
 }
 
 function flagSpec(f: Field): Record<string, Json> {
-  const s: Record<string, Json> = { type: f.kind === "integer" ? "number" : f.kind, description: f.description };
+  // A structured field comes in as one JSON string, which fromCli parses.
+  if (isStructured(f)) return { type: "string", description: `${sentence(describe(f))}, as JSON.`, ...(f.optional ? {} : { required: true }) };
+  const s: Record<string, Json> = { type: f.kind === "integer" ? "number" : f.kind, description: describe(f) };
   if (f.kind === "enum") s["values"] = [...f.values];
   if (f.kind === "number" || f.kind === "integer") {
     if (f.min !== undefined) s["min"] = f.min;
@@ -330,7 +539,7 @@ export function toCommand(a: Action): CommandJson {
   if (a.consent === "read") cmd.readOnly = true;
   const fields = Object.entries(a.input);
   const args = fields.filter(([, f]) => "arg" in f && f.arg).map(([name, f]) => ({ name, description: f.description, required: true as const }));
-  const flags = Object.fromEntries(fields.filter(([, f]) => !("arg" in f && f.arg)).map(([name, f]) => [flagName(name), flagSpec(f)]));
+  const flags = Object.fromEntries(fields.filter(([, f]) => !("arg" in f && f.arg)).map(([name, f]) => [f.flag ?? flagName(name), flagSpec(f)]));
   if (args.length) cmd.args = args;
   if (Object.keys(flags).length) cmd.flags = flags;
   const out = Object.keys(a.output);
@@ -344,7 +553,7 @@ export interface McpTool {
   description: string;
   inputSchema: ReturnType<typeof objectSchema>;
   outputSchema?: ReturnType<typeof objectSchema>;
-  annotations: ReturnType<typeof annotationsOf>;
+  annotations: McpAnnotations;
 }
 
 /** The MCP tool. */
@@ -379,8 +588,12 @@ function renderWeb(set: ActionSet): string {
   const twins = agentDoors(set).map((a) => `    ${lit(a.names.kebab)}: ${lit(twinOf(set, a))},`);
   const refuse = set.actions.filter((a) => a.consent === "person-only").map((a) => `    ${lit(a.names.kebab)}: ${lit(`${set.tool} ${a.cliWords}`)},`);
   const cliInput = agentDoors(set).flatMap((a) => {
-    const renames = Object.keys(a.input).filter((f) => flagName(f) !== f).map((f) => `${lit(flagName(f))}: ${lit(f)}`);
+    const renames = Object.entries(a.input).filter(([n, f]) => (f.flag ?? flagName(n)) !== n).map(([n, f]) => `${lit(f.flag ?? flagName(n))}: ${lit(n)}`);
     return renames.length ? [`  ${lit(a.names.kebab)}: { ${renames.join(", ")} },`] : [];
+  });
+  const cliJson = agentDoors(set).flatMap((a) => {
+    const structured = Object.entries(a.input).filter(([, f]) => isStructured(f)).map(([n]) => lit(n));
+    return structured.length ? [`  ${lit(a.names.kebab)}: [${structured.join(", ")}],`] : [];
   });
   const controls = set.actions.map((a) =>
     `  ${lit(a.names.kebab)}: { label: ${lit(a.label)}, description: ${lit(a.description)}, consent: ${lit(a.consent)}, props: { "data-ax-action": ${lit(a.names.kebab)} } },`,
@@ -417,9 +630,18 @@ function renderWeb(set: ActionSet): string {
     ...cliInput,
     "};",
     "",
+    "// A list, group or one-of field comes in on the CLI as one JSON string; fromCli parses it.",
+    "export const cliJson: Readonly<Record<string, readonly string[]>> = {",
+    ...cliJson,
+    "};",
+    "",
     "export function fromCli(action: keyof typeof twins.actions, input: Readonly<Record<string, unknown>>): Record<string, unknown> {",
     "  const rename = cliInput[action] ?? {};",
-    "  return Object.fromEntries(Object.entries(input).map(([key, value]) => [rename[key] ?? key, value]));",
+    "  const json = cliJson[action] ?? [];",
+    "  return Object.fromEntries(Object.entries(input).map(([key, value]) => {",
+    "    const name = rename[key] ?? key;",
+    "    return [name, json.includes(name) && typeof value === \"string\" ? JSON.parse(value) : value];",
+    "  }));",
     "}",
     "",
   ].join("\n");
@@ -432,22 +654,26 @@ function renderWeb(set: ActionSet): string {
 const swiftLit = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 const SWIFT_KEYWORDS = new Set(["as", "break", "case", "catch", "class", "continue", "default", "defer", "do", "else", "enum", "extension", "fallthrough", "false", "for", "func", "guard", "if", "import", "in", "init", "inout", "internal", "is", "let", "nil", "operator", "private", "protocol", "public", "repeat", "rethrows", "return", "self", "Self", "static", "struct", "subscript", "super", "switch", "throw", "throws", "true", "try", "typealias", "var", "where", "while"]);
 const swiftId = (name: string) => (SWIFT_KEYWORDS.has(name) ? `\`${name}\`` : name);
-const caseName = (v: string) => swiftId(names(v.replace(/-/g, "_")).camel);
+const caseName = (v: string) => swiftId(names(v.replace(/[-/.]/g, "_").replace(/_+/g, "_")).camel);
 const enumType = (a: Action, field: string) => `${a.names.pascal}${field.charAt(0).toUpperCase()}${field.slice(1)}Value`;
+
+/** Optional in Swift: an optional field, or a protocol-only one, which the person's doors leave nil. */
+const swiftOptional = (f: Field) => f.optional === true || f.protocolOnly === true;
 
 function swiftType(a: Action, name: string, f: Field): string {
   const base = f.kind === "string" ? "String" : f.kind === "number" ? "Double" : f.kind === "integer" ? "Int" : f.kind === "boolean" ? "Bool" : enumType(a, name);
-  return f.optional ? `${base}?` : base;
+  return swiftOptional(f) ? `${base}?` : base;
 }
 
 /** The input fields the person's doors (the App Intent and Reins) carry: every one but the protocol-only fields. */
 const personFields = (a: Action) => Object.entries(a.input).filter(([, f]) => !f.protocolOnly);
 
 function swiftStruct(a: Action, typeName: string, fields: Fields): string[] {
-  const entries = Object.entries(fields);
+  // A list, group or one-of field is protocol-only, and Swift never sends it, so the Swift input leaves it out.
+  const entries = Object.entries(fields).filter(([, f]) => !isStructured(f));
   const lines = [`public struct ${typeName}: Codable, Sendable, Hashable {`];
   for (const [n, f] of entries) lines.push(`    public var ${swiftId(n)}: ${swiftType(a, n, f)}`);
-  const params = entries.map(([n, f]) => `${swiftId(n)}: ${swiftType(a, n, f)}${f.optional ? " = nil" : ""}`).join(", ");
+  const params = entries.map(([n, f]) => `${swiftId(n)}: ${swiftType(a, n, f)}${swiftOptional(f) ? " = nil" : ""}`).join(", ");
   lines.push(`    public init(${params}) {`);
   for (const [n] of entries) lines.push(`        self.${n} = ${swiftId(n)}`);
   lines.push("    }", "}");
@@ -533,6 +759,11 @@ function renderSwift(set: ActionSet): string {
     L.push(`    public static let id = ${swiftLit(a.id)}`);
     L.push(`    /// The app's handler; every door calls it.`);
     L.push(`    public static var perform: (@MainActor @Sendable (${P}Input) async throws -> ${P}Output)?`);
+    if (agentDoor && a.consent === "consequential") {
+      L.push("    /// How the intent asks the person before it acts. Unset, the system asks. A test sets it: return to");
+      L.push("    /// confirm, or throw to cancel, and the handler never runs. The app can also set it to ask in its own way.");
+      L.push(`    public static var confirm: (@MainActor @Sendable (${P}Input) async throws -> Void)?`);
+    }
     if (!agentDoor) L.push("    /// Called with the error when the person's press fails, since a plain button has nowhere to show it.", "    public static var failed: (@MainActor @Sendable (any Error) -> Void)?");
     else {
       L.push("    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into");
@@ -548,23 +779,41 @@ function renderSwift(set: ActionSet): string {
       L.push(`public struct ${P}Intent: AppIntent {`);
       L.push(`    public static let title: LocalizedStringResource = ${swiftLit(a.label)}`);
       L.push(`    public static let description = IntentDescription(${swiftLit(a.agent)})`, "");
+      if (a.opensApp) L.push("    public static let openAppWhenRun = true", "");
+      const entityOf = (f: Field) => (f.kind === "string" ? f.entity : undefined);
       for (const [n, f] of fields) {
+        const entity = entityOf(f);
         const ask = f.ask !== undefined ? `, requestValueDialog: ${swiftLit(f.ask)}` : "";
-        L.push(`    @Parameter(title: ${swiftLit(f.label)}, description: ${swiftLit(f.description)}${ask})`);
-        L.push(`    public var ${swiftId(n)}: ${swiftType(a, n, f)}`);
+        const multiline = f.kind === "string" && f.multiline ? ", inputOptions: String.IntentInputOptions(multiline: true)" : "";
+        L.push(`    @Parameter(title: ${swiftLit(f.label)}, description: ${swiftLit(describe(f))}${ask}${multiline})`);
+        L.push(`    public var ${swiftId(n)}: ${entity ? `${entity}${f.optional ? "?" : ""}` : swiftType(a, n, f)}`);
       }
       if (fields.length) L.push("");
       L.push("    public init() {}", "");
       L.push(`    public init(_ input: ${P}Input) {`, "        self.init()");
-      for (const [n] of fields) L.push(`        self.${n} = input.${swiftId(n)}`);
+      for (const [n, f] of fields) {
+        const entity = entityOf(f);
+        L.push(entity
+          ? `        self.${n} = ${f.optional ? `input.${swiftId(n)}.map { ${entity}(id: $0) }` : `${entity}(id: input.${swiftId(n)})`}`
+          : `        self.${n} = input.${swiftId(n)}`);
+      }
       L.push("    }", "");
-      L.push(`    public var input: ${P}Input {`, `        ${P}Input(${fields.map(([n]) => `${swiftId(n)}: ${swiftId(n)}`).join(", ")})`, "    }", "");
-      L.push("    @MainActor", "    public func perform() async throws -> some IntentResult & ProvidesDialog {");
-      if (a.consent === "consequential") L.push("        // Consequential: the person says yes before it acts.", "        try await requestConfirmation()");
+      L.push(`    public var input: ${P}Input {`, `        ${P}Input(${fields.map(([n, f]) => `${swiftId(n)}: ${swiftId(n)}${entityOf(f) ? `${f.optional ? "?" : ""}.id` : ""}`).join(", ")})`, "    }", "");
+      const returned = Object.entries(a.output).find(([, f]) => f.returned);
+      const returns = ["IntentResult", ...(returned ? [`ReturnsValue<${swiftType(a, returned[0], returned[1])}>`] : []), "ProvidesDialog"].join(" & ");
+      L.push("    @MainActor", `    public func perform() async throws -> some ${returns} {`);
+      if (a.consent === "consequential") L.push("        // Consequential: the person says yes before it acts.", `        if let confirm = ${P}Action.confirm { try await confirm(self.input) } else { try await requestConfirmation() }`);
       L.push("        let input = self.input", `        let result: Result<${P}Output, any Error>`);
       L.push(`        do { result = .success(try await ${P}Action.run(input)) } catch { result = .failure(error) }`);
-      L.push(`        if let dialog = ${P}Action.dialog { return .result(dialog: try await dialog(input, result)) }`);
-      L.push("        _ = try result.get()", '        return .result(dialog: "Done.")', "    }", "}", "");
+      if (returned) {
+        // A failure still throws: there is no value to hand on, and the dialog may rethrow a better error first.
+        L.push(`        let said: IntentDialog = try await ${P}Action.dialog?(input, result) ?? "Done."`);
+        L.push(`        return .result(value: try result.get().${swiftId(returned[0])}, dialog: said)`);
+      } else {
+        L.push(`        if let dialog = ${P}Action.dialog { return .result(dialog: try await dialog(input, result)) }`);
+        L.push("        _ = try result.get()", '        return .result(dialog: "Done.")');
+      }
+      L.push("    }", "}", "");
     }
     L.push(`/// The control for ${a.id}: ${agentDoor ? "Button(_:intent:), the same intent Siri and Shortcuts run" : "a plain Button, since no agent may start it"}.`);
     L.push("@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)");
@@ -654,7 +903,7 @@ export function checkGenerated(set: ActionSet, found: ReadonlyMap<string, string
   return problems;
 }
 
-const MCP_HINT_DEFAULTS: Readonly<Record<string, boolean>> = Object.freeze({ readOnlyHint: false, destructiveHint: true, openWorldHint: true });
+const MCP_HINT_DEFAULTS: Readonly<Record<string, boolean>> = Object.freeze({ readOnlyHint: false, destructiveHint: true, openWorldHint: true, idempotentHint: false });
 const sortKeys = (v: unknown): unknown =>
   Array.isArray(v) ? v.map(sortKeys) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys((v as Record<string, unknown>)[k])])) : v;
 const same = (a: unknown, b: unknown) => JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
@@ -690,7 +939,8 @@ export function compareMcp(set: ActionSet, tools: unknown, options: { undeclared
     if (!same(t["inputSchema"], want.inputSchema)) problems.push(`${a.id}: input schema drifted: expected ${JSON.stringify(sortKeys(want.inputSchema))}, found ${JSON.stringify(sortKeys(t["inputSchema"]))}. Fix: serve the declaration's input schema.`);
     const ann = (t["annotations"] ?? {}) as Record<string, unknown>;
     // A missing hint means MCP's default, which a client acts on: readOnlyHint false, destructiveHint and openWorldHint true.
-    for (const [k, v] of Object.entries(want.annotations)) if ((ann[k] ?? MCP_HINT_DEFAULTS[k]) !== v) problems.push(`${a.id}: annotation ${k} is ${k in ann ? JSON.stringify(ann[k]) : `missing (MCP's default, ${MCP_HINT_DEFAULTS[k]})`}, the consent class "${a.consent}" says ${v}. Fix: serve the declaration's annotations.`);
+    const wanted = want.annotations as unknown as Record<string, boolean | undefined>;
+    for (const [k, fallback] of Object.entries(MCP_HINT_DEFAULTS)) if ((ann[k] ?? fallback) !== (wanted[k] ?? fallback)) problems.push(`${a.id}: annotation ${k} is ${k in ann ? JSON.stringify(ann[k]) : `missing (MCP's default, ${MCP_HINT_DEFAULTS[k]})`}, the declaration (consent "${a.consent}"${a.destructive ? ", destructive" : ""}${a.idempotent ? ", idempotent" : ""}) says ${wanted[k] ?? fallback}. Fix: serve the declaration's annotations.`);
   }
   // An app moving onto actions one tool at a time names the tools it hasn't declared yet. The list can only shrink: a
   // name on it that is now declared, or no longer served, is a problem too.
