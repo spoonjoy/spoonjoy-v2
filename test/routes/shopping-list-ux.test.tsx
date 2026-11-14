@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Outlet, useNavigate, useRevalidator } from "react-router";
@@ -753,5 +753,40 @@ describe("shopping list UX updates", () => {
 
     await waitFor(() => expect(applesCheck).toHaveAttribute("aria-checked", "true"));
     expect(rowNames()).toEqual(["apples", "bananas"]);
+  });
+
+  it("offers the declared add to an agent through WebMCP, adds through the API, and refreshes the list", async () => {
+    type Tool = { name: string; execute: (input: Record<string, unknown>) => Promise<unknown> };
+    const tools = new Map<string, Tool>();
+    const modelContext = {
+      registerTool: (tool: Tool) => void tools.set(tool.name, tool),
+      unregisterTool: vi.fn((name: string) => void tools.delete(name)),
+    };
+    Object.defineProperty(navigator, "modelContext", { value: modelContext, configurable: true });
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    let loads = 0;
+    try {
+      const Stub = createTestRoutesStub([{ path: "/shopping-list", Component: ShoppingList,
+        loader: () => { loads++; return singleItemData; },
+      }]);
+      const { unmount } = render(<Stub initialEntries={["/shopping-list"]} />);
+      await screen.findByRole("button", { name: "Add to list" });
+      expect([...tools.keys()]).toEqual(["add_shopping_list_item"]);
+      const loadsBefore = loads;
+
+      await act(() => tools.get("add_shopping_list_item")!.execute({ name: "oat milk" }));
+
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toBe("/api/v1/shopping-list/items");
+      expect(JSON.parse(init.body as string)).toEqual({ clientMutationId: expect.any(String), name: "oat milk" });
+      await waitFor(() => expect(loads).toBeGreaterThan(loadsBefore));
+
+      unmount();
+      expect(modelContext.unregisterTool).toHaveBeenCalledWith("add_shopping_list_item");
+    } finally {
+      vi.unstubAllGlobals();
+      delete (navigator as { modelContext?: unknown }).modelContext;
+    }
   });
 });
