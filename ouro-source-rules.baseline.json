@@ -1,3 +1,564 @@
 {
-  "offenders": {}
+  "allowedRegressions": [
+    {
+      "fingerprint": "app/components/errors/route-error.tsx::routeErrorCopy::vague-failure-copy::something went wrong::Something went wrong.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/moderation/ReportOrBlockButton.tsx::ReportOrBlockButton::vague-failure-copy::something went wrong::Something went wrong. Try again.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/notifications-section.tsx::(module)::vague-failure-copy::unable to::Unable to enable notifications right now (server error). Please try again.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/notifications-section.tsx::(module)::vague-failure-copy::unable to::Unable to enable notifications right now (server key unavailable).",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/notifications-section.tsx::NotificationsSection::vague-failure-copy::unable to::Unable to disable notifications. Please try again.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/notifications-section.tsx::NotificationsSection::vague-failure-copy::unable to::Unable to enable notifications.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/notifications-section.tsx::NotificationsSection::vague-failure-copy::unable to::Unable to update notification preferences. Please try again.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/oauth.tsx::OAuthError::vague-failure-copy::could not::Your OAuth session expired or could not be verified. Please try again.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/oauth.tsx::OAuthError::vague-failure-copy::couldn't::Spoonjoy couldn't save your sign-in just now. Please try again in a moment.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/oauth.tsx::OAuthError::vague-failure-copy::couldn't::We couldn't find a Spoonjoy account for this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/oauth.tsx::OAuthError::vague-failure-copy::something went wrong::Something went wrong. Please try again.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/recipe/IngredientList.tsx::IngredientList::render-index::Set::outputIds",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/recipe/IngredientParseInput.tsx::getActionableErrorMessage::vague-failure-copy::something went wrong::Something went wrong. Please try again or add ingredients manually.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/recipe/IngredientParseInput.tsx::getActionableErrorMessage::vague-failure-copy::unable to::Unable to connect to AI service. Please try again or add ingredients manually.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/recipe/RecipeBuilder.tsx::recipeImageRejection::vague-failure-copy::could not::${…} could not be opened as a photo.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/recipe/RecipeCoverHistory.tsx::ActiveCoverChoice::gated-load::loading=lazy>img::",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/recipe/RecipeCoverHistory.tsx::RecipeCoverHistory::gated-load::loading=lazy>img::",
+      "count": 2,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/recipe/RecipeCoverHistory.tsx::failedAttemptLabel::vague-failure-copy::bare failed::Generation failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/recipe/RecipeCoverHistory.tsx::failedAttemptLabel::vague-failure-copy::bare failed::Regeneration failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/components/recipe/RecipeCoverHistory.tsx::statusLabel::vague-failure-copy::bare failed::Editorial failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/account-settings.server.ts::handleAccountSettingsIntent::vague-failure-copy::could not::That passkey could not be found",
+      "count": 2,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/analytics-server.ts::errorToProps::vague-failure-copy::bare error::Error",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/api-v1-openapi.server.ts::(module)::vague-failure-copy::bare error::Internal error",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/api-v1-openapi.server.ts::(module)::vague-failure-copy::bare failed::Request validation failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/api-v1-openapi.server.ts::(module)::vague-failure-copy::could not::Present only when the request sent a pending Apple link token: what became of it. linked means Apple now signs this account in; taken means that Apple ID is linked to another account and stays there; error means the link could not be saved and the sign-in still succeeded.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/api-v1-openapi.server.ts::authOperationPaths::vague-failure-copy::bare error::OAuth error",
+      "count": 3,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/api-v1-openapi.server.ts::authOperationPaths::vague-failure-copy::bare error::Tool error",
+      "count": 2,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/api-v1-recipe-writes.server.ts::forkNativeRecipe::vague-failure-copy::could not::Could not resolve a unique title for the fork",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/api-v1.server.ts::coverMutationError::vague-failure-copy::bare failed::Cover mutation failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/api-v1.server.ts::handleShoppingAddFromRecipe::vague-failure-copy::bare error::Internal error",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/api-v1.server.ts::normalizeApiV1InternalError::vague-failure-copy::bare error::Internal error",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/apple-native-auth.server.ts::appleJwks::vague-failure-copy::could not::Could not load Apple's Sign in with Apple keys.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/apple-native-auth.server.ts::handleNativeAppleSignIn::vague-failure-copy::bare failed::Apple sign-in failed.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/d1-write-retry.server.ts::(module)::vague-failure-copy::couldn't::Spoonjoy couldn't save that just now. Please try again in a moment.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/gemini-text.server.ts::geminiGenerateJson::vague-failure-copy::bare failed::Gemini request failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/github-oauth.server.ts::isOAuthRequestError::vague-failure-copy::bare error::OAuth request error:",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/image-crop.ts::cropImageToBlob::vague-failure-copy::could not::Could not export image",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/image-crop.ts::cropImageToBlob::vague-failure-copy::could not::Could not get 2d context",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/image-gen.server.ts::stylizeSpoonPhoto::vague-failure-copy::bare failed::Stylization failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/ingredient-parse.server.ts::isRetryableForFallback::vague-failure-copy::bare failed::temporary service failure",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/ingredient-parse.server.ts::mapOpenAIError::vague-failure-copy::bare failed::OpenAI authentication failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/ingredient-parse.server.ts::mapOpenAIError::vague-failure-copy::bare failed::OpenAI connection failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/ingredient-parse.server.ts::parseIngredients::vague-failure-copy::bare failed::Gemini fallback failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/mcp/http-mcp.server.ts::readBody::vague-failure-copy::bare error::Parse error",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/mcp/json-rpc.server.ts::parseJsonRpcLine::vague-failure-copy::bare error::Parse error",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/network-failure.ts::(module)::vague-failure-copy::bare failed::Load failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/network-failure.ts::(module)::vague-failure-copy::couldn't::Spoonjoy couldn't be reached. Check your connection and try again.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/oauth-server.server.ts::consumeAuthorizationCode::vague-failure-copy::bare failed::PKCE verification failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/oauth-user.server.ts::isUniqueConflict::vague-failure-copy::bare failed::UNIQUE constraint failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/pending-apple-link.server.ts::(module)::vague-failure-copy::couldn't::We couldn't find a Spoonjoy account for this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/recipe-fork.server.ts::ForkTitleExhaustedError::vague-failure-copy::could not::Could not resolve a unique title for fork of \"${…}\" after ${…} attempts",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/recipe-import-llm.server.ts::mapOpenAIError::vague-failure-copy::bare failed::OpenAI authentication failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/recipe-import-llm.server.ts::mapOpenAIError::vague-failure-copy::bare failed::OpenAI temporary failure",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/recipe-import-session.server.ts::(module)::vague-failure-copy::couldn't::We couldn't find a recipe in that text. Include the ingredients and the steps.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/recipe-import-session.server.ts::(module)::vague-failure-copy::couldn't::We couldn't find a recipe there. Paste the recipe text instead.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/recipe-import-session.server.ts::(module)::vague-failure-copy::couldn't::We couldn't read a recipe in that photo. Try a sharper photo with the whole recipe in it, or paste the recipe instead.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/recipe-import-session.server.ts::(module)::vague-failure-copy::couldn't::We couldn't read that video. Paste the recipe from its description instead.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/recipe-import-session.server.ts::(module)::vague-failure-copy::something went wrong::Something went wrong while bringing that recipe in. Try again, or write it below.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/recipe-import-video.server.ts::fetchOEmbedMetadata::vague-failure-copy::bare error::oEmbed network error",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/recipe-import.server.ts::runExtraction::vague-failure-copy::could not::Could not extract a recipe from the page",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/recipe-import.server.ts::runPhotoExtraction::vague-failure-copy::could not::Could not read a recipe in the photo",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/recipe-import.server.ts::runTextExtraction::vague-failure-copy::could not::Could not extract a recipe from the captured text",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/recipe-import.server.ts::runVideoExtraction::vague-failure-copy::could not::Could not extract a recipe from the video metadata",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/shopping-list.server.ts::handleShoppingListIntent::vague-failure-copy::couldn't::Couldn't confidently parse one item. Review and correct before adding.",
+      "count": 2,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/shopping-list.server.ts::handleShoppingListIntent::vague-failure-copy::unable to::Unable to parse item right now. Review and correct before adding.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/spoonjoy-api.server.ts::coverLifecycleApiError::vague-failure-copy::bare failed::Cover mutation failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/spoonjoy-api.server.ts::handle::vague-failure-copy::could not::Could not resolve a unique title for the fork",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/webauthn-client.ts::passkeyCeremonyError::vague-failure-copy::bare failed::Passkey ceremony failed.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/webauthn-route.server.ts::finishAuthentication::vague-failure-copy::bare failed::Authentication verification failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/webauthn-route.server.ts::finishAuthentication::vague-failure-copy::could not::Authentication could not be completed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/webauthn-route.server.ts::finishAuthentication::vague-failure-copy::could not::Authentication could not be verified",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/webauthn-route.server.ts::finishRegistration::vague-failure-copy::bare failed::Registration verification failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/lib/webauthn-route.server.ts::finishRegistration::vague-failure-copy::could not::Registration could not be verified",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/$.tsx::meta::vague-failure-copy::could not::The page you requested could not be found.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/account.settings.tsx::AccountSettings::render-index::Set::linkedProviders",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/api.$.ts::handleApiRequest::vague-failure-copy::bare error::Internal server error",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/api.push.public-key.ts::loader::vague-failure-copy::bare error::VAPID configuration error",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/auth.webauthn.authenticate.options.ts::action::vague-failure-copy::could not::Could not start authentication",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/auth.webauthn.authenticate.verify.ts::action::vague-failure-copy::could not::Could not verify authentication",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/auth.webauthn.register.options.ts::action::vague-failure-copy::could not::Could not start registration",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/auth.webauthn.register.verify.ts::action::vague-failure-copy::could not::Could not verify registration",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/developers.playground.tsx::playgroundNetworkError::vague-failure-copy::bare error::NETWORK ERROR",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/developers.playground.tsx::playgroundNetworkError::vague-failure-copy::bare failed::Request failed",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/developers.playground.tsx::playgroundResponseFromFetchResult::vague-failure-copy::bare error::ERROR",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/developers.tsx::(module)::vague-failure-copy::bare error::Errors",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/developers.tsx::Developers::vague-failure-copy::bare error::Errors",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/developers.tsx::Developers::vague-failure-copy::bare error::Machine errors",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/recipes.$id.steps.$stepId.edit.tsx::action::vague-failure-copy::an error occurred::An unexpected error occurred while parsing ingredients",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/recipes.$id.steps.new.tsx::action::vague-failure-copy::an error occurred::An unexpected error occurred while parsing ingredients",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/recipes.$id.tsx::RecipeDetail::gated-load::document.visibilityState>revalidate::",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/recipes.$id.tsx::RecipeDetail::gated-load::visibilitychange>revalidateIfVisible::",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/recipes.new.tsx::action::vague-failure-copy::an error occurred::An unexpected error occurred while parsing ingredients",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    },
+    {
+      "fingerprint": "app/routes/test-kitchen.tsx::TestKitchen::vague-failure-copy::could not::Some timer resets could not be saved. They may return after a reload.",
+      "count": 1,
+      "reason": "HX v1.3.33's source rule adds the vague-failure-copy, gated-load and index-in-render checks; these 93 are existing Spoonjoy code measured for the first time, not new code"
+    }
+  ],
+  "offenders": {
+    "app/components/errors/route-error.tsx::routeErrorCopy::vague-failure-copy::something went wrong::Something went wrong.": 1,
+    "app/components/moderation/ReportOrBlockButton.tsx::ReportOrBlockButton::vague-failure-copy::something went wrong::Something went wrong. Try again.": 1,
+    "app/components/notifications-section.tsx::(module)::vague-failure-copy::unable to::Unable to enable notifications right now (server error). Please try again.": 1,
+    "app/components/notifications-section.tsx::(module)::vague-failure-copy::unable to::Unable to enable notifications right now (server key unavailable).": 1,
+    "app/components/notifications-section.tsx::NotificationsSection::vague-failure-copy::unable to::Unable to disable notifications. Please try again.": 1,
+    "app/components/notifications-section.tsx::NotificationsSection::vague-failure-copy::unable to::Unable to enable notifications.": 1,
+    "app/components/notifications-section.tsx::NotificationsSection::vague-failure-copy::unable to::Unable to update notification preferences. Please try again.": 1,
+    "app/components/oauth.tsx::OAuthError::vague-failure-copy::could not::Your OAuth session expired or could not be verified. Please try again.": 1,
+    "app/components/oauth.tsx::OAuthError::vague-failure-copy::couldn't::Spoonjoy couldn't save your sign-in just now. Please try again in a moment.": 1,
+    "app/components/oauth.tsx::OAuthError::vague-failure-copy::couldn't::We couldn't find a Spoonjoy account for this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.": 1,
+    "app/components/oauth.tsx::OAuthError::vague-failure-copy::something went wrong::Something went wrong. Please try again.": 1,
+    "app/components/recipe/IngredientList.tsx::IngredientList::render-index::Set::outputIds": 1,
+    "app/components/recipe/IngredientParseInput.tsx::getActionableErrorMessage::vague-failure-copy::something went wrong::Something went wrong. Please try again or add ingredients manually.": 1,
+    "app/components/recipe/IngredientParseInput.tsx::getActionableErrorMessage::vague-failure-copy::unable to::Unable to connect to AI service. Please try again or add ingredients manually.": 1,
+    "app/components/recipe/RecipeBuilder.tsx::recipeImageRejection::vague-failure-copy::could not::${…} could not be opened as a photo.": 1,
+    "app/components/recipe/RecipeCoverHistory.tsx::ActiveCoverChoice::gated-load::loading=lazy>img::": 1,
+    "app/components/recipe/RecipeCoverHistory.tsx::RecipeCoverHistory::gated-load::loading=lazy>img::": 2,
+    "app/components/recipe/RecipeCoverHistory.tsx::failedAttemptLabel::vague-failure-copy::bare failed::Generation failed": 1,
+    "app/components/recipe/RecipeCoverHistory.tsx::failedAttemptLabel::vague-failure-copy::bare failed::Regeneration failed": 1,
+    "app/components/recipe/RecipeCoverHistory.tsx::statusLabel::vague-failure-copy::bare failed::Editorial failed": 1,
+    "app/lib/account-settings.server.ts::handleAccountSettingsIntent::vague-failure-copy::could not::That passkey could not be found": 2,
+    "app/lib/analytics-server.ts::errorToProps::vague-failure-copy::bare error::Error": 1,
+    "app/lib/api-v1-openapi.server.ts::(module)::vague-failure-copy::bare error::Internal error": 1,
+    "app/lib/api-v1-openapi.server.ts::(module)::vague-failure-copy::bare failed::Request validation failed": 1,
+    "app/lib/api-v1-openapi.server.ts::(module)::vague-failure-copy::could not::Present only when the request sent a pending Apple link token: what became of it. linked means Apple now signs this account in; taken means that Apple ID is linked to another account and stays there; error means the link could not be saved and the sign-in still succeeded.": 1,
+    "app/lib/api-v1-openapi.server.ts::authOperationPaths::vague-failure-copy::bare error::OAuth error": 3,
+    "app/lib/api-v1-openapi.server.ts::authOperationPaths::vague-failure-copy::bare error::Tool error": 2,
+    "app/lib/api-v1-recipe-writes.server.ts::forkNativeRecipe::vague-failure-copy::could not::Could not resolve a unique title for the fork": 1,
+    "app/lib/api-v1.server.ts::coverMutationError::vague-failure-copy::bare failed::Cover mutation failed": 1,
+    "app/lib/api-v1.server.ts::handleShoppingAddFromRecipe::vague-failure-copy::bare error::Internal error": 1,
+    "app/lib/api-v1.server.ts::normalizeApiV1InternalError::vague-failure-copy::bare error::Internal error": 1,
+    "app/lib/apple-native-auth.server.ts::appleJwks::vague-failure-copy::could not::Could not load Apple's Sign in with Apple keys.": 1,
+    "app/lib/apple-native-auth.server.ts::handleNativeAppleSignIn::vague-failure-copy::bare failed::Apple sign-in failed.": 1,
+    "app/lib/d1-write-retry.server.ts::(module)::vague-failure-copy::couldn't::Spoonjoy couldn't save that just now. Please try again in a moment.": 1,
+    "app/lib/gemini-text.server.ts::geminiGenerateJson::vague-failure-copy::bare failed::Gemini request failed": 1,
+    "app/lib/github-oauth.server.ts::isOAuthRequestError::vague-failure-copy::bare error::OAuth request error:": 1,
+    "app/lib/image-crop.ts::cropImageToBlob::vague-failure-copy::could not::Could not export image": 1,
+    "app/lib/image-crop.ts::cropImageToBlob::vague-failure-copy::could not::Could not get 2d context": 1,
+    "app/lib/image-gen.server.ts::stylizeSpoonPhoto::vague-failure-copy::bare failed::Stylization failed": 1,
+    "app/lib/ingredient-parse.server.ts::isRetryableForFallback::vague-failure-copy::bare failed::temporary service failure": 1,
+    "app/lib/ingredient-parse.server.ts::mapOpenAIError::vague-failure-copy::bare failed::OpenAI authentication failed": 1,
+    "app/lib/ingredient-parse.server.ts::mapOpenAIError::vague-failure-copy::bare failed::OpenAI connection failed": 1,
+    "app/lib/ingredient-parse.server.ts::parseIngredients::vague-failure-copy::bare failed::Gemini fallback failed": 1,
+    "app/lib/mcp/http-mcp.server.ts::readBody::vague-failure-copy::bare error::Parse error": 1,
+    "app/lib/mcp/json-rpc.server.ts::parseJsonRpcLine::vague-failure-copy::bare error::Parse error": 1,
+    "app/lib/network-failure.ts::(module)::vague-failure-copy::bare failed::Load failed": 1,
+    "app/lib/network-failure.ts::(module)::vague-failure-copy::couldn't::Spoonjoy couldn't be reached. Check your connection and try again.": 1,
+    "app/lib/oauth-server.server.ts::consumeAuthorizationCode::vague-failure-copy::bare failed::PKCE verification failed": 1,
+    "app/lib/oauth-user.server.ts::isUniqueConflict::vague-failure-copy::bare failed::UNIQUE constraint failed": 1,
+    "app/lib/pending-apple-link.server.ts::(module)::vague-failure-copy::couldn't::We couldn't find a Spoonjoy account for this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.": 1,
+    "app/lib/recipe-fork.server.ts::ForkTitleExhaustedError::vague-failure-copy::could not::Could not resolve a unique title for fork of \"${…}\" after ${…} attempts": 1,
+    "app/lib/recipe-import-llm.server.ts::mapOpenAIError::vague-failure-copy::bare failed::OpenAI authentication failed": 1,
+    "app/lib/recipe-import-llm.server.ts::mapOpenAIError::vague-failure-copy::bare failed::OpenAI temporary failure": 1,
+    "app/lib/recipe-import-session.server.ts::(module)::vague-failure-copy::couldn't::We couldn't find a recipe in that text. Include the ingredients and the steps.": 1,
+    "app/lib/recipe-import-session.server.ts::(module)::vague-failure-copy::couldn't::We couldn't find a recipe there. Paste the recipe text instead.": 1,
+    "app/lib/recipe-import-session.server.ts::(module)::vague-failure-copy::couldn't::We couldn't read a recipe in that photo. Try a sharper photo with the whole recipe in it, or paste the recipe instead.": 1,
+    "app/lib/recipe-import-session.server.ts::(module)::vague-failure-copy::couldn't::We couldn't read that video. Paste the recipe from its description instead.": 1,
+    "app/lib/recipe-import-session.server.ts::(module)::vague-failure-copy::something went wrong::Something went wrong while bringing that recipe in. Try again, or write it below.": 1,
+    "app/lib/recipe-import-video.server.ts::fetchOEmbedMetadata::vague-failure-copy::bare error::oEmbed network error": 1,
+    "app/lib/recipe-import.server.ts::runExtraction::vague-failure-copy::could not::Could not extract a recipe from the page": 1,
+    "app/lib/recipe-import.server.ts::runPhotoExtraction::vague-failure-copy::could not::Could not read a recipe in the photo": 1,
+    "app/lib/recipe-import.server.ts::runTextExtraction::vague-failure-copy::could not::Could not extract a recipe from the captured text": 1,
+    "app/lib/recipe-import.server.ts::runVideoExtraction::vague-failure-copy::could not::Could not extract a recipe from the video metadata": 1,
+    "app/lib/shopping-list.server.ts::handleShoppingListIntent::vague-failure-copy::couldn't::Couldn't confidently parse one item. Review and correct before adding.": 2,
+    "app/lib/shopping-list.server.ts::handleShoppingListIntent::vague-failure-copy::unable to::Unable to parse item right now. Review and correct before adding.": 1,
+    "app/lib/spoonjoy-api.server.ts::coverLifecycleApiError::vague-failure-copy::bare failed::Cover mutation failed": 1,
+    "app/lib/spoonjoy-api.server.ts::handle::vague-failure-copy::could not::Could not resolve a unique title for the fork": 1,
+    "app/lib/webauthn-client.ts::passkeyCeremonyError::vague-failure-copy::bare failed::Passkey ceremony failed.": 1,
+    "app/lib/webauthn-route.server.ts::finishAuthentication::vague-failure-copy::bare failed::Authentication verification failed": 1,
+    "app/lib/webauthn-route.server.ts::finishAuthentication::vague-failure-copy::could not::Authentication could not be completed": 1,
+    "app/lib/webauthn-route.server.ts::finishAuthentication::vague-failure-copy::could not::Authentication could not be verified": 1,
+    "app/lib/webauthn-route.server.ts::finishRegistration::vague-failure-copy::bare failed::Registration verification failed": 1,
+    "app/lib/webauthn-route.server.ts::finishRegistration::vague-failure-copy::could not::Registration could not be verified": 1,
+    "app/routes/$.tsx::meta::vague-failure-copy::could not::The page you requested could not be found.": 1,
+    "app/routes/account.settings.tsx::AccountSettings::render-index::Set::linkedProviders": 1,
+    "app/routes/api.$.ts::handleApiRequest::vague-failure-copy::bare error::Internal server error": 1,
+    "app/routes/api.push.public-key.ts::loader::vague-failure-copy::bare error::VAPID configuration error": 1,
+    "app/routes/auth.webauthn.authenticate.options.ts::action::vague-failure-copy::could not::Could not start authentication": 1,
+    "app/routes/auth.webauthn.authenticate.verify.ts::action::vague-failure-copy::could not::Could not verify authentication": 1,
+    "app/routes/auth.webauthn.register.options.ts::action::vague-failure-copy::could not::Could not start registration": 1,
+    "app/routes/auth.webauthn.register.verify.ts::action::vague-failure-copy::could not::Could not verify registration": 1,
+    "app/routes/developers.playground.tsx::playgroundNetworkError::vague-failure-copy::bare error::NETWORK ERROR": 1,
+    "app/routes/developers.playground.tsx::playgroundNetworkError::vague-failure-copy::bare failed::Request failed": 1,
+    "app/routes/developers.playground.tsx::playgroundResponseFromFetchResult::vague-failure-copy::bare error::ERROR": 1,
+    "app/routes/developers.tsx::(module)::vague-failure-copy::bare error::Errors": 1,
+    "app/routes/developers.tsx::Developers::vague-failure-copy::bare error::Errors": 1,
+    "app/routes/developers.tsx::Developers::vague-failure-copy::bare error::Machine errors": 1,
+    "app/routes/recipes.$id.steps.$stepId.edit.tsx::action::vague-failure-copy::an error occurred::An unexpected error occurred while parsing ingredients": 1,
+    "app/routes/recipes.$id.steps.new.tsx::action::vague-failure-copy::an error occurred::An unexpected error occurred while parsing ingredients": 1,
+    "app/routes/recipes.$id.tsx::RecipeDetail::gated-load::document.visibilityState>revalidate::": 1,
+    "app/routes/recipes.$id.tsx::RecipeDetail::gated-load::visibilitychange>revalidateIfVisible::": 1,
+    "app/routes/recipes.new.tsx::action::vague-failure-copy::an error occurred::An unexpected error occurred while parsing ingredients": 1,
+    "app/routes/test-kitchen.tsx::TestKitchen::vague-failure-copy::could not::Some timer resets could not be saved. They may return after a reload.": 1
+  }
 }

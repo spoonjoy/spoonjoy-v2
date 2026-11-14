@@ -5,14 +5,23 @@ import { createTestRoutesStub } from "../../utils";
 import { SpoonDialog } from "../../../app/components/recipe/SpoonDialog";
 import { withTimeZone } from "../../helpers/timezone";
 
+import { useEffect, useState } from "react";
+
+// HX's Dialog runs its open transition only when it mounts closed and then opens (it warns when it
+// mounts already open), as the recipe page does; so open the dialog right after it mounts.
+function OpenedSpoonDialog(props: Omit<React.ComponentProps<typeof SpoonDialog>, "isOpen">) {
+  const [isOpen, setIsOpen] = useState(false);
+  useEffect(() => setIsOpen(true), []);
+  return <SpoonDialog {...props} isOpen={isOpen} />;
+}
+
 function renderDialog(props: Partial<React.ComponentProps<typeof SpoonDialog>> = {}) {
   const onClose = props.onClose ?? vi.fn();
   const Stub = createTestRoutesStub([
     {
       path: "/",
       Component: () => (
-        <SpoonDialog
-          isOpen={true}
+        <OpenedSpoonDialog
           onClose={onClose}
           actionUrl="/recipes/r1"
           isOriginCookCandidate={false}
@@ -174,8 +183,7 @@ describe("SpoonDialog", () => {
       {
         path: "/",
         Component: () => (
-          <SpoonDialog
-            isOpen={true}
+          <OpenedSpoonDialog
             onClose={onClose}
             actionUrl="/recipes/r1"
             isOriginCookCandidate={false}
@@ -209,7 +217,7 @@ describe("SpoonDialog", () => {
       {
         path: "/",
         Component: () => (
-          <SpoonDialog isOpen={true} onClose={vi.fn()} actionUrl="/recipes/r1" isOriginCookCandidate={false} />
+          <OpenedSpoonDialog onClose={vi.fn()} actionUrl="/recipes/r1" isOriginCookCandidate={false} />
         ),
       },
       {
@@ -253,8 +261,7 @@ describe("SpoonDialog", () => {
       {
         path: "/",
         Component: () => (
-          <SpoonDialog
-            isOpen={true}
+          <OpenedSpoonDialog
             onClose={vi.fn()}
             actionUrl="/recipes/r1"
             isOriginCookCandidate={false}
@@ -339,7 +346,7 @@ describe("SpoonDialog", () => {
     ]);
     rerender(<Closed />);
     const Reopened = createTestRoutesStub([
-      { path: "/", Component: () => <SpoonDialog isOpen={true} onClose={vi.fn()} actionUrl="/recipes/r1" isOriginCookCandidate={false} /> },
+      { path: "/", Component: () => <OpenedSpoonDialog onClose={vi.fn()} actionUrl="/recipes/r1" isOriginCookCandidate={false} /> },
     ]);
     rerender(<Reopened />);
     await waitFor(() => expect(token()).toMatch(/^[0-9a-f-]{36}$/));

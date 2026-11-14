@@ -1265,7 +1265,7 @@ describe("/developers/playground", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Copy path" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-    expect(await screen.findByRole("button", { name: "Couldn't copy" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Browser blocked copying" })).toBeInTheDocument();
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 2100));
     });

@@ -2627,7 +2627,9 @@ describe("Recipes $id Route", () => {
 
     it.each([
       { cookbooks: [{ id: "cb-1", title: "Weeknights" }], focused: "cookbook-item-cb-1" },
-      { cookbooks: [], focused: "new-cookbook-input" },
+      // With no cookbooks the content has no control, and HX's Dialog skips the footer's field and
+      // focuses its Close button (ourostack/ouro-ui#1165).
+      { cookbooks: [], focused: "the Close button" },
     ])("focuses $focused when a keyboard press opens the wide-screen save dialog", async ({ cookbooks, focused }) => {
       const user = userEvent.setup();
       const Stub = createTestRoutesStub([
@@ -2647,7 +2649,9 @@ describe("Recipes $id Route", () => {
       await settleBrowserTasks();
       expect(dialog).toHaveAttribute("data-ouro-presentation", "dialog");
       await waitFor(() => {
-        expect(document.activeElement).toBe(screen.getByTestId(focused));
+        expect(document.activeElement).toBe(
+          focused === "the Close button" ? within(dialog).getByRole("button", { name: "Close" }) : screen.getByTestId(focused),
+        );
       });
 
       await closeSaveModal(user);

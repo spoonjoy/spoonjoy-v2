@@ -86,7 +86,7 @@ describe("SiteFooter", () => {
 
     await user.click(bar.querySelector<HTMLElement>('[data-ouro-part="list"]')!);
     const list = await screen.findByRole("dialog", { name: "X-ray" });
-    expect(within(list).getAllByRole("link", { name: /^Docs for button/ })[0]).toHaveAttribute("href", "https://ui.ouro.bot/docs/button/");
+    expect(within(list).getAllByRole("link", { name: /^Docs for button/ })[0]).toHaveAttribute("href", "https://ui.ouroboros.bot/docs/button/");
     // Source links name the page's route module at the running commit, once the manifest is in.
     const recipes = manifest.routes.find((route) => route.file === "app/routes/recipes._index.tsx")!;
     const expected = recipes.renders["button"]?.length === 1 ? recipes.renders["button"]![0] : "app/routes/recipes._index.tsx";
