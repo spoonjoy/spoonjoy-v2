@@ -16,8 +16,13 @@ export interface BrowserContextLike {
 export function createBrowserDiagnosticCollector() {
   const diagnostics: string[] = [];
   const expectations: Array<{ pattern: RegExp; matched: boolean }> = [];
+  const allowances: RegExp[] = [];
 
   const record = (diagnostic: string) => {
+    if (allowances.some((pattern) => {
+      pattern.lastIndex = 0;
+      return pattern.test(diagnostic);
+    })) return;
     const expectation = expectations.find(({ pattern, matched }) => {
       if (matched) return false;
       pattern.lastIndex = 0;
@@ -33,6 +38,10 @@ export function createBrowserDiagnosticCollector() {
   return {
     expectDiagnostic(pattern: RegExp) {
       expectations.push({ pattern, matched: false });
+    },
+    /** Drops a known notice wherever it occurs, as often as it occurs, without requiring it. */
+    allowDiagnostic(pattern: RegExp) {
+      allowances.push(pattern);
     },
     captureConsole(
       type: string,

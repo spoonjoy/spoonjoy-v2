@@ -1066,6 +1066,26 @@ describe("Playwright warning policy", () => {
     expect(() => duplicate.assertClean()).toThrowError(/console\.error: owned once/);
   });
 
+  it("drops an allowed notice every time it occurs, without requiring it", async () => {
+    const { createBrowserDiagnosticCollector } = await vi.importActual<
+      typeof import("../../e2e/warning-policy")
+    >("../../e2e/warning-policy");
+    const allowed = createBrowserDiagnosticCollector();
+    allowed.allowDiagnostic(/known notice/g);
+    allowed.captureConsole("error", "known notice");
+    allowed.captureConsole("warning", "known notice");
+    expect(() => allowed.assertClean()).not.toThrow();
+
+    const unused = createBrowserDiagnosticCollector();
+    unused.allowDiagnostic(/known notice/);
+    expect(() => unused.assertClean()).not.toThrow();
+
+    const other = createBrowserDiagnosticCollector();
+    other.allowDiagnostic(/known notice/);
+    other.captureConsole("error", "something else");
+    expect(() => other.assertClean()).toThrowError(/console\.error: something else/);
+  });
+
   it("provides an executable automatic context-wide diagnostic fixture", async () => {
     const fixture = readFileSync("e2e/fixtures.ts", "utf8");
     const exported = await vi.importActual<typeof import("../../e2e/fixtures")>(
