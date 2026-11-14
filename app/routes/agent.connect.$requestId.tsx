@@ -21,6 +21,7 @@ import {
   typedCodeFor,
 } from "~/lib/agent-connection-route.server";
 import { Button } from "~/components/ouro/button/button";
+import { controls } from "../../actions/generated/web";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/ouro/text/text";
@@ -350,8 +351,9 @@ export default function AgentConnect() {
               Deny needs the code too, so a leaked link or a guessed request can't cancel a connection;
               the browser asks for the code before either button submits. */}
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button type="submit" name="intent" value="approve">
-              Approve access
+            {/* Person-only: no agent door offers this action, and MCP refuses a call to it. */}
+            <Button type="submit" name="intent" value="approve" {...controls["approve-agent-connection"].props}>
+              {controls["approve-agent-connection"].label}
             </Button>
             <Button type="submit" name="intent" value="deny" variant="outline" tone="secondary">
               Deny

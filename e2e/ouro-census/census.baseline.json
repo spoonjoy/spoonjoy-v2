@@ -5867,7 +5867,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Add\" [button/root] in main",
+          "identity": "button \"Add to list\" [button/root] in main",
           "count": 1
         },
         {
@@ -6029,7 +6029,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Add\" [button/root] in main",
+          "identity": "button \"Add to list\" [button/root] in main",
           "count": 1
         },
         {
@@ -6259,7 +6259,7 @@
     "shopping-list-newbie": {
       "default": [
         {
-          "identity": "button \"Add\" [button/root] in main",
+          "identity": "button \"Add to list\" [button/root] in main",
           "count": 1
         },
         {
@@ -12445,7 +12445,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Add\" [button/root] in main",
+          "identity": "button \"Add to list\" [button/root] in main",
           "count": 1
         },
         {
@@ -12579,7 +12579,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Add\" [button/root] in main",
+          "identity": "button \"Add to list\" [button/root] in main",
           "count": 1
         },
         {
@@ -12773,7 +12773,7 @@
     "shopping-list-newbie": {
       "default": [
         {
-          "identity": "button \"Add\" [button/root] in main",
+          "identity": "button \"Add to list\" [button/root] in main",
           "count": 1
         },
         {

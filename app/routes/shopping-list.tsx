@@ -3,7 +3,9 @@ import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/shopping-list";
 import { formatAmount } from "~/lib/quantity";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useLoaderData, Form, useSubmit, useFetchers, useActionData, useLocation } from "react-router";
+import { useLoaderData, Form, useSubmit, useFetchers, useActionData, useLocation, useRevalidator } from "react-router";
+import { controls } from "../../actions/generated/web";
+import { browserModelContext, registerShoppingListWebMcpTools } from "~/lib/webmcp-actions";
 import {
   handleShoppingListAction,
   loadShoppingList,
@@ -162,6 +164,20 @@ export default function ShoppingList() {
     }
     if (actionData?.success && actionData.intent === "addFromRecipe") renewAddRecipeToken();
   }, [actionData, renewAddItemToken, renewAddRecipeToken]);
+
+  // An agent in the person's browser adds with the same declared action as the Add to list button.
+  const revalidator = useRevalidator();
+  const revalidate = useRef(revalidator.revalidate);
+  revalidate.current = revalidator.revalidate;
+  useEffect(
+    () =>
+      registerShoppingListWebMcpTools(browserModelContext(navigator), {
+        fetch: (...args) => fetch(...args),
+        newMutationId: () => crypto.randomUUID(),
+        onAdded: () => void revalidate.current(),
+      }),
+    []
+  );
 
   // "Add item" at the top is a link to #add-item: bring the Item field into view with focus, ready
   // to type. Keyed on the location, so following the link again focuses it again.
@@ -474,7 +490,9 @@ export default function ShoppingList() {
                 </div>
               </div>
             )}
-            <Button type="submit" className="justify-self-start">Add</Button>
+            <Button type="submit" className="justify-self-start" {...controls["add-shopping-list-item"].props}>
+              {controls["add-shopping-list-item"].label}
+            </Button>
           </div>
         </Form>
       </div>

@@ -165,9 +165,9 @@ test.describe('Mobile RecipeBuilder and tab bar audit', () => {
     await expectTouchTarget(dock.getByRole('link', { name: 'Shopping', exact: true }), 'Shopping tab');
     await expectTouchTarget(dock.getByRole('link', { name: 'Search', exact: true }), 'Search tab');
     await expectTouchTarget(page.getByRole('main').getByRole('link', { name: 'New item', exact: true }), 'shopping New item link');
-    const addButton = page.getByRole('button', { name: /^Add$/ });
-    await expectTouchTarget(addButton, 'shopping Add button');
-    await expectAboveDock(addButton, dock, 'shopping Add button');
+    const addButton = page.getByRole('button', { name: /^Add to list$/ });
+    await expectTouchTarget(addButton, 'shopping Add to list button');
+    await expectAboveDock(addButton, dock, 'shopping Add to list button');
 
     const checkButton = page.getByRole('button', { name: /^(Check|Uncheck) item$/ }).first();
     if (await checkButton.isVisible({ timeout: 3000 }).catch(() => false)) {

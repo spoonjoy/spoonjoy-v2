@@ -126,7 +126,7 @@ describe("shopping list: the Item field clears after a successful add (R-M3-3, b
 
     const field = await screen.findByLabelText(requiredLabel("Item"));
     fireEvent.change(field, { target: { value: "2 lemons" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to list" }));
 
     await waitFor(() => expect(submitted).toEqual(["2 lemons"]));
     await waitFor(() => expect(field).toHaveValue(""));
@@ -156,13 +156,13 @@ describe("shopping list: the Item field clears after a successful add (R-M3-3, b
 
     const field = await screen.findByLabelText(requiredLabel("Item"));
     fireEvent.change(field, { target: { value: "salt" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to list" }));
 
     expect(await screen.findByText("Couldn't confidently parse one item. Review and correct before adding.")).toBeInTheDocument();
     expect(field).toHaveValue("salt");
     // (Quantity stays empty: happy-dom misjudges "1" against the field's step="0.01".)
     fireEvent.change(screen.getByLabelText("Unit"), { target: { value: "pinch" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to list" }));
 
     await waitFor(() => expect(calls).toBe(2));
     await waitFor(() => expect(screen.queryByLabelText("Quantity")).not.toBeInTheDocument());

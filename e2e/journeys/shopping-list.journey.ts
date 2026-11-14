@@ -81,7 +81,7 @@ function counted(n: number) {
 
 async function addByHand(page: Page, text: string, name: string, amount: string | RegExp) {
   await itemField(page).fill(text);
-  await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
+  await addSection(page).getByRole("button", { name: "Add to list", exact: true }).click();
   await expect(row(page, name), FALLBACK_PARSER).toHaveAccessibleDescription(typeof amount === "string" ? new RegExp(`(^| )${amount}$`) : amount);
   await expect(itemField(page)).toHaveValue("");
 }
@@ -104,7 +104,7 @@ async function startWithAnEmptyList(page: Page) {
   await page.goto(SHOPPING_LIST);
   await waitForHydration(page);
   await itemField(page).fill("1 lemon");
-  await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
+  await addSection(page).getByRole("button", { name: "Add to list", exact: true }).click();
   await expect(row(page, "lemon")).toBeVisible();
   await clearAll(page);
 }
@@ -127,7 +127,7 @@ test.describe("Shopping list", () => {
     await page.locator('input[name="ingredientText"]').fill("2 lemons");
     await waitForHydration(page);
     await expect(itemField(page)).toHaveValue("2 lemons");
-    await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
+    await addSection(page).getByRole("button", { name: "Add to list", exact: true }).click();
     await expect(lemons, FALLBACK_PARSER).toHaveAccessibleDescription(counted(2));
     await expect(lemons).toHaveAttribute("aria-checked", "false");
     // "lemons" is its own row: the "lemon" placeholder the reset just cleared doesn't come back.
@@ -135,7 +135,7 @@ test.describe("Shopping list", () => {
     // R-M3-3: the field clears, so pressing Add again can't add the lemons twice (bug 10). The
     // empty field is required, so the browser doesn't submit it.
     await expect(itemField(page)).toHaveValue("");
-    await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
+    await addSection(page).getByRole("button", { name: "Add to list", exact: true }).click();
     await expect(lemons, FALLBACK_PARSER).toHaveAccessibleDescription(counted(2));
     await expect(view(page, "Need", 1)).toBeVisible();
     await expectAccessible();
@@ -334,7 +334,7 @@ test.describe("Shopping list", () => {
     });
     const ambiguous = nextShoppingListAction(page, "addItem");
     await itemField(page).fill("salt");
-    await review.getByRole("button", { name: "Add", exact: true }).click();
+    await review.getByRole("button", { name: "Add to list", exact: true }).click();
     expect((await ambiguous).status(), FALLBACK_PARSER).toBe(400);
     await expect(
       review.getByText("Couldn't confidently parse one item. Review and correct before adding."),
@@ -352,7 +352,7 @@ test.describe("Shopping list", () => {
     await review.getByLabel("Quantity", { exact: true }).fill("1");
     await review.getByLabel("Unit", { exact: true }).fill("teaspoon");
     const confirmed = nextShoppingListAction(page, "addItem");
-    await review.getByRole("button", { name: "Add", exact: true }).click();
+    await review.getByRole("button", { name: "Add to list", exact: true }).click();
     expect((await confirmed).status()).toBe(200);
     await expect(salt).toHaveAccessibleDescription(/1 teaspoon/);
     await expect(review.getByLabel("Quantity", { exact: true })).toBeHidden();
