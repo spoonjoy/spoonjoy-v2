@@ -485,6 +485,9 @@ const CI_HX_SOURCE_RULES_RATCHET_COMMAND = `${CI_HX_SOURCE_RULES_COMMAND} --base
 // ratchet and its title and body (scripts/claims-pr.mjs).
 const CI_CLAIMS_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run claims:check`;
 const CI_CLAIMS_PR_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run claims:pr`;
+// Ouro UI's AX X-ray of the stdio MCP server (scripts/mcp-xray.ts), on pull requests, on the local
+// test database as a synthetic chef.
+const CI_MCP_XRAY_COMMAND = `DATABASE_URL="file:./test.db" ${WARNING_GATE_COMMAND_PREFIX}pnpm run mcp:xray`;
 
 const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
   ["advisory", [
@@ -561,6 +564,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
     commandStepSignature("pnpm run verify:clean:typecheck"),
     commandStepSignature("pnpm run verify:clean:generated-contract"),
+    commandStepSignature(CI_MCP_XRAY_COMMAND),
     commandStepSignature(CI_HX_SOURCE_RULES_RATCHET_COMMAND),
     commandStepSignature(CI_CLAIMS_PR_COMMAND),
     commandStepSignature(CI_CHANGED_TESTS_COMMAND),

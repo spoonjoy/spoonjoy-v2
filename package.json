@@ -134,6 +134,7 @@
     "smoke:api": "node scripts/smoke-api-live.mjs --target-env production",
     "native:dogfood:api": "tsx scripts/native-dogfood-api-server.ts",
     "mcp:serve": "tsx scripts/spoonjoy-mcp-server.ts",
+    "mcp:xray": "tsx scripts/mcp-xray.ts",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "chromatic": "chromatic --exit-zero-on-changes",
