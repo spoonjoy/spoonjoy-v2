@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ButtonHTMLAttributes, type JSX, type 
 import { announce } from "~/lib/ouro/announce";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
-import { share, type ShareResult } from "~/lib/ouro/share";
+import { canShare, share, type ShareResult } from "~/lib/ouro/share";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { Button } from "~/components/ouro/button/button";
 
@@ -24,8 +24,20 @@ export interface ShareButtonOwnProps {
    * @claim "What it says, and screen readers" registry/ouro/components/ouro/share-button/share-button.test.tsx verify:testExists(registry/ouro/components/ouro/share-button/share-button.test.tsx::ShareButton > copies the link where there is no share sheet, says Link copied once, and reads Share again after two seconds)
    */
   copiedLabel?: string | undefined;
-  /** What it says, and screen readers hear, when neither sharing nor copying worked. @default "Couldn't share" */
+  /**
+   * What it says for two seconds when neither sharing nor copying worked: short, so the button keeps its width.
+   * @default "Browser blocked sharing" when the share sheet refused, "Browser blocked copying" where there is no share sheet
+   * @claim "What it says for two seconds" registry/ouro/components/ouro/share-button/share-button.test.tsx verify:testExists(registry/ouro/components/ouro/share-button/share-button.test.tsx::ShareButton > by default, when the share sheet refuses and copying is blocked, shows Browser blocked sharing and announces the whole sentence once) verify:testExists(registry/ouro/components/ouro/share-button/share-button.test.tsx::ShareButton > by default, where there is no share sheet, shows Browser blocked copying, with how to copy the link as its tooltip, and announces the whole sentence once) verify:testExists(registry/ouro/components/ouro/share-button/share-button.test.tsx::ShareButton > keeps a 390px-wide page from scrolling sideways when it says the browser blocked sharing, at every size)
+   * @claim "when the share sheet refused" registry/ouro/components/ouro/share-button/share-button.test.tsx verify:testExists(registry/ouro/components/ouro/share-button/share-button.test.tsx::ShareButton > by default, when the share sheet refuses and copying is blocked, shows Browser blocked sharing and announces the whole sentence once) verify:testExists(registry/ouro/components/ouro/share-button/share-button.test.tsx::ShareButton > by default, where there is no share sheet, shows Browser blocked copying, with how to copy the link as its tooltip, and announces the whole sentence once)
+   */
   failedLabel?: string | undefined;
+  /**
+   * What screen readers hear, and the button's tooltip says while it shows `failedLabel`, when
+   * neither sharing nor copying worked: what happened and what to do instead.
+   * @default "The browser refused the share and blocked copying the link. Copy the link by hand." when the share sheet refused, "This browser has no share sheet, and it blocked copying the link. Copy the link by hand." where there is none, or `failedLabel` when only that is given
+   * @claim "when the share sheet refused" registry/ouro/components/ouro/share-button/share-button.test.tsx verify:testExists(registry/ouro/components/ouro/share-button/share-button.test.tsx::ShareButton > by default, when the share sheet refuses and copying is blocked, shows Browser blocked sharing and announces the whole sentence once) verify:testExists(registry/ouro/components/ouro/share-button/share-button.test.tsx::ShareButton > by default, where there is no share sheet, shows Browser blocked copying, with how to copy the link as its tooltip, and announces the whole sentence once)
+   */
+  failedMessage?: string | undefined;
   /** Shows only the icon; the label stays the button's name for screen readers. */
   hideLabel?: boolean | undefined;
   /** Visual weight, as Button's. @default "outline" */
@@ -74,18 +86,22 @@ function CheckIcon(props: SVGProps<SVGSVGElement>): JSX.Element {
 /**
  * A button that shares a link: through the system's share sheet where there is one (phones,
  * Safari), and by copying it where there is not, when it says "Link copied" for two seconds
- * and screen readers hear it once. It shares the page's own address unless given `url`.
+ * and screen readers hear it once. It shares the page's own address unless given `url`. When
+ * neither works, it says for two seconds which the browser blocked, "Browser blocked sharing"
+ * or, where there is no share sheet, "Browser blocked copying", with the whole of
+ * `failedMessage` as its tooltip, and screen readers hear that whole sentence once.
  *
  * Use `CopyButton` instead to copy any text without a share sheet, and the `share()` helper
  * for a share action inside a menu.
  *
  * @group Actions
- * @see https://ui.ouro.bot/docs/share-button
+ * @see https://ui.ouroboros.bot/docs/share-button
  *
  * @example
  * <ShareButton url={`https://example.com/notes/${note.id}`} title={note.title} />
  * @claim "A button that shares a link" registry/ouro/components/ouro/share-button/share-button.test.tsx verify:testExists(registry/ouro/components/ouro/share-button/share-button.test.tsx::ShareButton > copies the link where there is no share sheet, says Link copied once, and reads Share again after two seconds)
- * @claim "A button that shares a link" registry/ouro/components/ouro/share-button/share-button.test.tsx verify:testExists(registry/ouro/components/ouro/share-button/share-button.test.tsx::ShareButton > says Couldn't share, once, when neither sharing nor copying works)
+ * @claim "A button that shares a link" registry/ouro/components/ouro/share-button/share-button.test.tsx verify:testExists(registry/ouro/components/ouro/share-button/share-button.test.tsx::ShareButton > says its failedLabel, once, when neither sharing nor copying works)
+ * @claim "When neither works, it says for" registry/ouro/components/ouro/share-button/share-button.test.tsx verify:testExists(registry/ouro/components/ouro/share-button/share-button.test.tsx::ShareButton > by default, where there is no share sheet, shows Browser blocked copying, with how to copy the link as its tooltip, and announces the whole sentence once) verify:testExists(registry/ouro/components/ouro/share-button/share-button.test.tsx::ShareButton > by default, when the share sheet refuses and copying is blocked, shows Browser blocked sharing and announces the whole sentence once)
  */
 export function ShareButton(props: ShareButtonProps): JSX.Element {
   const {
@@ -94,7 +110,8 @@ export function ShareButton(props: ShareButtonProps): JSX.Element {
     text,
     label = "Share",
     copiedLabel = "Link copied",
-    failedLabel = "Couldn't share",
+    failedLabel: failedLabelProp,
+    failedMessage: failedMessageProp,
     hideLabel,
     variant: variantProp = "outline",
     size: sizeProp = "md",
@@ -129,21 +146,35 @@ export function ShareButton(props: ShareButtonProps): JSX.Element {
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
   const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
+  // Whether the browser had a share sheet at the last press, so a failure names what it blocked.
+  const [sheet, setSheet] = useState<boolean>();
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 
+  /** What a failure says: which the browser blocked, the share or the copy. */
+  const failure = (hadSheet: boolean | undefined) => {
+    const fallback = hadSheet
+      ? { label: "Browser blocked sharing", message: "The browser refused the share and blocked copying the link. Copy the link by hand." }
+      : { label: "Browser blocked copying", message: "This browser has no share sheet, and it blocked copying the link. Copy the link by hand." };
+    return { label: failedLabelProp ?? fallback.label, message: failedMessageProp ?? failedLabelProp ?? fallback.message };
+  };
+
   const go = async (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
-    const result = await share({ url: url ?? location.href, title, text });
+    const data = { url: url ?? location.href, title, text };
+    const hadSheet = canShare(data);
+    const result = await share(data);
     onShare?.(result);
     if (result !== "copied" && result !== "failed") return;
     clearTimeout(timer.current);
     setStatus(result);
-    announce(result === "copied" ? copiedLabel : failedLabel);
+    setSheet(hadSheet);
+    announce(result === "copied" ? copiedLabel : failure(hadSheet).message);
     timer.current = setTimeout(() => setStatus("idle"), CONFIRM_MS);
   };
 
-  const shown = status === "copied" ? copiedLabel : status === "failed" ? failedLabel : label;
+  const failed = failure(sheet);
+  const shown = status === "copied" ? copiedLabel : status === "failed" ? failed.label : label;
   const Icon = status === "copied" ? CheckIcon : ShareIcon;
   return (
     <span data-ouro="share-button" data-status={status} className={cn("inline-flex", className)}>
@@ -156,6 +187,7 @@ export function ShareButton(props: ShareButtonProps): JSX.Element {
         size={size}
         tone="secondary"
         onClick={go}
+        {...(status === "failed" ? { title: failed.message } : {})}
         {...(hideLabel ? { "aria-label": shown, className: "w-(--ouro-button-h) px-0" } : { startIcon: Icon })}
       >
         {hideLabel ? <Icon className="size-[1.25em] shrink-0" /> : shown}

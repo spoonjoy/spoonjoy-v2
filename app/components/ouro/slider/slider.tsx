@@ -15,6 +15,7 @@ import {
   thumbClass,
   trackClass,
   valueClass,
+  widestTexts,
 } from "~/components/ouro/slider/slider-styles";
 
 /** A slider's value: one number, or one per thumb for a range. */
@@ -188,7 +189,7 @@ function defaultThumbLabels(count: number): string[] {
  * named choices.
  *
  * @group Forms
- * @see https://ui.ouro.bot/docs/slider
+ * @see https://ui.ouroboros.bot/docs/slider
  *
  * @example
  * <Slider label="Servings" name="servings" defaultValue={4} min={1} max={12} showValue />
@@ -354,30 +355,14 @@ function SliderControl({
     () => false,
   );
   const locale = shared.locale ?? (hydrated ? undefined : SERVER_LOCALE);
-  // Samples of the widest value text, all reserved so the track keeps its length: each end's
-  // integer part with the step's decimals (Base UI's defaults are 0, 100 and a step of 1), plus
-  // values in each power of ten, since compact notation ("1.1K") can be wider than either end.
-  const number = new Intl.NumberFormat(shared.locale, shared.format);
-  const min = shared.min ?? 0;
-  const max = shared.max ?? 100;
-  const step = shared.step ?? 1;
-  const decimals = (String(step).split(".")[1] ?? "").length;
-  const withDecimals = (end: number) => {
-    const whole = Math.trunc(end);
-    return decimals === 0 ? end : Math.sign(end || 1) * (Math.abs(whole) + Number(`0.${"8".repeat(decimals)}`));
-  };
-  const values = [withDecimals(min), withDecimals(max)];
-  for (let power = 1; power <= Math.max(Math.abs(min), Math.abs(max)); power *= 10) {
-    for (const magnitude of [1.8 * power, 8.8 * power, 10 * power - step]) {
-      for (const value of [magnitude, -magnitude]) {
-        const snapped = min + Math.round((value - min) / step) * step;
-        if (snapped >= min && snapped <= max) values.push(snapped);
-      }
-    }
-  }
   // Without a locale, the samples are in the reader's, which the server cannot know: it and
   // hydration reserve nothing, and the browser fills them in, so the server's HTML hydrates as it is.
-  const texts = hydrated || shared.locale !== undefined ? [...new Set(values.map((value) => number.format(value)))] : [];
+  // Worked out once per range and format, not on every value a drag passes through.
+  const { locale: sampleLocale, format, min, max, step } = shared;
+  const texts = useMemo(
+    () => (hydrated || sampleLocale !== undefined ? widestTexts(min ?? 0, max ?? 100, step ?? 1, sampleLocale, format) : []),
+    [hydrated, sampleLocale, format, min, max, step],
+  );
   const samples = isRange ? texts.map((text) => `${text} – ${text}`) : texts;
   return (
     <BaseSlider.Root

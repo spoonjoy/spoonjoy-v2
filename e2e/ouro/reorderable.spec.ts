@@ -1,5 +1,5 @@
 import { expect, test } from "../ouro-fixtures";
-import { openStory } from "./story";
+import { openStory, settledBox, tapKeepsCancelledClick } from "./story";
 
 test("reorders with the keyboard: Space picks a row up, the arrows move it, Space drops it, Escape puts it back", async ({ page }) => {
   await openStory(page, "lists-reorderable--in-context");
@@ -44,6 +44,7 @@ test("reorders without a drag: a click on the handle opens a menu of moves", asy
   const handles = page.locator("[data-ouro-reorderable-handle]");
   await page.getByRole("button", { name: "Reorder Sear the ribs" }).click();
   await expect(page.getByRole("menuitem", { name: "Move up" })).toHaveAttribute("data-disabled");
+  await settledBox(page.getByRole("menu"));
   await page.getByRole("menuitem", { name: "Move to bottom" }).click();
   await expect(page.locator("[data-ouro-announcer]")).toHaveText("Sear the ribs moved. Position 4 of 4.");
   await expect(handles.nth(3)).toHaveAttribute("aria-label", "Reorder Sear the ribs");
@@ -66,4 +67,21 @@ test("a disabled list keeps its handles focusable and unavailable, and moves not
   await first.click({ force: true });
   await expect(page.getByRole("menu")).toHaveCount(0);
   await expect(page.locator("[data-ouro-reorderable-handle]").first()).toHaveAttribute("aria-label", name!);
+});
+
+test.describe("by touch", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test("a tap on the handle opens the menu of moves, and a tap on a move makes it", async ({ page }) => {
+    await openStory(page, "lists-reorderable--in-context");
+    // The handle cancels pointerdown, so a press selects no text and starts no native drag. The WebKit that
+    // Playwright drives before 1.65 then raises no click from a tap (tapKeepsCancelledClick), so there is no tap to test.
+    test.skip(!(await tapKeepsCancelledClick(page)), "this browser drops a tap's click after a cancelled pointerdown (microsoft/playwright#43569)");
+    await page.getByRole("button", { name: "Reorder Sear the ribs" }).tap();
+    await expect(page.getByRole("menu")).toBeVisible();
+    // Below 640px the menu is a bottom sheet that slides up. A tap on a move still moving can come up on the next item and drop the click, so wait until it has stopped.
+    await settledBox(page.getByRole("menu"));
+    await page.getByRole("menuitem", { name: "Move to bottom" }).tap();
+    await expect(page.getByTestId("saved-order")).toHaveText("Saved order: soften, wine, braise, sear");
+  });
 });

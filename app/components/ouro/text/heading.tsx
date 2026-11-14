@@ -22,10 +22,22 @@ export interface HeadingProps extends Omit<HTMLAttributes<HTMLHeadingElement>, "
   /**
    * Visual size, independent of the level. `display` is the hero headline of a
    * landing page, tightly set and larger from the `sm` breakpoint: `<Heading level={1} size="display">`.
+   * Each size above `sm` is set tighter than the last. A theme whose `--font-heading` is a serif sets
+   * `--ouro-heading-tracking` below its default of `1`, such as `0.5`, to tighten by that share and
+   * keep more of the font's own spacing; `0` sets every size at the font's own spacing.
    * @default derived from `level` (1 is `2xl`, 2 is `xl`, 3 is `lg`, 4 is `md`, 5 and 6 are `sm`)
    * @claim "derived from `level`" registry/ouro/components/ouro/text/heading.test.tsx verify:testExists(registry/ouro/components/ouro/text/heading.test.tsx::Heading > derives a smaller default size for deeper levels)
+   * @claim "Each size above `sm` is set tighter than the last" registry/ouro/components/ouro/text/heading.test.tsx verify:testExists(registry/ouro/components/ouro/text/heading.test.tsx::Heading tracking > tightens as the text grows: none at body size, more at each larger size)
+   * @claim "to tighten by that share" registry/ouro/components/ouro/text/heading.test.tsx verify:testExists(registry/ouro/components/ouro/text/heading.test.tsx::Heading tracking > scales the tightening by the theme's --ouro-heading-tracking, so a serif heading font can keep its own spacing)
    */
   size?: HeadingSize | (string & { 'Use "sm", "md", "lg", "xl", "2xl" or, larger, "display"': never }) | undefined;
+  /**
+   * Cuts the heading to one line with an ellipsis, as a list row or a title bar needs. A heading
+   * otherwise balances its lines, which would wrap it again, so `truncate` drops the balancing.
+   * @default false
+   * @claim "Cuts the heading to one line" registry/ouro/components/ouro/text/heading.test.tsx verify:testExists(registry/ouro/components/ouro/text/heading.test.tsx::Heading > cuts to one line with an ellipsis with truncate, without balancing it back onto two)
+   */
+  truncate?: boolean | undefined;
   /** Alignment in writing direction. @default inherited */
   align?: TextAlign | (string & { 'Use "start", "center" or "end": left is "start", right is "end"': never }) | undefined;
   /**
@@ -42,13 +54,15 @@ export interface HeadingProps extends Omit<HTMLAttributes<HTMLHeadingElement>, "
   color?: { 'Use <Text tone="primary">': never };
 }
 
+// Each size tightens by its own step times the theme's --ouro-heading-tracking (1 unless set), so a
+// serif heading font, whose letters already sit close, can keep more of its own spacing.
 const sizes = {
   sm: "text-base",
-  md: "text-lg tracking-[-0.01em]",
-  lg: "text-xl tracking-[-0.015em]",
-  xl: "text-2xl tracking-[-0.02em]",
-  "2xl": "text-3xl tracking-[-0.025em]",
-  display: "text-[2.5rem] leading-[1.05] tracking-[-0.035em] sm:text-6xl sm:leading-[1.02]",
+  md: "text-lg tracking-[calc(-0.01em*var(--ouro-heading-tracking,1))]",
+  lg: "text-xl tracking-[calc(-0.015em*var(--ouro-heading-tracking,1))]",
+  xl: "text-2xl tracking-[calc(-0.02em*var(--ouro-heading-tracking,1))]",
+  "2xl": "text-3xl tracking-[calc(-0.025em*var(--ouro-heading-tracking,1))]",
+  display: "text-[2.5rem] leading-[1.05] tracking-[calc(-0.035em*var(--ouro-heading-tracking,1))] sm:text-6xl sm:leading-[1.02]",
 } as const;
 
 const sizeByLevel = { 1: "2xl", 2: "xl", 3: "lg", 4: "md", 5: "sm", 6: "sm" } as const;
@@ -69,15 +83,16 @@ function headingHint(token: string): string {
  * `title` prop, which also labels it for assistive technology.
  *
  * @group Text
- * @see https://ui.ouro.bot/docs/heading
+ * @see https://ui.ouroboros.bot/docs/heading
  *
  * @example
  * <Heading level={1}>Recipes</Heading>
  * <Heading level={2} size="lg">Ingredients</Heading>
  * <Heading level={1} size="display">Dinner, sorted</Heading>
+ * <Heading level={3} truncate>{thread.subject}</Heading>
  */
 export function Heading(props: HeadingProps): JSX.Element {
-  const { level: levelProp, size: sizeProp, align: alignProp, className, ref, color, as, ...rest } = props;
+  const { level: levelProp, size: sizeProp, align: alignProp, truncate, className, ref, color, as, ...rest } = props;
   const level = levelProp as keyof typeof sizeByLevel;
   const [align, alignWarning] = checkAlign("Heading", alignProp);
   if (!(level in sizeByLevel) || typeof level !== "number") {
@@ -118,7 +133,8 @@ export function Heading(props: HeadingProps): JSX.Element {
   );
   const Tag = `h${level}` as const;
   const classes = cn(
-    "[@layer_ouro-reset]:m-0 font-[family-name:var(--font-heading,inherit)] font-semibold text-balance text-foreground",
+    "[@layer_ouro-reset]:m-0 font-[family-name:var(--font-heading,inherit)] font-semibold text-foreground",
+    truncate ? "truncate" : "text-balance",
     sizes[size],
     align && alignClasses[align],
     className,

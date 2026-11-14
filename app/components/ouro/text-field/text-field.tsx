@@ -224,7 +224,7 @@ function Icon({ children }: { children: ReactNode }): JSX.Element {
  * field inside a row your app frames, such as a page's main search between two rules.
  *
  * @group Forms
- * @see https://ui.ouro.bot/docs/text-field
+ * @see https://ui.ouroboros.bot/docs/text-field
  *
  * @example
  * <TextField label="Email" type="email" name="email" required error={errors?.email} />

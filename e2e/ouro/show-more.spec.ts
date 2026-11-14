@@ -19,3 +19,14 @@ test("show more loads the next page and focuses its first item", async ({ page }
   await expect(page.locator("[data-ouro-show-more-status]")).toHaveText("Showing 6 recipes");
   await expect(page).not.toHaveURL(/after=/);
 });
+
+test("show more unfolds a long post, and show less folds it again", async ({ page }) => {
+  await openStory(page, "lists-showmore--long-post");
+  const fold = page.locator("[data-ouro-show-more-fold]");
+  await expect(fold).toHaveAttribute("data-folded", "");
+  await page.getByRole("button", { name: "Show more" }).click();
+  await expect(fold).not.toHaveAttribute("data-folded");
+  await expect(page.getByRole("link", { name: "Sign up for a dish" })).toBeInViewport();
+  await page.getByRole("button", { name: "Show less" }).click();
+  await expect(fold).toHaveAttribute("data-folded", "");
+});

@@ -99,11 +99,12 @@ const requiredMarkClass =
 
 /**
  * Supporting text under the label, and under a fieldset's legend. It stays at full contrast when the
- * field is disabled, because it often says why.
+ * field is disabled, because it often says why. It wraps with `text-wrap: pretty`, so it does not end on
+ * one stranded word.
  *
  * @internal
  */
-const descriptionClass = "m-0 text-sm leading-5 text-muted-foreground";
+const descriptionClass = "m-0 text-sm leading-5 text-pretty text-muted-foreground";
 
 /**
  * The error message: it fades and slides in, and with reduced motion only fades. Several

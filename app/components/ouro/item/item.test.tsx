@@ -101,6 +101,32 @@ describe("Item", () => {
     expect(getComputedStyle(tile).backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
   });
 
+  it("keeps the media level with the title when the description runs past one line, and centered beside shorter text", async () => {
+    const long = "Seared hard, then braised low in red wine and stock until the meat falls apart, then rested overnight so the flavors settle. ".repeat(2);
+    const middle = (rect: DOMRect) => rect.top + rect.height / 2;
+    for (const mediaSize of ["icon", "sm", "md"] as const) {
+      const media = mediaSize === "icon" ? <svg viewBox="0 0 24 24" /> : <img src={pixel} alt="" />;
+      const { item } = await render(<Item media={media} mediaSize={mediaSize} title="Short ribs" description={long} />);
+      const [frame, text] = [item.children[0]!.getBoundingClientRect(), item.children[1]!.getBoundingClientRect()];
+      expect(text.height).toBeGreaterThan(frame.height);
+      // Within the band of the title and the description's first line, 46px, where centering a 40px media put it.
+      expect(frame.top - text.top).toBe(mediaSize === "md" ? 0 : 3);
+    }
+    for (const description of ["Four hours", undefined]) {
+      const { item } = await render(<Item media={<img src={pixel} alt="" />} title="Short ribs" description={description} />);
+      const [frame, text] = [item.children[0]!.getBoundingClientRect(), item.children[1]!.getBoundingClientRect()];
+      expect(Math.abs(middle(frame) - middle(text))).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("keeps a lifted media's place beside long text at widths where it sits beside it", async () => {
+    const long = "Seared hard, then braised low in red wine and stock until the meat falls apart. ".repeat(4);
+    const { item } = await render(<Item media={<img src={pixel} alt="" data-photo="" />} mediaSize="lg" mediaAbove="sm" title="Short ribs" description={long} />);
+    const [frame, text] = [item.children[0]!.getBoundingClientRect(), item.children[1]!.getBoundingClientRect()];
+    expect(text.height).toBeGreaterThan(frame.height);
+    expect(Math.abs(frame.top + frame.height / 2 - (text.top + text.height / 2))).toBeLessThanOrEqual(1);
+  });
+
   it("keeps the actions beside the text on a phone by default", async () => {
     await page.viewport(390, 844);
     const { item } = await render(<Item title="Bearer token" description="Created today" actions={<Button>Revoke</Button>} />);
@@ -279,14 +305,14 @@ describe("Item with href", () => {
         title="Braised short ribs"
         description={
           <>
-            <span>By Ada · 4 hours</span> <span>Short ribs braised in stock until they fall apart.</span>
+            <span>By Ana · 4 hours</span> <span>Short ribs braised in stock until they fall apart.</span>
           </>
         }
       />,
     );
     const link = page.getByRole("link", { name: "Braised short ribs" });
     await expect.element(link).toHaveAccessibleName("Braised short ribs");
-    await expect.element(link).toHaveAccessibleDescription("By Ada · 4 hours Short ribs braised in stock until they fall apart.");
+    await expect.element(link).toHaveAccessibleDescription("By Ana · 4 hours Short ribs braised in stock until they fall apart.");
     const description = item.querySelector<HTMLElement>("[data-ouro-text]")!;
     expect(link.element().getAttribute("aria-describedby")).toBe(description.id);
     // The visible layout is unchanged: the description sits under the title, outside the link.

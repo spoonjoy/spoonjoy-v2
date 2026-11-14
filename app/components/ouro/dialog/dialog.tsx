@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type JSX,
+  type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
   type ReactElement,
@@ -18,6 +19,8 @@ import { serverElement } from "~/lib/ouro/server-element";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { lastInput } from "~/lib/ouro/last-input";
+import { holdPageAtPress } from "~/lib/ouro/page-scroll-hold";
+import { useMountedOpen } from "~/lib/ouro/use-mounted-open";
 import { useSheetPresentation } from "~/lib/ouro/use-sheet-presentation";
 import { sheetHint } from "~/components/ouro/sheet/sheet-styles";
 import { SheetFrame } from "~/components/ouro/sheet/sheet";
@@ -79,16 +82,30 @@ export interface DialogBaseProps {
    */
   presentation?: DialogPresentation | (string & { 'Use "auto", "dialog" or "sheet"': never }) | undefined;
   /**
-   * The centered dialog's maximum width: `sm` 24rem, `md` 32rem, `lg` 40rem. @default "md"
+   * The centered dialog's width. By default (`auto`) it fits its content and the screen: at least 32rem, so a form or a short
+   * question keeps a comfortable width, and at most 70% of the screen, from 40rem up to 56rem, so a gallery or a table grows
+   * on a big screen. Running text (paragraphs, headings, list items, labels, `Text`) wraps at a readable 65ch and does not
+   * widen it; bare text in a `div` measures as one long line, so put prose in a `<p>`. `xl` (56rem), `2xl` (72rem) and
+   * `full` (the viewport) raise the cap for wide content. `sm` (24rem), `md` (32rem) and `lg` (40rem) pin a fixed width
+   * whatever the content. Every size narrows to the viewport less its 1rem margins (or the safe area). @default "auto"
    *
-   * @claim "The centered dialog's maximum width: `sm`" registry/ouro/components/ouro/dialog/dialog-parts.tsx verify:fileLine(registry/ouro/components/ouro/dialog/dialog-parts.tsx, /const\spopupSizes\s=\s\{\ssm:\s"max-w-\[24rem\]",\smd:\s"max-w-\[32rem\]",\slg:\s"max-w-\[40rem\]"\s\}/)
+   * @claim "By default (`auto`) it fits" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > fits size %s to its content, from 32rem up to %ipx)
+   * @claim "By default (`auto`) it fits" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > follows the screen by default: a wide table makes it %ipx wide on a %ipx screen)
+   * @claim "Running text (paragraphs, headings, list" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > keeps running text at a readable 65ch in size %s, so text alone does not widen it)
+   * @claim "Running text (paragraphs, headings, list" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > lets the app's own max-width class on a paragraph win over the 65ch measure)
+   * @claim "`xl` (56rem), `2xl` (72rem) and" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > caps size %s at %ipx wide)
+   * @claim "`sm` (24rem), `md` (32rem) and" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > keeps size %s at %ipx whatever the content)
+   * @claim "Every size narrows to the viewport" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > keeps size %s inside a 390px phone's 16px margins when presentation is dialog)
    */
-  size?: DialogSize | (string & { 'Use "sm", "md" or "lg"': never }) | undefined;
+  size?: DialogSize | (string & { 'Use "auto", "sm", "md", "lg", "xl", "2xl" or "full"': never }) | undefined;
   /**
    * The actions row: a row at the end on wider screens, stacked full width on
    * phones. Put the primary action last, so it sits on the right on wider
    * screens and at the bottom, nearest the thumb, on phones:
    * `footer={<><Button variant="outline" tone="secondary">Cancel</Button><Button>Save</Button></>}`.
+   * Mark the primary action `default` (`<Button default onClick={save}>Save</Button>`) and Return
+   * presses it from the dialog's fields, as a Mac dialog's default button does.
+   * @claim "Mark the primary action `default`" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::footer > presses the footer's default action on Return from a field, in a dialog and in a sheet)
    */
   footer?: ReactNode;
   /** The body. It scrolls when the dialog is taller than the screen. */
@@ -127,6 +144,9 @@ export type DialogControlledProps = DialogBaseProps & {
    * Whether the dialog is open. When a touch or pen tap opened it (on your own
    * button, say), the centered dialog focuses itself rather than its first input,
    * so no software keyboard pops up; after a key press it focuses the first control.
+   * Keep the Dialog mounted and change `open`: one that mounts already open after a press or a key
+   * (`{editing && <Dialog open … />}`) appears and leaves without its transitions, and says so in development.
+   * @claim "Keep the Dialog mounted and change" registry/ouro/components/ouro/dialog/dialog.first-mount.touch.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.first-mount.touch.test.tsx::Dialog mounted by the tap that opens it > says once in development that its open and close transitions don't run)
    * @claim "When a touch or pen tap" registry/ouro/components/ouro/dialog/dialog.touch.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.touch.test.tsx::initial focus in a controlled dialog opened from the app's own button > focuses the centered popup, not its first input, after a tap)
    * @claim "When a touch or pen tap" registry/ouro/components/ouro/dialog/dialog.touch.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.touch.test.tsx::initial focus in a controlled dialog opened from the app's own button > focuses the centered popup's first input after a keyboard open)
    */
@@ -145,6 +165,7 @@ type TriggerProps = {
   ref?: Ref<HTMLElement> | undefined;
   onClick?: ((event: MouseEvent<HTMLElement>) => void) | undefined;
   onPointerDown?: ((event: PointerEvent<HTMLElement>) => void) | undefined;
+  onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
   "aria-haspopup"?: string;
   "aria-expanded"?: boolean;
 };
@@ -177,10 +198,27 @@ function CloseIcon(): JSX.Element {
   );
 }
 
+/** The controls a person can focus; a disabled one is left out. */
+const FOCUSABLE =
+  "a[href], button:not(:disabled), input:not(:disabled):not([type='hidden']), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])";
+
+/**
+ * The element a dialog gives first focus: the first control in its body that can be seen, else its
+ * close button, else the popup itself. The body is skipped: while it scrolls it is a tab stop, and
+ * Base UI would focus it first.
+ */
+function firstFocus(popup: HTMLElement): HTMLElement {
+  const candidates = [...popup.querySelectorAll<HTMLElement>(`[data-ouro-dialog-content] :is(${FOCUSABLE}), [data-ouro-dialog-close]`), popup];
+  return candidates.find((element) => element.getClientRects().length > 0)!;
+}
+
 /**
  * A dialog that presents itself for the screen: a centered dialog on wider
  * screens and a bottom sheet you can drag away on phones (below 640px). It
  * handles focus, Escape, outside presses, scroll locking and a close button.
+ * Once open, a centered dialog keeps its top edge where it opened while its
+ * content grows or shrinks, as a macOS sheet does, and moves up only as far as
+ * it must to stay on the screen.
  *
  * Use `trigger` for a dialog a button opens, or `open` with `onOpenChange` to
  * control it. Use `ConfirmDialog` instead to confirm an action, and `Sheet`
@@ -190,13 +228,14 @@ function CloseIcon(): JSX.Element {
  * ouro-base.css). If your app has fixed bars above z-50, raise it in a `:root` rule
  * of your own after the Ouro tokens, outside any `@layer`: `:root { --ouro-layer: 60; }`.
  * Don't edit the `--ouro-layer: 50` line shadcn wrote; `shadcn add` resets it.
+ * An app that draws its own bar across the window's top sets `--ouro-inset-top` to that bar's height, and a centered dialog, its backdrop and a full-screen Lightbox open below it.
  *
  * Testing accessibility: in WebKit, Base UI's focus guards take `role="button"`
  * without a name so VoiceOver's cursor stays trapped. Exclude them:
  * `new AxeBuilder({ page }).exclude("[data-base-ui-focus-guard]")`.
  *
  * @group Overlays
- * @see https://ui.ouro.bot/docs/dialog
+ * @see https://ui.ouroboros.bot/docs/dialog
  *
  * @example
  * <Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>
@@ -212,8 +251,12 @@ function CloseIcon(): JSX.Element {
  * </Dialog>
  * @claim "A dialog that presents itself for" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::automatic presentation > renders a centered dialog at 1280px)
  * @claim "A dialog that presents itself for" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::automatic presentation > renders the bottom sheet at 390px)
+ * @claim "Once open, a centered dialog" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog's top edge while its content changes > opens centred, then keeps its top edge where it opened as its content grows)
+ * @claim "Once open, a centered dialog" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog's top edge while its content changes > moves up only as far as it must when it grows past the screen's bottom margin)
  * @claim "It stacks above the page at" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog stacking above the app's fixed bars > puts the portal on the --ouro-layer level, as its own stacking context)
  * @claim "It stacks above the page at" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
+ * @claim "a centered dialog, its backdrop and a full-screen Lightbox open below it" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog below an app's own bar > starts the backdrop and the centered viewport below --ouro-inset-top, and centres in the space under it)
+ * @claim "a centered dialog, its backdrop and a full-screen Lightbox open below it" registry/ouro/components/ouro/lightbox/lightbox.mosaic.test.tsx verify:testExists(registry/ouro/components/ouro/lightbox/lightbox.mosaic.test.tsx::Lightbox full screen > starts below --ouro-inset-top and fills the rest of the window)
  * @claim "Testing accessibility: in WebKit, Base UI's" test/axe-exclude.test.tsx verify:testExists(test/axe-exclude.test.tsx::matches the open dialog's focus guards, and with them excluded the accessibility gate finds nothing)
  */
 export function Dialog(props: DialogProps): JSX.Element {
@@ -223,7 +266,7 @@ export function Dialog(props: DialogProps): JSX.Element {
     closeLabel = "Close",
     description,
     presentation: presentationProp = "auto",
-    size: sizeProp = "md",
+    size: sizeProp = "auto",
     footer,
     children,
     className,
@@ -243,9 +286,10 @@ export function Dialog(props: DialogProps): JSX.Element {
   };
 
   checkOpenMode("Dialog", "dialog", trigger !== undefined, open, onOpenChange);
+  const mountedOpen = useMountedOpen(open);
 
   // A size or presentation that is not one of Ouro UI's (a type error) warns and renders the default.
-  const size = dialogSizes.includes(sizeProp as DialogSize) ? (sizeProp as DialogSize) : "md";
+  const size = dialogSizes.includes(sizeProp as DialogSize) ? (sizeProp as DialogSize) : "auto";
   const presentation = presentations.includes(presentationProp as DialogPresentation)
     ? (presentationProp as DialogPresentation)
     : "auto";
@@ -265,6 +309,10 @@ export function Dialog(props: DialogProps): JSX.Element {
           const list = (values: readonly string[]) => values.map((name) => `"${name}"`).join(", ");
           return [
             !title && ["title is required; it names the dialog for screen readers", '<Dialog title="Edit recipe">'],
+            mountedOpen && [
+              "mounted already open, so its open and close transitions don't run; mount it closed and change open",
+              "<Dialog open={open} onOpenChange={setOpen}>",
+            ],
             size !== sizeProp && dialogSizeWarning(String(sizeProp), '<Dialog size="md">'),
             presentation !== presentationProp && [
               `presentation="${String(presentationProp)}" is not a presentation; use ${list(presentations)}`,
@@ -371,6 +419,11 @@ export function DialogFrame({
       onPointerDown: (event: PointerEvent<HTMLElement>) => {
         triggerProps.onPointerDown?.(event);
         setLastPointer(event.pointerType);
+        holdPageAtPress.dialog.onPointerDown(event);
+      },
+      onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+        triggerProps.onKeyDown?.(event);
+        holdPageAtPress.dialog.onKeyDown(event);
       },
       onClick: (event: MouseEvent<HTMLElement>) => {
         triggerProps.onClick?.(event);
@@ -385,15 +438,15 @@ export function DialogFrame({
     });
   // Focus returns to the trigger on close, in either presentation.
   const finalFocus = trigger !== undefined ? { finalFocus: triggerRef } : {};
-  // The centered dialog focuses itself after a touch or pen open, and the first
-  // control otherwise, as Base UI does with its own trigger. A dialog without a trigger
-  // decides when it opens, from the last press on the page. (The sheet always
-  // focuses itself, like a plain Sheet.)
-  const initialFocus = trigger === undefined
-    ? { initialFocus: () => (lastInput() === "touch" || lastInput() === "pen" ? popupRef.current : true) }
-    : tapOpened
-      ? { initialFocus: popupRef }
-      : {};
+  // Focus goes where firstFocus picks, never on a scrolling body. The centered dialog focuses
+  // itself after a touch or pen open. A dialog without a trigger decides when it opens, from the
+  // last press on the page. (The sheet always focuses itself, like a plain Sheet.)
+  const initialFocus = {
+    initialFocus: () => {
+      const touch = trigger === undefined ? lastInput() === "touch" || lastInput() === "pen" : tapOpened;
+      return touch ? popupRef.current : firstFocus(popupRef.current!);
+    },
+  };
 
   // The server and hydration render the dialog form; the client corrects it after.
   const presented = useSheetPresentation(presentation) ? (

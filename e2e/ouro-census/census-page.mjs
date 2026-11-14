@@ -198,7 +198,8 @@ export function censusTests({ test, journeys, projects, componentsDir, baselineP
   const directory = path.resolve(resultsDir);
   /** @type {Record<string, unknown> | undefined} */
   let baseline;
-  test.beforeAll((/** @type {unknown} */ _fixtures, /** @type {{ workerIndex: number }} */ testInfo) => {
+  // eslint-disable-next-line no-empty-pattern -- Playwright requires an object pattern for a hook's fixtures
+  test.beforeAll(({}, /** @type {{ workerIndex: number }} */ testInfo) => {
     recordExpectedCensus({ journeys, projects, worker: testInfo.workerIndex, directory });
   });
   for (const journey of journeys) {

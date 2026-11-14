@@ -108,6 +108,13 @@ describe("Badge", () => {
     }
   });
 
+  it("draws its hover wash with the badge's own corner shape", async () => {
+    const { badge } = await render(<Badge onClick={() => {}}>Vegetarian</Badge>);
+    const own = getComputedStyle(badge).getPropertyValue("corner-shape");
+    expect(own).toBe("superellipse(2)");
+    expect(getComputedStyle(badge, "::before").getPropertyValue("corner-shape")).toBe(own);
+  });
+
   it("renders a button with onClick, with a touch target and press feedback", async () => {
     const onClick = vi.fn();
     const { badge } = await render(<Badge onClick={onClick}>Vegetarian</Badge>);

@@ -41,7 +41,7 @@ const listClass = `m-0 box-border flex h-16 min-w-0 flex-1 list-none items-stret
 
 /**
  * A tab: the icon over a short label. The current page's tab has the accent wash; a press
- * scales it (not with reduced motion), and the colors ease.
+ * scales it (not with reduced motion), and the colors change at once.
  */
 const tabClass =
   "press relative box-border flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full px-0.5 no-underline " +

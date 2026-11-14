@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, type HTMLAttributes, type JSX, type Ref } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type HTMLAttributes, type JSX, type Ref } from "react";
 import { announce } from "~/lib/ouro/announce";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
@@ -22,7 +22,7 @@ export interface SyncStatusLabels {
   saving?: string | undefined;
   /** While changes wait on this device. @default "Offline: changes are kept on this device" */
   offline?: string | undefined;
-  /** When the server refused the changes. @default "Couldn't save" */
+  /** When the server refused the changes. @default "Not saved: the server refused the changes" */
   error?: string | undefined;
   /** The retry button's label. @default "Retry" */
   retry?: string | undefined;
@@ -61,10 +61,15 @@ const words: Record<keyof SyncStatusLabels, string> = {
   saved: "Saved",
   saving: "Saving…",
   offline: "Offline: changes are kept on this device",
-  error: "Couldn't save",
+  error: "Not saved: the server refused the changes",
   retry: "Retry",
 };
 const problems = new Set<SyncState>(["offline", "error"]);
+// Match Celebrate's time for the triggering control's state announcement (a switch's "off").
+// This fixed delay does not detect when a screen reader has finished speaking. Recovery keeps
+// the default delay: Retry's save moves focus to this line, and VoiceOver's usage hint for it
+// starts about then and swallows a later message.
+const SPEAK_DELAY_MS = 1500;
 
 const tones: Record<SyncState, string> = {
   saved: "text-[color-mix(in_oklab,var(--muted-foreground)_88%,var(--foreground))]",
@@ -127,7 +132,7 @@ function Line({
           data-ouro-control="sync-status"
           data-ouro-part="retry"
           onClick={onRetry}
-          className="relative ms-2 cursor-pointer rounded-sm border-0 bg-transparent p-0 font-medium text-foreground underline underline-offset-4 outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid pointer-fine:hover:decoration-2"
+          className="relative ms-2 cursor-pointer rounded-sm border-0 bg-transparent p-0 font-[inherit] text-[length:inherit] leading-[inherit] font-medium text-foreground underline underline-offset-4 outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid pointer-fine:hover:decoration-2"
         >
           <TouchTarget />
           {retry}
@@ -139,7 +144,7 @@ function Line({
 
 /**
  * One line that says where the person's changes are: Saved, Saving…, Offline (kept on this
- * device) or Couldn't save, each with its icon, and Retry while there is a problem. Screen
+ * device) or Not saved (the server refused the changes), each with its icon, and Retry while there is a problem. Screen
  * readers hear it only when a problem starts and when it clears, so every save is not
  * narrated. It keeps the height of its longest state, so a change never moves the page.
  * When Retry goes away while it has focus (the save it started is under way), focus moves to
@@ -148,7 +153,7 @@ function Line({
  * Use `toast()` instead to confirm a single action, and `Alert` for a problem that blocks the page.
  *
  * @group Feedback
- * @see https://ui.ouro.bot/docs/sync-status
+ * @see https://ui.ouroboros.bot/docs/sync-status
  *
  * @example
  * <SyncStatus status={navigator.onLine ? (pending ? "saving" : "saved") : "offline"} onRetry={flush} />
@@ -168,7 +173,8 @@ export function SyncStatus(props: SyncStatusProps): JSX.Element {
     ...rest
   } = props;
   const status: SyncState = (states as readonly string[]).includes(statusProp) ? (statusProp as SyncState) : "saved";
-  const word = { ...words, ...Object.fromEntries(Object.entries(labels ?? {}).filter(([, value]) => value !== undefined)) } as Record<keyof SyncStatusLabels, string>;
+  // Merged once per labels object, so an app that keeps its labels in a constant merges them once.
+  const word = useMemo(() => ({ ...words, ...Object.fromEntries(Object.entries(labels ?? {}).filter(([, value]) => value !== undefined)) }) as Record<keyof SyncStatusLabels, string>, [labels]);
   useAppearanceClassNameCheck(
     "SyncStatus",
     className,
@@ -191,10 +197,9 @@ export function SyncStatus(props: SyncStatusProps): JSX.Element {
   useEffect(() => {
     if (problems.has(status)) {
       troubled.current = true;
-      announce(word[status]);
+      return announce(word[status], { delayMs: SPEAK_DELAY_MS });
     } else if (status === "saved" && troubled.current) {
-      troubled.current = false;
-      announce(word.saved);
+      return announce(word.saved, { onWrite: () => { troubled.current = false; } });
     }
     // The words change with the status; a new translation alone is not news.
     // eslint-disable-next-line react-hooks/exhaustive-deps

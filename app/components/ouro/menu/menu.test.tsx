@@ -1,14 +1,16 @@
+import axe from "axe-core";
 import { createRef, StrictMode, useState, type AnchorHTMLAttributes, type ReactNode } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { commands, page, userEvent } from "vitest/browser";
+import { commands, page, server, userEvent } from "vitest/browser";
 import { Button } from "~/components/ouro/button/button";
 import { Tooltip } from "~/components/ouro/tooltip/tooltip";
 import {
   Menu,
   MenuBar,
   MenuCheckboxItem,
+  MenuEntries,
   MenuGroup,
   MenuItem,
   MenuRadioGroup,
@@ -20,6 +22,8 @@ import {
 } from "~/components/ouro/menu/menu";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
+import { pressTab } from "~/lib/ouro/testing/tab";
+import { pressDuringScroll } from "~/lib/ouro/testing/press";
 import { isTransparent } from "~/lib/ouro/testing/color";
 import { audit, axeExclude, describeFindings } from "~/lib/ouro/testing/axe";
 
@@ -30,6 +34,28 @@ function behind(element: Element): string {
     if (color !== "transparent" && !/rgba\(.*,\s*0\)$/.test(color)) return color;
   }
   return "rgb(255, 255, 255)";
+}
+
+
+/**
+ * Gives every Base UI focus guard on the page the role WebKit on Apple platforms gives it, where Base UI's FocusGuard
+ * makes it a button for VoiceOver and drops its aria-hidden. CI's WebKit runs on Linux, where the guards stay hidden.
+ */
+function guardsAsOnApple(): void {
+  for (const guard of document.querySelectorAll("[data-base-ui-focus-guard]")) {
+    guard.setAttribute("role", "button");
+    guard.removeAttribute("aria-hidden");
+  }
+}
+
+/** The gate's findings on the page, but for content outside a landmark: these tests render no main. */
+async function structureFindings() {
+  return (await audit({ include: [document.documentElement], exclude: axeExclude.map((selector) => [selector]) })).filter((finding) => finding.rule !== "region");
+}
+
+/** The menu bar's or a menu's own focus guards: the ones in it, not in a popup it owns. */
+function guardsIn(element: Element): Element[] {
+  return [...element.querySelectorAll("[data-base-ui-focus-guard]")];
 }
 
 
@@ -274,6 +300,45 @@ describe("Menu dropdown", () => {
 });
 
 describe("Menu items", () => {
+  it("shows an entry's icon before its label, at 16px, out of its name", async () => {
+    const icon = (
+      <svg viewBox="0 0 16 16" data-testid="pencil">
+        <path d="M2 14 14 2" />
+      </svg>
+    );
+    await render(<Menu trigger={<Button>Actions</Button>} items={[{ label: "Edit", icon, onClick: () => {} }, { label: "Copy link" }]} />);
+    await userEvent.click(page.getByRole("button", { name: "Actions" }));
+    await expect.element(page.getByRole("menuitem", { name: "Edit", exact: true })).toBeVisible();
+    const edit = item("Edit").element() as HTMLElement;
+    const svg = edit.querySelector("svg")!;
+    expect(svg.closest("[data-ouro-menu-icon]")!.getAttribute("aria-hidden")).toBe("true");
+    expect(svg.getBoundingClientRect().width).toBe(16);
+    const text = document.createRange();
+    const walker = document.createTreeWalker(edit, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode() && walker.currentNode.textContent !== "Edit");
+    text.selectNodeContents(walker.currentNode);
+    expect(svg.getBoundingClientRect().right).toBeLessThan(text.getBoundingClientRect().left);
+    expect(item("Copy link").element().querySelector("[data-ouro-menu-icon]")).toBeNull();
+  });
+
+  it("sets an entry's axAction as data-ax-action on its item or checkbox item, and nothing without one", async () => {
+    const items: MenuEntry[] = [
+      { label: "Mute", axAction: "mute" },
+      { type: "checkbox", label: "Captions", axAction: "toggle-captions" },
+      { label: "Leave" },
+      { type: "checkbox", label: "Noise suppression" },
+    ];
+    await render(<Menu trigger={<Button>Call</Button>} items={items} />);
+    await userEvent.click(page.getByRole("button", { name: "Call" }));
+    await expect.element(page.getByRole("menuitem", { name: "Mute" })).toHaveAttribute("data-ax-action", "mute");
+    // Its part attributes stay as they were.
+    await expect.element(page.getByRole("menuitem", { name: "Mute" })).toHaveAttribute("data-ouro-control", "menu");
+    await expect.element(page.getByRole("menuitem", { name: "Mute" })).toHaveAttribute("data-ouro-part", "item");
+    await expect.element(page.getByRole("menuitemcheckbox", { name: "Captions" })).toHaveAttribute("data-ax-action", "toggle-captions");
+    await expect.element(page.getByRole("menuitem", { name: "Leave" })).not.toHaveAttribute("data-ax-action");
+    await expect.element(page.getByRole("menuitemcheckbox", { name: "Noise suppression" })).not.toHaveAttribute("data-ax-action");
+  });
+
   it("shows a shortcut with Kbd at the end of the item", async () => {
     await openDropdown({}, <MenuItem shortcut={["mod", "e"]}>Edit</MenuItem>);
     const kbd = item("Edit").element().querySelector<HTMLElement>('[data-ouro="kbd"]')!;
@@ -511,6 +576,52 @@ describe("Menu items", () => {
     await expect.poll(() => menus().length).toBe(1);
   });
 
+  it("keeps an open submenu's focus guards out of its menu, where WebKit on Apple platforms makes them buttons", async () => {
+    await render(
+      <Menu trigger={<Button>Actions</Button>}>
+        <MenuItem>Edit</MenuItem>
+        <MenuSub label="Share">
+          <MenuItem>Copy link</MenuItem>
+        </MenuSub>
+      </Menu>,
+    );
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    await userEvent.keyboard("{ArrowDown}{ArrowRight}");
+    await expect.poll(() => menus().length).toBe(2);
+    const [parent, child] = menus();
+    expect(guardsIn(parent!)).toHaveLength(2);
+    guardsAsOnApple();
+    // The parent menu holds items only (aria-required-children); the submenu's own guards stay buttons for VoiceOver.
+    await expect.poll(() => guardsIn(parent!).map((guard) => [guard.getAttribute("role"), guard.getAttribute("aria-hidden")])).toEqual([
+      [null, "true"],
+      [null, "true"],
+    ]);
+    expect(describeFindings(await structureFindings())).toBe("");
+    expect(guardsIn(document.body).filter((guard) => !parent!.contains(guard)).map((guard) => guard.getAttribute("role"))).toContain("button");
+    expect(child!.closest("[data-ouro='menu-portal']")).not.toBeNull();
+    // Tab still stops on them: they keep their place in the focus order.
+    expect(guardsIn(parent!).map((guard) => guard.getAttribute("tabindex"))).toEqual(["0", "0"]);
+  });
+
+  it("leaves a dropdown's focus guards as WebKit on Apple platforms makes them, buttons that VoiceOver's cursor lands on", async () => {
+    await render(
+      <Menu trigger={<Button>Actions</Button>}>
+        <MenuItem>Edit</MenuItem>
+      </Menu>,
+    );
+    await userEvent.click(trigger());
+    await settled();
+    const beside = guardsIn(document.body).filter((guard) => guard.getAttribute("data-type") === "outside");
+    expect(beside).toHaveLength(2);
+    guardsAsOnApple();
+    // Hidden ones change on the next microtask; these stay buttons after it.
+    await act(async () => {});
+    expect(beside.map((guard) => guard.getAttribute("role"))).toEqual(["button", "button"]);
+    expect(document.querySelector("[data-ouro-menu-guards]")).toBeNull();
+  });
+
   it("renders every entry type from items", async () => {
     const onClick = vi.fn();
     const entries: MenuEntry[] = [
@@ -601,6 +712,50 @@ describe("Menu items", () => {
     expect(warnings()).toEqual([
       "[ouro-ui] Menu: the open popup renders outside every landmark, so screen reader users who move by landmark miss it. Fix: <OuroProvider portalContainer={popups}> around the app, with <div ref={popups} /> inside <main>.",
     ]);
+  });
+});
+
+describe("Menu focus", () => {
+  it("closes when focus moves outside it, so a forward Tab from before its trigger goes on to the trigger", async () => {
+    await render(
+      <>
+        <button type="button">Before</button>
+        <Menu trigger={<Button>Actions</Button>}>{basicItems}</Menu>
+        <button type="button">After</button>
+      </>,
+    );
+    await userEvent.click(trigger());
+    await settled();
+    const before = page.getByRole("button", { name: "Before", exact: true }).element() as HTMLElement;
+    await act(async () => before.focus());
+    await expect.poll(menu).toBeNull();
+    expect(document.activeElement).toBe(before);
+    // Left open, Base UI's focus guard before the trigger sent this Tab back to Before.
+    await pressTab();
+    expect(document.activeElement).toBe(trigger());
+    await pressTab();
+    expect(document.activeElement?.textContent).toBe("After");
+  });
+
+  it("stays open while focus is in it, in its submenu or on its trigger", async () => {
+    await render(
+      <Menu trigger={<Button>Actions</Button>}>
+        <MenuItem>Edit</MenuItem>
+        <MenuSub label="Share">
+          <MenuItem>Copy link</MenuItem>
+        </MenuSub>
+      </Menu>,
+    );
+    await userEvent.click(trigger());
+    await settled();
+    await act(async () => trigger().focus());
+    await act(nextFrame);
+    expect(menu()).not.toBeNull();
+    await act(async () => (item("Edit").element() as HTMLElement).focus());
+    await userEvent.keyboard("{ArrowDown}{ArrowRight}");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Copy link");
+    await act(nextFrame);
+    expect(menus()).toHaveLength(2);
   });
 });
 
@@ -882,6 +1037,219 @@ describe("Menu context trigger", () => {
   });
 });
 
+describe("Menu anchor", () => {
+  /** A list's one menu, opened by the app at a row: here, a button that opens it at a point or beside a row. */
+  function Shared({
+    at,
+    onCopy = () => {},
+    onChoose,
+    align,
+  }: {
+    at: (row: HTMLElement) => Element | { x: number; y: number };
+    onCopy?: () => void;
+    onChoose?: () => void;
+    align?: "start" | "end";
+  }) {
+    const [open, setOpen] = useState(false);
+    const [row, setRow] = useState<HTMLElement | null>(null);
+    return (
+      <>
+        <div data-testid="row" tabIndex={-1} style={{ width: 300, height: 40 }}>
+          A row
+        </div>
+        <Button
+          onClick={() => {
+            setRow(document.querySelector<HTMLElement>("[data-testid=row]"));
+            setOpen(true);
+          }}
+        >
+          Open
+        </Button>
+        <input aria-label="Elsewhere" />
+        {row && (
+          <Menu anchor={at(row)} open={open} onOpenChange={setOpen} aria-label="Actions for the row" returnFocus={row} {...(align ? { align } : {})}>
+            <MenuItem onClick={onCopy}>Copy</MenuItem>
+            <MenuItem onClick={onChoose}>Choose</MenuItem>
+          </Menu>
+        )}
+      </>
+    );
+  }
+  const row = () => document.querySelector<HTMLElement>("[data-testid=row]")!;
+
+  it("opens at a point the app gives, named by its aria-label, and puts focus back where the app says when it closes", async () => {
+    await render(<Shared at={(target) => ({ x: target.getBoundingClientRect().left + 40, y: target.getBoundingClientRect().top + 20 })} />);
+    // Where the menu is in each frame it is drawn: at the point from its first, never somewhere else first.
+    const drawn: { left: number; top: number }[] = [];
+    let watching = true;
+    const watch = () => {
+      const shown = menu()?.getBoundingClientRect();
+      if (shown) drawn.push({ left: shown.left, top: shown.top });
+      if (watching) requestAnimationFrame(watch);
+    };
+    requestAnimationFrame(watch);
+    await userEvent.click(page.getByRole("button", { name: "Open" }));
+    const element = await settled();
+    await expect.element(page.getByRole("menu", { name: "Actions for the row" })).toBeVisible();
+    expect(element.getAttribute("data-ouro-presentation")).toBe("menu");
+    // Focus moves into the menu on the frame after it opens (Base UI's), so Escape comes once it is there.
+    await expect.poll(() => element.contains(document.activeElement)).toBe(true);
+    watching = false;
+    const at = { left: row().getBoundingClientRect().left + 40, top: row().getBoundingClientRect().top + 20 };
+    expect(drawn.length).toBeGreaterThan(0);
+    for (const box of drawn) {
+      expect(Math.abs(box.left - at.left)).toBeLessThanOrEqual(2);
+      expect(Math.abs(box.top - at.top)).toBeLessThanOrEqual(2);
+    }
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(menu).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(row());
+  });
+
+  it("opens beside an element, as a bottom sheet below 640px, and at a point as a menu", async () => {
+    await render(<Shared at={(target) => target} />);
+    await userEvent.click(page.getByRole("button", { name: "Open" }));
+    const beside = (await settled()).getBoundingClientRect();
+    expect(Math.abs(beside.top - row().getBoundingClientRect().bottom - 4)).toBeLessThanOrEqual(2);
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(menu).toBeNull();
+    await page.viewport(390, 844);
+    await userEvent.click(page.getByRole("button", { name: "Open" }));
+    expect((await settled()).getAttribute("data-ouro-presentation")).toBe("sheet");
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(menu).toBeNull();
+    await act(async () => roots.pop()!.unmount());
+    await render(<Shared at={() => ({ x: 20, y: 20 })} />);
+    await userEvent.click(page.getByRole("button", { name: "Open" }));
+    expect((await settled()).getAttribute("data-ouro-presentation")).toBe("menu");
+  });
+
+  it("leaves focus where a chosen item moved it", async () => {
+    const onChoose = () => page.getByRole("textbox", { name: "Elsewhere" }).element().focus();
+    await render(<Shared at={(target) => target} onChoose={onChoose} />);
+    await userEvent.click(page.getByRole("button", { name: "Open" }));
+    await settled();
+    await userEvent.click(item("Choose"));
+    await expect.poll(menu).toBeNull();
+    expect(document.activeElement).toBe(page.getByRole("textbox", { name: "Elsewhere" }).element());
+  });
+
+  it("leaves focus where a chosen item moved it once the menu had gone, as a dialog it opens does", async () => {
+    const field = () => page.getByRole("textbox", { name: "Elsewhere" }).element() as HTMLElement;
+    await render(<Shared at={(target) => target} onChoose={() => setTimeout(() => field().focus())} />);
+    await userEvent.click(page.getByRole("button", { name: "Open" }));
+    await settled();
+    await userEvent.click(item("Choose"));
+    await expect.poll(menu).toBeNull();
+    await new Promise((done) => setTimeout(done, 50));
+    expect(document.activeElement).toBe(field());
+  });
+
+  it("puts focus back without scrolling to it", async () => {
+    function Far() {
+      const [open, setOpen] = useState(true);
+      const [to, setTo] = useState<HTMLElement | null>(null);
+      return (
+        <div data-testid="scroller" style={{ height: 100, overflow: "auto" }}>
+          <div style={{ height: 600 }} />
+          <div ref={setTo} data-testid="far" tabIndex={-1}>
+            Far
+          </div>
+          <Menu anchor={{ x: 20, y: 20 }} open={open} onOpenChange={setOpen} aria-label="Actions" returnFocus={to}>
+            <MenuItem>Copy</MenuItem>
+          </Menu>
+        </div>
+      );
+    }
+    await render(<Far />);
+    await settled();
+    await userEvent.click(item("Copy"));
+    await expect.poll(menu).toBeNull();
+    await expect.poll(() => document.activeElement?.getAttribute("data-testid")).toBe("far");
+    expect(document.querySelector("[data-testid=scroller]")!.scrollTop).toBe(0);
+  });
+
+  it("puts focus back on the returnFocus of its latest render", async () => {
+    let retarget: (to: HTMLElement) => void = () => {};
+    function Moving() {
+      const [open, setOpen] = useState(true);
+      const [to, setTo] = useState<HTMLElement | undefined>(undefined);
+      retarget = setTo;
+      return (
+        <>
+          <div data-testid="first" tabIndex={-1}>
+            First
+          </div>
+          <div data-testid="second" tabIndex={-1}>
+            Second
+          </div>
+          <Menu anchor={{ x: 20, y: 80 }} open={open} onOpenChange={setOpen} aria-label="Actions" returnFocus={to}>
+            <MenuItem>Copy</MenuItem>
+          </Menu>
+        </>
+      );
+    }
+    await render(<Moving />);
+    await settled();
+    const second = document.querySelector<HTMLElement>("[data-testid=second]")!;
+    await act(async () => retarget(document.querySelector<HTMLElement>("[data-testid=first]")!));
+    await act(async () => retarget(second));
+    await userEvent.click(item("Copy"));
+    await expect.poll(menu).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(second);
+  });
+
+  it("lines up with an element by align, and starts at a point whatever the align", async () => {
+    await render(<Shared at={(target) => target} align="end" />);
+    await userEvent.click(page.getByRole("button", { name: "Open" }));
+    const beside = (await settled()).getBoundingClientRect();
+    expect(Math.abs(beside.right - row().getBoundingClientRect().right)).toBeLessThanOrEqual(2);
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(menu).toBeNull();
+    await act(async () => roots.pop()!.unmount());
+    await render(<Shared at={(target) => ({ x: target.getBoundingClientRect().left + 200, y: target.getBoundingClientRect().top + 20 })} align="end" />);
+    await userEvent.click(page.getByRole("button", { name: "Open" }));
+    const at = (await settled()).getBoundingClientRect();
+    expect(Math.abs(at.left - (row().getBoundingClientRect().left + 200))).toBeLessThanOrEqual(2);
+  });
+
+  it("closes when focus moves outside it", async () => {
+    await render(<Shared at={(target) => target} />);
+    await userEvent.click(page.getByRole("button", { name: "Open" }));
+    await settled();
+    await act(async () => page.getByRole("textbox", { name: "Elsewhere" }).element().focus());
+    await expect.poll(menu).toBeNull();
+  });
+
+  it("puts entries after items of its own with MenuEntries", async () => {
+    const onCopy = vi.fn();
+    await render(
+      <Menu anchor={{ x: 20, y: 20 }} open onOpenChange={() => {}} aria-label="Actions">
+        <MenuItem>Reply</MenuItem>
+        <MenuSeparator />
+        <MenuEntries entries={[{ label: "Copy", onClick: onCopy }, { type: "separator" }, { label: "Delete" }]} />
+      </Menu>,
+    );
+    const element = await settled();
+    expect([...element.querySelectorAll("[role=menuitem]")].map((entry) => entry.textContent)).toEqual(["Reply", "Copy", "Delete"]);
+    expect(element.querySelectorAll("[role=separator]")).toHaveLength(2);
+    await userEvent.click(item("Copy"));
+    expect(onCopy).toHaveBeenCalledOnce();
+  });
+
+  it("throws the exact fix without open or aria-label", () => {
+    const fix = `<Menu anchor={row} open={open} onOpenChange={setOpen} aria-label="Actions for Ana's message">`;
+    const point = { x: 0, y: 0 };
+    const Loose = Menu as unknown as (props: Record<string, unknown>) => ReactNode;
+    expect(() => renderToString(<Loose anchor={point} aria-label="Actions" items={[{ label: "Copy" }]} />)).toThrow(
+      `[ouro-ui] Menu: anchor needs open: the app opens a menu it anchors. Fix: ${fix}.`,
+    );
+    expect(() => renderToString(<Loose anchor={point} open={false} onOpenChange={() => {}} items={[{ label: "Copy" }]} />)).toThrow(
+      `[ouro-ui] Menu: anchor needs aria-label: no button names the menu. Fix: ${fix}.`,
+    );
+  });
+});
+
 describe("MenuBar", () => {
   async function renderBar() {
     await render(
@@ -921,6 +1289,58 @@ describe("MenuBar", () => {
     await userEvent.hover(barTrigger("Edit"));
     await expect.poll(() => menu()?.textContent).toBe("Undo");
     expect(barTrigger("Edit").element().hasAttribute("data-popup-open")).toBe(true);
+  });
+
+  it("holds only its menus while one is open, where WebKit on Apple platforms makes the focus guards beside it buttons", async () => {
+    await renderBar();
+    const bar = page.getByRole("menubar", { name: "Recipe editor" }).element();
+    await userEvent.click(barTrigger("File"));
+    await settled();
+    expect(guardsIn(bar)).toHaveLength(2);
+    guardsAsOnApple();
+    await expect.poll(() => guardsIn(bar).every((guard) => !guard.hasAttribute("role") && guard.getAttribute("aria-hidden") === "true")).toBe(true);
+    expect(describeFindings(await structureFindings())).toBe("");
+    // The next menu's guards are new elements, and are hidden too.
+    await userEvent.hover(barTrigger("Edit"));
+    await expect.poll(() => menu()?.textContent).toBe("Undo");
+    guardsAsOnApple();
+    await expect.poll(() => guardsIn(bar).map((guard) => guard.getAttribute("role"))).toEqual([null, null]);
+  });
+
+  it("moves focus from an open menu past the bar on Tab, closing it, and back to its trigger on Shift+Tab, with its guards hidden as on Apple platforms", async () => {
+    await render(
+      <>
+        <button type="button">Before</button>
+        <MenuBar aria-label="Recipe editor">
+          <Menu label="File">
+            <MenuItem>New</MenuItem>
+          </Menu>
+        </MenuBar>
+        <button type="button">After</button>
+      </>,
+    );
+    const bar = page.getByRole("menubar").element();
+    for (const [shift, lands] of [[false, "After"], [true, "File"]] as const) {
+      (barTrigger("File").element() as HTMLElement).focus();
+      await userEvent.keyboard("{ArrowDown}");
+      await expect.poll(() => document.activeElement?.textContent).toBe("New");
+      guardsAsOnApple();
+      await expect.poll(() => guardsIn(bar).map((guard) => guard.getAttribute("role"))).toEqual([null, null]);
+      await pressTab({ shift });
+      await expect.poll(() => document.activeElement?.textContent).toBe(lands);
+      if (!shift) await expect.poll(menu).toBeNull();
+      else await userEvent.keyboard("{Escape}");
+    }
+  });
+
+  it("keeps its menus' gap, closed and open", async () => {
+    await renderBar();
+    const gap = parseFloat(getComputedStyle(page.getByRole("menubar").element()).columnGap);
+    const between = () => barTrigger("Edit").element().getBoundingClientRect().left - barTrigger("File").element().getBoundingClientRect().right;
+    expect(between()).toBeCloseTo(gap, 1);
+    await userEvent.click(barTrigger("File"));
+    await settled();
+    expect(between()).toBeCloseTo(gap, 1);
   });
 
   it("gives its triggers a 32px row with a fine pointer", async () => {
@@ -1039,18 +1459,19 @@ describe("Menu server rendering", () => {
 });
 
 describe("Menu dev messages", () => {
-  const OPEN_FIX = "Pass trigger={<Button>…</Button>} for a dropdown, contextTrigger={<div>…</div>} for a right-click or long-press area, or label inside <MenuBar>";
+  const OPEN_FIX =
+    "Pass trigger={<Button>…</Button>} for a dropdown, contextTrigger={<div>…</div>} for a right-click or long-press area, label inside <MenuBar>, or anchor={element} with open for a menu the app opens";
 
   it("throws the exact fix with no way to open", () => {
     // @ts-expect-error -- no trigger, contextTrigger or label
     const element = <Menu>{basicItems}</Menu>;
-    expect(() => renderToString(element)).toThrow(`[ouro-ui] Menu: needs trigger, contextTrigger or label. Fix: ${OPEN_FIX}.`);
+    expect(() => renderToString(element)).toThrow(`[ouro-ui] Menu: needs trigger, contextTrigger, label or anchor. Fix: ${OPEN_FIX}.`);
   });
 
   it("throws the exact fix with two ways to open", () => {
     // @ts-expect-error -- both trigger and contextTrigger
     const element = <Menu trigger={<Button>A</Button>} contextTrigger={<div>B</div>}>{basicItems}</Menu>;
-    expect(() => renderToString(element)).toThrow(`[ouro-ui] Menu: takes one of trigger, contextTrigger and label. Fix: ${OPEN_FIX}.`);
+    expect(() => renderToString(element)).toThrow(`[ouro-ui] Menu: takes one of trigger, contextTrigger, label and anchor. Fix: ${OPEN_FIX}.`);
   });
 
   it("throws the exact fix for label outside a MenuBar, and for a trigger inside one", () => {
@@ -1188,5 +1609,209 @@ describe("Menu dev messages", () => {
       </MenuBar>,
     );
     expect(warnings()).toEqual(['[ouro-ui] MenuBar: "bg-muted" sets appearance, and className is for layout only. Fix: wrap the MenuBar in an element with that class.']);
+  });
+});
+
+describe("Menu and the page's scroll", () => {
+  // A long page with smooth scrolling and a scroll padding under its sticky header (a docs site's,
+  // say), scrolled to 2000px, with the trigger in that header. Opening focuses and scrolls to what
+  // the popup holds, which the browser did for the page too, as far as its end.
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  afterEach(() => {
+    document.documentElement.removeAttribute("style");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  });
+
+  for (const reduced of [false, true]) {
+    for (const input of ["pointer", "keyboard"] as const) {
+      it(`leaves the page where it is as it opens and closes, by ${input}${reduced ? ", with reduced motion" : ""}`, async () => {
+        if (reduced) await commands.emulateMedia({ reducedMotion: "reduce" });
+        await render(
+          <div style={{ height: 5000 }}>
+            <header style={{ position: "sticky", top: 0, height: 100 }}>
+              <Menu trigger={<Button>Actions</Button>}>{basicItems}</Menu>
+            </header>
+          </div>,
+        );
+        window.scrollTo({ top: 2000, behavior: "instant" });
+        Object.assign(document.documentElement.style, { scrollBehavior: "smooth", scrollPaddingTop: "120px" });
+        const painted: number[] = [];
+        let reading = true;
+        const read = () => {
+          painted.push(window.scrollY);
+          if (reading) requestAnimationFrame(read);
+        };
+        requestAnimationFrame(read);
+        const opener = document.querySelector<HTMLElement>('[data-ouro="button"]')!;
+        if (input === "pointer") {
+          await commands.pointerPress({ selector: '[data-ouro="button"]', action: "down" });
+          await commands.pointerPress({ action: "up" });
+        } else {
+          opener.focus({ preventScroll: true });
+          await userEvent.keyboard("{Enter}");
+        }
+        await expect.poll(() => {
+          const open = menu();
+          return Boolean(open?.hasAttribute("data-open") && !open.hasAttribute("data-starting-style") && open.getAnimations().length === 0);
+        }).toBe(true);
+        await frame();
+        await frame();
+        await userEvent.keyboard("{Escape}");
+        await expect.poll(() => {
+          const open = menu();
+          return !open || (open.hasAttribute("data-closed") && open.getAnimations().length === 0);
+        }).toBe(true);
+        await frame();
+        await frame();
+        reading = false;
+        expect(painted.length).toBeGreaterThan(2);
+        expect(new Set(painted)).toEqual(new Set([2000]));
+      });
+    }
+  }
+
+  for (const reduced of [false, true]) {
+    it(`stays open and stops the page where it is, pressed mid-scroll${reduced ? ", with reduced motion" : ""}`, async () => {
+      // A smooth scroll to an anchor is under way when the person presses the trigger. The menu opens
+      // on pointerdown and renders a little later; had the page gone on scrolling, it would no longer
+      // be where the press found it. The pointer goes to one place in the window (the fixed mark's),
+      // which is over the tall trigger wherever the page is between 2000 and 4000, the two places the
+      // page sways between until the press. The menu opens beside the trigger, away from the pointer.
+      if (reduced) await commands.emulateMedia({ reducedMotion: "reduce" });
+      await render(
+        <div style={{ height: 9000, paddingTop: 2140 }}>
+          <Menu side="right" trigger={<Button style={{ height: 2500 }}>Actions</Button>}>{basicItems}</Menu>
+          <div data-press-here="" style={{ position: "fixed", top: 310, left: 420, width: 1, height: 1, pointerEvents: "none" }} />
+          <div data-rest-here="" style={{ position: "fixed", top: 100, left: 100, width: 10, height: 10 }} />
+        </div>,
+      );
+      await userEvent.hover(document.querySelector("[data-rest-here]")!);
+      const { pressedAt, moving } = await pressDuringScroll("[data-press-here]", { from: 2000, to: 4000, scroll: "underway" });
+      await expect.poll(() => {
+        const open = menu();
+        return Boolean(open?.hasAttribute("data-open") && !open.hasAttribute("data-starting-style") && open.getAnimations().length === 0);
+      }).toBe(true);
+      await frame();
+      await frame();
+      expect(menu()!.hasAttribute("data-open")).toBe(true);
+      expect(window.scrollY).toBe(pressedAt);
+      // The page was moving when the press found it.
+      expect(moving).toBe(true);
+    });
+  }
+
+  for (const reduced of [false, true]) {
+    it(`stays open and stops the page where it is, pressed mid-scroll on a menubar's trigger${reduced ? ", with reduced motion" : ""}`, async () => {
+      // The bar's trigger is 44px tall, so the style below makes it as tall as the dropdown's
+      // trigger above, for the press to stay on it while the page sways.
+      if (reduced) await commands.emulateMedia({ reducedMotion: "reduce" });
+      await render(
+        <div style={{ height: 9000, paddingTop: 2140 }}>
+          <style>{'[data-ouro-part="bar-trigger"] { height: 2500px; }'}</style>
+          <MenuBar>
+            <Menu label="Actions">{basicItems}</Menu>
+          </MenuBar>
+          <div data-press-here="" style={{ position: "fixed", top: 310, left: 420, width: 1, height: 1, pointerEvents: "none" }} />
+          <div data-rest-here="" style={{ position: "fixed", top: 100, left: 100, width: 10, height: 10 }} />
+        </div>,
+      );
+      await userEvent.hover(document.querySelector("[data-rest-here]")!);
+      const { pressedAt, moving } = await pressDuringScroll("[data-press-here]", { from: 2000, to: 4000, scroll: "underway" });
+      await expect.poll(() => {
+        const open = menu();
+        return Boolean(open?.hasAttribute("data-open") && !open.hasAttribute("data-starting-style") && open.getAnimations().length === 0);
+      }).toBe(true);
+      await frame();
+      await frame();
+      expect(menu()!.hasAttribute("data-open")).toBe(true);
+      expect(window.scrollY).toBe(pressedAt);
+      expect(moving).toBe(true);
+    });
+
+    it(`stays open and stops the page where it is, right-pressed mid-scroll on a context menu's area${reduced ? ", with reduced motion" : ""}`, async () => {
+      // The right button's press is the one that opens a context menu, at the pointer. The area is
+      // as tall as the dropdown's trigger above, so the press stays on it while the page sways.
+      if (reduced) await commands.emulateMedia({ reducedMotion: "reduce" });
+      await render(
+        <div style={{ height: 9000, paddingTop: 2140 }}>
+          <Menu contextTrigger={<div style={{ width: 300, height: 2500 }}>Recipe card</div>}>{basicItems}</Menu>
+          <div data-press-here="" style={{ position: "fixed", top: 310, left: 420, width: 1, height: 1, pointerEvents: "none" }} />
+          <div data-rest-here="" style={{ position: "fixed", top: 100, left: 100, width: 10, height: 10 }} />
+        </div>,
+      );
+      await userEvent.hover(document.querySelector("[data-rest-here]")!);
+      const { pressedAt, moving } = await pressDuringScroll("[data-press-here]", { from: 2000, to: 4000, scroll: "underway", button: "right" });
+      await expect.poll(() => {
+        const open = menu();
+        return Boolean(open?.hasAttribute("data-open") && !open.hasAttribute("data-starting-style") && open.getAnimations().length === 0);
+      }).toBe(true);
+      await frame();
+      await frame();
+      expect(menu()!.hasAttribute("data-open")).toBe(true);
+      expect(window.scrollY).toBe(pressedAt);
+      expect(moving).toBe(true);
+    });
+  }
+});
+
+/**
+ * Base UI puts focus guards around each popup that holds focus. Plain axe reports them, and the
+ * gate leaves them out (axeExclude).
+ */
+describe("Menu focus guards", () => {
+  const GUARD_RULES = ["aria-hidden-focus", "aria-command-name"];
+  const guards = () => [...document.querySelectorAll<HTMLElement>("[data-base-ui-focus-guard]")];
+  /** The rule axe reports the open guards under: role="button" on Apple platforms' WebKit (for VoiceOver), else aria-hidden. */
+  const guardRule = () => (guards()[0]?.getAttribute("role") === "button" ? "aria-command-name" : "aria-hidden-focus");
+
+  /** Renders `node` in a main landmark whose OuroProvider portals popups into it, as an app places a menu. */
+  async function renderInMain(node: ReactNode) {
+    const main = document.createElement("main");
+    main.innerHTML = "<h1>Recipes</h1>";
+    document.body.append(main);
+    mounted.push(main);
+    await render(<OuroProvider portalContainer={main}>{node}</OuroProvider>, main);
+  }
+
+  /**
+   * Plain axe, with nothing excluded, reports each guard under guardRule(). In Chromium the report is
+   * undecided (`incomplete`), not a violation, because axe cannot tell whether a guard is tabbable while
+   * a modal popup is open.
+   */
+  async function expectGuardsReported() {
+    expect(guards().length).toBeGreaterThan(0);
+    const rule = guardRule();
+    const results = await axe.run(document.documentElement);
+    const nodes = (list: axe.Result[]) => list.filter((result) => GUARD_RULES.includes(result.id)).flatMap((result) => result.nodes.map((node) => ({ rule: result.id, html: node.html })));
+    const reported = [...nodes(results.violations), ...nodes(results.incomplete)];
+    expect(reported.length).toBeGreaterThan(0);
+    expect(reported.every((entry) => entry.rule === rule && entry.html.includes("data-base-ui-focus-guard"))).toBe(true);
+    if (server.browser === "chromium") expect(nodes(results.violations)).toEqual([]);
+  }
+
+  const gated = () => audit({ include: [document.documentElement], exclude: axeExclude.map((selector) => [selector]) });
+
+  it("reports a context menu's focus guards to plain axe, and the gate passes with them left out", async () => {
+    await renderInMain(
+      <Menu contextTrigger={<div data-testid="area" style={{ width: 300, height: 200 }}>Recipe card text</div>}>
+        <MenuItem onClick={() => {}}>Copy</MenuItem>
+      </Menu>,
+    );
+    await userEvent.click(document.querySelector<HTMLElement>("[data-testid=area]")!, { button: "right", position: { x: 40, y: 30 } });
+    await settled();
+    await expectGuardsReported();
+    expect(describeFindings(await gated())).toBe("");
+  });
+
+  it("reports a trigger menu's focus guards to plain axe, and the gate passes with them left out", async () => {
+    await renderInMain(
+      <Menu trigger={<Button>Actions</Button>}>
+        <MenuItem onClick={() => {}}>Copy</MenuItem>
+      </Menu>,
+    );
+    await userEvent.click(trigger());
+    await settled();
+    await expectGuardsReported();
+    expect(describeFindings(await gated())).toBe("");
   });
 });

@@ -43,7 +43,7 @@ test("a screen reader finds every toast and its buttons in the collapsed stack, 
   await holdClock(page);
   const region = page.getByRole("region", { name: "Notifications" });
   // Roles as assistive technology gets them: nothing hidden from it counts.
-  await expect(region.getByRole("alertdialog", { name: "Couldn't sync" })).toBeVisible();
+  await expect(region.getByRole("alertdialog", { name: "Not synced: the server didn't answer" })).toBeVisible();
   await expect(region.getByRole("dialog")).toHaveCount(2);
   await expect(region.getByRole("button", { name: "Undo" })).toHaveCount(1);
   await expect(region.getByRole("button", { name: "Dismiss" })).toHaveCount(3);

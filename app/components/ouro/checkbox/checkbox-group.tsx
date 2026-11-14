@@ -191,7 +191,7 @@ function Choices(props: {
  * yes-or-no choice, and `Fieldset` to group different fields.
  *
  * @group Forms
- * @see https://ui.ouro.bot/docs/checkbox-group
+ * @see https://ui.ouroboros.bot/docs/checkbox-group
  *
  * @example
  * <CheckboxGroup

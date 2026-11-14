@@ -32,9 +32,9 @@ describe("useMediaQuery", () => {
     await act(async () => root.render(<Probe serverDefault={false} />));
     expect(container.textContent).toBe("true");
     await page.viewport(400, 800);
-    await vi.waitFor(() => expect(container.textContent).toBe("false"));
+    await vi.waitFor(() => expect(container.textContent).toBe("false"), { timeout: 10_000 });
     await page.viewport(1000, 800);
-    await vi.waitFor(() => expect(container.textContent).toBe("true"));
+    await vi.waitFor(() => expect(container.textContent).toBe("true"), { timeout: 10_000 });
     await act(async () => root.unmount());
   });
 

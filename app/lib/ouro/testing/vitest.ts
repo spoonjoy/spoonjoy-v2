@@ -44,14 +44,14 @@ export interface OuroTestOptions {
  * Vitest browser projects that run Ouro UI's tests in your app: one project per
  * browser, plus `ouro-touch` (Chromium as a 390x844 touch phone) for files named
  * `*.touch.test.tsx`. They register Ouro UI's browser commands (`drag`, `flick`, `tap`,
- * `touchDrag`, `touchStep`, `emulateMedia`, `pointerPress`, `pageZoom`, `resetPageZoom`, `setPageZoom`,
+ * `doubleTap`, `touchDrag`, `touchStep`, `emulateMedia`, `pointerPress`, `pageZoom`, `resetPageZoom`, `setPageZoom`,
  * `restoreTouch`) and the setup that fails a test on anything it writes to the console (a React act() warning, a development message). In `ouro-touch`, a test
  * that leaves the page zoomed fails too (rotate the viewport with `rotate` from testing/rotate.ts),
  * and every test starts with touch emulation on, even after a failure's screenshot dropped it.
  * `pressTint` from testing/press.ts holds the mouse down on an element and proves its `:active` tint.
  * Each project extends your root config, so your Vite plugins and aliases apply. Needs
  * Playwright's browsers: `npx playwright install chromium webkit`. Needs Vitest 4.1.11 or
- * later; on Vitest 4, pass `page` (https://ui.ouro.bot/docs/testing.md).
+ * later; on Vitest 4, pass `page` (https://ui.ouroboros.bot/docs/testing.md).
  *
  * @example
  * // vitest.config.ts
@@ -77,6 +77,7 @@ export function ouroTestProjects({
   page,
 }: OuroTestOptions): TestProjectInlineConfiguration[] {
   const setupFiles = [css, fileURLToPath(new URL("./setup.ts", import.meta.url))];
+  const mouseSetupFiles = [...setupFiles, fileURLToPath(new URL("./pointer-setup.ts", import.meta.url))];
   const touchInclude = include.map((glob) => glob.replace(/\.test\.(\{[^}]*\}|\w+)$/, ".touch.test.$1"));
   const exclude = [...configDefaults.exclude, "**/*.touch.test.{ts,tsx}", "**/*.visual.test.{ts,tsx}"];
   // Tests wait on conditions (`expect.poll`), never on fixed timers. A loaded CI runner
@@ -87,7 +88,7 @@ export function ouroTestProjects({
       extends: true as const,
       test: {
         name: `ouro-${browser}`,
-        setupFiles,
+        setupFiles: mouseSetupFiles,
         expect: expectOptions,
         include,
         exclude,

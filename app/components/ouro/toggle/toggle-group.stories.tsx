@@ -57,7 +57,8 @@ const meta = {
   args: { label: "Alignment", items: alignment, defaultValue: "left" },
   argTypes: {
     variant: { control: "inline-radio", options: ["plain", "outline"] },
-    size: { control: "inline-radio", options: ["sm", "md", "lg"] },
+    size: { control: "inline-radio", options: ["xs", "sm", "md", "lg"] },
+    shape: { control: "inline-radio", options: ["rect", "pill"] },
     hideLabel: { control: "boolean" },
     disabled: { control: "boolean" },
   },
@@ -98,6 +99,40 @@ export const Controlled: Story = {
         >
           Lemon ricotta pasta
         </span>
+      </Surface>
+    );
+  },
+};
+
+const filters = [
+  { value: "all", label: "All" },
+  { value: "unread", label: "Unread" },
+  { value: "mentions", label: "Mentions" },
+  { value: "chats", label: "Chats" },
+  { value: "channels", label: "Channels" },
+];
+
+/**
+ * Filter chips: `shape="pill"` and `size="xs"`, 24px with a mouse and a 44px touch target on
+ * phones. Pressing the pressed chip again goes back to All.
+ */
+export const Pills: Story = {
+  render: function Render() {
+    const [filter, setFilter] = useState("all");
+    return (
+      <Surface>
+        <ToggleGroup
+          label="Show"
+          hideLabel
+          variant="outline"
+          shape="pill"
+          size="xs"
+          items={filters}
+          value={filter}
+          onValueChange={(next) => setFilter(next ?? "all")}
+        />
+        <ToggleGroup label="Sort" shape="pill" size="xs" items={[{ value: "recent", label: "Recent" }, { value: "name", label: "Name" }]} defaultValue="recent" />
+        <ToggleGroup label="Text style" hideLabel multiple variant="outline" shape="pill" size="xs" items={styles} defaultValue={["bold"]} />
       </Surface>
     );
   },

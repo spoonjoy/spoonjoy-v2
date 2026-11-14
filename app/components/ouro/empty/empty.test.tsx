@@ -6,6 +6,7 @@ import { page } from "vitest/browser";
 import { Button } from "~/components/ouro/button/button";
 import { Empty } from "~/components/ouro/empty/empty";
 import { act } from "~/lib/ouro/testing/act";
+import { computedValue } from "~/lib/ouro/testing/computed";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -68,7 +69,7 @@ describe("Empty", () => {
     const { el } = await render(<Empty title="Nothing here" variant="plain" align="start" />);
     const style = getComputedStyle(el);
     expect(style.borderTopWidth).toBe("0px");
-    expect(style.alignItems).toBe("flex-start");
+    expect(style.alignItems).toBe(computedValue("align-items", "flex-start"));
     expect(style.textAlign).toBe("start");
   });
 

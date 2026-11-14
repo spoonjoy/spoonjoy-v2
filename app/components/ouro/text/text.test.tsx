@@ -67,6 +67,13 @@ describe("Text", () => {
     expect(el.scrollWidth).toBeGreaterThan(el.clientWidth);
   });
 
+  it("wraps prettily so a paragraph does not end on one word, and drops it with truncate", async () => {
+    const pretty = (await render(<Text>{long}</Text>)).el;
+    expect(getComputedStyle(pretty).textWrapStyle).toBe("pretty");
+    const cut = (await render(<Text truncate>{long}</Text>)).el;
+    expect(cut.className).not.toContain("text-pretty");
+  });
+
   it("clamps to a number of lines", async () => {
     const { el } = await render(
       <>

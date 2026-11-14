@@ -44,6 +44,7 @@ afterEach(async () => {
   await act(async () => roots.splice(0).forEach((root) => root.unmount()));
   for (const node of mounted) node.remove();
   mounted = [];
+  for (const region of document.querySelectorAll("[data-ouro-announcer]")) region.remove();
 });
 
 describe("SyncStatus", () => {
@@ -51,7 +52,7 @@ describe("SyncStatus", () => {
     ["saved", "Saved"],
     ["saving", "Saving…"],
     ["offline", "Offline: changes are kept on this device"],
-    ["error", "Couldn't save"],
+    ["error", "Not saved: the server refused the changes"],
   ] as const)("says %s with its icon", async (state, words) => {
     const { status, line } = await render(<SyncStatus status={state} />);
     expect(status.getAttribute("data-status")).toBe(state);
@@ -96,37 +97,150 @@ describe("SyncStatus", () => {
     expect(heights[0]).toBeGreaterThan(20);
   });
 
+  it("sets Retry in the sentence's face, size and line height, whatever the app's own rule for buttons says", async () => {
+    // As an app's stylesheet gives its buttons their own face, in a sentence set in another.
+    const rule = document.createElement("style");
+    rule.textContent = "@layer base { button { font-family: monospace; font-size: 22px; line-height: 3; } }";
+    document.head.append(rule);
+    try {
+      const view = await render(
+        <div style={{ width: 160, fontFamily: "serif" }}>
+          <SyncStatus status="saved" onRetry={() => {}} />
+        </div>,
+      );
+      const saved = view.status.getBoundingClientRect().height;
+      await view.rerender(
+        <div style={{ width: 160, fontFamily: "serif" }}>
+          <SyncStatus status="offline" onRetry={() => {}} />
+        </div>,
+      );
+      const sentence = getComputedStyle(view.line);
+      const button = getComputedStyle(view.retry!);
+      expect([button.fontFamily, button.fontSize, button.lineHeight]).toEqual([sentence.fontFamily, sentence.fontSize, sentence.lineHeight]);
+      expect(view.status.getBoundingClientRect().height).toBe(saved);
+    } finally {
+      rule.remove();
+    }
+  });
+
   it("speaks when a problem starts and when changes are saved again, and not for every save", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const announced = watchAnnouncements();
     try {
       const { rerender } = await render(<SyncStatus status="saved" />);
       await rerender(<SyncStatus status="saving" />);
       await rerender(<SyncStatus status="saved" />);
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      await act(() => vi.advanceTimersByTimeAsync(1500));
       expect(announced.count("Saved")).toBe(0);
       expect(announced.count("Saving…")).toBe(0);
       await rerender(<SyncStatus status="offline" />);
-      await expect.poll(() => announced.count("Offline: changes are kept on this device")).toBe(1);
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      expect(announced.count("Offline: changes are kept on this device")).toBe(1);
       await rerender(<SyncStatus status="saving" />);
       await rerender(<SyncStatus status="saved" />);
-      await expect.poll(() => announced.count("Saved")).toBe(1);
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      expect(announced.count("Saved")).toBe(1);
       await rerender(<SyncStatus status="error" />);
-      await expect.poll(() => announced.count("Couldn't save")).toBe(1);
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      expect(announced.count("Not saved: the server refused the changes")).toBe(1);
     } finally {
       announced.stop();
+      vi.useRealTimers();
     }
   });
 
   it("does not speak again when only the words change", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const announced = watchAnnouncements();
     try {
       const { rerender } = await render(<SyncStatus status="offline" labels={{ offline: "Offline" }} />);
-      await expect.poll(() => announced.count("Offline")).toBe(1);
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      expect(announced.count("Offline")).toBe(1);
       await rerender(<SyncStatus status="offline" labels={{ offline: "Hors ligne" }} />);
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      await act(() => vi.advanceTimersByTimeAsync(1500));
       expect(announced.count("Hors ligne")).toBe(0);
     } finally {
       announced.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ["offline", "Offline: changes are kept on this device"],
+    ["error", "Not saved: the server refused the changes"],
+  ] as const)("leaves time for a control's state announcement before speaking %s, and speaks its recovery without that wait", async (status, words) => {
+    const { line, rerender } = await render(<SyncStatus status="saved" />);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await rerender(<SyncStatus status={status} />);
+      expect(line.textContent).toBe(words);
+      const region = document.querySelector<HTMLElement>("[data-ouro-announcer]")!;
+      vi.advanceTimersByTime(1499);
+      expect(region.textContent).toBe("");
+      vi.advanceTimersByTime(1);
+      expect(region.textContent).toBe(words);
+
+      await rerender(<SyncStatus status="saved" />);
+      expect(line.textContent).toBe("Saved");
+      vi.advanceTimersByTime(99);
+      expect(region.textContent).toBe("");
+      vi.advanceTimersByTime(1);
+      expect(region.textContent).toBe("Saved");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["offline", "saved"] as const)("cancels a pending %s announcement when another save starts", async (pending) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const { line, rerender } = await render(<SyncStatus status="offline" />);
+      if (pending === "saved") await rerender(<SyncStatus status="saved" />);
+      vi.advanceTimersByTime(50);
+      await rerender(<SyncStatus status="saving" />);
+      expect(line.textContent).toBe("Saving…");
+      vi.advanceTimersByTime(1500);
+      expect(document.querySelector("[data-ouro-announcer]")!.textContent).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["offline", "saved"] as const)("cancels a pending %s announcement when unmounted", async (pending) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const { rerender } = await render(<SyncStatus status="offline" />);
+      if (pending === "saved") await rerender(<SyncStatus status="saved" />);
+      await rerender(null);
+      vi.advanceTimersByTime(1500);
+      expect(document.querySelector("[data-ouro-announcer]")!.textContent).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still announces recovery after an earlier recovery was cancelled by another save", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const announced = watchAnnouncements();
+    try {
+      const { rerender } = await render(<SyncStatus status="offline" />);
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      expect(announced.count("Offline: changes are kept on this device")).toBe(1);
+      await rerender(<SyncStatus status="saved" />);
+      await act(() => vi.advanceTimersByTimeAsync(50));
+      await rerender(<SyncStatus status="saving" />);
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      expect(announced.count("Saved")).toBe(0);
+      await rerender(<SyncStatus status="saved" />);
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      expect(announced.count("Saved")).toBe(1);
+      await rerender(<SyncStatus status="saving" />);
+      await rerender(<SyncStatus status="saved" />);
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      expect(announced.count("Saved")).toBe(1);
+    } finally {
+      announced.stop();
+      vi.useRealTimers();
     }
   });
 

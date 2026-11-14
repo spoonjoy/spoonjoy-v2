@@ -107,17 +107,18 @@ function textHint(token: string): string {
 
 /**
  * Body text in the theme's type scale and colors. Renders a `<p>` by default.
+ * It wraps with `text-wrap: pretty`, so a paragraph does not end on one stranded word.
  *
  * Use `Heading` instead for titles (it renders `<h1>`–`<h6>`). Inside a
  * `Button`, pass plain text as children; the button styles it.
  *
  * @group Text
- * @see https://ui.ouro.bot/docs/text
+ * @see https://ui.ouroboros.bot/docs/text
  *
  * @example
  * <Text>Braise for three hours.</Text>
  * <Text size="sm" tone="muted">Updated 2 days ago</Text>
- * <Text tone="destructive">Could not save the recipe.</Text>
+ * <Text tone="destructive">Recipe not saved: the server is offline.</Text>
  * <Text lines={2}>{recipe.description}</Text>
  */
 export function Text(props: TextProps): JSX.Element {
@@ -175,7 +176,7 @@ export function Text(props: TextProps): JSX.Element {
     sizes[size],
     tones[tone],
     align && alignClasses[align],
-    truncate && "truncate",
+    truncate ? "truncate" : "text-pretty",
     lines !== undefined && "line-clamp-(--ouro-lines)",
     className,
   );

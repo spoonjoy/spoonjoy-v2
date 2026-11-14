@@ -51,7 +51,7 @@ export type AuthLayoutProps = Omit<HTMLAttributes<HTMLElement>, keyof AuthLayout
  * sign-in prompt over another page.
  *
  * @group Navigation
- * @see https://ui.ouro.bot/docs/auth-layout
+ * @see https://ui.ouroboros.bot/docs/auth-layout
  *
  * @example
  * <AuthLayout title="Sign in" description="Welcome back." footer={<Link href="/signup">Create an account</Link>}>

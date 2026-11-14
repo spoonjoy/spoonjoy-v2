@@ -76,10 +76,21 @@ test("lifts the finger in finally when a step throws mid-gesture, so the next to
       }
     })(),
   ).rejects.toThrow("mid-gesture");
-  const before = element.scrollLeft;
+  // The lifted finger can fling the scroller on to its end, where the next swipe has nowhere to go:
+  // let the fling stop (two reads agree), then start the scroller from the left again.
+  let last = -1;
+  await expect
+    .poll(() => {
+      const now = element.scrollLeft;
+      const still = now === last;
+      last = now;
+      return still;
+    })
+    .toBe(true);
+  element.scrollLeft = 0;
   const starts = watchStarts();
   await swipe();
-  await expect.poll(() => element.scrollLeft).toBeGreaterThan(before + 100);
+  await expect.poll(() => element.scrollLeft).toBeGreaterThan(100);
   expect(starts()).toEqual(["pointerdown", "touchstart"]);
 });
 
@@ -99,6 +110,27 @@ test("lifts a finger a test left down before the next gesture starts", async () 
   await commands.touchStep({ type: "touchEnd" });
   expect(starts()).toEqual(["pointerdown", "touchstart"]);
   expect(element.scrollLeft).toBeGreaterThan(0);
+});
+
+test("a move sent after a timed-out test's finger was lifted leaves no finger behind, so a later gesture in the tab works", async () => {
+  const element = scroller();
+  // A test that timed out: afterEach lifts its finger while the test's body runs on and moves it.
+  await commands.touchStep({ type: "touchStart", x: 260, y: 100 });
+  await commands.touchStep({ type: "touchEnd" });
+  await expect(commands.touchStep({ type: "touchMove", x: 200, y: 100 })).rejects.toThrow("Must send a TouchStart first");
+  // The next test's afterEach has nothing to lift, and its gestures start clean.
+  await commands.touchStep({ type: "touchEnd" });
+  let starts = watchStarts();
+  await commands.touchStep({ type: "touchStart", x: 260, y: 100 });
+  for (const x of [200, 140, 80]) await commands.touchStep({ type: "touchMove", x, y: 100 });
+  await commands.touchStep({ type: "touchEnd" });
+  expect(starts()).toEqual(["pointerdown", "touchstart"]);
+  expect(element.scrollLeft).toBeGreaterThan(0);
+  const before = element.scrollLeft;
+  starts = watchStarts();
+  await swipe();
+  await expect.poll(() => element.scrollLeft).toBeGreaterThan(before);
+  expect(starts()).toEqual(["pointerdown", "touchstart"]);
 });
 
 /** Records each touchmove and touchend the page handles, as its type and the finger's x. */
@@ -190,7 +222,7 @@ function unwatchableFrame(top: number, body = "<div style='height:100px'></div>"
 }
 
 const refused = (x: number, y: number) =>
-  `touchStep: could not watch the frame at (${x}, ${y}) within 5000ms, so the touchStart was not sent. The frame there is about:srcdoc, and it has no watcher.`;
+  `touchStep: the frame at (${x}, ${y}) was not ready for the touchStart within 5000ms, so it was not sent. The frame there is about:srcdoc, and it has no watcher.`;
 
 test("a touchstart into a frame the kit cannot watch is refused after the time limit, and the next touch works", async () => {
   await unwatchableFrame(300);
@@ -456,7 +488,7 @@ test("a touch into an iframe that never loads does not hang", async () => {
     (error: Error) => error.message,
   );
   expect(performance.now() - started).toBeLessThan(2 * 5000 + 2000);
-  if (outcome !== "handled") expect(outcome).toMatch(/^touchStep: could not watch the frame at \(100, 350\) within 5000ms, so the touchStart was not sent\. The frame there is /);
+  if (outcome !== "handled") expect(outcome).toMatch(/^touchStep: the frame at \(100, 350\) was not ready for the touchStart within 5000ms, so it was not sent\. The frame there is /);
   // A touch elsewhere is not held up by it.
   expect(await tapAt(window, 100, 50)).toEqual(["touchstart", "touchend"]);
 });
@@ -508,13 +540,17 @@ test("a lift into a frame that has gone is sent all the same, and throws naming 
   // The finger's target goes away with its frame, so no page gets the touchend.
   frame.remove();
   await expect(commands.touchStep({ type: "touchEnd" })).rejects.toThrow(
-    "touchStep: could not watch about:srcdoc, the frame the gesture's touchstart went to: frame.evaluate: Frame was detached. The touchEnd was sent, but nothing could see it.",
+    "touchStep: the watch for the touchEnd did not start in about:srcdoc, the frame the gesture's touchstart went to: frame.evaluate: Frame was detached. The touchEnd was sent, but no watcher saw it.",
   );
   // The next gesture starts clean.
   const element = scroller();
   await swipe();
   await expect.poll(() => element.scrollLeft).toBeGreaterThan(100);
 });
+
+// A test that waits out a step's full 5 s for the page to answer, then swipes again: on a loaded runner the rest can
+// take more than the 10 s the default limit leaves it.
+const SITS_OUT_A_STEP = 30_000;
 
 test("a missing touch event remains bounded while the page clock is frozen", async () => {
   const element = scroller();
@@ -533,7 +569,7 @@ test("a missing touch event remains bounded while the page clock is frozen", asy
   }
   await swipe();
   await expect.poll(() => element.scrollLeft).toBeGreaterThan(100);
-});
+}, SITS_OUT_A_STEP);
 
 test("a missing later touchmove rejects while the page clock is frozen", async () => {
   const element = scroller();
@@ -562,7 +598,7 @@ test("a missing later touchmove rejects while the page clock is frozen", async (
   }
   await swipe();
   await expect.poll(() => element.scrollLeft).toBeGreaterThan(100);
-});
+}, SITS_OUT_A_STEP);
 
 test("a restarted watcher cannot acknowledge first-move slop without the gesture's touchstart", async () => {
   const element = scroller();
@@ -598,4 +634,46 @@ test("touchDrag with durationMs spans exactly that long in the page's event time
     for (const type of ["touchstart", "touchend"]) removeEventListener(type, listener, true);
   }
   expect(stamps["touchend"]! - stamps["touchstart"]!).toBeCloseTo(300, 0);
+});
+
+test("doubleTap taps twice at one point, the gap it is given apart in the page's event timestamps", async () => {
+  const stamps: Array<[string, number]> = [];
+  const pointers: string[] = [];
+  const listener = (event: Event) => stamps.push([event.type, event.timeStamp]);
+  const pointer = (event: PointerEvent) => pointers.push(`${event.type}:${event.pointerType}`);
+  for (const type of ["touchstart", "touchend"]) addEventListener(type, listener, true);
+  for (const type of ["pointerdown", "pointerup"] as const) addEventListener(type, pointer, true);
+  try {
+    // No wait: doubleTap resolves once the page has handled the second touchend.
+    await commands.doubleTap({ at: [100, 100], gapMs: 120 });
+  } finally {
+    for (const type of ["touchstart", "touchend"]) removeEventListener(type, listener, true);
+    for (const type of ["pointerdown", "pointerup"] as const) removeEventListener(type, pointer, true);
+  }
+  expect(stamps.map(([type]) => type)).toEqual(["touchstart", "touchend", "touchstart", "touchend"]);
+  const [, firstUp, secondDown, secondUp] = stamps.map(([, time]) => time);
+  expect(secondDown! - firstUp!).toBeCloseTo(120, 0);
+  expect(secondUp! - secondDown!).toBeCloseTo(50, 0);
+  expect(pointers).toEqual(["pointerdown:touch", "pointerup:touch", "pointerdown:touch", "pointerup:touch"]);
+});
+
+test("doubleTap keeps its gap in the page's timestamps when the page is busy between the taps", async () => {
+  const stamps: number[] = [];
+  let first = true;
+  const listener = (event: Event) => {
+    stamps.push(event.timeStamp);
+    if (event.type !== "touchend" || !first) return;
+    first = false;
+    // A page busy for 600ms after the first tap, longer than a double-tap's window.
+    const until = performance.now() + 600;
+    while (performance.now() < until);
+  };
+  for (const type of ["touchstart", "touchend"]) addEventListener(type, listener, true);
+  try {
+    await commands.doubleTap({ at: [100, 100], gapMs: 120 });
+  } finally {
+    for (const type of ["touchstart", "touchend"]) removeEventListener(type, listener, true);
+  }
+  expect(stamps).toHaveLength(4);
+  expect(stamps[2]! - stamps[1]!).toBeCloseTo(120, 0);
 });

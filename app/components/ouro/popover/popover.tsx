@@ -150,7 +150,7 @@ export type PopoverProps = PopoverWithTriggerProps | PopoverControlledProps;
  * the Ouro tokens, outside any `@layer`: `:root { --ouro-layer: 60; }`.
  *
  * @group Overlays
- * @see https://ui.ouro.bot/docs/popover
+ * @see https://ui.ouroboros.bot/docs/popover
  *
  * @example
  * <Popover title="Share recipe" trigger={<Button>Share</Button>}>

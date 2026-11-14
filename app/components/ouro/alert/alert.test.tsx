@@ -77,7 +77,7 @@ describe("Alert", () => {
     const { alert } = await render(
       <Alert
         tone="destructive"
-        title="Couldn't save"
+        title="Not saved: you're offline"
         description="Check your connection."
         action={
           <Button size="sm" onClick={retry}>
@@ -128,7 +128,7 @@ describe("Alert", () => {
       return (
         <div>
           {failed ? (
-            <Alert tone="destructive" title="Couldn't save" action={<Button size="sm" onClick={() => setFailed(false)}>Try again</Button>} />
+            <Alert tone="destructive" title="Not saved: you're offline" action={<Button size="sm" onClick={() => setFailed(false)}>Try again</Button>} />
           ) : (
             <Button onClick={() => setFailed(true)}>Show the error again</Button>
           )}

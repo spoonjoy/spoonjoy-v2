@@ -6,6 +6,7 @@ import { commands, page, userEvent } from "vitest/browser";
 import { ColorSchemeToggle } from "~/components/ouro/color-scheme-toggle/color-scheme-toggle";
 import { ColorSchemeProvider } from "~/lib/ouro/color-scheme";
 import { act } from "~/lib/ouro/testing/act";
+import { settled } from "~/lib/ouro/testing/settled";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -31,6 +32,8 @@ async function render(node: ReactNode) {
 
 const dark = () => html.classList.contains("dark");
 const option = (name: string) => page.getByRole("menuitemradio", { name });
+
+const menuSettled = () => settled(() => document.querySelector<HTMLElement>('[role="menu"][data-ouro-presentation]'));
 
 let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
@@ -72,6 +75,7 @@ describe("ColorSchemeToggle", () => {
     );
     await userEvent.click(trigger);
     await expect.element(page.getByRole("menu")).toBeVisible();
+    await menuSettled();
     await userEvent.click(option("Dark"));
     await expect.poll(dark).toBe(true);
     expect(localStorage.getItem("ouro-color-scheme")).toBe("dark");
@@ -82,6 +86,7 @@ describe("ColorSchemeToggle", () => {
     await expect.poll(() => document.activeElement).toBe(trigger);
     await userEvent.click(trigger);
     await expect.element(option("Dark")).toHaveAttribute("aria-checked", "true");
+    await menuSettled();
     await userEvent.click(option("System"));
     await expect.poll(dark).toBe(false);
     expect(localStorage.getItem("ouro-color-scheme")).toBe("system");
@@ -120,6 +125,7 @@ describe("ColorSchemeToggle", () => {
     await userEvent.click(trigger);
     // The menu opens, then the choice switches the page: each is waited for, not assumed.
     await expect.element(page.getByRole("menu")).toBeVisible();
+    await menuSettled();
     await userEvent.click(option("Night"));
     await expect.poll(dark).toBe(true);
     await expect.element(page.getByRole("menu")).not.toBeInTheDocument();

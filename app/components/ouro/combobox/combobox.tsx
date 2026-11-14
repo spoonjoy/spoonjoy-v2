@@ -2,7 +2,8 @@
 
 import { Autocomplete as BaseAutocomplete } from "@base-ui/react/autocomplete";
 import { Combobox as BaseCombobox } from "@base-ui/react/combobox";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode, type Ref, type RefCallback, type RefObject } from "react";
+import { mergeProps } from "@base-ui/react/merge-props";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, type ReactNode, type Ref, type RefCallback, type RefObject } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { Field } from "~/components/ouro/field/field";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
@@ -14,6 +15,7 @@ import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { usePickerSheet } from "~/lib/ouro/use-sheet-presentation";
 import { controlRef } from "~/lib/ouro/control-ref";
 import { useMergedRef } from "~/lib/ouro/refs";
+import { holdPageAtPress } from "~/lib/ouro/page-scroll-hold";
 import { PortalScope, usePortalContainer } from "~/lib/ouro/portal-container";
 import {
   chipClass,
@@ -35,8 +37,33 @@ import {
 /**
  * An item to pick: a string, which is both what shows and what submits, or an object with
  * the `value` that submits and the `label` that shows. `disabled` items show but can't be picked.
+ * An object can also show a picture, a second line and a mark, as a people picker does: `media`
+ * (an `Avatar`), `description` and `meta` (a `Badge`).
  */
-export type ComboboxItem = string | { value: string; label: string; disabled?: boolean | undefined };
+export type ComboboxItem = string | ComboboxItemObject;
+
+/** An item as an object: what it submits, what it shows, and what shows around it. */
+export interface ComboboxItemObject {
+  /** What the item submits, and what `value` and `onValueChange` hold. */
+  value: string;
+  /** What the item shows, on its row and on its chip with `multiple`; screen readers hear it first. */
+  label: string;
+  /** The item shows but can't be picked. */
+  disabled?: boolean | undefined;
+  /**
+   * A second, muted line under the label, such as a person's job title or email. It stays on
+   * one line, cut with an ellipsis, and shows whole on hover (its `title`).
+   * @claim "It stays on one line, cut" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox rich items > shows media, a description and a mark on a row, and media on its chip)
+   */
+  description?: string | undefined;
+  /**
+   * A picture before the label, on the row and, with `multiple`, on the chip: an `Avatar` with
+   * `alt=""` (the label already names it) and `size="xs"`, which fits a chip.
+   */
+  media?: ReactNode;
+  /** A small mark at the row's end, such as a `<Badge>` that says "1:1". */
+  meta?: ReactNode;
+}
 
 /**
  * Props every Combobox takes, whatever it picks.
@@ -80,6 +107,25 @@ export interface ComboboxBaseProps {
   onInputChange?: ((text: string) => void) | undefined;
   /** A search is running: the list shows a spinner and `loadingLabel`, and is `aria-busy`. */
   loading?: boolean | undefined;
+  /**
+   * The first item that matches is highlighted as people type, so Enter picks it.
+   * @claim "The first item that matches is" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox keys > picks the first match on Enter with autoHighlight, and nothing without it)
+   */
+  autoHighlight?: boolean | undefined;
+  /**
+   * Called on each key pressed in the input, before Combobox acts on it. Call
+   * `event.preventDefault()` to stop Combobox's own handling of that key (Enter picking, Tab,
+   * the arrows), such as to move on from an empty input on Enter.
+   * @claim "Called on each key pressed in" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox keys > hands the app each key first, and leaves a key the app prevents alone)
+   */
+  onInputKeyDown?: ((event: KeyboardEvent<HTMLInputElement>) => void) | undefined;
+  /**
+   * People can see the field and what is picked but not change it: the input takes no text,
+   * nothing in the list can be picked, and the clear and remove buttons go. The list still opens,
+   * to browse.
+   * @claim "People can see the field and" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox keys > keeps a read-only field as it is)
+   */
+  readOnly?: boolean | undefined;
   /**
    * The text the list shows while `loading`. Translate it with your app.
    * @default "Loading…"
@@ -157,6 +203,11 @@ export type ComboboxSingleProps = ComboboxBaseProps & {
   defaultValue?: string | null | undefined;
   /** Called with the picked item's value, or `null` when cleared. */
   onValueChange?: ((value: string | null) => void) | undefined;
+  /**
+   * The input's text, when you control it with `onInputChange`. Set it to `""` in
+   * `onValueChange` to clear the input after a pick.
+   */
+  inputValue?: string | undefined;
   /** Only with `multiple`. */
   removeLabel?: never;
   /** Only with `allowCustomValue`. */
@@ -175,6 +226,12 @@ export type ComboboxMultipleProps = ComboboxBaseProps & {
   defaultValue?: string[] | undefined;
   /** Called with the picked items' values. */
   onValueChange?: ((value: string[]) => void) | undefined;
+  /**
+   * The input's text, when you control it with `onInputChange`. Set it to `""` in
+   * `onValueChange` to clear the input after a pick.
+   * @claim "in `onValueChange` to clear the input after a pick" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox keys > takes its text from inputValue, and clears it after a pick when the app says so)
+   */
+  inputValue?: string | undefined;
   /**
    * The name of a chip's remove button, from the item's label, as visually hidden text and not
    * an `aria-label`. Translate it with your app.
@@ -200,6 +257,8 @@ export type ComboboxCustomProps = ComboboxBaseProps & {
    * in the input, and the text is the value, so an `{ value, label }` item submits its label.
    */
   onValueChange?: ((value: string) => void) | undefined;
+  /** Not with `allowCustomValue`: the text is the value, which `value` controls. */
+  inputValue?: never;
   /**
    * The sheet's row (on a phone) that keeps what was typed, from the text. Translate it with
    * your app.
@@ -221,6 +280,9 @@ interface Option {
   value: string;
   label: string;
   disabled?: boolean | undefined;
+  description?: string | undefined;
+  media?: ReactNode;
+  meta?: ReactNode;
   /** The sheet's row that keeps the typed text (`allowCustomValue`): it shows `label` but picks `value`. */
   custom?: boolean | undefined;
 }
@@ -248,6 +310,10 @@ interface ControlProps {
   /** `allowCustomValue` on a phone: one value, which may be typed text. */
   custom: boolean;
   inputRef: Ref<HTMLInputElement> | undefined;
+  autoHighlight: boolean | undefined;
+  onInputKeyDown: ((event: KeyboardEvent<HTMLInputElement>) => void) | undefined;
+  readOnly: boolean | undefined;
+  inputValue: string | undefined;
 }
 
 /** Field's messages and root name Combobox. */
@@ -295,6 +361,7 @@ function Icon({ children }: { children: ReactNode }): JSX.Element {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
+      className="size-4"
     >
       {children}
     </svg>
@@ -328,7 +395,7 @@ const ChevronIcon = () => (
  * free text with no suggestions.
  *
  * @group Forms
- * @see https://ui.ouro.bot/docs/combobox
+ * @see https://ui.ouroboros.bot/docs/combobox
  *
  * @example
  * <Combobox label="Herb" name="herb" items={["Basil", "Dill", "Thyme"]} />
@@ -351,6 +418,9 @@ export function Combobox(props: ComboboxProps): JSX.Element {
     placeholder,
     onInputChange,
     loading,
+    autoHighlight,
+    onInputKeyDown,
+    readOnly,
     loadingLabel = "Loading…",
     emptyLabel = "No results",
     clearLabel = "Clear",
@@ -364,6 +434,7 @@ export function Combobox(props: ComboboxProps): JSX.Element {
     onValueChange,
     removeLabel = (item: string) => `Remove ${item}`,
     customValueLabel = (text: string) => `Use “${text}”`,
+    inputValue,
     // Guard props (hint types), dropped here so they never reach the DOM.
     errorMessage,
     helperText,
@@ -389,6 +460,7 @@ export function Combobox(props: ComboboxProps): JSX.Element {
     onValueChange?: (value: never) => void;
     removeLabel?: (label: string) => string;
     customValueLabel?: (text: string) => string;
+    inputValue?: string;
   };
   const form = useFormErrors();
   const [ownCustomValue, setOwnCustomValue] = useState(defaultValue ?? "");
@@ -425,6 +497,8 @@ export function Combobox(props: ComboboxProps): JSX.Element {
           onChange !== undefined && ["onChange is not a prop", "<Combobox onValueChange={(value) => …}>"],
           noOptionsMessage !== undefined && ["noOptionsMessage is not a prop", `<Combobox emptyLabel="${String(noOptionsMessage)}">`],
           isClearable !== undefined && ["isClearable is not a prop; the clear button shows whenever there is a value", "<Combobox>"],
+          inputValue !== undefined &&
+            !onInputChange && ["inputValue needs onInputChange, or the text can never change", "<Combobox inputValue={text} onInputChange={setText}>"],
           multiple &&
             allowCustomValue && [
               "multiple and allowCustomValue do not combine; allowCustomValue keeps one typed value",
@@ -455,6 +529,10 @@ export function Combobox(props: ComboboxProps): JSX.Element {
     customValueLabel,
     custom,
     inputRef: ref,
+    autoHighlight,
+    onInputKeyDown,
+    readOnly,
+    inputValue,
   };
 
   return (
@@ -473,6 +551,52 @@ export function Combobox(props: ComboboxProps): JSX.Element {
         {custom && !sheet ? <AutocompleteControl {...control} /> : <ComboboxControl {...control} />}
       </Field>
     </FieldOwnerContext.Provider>
+  );
+}
+
+/**
+ * The input's press and key handlers: the page hold's, with the app's `onInputKeyDown` ahead of
+ * it. Base UI merges handlers so the last runs first; a key the app prevents skips the rest, the
+ * page hold's and Base UI's own.
+ */
+function inputHandlers(onInputKeyDown: ((event: KeyboardEvent<HTMLInputElement>) => void) | undefined) {
+  return mergeProps<"input">(holdPageAtPress.listInput, {
+    onKeyDown: (event) => {
+      onInputKeyDown?.(event);
+      if (event.defaultPrevented) event.preventBaseUIHandler();
+    },
+  });
+}
+
+/** An item's row: its label alone, or with its picture, second line and mark. */
+function ItemContent({ option }: { option: Option }): JSX.Element {
+  if (option.media == null && !option.description && option.meta == null) return <span className="col-start-2">{option.label}</span>;
+  return (
+    <span className="col-start-2 flex min-w-0 items-center gap-2">
+      {option.media != null && (
+        <span data-ouro-combobox-media="" className="flex shrink-0">
+          {option.media}
+        </span>
+      )}
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate">{option.label}</span>
+        {option.description && (
+          // Muted, nudged toward the text color (as ConversationList's quiet lines), so it keeps 4.5:1 on a highlighted row too.
+          <span
+            data-ouro-combobox-description=""
+            title={option.description}
+            className="truncate text-xs text-[color-mix(in_oklab,var(--muted-foreground)_80%,var(--foreground))]"
+          >
+            {option.description}
+          </span>
+        )}
+      </span>
+      {option.meta != null && (
+        <span data-ouro-combobox-meta="" className="flex shrink-0">
+          {option.meta}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -550,9 +674,11 @@ function KeepPageExposed(): null {
 
 /** The popup under (or over) the input, on wider screens and with a mouse. */
 function Popup({ loading, children }: { loading: boolean | undefined; children: ReactNode }): JSX.Element {
-  const portal = usePortalContainer("Combobox");
+  const portal = usePortalContainer("Combobox", true);
+  // Inside a Dialog its own layers sit at z-1000; 1000 above --ouro-layer clears them there and
+  // on the page, as Select's list does.
   return (
-    <BaseCombobox.Portal {...portal} data-ouro="combobox-portal" className="relative isolate z-(--ouro-layer)">
+    <BaseCombobox.Portal {...portal} data-ouro="combobox-portal" className="relative isolate z-[calc(var(--ouro-layer)+1000)]">
       <PortalScope>
         <KeepPageExposed />
         <BaseCombobox.Positioner ref={markPopupDismiss} sideOffset={4} className="outline-none">
@@ -571,9 +697,10 @@ function Popup({ loading, children }: { loading: boolean | undefined; children: 
  * arrow keys open it from the keyboard. (Base UI gives a trigger button the input's id on the
  * server, so a server-rendered page would hold that id twice.)
  */
-function EndButtons({ clearLabel }: { clearLabel: string }): JSX.Element {
+function EndButtons({ clearLabel, readOnly }: { clearLabel: string; readOnly: boolean | undefined }): JSX.Element {
   return (
     <span className={endSlotClass}>
+      {!readOnly && (
       <BaseCombobox.Clear
         render={
           <Button variant="plain" tone="secondary" size="sm" data-ouro-combobox-clear="" data-ouro-control="combobox" data-ouro-part="clear" className="aspect-square px-0">
@@ -582,6 +709,7 @@ function EndButtons({ clearLabel }: { clearLabel: string }): JSX.Element {
           </Button>
         }
       />
+      )}
       <BaseCombobox.Icon data-ouro-combobox-icon="" className="flex size-8 items-center justify-center text-muted-foreground sm:pointer-fine:size-6 [&_svg]:size-4">
         <ChevronIcon />
       </BaseCombobox.Icon>
@@ -612,6 +740,7 @@ function useCustomReset(ref: RefObject<HTMLInputElement | HTMLButtonElement | nu
 function ComboboxControl(props: ControlProps): JSX.Element {
   const { label, items, multiple, value, defaultValue, onValueChange, onInputChange, placeholder, required, loading } = props;
   const { loadingLabel, emptyLabel, clearLabel, doneLabel, removeLabel, customValueLabel, custom, inputRef, sheet } = props;
+  const { autoHighlight, onInputKeyDown, readOnly, inputValue } = props;
   const field = useField()!;
   // Ouro's own invalid state (the error prop or the Form's error for this name), not Base UI's,
   // which would count it as a failed check and block the next submit.
@@ -652,16 +781,19 @@ function ComboboxControl(props: ControlProps): JSX.Element {
   const setInputRef = useMergedRef(inputRef, resetInputRef);
   useCustomReset(sheet ? triggerRef : resetInputRef, value, props.onReset);
   const report = onValueChange as ((value: string | string[] | null) => void) | undefined;
-  const showEmpty = !onInputChange || text !== "";
+  // The sheet's clear button, beside the field for a single pick that can change.
+  // Stryker disable next-line ConditionalExpression,LogicalOperator,BooleanLiteral: the sheet shows only on a coarse-pointer phone, which the Chromium project mutation runs in cannot be; combobox.touch.test.tsx holds a read-only field's missing clear button there.
+  const sheetClear = !multiple && !readOnly;
+  const showEmpty = !onInputChange || (inputValue ?? text) !== "";
 
   const renderItem = (option: Option) => (
     <BaseCombobox.Item key={option.value} value={option} disabled={option.disabled} data-ouro-control="combobox" data-ouro-part="option" className={itemClass}>
-      <BaseCombobox.ItemIndicator className="col-start-1 flex">
+      <BaseCombobox.ItemIndicator className="col-start-1 flex [&_svg]:size-4">
         <Icon>
           <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
         </Icon>
       </BaseCombobox.ItemIndicator>
-      <span className="col-start-2">{option.label}</span>
+      <ItemContent option={option} />
     </BaseCombobox.Item>
   );
   const body = (className: string) => (
@@ -678,6 +810,8 @@ function ComboboxControl(props: ControlProps): JSX.Element {
   const input = (className: string, extra: { "aria-label"?: string } = {}) => (
     <BaseCombobox.Input
       {...extra}
+      {...inputHandlers(onInputKeyDown)}
+      readOnly={readOnly}
       ref={setInputRef}
       data-ouro-control="combobox"
       data-ouro-part="input"
@@ -699,6 +833,9 @@ function ComboboxControl(props: ControlProps): JSX.Element {
         setText(next);
         if (details.reason !== "item-press") onInputChange?.(next);
       }}
+      inputValue={inputValue}
+      autoHighlight={autoHighlight}
+      readOnly={readOnly}
       required={required}
       inputRef={markInput}
       openOnInputClick
@@ -738,7 +875,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
             </BaseCombobox.Value>
             <ChevronIcon />
           </BaseCombobox.Trigger>
-          {!multiple && (
+          {sheetClear && (
             // Beside the button, not in it: a button can't hold another. It is in the Tab order
             // here, since the button, not an input, has focus; clearing puts focus back on the button.
             <BaseCombobox.Clear
@@ -789,13 +926,22 @@ function ComboboxControl(props: ControlProps): JSX.Element {
                   {(picked: Option[]) => (
                     <>
                       {picked.map((option) => (
-                        <BaseCombobox.Chip key={option.value} data-ouro-combobox-chip="" className={chipClass}>
+                        // Base UI marks a read-only field's chips aria-readonly, which a chip (no role) may
+                        // not carry; the input's readonly already says it.
+                        <BaseCombobox.Chip key={option.value} data-ouro-combobox-chip="" className={chipClass} render={(chip) => <div {...chip} aria-readonly={undefined} />}>
+                          {option.media != null && (
+                            <div data-ouro-combobox-chip-media="" className="-ms-1 flex shrink-0">
+                              {option.media}
+                            </div>
+                          )}
                           <span>{option.label}</span>
-                          <BaseCombobox.ChipRemove data-ouro-combobox-chip-remove="" data-ouro-control="combobox" data-ouro-part="chip-remove" className={chipRemoveClass}>
-                            <TouchTarget />
-                            <CrossIcon />
-                            <span className="sr-only">{removeLabel(option.label)}</span>
-                          </BaseCombobox.ChipRemove>
+                          {!readOnly && (
+                            <BaseCombobox.ChipRemove data-ouro-combobox-chip-remove="" data-ouro-control="combobox" data-ouro-part="chip-remove" className={chipRemoveClass}>
+                              <TouchTarget />
+                              <CrossIcon />
+                              <span className="sr-only">{removeLabel(option.label)}</span>
+                            </BaseCombobox.ChipRemove>
+                          )}
                         </BaseCombobox.Chip>
                       ))}
                       {input(chipsInputClass)}
@@ -806,7 +952,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
             ) : (
               input(inputClass)
             )}
-            <EndButtons clearLabel={clearLabel} />
+            <EndButtons clearLabel={clearLabel} readOnly={readOnly} />
           </BaseCombobox.InputGroup>
           <Popup loading={loading}>{body(listClass)}</Popup>
         </>
@@ -818,7 +964,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
 /** A Combobox that accepts any text, on Base UI Autocomplete. */
 function AutocompleteControl(props: ControlProps): JSX.Element {
   const { items, value, onValueChange, onInputChange, placeholder, required, loading } = props;
-  const { loadingLabel, emptyLabel, clearLabel, inputRef } = props;
+  const { loadingLabel, emptyLabel, clearLabel, inputRef, autoHighlight, onInputKeyDown, readOnly } = props;
   const field = useField()!;
   // Ouro's own invalid state (the error prop or the Form's error for this name), not Base UI's,
   // which would count it as a failed check and block the next submit.
@@ -834,6 +980,8 @@ function AutocompleteControl(props: ControlProps): JSX.Element {
       inputRef={markInput}
       itemToStringValue={(option: Option) => option.label}
       filter={onInputChange ? null : undefined}
+      autoHighlight={autoHighlight}
+      readOnly={readOnly}
       required={required}
       openOnInputClick
       value={value as string}
@@ -845,6 +993,8 @@ function AutocompleteControl(props: ControlProps): JSX.Element {
     >
       <BaseAutocomplete.InputGroup ref={markDismiss} data-ouro-input-group="" className={groupClass}>
         <BaseAutocomplete.Input
+          {...inputHandlers(onInputKeyDown)}
+          readOnly={readOnly}
           ref={setInputRef}
           data-ouro-control="combobox"
           data-ouro-part="input"
@@ -853,7 +1003,7 @@ function AutocompleteControl(props: ControlProps): JSX.Element {
           {...(invalid ? { "aria-invalid": true } : {})}
           className={inputClass}
         />
-        <EndButtons clearLabel={clearLabel} />
+        <EndButtons clearLabel={clearLabel} readOnly={readOnly} />
       </BaseAutocomplete.InputGroup>
       <Popup loading={loading}>
         <ListBody
@@ -864,7 +1014,7 @@ function AutocompleteControl(props: ControlProps): JSX.Element {
           className={listClass}
           renderItem={(option) => (
             <BaseAutocomplete.Item key={option.value} value={option} disabled={option.disabled} data-ouro-control="combobox" data-ouro-part="option" className={itemClass}>
-              <span className="col-start-2">{option.label}</span>
+              <ItemContent option={option} />
             </BaseAutocomplete.Item>
           )}
         />

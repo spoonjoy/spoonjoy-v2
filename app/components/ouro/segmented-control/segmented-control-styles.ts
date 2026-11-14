@@ -60,15 +60,19 @@ const thumbClass =
 /**
  * A segment: muted text, the foreground when pressed. The muted text is mixed 20% toward the
  * foreground, for more contrast on the muted track than plain `text-muted-foreground` has.
+ * Under forced colours the pressed segment is lettered in HighlightText on the thumb's Highlight.
+ * Hover lifts only the other segments' text, so the pointer resting on the pressed segment never
+ * turns its letters back to the page's text colour.
  *
  * @internal
+ * @claim "Hover lifts only the other segments'" registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx verify:testExists(registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx::SegmentedControl > keeps HighlightText on the pressed segment under forced colours while the pointer rests on it)
  * @claim "The muted text is mixed 20%" registry/ouro/components/ouro/segmented-control/segmented-control-styles.ts verify:fileLine(registry/ouro/components/ouro/segmented-control/segmented-control-styles.ts, /text-\[color-mix\(in_oklab,var\(--muted-foreground\)_80%,var\(--foreground\)\)\]/)
  */
 const segmentClass =
   "press relative m-0 box-border flex min-w-0 cursor-pointer items-center justify-center px-3 pointer-coarse:min-w-11 " +
   "rounded-md border-0 bg-transparent text-base font-medium whitespace-nowrap text-[color-mix(in_oklab,var(--muted-foreground)_80%,var(--foreground))] sm:pointer-fine:text-sm " +
   "select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
-  "not-data-disabled:pointer-fine:hover:text-foreground data-pressed:text-foreground forced-colors:data-pressed:text-[HighlightText] " +
+  "not-data-disabled:not-data-pressed:pointer-fine:hover:text-foreground data-pressed:text-foreground forced-colors:data-pressed:text-[HighlightText] " +
   "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
   "outline-ring outline-offset-1 focus-visible:outline-2 focus-visible:outline-solid " +
   "data-disabled:cursor-not-allowed data-disabled:opacity-50";

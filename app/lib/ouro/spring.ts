@@ -60,6 +60,12 @@ interface SpringOptions {
    * @claim "With reduced motion the spring never" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > on animation frames > jumps to the target and rests, before it returns, with reduced motion)
    */
   element?: Element | null | undefined;
+  /**
+   * Whether to reduce motion, from `useReducedMotion()`, so the app's `OuroProvider motion`
+   * decides. Unset, the device's `prefers-reduced-motion` does.
+   * @claim "Whether to reduce motion, from `useReducedMotion()`" registry/ouro/lib/ouro/spring.test.ts verify:testExists(registry/ouro/lib/ouro/spring.test.ts::spring > on animation frames > follows reduced over the device: true jumps to the target, false runs)
+   */
+  reduced?: boolean | undefined;
 }
 
 /** Where a spring is and how fast it is moving, in px and px/ms. */
@@ -130,7 +136,7 @@ function springAt(
  * A critically damped spring handed a velocity toward its target passes the target once,
  * by less than a pixel below the flick speed.
  */
-function spring({ from, to, velocity = 0, damping, response, onUpdate, onRest, element }: SpringOptions): SpringHandle {
+function spring({ from, to, velocity = 0, damping, response, onUpdate, onRest, element, reduced }: SpringOptions): SpringHandle {
   let start = performance.now();
   let frame = 0;
   let running = false;
@@ -154,7 +160,7 @@ function spring({ from, to, velocity = 0, damping, response, onUpdate, onRest, e
     frame = requestAnimationFrame(tick);
   };
   const run = () => {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return rest();
+    if (reduced ?? matchMedia("(prefers-reduced-motion: reduce)").matches) return rest();
     running = true;
     mark(true);
     frame = requestAnimationFrame(tick);

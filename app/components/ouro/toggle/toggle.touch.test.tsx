@@ -49,6 +49,24 @@ it("gives a small toggle a 44px hit area", async () => {
   }
 });
 
+it("gives an extra-small pill a 44px hit area", async () => {
+  const host = await render(
+    <>
+      <ToggleGroup label="Show" items={[{ value: "all", label: "All" }, { value: "unread", label: "Unread" }]} shape="pill" size="xs" />
+      <div style={{ marginTop: 24 }}>
+        <Toggle label="Starred" shape="pill" size="xs" />
+      </div>
+    </>,
+  );
+  for (const toggle of host.querySelectorAll<HTMLElement>("button")) {
+    const rect = toggle.getBoundingClientRect();
+    expect(rect.height).toBe(32);
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    for (const y of [cy - 21, cy + 21]) expect(document.elementFromPoint(cx, y)?.closest("button")).toBe(toggle);
+  }
+});
+
 it("keeps 44px toggles and 16px text on a landscape phone, past the sm breakpoint", async () => {
   await rotate(844, 390);
   expect(matchMedia("(min-width: 640px)").matches).toBe(true);

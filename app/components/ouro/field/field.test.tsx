@@ -3,7 +3,7 @@ import { type ReactNode } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { commands, page, server } from "vitest/browser";
+import { commands, page, server, userEvent } from "vitest/browser";
 import { Button } from "~/components/ouro/button/button";
 import { Field } from "~/components/ouro/field/field";
 import { RadioGroup } from "~/components/ouro/radio-group/radio-group";
@@ -17,6 +17,7 @@ import {
   FieldRoot,
 } from "~/components/ouro/field/field-parts";
 import { act } from "~/lib/ouro/testing/act";
+import { FieldOwnerContext, useField, type FieldOwner } from "~/lib/ouro/use-field";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -85,6 +86,16 @@ describe("Field wiring", () => {
     expect(error.id).not.toBe("");
     expect(describedBy(input)).toEqual([description.id, error.id]);
     await expect.element(page.getByRole("textbox", { name: "Email" })).toHaveAccessibleDescription("We never share it. Enter an email address.");
+  });
+
+  it("wraps the description prettily so it does not end on one word", async () => {
+    const { host } = await render(
+      <Field label="Email" description="We never share it.">
+        <FieldControl />
+      </Field>,
+    );
+    const description = [...host.querySelectorAll("p, div")].find((el) => el.textContent === "We never share it.")!;
+    expect(getComputedStyle(description).textWrapStyle).toBe("pretty");
   });
 
   it("has no aria-describedby without a description or an error", async () => {
@@ -362,6 +373,25 @@ describe("Field wiring", () => {
     expect(input.getAttribute("aria-invalid")).toBe("true");
   });
 
+  it("drops its Ouro Form error once the user changes its control, and keeps it through a change in another field", async () => {
+    const { host } = await render(
+      <OuroForm errors={{ email: "That email is taken." }}>
+        <Field label="Name" name="name">
+          <FieldControl />
+        </Field>
+        <Field label="Email" name="email">
+          <FieldControl type="email" />
+        </Field>
+      </OuroForm>,
+    );
+    const email = page.getByRole("textbox", { name: "Email", exact: true });
+    await userEvent.fill(page.getByRole("textbox", { name: "Name", exact: true }), "Ari");
+    await expect.element(email).toHaveAttribute("aria-invalid", "true");
+    await userEvent.fill(email, "ari@example.com");
+    await expect.element(email).not.toHaveAttribute("aria-invalid");
+    expect(host.textContent).not.toContain("That email is taken.");
+  });
+
   it("lets app layout classes win", async () => {
     const { field } = await render(
       <Field label="Email" className="mt-4 w-40">
@@ -583,6 +613,117 @@ describe("Helper text after the control", () => {
     expect([...field.children].map((child) => child.textContent)).toEqual(["Email", "", "We never share it."]);
     await expect.element(page.getByRole("textbox", { name: "Email", exact: true })).toHaveAccessibleDescription("We never share it.");
     expect(input.name).toBe("email");
+  });
+});
+
+/** A control built on Field lays it out through its owner, as Checkbox, RadioGroup and CheckboxGroup do. */
+const choice: FieldOwner = { name: "Choice", data: "choice", layout: "inline" };
+const choices: FieldOwner = { name: "Choices", data: "choices", layout: "group", requiredLabel: "(required)" };
+
+/** A group control named by the group Field's legend, as RadioGroup's radiogroup is. */
+function GroupControl({ children }: { children?: ReactNode }) {
+  return (
+    <div role="group" aria-labelledby={useField()!.labelId}>
+      {children}
+    </div>
+  );
+}
+
+describe("Field for the controls built on it", () => {
+  it("names a required group with its legend, marked, and adds the owner's required words", async () => {
+    const { host } = await render(
+      <FieldOwnerContext.Provider value={choices}>
+        <Field label="Toppings" required>
+          <GroupControl />
+        </Field>
+      </FieldOwnerContext.Provider>,
+    );
+    const legend = host.querySelector<HTMLElement>("[data-ouro-legend]")!;
+    expect(legend.hasAttribute("data-ouro-required")).toBe(true);
+    expect(host.querySelector("label")).toBeNull();
+    await expect.element(page.getByRole("group", { name: "Toppings (required)", exact: true })).toBeInTheDocument();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("leaves a group that is not required unmarked, and hides its legend from sight with hideLabel", async () => {
+    const { host } = await render(
+      <FieldOwnerContext.Provider value={choices}>
+        <Field label="Toppings" hideLabel>
+          <GroupControl />
+        </Field>
+      </FieldOwnerContext.Provider>,
+    );
+    const legend = host.querySelector<HTMLElement>("[data-ouro-legend]")!;
+    expect(legend.hasAttribute("data-ouro-required")).toBe(false);
+    expect(legend.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+    await expect.element(page.getByRole("group", { name: "Toppings", exact: true })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["an empty legend", "", "empty"],
+    ["no legend", undefined, "missing"],
+  ])("names the group's legend in its development message for %s", async (_name, label, state) => {
+    const props = { label } as unknown as Parameters<typeof Field>[0];
+    await render(
+      <FieldOwnerContext.Provider value={choices}>
+        <Field {...props}>
+          <GroupControl />
+        </Field>
+      </FieldOwnerContext.Provider>,
+    );
+    expect(warn).toHaveBeenCalledWith(
+      `[ouro-ui] Choices: legend is ${state}, so the group has no name. Fix: <Choices legend="Toppings" hideLegend> to hide a legend you still need.`,
+    );
+  });
+
+  it("names a missing label in its development message", async () => {
+    const props = {} as unknown as Parameters<typeof Field>[0];
+    await render(
+      <Field {...props}>
+        <FieldControl />
+      </Field>,
+    );
+    expect(warn).toHaveBeenCalledWith(
+      '[ouro-ui] Field: label is missing, so the control has no name. Fix: <Field label="Email" hideLabel> to hide a label you still need.',
+    );
+  });
+
+  it("points a choice's name, error and required to its group, which shows the error once", async () => {
+    const props = { label: "Basil", name: "basil", error: "No.", required: true } as Parameters<typeof Field>[0];
+    const { host } = await render(
+      <FieldOwnerContext.Provider value={choices}>
+        <Field label="Herbs">
+          <GroupControl>
+            <FieldOwnerContext.Provider value={choice}>
+              <Field {...props}>
+                <FieldControl type="checkbox" />
+              </Field>
+            </FieldOwnerContext.Provider>
+          </GroupControl>
+        </Field>
+      </FieldOwnerContext.Provider>,
+    );
+    expect(warn).toHaveBeenCalledWith('[ouro-ui] Choice: name belongs on the Choices. Fix: <Choices name="basil">.');
+    expect(warn).toHaveBeenCalledWith(
+      '[ouro-ui] Choice: error belongs on the Choices, which shows it once for every choice. Fix: <Choices error="What is wrong">.',
+    );
+    expect(warn).toHaveBeenCalledWith("[ouro-ui] Choice: required belongs on the Choices. Fix: <Choices required>.");
+    expect(host.textContent).not.toContain("No.");
+  });
+
+  it("puts a lone inline control first, then its label, description and error, all linked", async () => {
+    const { host, input } = await render(
+      <FieldOwnerContext.Provider value={choice}>
+        <Field label="Subscribe" description="Weekly, at most." error="Pick this to go on.">
+          <FieldControl type="checkbox" />
+        </Field>
+      </FieldOwnerContext.Provider>,
+    );
+    const root = host.querySelector<HTMLElement>('[data-ouro="choice"]')!;
+    expect([...root.children].map((child) => child.textContent)).toEqual(["", "Subscribe", "Weekly, at most.", "Pick this to go on."]);
+    await expect.element(page.getByRole("checkbox", { name: "Subscribe" })).toHaveAccessibleDescription("Weekly, at most. Pick this to go on.");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 

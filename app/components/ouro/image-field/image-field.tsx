@@ -140,7 +140,7 @@ function setInputFile(input: HTMLInputElement, file: File | null): void {
  * an image you already have.
  *
  * @group Forms
- * @see https://ui.ouro.bot/docs/image-field
+ * @see https://ui.ouroboros.bot/docs/image-field
  *
  * @example
  * <ImageField label="Profile photo" name="photo" src={user.photoUrl} shape="circle" crop maxSize={5 * 1024 * 1024} onRemove={removePhoto} />
@@ -246,7 +246,7 @@ export function ImageField(props: ImageFieldProps): JSX.Element {
   };
   const turnAway = (reason: ImageFieldRejection, chosen: File) => {
     const fallback = () =>
-      reason === "type" ? `${chosen.name} is not an image this field takes.` : reason === "size" ? `${chosen.name} is larger than ${formatSize(maxSize!)}.` : `${chosen.name} could not be opened as a photo.`;
+      reason === "type" ? `${chosen.name} is not an image this field takes.` : reason === "size" ? `${chosen.name} is larger than ${formatSize(maxSize!)}.` : `The browser can't read ${chosen.name} as a photo. Choose a JPEG or PNG photo instead.`;
     setRejection(rejectMessage ? rejectMessage(reason, chosen) : fallback());
   };
   /** A photo from the picker or a drop: checked, opened (and, with crop, cropped), then shown. */

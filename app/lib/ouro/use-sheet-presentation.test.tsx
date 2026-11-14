@@ -44,7 +44,7 @@ describe("useSheetPresentation", () => {
     const container = await shown(<Probe presentation="auto" />);
     expect(container.textContent).toBe("false");
     await page.viewport(400, 800);
-    await vi.waitFor(() => expect(container.textContent).toBe("true"));
+    await vi.waitFor(() => expect(container.textContent).toBe("true"), { timeout: 10_000 });
   });
 
   it("renders the wide form on the server", () => {

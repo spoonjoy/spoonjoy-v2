@@ -1,8 +1,9 @@
 "use client";
 
-import type { JSX, ReactElement, ReactNode, RefObject } from "react";
+import type { JSX, ReactElement, ReactNode } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { checkOpenMode } from "~/lib/ouro/open-mode";
+import { TouchTarget } from "~/lib/ouro/touch-target";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import {
   SheetBackdrop,
@@ -16,6 +17,7 @@ import {
   SheetTitle,
   SheetTrigger,
   SheetViewport,
+  type SheetPopupProps,
   type SheetSnapPoint,
 } from "~/components/ouro/sheet/sheet-parts";
 import { footerClass, sheetHint, sheetSides, sideWarning, type SheetSide } from "~/components/ouro/sheet/sheet-styles";
@@ -51,6 +53,20 @@ export interface SheetBaseProps {
    * @claim "Heights a bottom or top sheet" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::feel > gives a top sheet with snap points the full height less the gap, and fits a top sheet without them)
    */
   snapPoints?: SheetSnapPoint[] | undefined;
+  /**
+   * Whether the sheet shuts off the rest of the page while it is open. `false` makes it a
+   * panel beside a page the person keeps using, such as a live preview of a look: no backdrop,
+   * no focus trap and no scroll lock, the page stays at full strength and in reach, and a press
+   * or focus on the page leaves the sheet open. Escape, with focus in the sheet, and its close
+   * button, shown at its top corner, close it. @default true
+   * @claim "Whether the sheet shuts off the" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::non-modal sheet > draws no backdrop and leaves the page at full strength, in reach and scrolling)
+   * @claim "Whether the sheet shuts off the" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::non-modal sheet > is a dialog without aria-modal, lets focus leave it, and stays open when focus or a press goes to the page)
+   * @claim "makes it a panel beside" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::non-modal sheet > draws no backdrop and leaves the page at full strength, in reach and scrolling)
+   * @claim "makes it a panel beside" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::non-modal sheet > is a dialog without aria-modal, lets focus leave it, and stays open when focus or a press goes to the page)
+   * @claim "Escape, with focus in the sheet" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::non-modal sheet > closes on Escape from inside it, and from its close button, which shows at its top corner)
+   * @claim "Whether the sheet shuts off the" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::non-modal sheet > stays modal by default, with its backdrop)
+   */
+  modal?: boolean | undefined;
   /** The body. It scrolls when it is taller than the sheet. */
   children: ReactNode;
   /** The actions row, stacked full width on phones; primary action last. */
@@ -119,7 +135,7 @@ export type SheetProps = SheetWithTriggerProps | SheetControlledProps;
  * `new AxeBuilder({ page }).exclude("[data-base-ui-focus-guard]")`.
  *
  * @group Overlays
- * @see https://ui.ouro.bot/docs/sheet
+ * @see https://ui.ouroboros.bot/docs/sheet
  *
  * @example
  * <Sheet title="Save to cookbook" trigger={<Button>Save</Button>}>
@@ -143,6 +159,7 @@ export function Sheet(props: SheetProps): JSX.Element {
     description,
     side: sideProp = "bottom",
     snapPoints,
+    modal,
     children,
     footer,
     className,
@@ -194,6 +211,7 @@ export function Sheet(props: SheetProps): JSX.Element {
       description={description}
       side={side}
       snapPoints={snapPoints}
+      modal={modal}
       className={className}
       trigger={trigger}
       open={open}
@@ -217,6 +235,16 @@ const closeClass =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
+/**
+ * A non-modal sheet's close button: in view at its top corner, since a press on the page leaves
+ * the sheet open, with `TouchTarget` for a coarse pointer.
+ */
+const shownCloseClass =
+  "press absolute top-3 end-3 z-1 m-0 box-border inline-flex size-8 cursor-default items-center justify-center rounded-lg border-0 bg-transparent p-0 " +
+  "text-muted-foreground outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
+  "pointer-fine:hover:bg-muted pointer-fine:hover:text-foreground motion-safe:active:scale-(--ouro-press-scale) " +
+  "forced-colors:border forced-colors:border-solid disabled:cursor-not-allowed disabled:opacity-50";
+
 /** Props for {@link SheetFrame}: a Sheet's props after its checks, plus what `Dialog` adds. */
 export interface SheetFrameProps {
   title: string;
@@ -225,6 +253,8 @@ export interface SheetFrameProps {
   description?: ReactNode;
   side: SheetSide;
   snapPoints?: SheetSnapPoint[] | undefined;
+  /** `false` leaves the page in use beside the sheet (`Sheet`'s `modal`). @default true */
+  modal?: boolean | undefined;
   children: ReactNode;
   className?: string | undefined;
   /** The opening element. May come with `open`, when `Dialog` owns the state. */
@@ -235,10 +265,14 @@ export interface SheetFrameProps {
   footer?: ReactNode;
   /** Marks the popup with `data-ouro-presentation`, when `Dialog` renders as a sheet. */
   presentation?: "sheet" | undefined;
-  /** Where focus goes on close: `Dialog` passes its own trigger, which it renders outside the sheet. */
-  finalFocus?: RefObject<HTMLElement | null> | undefined;
+  /** Where focus goes on close: `Dialog` passes its own trigger, which it renders outside the sheet, and `Command` a choice of its own. */
+  finalFocus?: SheetPopupProps["finalFocus"];
   /** Disables the close button, as `EditSheet` does while a save is pending. */
   closeDisabled?: boolean | undefined;
+  /** Keeps the closed sheet's content in the page, hidden, so an open only shows it (`Navbar` builds its sheet ahead of the press). */
+  keepMounted?: boolean | undefined;
+  /** Called once an open or a close has finished, its slide included (`Navbar` builds its kept sheet afresh after a close). */
+  onOpenChangeComplete?: ((open: boolean) => void) | undefined;
 }
 
 /**
@@ -248,7 +282,7 @@ export interface SheetFrameProps {
  *
  * @internal Shared with `Dialog`; apps use `Sheet`.
  * @claim "The sheet's markup, without prop checks" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::Sheet dev messages > throws the exact fix when open comes without onOpenChange)
- * @claim "The sheet's markup, without prop checks" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog parts > renders an md DialogPopup for a size that is not one of Ouro UI's, and warns once with the fix)
+ * @claim "The sheet's markup, without prop checks" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog parts > renders the auto DialogPopup for a size that is not one of Ouro UI's, and warns once with the fix)
  */
 export function SheetFrame({
   title,
@@ -257,6 +291,7 @@ export function SheetFrame({
   description,
   side,
   snapPoints,
+  modal = true,
   children,
   className,
   trigger,
@@ -266,19 +301,24 @@ export function SheetFrame({
   presentation,
   finalFocus,
   closeDisabled,
+  keepMounted,
+  onOpenChangeComplete,
 }: SheetFrameProps): JSX.Element {
-  const showHeader = !hideTitle || description !== undefined;
+  // A non-modal sheet keeps its header row, which its close button sits in, even with the title hidden.
+  const showHeader = !hideTitle || description !== undefined || !modal;
   const titleNode = <SheetTitle visuallyHidden={hideTitle}>{title}</SheetTitle>;
 
   return (
     <SheetRoot
       side={side}
       snapPoints={snapPoints}
+      modal={modal}
       {...(open !== undefined ? { open, onOpenChange: (next: boolean) => onOpenChange!(next) } : {})}
+      {...(onOpenChangeComplete ? { onOpenChangeComplete } : {})}
     >
       {trigger !== undefined && <SheetTrigger render={trigger} />}
-      <SheetPortal>
-        <SheetBackdrop />
+      <SheetPortal keepMounted={keepMounted}>
+        {modal && <SheetBackdrop />}
         <SheetViewport>
           <SheetPopupUnchecked
             className={className}
@@ -287,7 +327,7 @@ export function SheetFrame({
           >
             {side === "bottom" && <SheetHandle />}
             {showHeader ? (
-              <div data-ouro-sheet-header="" className="grid shrink-0 gap-1 px-5 pt-3 pb-2">
+              <div data-ouro-sheet-header="" className={modal ? "grid shrink-0 gap-1 px-5 pt-3 pb-2" : "grid min-h-12 shrink-0 gap-1 ps-5 pe-14 pt-3 pb-2"}>
                 {titleNode}
                 {description !== undefined && <SheetDescription>{description}</SheetDescription>}
               </div>
@@ -301,9 +341,19 @@ export function SheetFrame({
               </div>
             )}
             {side === "top" && <SheetHandle />}
-            <SheetClose data-ouro-sheet-close="" disabled={closeDisabled} className={closeClass}>
-              {closeLabel}
-            </SheetClose>
+            {modal ? (
+              <SheetClose data-ouro-sheet-close="" disabled={closeDisabled} className={closeClass}>
+                {closeLabel}
+              </SheetClose>
+            ) : (
+              <SheetClose data-ouro-sheet-close="" disabled={closeDisabled} className={shownCloseClass}>
+                <TouchTarget />
+                <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" className="size-4">
+                  <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <span className="sr-only">{closeLabel}</span>
+              </SheetClose>
+            )}
           </SheetPopupUnchecked>
         </SheetViewport>
       </SheetPortal>

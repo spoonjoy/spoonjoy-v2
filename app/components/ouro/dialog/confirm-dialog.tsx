@@ -117,7 +117,7 @@ export type ConfirmDialogProps = ConfirmDialogWithTriggerProps | ConfirmDialogCo
  * `new AxeBuilder({ page }).exclude("[data-base-ui-focus-guard]")`.
  *
  * @group Overlays
- * @see https://ui.ouro.bot/docs/confirm-dialog
+ * @see https://ui.ouroboros.bot/docs/confirm-dialog
  *
  * @example
  * <ConfirmDialog

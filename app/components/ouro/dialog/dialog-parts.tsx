@@ -2,7 +2,7 @@
 
 import { AlertDialog } from "@base-ui/react/alert-dialog";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
-import { createContext, useContext, type JSX, type Ref } from "react";
+import { createContext, useCallback, useContext, type JSX, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { devThrow } from "~/lib/ouro/dev";
 import { useMergedRef } from "~/lib/ouro/refs";
@@ -10,6 +10,7 @@ import { useBackdropAnchor } from "~/lib/ouro/use-backdrop-anchor";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useKeyboardScrollable } from "~/lib/ouro/use-keyboard-scrollable";
 import { cn } from "~/lib/ouro/cn";
+import { holdPageAtPress } from "~/lib/ouro/page-scroll-hold";
 import { PortalScope } from "~/lib/ouro/portal-container";
 import { footerClass, iosBackdrop, sheetHint } from "~/components/ouro/sheet/sheet-styles";
 import { dialogSizes, dialogSizeWarning, type DialogSize } from "~/components/ouro/dialog/dialog-styles";
@@ -25,19 +26,22 @@ const DialogContext = createContext(false);
  * when the dialog is taller than that. Class strings are literal so the app's Tailwind
  * finds them when it compiles.
  */
+// --ouro-inset-top is the height of an app bar the app draws across the window's top; the dialog layer starts below it.
+// On iOS the backdrop's top is anchored to the screen (useBackdropAnchor), so the inset clips it there instead.
 const backdropClass =
-  "fixed inset-0 z-1000 min-h-dvh bg-(--ouro-backdrop-color) opacity-(--ouro-backdrop-max) " +
+  "fixed inset-0 top-(--ouro-inset-top,0px) z-1000 min-h-dvh bg-(--ouro-backdrop-color) opacity-(--ouro-backdrop-max) " +
   "transition-opacity duration-(--ouro-duration-slow) ease-(--ouro-ease-out) " +
   "data-starting-style:opacity-0 data-ending-style:opacity-0 data-ending-style:duration-(--ouro-duration-base) data-ouro-instant:transition-none " +
-  iosBackdrop;
+  iosBackdrop +
+  " supports-[-webkit-touch-callout:none]:[clip-path:inset(var(--ouro-inset-top,0px)_0_0_0)]";
 
 const viewportClass =
-  "fixed inset-0 z-1000 box-border flex items-center justify-center " +
+  "fixed inset-0 top-(--ouro-inset-top,0px) z-1000 box-border flex items-center justify-center " +
   "pt-[max(1rem,env(safe-area-inset-top,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] " +
   "pb-[max(1rem,env(safe-area-inset-bottom,0px))] pl-[max(1rem,env(safe-area-inset-left,0px))]";
 
 const popupClass =
-  "relative box-border flex w-full max-h-full min-h-0 flex-col outline-none " +
+  "relative box-border flex max-h-full min-h-0 flex-col outline-none " +
   "rounded-xl bg-popover text-popover-foreground " +
   "ring-1 ring-border/60 shadow-(--shadow-xl) " +
   "[transition:transform_var(--ouro-duration-slow)_var(--ouro-ease-out),opacity_var(--ouro-duration-slow)_var(--ouro-ease-out)] " +
@@ -47,7 +51,25 @@ const popupClass =
   "motion-reduce:[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out)] " +
   "motion-reduce:data-starting-style:[transform:none] motion-reduce:data-ending-style:[transform:none] data-ouro-instant:[transition:none]";
 
-const popupSizes = { sm: "max-w-[24rem]", md: "max-w-[32rem]", lg: "max-w-[40rem]" } as const;
+// Running text: the elements Link also treats as text. In a dialog that fits its content they wrap at 65ch, so their
+// one-line width does not widen it, while a table, an image or a grid still does. The rule sits in the ouro-reset
+// layer, so the app's own max-width class on a paragraph wins.
+const fitClass =
+  "w-fit min-w-[min(32rem,100%)] " +
+  "[@layer_ouro-reset]:[&_:where(p,h1,h2,h3,h4,h5,h6,li,dt,dd,label,legend,blockquote,figcaption,[data-ouro=text],[data-ouro-text])]:max-w-[65ch]";
+
+// sm, md and lg keep one width whatever the content. auto and the wide sizes fit their content: at least md's width,
+// so a short form does not shrink, and at most their cap and the viewport less its margins. auto's cap is 70% of the
+// screen, from 40rem to 56rem.
+const popupSizes = {
+  auto: `${fitClass} max-w-[min(100%,clamp(40rem,70vw,56rem))]`,
+  sm: "w-full max-w-[24rem]",
+  md: "w-full max-w-[32rem]",
+  lg: "w-full max-w-[40rem]",
+  xl: `${fitClass} max-w-[min(100%,56rem)]`,
+  "2xl": `${fitClass} max-w-[min(100%,72rem)]`,
+  full: `${fitClass} max-w-full`,
+} as const;
 
 /** The JSX that puts a part in its place, for the dev message when it is not. */
 function shape(inner: string): string {
@@ -110,9 +132,22 @@ export function AlertDialogRoot(props: AlertDialog.Root.Props): JSX.Element {
 }
 
 /** Part: the button that opens the dialog. Pass your button as `render={<Button>Open</Button>}`. */
-export function DialogTrigger(props: BaseDialog.Trigger.Props): JSX.Element {
+export function DialogTrigger({ onPointerDown, onKeyDown, ...props }: BaseDialog.Trigger.Props): JSX.Element {
   useDialogPart("DialogTrigger", "…");
-  return <BaseDialog.Trigger {...(props.render === undefined ? { className: "forced-colors:border forced-colors:border-solid", "data-ouro-control": "dialog", "data-ouro-part": "trigger" } : {})} {...props} />;
+  return (
+    <BaseDialog.Trigger
+      {...(props.render === undefined ? { className: "forced-colors:border forced-colors:border-solid", "data-ouro-control": "dialog", "data-ouro-part": "trigger" } : {})}
+      {...props}
+      onPointerDown={(event) => {
+        onPointerDown?.(event);
+        holdPageAtPress.dialog.onPointerDown(event);
+      }}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        holdPageAtPress.dialog.onKeyDown(event);
+      }}
+    />
+  );
 }
 
 /**
@@ -155,11 +190,22 @@ export function DialogViewport(props: Omit<BaseDialog.Viewport.Props, "className
 export type DialogPopupProps = Omit<BaseDialog.Popup.Props, "className"> & {
   className?: string | undefined;
   /**
-   * Maximum width: `sm` 24rem, `md` 32rem, `lg` 40rem. @default "md"
+   * The panel's width. By default (`auto`) it fits its content and the screen: at least 32rem, so a form or a short
+   * question keeps a comfortable width, and at most 70% of the screen, from 40rem up to 56rem, so a gallery or a table grows
+   * on a big screen. Running text (paragraphs, headings, list items, labels, `Text`) wraps at a readable 65ch and does not
+   * widen it; bare text in a `div` measures as one long line, so put prose in a `<p>`. `xl` (56rem), `2xl` (72rem) and
+   * `full` (the viewport) raise the cap for wide content. `sm` (24rem), `md` (32rem) and `lg` (40rem) pin a fixed width
+   * whatever the content. Every size narrows to the viewport less its 1rem margins (or the safe area). @default "auto"
    *
-   * @claim "Maximum width: `sm` 24rem, `md` 32rem" registry/ouro/components/ouro/dialog/dialog-parts.tsx verify:fileLine(registry/ouro/components/ouro/dialog/dialog-parts.tsx, /const\spopupSizes\s=\s\{\ssm:\s"max-w-\[24rem\]",\smd:\s"max-w-\[32rem\]",\slg:\s"max-w-\[40rem\]"\s\}/)
+   * @claim "By default (`auto`) it fits" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > fits size %s to its content, from 32rem up to %ipx)
+   * @claim "By default (`auto`) it fits" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > follows the screen by default: a wide table makes it %ipx wide on a %ipx screen)
+   * @claim "Running text (paragraphs, headings, list" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > keeps running text at a readable 65ch in size %s, so text alone does not widen it)
+   * @claim "Running text (paragraphs, headings, list" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > lets the app's own max-width class on a paragraph win over the 65ch measure)
+   * @claim "`xl` (56rem), `2xl` (72rem) and" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > caps size %s at %ipx wide)
+   * @claim "`sm` (24rem), `md` (32rem) and" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > keeps size %s at %ipx whatever the content)
+   * @claim "Every size narrows to the viewport" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > keeps size %s inside a 390px phone's 16px margins when presentation is dialog)
    */
-  size?: DialogSize | (string & { 'Use "sm", "md" or "lg"': never }) | undefined;
+  size?: DialogSize | (string & { 'Use "auto", "sm", "md", "lg", "xl", "2xl" or "full"': never }) | undefined;
 };
 
 /**
@@ -168,9 +214,9 @@ export type DialogPopupProps = Omit<BaseDialog.Popup.Props, "className"> & {
  * @claim "It scales up from 0.96 and" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::motion > scales from 0.96 on the ease-out token and fades, entering in 300ms and leaving in 200ms)
  * @claim "It scales up from 0.96 and" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::motion > drops the scale under reduced motion and keeps the fade)
  */
-export function DialogPopup({ size: sizeProp = "md", ...props }: DialogPopupProps): JSX.Element {
-  // A size that is not one of Ouro UI's (a type error) warns and renders md.
-  const size = dialogSizes.includes(sizeProp as DialogSize) ? (sizeProp as DialogSize) : "md";
+export function DialogPopup({ size: sizeProp = "auto", ...props }: DialogPopupProps): JSX.Element {
+  // A size that is not one of Ouro UI's (a type error) warns and renders the default.
+  const size = dialogSizes.includes(sizeProp as DialogSize) ? (sizeProp as DialogSize) : "auto";
   useDevWarnings(
     "DialogPopup",
     process.env.NODE_ENV !== "production"
@@ -195,18 +241,65 @@ export function DialogPopup({ size: sizeProp = "md", ...props }: DialogPopupProp
 export function DialogPopupUnchecked({
   className,
   size,
+  ref,
   ...props
 }: Omit<DialogPopupProps, "size"> & { size: DialogSize }): JSX.Element {
   useDialogPart("DialogPopup", "…");
+  const holdRef = useMergedRef(ref, useHeldTop());
   return (
     <BaseDialog.Popup
       {...props}
+      ref={holdRef}
       className={cn(popupClass, popupSizes[size], className)}
       data-ouro="dialog"
       data-ouro-presentation="dialog"
       data-size={size}
     />
   );
+}
+
+/**
+ * Keeps an open dialog's top edge where it opened while its content grows or shrinks, as a macOS sheet does, so a
+ * dialog whose steps tick by grows downward instead of moving as a whole. It opens centred, moves up only as far as
+ * it must to stay inside the screen's margin, and centres itself again for a window of a new size.
+ */
+function useHeldTop(): (popup: HTMLElement) => () => void {
+  return useCallback((popup: HTMLElement) => {
+    const viewport = popup.parentElement!;
+    // Where the popup's top is held, from the viewport's top: where the viewport centred it when it opened.
+    let held: number | undefined;
+    // A relative offset from where the viewport's centring puts it, so the popup's own margins (Lightbox's full
+    // screen) stay as they are.
+    const place = () => {
+      const height = popup.offsetHeight;
+      const natural = popup.offsetTop - (parseFloat(popup.style.top) || 0);
+      const lowest = viewport.clientHeight - parseFloat(getComputedStyle(viewport).paddingBottom) - height;
+      held ??= natural;
+      // Taller than the room, it stays where the viewport puts it; otherwise as near the held top as it fits.
+      // Stryker disable next-line EqualityOperator: at natural === lowest the popup fills the room, so held >= lowest and both give 0.
+      popup.style.top = `${natural > lowest ? 0 : Math.min(held, lowest) - natural}px`;
+    };
+    place();
+    const content = new ResizeObserver(place);
+    content.observe(popup);
+    // A window of a new height centres it again; a width change (a page's scroll bar coming or going) does not.
+    let screenHeight = viewport.clientHeight;
+    const screen = new ResizeObserver(() => {
+      if (viewport.clientHeight !== screenHeight) held = undefined;
+      screenHeight = viewport.clientHeight;
+      place();
+    });
+    screen.observe(viewport);
+    // Stryker disable next-line BlockStatement: the observers watch a popup and viewport that are leaving the page, so no test sees them stop.
+    return () => {
+      // Stryker disable next-line CallExpression: as above.
+      content.disconnect();
+      // Stryker disable next-line CallExpression: as above.
+      screen.disconnect();
+    };
+  },
+  // Stryker disable next-line ArrayDeclaration: the callback reads nothing from render, so any dependency list keeps it.
+  []);
 }
 
 /** Props for {@link DialogTitle}. */
@@ -275,6 +368,8 @@ export function DialogContent({ className, ref, ...props }: DialogContentProps):
         "box-border min-h-0 flex-auto overflow-y-auto overscroll-contain px-5 pt-2 pb-5",
         // A body that overflows is a tab stop (useKeyboardScrollable); show where focus is.
         "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid",
+        // Under forced colours, where the body ends while it is one.
+        "forced-colors:[&[tabindex='0']]:outline-1 forced-colors:[&[tabindex='0']]:outline-solid forced-colors:[&[tabindex='0']]:-outline-offset-1",
         className,
       )}
     />

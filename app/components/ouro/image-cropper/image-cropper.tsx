@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useId, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent } from "react";
+import { useCallback, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent } from "react";
 import { cn } from "~/lib/ouro/cn";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { Button } from "~/components/ouro/button/button";
@@ -29,9 +29,12 @@ export interface ImageCropperLabels {
   area?: string | undefined;
   /** How to move the photo, read with the crop area. @default "Drag the photo, or move it with the arrow keys, to choose what shows. Plus and minus zoom." */
   instructions?: string | undefined;
-  /** Shown and announced when the browser cannot open the image. @default "This photo could not be opened. Choose another one." */
+  /**
+   * Shown and announced when the browser cannot open the image.
+   * @default "The browser can't read this file as a photo. Choose a JPEG or PNG photo instead." for a `File` or `Blob`; for a URL, "The browser didn't load the photo at this address: it is missing, blocked, or not a photo the browser can read. Choose another photo."
+   */
   openError?: string | undefined;
-  /** Shown and announced when the browser cannot save the crop; Save can be tried again. @default "The photo could not be saved. Try again." */
+  /** Shown and announced when the browser cannot save the crop; Save can be tried again. @default "The browser didn't turn the crop into a file. Press <save label> to try again, or choose another photo." */
   saveError?: string | undefined;
 }
 
@@ -80,8 +83,12 @@ const words = {
   zoom: "Zoom",
   area: "Photo to crop",
   instructions: "Drag the photo, or move it with the arrow keys, to choose what shows. Plus and minus zoom.",
-  openError: "This photo could not be opened. Choose another one.",
-  saveError: "The photo could not be saved. Try again.",
+};
+
+/** What an image that will not open says by default, by where it came from: a file, or an address. */
+const openErrors = {
+  file: "The browser can't read this file as a photo. Choose a JPEG or PNG photo instead.",
+  url: "The browser didn't load the photo at this address: it is missing, blocked, or not a photo the browser can read. Choose another photo.",
 };
 
 /** Draws the chosen part of the image at the output size and returns it as a file. */
@@ -93,7 +100,8 @@ async function crop(image: HTMLImageElement, natural: Size, frame: Size, scale: 
   const context = canvas.getContext("2d")!;
   context.imageSmoothingQuality = "high";
   context.drawImage(image, rect.x, rect.y, rect.width, rect.height, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((result) => (result ? resolve(result) : reject(new Error("The browser could not encode the image."))), type, 0.92));
+  // Stryker disable next-line StringLiteral: the cropper catches this error and shows saveError; the message is only for a debugger.
+  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((result) => (result ? resolve(result) : reject(new Error("canvas.toBlob returned no image for the crop"))), type, 0.92));
   const extension = blob.type.split("/")[1]!.replace("jpeg", "jpg");
   return new File([blob], `${name.replace(/\.[^.]+$/, "")}.${extension}`, { type: blob.type });
 }
@@ -109,7 +117,7 @@ async function crop(image: HTMLImageElement, natural: Size, frame: Size, scale: 
  * for files that need no cropping.
  *
  * @group Forms
- * @see https://ui.ouro.bot/docs/image-cropper
+ * @see https://ui.ouroboros.bot/docs/image-cropper
  *
  * @example
  * <ImageCropper open={file !== null} onOpenChange={(open) => !open && setFile(null)} image={file} shape="circle" onCrop={upload} />
@@ -151,7 +159,10 @@ export function ImageCropper(props: ImageCropperProps): JSX.Element {
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
-  const word = { ...words, ...Object.fromEntries(Object.entries(labels ?? {}).filter(([, value]) => value !== undefined)) };
+  // Merged once per labels object, so an app that keeps its labels in a constant merges them once.
+  const word = useMemo(() => ({ ...words, ...Object.fromEntries(Object.entries(labels ?? {}).filter(([, value]) => value !== undefined)) }), [labels]);
+  const openError = labels?.openError ?? (typeof image === "string" ? openErrors.url : openErrors.file);
+  const saveError = labels?.saveError ?? `The browser didn't turn the crop into a file. Press ${word.save} to try again, or choose another photo.`;
   const frame: Size = { width: FRAME_WIDTH, height: Math.round(FRAME_WIDTH / aspect) };
 
   const [natural, setNatural] = useState<Size | null>(null);
@@ -233,7 +244,7 @@ export function ImageCropper(props: ImageCropperProps): JSX.Element {
     try {
       file = await crop(img.current!, natural!, frame, scale, offset, outputWidth, type, image instanceof File ? image.name : "photo");
     } catch {
-      // The browser could not encode the image; the dialog stays open, so Save can be tried again.
+      // The browser turned the crop into no file; the dialog stays open, so Save can be tried again.
       setSaving(false);
       fail("save");
       return;
@@ -307,7 +318,7 @@ export function ImageCropper(props: ImageCropperProps): JSX.Element {
         </p>
         {/* A polite status region from the first render, so a failure is announced once when it appears; hidden while empty. */}
         <p id={statusId} role="status" className={cn("m-0 text-center text-sm leading-5 text-destructive", !failure && "sr-only")}>
-          {failure === "open" ? word.openError : failure === "save" ? word.saveError : null}
+          {failure === "open" ? openError : failure === "save" ? saveError : null}
         </p>
         <Slider label={word.zoom} min={MIN_ZOOM} max={MAX_ZOOM} step={0.01} value={zoom} onValueChange={zoomTo} disabled={!natural} format={{ style: "percent" }} className="w-full max-w-72" />
       </div>

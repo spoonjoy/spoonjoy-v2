@@ -105,8 +105,13 @@ const HOW_TO = {
   copy: 'Wrap it in claim("…", { source, verify }) from lib/ouro/claims (the claim docs).',
 };
 
+/** Characters that draw nothing: a way to split a word the patterns look for. */
+const INVISIBLE = /[\p{Default_Ignorable_Code_Point}\p{Cf}\u2800]|(?![\t\n\r])\p{Cc}/gu;
+/** A hidden character may sit inside a word or stand between words, so text is read with them removed and with them as spaces. */
+const FILLER = INVISIBLE;
+
 /** Whether text has one of the claim words (not a number): a quotation with one is read, not masked. */
-const hasClaimWord = (text) => WORDS.some(([, pattern]) => pattern.test(text));
+const hasClaimWord = (text) => [text, text.replace(FILLER, " ")].some((view) => WORDS.some(([, pattern]) => pattern.test(view.replace(INVISIBLE, ""))));
 
 /**
  * A short quotation mentions text, such as a label or an example of output ("3 days ago"); it
@@ -121,9 +126,42 @@ const maskQuote = (quote, plain, curly) => {
   return hasClaimWord(inner) || inner.trim().split(/\s+/).length > 6 ? quote : "§".repeat(quote.length);
 };
 
+/** Entities that draw nothing. */
+const HIDDEN_ENTITY = /&(?:shy|ZeroWidthSpace|zwj|zwnj|ZeroWidthNonJoiner|NoBreak|lrm|rlm|LeftToRightMark|RightToLeftMark|InvisibleTimes|InvisibleComma|ic|it|af|ApplyFunction|NegativeVeryThinSpace|NegativeThinSpace|NegativeMediumSpace|NegativeThickSpace);/;
+/** An HTML or JSX tag: a name, name=value attributes, and at most one bare attribute ("open"), so prose between a bare < and a later > is not one. */
+const BOOLEAN_ATTRIBUTE = "allowfullscreen|async|autofocus|autoplay|checked|controls|default|defer|disabled|formnovalidate|hidden|inert|ismap|loop|multiple|muted|nomodule|novalidate|open|playsinline|readonly|required|reversed|selected";
+const TAG_SOURCE = String.raw`<\/?[A-Za-z][\w:.-]*(?:\s+(?:[^\s=<>"'/]+=(?:"[^"]*"|'[^']*'|\{[^}<]{0,200}\}|[^\s<>"']+)|\{\.\.\.[\w$.?\[\]()]{1,80}\}|(?:${BOOLEAN_ATTRIBUTE})(?![\w:.-])))*(?:\s+[^\s=<>"'/]+)?\s*\/?>`;
+const TAG = new RegExp(TAG_SOURCE, "g");
+/** A run of tags between letters: they draw nothing, so they are hidden characters like any other. */
+const IN_WORD_MARKUP = new RegExp(String.raw`(?<=[\w\u200B])(?:${TAG_SOURCE})+(?=[\w\u200B])`, "g");
+
+/**
+ * The text with its comments masked to the same length: spaces, or hidden characters when the comment sits between
+ * letters (it draws nothing there). It finds a close with indexOf and stops at the first open comment without one,
+ * so a text of open comments is read in linear time.
+ */
+function maskComments(text) {
+  const letter = /[\w\u200B]/;
+  let out = "";
+  let at = 0;
+  for (;;) {
+    const open = text.indexOf("<!--", at);
+    if (open < 0) break;
+    const close = text.indexOf("-->", open + 4);
+    if (close < 0) break;
+    const end = close + 3;
+    const inWord = open > 0 && letter.test(text[open - 1]) && end < text.length && letter.test(text[end]);
+    out += text.slice(at, open) + (inWord ? "\u200B" : " ").repeat(end - open);
+    at = end;
+  }
+  return out + text.slice(at);
+}
+
 /** Code spans, template substitutions, links' targets and addresses: their digits and words are not prose. */
-function maskCode(text) {
-  return text
+function maskCode(text, fillersAsSpaces = false) {
+  // Characters that draw nothing are a way to split a word the patterns look for, so they go first.
+  return (fillersAsSpaces ? text.replace(FILLER, " ") : text)
+    .replace(INVISIBLE, "")
     .replace(/(`+)[\s\S]*?\1/g, (span) => "§".repeat(span.length))
     .replace(/\$\{[^}]*\}/g, (span) => "§".repeat(span.length))
     .replace(/\]\([^)]*\)/g, (target) => "]" + " ".repeat(target.length - 1))
@@ -133,7 +171,14 @@ function maskCode(text) {
 
 /** The kinds of claim a sentence makes, with the words that make it. */
 export function triggers(sentence) {
-  let text = maskCode(sentence);
+  const found = triggersOf(maskCode(sentence));
+  // A filler that draws a blank may stand between two words rather than inside one.
+  if (sentence.search(FILLER) >= 0) for (const entry of triggersOf(maskCode(sentence, true))) if (!found.some((other) => other.kind === entry.kind)) found.push(entry);
+  return found;
+}
+
+function triggersOf(masked) {
+  let text = masked;
   const found = [];
   const take = (kind, pattern) => {
     const words = [...text.matchAll(pattern)].map((match) => match[0]);
@@ -224,7 +269,8 @@ function parseEvidence(body) {
 // ---------------------------------------------------------------------------------------
 // Markdown
 
-const collapse = (text) => text.replace(/\s+/g, " ").trim();
+// The vertical tab, form feed and NEL are hidden characters (INVISIBLE), not spaces, so they stay for the checks to read.
+const collapse = (text) => text.replace(/[^\S\v\f\u0085]+/g, " ").trim();
 
 /** Splits Markdown into the units sentences come from: paragraphs, list items, headings and table cells. */
 function blocks(text) {
@@ -316,8 +362,7 @@ function blocks(text) {
 /** The block's text with code, addresses and markup masked to the same length, and its claim markers. */
 function maskBlock(text, definitions) {
   const markers = [];
-  let masked = text
-    .replace(/<!--[\s\S]*?-->/g, (match) => " ".repeat(match.length))
+  let masked = maskComments(text)
     .replace(/(`+)[\s\S]*?\1/g, (span) => "§".repeat(span.length))
     .replace(/\$\{[^}]*\}/g, (span) => "§".repeat(span.length))
     .replace(/!\[[^\]]*\]\([^)]*\)/g, (image) => "§".repeat(image.length));
@@ -338,10 +383,14 @@ function maskBlock(text, definitions) {
     }
     return "¹".repeat(match.length);
   });
+  // Invisible entities, and tags or comments inside a word, draw nothing: they are hidden characters like any other.
+  masked = masked
+    .replace(new RegExp(HIDDEN_ENTITY, "g"), (entity) => "\u200B".repeat(entity.length))
+    .replace(IN_WORD_MARKUP, (hidden) => "\u200B".repeat(hidden.length));
   masked = masked
     .replace(/<?https?:\/\/[^\s)>\]]*[^\s)>\].,;:!?'"]>?/g, (url) => "§".repeat(url.length))
     .replace(QUOTED, maskQuote)
-    .replace(/<\/?[A-Za-z][^>]*>/g, (tag) => " ".repeat(tag.length));
+    .replace(TAG, (tag) => " ".repeat(tag.length));
   return { masked, markers };
 }
 
@@ -630,6 +679,12 @@ export function lintTypeScript(source, { file, jsdoc = false, copy = false, clai
     findings.push(...(wordsOnly ? result.findings.filter((finding) => finding.kinds?.some((kind) => !["number", "version", "date"].includes(kind))) : result.findings));
     claims.push(...result.claims);
   };
+  // A string is read as copy when it passes the gate with its hidden characters removed or with its fillers as spaces; the text read is the string itself.
+  const readCopy = (text, node) => {
+    const views = [text.replace(INVISIBLE, ""), text.replace(FILLER, " ").replace(INVISIBLE, "")];
+    if (views.some((view) => isMarkdown(view) || isProse(view) || statesNumber(view))) prose(text, node);
+    else if (views.some(saysSomething)) prose(text, node, true);
+  };
   const visit = (node) => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "claim") {
       const [textNode, evidenceNode] = node.arguments;
@@ -658,14 +713,12 @@ export function lintTypeScript(source, { file, jsdoc = false, copy = false, clai
     }
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       if (isLookup(node)) return;
-      if (isMarkdown(node.text) || isProse(node.text) || statesNumber(node.text)) prose(node.text, node);
-      else if (saysSomething(node.text)) prose(node.text, node, true);
+      readCopy(node.text, node);
       return;
     }
     if (ts.isTemplateExpression(node)) {
       const text = [node.head.text, ...node.templateSpans.map((span) => `\${${span.expression.getText(tree)}}${span.literal.text}`)].join("");
-      if (isMarkdown(text) || isProse(text) || statesNumber(text)) prose(text, node);
-      else if (saysSomething(text)) prose(text, node, true);
+      readCopy(text, node);
     }
     ts.forEachChild(node, visit);
   };
@@ -796,11 +849,33 @@ function workflowJobs(root) {
   return jobs;
 }
 
-/** The repository's owner/name, for recognising its own GitHub addresses. */
-function repoSlug(root) {
-  const url = readJson(root, "package.json")?.repository?.url ?? "";
-  return /github\.com\/([^/]+\/[^/.]+)/.exec(url)?.[1] ?? "ourostack/ouro-ui";
+/** owner/name of a GitHub address (`github:`, https, git+https, ssh or scp-style), or undefined. */
+function githubSlug(address) {
+  const value = typeof address === "string" ? address.trim() : "";
+  const match = /^github:([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(value) ?? /github\.com[/:]([^/\s:]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(value);
+  return match ? `${match[1]}/${match[2]}` : undefined;
 }
+
+/** The `origin` remote's address, or undefined if git cannot report one. */
+function gitOrigin(root) {
+  try {
+    return execFileSync("git", ["remote", "get-url", "origin"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The repository's owner/name, for recognising its own GitHub addresses: package.json's
+ * `repository` (a string or `{ url }`), else the `origin` remote. Undefined if neither is a
+ * GitHub repository, so the checker cannot fall back to another repository's.
+ */
+function repoSlug(root) {
+  const field = readJson(root, "package.json")?.repository;
+  return githubSlug(typeof field === "string" ? field : field?.url) ?? githubSlug(gitOrigin(root));
+}
+
+const NO_REPO_SLUG = 'A GitHub address cannot be checked: this repository has no "repository" field in package.json and no GitHub origin remote, so the checker cannot tell which repository is its own. Add "repository": "github:<owner>/<repo>" to package.json.';
 
 async function fetchStatus(url) {
   let last = 0;
@@ -952,7 +1027,10 @@ export async function verify(checks, context, sources = []) {
       else if (entry.status < 200 || entry.status >= 400) fail(`${check.urlOk} answered ${entry.status || "nothing"} (checked ${entry.checked}).`);
     }
   }
-  const slug = repoSlug(root);
+  // A GitHub address is this repository's own only when its slug is known, so the checker names the missing field instead of guessing.
+  const githubSpec = sources.some((source) => "spec" in source && /^https:\/\/github\.com\//.test(source.spec));
+  const slug = githubSpec ? repoSlug(root) : undefined;
+  if (githubSpec && slug === undefined) fail(NO_REPO_SLUG);
   for (const source of sources) {
     if ("file" in source || "evidence" in source) {
       const file = source.file ?? source.evidence;
@@ -963,7 +1041,7 @@ export async function verify(checks, context, sources = []) {
       const problem = testProblem(root, source.test, config);
       if (problem) fail(problem);
     } else if ("spec" in source) {
-      const own = new RegExp(`^https://github\\.com/${slug.replace(".", "\\.")}/(?:blob|tree)/[^/]+/([^#?]+)(?:#L(\\d+))?`).exec(source.spec);
+      const own = slug && new RegExp(`^https://github\\.com/${slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/(?:blob|tree)/[^/]+/([^#?]+)(?:#L(\\d+))?`).exec(source.spec);
       if (own) {
         const file = decodeURIComponent(own[1]).replace(/\/$/, "");
         const text = read(root, file);
@@ -978,14 +1056,17 @@ export async function verify(checks, context, sources = []) {
 // ---------------------------------------------------------------------------------------
 // Surfaces
 
-function listFiles(root) {
+function listFiles(root, generated = []) {
   const git = (args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
   try {
     if (realpathSync(git(["rev-parse", "--show-toplevel"])) !== realpathSync(root)) throw new Error("not the repository's root");
-    return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
-      .split("\n")
-      .filter(Boolean)
-      .filter((file) => existsSync(join(root, file)));
+    const lines = (args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 }).split("\n").filter(Boolean);
+    // A generated file that git ignores (one the generators write on every checkout and only a
+    // release commits) is still a surface: what it says is what an app or a reader gets.
+    const ignored = lines(["ls-files", "--others", "--ignored", "--exclude-standard", "--directory"]).filter((file) => generated.some((pattern) => pattern.test(file)));
+    return [...new Set([...lines(["ls-files", "--cached", "--others", "--exclude-standard"]), ...ignored])]
+      .sort()
+      .filter((file) => existsSync(join(root, file)) && statSync(join(root, file)).isFile());
   } catch {
     const out = [];
     const walk = (dir) => {
@@ -1008,7 +1089,7 @@ function listFiles(root) {
  */
 export function surfaces(root, config = loadConfig(root)) {
   const out = [];
-  for (const file of listFiles(root)) {
+  for (const file of listFiles(root, (config.generated ?? []).map((pattern) => new RegExp(pattern)))) {
     const entry = classify(file, config);
     if (entry) out.push({ file, ...entry });
   }

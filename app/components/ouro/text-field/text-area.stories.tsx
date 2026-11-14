@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "~/components/ouro/button/button";
-import { TextArea } from "~/components/ouro/text-field/text-area";
+import { TextArea, type TextAreaHighlight } from "~/components/ouro/text-field/text-area";
 
 // Layout here uses inline styles and the theme's CSS variables (shadcn's names).
 
@@ -83,6 +83,43 @@ export const Composer: Story = {
         <TextArea label="Message" hideLabel name="message" placeholder="Ask about this recipe" variant="plain" autoGrow rows={1} maxRows={6} className="flex-1" />
         <Button type="submit">Send</Button>
       </form>
+    </Surface>
+  ),
+};
+
+const notes = "Shape the loaf tightly and proof it overnight in the fridge. Bake it at 250°C for twenty minuts, then lower the heat.";
+const noteMarks: TextAreaHighlight[] = [
+  { start: 0, end: 60, label: "Suggested by your assistant" },
+  { start: 89, end: 95, label: "Possible spelling mistake", tone: "destructive" },
+  { start: 102, end: 116, label: "Unclear amount", tone: "warning" },
+];
+
+function Marked() {
+  const [text, setText] = useState(notes);
+  const [highlights, setHighlights] = useState(noteMarks);
+  return (
+    <TextArea
+      label="Method"
+      description="Your assistant's words are underlined with dots; possible mistakes with a wave."
+      autoGrow
+      rows={3}
+      value={text}
+      onValueChange={setText}
+      highlights={highlights}
+      onHighlightsChange={setHighlights}
+    />
+  );
+}
+
+/**
+ * Marks in the text: words an assistant suggested (a dotted underline on a tint), a possible
+ * spelling mistake (`destructive`) and a note (`warning`), each with a wavy underline. The
+ * marks follow their words as you edit, and screen readers hear them in the field's description.
+ */
+export const Highlights: Story = {
+  render: () => (
+    <Surface>
+      <Marked />
     </Surface>
   ),
 };

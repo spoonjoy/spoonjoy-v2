@@ -4,7 +4,9 @@ import { useCallback, type RefCallback } from "react";
 
 /**
  * Makes a scroll container a tab stop while its content overflows, so a
- * keyboard user can focus it and scroll with the arrow keys. A dialog body of
+ * keyboard user can focus it and scroll with the arrow keys. Overflow counts
+ * across as well as down when the container scrolls across, as a dialog body
+ * does around a table wider than a phone. A dialog body of
  * plain text has nothing else to focus, and without this its overflow is out
  * of keyboard reach (axe `scrollable-region-focusable`, WCAG 2.1.1). It adds no
  * tab stop while the content fits.
@@ -16,6 +18,7 @@ import { useCallback, type RefCallback } from "react";
  * @example
  * const scrollRef = useKeyboardScrollable<HTMLDivElement>(props.tabIndex === undefined);
  * @claim "It adds no tab stop while" registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx verify:testExists(registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx::keeps the tab stop while the body has focus, and drops it on blur once the content fits)
+ * @claim "Overflow counts across as well" registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx verify:testExists(registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx::makes a container a tab stop when its content overflows across, unless it clips across)
  * @claim "A dialog body of plain text" registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx verify:testExists(registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx::makes an overflowing scroll container a tab stop, so a keyboard can scroll it)
  * @claim "It adds no tab stop while" registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx verify:testExists(registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx::makes an overflowing scroll container a tab stop, so a keyboard can scroll it)
  * @claim "A dialog body of plain text" https://dequeuniversity.com/rules/axe/4.10/scrollable-region-focusable verify:urlOk(https://dequeuniversity.com/rules/axe/4.10/scrollable-region-focusable)
@@ -26,7 +29,8 @@ export function useKeyboardScrollable<T extends HTMLElement>(enabled: boolean): 
     (element: T | null) => {
       if (!element || !enabled) return;
       const update = () => {
-        if (element.scrollHeight > element.clientHeight) element.setAttribute("tabindex", "0");
+        const across = element.scrollWidth > element.clientWidth && /auto|scroll/.test(getComputedStyle(element).overflowX);
+        if (element.scrollHeight > element.clientHeight || across) element.setAttribute("tabindex", "0");
         // Removing the tab stop from the focused element would drop focus to
         // <body>, out of the dialog; keep it until focus leaves (see blur below).
         else if (element !== element.ownerDocument.activeElement) element.removeAttribute("tabindex");

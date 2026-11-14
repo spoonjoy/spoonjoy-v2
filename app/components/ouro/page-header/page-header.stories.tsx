@@ -63,4 +63,4 @@ export const InContext: Story = {
 };
 
 /** A landing or profile page's larger title. */
-export const Large: Story = { args: { size: "lg", eyebrow: "Welcome back", title: "Good morning, Sam", description: undefined } };
+export const Large: Story = { args: { size: "lg", eyebrow: "Welcome back", title: "Good morning, Jo", description: undefined } };

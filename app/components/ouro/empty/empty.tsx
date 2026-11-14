@@ -69,11 +69,12 @@ const levels = [2, 3, 4, 5, 6] as const;
  * What a list, search or page shows when it has nothing in it: an icon, a title that says
  * what is empty, a sentence on what to do, and the action that does it.
  *
- * Use `Alert` instead for an error or a warning, and `Skeleton` while the content is
- * still loading.
+ * Use `Alert` instead for an error or a warning, `Skeleton` while the content is
+ * still loading, and `Moment` for a state with art of its own, a first run, a success that
+ * celebrates, or one the person can dismiss.
  *
  * @group Display
- * @see https://ui.ouro.bot/docs/empty
+ * @see https://ui.ouroboros.bot/docs/empty
  *
  * @example
  * <Empty

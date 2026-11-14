@@ -206,4 +206,77 @@ describe("usePortalContainer", () => {
     );
     expect(warn).not.toHaveBeenCalled();
   });
+
+  describe("holdPage", () => {
+    const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    /** Scrolls the page as a script does, and returns where it is once the next frame paints. */
+    async function scrollTo(top: number) {
+      window.scrollTo({ top, behavior: "instant" });
+      await frame();
+      return window.scrollY;
+    }
+
+    function Held({ name, open, holdPage = true, children }: { name: string; open: boolean; holdPage?: boolean; children?: ReactNode }) {
+      const portal = usePortalContainer("Held", holdPage);
+      return (
+        <Popover.Root open={open}>
+          <Popover.Portal {...portal}>
+            <PortalScope>
+              <Popover.Positioner>
+                <Popover.Popup aria-label={name}>
+                  {name}
+                  {children}
+                </Popover.Popup>
+              </Popover.Positioner>
+            </PortalScope>
+          </Popover.Portal>
+        </Popover.Root>
+      );
+    }
+
+    beforeEach(async () => {
+      document.body.appendChild(document.createElement("div")).style.height = "5000px";
+      expect(await scrollTo(2000)).toBe(2000);
+    });
+    afterEach(async () => {
+      await scrollTo(0);
+    });
+
+    it("with holdPage, keeps the page where it is while the layer is open, and lets it go once it closes", async () => {
+      const host = await render(<Held name="Filters" open />);
+      expect(await scrollTo(4000)).toBe(2000);
+      const root = roots.at(-1)!;
+      await act(async () => root.render(<Held name="Filters" open={false} />));
+      await expect.poll(() => document.querySelector('[aria-label="Filters"]')).toBeNull();
+      expect(await scrollTo(3000)).toBe(3000);
+      expect(host.isConnected).toBe(true);
+    });
+
+    it("holds the page for a layer opened inside another portal, and not for a layer without holdPage", async () => {
+      await render(
+        <Held name="Hint" open holdPage={false}>
+          <Held name="Tip" open holdPage={false} />
+        </Held>,
+      );
+      expect(await scrollTo(2500)).toBe(2500);
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+      expect(await scrollTo(2000)).toBe(2000);
+      await render(
+        <Held name="Tip" open holdPage={false}>
+          <Held name="Inner" open />
+        </Held>,
+      );
+      expect(await scrollTo(3000)).toBe(2000);
+      const root = roots.at(-1)!;
+      await act(async () =>
+        root.render(
+          <Held name="Tip" open holdPage={false}>
+            <Held name="Inner" open={false} />
+          </Held>,
+        ),
+      );
+      await expect.poll(() => document.querySelector('[aria-label="Inner"]')).toBeNull();
+      expect(await scrollTo(3000)).toBe(3000);
+    });
+  });
 });

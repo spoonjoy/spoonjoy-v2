@@ -32,7 +32,7 @@ export const InContext: Story = {
     <ul style={{ display: "grid", gap: 12, maxWidth: 420, margin: 0, padding: 0, listStyle: "none", color: "var(--foreground)" }}>
       {[
         ["Avery", "Bridge is open again.", 2 * MINUTE],
-        ["Sam", "Mud past the second gate.", 5 * 60 * MINUTE],
+        ["Jo", "Mud past the second gate.", 5 * 60 * MINUTE],
         ["Jordan", "Saw a heron at the lake.", 26 * 60 * MINUTE],
         ["Riley", "Trail map updated.", 9 * 24 * 60 * MINUTE],
       ].map(([name, text, ago]) => (

@@ -23,12 +23,12 @@ afterEach(async () => {
   await rotate(390, 844);
 });
 
-async function renderToaster() {
+async function renderToaster(className?: string) {
   const host = document.createElement("div");
   document.body.append(host);
   nodes.push(host);
   root = createRoot(host);
-  await act(async () => root!.render(<Toaster />));
+  await act(async () => root!.render(<Toaster className={className} />));
 }
 
 const toastNamed = (message: string) =>
@@ -262,6 +262,26 @@ describe("the swipe follows the finger (rule 12)", () => {
     // It fades on the way it was thrown, and does not slide down as a closed toast does.
     expect(item.hasAttribute("data-ouro-swiped")).toBe(true);
     await expect.poll(() => toastNamed("Flicked")).toBeUndefined();
+  });
+
+  it("at the top edge, leaves on a swipe up and follows less and less downward", async () => {
+    await renderToaster("top-4 bottom-auto");
+    const item = await show("Top", { duration: 0 });
+    const from = grip(item);
+    const height = item.offsetHeight;
+    try {
+      await dragTo(from, [[0, 12], [0, 60]]);
+      await expect.poll(() => Math.abs(shift(item).y - rubberband(60, height))).toBeLessThan(0.05);
+      expect(shift(item).y).toBeLessThan(60);
+    } finally {
+      await commands.touchStep({ type: "touchEnd" });
+    }
+    await atRest(item);
+    expect(toastNamed("Top")).toBe(item);
+    const [x, y] = grip(item);
+    await commands.touchDrag({ from: [x, y], to: [x, y - 30], steps: 4, durationMs: 60 });
+    expect(item.hasAttribute("data-ouro-swiped")).toBe(true);
+    await expect.poll(() => toastNamed("Top")).toBeUndefined();
   });
 
   it("leaves when let go at rest more than 40px out, and goes on the way it was dragged", async () => {

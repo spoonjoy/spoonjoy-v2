@@ -1,10 +1,11 @@
 "use client";
 
 import { Tooltip } from "@base-ui/react/tooltip";
-import { useMemo, type JSX, type ReactNode, type RefObject } from "react";
-import { DefaultLink, OuroContext, useOuro, type OuroContextValue, type OuroLinkComponent } from "~/lib/ouro/use-ouro";
+import { useEffect, useMemo, type JSX, type ReactNode, type RefObject } from "react";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
+import { DefaultLink, OuroContext, useOuro, type OuroContextValue, type OuroLinkComponent, type OuroMotion } from "~/lib/ouro/use-ouro";
 
-export type { OuroContextValue, OuroLinkComponent } from "~/lib/ouro/use-ouro";
+export type { OuroContextValue, OuroLinkComponent, OuroMotion } from "~/lib/ouro/use-ouro";
 
 /** Props for {@link OuroProvider}. */
 export interface OuroProviderProps {
@@ -34,7 +35,56 @@ export interface OuroProviderProps {
    * @claim "A provider inside another keeps the" registry/ouro/lib/ouro/portal-container.test.tsx verify:testExists(registry/ouro/lib/ouro/portal-container.test.tsx::usePortalContainer > gives popups Base UI's own place again inside an OuroProvider whose portalContainer is null, as an app's own dialog needs)
    */
   portalContainer?: HTMLElement | RefObject<HTMLElement | null> | null | undefined;
+  /**
+   * How much Ouro UI moves, for an app with a motion setting of its own. `system` follows the
+   * device's reduced-motion setting, as Ouro UI does without a provider. `reduced` moves as if
+   * that setting were on, whatever the device says: springs settle at once, scrolls jump, and
+   * a moment or an emoji holds still. `full` keeps that motion running even where the device
+   * asks for less.
+   * Ouro UI's motion in script reads it, as does `useReducedMotion` for your own: it is in
+   * `lib/ouro/use-reduced-motion`, which you can add by name, `lib-use-reduced-motion`. A provider
+   * that sets it wraps its children in an element with `data-motion` set to it (and
+   * `display: contents`, so it adds no box), so your CSS can follow the setting too, beside
+   * the `prefers-reduced-motion` media query: `[data-motion="reduced"] .wave { animation: none }`.
+   * While a provider with `reduced` is on the page, Ouro UI's CSS animations and transitions,
+   * and your own, end at once everywhere but inside a provider set to `full`. It does this with a
+   * `<style>` of its own, the one stylesheet an Ouro UI component brings: an app's own setting must
+   * still the dialogs, sheets and toasts that render outside the provider's element too, and Ouro
+   * UI's classes follow only the device's media query. With `full`, a transition Ouro UI keeps
+   * for `prefers-reduced-motion: no-preference` still follows the device.
+   * A provider inside another keeps the outer one's setting when it sets none.
+   * @claim "`reduced` moves as if that setting" registry/ouro/lib/ouro/ouro-provider.test.tsx verify:testExists(registry/ouro/lib/ouro/ouro-provider.test.tsx::OuroProvider motion > answers useReducedMotion by its motion, and by the device under system or no provider)
+   * @claim "`full` keeps that motion running" registry/ouro/lib/ouro/ouro-provider.test.tsx verify:testExists(registry/ouro/lib/ouro/ouro-provider.test.tsx::OuroProvider motion > answers useReducedMotion by its motion, and by the device under system or no provider)
+   * @claim "A provider that sets it wraps" registry/ouro/lib/ouro/ouro-provider.test.tsx verify:testExists(registry/ouro/lib/ouro/ouro-provider.test.tsx::OuroProvider motion > marks its children's element with data-motion, adding no box, and adds no element without motion)
+   * @claim "While a provider with `reduced` is" registry/ouro/lib/ouro/ouro-provider.test.tsx verify:testExists(registry/ouro/lib/ouro/ouro-provider.test.tsx::OuroProvider motion > ends CSS transitions at once under reduced, in a portal too, but not inside a provider set to full)
+   * @claim "A provider inside another keeps the outer one's setting" registry/ouro/lib/ouro/ouro-provider.test.tsx verify:testExists(registry/ouro/lib/ouro/ouro-provider.test.tsx::OuroProvider motion > keeps an outer provider's motion inside one that sets none)
+   * @default "system"
+   */
+  motion?: OuroMotion | (string & { 'Use "system", "reduced" or "full"': never }) | undefined;
+  /**
+   * For people who want less: `Moment` shows its words without art or a celebration, and
+   * `Celebrate` its message without confetti. While it is on, `<html>` carries
+   * `data-ouro-quiet`, so an app hides its own decoration with one rule:
+   * `[data-ouro-quiet] [data-ouro-quiet-hide] { display: none; }`. A provider inside another
+   * keeps the outer one's setting when it sets none. Store the person's choice as you store
+   * their other settings, and pass it here.
+   * @default false
+   * @claim "For people who want less: `Moment`" registry/ouro/lib/ouro/ouro-provider.test.tsx verify:testExists(registry/ouro/lib/ouro/ouro-provider.test.tsx::OuroProvider quiet > tells components the person asked for less, and marks the page while it is on)
+   * @claim "A provider inside another keeps the" registry/ouro/lib/ouro/ouro-provider.test.tsx verify:testExists(registry/ouro/lib/ouro/ouro-provider.test.tsx::OuroProvider quiet > keeps an outer provider's quiet inside one that sets none, and lets an inner one turn it off)
+   */
+  quiet?: boolean | undefined;
 }
+
+const motions = ["system", "reduced", "full"] as const;
+
+// Under motion="reduced", CSS animations and transitions end at once, popups and toasts
+// outside the provider's element included, but not inside a provider set to "full".
+const stillCss =
+  '*:not([data-motion="full"], [data-motion="full"] *), *:not([data-motion="full"] *)::before, *:not([data-motion="full"] *)::after ' +
+  "{ animation-duration: 0s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; transition-delay: 0s !important; scroll-behavior: auto !important; }";
+
+// How many quiet providers are mounted, so the page stays marked until the last one goes.
+let quietProviders = 0;
 
 /**
  * Optional app-level provider that routes internal `href`s through your
@@ -43,6 +93,10 @@ export interface OuroProviderProps {
  * themselves, in CSS (`motion-reduce:` variants and `prefers-reduced-motion`
  * queries), and need no animation library. If your app animates with Motion,
  * wrap it in `<MotionConfig reducedMotion="user">` for the same behavior.
+ *
+ * An app with a motion setting of its own passes it as `motion`: `<OuroProvider
+ * motion={still ? "reduced" : "system"}>`. Its springs, scrolls and moving pictures then
+ * follow the app's setting, and your components can too, through `useReducedMotion()`.
  *
  * It installs with every component that renders links (`Button`, `Link`, `Card`, `Item`,
  * `Table` and the navigation components) and with `Tooltip`. An app with none of those adds
@@ -65,7 +119,7 @@ export interface OuroProviderProps {
  * `app/layout.tsx`, which stays a Server Component.
  *
  * @group App setup
- * @see https://ui.ouro.bot/docs/ouro-provider
+ * @see https://ui.ouroboros.bot/docs/ouro-provider
  * @example
  * // React Router. app/components/ouro-router-link.tsx:
  * import type { ComponentProps } from "react";
@@ -122,16 +176,48 @@ export interface OuroProviderProps {
  * @claim "Ouro UI components work without it" scripts/registry.test.mjs verify:testExists(scripts/registry.test.mjs::npm dependencies are pinned to the ranges this repository tests)
  * @claim "It installs with every component that" scripts/registry.test.mjs verify:testExists(scripts/registry.test.mjs::registryDependencies are the same-repo items each item imports, as full unpinned addresses)
  */
-export function OuroProvider({ children, linkComponent, portalContainer }: OuroProviderProps): JSX.Element {
+export function OuroProvider({ children, linkComponent, portalContainer, motion: motionProp, quiet: quietProp }: OuroProviderProps): JSX.Element {
   const outer = useOuro();
   const container = portalContainer === undefined ? outer.portalContainer : (portalContainer ?? undefined);
-  const value = useMemo<OuroContextValue>(
-    () => ({ linkComponent: linkComponent ?? DefaultLink, ...(container ? { portalContainer: container } : {}) }),
-    [linkComponent, container],
+  // A setting that is not one (a type error) warns and follows the device.
+  const own = motionProp === undefined ? undefined : (motions as readonly string[]).includes(motionProp) ? (motionProp as OuroMotion) : "system";
+  const motion = own ?? outer.motion;
+  const quiet = quietProp ?? outer.quiet === true;
+  useDevWarnings(
+    "OuroProvider",
+    process.env.NODE_ENV !== "production"
+      ? () => [own !== motionProp && [`motion="${String(motionProp)}" is not a setting; use "system", "reduced" or "full"`, '<OuroProvider motion="reduced">']]
+      : /* istanbul ignore next @preserve -- production only */ undefined,
   );
+  const value = useMemo<OuroContextValue>(
+    () => ({ linkComponent: linkComponent ?? DefaultLink, ...(container ? { portalContainer: container } : {}), ...(motion ? { motion } : {}), quiet }),
+    [linkComponent, container, motion, quiet],
+  );
+  useEffect(() => {
+    if (!quiet) return;
+    quietProviders += 1;
+    document.documentElement.setAttribute("data-ouro-quiet", "");
+    return () => {
+      quietProviders -= 1;
+      if (quietProviders === 0) document.documentElement.removeAttribute("data-ouro-quiet");
+    };
+  }, [quiet]);
+  const content = <Tooltip.Provider>{children}</Tooltip.Provider>;
   return (
     <OuroContext.Provider value={value}>
-      <Tooltip.Provider>{children}</Tooltip.Provider>
+      {own === undefined ? (
+        content
+      ) : (
+        <div data-motion={own} style={{ display: "contents" }}>
+          {own === "reduced" && (
+            // In place, not hoisted: React keeps a hoisted style after its provider goes, and this one must go with it.
+            <style>
+              {stillCss}
+            </style>
+          )}
+          {content}
+        </div>
+      )}
     </OuroContext.Provider>
   );
 }

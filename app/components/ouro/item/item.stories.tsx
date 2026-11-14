@@ -105,3 +105,54 @@ export const RecipeList: Story = {
     </Page>
   ),
 };
+
+function TimerIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l2 2M10 2h4" />
+    </svg>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" />
+    </svg>
+  );
+}
+
+/** Three things to know, the last with more under its line: each icon stays level with its title, however long the text under it runs. */
+export const Steps: Story = {
+  parameters: { screenshot: { name: "item-steps" } },
+  render: () => (
+    <Page>
+      <ItemGroup label="Three things to know">
+        <Item media={<BellIcon />} mediaSize="icon" title="Get a nudge" description="A cook saving your recipe shows up here." />
+        <Item
+          media={<TimerIcon />}
+          mediaSize="icon"
+          title="Timers keep going"
+          description="Start a timer on one recipe and it keeps counting while you read another, even with the page closed."
+        />
+        <Item
+          media={<ShareIcon />}
+          mediaSize="icon"
+          title="Share a recipe"
+          description={
+            <span style={{ display: "grid", gap: 8 }}>
+              <span>Send the link to anyone. They can read it without an account.</span>
+              <span style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "8px 12px", fontFamily: "var(--font-mono, monospace)" }}>
+                cookbook.example/r/short-ribs
+              </span>
+            </span>
+          }
+        />
+      </ItemGroup>
+    </Page>
+  ),
+};

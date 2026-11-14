@@ -11,10 +11,12 @@ import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import {
   iconClass,
   looks,
+  shapes,
   sizes,
   squareClass,
   toggleBase,
   toggleHint,
+  toggleShapeWarning,
   toggleSizeWarning,
   toggleVariantWarning,
   type ToggleIcon,
@@ -60,11 +62,19 @@ export interface ToggleGroupBaseProps {
    */
   variant?: "plain" | "outline" | (string & { 'From shadcn? default is "plain"; use "plain" or "outline"': never }) | undefined;
   /**
-   * Every toggle's size, as Button's. shadcn's `default` is `md`.
+   * Every toggle's size, as Button's, plus `xs` for a row of filter chips: 24px with a fine
+   * pointer, with a 44px touch target on phones. shadcn's `default` is `md`.
    * @default "md"
-   * @claim "Every toggle's size, as Button's. shadcn's" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > passes variant and size to every item)
+   * @claim "Every toggle's size, as Button's, plus" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > passes variant and size to every item)
    */
-  size?: "sm" | "md" | "lg" | (string & { 'From shadcn? default is "md"': never }) | undefined;
+  size?: "xs" | "sm" | "md" | "lg" | (string & { 'From shadcn? default is "md"': never }) | undefined;
+  /**
+   * Every toggle's shape: `rect` has the theme's corners and medium text; `pill` is fully rounded
+   * with regular-weight text, for filter chips such as All, Unread and Mentions.
+   * @default "rect"
+   * @claim "`pill` is fully rounded with regular-weight" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > passes shape pill and size xs to every item)
+   */
+  shape?: "rect" | "pill" | (string & { 'Use "rect" or "pill"; rounded-full is "pill"': never }) | undefined;
   /** Layout only: margins, grid placement (`mt-4`). Appearance classes warn in development. */
   className?: string | undefined;
   /** Reaches the group element (`role="group"`). */
@@ -143,7 +153,7 @@ function asList(value: string | null | readonly string[] | undefined): readonly 
  * one `Toggle` for a single on/off button.
  *
  * @group Actions
- * @see https://ui.ouro.bot/docs/toggle-group
+ * @see https://ui.ouroboros.bot/docs/toggle-group
  *
  * @example
  * <ToggleGroup
@@ -157,6 +167,19 @@ function asList(value: string | null | readonly string[] | undefined): readonly 
  *   value={styles}
  *   onValueChange={setStyles}
  * />
+ * <ToggleGroup
+ *   label="Show"
+ *   hideLabel
+ *   variant="outline"
+ *   shape="pill"
+ *   size="xs"
+ *   items={[
+ *     { value: "all", label: "All" },
+ *     { value: "unread", label: "Unread" },
+ *   ]}
+ *   value={filter}
+ *   onValueChange={(next) => setFilter(next ?? "all")}
+ * />
  * @claim "The arrow keys move between toggles" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > moves focus with the arrow keys and presses with Space)
  * @claim "The arrow keys move between toggles" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > is a labeled group of toggle buttons)
  */
@@ -168,6 +191,7 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
     disabled,
     variant: variantProp = "plain",
     size: sizeProp = "md",
+    shape: shapeProp = "rect",
     className,
     ref,
     multiple,
@@ -182,6 +206,7 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
   } = props;
   const variant = Object.hasOwn(looks, variantProp) ? (variantProp as keyof typeof looks) : "plain";
   const size = Object.hasOwn(sizes, sizeProp) ? (sizeProp as keyof typeof sizes) : "md";
+  const shape = Object.hasOwn(shapes, shapeProp) ? (shapeProp as keyof typeof shapes) : "rect";
   const duplicate = duplicateValue(items);
   if (duplicate !== undefined) {
     devThrow(
@@ -210,6 +235,7 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
           return [
             variant !== variantProp && toggleVariantWarning("ToggleGroup", String(variantProp)),
             size !== sizeProp && toggleSizeWarning("ToggleGroup", String(sizeProp)),
+            shape !== shapeProp && toggleShapeWarning("ToggleGroup", String(shapeProp)),
             !label && ["label is empty, so the group has no name", '<ToggleGroup label="Text style" hideLabel>'],
             !multiple && lists && ["a list of values needs multiple", "<ToggleGroup multiple defaultValue={[…]}>"],
             multiple && strings && ["multiple takes a list of values", `<ToggleGroup multiple value={["${first}"]}>`],
@@ -264,7 +290,8 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
               data-ouro-control="toggle-group"
               data-ouro-part="item"
               data-variant={variant}
-              className={cn(toggleBase, sizes[size], looks[variant], iconOnly && squareClass)}
+              data-shape={shape}
+              className={cn(toggleBase, shapes[shape], sizes[size], looks[variant], iconOnly && squareClass)}
             >
               <TouchTarget />
               {Icon && <Icon aria-hidden="true" className={cn(iconClass, "relative", !iconOnlyItem && "-ms-0.5")} />}

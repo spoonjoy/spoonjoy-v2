@@ -174,11 +174,12 @@ function ownedPaths(items: readonly TabBarItem[]): Array<{ path: string; index: 
  * Tabs render through `OuroProvider`'s `linkComponent`, so your router navigates. Each tab
  * is 64px tall, well over the 44px a finger needs.
  *
- * Use `Navbar` instead for the links across the top of a wider screen, `Sidebar` for many
- * destinations, and `Tabs` for views of one page.
+ * Use `Navbar` instead for the links across the top of a wider screen, `NavigationRail` for the
+ * same pages down the side of a wider screen, `Sidebar` for many destinations, and `Tabs` for
+ * views of one page.
  *
  * @group Navigation
- * @see https://ui.ouro.bot/docs/tab-bar
+ * @see https://ui.ouroboros.bot/docs/tab-bar
  *
  * @example
  * <TabBar

@@ -19,7 +19,8 @@ expectTypeOf<{
   value: "left" | null;
   onValueChange: (value: string | null) => void;
   variant: "outline";
-  size: "sm";
+  size: "xs";
+  shape: "pill";
   disabled: true;
   className: "mt-2";
 }>().toExtend<ToggleGroupProps>();
@@ -36,7 +37,8 @@ expectTypeOf<{ label: "Alignment" }>().not.toExtend<ToggleGroupProps>();
 
 // Unknown looks, and the guessed names, are type errors whose hint names the fix.
 expectTypeOf<{ label: "Alignment"; items: typeof items; variant: "default" }>().not.toExtend<ToggleGroupProps>();
-expectTypeOf<{ label: "Alignment"; items: typeof items; size: "xs" }>().not.toExtend<ToggleGroupProps>();
+expectTypeOf<{ label: "Alignment"; items: typeof items; size: "xl" }>().not.toExtend<ToggleGroupProps>();
+expectTypeOf<{ label: "Alignment"; items: typeof items; shape: "round" }>().not.toExtend<ToggleGroupProps>();
 expectTypeOf<{ label: "Alignment"; items: typeof items; options: typeof items }>().not.toExtend<ToggleGroupProps>();
 expectTypeOf<{ label: "Alignment"; items: typeof items; type: "multiple" }>().not.toExtend<ToggleGroupProps>();
 expectTypeOf<{ label: "Alignment"; items: typeof items; onChange: () => void }>().not.toExtend<ToggleGroupProps>();

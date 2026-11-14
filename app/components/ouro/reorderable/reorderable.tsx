@@ -20,6 +20,7 @@ import { rubberband, spring, type SpringHandle } from "~/lib/ouro/spring";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useDrag } from "~/lib/ouro/use-drag";
+import { useReducedMotion } from "~/lib/ouro/use-reduced-motion";
 import { Menu } from "~/components/ouro/menu/menu";
 import {
   contentClass,
@@ -214,7 +215,7 @@ function GripIcon(): JSX.Element {
  * `Resizable` to change sizes, not order.
  *
  * @group Lists
- * @see https://ui.ouro.bot/docs/reorderable
+ * @see https://ui.ouroboros.bot/docs/reorderable
  *
  * @example
  * <Reorderable
@@ -257,6 +258,7 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
     onDragEnd,
     axis,
   } = props;
+  const reduced = useReducedMotion();
 
   useAppearanceClassNameCheck(
     "Reorderable",
@@ -362,6 +364,7 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
       to: 0,
       velocity,
       damping: flick ? 0.8 : 1,
+      reduced,
       element: row,
       onUpdate: (value) => shiftRow(row, value),
       onRest: () => track(row, undefined),

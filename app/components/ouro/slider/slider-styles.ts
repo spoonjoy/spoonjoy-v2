@@ -1,4 +1,4 @@
-export { controlClass, indicatorClass, rootClass, sampleClass, thumbClass, trackClass, valueClass };
+export { controlClass, indicatorClass, rootClass, sampleClass, thumbClass, trackClass, valueClass, widestTexts };
 
 // Class strings for Slider, apart from the component so its file
 // exports only components (React Fast Refresh). Class strings are literal so the app's
@@ -53,7 +53,7 @@ const indicatorClass =
  * @claim "A thumb: a 20px knob with" registry/ouro/components/ouro/slider/slider.touch.test.tsx verify:testExists(registry/ouro/components/ouro/slider/slider.touch.test.tsx::gives the thumb a 44px hit area and the control a 44px height, also on a landscape phone)
  */
 const thumbClass =
-  "relative box-border size-5 rounded-full border-2 border-solid border-primary bg-background select-none " +
+  "relative box-border size-5 [--corner-shape:round] [corner-shape:round] rounded-full border-2 border-solid border-primary bg-background select-none " +
   "shadow-(--shadow-sm) " +
   "outline-ring outline-offset-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-solid " +
   "[transition:scale_var(--ouro-duration-press)_var(--ouro-ease-out),border-color_var(--ouro-duration-fast)_ease] " +
@@ -72,3 +72,31 @@ const valueClass =
 
 /** A hidden sample of the widest value text, stacked under the value to hold its width. */
 const sampleClass = "invisible col-start-1 row-start-1 before:content-[attr(data-ouro-slider-sample)]";
+
+/**
+ * Samples of the widest value text a slider shows, so the track keeps its length: each end's integer
+ * part with the step's decimals (Base UI's defaults are 0, 100 and a step of 1), plus values in each
+ * power of ten, since compact notation ("1.1K") can be wider than either end.
+ *
+ * @claim "Samples of the widest value" registry/ouro/components/ouro/slider/slider.test.tsx verify:testExists(registry/ouro/components/ouro/slider/slider.test.tsx::the value's widest texts > samples each end with the step's decimals and each power of ten in range, both signs, ends included)
+ * @claim "Samples of the widest value" registry/ouro/components/ouro/slider/slider.test.tsx verify:testExists(registry/ouro/components/ouro/slider/slider.test.tsx::the value's widest texts > reserves the samples for the slider's own range, step and format, and Base UI's 0 to 100 by default)
+ * @internal
+ */
+function widestTexts(min: number, max: number, step: number, locale: Intl.LocalesArgument, format: Intl.NumberFormatOptions | undefined): string[] {
+  const number = new Intl.NumberFormat(locale, format);
+  const decimals = (String(step).split(".")[1] ?? "").length;
+  const withDecimals = (end: number) => {
+    const whole = Math.trunc(end);
+    return decimals === 0 ? end : Math.sign(end || 1) * (Math.abs(whole) + Number(`0.${"8".repeat(decimals)}`));
+  };
+  const values = [withDecimals(min), withDecimals(max)];
+  for (let power = 1; power <= Math.max(Math.abs(min), Math.abs(max)); power *= 10) {
+    for (const magnitude of [1.8 * power, 8.8 * power, 10 * power - step]) {
+      for (const value of [magnitude, -magnitude]) {
+        const snapped = min + Math.round((value - min) / step) * step;
+        if (snapped >= min && snapped <= max) values.push(snapped);
+      }
+    }
+  }
+  return [...new Set(values.map((value) => number.format(value)))];
+}

@@ -111,20 +111,29 @@ const subscribe = () => () => {};
 // platform after hydration, without a mismatch.
 const serverPlatform = (): Platform => "unknown";
 
+/**
+ * A one-character key that is also an emoji, such as ↩, followed by U+FE0E so it draws as text in
+ * the key's colour, never as a colour emoji (macOS draws ↩ as one).
+ * @claim "A one-character key that is also" registry/ouro/components/ouro/kbd/kbd.test.tsx verify:testExists(registry/ouro/components/ouro/kbd/kbd.test.tsx::Kbd > draws a key that is also an emoji as text)
+ */
+function asText(text: string): string {
+  return /^(?!\p{ASCII})\p{Emoji}$/u.test(text) ? `${text}\uFE0E` : text;
+}
+
 /** One key: its visible label, and a screen-reader name when the label is a symbol. */
 function label(key: string, platform: Platform): { text: string; name: string | undefined } {
   const id = keyId(key);
   // Only Windows has a Win key; on Linux and ChromeOS the app's command key is Ctrl.
   if (id === "cmd" && platform !== "apple") return { text: platform === "windows" ? "Win" : "Ctrl", name: undefined };
-  if (!Object.hasOwn(named, id)) return { text: key.length === 1 ? key.toUpperCase() : key, name: undefined };
+  if (!Object.hasOwn(named, id)) return { text: asText(key.length === 1 ? key.toUpperCase() : key), name: undefined };
   const [glyph, glyphName, text, textName] = named[id]!;
-  return platform === "apple" ? { text: glyph, name: glyphName || undefined } : { text, name: textName };
+  return platform === "apple" ? { text: asText(glyph), name: glyphName || undefined } : { text, name: textName };
 }
 
 /**
  * A keyboard shortcut, in the reader's platform's notation: `keys={["mod", "k"]}` shows
  * ⌘K on a Mac, iPhone or iPad and Ctrl+K elsewhere. Symbols carry their spoken name for
- * screen readers. It sizes itself to the surrounding text, so it fits in a Menu item, a
+ * screen readers, and draw as text even where they are also emoji (↩). It sizes itself to the surrounding text, so it fits in a Menu item, a
  * Tooltip or a sentence.
  *
  * The server can't know the platform, so server HTML shows the key names (Ctrl+K) and
@@ -133,7 +142,8 @@ function label(key: string, platform: Platform): { text: string; name: string | 
  * Use plain `Text` instead for a key named in prose that isn't a shortcut to press.
  *
  * @group Text
- * @see https://ui.ouro.bot/docs/kbd
+ * @see https://ui.ouroboros.bot/docs/kbd
+ * @claim "and draw as text even where" registry/ouro/components/ouro/kbd/kbd.test.tsx verify:testExists(registry/ouro/components/ouro/kbd/kbd.test.tsx::Kbd > draws a key that is also an emoji as text)
  *
  * @example
  * <Kbd keys={["mod", "k"]} />

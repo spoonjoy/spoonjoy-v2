@@ -1,15 +1,17 @@
 import type { ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, server, userEvent } from "vitest/browser";
 import { Button } from "~/components/ouro/button/button";
 import { Menu, MenuItem } from "~/components/ouro/menu/menu";
 import { Reorderable, type ReorderableProps } from "~/components/ouro/reorderable/reorderable";
 import { dropIndex, edgeSpeed, EDGE, MAX_SPEED, moveItem, scrollParent } from "~/components/ouro/reorderable/reorderable-styles";
 import { rubberband } from "~/lib/ouro/spring";
+import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
 import { holdFrames, type HeldFrames } from "~/lib/ouro/testing/frames";
+import { settled } from "~/lib/ouro/testing/settled";
 import { pressTab } from "~/lib/ouro/testing/tab";
 
 // Touch drags are in reorderable.touch.test.tsx. Here the keyboard runs in Chromium and
@@ -75,6 +77,7 @@ const moves = () =>
 const move = (name: string) => page.getByRole("menuitem", { name, exact: true });
 const menuOpen = () => expect.element(page.getByRole("menu")).toBeVisible();
 const menuClosed = () => expect.poll(() => document.querySelector('[role="menu"]')).toBeNull();
+const menuSettled = () => settled(() => document.querySelector<HTMLElement>('[role="menu"][data-ouro-presentation]'));
 
 /** Focuses a handle the way the keyboard does. */
 async function focus(name: string) {
@@ -374,6 +377,7 @@ describe("Reorderable", () => {
       await press("{Enter}");
       await expect.poll(() => Object.keys(moves())).toEqual(["Monter", "Descendre", "Tout en haut", "Tout en bas"]);
       await expect.poll(() => document.querySelector("[data-ouro-menu-close]")?.textContent ?? "Fermer").toBe("Fermer");
+      await menuSettled();
       await userEvent.click(move("Descendre"));
       await expect.poll(said).toBe("Sear déplacé, 2 sur 4");
     });
@@ -392,6 +396,7 @@ describe("Reorderable", () => {
       // The click picked nothing up.
       expect(grip.hasAttribute("data-grabbed")).toBe(false);
       expect(moves()).toEqual({ "Move up": true, "Move down": true, "Move to top": true, "Move to bottom": true });
+      await menuSettled();
       await userEvent.click(move("Move down"));
       expect(order(element)).toEqual(["Sear", "Deglaze", "Soften", "Braise"]);
       await expect.poll(said).toBe("Soften moved. Position 3 of 4.");
@@ -430,6 +435,7 @@ describe("Reorderable", () => {
         await userEvent.click(handle("Soften"));
         await menuOpen();
         expect(document.querySelector('[role="menu"]')!.getAttribute("data-ouro-presentation")).not.toBe("sheet");
+        await menuSettled();
         await userEvent.click(move("Move down"));
         await menuClosed();
         // The positive control: a Menu that holds the page, opened after, locks it, and the watch
@@ -456,6 +462,7 @@ describe("Reorderable", () => {
       await menuOpen();
       // The first row cannot go up.
       expect(moves()).toEqual({ "Move up": false, "Move down": true, "Move to top": false, "Move to bottom": true });
+      await menuSettled();
       await userEvent.click(move("Move to bottom"));
       expect(order(element)).toEqual(["Soften", "Deglaze", "Braise", "Sear"]);
       await expect.poll(said).toBe("Sear moved. Position 4 of 4.");
@@ -464,12 +471,14 @@ describe("Reorderable", () => {
       await menuOpen();
       // Now last, it cannot go down.
       expect(moves()).toEqual({ "Move up": true, "Move down": false, "Move to top": true, "Move to bottom": false });
+      await menuSettled();
       await userEvent.click(move("Move up"));
       expect(order(element)).toEqual(["Soften", "Deglaze", "Sear", "Braise"]);
       await expect.poll(said).toBe("Sear moved. Position 3 of 4.");
       await menuClosed();
       await userEvent.click(grip);
       await menuOpen();
+      await menuSettled();
       await userEvent.click(move("Move to top"));
       expect(order(element)).toEqual(["Sear", "Soften", "Deglaze", "Braise"]);
       await expect.poll(said).toBe("Sear moved. Position 1 of 4.");
@@ -1270,5 +1279,22 @@ describe("Reorderable", () => {
     expect(html).toContain("Press Enter for a menu of moves. Press Space to pick up,");
     expect(html).toContain('aria-haspopup="menu"');
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("Reorderable motion", () => {
+  it("drops a row into place at once under OuroProvider's motion=\"reduced\", and springs it there under \"full\", whatever the device says", async () => {
+    onTestFinished(() => commands.emulateMedia({ reducedMotion: "no-preference" }));
+    const element = await render(<OuroProvider motion="reduced">{list()}</OuroProvider>);
+    const [x, y] = await dragBy("Sear", 60);
+    await pointer(window, "pointerup", x, y);
+    expect(element.hasAttribute("data-ouro-settling")).toBe(false);
+    expect(rows(element).every((row) => row.style.transform === "")).toBe(true);
+    await commands.emulateMedia({ reducedMotion: "reduce" });
+    await render(<OuroProvider motion="full">{list()}</OuroProvider>);
+    const [x2, y2] = await dragBy("Deglaze", 60);
+    await pointer(window, "pointerup", x2, y2);
+    expect(element.hasAttribute("data-ouro-settling")).toBe(true);
+    await rest(element);
   });
 });

@@ -58,8 +58,16 @@ const rowClass =
   "data-ending-style:opacity-0 motion-safe:data-ending-style:grid-rows-[0fr] " +
   "starting:data-starting-style:opacity-0 motion-safe:starting:data-starting-style:grid-rows-[0fr]";
 
-/** The row's single grid cell, clipped only while the row grows or shrinks, so a focus ring shows at rest. @internal */
-const rowInnerClass = "flex min-h-0 min-w-0 items-center gap-1 group-data-starting-style/row:overflow-hidden group-data-ending-style/row:overflow-hidden";
+/**
+ * The row's single grid cell, clipped only while the row grows or shrinks, so a focus ring shows at rest. A child
+ * selector, not `group-data-starting-style/row`: Chrome restyles every element under anything that gains or loses
+ * `data-starting-style` while a `group-data-*` rule on it exists, which made each sheet and popover open restyle the
+ * whole of it again (ourostack/ouro-ui#648).
+ *
+ * @internal
+ * @claim "A child selector, not `group-data-starting-style/row`" site/e2e/site-menu.spec.ts verify:testExists(site/e2e/site-menu.spec.ts::the site's CSS has no rule that makes an open restyle more than it changes)
+ */
+const rowInnerClass = "flex min-h-0 min-w-0 items-center gap-1 [[data-starting-style]>&]:overflow-hidden [[data-ending-style]>&]:overflow-hidden";
 
 /**
  * The row's label: the box, the text and the value, so the whole row but its action toggles.

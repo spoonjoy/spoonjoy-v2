@@ -20,6 +20,7 @@ import { controlRef } from "~/lib/ouro/control-ref";
 import { FieldOwnerContext, useField, useFormErrors, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useMediaQuery } from "~/lib/ouro/use-media-query";
+import { holdPageAtPress } from "~/lib/ouro/page-scroll-hold";
 import { PortalScope, usePortalContainer } from "~/lib/ouro/portal-container";
 
 export type { SelectOption, SelectOptionGroup, SelectOptions } from "~/components/ouro/select/select-styles";
@@ -191,7 +192,7 @@ function SelectControl({
     onValueChange?.(next);
   };
 
-  const portal = usePortalContainer("Select");
+  const portal = usePortalContainer("Select", true);
   return (
     <BaseSelect.Root<string, boolean>
       items={items}
@@ -208,6 +209,7 @@ function SelectControl({
       inputRef={markInput}
     >
       <BaseSelect.Trigger
+        {...holdPageAtPress.listButton}
         ref={ref}
         data-ouro-control="select"
         data-ouro-part="trigger"
@@ -285,7 +287,7 @@ function SelectControl({
  * show, and `Combobox` when the user needs to type to filter.
  *
  * @group Forms
- * @see https://ui.ouro.bot/docs/select
+ * @see https://ui.ouroboros.bot/docs/select
  *
  * @example
  * <Select

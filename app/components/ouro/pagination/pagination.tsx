@@ -1,10 +1,12 @@
 "use client";
 
-import type { JSX, ReactNode, Ref } from "react";
+import { useLayoutEffect, useRef, useState, type JSX, type ReactNode, type Ref, type RefObject } from "react";
+import { flushSync } from "react-dom";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { devThrow } from "~/lib/ouro/dev";
 import { RouterLink } from "~/lib/ouro/router-link";
+import { useMergedRef } from "~/lib/ouro/refs";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
 /**
@@ -45,8 +47,8 @@ export interface PaginationBaseProps {
    */
   pageLabel?: string | undefined;
   /**
-   * The text between Previous and Next below 640px, where the page numbers do not fit;
-   * `{page}` and `{pageCount}` are the numbers. @default "Page {page} of {pageCount}"
+   * The text between Previous and Next where the page numbers do not fit: below 640px, or in a
+   * container too narrow for them. `{page}` and `{pageCount}` are the numbers. @default "Page {page} of {pageCount}"
    * @claim "The text between Previous and Next" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > shows only Previous, the summary and Next below 640px)
    * @claim "The text between Previous and Next" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > builds hrefs from a string with {page}, which a Server Component can pass)
    */
@@ -98,7 +100,7 @@ export interface PaginationPagerProps {
 export type PaginationLinkProps = PaginationBaseProps & {
   /**
    * The address of a page: a string with `{page}` (`href="/recipes?page={page}"`, which a
-   * Server Component can pass) or a function (`href={(page) => `/recipes?page=${page}`}`).
+   * Server Component can pass) or a function (`` href={(page) => `/recipes?page=${page}`} ``).
    * Internal paths go through `OuroProvider`'s `linkComponent`, so your router navigates.
    */
   href: string | ((page: number) => string);
@@ -158,6 +160,96 @@ function cells(page: number, pageCount: number, siblings: number): number[] {
   return [1, 0, ...range(page - siblings, page + siblings), 0, pageCount];
 }
 
+/** The room the container gives the nav: its content box, less the nav's own margins. */
+function roomFor(nav: HTMLElement): number {
+  const container = nav.parentElement!;
+  const containerStyle = getComputedStyle(container);
+  const navStyle = getComputedStyle(nav);
+  return container.clientWidth - parseFloat(containerStyle.paddingLeft) - parseFloat(containerStyle.paddingRight) - parseFloat(navStyle.marginLeft) - parseFloat(navStyle.marginRight);
+}
+
+/** The width of the page list in full: its shown cells and the gaps between them. */
+function fullWidth(list: HTMLElement): number {
+  const items = [...list.children].filter((item) => !item.querySelector("[data-ouro-pagination-summary]"));
+  // Below 640px the sm rule hides the numbers, so the list is not laid out and there is nothing to measure.
+  if (items.some((item) => item.getClientRects().length === 0)) return 0;
+  const gap = parseFloat(getComputedStyle(list).columnGap);
+  return items.reduce((sum, item) => sum + item.getBoundingClientRect().width, 0) + gap * (items.length - 1);
+}
+
+/**
+ * Whether the page list fits the room its container gives the nav. It shows unless it would
+ * overflow, and then the summary shows instead. A layout effect measures the list before paint,
+ * so the first paint is the fitted list. A list the summary replaces is not laid out, so its
+ * width is kept for the cells it was measured with, and measured again when those change or
+ * when the list shows again.
+ *
+ * Server HTML and the first paint show the list. The `sm` rule hides the list below its
+ * breakpoint, where nothing is measured.
+ */
+function useListFit(navRef: RefObject<HTMLElement | null>, listRef: RefObject<HTMLUListElement | null>, key: string | undefined): boolean {
+  const [fits, setFits] = useState(true);
+  const measured = useRef<{ key: string; width: number } | null>(null);
+  const measure = useRef<(() => void) | null>(null);
+
+  useLayoutEffect(() => {
+    measure.current = () => {
+      // Stryker disable next-line ConditionalExpression: without a page count the pager has no page numbers or summary, so a fit either way changes no class or focus.
+      if (key === undefined) return;
+      const nav = navRef.current!;
+      const list = listRef.current!;
+      const room = roomFor(nav) + 0.5;
+      if (!fits) {
+        if (measured.current === null || measured.current.key !== key) {
+          setFits(true);
+          return;
+        }
+        setFits(measured.current.width <= room);
+        return;
+      }
+      const width = fullWidth(list);
+      if (width === 0) return;
+      measured.current = { key, width };
+      if (width > room) {
+        // A focused page number moves focus to Next (or Previous on the last page) before the summary replaces it.
+        if (list.querySelector("[data-ouro-pagination-page]:focus")) {
+          const control = (part: string) => list.querySelector<HTMLElement>(`[data-ouro-pagination-${part}]:is(a, button:not([aria-disabled]))`);
+          (control("next") ?? control("previous"))?.focus({ preventScroll: true });
+        }
+        setFits(false);
+      }
+    };
+    measure.current!();
+  }, [fits, key, navRef, listRef]);
+
+  useLayoutEffect(
+    () => {
+      const observer = new ResizeObserver(() => flushSync(() => measure.current!()));
+      observer.observe(navRef.current!.parentElement!);
+      observer.observe(document.documentElement);
+      // Fonts change the cells' widths and may change nothing the observer sees. A font that
+      // finishes loading measures again once it is ready, unless the nav has gone.
+      const fonts = document.fonts;
+      const refit = () =>
+        void fonts.ready.then(() => {
+          if (navRef.current === null) return;
+          measured.current = null;
+          measure.current!();
+        });
+      fonts.addEventListener("loading", refit);
+      refit();
+      return () => {
+        observer.disconnect();
+        fonts.removeEventListener("loading", refit);
+      };
+    },
+    // Stryker disable next-line ArrayDeclaration: the nav's and the list's refs are the same objects for the nav's life, so any constant list runs this effect once, as this one does.
+    [navRef, listRef],
+  );
+
+  return fits;
+}
+
 function Chevron({ back }: { back?: boolean }): JSX.Element {
   return (
     <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="size-4 shrink-0 rtl:-scale-x-100">
@@ -171,20 +263,23 @@ function Chevron({ back }: { back?: boolean }): JSX.Element {
  * current page marked `aria-current="page"`. With `href` every page is a real link, so it
  * works with no JavaScript and through your router; with `onPageChange` the pages are
  * buttons. Below 640px the numbers give way to "Page 3 of 12" between Previous and Next.
- * Without `pageCount`, for a list that is not counted, it shows Previous and Next only, and
- * `hasNextPage` enables Next.
+ * They give way too when they are wider than the space their container gives them, so the
+ * list stays inside a narrow column. Without `pageCount`, for a list that is not counted, it
+ * shows Previous and Next only, and `hasNextPage` enables Next.
  *
  * Use `ShowMore` instead when the next rows should join the list in place. Use `Tabs` to
  * switch between a few named views.
  *
  * @group Navigation
- * @see https://ui.ouro.bot/docs/pagination
+ * @see https://ui.ouroboros.bot/docs/pagination
  *
  * @example
  * <Pagination page={3} pageCount={12} href="/recipes?page={page}" />
  * <Pagination page={page} pageCount={12} onPageChange={setPage} />
  * <Pagination page={page} hasNextPage={rows.length > pageSize} href="?page={page}" />
  * @claim "Below 640px the numbers give way" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > shows only Previous, the summary and Next below 640px)
+ * @claim "They give way too when they are wider" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination in a column > shows the summary, not overflowing, in a column too narrow for every page)
+ * @claim "They give way too when they are wider" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination in a column > switches to the summary when the column narrows, and back when it widens)
  * @claim "With `href` every page is a" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > works with no JavaScript: the server HTML holds every link)
  * @claim "With `href` every page is a" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination without a page count > pages in place with onPageChange)
  */
@@ -268,6 +363,17 @@ export function Pagination(props: PaginationProps): JSX.Element {
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
 
+  const pages = pageCount === undefined ? [] : cells(page, pageCount, Math.max(0, Math.floor(siblings)));
+  // What decides the width of the full list: its cells and the two labels. The nav's own classes do not.
+  // Stryker disable next-line ConditionalExpression: without a count there are no page numbers or summary to show or hide, so a fit either way changes no class or focus.
+  const fitKey = pageCount === undefined ? undefined : JSON.stringify([pages, previousLabel, nextLabel]);
+  const navRef = useRef<HTMLElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const fits = useListFit(navRef, listRef, fitKey);
+  const navigationRef = useMergedRef(ref, navRef);
+  // The summary shows when the list does not fit, and below 640px, where the sm rule hides the list.
+  const pageClass = fits ? "max-sm:hidden" : "hidden";
+
   /** One control: a link with `href`, a button with `onPageChange`, or plain text when it leads nowhere. */
   const control = (target: number, enabled: boolean, attributes: Record<string, string | undefined>, classes: string, children: ReactNode) => {
     if (href !== undefined) {
@@ -294,8 +400,8 @@ export function Pagination(props: PaginationProps): JSX.Element {
   };
 
   return (
-    <nav ref={ref} data-ouro="pagination" aria-label={label} className={cn("min-w-0", className)}>
-      <ul className="m-0 flex list-none items-center justify-between gap-1 p-0 sm:justify-center">
+    <nav ref={navigationRef} data-ouro="pagination" aria-label={label} className={cn("min-w-0", className)}>
+      <ul ref={listRef} className="m-0 flex list-none items-center justify-between gap-1 p-0 sm:justify-center">
         <li>
           {control(
             page - 1,
@@ -309,21 +415,21 @@ export function Pagination(props: PaginationProps): JSX.Element {
           )}
         </li>
         {pageCount !== undefined && (
-        <li className="sm:hidden">
+        <li className={fits ? "sm:hidden" : undefined}>
           <span data-ouro-pagination-summary="" aria-current="page" className="px-2 text-base leading-5 text-muted-foreground tabular-nums">
             {fill(summaryLabel, page, pageCount)}
           </span>
         </li>
         )}
-        {(pageCount === undefined ? [] : cells(page, pageCount, Math.max(0, Math.floor(siblings)))).map((target, index) =>
+        {pages.map((target, index) =>
           target === 0 ? (
-            <li key={`gap${index}`} className="max-sm:hidden">
+            <li key={`gap${index}`} className={pageClass}>
               <span data-ouro-pagination-gap="" aria-hidden="true" className="inline-flex h-11 min-w-9 pointer-fine:h-9 items-center justify-center text-base text-muted-foreground select-none">
                 …
               </span>
             </li>
           ) : (
-            <li key={target} className="max-sm:hidden">
+            <li key={target} className={pageClass}>
               {control(
                 target,
                 true,

@@ -12,13 +12,14 @@ let mounted: Element[] = [];
 let shared: ShareData[] = [];
 let copied: string[] = [];
 
-/** Gives the page a share sheet that takes the data or is closed, or none. */
-function stubShare(behaviour: "share" | "abort" | "absent") {
+/** Gives the page a share sheet that takes the data, is closed, or refuses, or none. */
+function stubShare(behaviour: "share" | "abort" | "refuse" | "absent") {
   const value =
     behaviour === "absent"
       ? undefined
       : (data: ShareData) => {
           if (behaviour === "abort") return Promise.reject(new DOMException("Closed", "AbortError"));
+          if (behaviour === "refuse") return Promise.reject(new DOMException("Denied", "NotAllowedError"));
           shared.push(data);
           return Promise.resolve();
         };
@@ -175,7 +176,7 @@ describe("ShareButton", () => {
     }
   });
 
-  it("says Couldn't share, once, when neither sharing nor copying works", async () => {
+  it("says its failedLabel, once, when neither sharing nor copying works", async () => {
     stubClipboard("absent");
     vi.spyOn(document, "execCommand").mockReturnValue(false);
     const announced = watchAnnouncements();
@@ -188,6 +189,106 @@ describe("ShareButton", () => {
       expect(announced.count("Sharing blocked")).toBe(1);
     } finally {
       announced.stop();
+    }
+  });
+
+  it("by default, where there is no share sheet, shows Browser blocked copying, with how to copy the link as its tooltip, and announces the whole sentence once", async () => {
+    stubClipboard("absent");
+    vi.spyOn(document, "execCommand").mockReturnValue(false);
+    const sentence = "This browser has no share sheet, and it blocked copying the link. Copy the link by hand.";
+    const announced = watchAnnouncements();
+    try {
+      const { button } = await render(<ShareButton url="https://example.com" />);
+      await userEvent.click(button);
+      await until(() => button.textContent, "Browser blocked copying");
+      expect(button.title).toBe(sentence);
+      await wait(100);
+      expect(announced.count(sentence)).toBe(1);
+      expect(announced.count("Browser blocked sharing")).toBe(0);
+      await wait(2000);
+      expect(button.textContent).toBe("Share");
+      expect(button.hasAttribute("title")).toBe(false);
+    } finally {
+      announced.stop();
+    }
+  });
+
+  it("by default, when the share sheet refuses and copying is blocked, shows Browser blocked sharing and announces the whole sentence once", async () => {
+    stubShare("refuse");
+    stubClipboard("absent");
+    vi.spyOn(document, "execCommand").mockReturnValue(false);
+    const sentence = "The browser refused the share and blocked copying the link. Copy the link by hand.";
+    const announced = watchAnnouncements();
+    const onShare = vi.fn();
+    try {
+      const { button } = await render(<ShareButton url="https://example.com" label="Share recipe" hideLabel onShare={onShare} />);
+      await userEvent.click(button);
+      await until(() => button.getAttribute("aria-label"), "Browser blocked sharing");
+      expect(onShare).toHaveBeenCalledExactlyOnceWith("failed");
+      expect(button.title).toBe(sentence);
+      await wait(100);
+      expect(announced.count(sentence)).toBe(1);
+    } finally {
+      announced.stop();
+    }
+  });
+
+  it("says Link copied, not that it shared, when the share sheet refuses and the link is copied instead", async () => {
+    stubShare("refuse");
+    const onShare = vi.fn();
+    const { button } = await render(<ShareButton url="https://example.com/n/2" onShare={onShare} />);
+    await userEvent.click(button);
+    await until(() => button.textContent, "Link copied");
+    expect(onShare).toHaveBeenCalledExactlyOnceWith("copied");
+    expect(copied).toEqual(["https://example.com/n/2"]);
+  });
+
+  it("announces failedMessage, and shows it as the tooltip, beside a short failedLabel", async () => {
+    stubClipboard("absent");
+    vi.spyOn(document, "execCommand").mockReturnValue(false);
+    const announced = watchAnnouncements();
+    try {
+      const { button } = await render(<ShareButton url="https://example.com" failedLabel="Enlace no copiado" failedMessage="El navegador bloqueó la copia del enlace. Cópialo a mano." />);
+      await userEvent.click(button);
+      await until(() => button.textContent, "Enlace no copiado");
+      expect(button.title).toBe("El navegador bloqueó la copia del enlace. Cópialo a mano.");
+      await wait(100);
+      expect(announced.count("El navegador bloqueó la copia del enlace. Cópialo a mano.")).toBe(1);
+      expect(announced.count("Enlace no copiado")).toBe(0);
+    } finally {
+      announced.stop();
+    }
+  });
+
+  it("keeps a 390px-wide page from scrolling sideways when it says the browser blocked sharing, at every size", async () => {
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(390, 844);
+    try {
+      stubShare("refuse");
+      stubClipboard("absent");
+      vi.spyOn(document, "execCommand").mockReturnValue(false);
+      const { host } = await render(
+        <>
+          <div>
+            <ShareButton url="https://example.com" size="sm" />
+          </div>
+          <div>
+            <ShareButton url="https://example.com" size="md" />
+          </div>
+          <div>
+            <ShareButton url="https://example.com" size="lg" />
+          </div>
+        </>,
+      );
+      for (const button of host.querySelectorAll<HTMLButtonElement>('[data-ouro-control="share-button"]')) {
+        await userEvent.click(button);
+        await until(() => button.closest('[data-ouro="share-button"]')!.getAttribute("data-status"), "failed");
+        expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(document.documentElement.clientWidth);
+        expect(button.textContent).toBe("Browser blocked sharing");
+      }
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    } finally {
+      await page.viewport(before.width, before.height);
     }
   });
 

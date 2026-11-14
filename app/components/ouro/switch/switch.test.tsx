@@ -265,8 +265,9 @@ describe("Switch look and motion", () => {
         const offFill = rgb(offStyle.backgroundColor, over);
         const onFill = rgb(getComputedStyle(on!).backgroundColor, over);
         expect(contrast(onFill, offFill)).toBeGreaterThanOrEqual(3);
-        // And the thumbs differ too.
-        expect(rgb(getComputedStyle(offThumb!).backgroundColor, over)).not.toEqual(rgb(getComputedStyle(onThumb!).backgroundColor, over));
+        // The glass thumb is a little stronger when on, and both wear a rim.
+        expect(getComputedStyle(offThumb!).backgroundColor).not.toEqual(getComputedStyle(onThumb!).backgroundColor);
+        expect(getComputedStyle(offThumb!).boxShadow).not.toBe("none");
         measured[scheme] = page;
       } finally {
         document.documentElement.classList.remove("dark");
@@ -336,17 +337,27 @@ describe("Switch look and motion", () => {
   ] as const)("moves the thumb only toward where it is going, and stays inside the track, when a pointer turns the switch %s", async (_name, startChecked) => {
     const { track, thumb } = await render(<Switch label="Wi-Fi" defaultChecked={startChecked} />);
     await settled(thumb);
-    const inner = () => {
+    // Both measured against the track's inner edge, in the same frame: anything that moves the whole switch on the page
+    // moves track and thumb together, and is no motion of the thumb's.
+    const origin = () => {
       const box = track.getBoundingClientRect();
-      const border = Number.parseFloat(getComputedStyle(track).borderLeftWidth);
-      return { left: box.left + border, right: box.right - border };
+      const style = getComputedStyle(track);
+      const left = Number.parseFloat(style.borderLeftWidth);
+      return { at: box.left + left, width: box.width - left - Number.parseFloat(style.borderRightWidth) };
     };
     const edges = () => {
       const box = thumb.getBoundingClientRect();
-      return { left: box.left, right: box.right };
+      const { at } = origin();
+      // What the thumb's style says beside where it is drawn, so a failure tells a stale read from a real move.
+      const style = getComputedStyle(thumb);
+      const animations = thumb.getAnimations();
+      const running = animations.map((a) => `${a instanceof CSSTransition ? a.transitionProperty : "animation"}@${Math.round(Number(a.currentTime ?? -1))}`);
+      // Whether every transition still running ends within its last 2 ms, where the curve has all but arrived.
+      const ending = animations.length > 0 && animations.every((a) => Number(a.effect?.getComputedTiming().endTime) - Number(a.currentTime ?? 0) <= 2);
+      return { left: box.left - at, right: box.right - at, at, ending, style: `${style.translate}/${style.scale}${running.length ? ` [${running.join(" ")}]` : ""}` };
     };
     const direction = startChecked ? -1 : 1;
-    const samples: { left: number; right: number }[] = [];
+    const samples: ReturnType<typeof edges>[] = [];
     await commands.pointerPress({ selector: '[role="switch"]', action: "down" });
     await new Promise((resolve) => setTimeout(resolve, 300));
     const pressed = edges();
@@ -360,16 +371,23 @@ describe("Switch look and motion", () => {
     await new Promise((resolve) => setTimeout(resolve, 400));
     sampling = false;
     await settled(thumb);
-    const frames = [pressed, ...samples, edges()];
-    const bounds = inner();
+    const read = [pressed, ...samples, edges()];
+    // In WebKit the frame a transition finishes in (at 159 ms of 160) now and then reports the style of a moment early in
+    // the slide, and the next frame is at rest. Within its last 2 ms the ease-out curve is within a tenth of a pixel of
+    // where it is going, so leaving those frames out loses no motion, and the frames at rest are still checked.
+    const stale = (frame: (typeof read)[number]) => frame.ending;
+    const frames = read.filter((frame) => !stale(frame));
+    const bounds = { left: 0, right: origin().width };
     for (const frame of frames) {
       expect(frame.left).toBeGreaterThanOrEqual(bounds.left - 0.5);
       expect(frame.right).toBeLessThanOrEqual(bounds.right + 0.5);
     }
     // Neither edge ever moves against the direction of travel by more than a pixel.
+    // The frames, with where the track was on the page, so a failure says whether the thumb or the page moved.
+    const seen = read.map((f) => `${f.left.toFixed(1)}..${f.right.toFixed(1)} at ${f.at.toFixed(1)} (${f.style})${stale(f) ? " left out" : ""}`).join(", ");
     for (let index = 1; index < frames.length; index++) {
-      expect((frames[index]!.left - frames[index - 1]!.left) * direction).toBeGreaterThanOrEqual(-1);
-      expect((frames[index]!.right - frames[index - 1]!.right) * direction).toBeGreaterThanOrEqual(-1);
+      expect((frames[index]!.left - frames[index - 1]!.left) * direction, seen).toBeGreaterThanOrEqual(-1);
+      expect((frames[index]!.right - frames[index - 1]!.right) * direction, seen).toBeGreaterThanOrEqual(-1);
     }
     expect(track.getAttribute("aria-checked")).toBe(String(!startChecked));
   });
@@ -500,5 +518,23 @@ describe("Switch under a parent's spacing", () => {
     const button = host.querySelector<HTMLElement>('[data-ouro="button"]')!;
     expect(getComputedStyle(root).marginBottom).toBe("16px");
     expect(Math.abs(button.getBoundingClientRect().top - root.getBoundingClientRect().bottom - 16)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("Switch corners under the squircle polyfill's bridge", () => {
+  it("keeps a round track and thumb when an unlayered bridge reads --corner-shape, as the polyfill's does", async () => {
+    // The polyfill's stylesheet is unlayered, so it beats a layered corner-shape; the shape has to come through --corner-shape.
+    const bridge = document.createElement("style");
+    bridge.textContent = ":where(*){corner-shape:var(--corner-shape,round)}";
+    document.head.append(bridge);
+    try {
+      const { track, thumb } = await render(<Switch label="Wi-Fi" />);
+      expect(getComputedStyle(track).getPropertyValue("--corner-shape")).toBe("round");
+      expect(getComputedStyle(thumb).getPropertyValue("--corner-shape")).toBe("round");
+      expect(getComputedStyle(track).getPropertyValue("corner-shape")).toBe("superellipse(1)");
+      expect(getComputedStyle(thumb).getPropertyValue("corner-shape")).toBe("superellipse(1)");
+    } finally {
+      bridge.remove();
+    }
   });
 });

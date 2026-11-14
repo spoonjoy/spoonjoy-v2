@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { currentHref, currentTabHref } from "~/lib/ouro/current-path";
+import { currentHref, currentTabHref, samePath } from "~/lib/ouro/current-path";
 
 describe("currentHref", () => {
   const hrefs = ["/", "/recipes", "/recipes/drafts", "/settings"];
@@ -29,6 +29,18 @@ describe("currentHref", () => {
 
   it("does not match a path that only shares a prefix of a segment", () => {
     expect(currentHref(hrefs, "/recipes-archive")).toBeUndefined();
+  });
+});
+
+describe("samePath", () => {
+  it("is the page itself, ignoring a trailing slash, a query and a hash, and not a page above it", () => {
+    expect(samePath("/recipes", "/recipes")).toBe(true);
+    expect(samePath("/recipes", "/recipes/?sort=new#top")).toBe(true);
+    expect(samePath("/recipes?sort=new", "/recipes")).toBe(true);
+    expect(samePath("/", "/")).toBe(true);
+    expect(samePath("/recipes", "/recipes/12")).toBe(false);
+    expect(samePath("/", "/recipes")).toBe(false);
+    expect(samePath("/recipes", undefined)).toBe(false);
   });
 });
 

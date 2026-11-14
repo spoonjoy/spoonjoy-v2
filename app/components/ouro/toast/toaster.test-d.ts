@@ -49,8 +49,8 @@ expectTypeOf<{ action: { label: "Undo" } }>().not.toExtend<ToastOptions>();
 // Sonner's shortcuts are not callable; their types name the call to use.
 // @ts-expect-error Use toast("Saved", { tone: "success" }).
 toast.success("Saved");
-// @ts-expect-error Use toast("Failed", { tone: "destructive" }).
-toast.error("Failed");
+// @ts-expect-error Use toast("Not saved: you are offline", { tone: "destructive" }).
+toast.error("Not saved: you are offline");
 // @ts-expect-error Use toast("Careful", { tone: "warning" }).
 toast.warning("Careful");
 // @ts-expect-error Use toast("Heads up", { tone: "primary" }).

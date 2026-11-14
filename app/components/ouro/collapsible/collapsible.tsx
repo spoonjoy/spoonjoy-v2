@@ -61,7 +61,7 @@ function useUntilFound(): boolean {
  * content is a task of its own.
  *
  * @group Lists
- * @see https://ui.ouro.bot/docs/collapsible
+ * @see https://ui.ouroboros.bot/docs/collapsible
  *
  * @example
  * <Collapsible title="Nutrition facts">

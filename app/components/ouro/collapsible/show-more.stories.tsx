@@ -102,3 +102,30 @@ export const LoadMore: Story = {
     );
   },
 };
+
+/** A long post folded to 180px under a fade: Show more unfolds it, and focus that lands below the fold unfolds it too. */
+export const LongPost: Story = {
+  parameters: { mode: "height" },
+  render: () => (
+    <Surface>
+      <ShowMore maxHeight={180}>
+        <div style={{ display: "grid", gap: 8 }}>
+          <Text><strong>Menu for the harvest supper</strong></Text>
+          <Text>
+            We will start with charred broccoli with tahini and a tomato and white bean soup, then braised short ribs over
+            polenta for the main course. There is a green shakshuka for anyone who skips meat.
+          </Text>
+          <Text>
+            Bring a dish if you like: we are short on salads and bread. Pear and ginger crumble closes the night, with
+            whipped cream on the side.
+          </Text>
+          <Text>
+            Arrive from six. The kitchen opens at four for anyone who wants to help with prep, and we will need two people
+            to set the long table.
+          </Text>
+          <Link href="#sign-up">Sign up for a dish</Link>
+        </div>
+      </ShowMore>
+    </Surface>
+  ),
+};

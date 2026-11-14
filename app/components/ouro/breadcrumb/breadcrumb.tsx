@@ -102,7 +102,7 @@ function Separator(): JSX.Element {
  * one page.
  *
  * @group Navigation
- * @see https://ui.ouro.bot/docs/breadcrumb
+ * @see https://ui.ouroboros.bot/docs/breadcrumb
  *
  * @example
  * <Breadcrumb

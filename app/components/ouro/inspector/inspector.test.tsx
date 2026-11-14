@@ -5,6 +5,7 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { Badge } from "~/components/ouro/badge/badge";
+import { itemFor } from "~/components/ouro/inspector/inspector-styles";
 import { Button } from "~/components/ouro/button/button";
 import { Card } from "~/components/ouro/card/card";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
@@ -15,10 +16,13 @@ import { Menu, MenuItem } from "~/components/ouro/menu/menu";
 import { Popover } from "~/components/ouro/popover/popover";
 import { RadioGroup } from "~/components/ouro/radio-group/radio-group";
 import { Select } from "~/components/ouro/select/select";
+import { Sheet } from "~/components/ouro/sheet/sheet";
+import { TabBar } from "~/components/ouro/tab-bar/tab-bar";
 import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/ouro/text/text";
 import { Link } from "~/components/ouro/link/link";
 import { measureTextContrast } from "~/lib/ouro/testing/axe";
+import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
 import { expectMotion, expectNoMotion, parseDuration } from "~/lib/ouro/testing/motion";
 
@@ -119,7 +123,7 @@ afterEach(async () => {
   await act(async () => roots.splice(0).forEach((root) => root.unmount()));
   for (const node of mounted) node.remove();
   mounted = [];
-  scrollTo(0, 0);
+  scrollTo({ top: 0, behavior: "instant" });
   await page.viewport(414, 896);
   await commands.emulateMedia({ reducedMotion: "no-preference" });
 });
@@ -370,6 +374,26 @@ describe("Inspector geometry", () => {
     ]);
   });
 
+  it("places the spotlit component's tag first, so it takes the best place", async () => {
+    component(100, 200, 100, 50);
+    component(120, 200, 100, 50).setAttribute("data-ouro", "button");
+    // Without a spotlight the first in document order goes above (as in the test before); spotlit,
+    // the second one's tag goes above and the first one's inside.
+    const { rerender } = await render(<Inspector open onOpenChange={() => {}} spotlight="button" />);
+    await drawn(2);
+    await expect.poll(() => tags().map((tag) => [tag.textContent, tag.style.transform, tag.hasAttribute("data-inside")])).toEqual([
+      ["badge", "translate(0px, 0px)", true],
+      ["button", "translate(0px, -16px)", false],
+    ]);
+    // Spotlit in turn, the first one's tag takes the place back.
+    await rerender(<Inspector open onOpenChange={() => {}} spotlight="badge" />);
+    dispatchEvent(new Event("resize"));
+    await expect.poll(() => tags().map((tag) => [tag.textContent, tag.style.transform, tag.hasAttribute("data-inside")])).toEqual([
+      ["badge", "translate(0px, -16px)", false],
+      ["button", "translate(0px, 0px)", true],
+    ]);
+  });
+
   it("hides a tag whose centre an overlay's popup covers, though its component's corner shows", async () => {
     component(100, 200, 200, 100);
     await xray();
@@ -384,9 +408,55 @@ describe("Inspector geometry", () => {
     await expect.poll(() => tags()[0]!.hasAttribute("data-covered")).toBe(true);
     expect(getComputedStyle(tags()[0]!).visibility).toBe("hidden");
   });
+
+  it("outlines a component whose own box has no area by the box its visible content fills, and not at all while nothing in it shows", async () => {
+    const absolute = (left: number, bottom: number, width: number, height: number) => ({ position: "absolute", left, bottom, width, height }) as const;
+    const { host } = await render(
+      <>
+        {/* No height, its content placed up from its bottom edge at 300: a box, a line, and, in a wrapper with no area, another box. */}
+        <div data-ouro="badge" style={{ position: "fixed", left: 100, top: 300, width: 200, height: 0 }}>
+          <div style={absolute(0, 0, 200, 60)} />
+          <div style={absolute(0, 120, 200, 1)} />
+          <div style={absolute(0, 0, 0, 0)}>
+            <div style={absolute(20, 50, 160, 40)} />
+          </div>
+          {/* Neither an empty box, a transparent one nor a visually hidden one counts. */}
+          <div />
+          <div style={{ ...absolute(-50, 100, 300, 100), opacity: 0 }} />
+          <span className="sr-only">Hidden</span>
+        </div>
+        {/* No width, and nothing in it. */}
+        <div data-ouro="badge" style={{ position: "fixed", left: 400, top: 100, width: 0, height: 40 }} />
+        {/* No height, and nothing in it. */}
+        <div data-ouro="badge" style={{ position: "fixed", left: 100, top: 400, width: 200, height: 0 }} />
+        {/* A one-pixel line, as a Separator draws, across or down, has area. */}
+        <div data-ouro="badge" style={{ position: "fixed", left: 100, top: 500, width: 200, height: 1 }} />
+        <div data-ouro="badge" style={{ position: "fixed", left: 500, top: 100, width: 1, height: 200 }} />
+        {/* No width, its content a line drawn down. */}
+        <div data-ouro="badge" style={{ position: "fixed", left: 600, top: 100, width: 0, height: 200 }}>
+          <div style={{ position: "absolute", left: 0, top: 0, width: 1, height: 200 }} />
+        </div>
+      </>,
+    );
+    await xray();
+    await drawn(4);
+    const box = () => {
+      const { left, top, width, height } = outlines()[0]!.getBoundingClientRect();
+      return { left, top, width, height };
+    };
+    // From the line's top at 179 to the bottom edge, and from the region's start to its end.
+    await expect.poll(box).toEqual({ left: 100, top: 179, width: 200, height: 121 });
+    for (const child of host.querySelectorAll<HTMLElement>("[data-ouro] > div")) child.style.opacity = "0";
+    await expect.poll(() => outlines().length).toBe(2);
+    expect(outlines().map((outline) => outline.getBoundingClientRect()).map(({ width, height }) => ({ width, height }))).toEqual(expect.arrayContaining([{ width: 200, height: 1 }, { width: 1, height: 200 }]));
+  });
 });
 
 describe("Inspector", () => {
+  it("tags a part's own root with the item it ships in, and its docs", () => {
+    expect([itemFor("time-grid-nav"), itemFor("toast"), itemFor("time-grid"), itemFor("snap-pip-frame"), itemFor("snap-pip-hint")]).toEqual(["time-grid", "toaster", "time-grid", "snap-pip", "snap-pip"]);
+  });
+
   it("outlines every Ouro component on the page, each tagged with its item and linked to its docs", async () => {
     const { host } = await render(<Page />);
     const components = pageRoots(host);
@@ -402,6 +472,63 @@ describe("Inspector", () => {
     await drawn(3);
     const bar = page.getByRole("region", { name: "Röntgen" });
     await expect.element(bar.getByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+
+  it("fits its bar on a phone as narrow as 320px: the label on one line, the spotlit item named in full, both buttons in reach", async () => {
+    for (const width of [390, 320]) {
+      await page.viewport(width, 700);
+      const { host } = await render(<Page inspector={{ spotlight: "navigation-menu" }} />);
+      const region = page.getByRole("region", { name: "X-ray" });
+      await expect.element(region.getByRole("status")).toHaveTextContent("No navigation-menu on this page");
+      const bar = region.element().getBoundingClientRect();
+      expect(bar.left, `${width}px: inside the screen`).toBeGreaterThanOrEqual(16);
+      expect(bar.right, `${width}px: inside the screen`).toBeLessThanOrEqual(width - 16);
+      const label = region.element().querySelector('[aria-hidden="true"]')!;
+      expect(label.getBoundingClientRect().height, `${width}px: "X-ray" on one line`).toBe(Number.parseFloat(getComputedStyle(label).lineHeight) + 12);
+      const status = region.getByRole("status").element() as HTMLElement;
+      expect(status.scrollWidth, `${width}px: the status is not cut short`).toBeLessThanOrEqual(status.clientWidth);
+      for (const name of [/components$/, "Close"]) {
+        const button = region.getByRole("button", { name }).element().getBoundingClientRect();
+        expect(button.top, `${width}px: ${String(name)} below the status`).toBeGreaterThanOrEqual(status.getBoundingClientRect().bottom);
+        expect(button.right).toBeLessThanOrEqual(bar.right);
+      }
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+      host.remove();
+    }
+  });
+
+  it("keeps its bar on one row on a phone with no spotlight, and on a wider screen", async () => {
+    for (const [width, spotlight] of [[390, undefined], [800, "navigation-menu"]] as const) {
+      await page.viewport(width, 700);
+      const { host } = await render(<Page inspector={{ spotlight }} />);
+      await drawn(3);
+      const region = page.getByRole("region", { name: "X-ray" }).element();
+      const close = page.getByRole("button", { name: "Close" }).element().getBoundingClientRect();
+      expect(region.getBoundingClientRect().height, `${width}px`).toBe(close.height + 8);
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+      host.remove();
+    }
+  });
+
+  it("sits above a TabBar that shows, and above the distance the app sets", async () => {
+    await page.viewport(390, 844);
+    const icon = <svg viewBox="0 0 24 24"><path d="M3 10 12 3l9 7v11H3z" /></svg>;
+    const items = ["Home", "Recipes", "Shopping"].map((label, index) => ({ label, href: `/${index}`, icon }));
+    const { rerender } = await render(<Page><TabBar label="Main" items={items} currentPath="/0" hideFrom="sm" /></Page>);
+    const region = () => page.getByRole("region", { name: "X-ray" }).element().getBoundingClientRect();
+    const tabs = () => document.querySelector('[data-ouro="tab-bar"] > [data-ouro-part="bar"]')!.getBoundingClientRect();
+    await expect.poll(() => tabs().top - region().bottom).toBe(8);
+    // Where the TabBar hides, the bar goes back to the bottom of the screen.
+    await page.viewport(800, 844);
+    await expect.poll(() => innerHeight - region().bottom).toBe(16);
+    // An app with chrome of its own pinned to the bottom sets the distance to keep.
+    document.documentElement.style.setProperty("--ouro-inspector-bottom", "100px");
+    try {
+      await rerender(<Page />);
+      await expect.poll(() => innerHeight - region().bottom).toBe(100);
+    } finally {
+      document.documentElement.style.removeProperty("--ouro-inspector-bottom");
+    }
   });
 
   it("leaves every line of the page's text as readable as it was, in light and dark: outlines step around text, and tags sit clear of text and of each other", async () => {
@@ -473,6 +600,82 @@ describe("Inspector", () => {
     expect(host.querySelector("[hidden] [data-ouro]")).not.toBeNull();
     // A visually hidden root has nothing to outline.
     expect(host.querySelector<HTMLElement>(".sr-only[data-ouro]")!.getBoundingClientRect().width).toBe(1);
+  });
+
+  it("does not outline a component no one can see, and outlines it while hover or focus shows it", async () => {
+    const { host } = await render(
+      <Page>
+        <style>{".reveal [data-ouro] { opacity: 0 } .reveal:hover [data-ouro], .reveal:focus-within [data-ouro] { opacity: 1 }"}</style>
+        {/* A message whose action shows only on hover or focus. The page stops those events on their way up, and X-ray still hears them. */}
+        <div className="reveal" style={{ padding: 8 }} onPointerOver={(event) => event.stopPropagation()} onFocus={(event) => event.stopPropagation()} onBlur={(event) => event.stopPropagation()}>
+          <p data-testid="message">See you at six</p>
+          <Button>Reply</Button>
+        </div>
+        <div style={{ opacity: 0 }}>
+          <Badge>Faded</Badge>
+        </div>
+        <div style={{ visibility: "hidden" }}>
+          <Badge>Invisible</Badge>
+        </div>
+      </Page>,
+    );
+    const reply = host.querySelector<HTMLElement>(".reveal [data-ouro]")!;
+    const names = () => tags().map((tag) => tag.textContent);
+    await drawn(3);
+    expect(names()).toEqual(["button", "badge", "checkbox"]);
+    await settled();
+    await userEvent.hover(host.querySelector("[data-testid=message]")!);
+    await drawn(4);
+    expect(names()).toEqual(["button", "badge", "checkbox", "button"]);
+    expect(onTarget(outlines()[3]!, reply)).toBe(true);
+    await userEvent.unhover(host.querySelector("[data-testid=message]")!);
+    await drawn(3);
+    await settled();
+    await act(() => reply.focus());
+    await drawn(4);
+    // Once nothing moves, so X-ray hears the blur rather than measuring a transition's frames.
+    await settled();
+    await act(() => reply.blur());
+    await drawn(3);
+  });
+
+  it("measures once more the frame after motion ends, as WebKit can read the old style in the frame a transition ends, then rests", async () => {
+    const { host } = await render(
+      <Page>
+        <style>{".reveal [data-ouro] { opacity: 0 } .reveal:focus-within [data-ouro] { opacity: 1 }"}</style>
+        <div className="reveal">
+          <Button>Reply</Button>
+        </div>
+      </Page>,
+    );
+    const reply = host.querySelector<HTMLElement>(".reveal [data-ouro]")!;
+    await drawn(3);
+    await act(() => reply.focus());
+    await drawn(4);
+    await settled();
+    // The frame a transition ends, read as WebKit read it on a CI runner: the button still shows, though nothing runs.
+    const check = Element.prototype.checkVisibility;
+    let ran = false;
+    let stale = 0;
+    vi.spyOn(Element.prototype, "checkVisibility").mockImplementation(function (this: Element, options?: CheckVisibilityOptions) {
+      if (this !== reply) return check.call(this, options);
+      const running = reply.getAnimations().some((animation) => animation.playState === "running");
+      const old = ran && !running && stale === 0;
+      ran = running;
+      if (old) stale++;
+      return old || check.call(this, options);
+    });
+    await act(() => reply.blur());
+    await drawn(3);
+    expect(stale).toBe(1);
+    // Once nothing moves, X-ray measures nothing more until the page changes.
+    const reads = vi.spyOn(document, "getAnimations");
+    await settled();
+    await frame();
+    await frame();
+    reads.mockClear();
+    for (let index = 0; index < 5; index++) await frame();
+    expect(reads).not.toHaveBeenCalled();
   });
 
   it("follows its components as the page scrolls and resizes", async () => {
@@ -602,6 +805,25 @@ describe("Inspector", () => {
     expect(getComputedStyle(layer()!.querySelector('section')!).visibility).toBe("hidden");
     await userEvent.click(page.getByRole("button", { name: "Copy link" }));
     expect(onCopy).toHaveBeenCalledOnce();
+  }, 15_000);
+
+  it("outlines a non-modal sheet and the page beside it, whose components stay within reach", async () => {
+    await page.viewport(1280, 800);
+    await render(
+      <Page>
+        <Sheet title="Look" side="right" modal={false} open onOpenChange={() => {}}>
+          <Badge>Ocean</Badge>
+        </Sheet>
+      </Page>,
+    );
+    await expect.poll(() => document.getAnimations().filter((animation) => animation.playState === "running").length).toBe(0);
+    const sheet = document.querySelector<HTMLElement>('[data-ouro="sheet"]')!;
+    await expect.poll(() => outlines().some((outline) => onTarget(outline, sheet))).toBe(true);
+    expect(tags().map((tag) => tag.textContent)).toEqual(expect.arrayContaining(["button", "badge", "checkbox", "sheet"]));
+    expect(layer()!.hasAttribute("data-modal")).toBe(false);
+    const save = page.getByRole("button", { name: "Save recipe" }).element() as HTMLElement;
+    const box = save.getBoundingClientRect();
+    expect(save.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);
   }, 15_000);
 
   it("hides the tag of a component an open menu covers, and leaves the menu's items within reach", async () => {
@@ -943,7 +1165,155 @@ describe("Inspector", () => {
     );
     await drawn(1);
     await expect.element(page.getByRole("button", { name: "1 component", exact: true })).toBeVisible();
-    expect(tags()[0]!.getAttribute("href")).toBe("https://ui.ouro.bot/docs/button/");
+    expect(tags()[0]!.getAttribute("href")).toBe("https://ui.ouroboros.bot/docs/button/");
+  });
+
+  /** A page with its components far below the first screen, X-ray pointing one item out. */
+  const Far = ({ spotlight, extra }: { spotlight: string; extra?: ReactNode }) => (
+    <div>
+      <Button>Near</Button>
+      <div style={{ height: 2400 }} />
+      <Badge>First</Badge>
+      <Badge>Second</Badge>
+      {extra}
+      <div style={{ height: 2400 }} />
+      <Inspector open onOpenChange={() => {}} docsHref={docsHref} spotlight={spotlight} />
+    </div>
+  );
+  const status = () => page.getByRole("region", { name: "X-ray" }).getByRole("status");
+  const spotlit = () => outlines().filter((outline) => outline.hasAttribute("data-spotlight"));
+
+  it("points out the spotlit item: scrolls the first one into view, draws its outline stronger and names it on the bar", async () => {
+    const into = vi.spyOn(Element.prototype, "scrollIntoView");
+    const { host, rerender } = await render(<Far spotlight="badge" />);
+    await drawn(3);
+    const [, first, second] = pageRoots(host);
+    // The outline follows the scroll on X-ray's next frame.
+    await expect.poll(() => spotlit().length === 1 && onTarget(spotlit()[0]!, first!)).toBe(true);
+    expect(into).toHaveBeenCalledTimes(1);
+    expect(into.mock.contexts[0]).toBe(first);
+    expect(spotlit()[0]!.getAttribute("data-spotlight")).toBe("");
+    expect(into.mock.calls[0]).toEqual([{ block: "center", inline: "nearest", behavior: "smooth" }]);
+    // The first badge comes to the middle of the screen.
+    await expect.poll(() => Math.abs(first!.getBoundingClientRect().top + first!.getBoundingClientRect().height / 2 - innerHeight / 2) < 2).toBe(true);
+    await expect.element(status()).toHaveTextContent("Showing badge");
+    // The spotlit frame is the primary color in full, two pixels wide; the others stay as they were.
+    const stroke = (outline: HTMLElement) => getComputedStyle(outline.querySelector("[data-ouro-inspector-frame]")!);
+    const other = outlines().find((outline) => onTarget(outline, second!))!;
+    expect(stroke(spotlit()[0]!).strokeWidth).toBe("2px");
+    expect(stroke(other).strokeWidth).toBe("1px");
+    expect(stroke(spotlit()[0]!).stroke).not.toBe(stroke(other).stroke);
+    // Scrolling on does not bring it back, nor does a change to the page.
+    // Instant even where the app scrolls smoothly, so the check below reads where the page stays.
+    // On a slow runner the smooth scroll can still be easing its last pixel; let it settle first,
+    // or it carries on past the scroll back.
+    const frames = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await expect.poll(async () => {
+      const before = scrollY;
+      await frames();
+      return scrollY === before;
+    }).toBe(true);
+    scrollTo({ top: 0, behavior: "instant" });
+    await expect.poll(() => scrollY).toBe(0);
+    await rerender(<Far spotlight="badge" extra={<Checkbox label="Added" />} />);
+    await drawn(4);
+    expect(into).toHaveBeenCalledTimes(1);
+    expect(first!.getBoundingClientRect().top).toBeGreaterThan(innerHeight);
+  });
+
+  it("prefers the first spotlit item in the page's main content to one in its header", async () => {
+    const { host } = await render(
+      <div>
+        <header>
+          <Badge>Header</Badge>
+        </header>
+        <main>
+          <Badge>Content</Badge>
+          <Badge>Later</Badge>
+        </main>
+        <Inspector open onOpenChange={() => {}} docsHref={docsHref} spotlight="badge" />
+      </div>,
+    );
+    await drawn(3);
+    const [, content] = pageRoots(host);
+    await expect.poll(() => spotlit().length === 1 && onTarget(spotlit()[0]!, content!)).toBe(true);
+    // With nothing of the item in a main, the first anywhere.
+    await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    const { host: bare } = await render(<Far spotlight="button" />);
+    await drawn(3);
+    await expect.poll(() => spotlit().length === 1 && onTarget(spotlit()[0]!, pageRoots(bare)[0]!)).toBe(true);
+  });
+
+  it("scrolls to the spotlit item at once with reduced motion", async () => {
+    await commands.emulateMedia({ reducedMotion: "reduce" });
+    const into = vi.spyOn(Element.prototype, "scrollIntoView");
+    await render(<Far spotlight="badge" />);
+    await drawn(3);
+    await expect.poll(() => into.mock.calls.length).toBe(1);
+    expect(into.mock.calls[0]).toEqual([{ block: "center", inline: "nearest", behavior: "instant" }]);
+  });
+
+  it("scrolls to the spotlit item at once under OuroProvider's motion=\"reduced\", and smoothly under \"full\", whatever the device says", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    const into = vi.spyOn(Element.prototype, "scrollIntoView");
+    await render(
+      <OuroProvider motion="reduced">
+        <Far spotlight="badge" />
+      </OuroProvider>,
+    );
+    await drawn(3);
+    await expect.poll(() => into.mock.calls.length).toBe(1);
+    expect(into.mock.calls[0]![0]).toEqual(expect.objectContaining({ behavior: "instant" }));
+    await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    await commands.emulateMedia({ reducedMotion: "reduce" });
+    await render(
+      <OuroProvider motion="full">
+        <Far spotlight="badge" />
+      </OuroProvider>,
+    );
+    await drawn(3);
+    await expect.poll(() => into.mock.calls.length).toBe(2);
+    expect(into.mock.calls[1]![0]).toEqual(expect.objectContaining({ behavior: "smooth" }));
+  });
+
+  it("says when the page has no spotlit item, and points one out when it appears", async () => {
+    const into = vi.spyOn(Element.prototype, "scrollIntoView");
+    const { rerender, host } = await render(<Far spotlight="checkbox" />);
+    await drawn(3);
+    await expect.element(status()).toHaveTextContent("No checkbox on this page");
+    expect(spotlit()).toEqual([]);
+    expect(into).not.toHaveBeenCalled();
+    await rerender(<Far spotlight="checkbox" extra={<Checkbox label="Late" />} />);
+    await drawn(4);
+    await expect.element(status()).toHaveTextContent("Showing checkbox");
+    const late = host.querySelector('[data-ouro="checkbox"]')!;
+    await expect.poll(() => spotlit().length === 1 && onTarget(spotlit()[0]!, late)).toBe(true);
+    expect(into.mock.contexts).toEqual([late]);
+    // Another item to point out: X-ray goes to it.
+    await rerender(<Far spotlight="button" extra={<Checkbox label="Late" />} />);
+    await expect.element(status()).toHaveTextContent("Showing button");
+    await expect.poll(() => into.mock.contexts.length).toBe(2);
+    expect(into.mock.contexts[1]).toBe(host.querySelector('[data-ouro="button"]'));
+  });
+
+  it("says nothing on its bar until it has looked, and nothing without a spotlight", async () => {
+    // Before X-ray's first measure (a frame later) the status is empty, so no "none" is announced
+    // for a page it has yet to read. A mutation observer's callback runs before that frame.
+    let first: string | undefined;
+    const watch = new MutationObserver(() => {
+      first ??= document.querySelector('[data-ouro="inspector"] [role="status"]')?.textContent ?? undefined;
+    });
+    watch.observe(document.body, { childList: true, subtree: true });
+    await render(<Far spotlight="checkbox" />);
+    watch.disconnect();
+    expect(first).toBe("");
+    await drawn(3);
+    await expect.element(status()).toHaveTextContent("No checkbox on this page");
+    await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    await render(<Page />);
+    await drawn(3);
+    expect(document.querySelector('[data-ouro="inspector"] [role="status"]')).toBeNull();
+    expect(spotlit()).toEqual([]);
   });
 
   it("renders nothing while closed, and nothing on the server", async () => {

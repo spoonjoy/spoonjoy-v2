@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
+import { useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -49,55 +50,60 @@ beforeEach(async () => {
 });
 
 describe("Navbar current-page marks", () => {
+  // The pointer starts off the page: a link under it draws its hover highlight at once (`press` eases no colour), and
+  // the mark under test is the underline, never a background. Vitest's unhover leaves it at the body's centre, where
+  // the bar may be.
+  beforeEach(async () => {
+    await userEvent.hover(document.documentElement, { position: { x: -8, y: -8 }, force: true });
+  });
   afterEach(async () => {
     document.documentElement.removeAttribute("dir");
     await commands.emulateMedia({ forcedColors: "none" });
   });
 
-  function assertMark(direction: "ltr" | "rtl", scope: Pick<typeof page, "getByRole"> = page) {
+  function assertMark(scope: Pick<typeof page, "getByRole"> = page) {
     const current = scope.getByRole("link", { name: "Recipes", exact: true }).element();
     const other = scope.getByRole("link", { name: "Cookbooks", exact: true }).element();
-    const marker = getComputedStyle(current, "::before");
-    expect(marker.content).toBe('""');
-    expect(parseFloat(marker.width)).toBe(2);
-    expect(parseFloat(marker.height)).toBeGreaterThan(0);
-    expect(marker.opacity).toBe("1");
-    expect(marker.visibility).toBe("visible");
-    expect(marker[direction === "rtl" ? "right" : "left"]).toBe("0px");
-    expect(getComputedStyle(other, "::before").content).toBe("none");
-    expect(isTransparent(getComputedStyle(current).backgroundColor)).toBe(true);
+    const mark = getComputedStyle(current);
+    expect(mark.textDecorationLine).toBe("underline");
+    expect(mark.textDecorationThickness).toBe("2px");
+    expect(mark.textDecorationColor).not.toBe(mark.color);
+    expect(mark.fontWeight).toBe("600");
+    expect(getComputedStyle(other).textDecorationLine).toBe("none");
+    expect(isTransparent(mark.backgroundColor)).toBe(true);
   }
 
+  it("keeps its underline in the system palette", async () => {
+    await render(<Navbar label="Main" items={[{ label: "Recipes", href: "/recipes" }]} currentPath="/recipes" />);
+    await commands.emulateMedia({ forcedColors: "active" });
+    expect(matchMedia("(forced-colors: active)").matches).toBe(true);
+    const mark = getComputedStyle(page.getByRole("link", { name: "Recipes", exact: true }).element());
+    expect(mark.textDecorationLine).toBe("underline");
+    expect(mark.textDecorationThickness).toBe("2px");
+  });
+
   for (const direction of ["ltr", "rtl"] as const) {
-    it(`keeps its ${direction} start-edge mark visible in the system palette`, async () => {
-      document.documentElement.dir = direction;
-      await render(<Navbar label="Main" items={[{ label: "Recipes", href: "/recipes" }]} currentPath="/recipes" />);
-      await commands.emulateMedia({ forcedColors: "active" });
-      expect(matchMedia("(forced-colors: active)").matches).toBe(true);
-      const current = page.getByRole("link", { name: "Recipes", exact: true }).element();
-      const marker = getComputedStyle(current, "::before");
-      expect(marker[direction === "rtl" ? "borderRightWidth" : "borderLeftWidth"]).toBe("2px");
-      expect(marker.borderInlineStartColor).toBe(getComputedStyle(current).color);
-      expect(marker.borderInlineStartColor).not.toBe(getComputedStyle(current).backgroundColor);
-    });
-    it(`shows the ${direction} start-edge mark in its bar`, async () => {
+    it(`underlines the current page in its ${direction} bar, as FamilyBar marks the current site`, async () => {
       document.documentElement.dir = direction;
       await render(<Navbar label="Main" items={[{ label: "Recipes", href: "/recipes" }, { label: "Cookbooks", href: "/cookbooks" }]} currentPath="/recipes" />);
-      assertMark(direction);
+      assertMark();
     });
-    it(`keeps the ${direction} mark in its phone drawer`, async () => {
+    it(`keeps the ${direction} underline in its phone drawer`, async () => {
       document.documentElement.dir = direction;
       await page.viewport(390, 844);
       await render(<Navbar label="Main" items={[{ label: "Recipes", href: "/recipes" }, { label: "Cookbooks", href: "/cookbooks" }]} currentPath="/recipes" />);
       await userEvent.click(page.getByRole("button", { name: "Menu", exact: true }));
       await expect.element(page.getByRole("dialog")).toBeVisible();
-      assertMark(direction, page.getByRole("dialog"));
+      assertMark(page.getByRole("dialog"));
     });
   }
 });
 afterEach(async () => {
-  vi.restoreAllMocks();
+  // Unmounted first, so an effect's cleanup still finds the stubs it started with: WebKit has no cancelIdleCallback of
+  // its own to fall back on (ourostack/ouro-ui#685).
   await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   for (const node of mounted) node.remove();
   mounted = [];
   await page.viewport(414, 896);
@@ -110,6 +116,14 @@ const items = [
 ];
 
 /** Waits until the sheet has finished opening or closing. */
+/**
+ * The menu button as a locator by its role. Built ahead of the press, the hidden sheet carries the button's label too, so
+ * the element's own locator (by label) would find both.
+ */
+function press(menuButton: HTMLElement) {
+  return page.getByRole("button", { name: menuButton.getAttribute("aria-label")!, exact: true });
+}
+
 async function sheetSettled() {
   await expect.poll(() => document.getAnimations().length).toBe(0);
 }
@@ -125,12 +139,14 @@ describe("Navbar", () => {
     await expect.element(nav.getByRole("link", { name: "Cookbooks" })).toHaveAttribute("data-router");
   });
 
-  it("marks the current page from currentPath, also for a page under an item", async () => {
-    const { rerender } = await render(<Navbar label="Main" items={items} currentPath="/cookbooks" />);
+  it("marks the current page from currentPath, and the section a page under an item is in as current but not the page", async () => {
+    const { rerender } = await render(<Navbar label="Main" items={items} currentPath="/cookbooks/" />);
     await expect.element(page.getByRole("link", { name: "Cookbooks" })).toHaveAttribute("aria-current", "page");
     await expect.element(page.getByRole("link", { name: "Recipes" })).not.toHaveAttribute("aria-current");
     await rerender(<Navbar label="Main" items={items} currentPath="/recipes/12?step=2" />);
-    await expect.element(page.getByRole("link", { name: "Recipes" })).toHaveAttribute("aria-current", "page");
+    // A screen reader hears one current page: the page itself, which a deeper page's own navigation marks.
+    await expect.element(page.getByRole("link", { name: "Recipes" })).toHaveAttribute("aria-current", "true");
+    expect(getComputedStyle(page.getByRole("link", { name: "Recipes" }).element()).textDecorationLine).toBe("underline");
     await expect.element(page.getByRole("link", { name: "Cookbooks" })).not.toHaveAttribute("aria-current");
   });
 
@@ -172,7 +188,7 @@ describe("Navbar", () => {
     expect(menuButton.getAttribute("aria-haspopup")).toBe("dialog");
     expect(menuButton.getAttribute("aria-expanded")).toBe("false");
     expect(bar.scrollWidth).toBeLessThanOrEqual(bar.clientWidth);
-    await userEvent.click(menuButton);
+    await userEvent.click(press(menuButton));
     const sheet = page.getByRole("dialog", { name: "Menu" });
     await expect.element(sheet).toBeVisible();
     expect(menuButton.getAttribute("aria-expanded")).toBe("true");
@@ -182,19 +198,243 @@ describe("Navbar", () => {
     await expect.poll(() => Math.round(sheet.element().getBoundingClientRect().left)).toBe(0);
   });
 
+  it("marks the section a page is in as current but not the page in the sheet too, and no other link", async () => {
+    await page.viewport(390, 844);
+    const { menuButton } = await render(<Navbar label="Main" items={items} currentPath="/recipes/12" />);
+    await userEvent.click(press(menuButton));
+    const nav = page.getByRole("dialog", { name: "Menu" }).getByRole("navigation", { name: "Main" });
+    await expect.element(nav.getByRole("link", { name: "Recipes" })).toHaveAttribute("aria-current", "true");
+    await expect.element(nav.getByRole("link", { name: "Cookbooks" })).not.toHaveAttribute("aria-current");
+    await expect.element(nav.getByRole("link", { name: "Shopping list" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("lets an item's own current win over currentPath in the sheet too", async () => {
+    await page.viewport(390, 844);
+    const { menuButton } = await render(<Navbar label="Main" items={[items[0]!, { ...items[1]!, current: true }]} currentPath="/recipes" />);
+    await userEvent.click(press(menuButton));
+    const nav = page.getByRole("dialog", { name: "Menu" }).getByRole("navigation", { name: "Main" });
+    await expect.element(nav.getByRole("link", { name: "Cookbooks" })).toHaveAttribute("aria-current", "page");
+    await expect.element(nav.getByRole("link", { name: "Recipes" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("builds the sheet while the page is idle once the menu button shows, and keeps it, hidden, between opens", async () => {
+    await page.viewport(390, 844);
+    const { menuButton } = await render(<Navbar label="Main" items={items} />);
+    const popup = () => document.querySelector<HTMLElement>('[data-ouro="sheet"]');
+    // Built ahead of the press, hidden: nothing in it is seen, heard or reached.
+    await expect.poll(popup).not.toBeNull();
+    expect(popup()!.hidden).toBe(true);
+    expect(page.getByRole("dialog").elements()).toHaveLength(0);
+    const built = popup();
+    await userEvent.click(press(menuButton));
+    await expect.element(page.getByRole("dialog", { name: "Menu" })).toBeVisible();
+    // The press showed the sheet it had: the same element.
+    expect(popup()).toBe(built);
+    await sheetSettled();
+    await userEvent.keyboard("{Escape}");
+    // Kept, hidden, for the next press: built afresh once the close has finished.
+    await expect.poll(() => popup() !== built && popup()?.hidden).toBe(true);
+  });
+
+  it("builds the sheet when the menu button comes to show, on a window narrowed to a phone's", async () => {
+    await page.viewport(1024, 768);
+    await render(<Navbar label="Main" items={items} />);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(document.querySelector('[data-ouro="sheet"]')).toBeNull();
+    await page.viewport(390, 844);
+    await expect.poll(() => document.querySelector<HTMLElement>('[data-ouro="sheet"]')?.hidden).toBe(true);
+  });
+
+  it("builds the sheet as soon as the browser says the page is idle, before the half second a browser without an idle callback waits", async () => {
+    // An idle callback that comes at once.
+    vi.stubGlobal("requestIdleCallback", (callback: () => void) => setTimeout(callback, 0));
+    vi.stubGlobal("cancelIdleCallback", (id: number) => clearTimeout(id));
+    await page.viewport(390, 844);
+    await render(<Navbar label="Main" items={items} />);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(document.querySelector<HTMLElement>('[data-ouro="sheet"]')?.hidden).toBe(true);
+  });
+
+  it("builds the sheet half a second in where the browser has no idle callback (Safari)", async () => {
+    vi.stubGlobal("requestIdleCallback", undefined);
+    await page.viewport(390, 844);
+    await render(<Navbar label="Main" items={items} />);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(document.querySelector('[data-ouro="sheet"]')).toBeNull();
+    await expect.poll(() => document.querySelector<HTMLElement>('[data-ouro="sheet"]')?.hidden).toBe(true);
+  });
+
+  for (const idle of [true, false]) {
+    it(`builds the sheet's frame first and puts its content in on a later turn${idle ? "" : ", where the browser has no idle callback"}`, async () => {
+      // An idle callback that comes 300 ms on.
+      vi.stubGlobal("requestIdleCallback", idle ? (callback: () => void) => setTimeout(callback, 300) : undefined);
+      vi.stubGlobal("cancelIdleCallback", idle ? (id: number) => clearTimeout(id) : undefined);
+      await page.viewport(390, 844);
+      await render(<Navbar label="Main" items={items} />);
+      const popup = () => document.querySelector<HTMLElement>('[data-ouro="sheet"]');
+      const links = () => popup()?.querySelectorAll("a[href]").length ?? 0;
+      await expect.poll(popup).not.toBeNull();
+      // Its frame alone, with no links yet; then, a turn later, the links.
+      expect(popup()!.hidden).toBe(true);
+      expect(links()).toBe(0);
+      await expect.poll(links).toBeGreaterThan(0);
+      expect(popup()!.hidden).toBe(true);
+    });
+
+    if (idle)
+    it("opens with its links on a press between the sheet's frame and its content", async () => {
+      // The frame's idle turn comes at once; the content's is held until after the press.
+      const held: Array<() => void> = [];
+      let fired = false;
+      vi.stubGlobal("requestIdleCallback", (callback: () => void) => {
+        if (fired) return held.push(callback);
+        return setTimeout(() => {
+          fired = true;
+          callback();
+        }, 0);
+      });
+      vi.stubGlobal("cancelIdleCallback", (id: number) => clearTimeout(id));
+      await page.viewport(390, 844);
+      const { menuButton } = await render(<Navbar label="Main" items={items} />);
+      await expect.poll(() => document.querySelector('[data-ouro="sheet"]')).not.toBeNull();
+      expect(document.querySelectorAll('[data-ouro="sheet"] a[href]')).toHaveLength(0);
+      await userEvent.click(press(menuButton));
+      await expect.element(page.getByRole("dialog", { name: "Menu" }).getByRole("link", { name: items[0]!.label })).toBeVisible();
+      // The content's turn, at last, leaves the open sheet as it is.
+      for (const callback of held.splice(0)) callback();
+      await expect.element(page.getByRole("dialog", { name: "Menu" }).getByRole("link", { name: items[0]!.label })).toBeVisible();
+      // The sheet built afresh after the close takes its frame first and its content on the next turn too.
+      await sheetSettled();
+      await userEvent.keyboard("{Escape}");
+      await expect.poll(() => document.querySelector<HTMLElement>('[data-ouro="sheet"]')?.hidden).toBe(true);
+      await expect.poll(() => held.length).toBeGreaterThan(0);
+      expect(document.querySelectorAll('[data-ouro="sheet"] a[href]')).toHaveLength(0);
+      for (const callback of held.splice(0)) callback();
+      await expect.poll(() => document.querySelectorAll('[data-ouro="sheet"] a[href]').length).toBe(items.length);
+    });
+
+    it(`builds no sheet when the menu button hides again before the page is idle${idle ? "" : ", where the browser has no idle callback"}`, async () => {
+      // An idle callback that comes 300 ms on, cancelled as a timer is.
+      vi.stubGlobal("requestIdleCallback", idle ? (callback: () => void) => setTimeout(callback, 300) : undefined);
+      vi.stubGlobal("cancelIdleCallback", idle ? (id: number) => clearTimeout(id) : undefined);
+      await page.viewport(390, 844);
+      await render(<Navbar label="Main" items={items} />);
+      await page.viewport(1024, 768);
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      expect(document.querySelector('[data-ouro="sheet"]')).toBeNull();
+    });
+  }
+
+  it("opens afresh after each close: the menu prop's state and the sheet's scroll as the first open had them", async () => {
+    function Filter() {
+      const [text, setText] = useState("");
+      return (
+        <>
+          <input aria-label="Filter" value={text} onChange={(event) => setText(event.currentTarget.value)} />
+          <div style={{ height: 3000 }} />
+        </>
+      );
+    }
+    await page.viewport(390, 844);
+    await render(<Navbar label="Main" items={items} menu={<Filter />} />);
+    // The sheet built and kept before the first press, as on a page that has been idle.
+    await expect.poll(() => document.querySelector<HTMLElement>('[data-ouro="sheet"]')?.hidden).toBe(true);
+    const button = page.getByRole("button", { name: "Menu", exact: true });
+    await userEvent.click(button);
+    await userEvent.fill(page.getByRole("textbox", { name: "Filter" }), "rec");
+    const body = () => document.querySelector<HTMLElement>("[data-ouro-sheet-content]")!;
+    await expect.poll(() => body().scrollHeight > body().clientHeight).toBe(true);
+    body().scrollTop = 400;
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => document.querySelector<HTMLElement>('[data-ouro="sheet"]')?.hidden).toBe(true);
+    // After every close, not only the first.
+    for (let round = 0; round < 2; round += 1) {
+      await userEvent.click(button);
+      await expect.element(page.getByRole("textbox", { name: "Filter" })).toHaveValue("");
+      expect(body().scrollTop).toBe(0);
+      await userEvent.fill(page.getByRole("textbox", { name: "Filter" }), "rec");
+      body().scrollTop = 400;
+      await userEvent.keyboard("{Escape}");
+      await expect.poll(() => document.querySelector<HTMLElement>('[data-ouro="sheet"]')?.hidden).toBe(true);
+    }
+  });
+
+  it("builds no sheet where the links fit the bar", async () => {
+    await page.viewport(1024, 768);
+    await render(<Navbar label="Main" items={items} />);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(document.querySelector('[data-ouro="sheet"]')).toBeNull();
+  });
+
   it("closes the sheet when a link is chosen", async () => {
     await page.viewport(390, 844);
     const { menuButton } = await render(<Navbar label="Main" items={items} />);
-    await userEvent.click(menuButton);
+    await userEvent.click(press(menuButton));
     await sheetSettled();
     await userEvent.click(page.getByRole("dialog").getByRole("link", { name: "Cookbooks" }));
     await expect.poll(() => page.getByRole("dialog").elements().length).toBe(0);
   });
 
+  it("leaves the sheet open for a link opened elsewhere, with a modifier key held", async () => {
+    await page.viewport(390, 844);
+    const { menuButton } = await render(
+      <Navbar
+        label="Main"
+        items={items}
+        menu={
+          <div>
+            <a href="#elsewhere">Elsewhere</a>
+          </div>
+        }
+      />,
+    );
+    await userEvent.click(press(menuButton));
+    await sheetSettled();
+    const nav = page.getByRole("dialog").getByRole("navigation", { name: "Main" });
+    // The browser's own default (a new tab) is held back after the menu has seen the click, so the test page stays.
+    const hold = (event: Event) => event.preventDefault();
+    window.addEventListener("click", hold);
+    try {
+      for (const modifier of ["metaKey", "ctrlKey", "shiftKey", "altKey"] as const) {
+        nav.getByRole("link", { name: "Elsewhere" }).element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, [modifier]: true }));
+        await act(async () => {});
+        expect(menuButton.getAttribute("aria-expanded"), modifier).toBe("true");
+      }
+    } finally {
+      window.removeEventListener("click", hold);
+    }
+  });
+
+  it("shows the menu prop in the sheet in place of the links, and closes it when a link there is chosen", async () => {
+    await page.viewport(390, 844);
+    const { menuButton } = await render(
+      <Navbar
+        label="Main"
+        items={items}
+        menu={
+          <div>
+            <p>Recipes</p>
+            <a href="#new-recipe">New recipe</a>
+          </div>
+        }
+      />,
+    );
+    await userEvent.click(press(menuButton));
+    await sheetSettled();
+    const nav = page.getByRole("dialog").getByRole("navigation", { name: "Main" });
+    expect(nav.getByRole("link").elements().map((link) => link.textContent)).toEqual(["New recipe"]);
+    await userEvent.click(nav.getByText("Recipes"));
+    await act(async () => {});
+    expect(menuButton.getAttribute("aria-expanded")).toBe("true");
+    await userEvent.click(nav.getByRole("link", { name: "New recipe" }));
+    await expect.poll(() => page.getByRole("dialog").elements().length).toBe(0);
+    await expect.poll(() => document.activeElement).toBe(menuButton);
+  });
+
   it("returns focus to the menu button when the sheet closes with Escape", async () => {
     await page.viewport(390, 844);
     const { menuButton } = await render(<Navbar label="Main" items={items} />);
-    await userEvent.click(menuButton);
+    await userEvent.click(press(menuButton));
     await sheetSettled();
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => page.getByRole("dialog").elements().length).toBe(0);
@@ -204,7 +444,7 @@ describe("Navbar", () => {
   it("closes the sheet when the screen grows past 640px", async () => {
     await page.viewport(390, 844);
     const { menuButton } = await render(<Navbar label="Main" items={items} />);
-    await userEvent.click(menuButton);
+    await userEvent.click(press(menuButton));
     await expect.element(page.getByRole("dialog")).toBeVisible();
     await page.viewport(1024, 768);
     await expect.poll(() => page.getByRole("dialog").elements().length).toBe(0);
@@ -217,7 +457,7 @@ describe("Navbar", () => {
     await page.viewport(390, 844);
     const { menuButton } = await render(<Navbar label="Main" items={items} menuLabel="Menü" closeLabel="Schließen" />);
     expect(menuButton.getAttribute("aria-label")).toBe("Menü");
-    await userEvent.click(menuButton);
+    await userEvent.click(press(menuButton));
     await expect.element(page.getByRole("dialog", { name: "Menü" })).toBeVisible();
     await expect.element(page.getByRole("button", { name: "Schließen" })).toBeInTheDocument();
   });
@@ -279,7 +519,7 @@ describe("Navbar at tablet widths and with groups", () => {
     expect(bar.scrollWidth).toBeLessThanOrEqual(bar.clientWidth);
     // The bar's links are out of the way and out of the tab order.
     expect(page.getByRole("navigation", { name: "Main" }).query()).toBeNull();
-    await userEvent.click(menuButton);
+    await userEvent.click(press(menuButton));
     const sheet = page.getByRole("dialog", { name: "Menu" });
     await expect.element(sheet.getByRole("link", { name: "Kitchen Search" })).toBeVisible();
     await userEvent.keyboard("{Escape}");
@@ -294,7 +534,7 @@ describe("Navbar at tablet widths and with groups", () => {
     await page.viewport(768, 800);
     const { menuButton } = await render(<Navbar label="Main" items={eight} />);
     await expect.poll(() => getComputedStyle(menuButton).display).not.toBe("none");
-    await userEvent.click(menuButton);
+    await userEvent.click(press(menuButton));
     await expect.element(page.getByRole("dialog", { name: "Menu" })).toBeVisible();
     await page.viewport(1600, 800);
     await expect.poll(() => page.getByRole("dialog").elements().length).toBe(0);
@@ -320,7 +560,7 @@ describe("Navbar at tablet widths and with groups", () => {
   it("lists a group of links under its name in the sheet", async () => {
     await page.viewport(390, 844);
     const { menuButton } = await render(<Navbar label="Main" items={grouped} currentPath="/recipes/drafts" />);
-    await userEvent.click(menuButton);
+    await userEvent.click(press(menuButton));
     const sheet = page.getByRole("dialog", { name: "Menu" });
     const group = sheet.getByRole("list", { name: "Recipes" });
     await expect.element(group).toBeVisible();

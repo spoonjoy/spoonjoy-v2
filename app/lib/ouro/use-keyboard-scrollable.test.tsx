@@ -47,6 +47,23 @@ it("makes an overflowing scroll container a tab stop, so a keyboard can scroll i
   expect(scroller(host).getAttribute("tabindex")).toBe("0");
 });
 
+it("makes a container a tab stop when its content overflows across, unless it clips across", async () => {
+  const Across = ({ overflowX }: { overflowX: "auto" | "scroll" | "hidden" }) => {
+    const ref = useKeyboardScrollable<HTMLDivElement>(true);
+    return (
+      <div ref={ref} data-scroller="" style={{ width: 200, overflowX, overflowY: "auto" }}>
+        <div style={{ width: 600, height: 20 }} />
+      </div>
+    );
+  };
+  for (const overflowX of ["auto", "scroll"] as const) {
+    const { host } = await render(<Across overflowX={overflowX} />);
+    expect(scroller(host).getAttribute("tabindex")).toBe("0");
+  }
+  const clipped = await render(<Across overflowX="hidden" />);
+  expect(scroller(clipped.host).hasAttribute("tabindex")).toBe(false);
+});
+
 it("adds no tab stop while the content fits", async () => {
   const { host } = await render(<Scroller lines={2} />);
   expect(scroller(host).hasAttribute("tabindex")).toBe(false);

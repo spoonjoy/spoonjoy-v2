@@ -1,4 +1,4 @@
-import { createRef, StrictMode, useState, type ReactElement, type ReactNode } from "react";
+import { createRef, StrictMode, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,7 +20,9 @@ import {
   DialogViewport,
 } from "~/components/ouro/dialog/dialog-parts";
 import { act } from "~/lib/ouro/testing/act";
+import { pressDuringScroll } from "~/lib/ouro/testing/press";
 import { pageCss } from "~/lib/ouro/testing/page-css";
+import { pressTab } from "~/lib/ouro/testing/tab";
 
 // Runs in Chromium and WebKit.
 
@@ -314,6 +316,34 @@ describe("trigger", () => {
   });
 });
 
+describe("Dialog below an app's own bar", () => {
+  const viewport = () => document.querySelector<HTMLElement>('[data-ouro="dialog-viewport"]')!;
+  const setInset = () => document.documentElement.style.setProperty("--ouro-inset-top", "40px");
+
+  afterEach(() => {
+    document.documentElement.style.removeProperty("--ouro-inset-top");
+  });
+
+  it("starts the backdrop and the centered viewport below --ouro-inset-top, and centres in the space under it", async () => {
+    setInset();
+    const element = await openUncontrolled();
+    const layer = backdrop()!.getBoundingClientRect();
+    const frame = viewport().getBoundingClientRect();
+    expect(layer.top).toBe(40);
+    expect(Math.round(layer.bottom)).toBeGreaterThanOrEqual(innerHeight);
+    expect(frame.top).toBe(40);
+    expect(Math.round(frame.bottom)).toBe(innerHeight);
+    const rect = element.getBoundingClientRect();
+    expect(Math.abs(rect.top + rect.height / 2 - (40 + innerHeight) / 2)).toBeLessThanOrEqual(1);
+  });
+
+  it("starts the backdrop and the viewport at the window's top when the app sets no inset", async () => {
+    await openUncontrolled();
+    expect(backdrop()!.getBoundingClientRect().top).toBe(0);
+    expect(viewport().getBoundingClientRect().top).toBe(0);
+  });
+});
+
 describe("Dialog stacking above the app's fixed bars", () => {
   /** The app's `--ouro-layer`: 50 from ouro-base, unless the app raised it. */
   const layer = () => Number(getComputedStyle(document.documentElement).getPropertyValue("--ouro-layer"));
@@ -436,17 +466,158 @@ describe("centered dialog", () => {
   });
 
   it.each([
+    ["auto", 896],
     ["sm", 384],
     ["md", 512],
     ["lg", 640],
+    ["xl", 896],
+    ["2xl", 1152],
+    ["full", 1280 - 32],
   ] as const)("caps size %s at %ipx wide", async (size, max) => {
     const element = await openUncontrolled({ size, children: <div style={{ width: 2000 }} /> } as Partial<DialogProps>);
     expect(element.getAttribute("data-size")).toBe(size);
     expect(element.getBoundingClientRect().width).toBe(max);
   });
 
-  it("defaults to md", async () => {
-    expect((await openUncontrolled()).getAttribute("data-size")).toBe("md");
+  it.each([
+    ["sm", 384],
+    ["md", 512],
+    ["lg", 640],
+  ] as const)("keeps size %s at %ipx whatever the content", async (size, width) => {
+    for (const children of ["Delete?", <div key="wide" style={{ width: 2000 }} />]) {
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+      const element = await openUncontrolled({ size, children } as Partial<DialogProps>);
+      expect(element.getBoundingClientRect().width).toBe(width);
+    }
+  });
+
+  it.each([
+    ["auto", 896, 640],
+    ["xl", 896, 800 - 32],
+    ["2xl", 1152, 800 - 32],
+    ["full", 1280 - 32, 800 - 32],
+  ] as const)("fits size %s to its content, from 32rem up to %ipx", async (size, cap, capAt800) => {
+    // Short content keeps md's 512px; a 700px gallery widens the dialog to fit it and its padding.
+    const short = await openUncontrolled({ size, children: "Delete?" } as Partial<DialogProps>);
+    expect(short.getBoundingClientRect().width).toBe(512);
+    await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    const wide = await openUncontrolled({ size, children: <div data-gallery="" style={{ width: 700, height: 100 }} /> } as Partial<DialogProps>);
+    const body = wide.querySelector<HTMLElement>("[data-ouro-dialog-content]")!;
+    const padding = parseFloat(getComputedStyle(body).paddingInlineStart) + parseFloat(getComputedStyle(body).paddingInlineEnd);
+    expect(wide.getBoundingClientRect().width).toBe(700 + padding);
+    expect(wide.getBoundingClientRect().width).toBeLessThan(cap);
+    // On a narrower screen the cap gives way: auto's to 40rem, the others' to the viewport less its margins.
+    await page.viewport(800, 800);
+    await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    const capped = await openUncontrolled({ size, children: <div style={{ width: 2000 }} /> } as Partial<DialogProps>);
+    expect(capped.getBoundingClientRect().width).toBe(capAt800);
+    expect(capped.getBoundingClientRect().left).toBe((800 - capAt800) / 2);
+  });
+
+  it.each([
+    [1024, 1024 * 0.7],
+    [1280, 896],
+    [1440, 896],
+  ] as const)("follows the screen by default: a wide table makes it %ipx wide on a %ipx screen", async (screen, width) => {
+    await page.viewport(screen, 800);
+    const table = (
+      <table>
+        <tbody>
+          <tr>
+            {Array.from({ length: 12 }, (_, index) => (
+              <td key={index} style={{ whiteSpace: "nowrap" }}>Column {index + 1} of the table</td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    );
+    const element = await openUncontrolled({ children: table } as Partial<DialogProps>);
+    expect(element.getAttribute("data-size")).toBe("auto");
+    expect(element.getBoundingClientRect().width).toBeCloseTo(width, 0);
+  });
+
+  it.each(["auto", "xl", "2xl", "full"] as const)(
+    "keeps running text at a readable 65ch in size %s, so text alone does not widen it",
+    async (size) => {
+      const prose = "A sentence that runs on. ".repeat(40);
+      const element = await openUncontrolled({
+        size,
+        description: prose,
+        children: (
+          <>
+            <h3>{prose}</h3>
+            <p>{prose}</p>
+            <ul style={{ paddingInlineStart: 0 }}>
+              <li>{prose}</li>
+            </ul>
+            {/* A label lays out as a block in a form; an inline label's text joins its parent's line. */}
+            <label style={{ display: "grid" }}>
+              {prose} <input aria-label="Name" />
+            </label>
+            <div data-ouro-text="">{prose}</div>
+          </>
+        ),
+      } as Partial<DialogProps>);
+      const body = element.querySelector<HTMLElement>("[data-ouro-dialog-content]")!;
+      const padding = parseFloat(getComputedStyle(body).paddingInlineStart) + parseFloat(getComputedStyle(body).paddingInlineEnd);
+      const texts = [...element.querySelectorAll<HTMLElement>("[data-ouro-dialog-title], [data-ouro-dialog-description], h3, p, li, label, [data-ouro-text]")];
+      expect(texts).toHaveLength(7);
+      for (const text of texts) {
+        // 65ch at the element's own font size.
+        const measure = parseFloat(getComputedStyle(text).maxWidth);
+        expect(measure).toBeGreaterThan(400);
+        expect(measure).toBeLessThan(800);
+        expect(text.getBoundingClientRect().width).toBeLessThanOrEqual(measure + 0.01);
+      }
+      const widest = Math.max(...texts.map((text) => text.getBoundingClientRect().width));
+      expect(element.getBoundingClientRect().width).toBeLessThanOrEqual(Math.max(512, widest + padding) + 0.01);
+      // Beside a wide gallery the dialog grows, and the text keeps its measure.
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+      const mixed = await openUncontrolled({
+        size,
+        children: (
+          <>
+            <p>{prose}</p>
+            <div style={{ width: 860, height: 40 }} />
+          </>
+        ),
+      } as Partial<DialogProps>);
+      expect(mixed.getBoundingClientRect().width).toBe(Math.min(860 + padding, size === "auto" || size === "xl" ? 896 : 1248));
+      const paragraph = mixed.querySelector("p")!;
+      expect(paragraph.getBoundingClientRect().width).toBeCloseTo(parseFloat(getComputedStyle(paragraph).maxWidth), 1);
+    },
+  );
+
+  it("leaves running text its full width in the fixed sizes", async () => {
+    const element = await openUncontrolled({ size: "lg", children: <p>{"A sentence that runs on. ".repeat(40)}</p> } as Partial<DialogProps>);
+    expect(getComputedStyle(element.querySelector("p")!).maxWidth).toBe("none");
+  });
+
+  it("lets the app's own max-width class on a paragraph win over the 65ch measure", async () => {
+    const element = await openUncontrolled({
+      children: <p className="max-w-none">{"A sentence that runs on. ".repeat(40)}</p>,
+    } as Partial<DialogProps>);
+    expect(getComputedStyle(element.querySelector("p")!).maxWidth).toBe("none");
+    expect(element.getBoundingClientRect().width).toBe(896);
+  });
+
+  it.each(["auto", "sm", "md", "lg", "xl", "2xl", "full"] as const)(
+    "keeps size %s inside a 390px phone's 16px margins when presentation is dialog",
+    async (size) => {
+      await page.viewport(390, 844);
+      for (const children of ["Delete?", <div key="wide" style={{ width: 2000 }} />]) {
+        await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+        const element = await openUncontrolled({ size, presentation: "dialog", children } as Partial<DialogProps>);
+        expect(element.getAttribute("data-size")).toBe(size);
+        const rect = element.getBoundingClientRect();
+        expect(rect.left).toBe(16);
+        expect(rect.width).toBe(390 - 32);
+      }
+    },
+  );
+
+  it("defaults to auto", async () => {
+    expect((await openUncontrolled()).getAttribute("data-size")).toBe("auto");
   });
 
   it("hides the title visually with hideTitle and describes the dialog with description", async () => {
@@ -484,6 +655,107 @@ describe("centered dialog", () => {
   });
 });
 
+describe("Dialog's top edge while its content changes", () => {
+  /** A dialog whose steps the test adds and removes, as a first-run checklist ticks. */
+  function Steps({ count }: { count: number }) {
+    return (
+      <Dialog title="Getting set up" open onOpenChange={() => {}}>
+        <ol>
+          {Array.from({ length: count }, (_, step) => (
+            <li key={step} style={{ height: 40 }}>
+              Step {step + 1}
+            </li>
+          ))}
+        </ol>
+      </Dialog>
+    );
+  }
+  const box = () => dialogPopup()!.getBoundingClientRect();
+
+  it("opens centred, then keeps its top edge where it opened as its content grows", async () => {
+    const { rerender } = await render(<Steps count={2} />);
+    await settled();
+    const opened = box();
+    expect(Math.abs(opened.top - (800 - opened.bottom))).toBeLessThanOrEqual(1);
+    await rerender(<Steps count={6} />);
+    await expect.poll(() => box().height).toBeGreaterThan(opened.height + 150);
+    // The hold runs in a resize observer, after the frame's animation callbacks and before its paint.
+    await expect.poll(() => Math.round(box().top)).toBe(Math.round(opened.top));
+  });
+
+  it("keeps its top edge where it opened as its content shrinks", async () => {
+    const { rerender } = await render(<Steps count={6} />);
+    await settled();
+    const opened = box();
+    await rerender(<Steps count={2} />);
+    await expect.poll(() => box().height).toBeLessThan(opened.height - 150);
+    // The hold runs in a resize observer, after the frame's animation callbacks and before its paint.
+    await expect.poll(() => Math.round(box().top)).toBe(Math.round(opened.top));
+  });
+
+  it("moves up only as far as it must when it grows past the screen's bottom margin", async () => {
+    const { rerender } = await render(<Steps count={6} />);
+    await settled();
+    const opened = box();
+    await rerender(<Steps count={24} />);
+    await expect.poll(() => box().height).toBe(800 - 32);
+    // The hold runs in a resize observer before the next paint: read after it has.
+    await nextFrame();
+    await nextFrame();
+    expect(box().bottom).toBeCloseTo(800 - 16, 0);
+    expect(box().top).toBeLessThan(opened.top);
+    expect(box().top).toBeGreaterThanOrEqual(16);
+  });
+
+  it("centres itself again for a window of a new size", async () => {
+    const { rerender } = await render(<Steps count={2} />);
+    await settled();
+    await rerender(<Steps count={6} />);
+    await expect.poll(() => box().height).toBeGreaterThan(300);
+    await page.viewport(1280, 700);
+    // The window's new height reaches the dialog's viewport, and its resize observer, before the dialog moves.
+    await expect.poll(() => document.querySelector<HTMLElement>('[data-ouro="dialog-viewport"]')!.clientHeight).toBe(700);
+    await expect.poll(() => Math.round(box().top - (700 - box().bottom))).toBe(0);
+    await nextFrame();
+    await nextFrame();
+    const centred = Math.round(box().top);
+    await rerender(<Steps count={8} />);
+    await expect.poll(() => Math.round(box().top)).toBe(centred);
+    expect(Math.round(box().top - (700 - box().bottom))).toBeGreaterThan(0);
+  });
+
+  it("leaves a popup taller than the room where the viewport puts it, as a full-screen viewer is", async () => {
+    await render(
+      <DialogRoot open onOpenChange={() => {}}>
+        <DialogPortal>
+          <DialogViewport>
+            <DialogPopup style={{ marginBlock: -16, height: "calc(100% + 32px)", maxHeight: "none" }}>
+              <DialogTitle>Photos</DialogTitle>
+            </DialogPopup>
+          </DialogViewport>
+        </DialogPortal>
+      </DialogRoot>,
+    );
+    await settled();
+    expect(box().top).toBe(0);
+    expect(box().height).toBe(800);
+    expect(dialogPopup()!.style.top).toBe("0px");
+  });
+
+  it("keeps its top edge when only the window's width changes, as when a page's scroll bar comes or goes", async () => {
+    const { rerender } = await render(<Steps count={6} />);
+    await settled();
+    const opened = Math.round(box().top);
+    await rerender(<Steps count={2} />);
+    await expect.poll(() => Math.round(box().top)).toBe(opened);
+    await page.viewport(1100, 800);
+    await expect.poll(() => Math.round(box().left)).toBe(Math.round((1100 - box().width) / 2));
+    await nextFrame();
+    await nextFrame();
+    expect(Math.round(box().top)).toBe(opened);
+  });
+});
+
 describe("footer", () => {
   const footer = (
     <>
@@ -493,6 +765,30 @@ describe("footer", () => {
       <Button>Save</Button>
     </>
   );
+
+  it("presses the footer's default action on Return from a field, in a dialog and in a sheet", async () => {
+    for (const width of [1280, 390]) {
+      await page.viewport(width, 800);
+      const save = vi.fn();
+      await openUncontrolled({
+        footer: (
+          <>
+            <Button variant="outline" tone="secondary">
+              Cancel
+            </Button>
+            <Button default onClick={save}>
+              Save
+            </Button>
+          </>
+        ),
+      });
+      (page.getByRole("textbox", { name: "Name" }).element() as HTMLElement).focus();
+      await userEvent.keyboard("{Enter}");
+      expect(save).toHaveBeenCalledTimes(1);
+      expect((save.mock.calls[0]![0] as KeyboardEvent).isTrusted).toBe(true);
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    }
+  });
 
   it("lays out actions in a row at the end on wide screens", async () => {
     const element = await openUncontrolled({ footer });
@@ -648,7 +944,12 @@ describe("Dialog close button press", () => {
 
 describe("Dialog iOS backdrop rule", () => {
   it("covers the visible screen on a page scrolled 2000px", async () => {
+    // The anchor follows the same query, so it is switched on with the rules.
+    const supports = CSS.supports.bind(CSS);
     const ios = document.createElement("style");
+    vi.spyOn(CSS, "supports").mockImplementation((...query: [string, string?]) =>
+      query[0] === "-webkit-touch-callout" && query[1] === "none" ? true : supports(...(query as [string, string])),
+    );
     ios.textContent = withIosRules(pageCss());
     document.head.append(ios);
     mounted.push(ios);
@@ -674,6 +975,29 @@ describe("Dialog iOS backdrop rule", () => {
       .toBe(true);
     expect(window.scrollY).toBe(2000);
     window.scrollTo(0, 0);
+  });
+
+  it("clips the backdrop below --ouro-inset-top, since its top is anchored to the screen", async () => {
+    const ios = document.createElement("style");
+    ios.textContent = withIosRules(pageCss());
+    document.head.append(ios);
+    mounted.push(ios);
+    document.documentElement.style.setProperty("--ouro-inset-top", "40px");
+    try {
+      await render(
+        <Dialog title="Inset" open onOpenChange={() => {}}>
+          Body
+        </Dialog>,
+      );
+      await settled();
+      const layer = backdrop()!;
+      expect(getComputedStyle(layer).position).toBe("absolute");
+      expect(getComputedStyle(layer).clipPath).toBe("inset(40px 0px 0px)");
+      const bar = document.elementFromPoint(100, 20);
+      expect(layer.contains(bar)).toBe(false);
+    } finally {
+      document.documentElement.style.removeProperty("--ouro-inset-top");
+    }
   });
 });
 
@@ -707,6 +1031,23 @@ describe("Dialog dev messages", () => {
     ]);
   });
 
+  it("says once when it mounts already open after a press, since its transitions can't run", async () => {
+    document.dispatchEvent(new PointerEvent("pointerdown", { pointerType: "mouse" }));
+    const { rerender } = await render(
+      <Dialog title="Edit recipe" open onOpenChange={() => {}}>
+        Body
+      </Dialog>,
+    );
+    await rerender(
+      <Dialog title="Edit recipe" open onOpenChange={() => {}}>
+        Body again
+      </Dialog>,
+    );
+    expect(warn.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+      "[ouro-ui] Dialog: mounted already open, so its open and close transitions don't run; mount it closed and change open. Fix: <Dialog open={open} onOpenChange={setOpen}>.",
+    ]);
+  });
+
   it("warns once about guessed props and drops them from the DOM", async () => {
     const guessed = { isOpen: true, onClose: () => {}, position: "bottom", side: "left", snapPoints: [0.5] } as object;
     const element = await openUncontrolled(guessed);
@@ -720,12 +1061,12 @@ describe("Dialog dev messages", () => {
     for (const name of ["isopen", "position", "side", "snappoints"]) expect(element.hasAttribute(name)).toBe(false);
   });
 
-  it("renders the md size and auto presentation for values that are not Ouro UI's, and warns once with each fix", async () => {
-    const element = await openUncontrolled({ size: "xl", presentation: "modal" } as object);
-    expect(element.getAttribute("data-size")).toBe("md");
+  it("renders the auto size and auto presentation for values that are not Ouro UI's, and warns once with each fix", async () => {
+    const element = await openUncontrolled({ size: "xs", presentation: "modal" } as object);
+    expect(element.getAttribute("data-size")).toBe("auto");
     expect(element.getAttribute("data-ouro-presentation")).toBe("dialog");
     expect(warn.mock.calls.map((call: unknown[]) => call[0])).toEqual([
-      '[ouro-ui] Dialog: size="xl" is not a size; use "sm", "md", "lg". Fix: <Dialog size="md">.',
+      '[ouro-ui] Dialog: size="xs" is not a size; use "auto", "sm", "md", "lg", "xl", "2xl", "full". Fix: <Dialog size="md">.',
       '[ouro-ui] Dialog: presentation="modal" is not a presentation; use "auto", "dialog", "sheet". Fix: <Dialog presentation="auto">.',
     ]);
   });
@@ -772,21 +1113,21 @@ describe("Dialog parts", () => {
     expect(document.querySelector("[data-ouro-dialog-content]")!.getAttribute("data-ouro-part")).toBe("content");
   });
 
-  it("renders an md DialogPopup for a size that is not one of Ouro UI's, and warns once with the fix", async () => {
+  it("renders the auto DialogPopup for a size that is not one of Ouro UI's, and warns once with the fix", async () => {
     await render(
       <DialogRoot open>
         <DialogPortal>
           <DialogViewport>
-            <DialogPopup {...({ size: "xl" } as object)}>
+            <DialogPopup {...({ size: "xs" } as object)}>
               <DialogTitle>Parts</DialogTitle>
             </DialogPopup>
           </DialogViewport>
         </DialogPortal>
       </DialogRoot>,
     );
-    await expect.poll(() => dialogPopup()?.getAttribute("data-size")).toBe("md");
+    await expect.poll(() => dialogPopup()?.getAttribute("data-size")).toBe("auto");
     expect(warn.mock.calls.map((call: unknown[]) => call[0])).toEqual([
-      '[ouro-ui] DialogPopup: size="xl" is not a size; use "sm", "md", "lg". Fix: <DialogPopup size="md">.',
+      '[ouro-ui] DialogPopup: size="xs" is not a size; use "auto", "sm", "md", "lg", "xl", "2xl", "full". Fix: <DialogPopup size="md">.',
     ]);
   });
 
@@ -873,3 +1214,468 @@ describe("Dialog parts", () => {
     expect(() => renderToString(element)).toThrow(`[ouro-ui] ${name}: must be rendered inside <DialogRoot>. Fix: ${jsx}.`);
   });
 });
+
+describe("Dialog and the page's scroll", () => {
+  // A long page with smooth scrolling and a scroll padding under its sticky header (a docs site's,
+  // say), scrolled to 2000px, with the trigger in that header. Opening focuses and scrolls to what
+  // the popup holds, which the browser did for the page too, as far as its end.
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  afterEach(() => {
+    document.documentElement.removeAttribute("style");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  });
+
+  for (const reduced of [false, true]) {
+    for (const input of ["pointer", "keyboard"] as const) {
+      it(`leaves the page where it is as it opens and closes, by ${input}${reduced ? ", with reduced motion" : ""}`, async () => {
+        if (reduced) await commands.emulateMedia({ reducedMotion: "reduce" });
+        await render(
+          <div style={{ height: 5000 }}>
+            <header style={{ position: "sticky", top: 0, height: 100 }}>
+              <Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>
+                <input aria-label="Name" />
+              </Dialog>
+            </header>
+          </div>,
+        );
+        window.scrollTo({ top: 2000, behavior: "instant" });
+        Object.assign(document.documentElement.style, { scrollBehavior: "smooth", scrollPaddingTop: "120px" });
+        const painted: number[] = [];
+        let reading = true;
+        const read = () => {
+          painted.push(window.scrollY);
+          if (reading) requestAnimationFrame(read);
+        };
+        requestAnimationFrame(read);
+        const opener = document.querySelector<HTMLElement>('[data-ouro="button"]')!;
+        if (input === "pointer") {
+          await commands.pointerPress({ selector: '[data-ouro="button"]', action: "down" });
+          await commands.pointerPress({ action: "up" });
+        } else {
+          opener.focus({ preventScroll: true });
+          await userEvent.keyboard("{Enter}");
+        }
+        await expect.poll(() => {
+          const open = popup();
+          return Boolean(open?.hasAttribute("data-open") && !open.hasAttribute("data-starting-style") && open.getAnimations().length === 0);
+        }).toBe(true);
+        await frame();
+        await frame();
+        await userEvent.keyboard("{Escape}");
+        await expect.poll(() => {
+          const open = popup();
+          return !open || (open.hasAttribute("data-closed") && open.getAnimations().length === 0);
+        }).toBe(true);
+        await frame();
+        await frame();
+        reading = false;
+        expect(painted.length).toBeGreaterThan(2);
+        expect(new Set(painted)).toEqual(new Set([2000]));
+      });
+    }
+  }
+
+  /** Far taller than the scroll goes, and kept at its size while pressed, so the press lands on it at any point of the scroll. */
+  const tallButton = { height: 20000, "--ouro-press-scale": 1 } as CSSProperties;
+
+  /** A dialog its own trigger opens, or one a Button opens that says it does (`aria-haspopup="dialog"`), as an app's controlled dialog. */
+  function Controlled({ tall }: { tall: boolean }) {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <Button aria-haspopup="dialog" style={tall ? tallButton : undefined} onClick={() => setOpen(true)}>
+          Sound the alarm
+        </Button>
+        <Dialog title="All hands" open={open} onOpenChange={setOpen}>
+          <input aria-label="Name" />
+        </Dialog>
+      </>
+    );
+  }
+
+  for (const opener of ["trigger", "controlled"] as const) {
+    for (const reduced of [false, true]) {
+      it(`opens and leaves the page where the press found it, pressed mid-scroll, by its ${opener === "trigger" ? "trigger" : "app's Button"}${reduced ? ", with reduced motion" : ""}`, async () => {
+        // A smooth scroll is under way (a toast's, say) when the person presses the button. Had the
+        // page gone on scrolling, it would no longer be where the press found it, and the release
+        // could land on what moved under the pointer. The pointer goes to one place in the window
+        // (the fixed mark's), on a button far taller than the scroll goes, so the press lands on it
+        // however late it comes on a loaded runner, while the page sways between two places until
+        // the press.
+        if (reduced) await commands.emulateMedia({ reducedMotion: "reduce" });
+        await render(
+          <div style={{ height: 30000, paddingTop: 2300 }}>
+            {opener === "trigger" ? (
+              <Dialog title="All hands" trigger={<Button style={tallButton}>Sound the alarm</Button>}>
+                <input aria-label="Name" />
+              </Dialog>
+            ) : (
+              <Controlled tall />
+            )}
+            <div data-press-here="" style={{ position: "fixed", top: 500, left: 40, width: 1, height: 1, pointerEvents: "none" }} />
+            <div data-rest-here="" style={{ position: "fixed", top: 100, left: 600, width: 10, height: 10 }} />
+          </div>,
+        );
+        await userEvent.hover(document.querySelector("[data-rest-here]")!);
+        const { pressedAt, moving } = await pressDuringScroll("[data-press-here]", { from: 2000, to: 14000, scroll: "underway" });
+        await expect.poll(() => {
+          const open = popup();
+          return Boolean(open?.hasAttribute("data-open") && !open.hasAttribute("data-starting-style") && open.getAnimations().length === 0);
+        }).toBe(true);
+        await frame();
+        await frame();
+        expect(window.scrollY).toBe(pressedAt);
+        // The page was moving when the press found it.
+        expect(moving).toBe(true);
+      });
+    }
+  }
+
+  it("leaves the page free at an arrow key on a Button that opens a dialog, which opens nothing", async () => {
+    // A button opens on its click, which Enter and Space make; an arrow on it only scrolls the page.
+    await render(
+      <div style={{ height: 5000 }}>
+        <header style={{ position: "sticky", top: 0, height: 100 }}>
+          <Controlled tall={false} />
+        </header>
+      </div>,
+    );
+    window.scrollTo({ top: 2000, behavior: "instant" });
+    document.documentElement.style.scrollBehavior = "smooth";
+    document.querySelector<HTMLElement>('[data-ouro="button"]')!.focus({ preventScroll: true });
+    await userEvent.keyboard("{ArrowDown}");
+    let last = -1;
+    while (window.scrollY !== last) {
+      last = window.scrollY;
+      await frame();
+      await frame();
+    }
+    window.scrollTo({ top: 1500, behavior: "instant" });
+    await frame();
+    await frame();
+    expect(window.scrollY).toBe(1500);
+    expect(popup()).toBeNull();
+  });
+});
+
+describe("Dialog's trigger and a page scroll at the press", () => {
+  // A smooth scroll begins as the press goes down, ahead of the trigger's own handlers: the press
+  // stops it where it is, the release (or the key) clicks the trigger, and the dialog opens there.
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  afterEach(() => {
+    document.documentElement.removeAttribute("style");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  });
+
+  for (const input of ["pointer", "Enter"] as const) {
+    it(`stops a smooth scroll where ${input === "pointer" ? "a press" : "Enter"} on its trigger found it, and opens`, async () => {
+      const pointerDown = vi.fn();
+      const keyDown = vi.fn();
+      await render(
+        <div style={{ height: 5000 }}>
+          <header style={{ position: "sticky", top: 0, height: 100 }}>
+            <Dialog title="Edit recipe" trigger={<button type="button" data-opener="" onPointerDown={pointerDown} onKeyDown={keyDown}>
+              Edit
+            </button>}>
+              <input aria-label="Name" />
+            </Dialog>
+          </header>
+        </div>,
+      );
+      window.scrollTo({ top: 2000, behavior: "instant" });
+      document.documentElement.style.scrollBehavior = "smooth";
+      document.addEventListener(input === "pointer" ? "pointerdown" : "keydown", () => window.scrollTo({ top: 4000 }), { capture: true, once: true });
+      const opener = document.querySelector<HTMLElement>('[data-opener]')!;
+      if (input === "pointer") {
+        await commands.pointerPress({ selector: '[data-opener]', action: "down" });
+        for (let index = 0; index < 10; index++) await frame();
+        await commands.pointerPress({ action: "up" });
+      } else {
+        opener.focus({ preventScroll: true });
+        await userEvent.keyboard("{Enter}");
+      }
+      await expect.poll(() => opener.getAttribute("aria-expanded") === "true").toBe(true);
+      await frame();
+      await frame();
+      expect(window.scrollY).toBe(2000);
+      expect((input === "pointer" ? pointerDown : keyDown).mock.calls.length).toBe(1);
+    });
+  }
+});
+
+describe("DialogTrigger and a page scroll at the press", () => {
+  // A smooth scroll begins as the press goes down, ahead of the trigger's own handlers: the press
+  // stops it where it is, the release (or the key) clicks the trigger, and the dialog opens there.
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  afterEach(() => {
+    document.documentElement.removeAttribute("style");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  });
+
+  for (const input of ["pointer", "Enter"] as const) {
+    it(`stops a smooth scroll where ${input === "pointer" ? "a press" : "Enter"} on the part found it, and opens`, async () => {
+      const pointerDown = vi.fn();
+      const keyDown = vi.fn();
+      await render(
+        <div style={{ height: 5000 }}>
+          <header style={{ position: "sticky", top: 0, height: 100 }}>
+            <DialogRoot>
+              <DialogTrigger onPointerDown={pointerDown} onKeyDown={keyDown}>
+                Open
+              </DialogTrigger>
+            </DialogRoot>
+          </header>
+        </div>,
+      );
+      window.scrollTo({ top: 2000, behavior: "instant" });
+      document.documentElement.style.scrollBehavior = "smooth";
+      document.addEventListener(input === "pointer" ? "pointerdown" : "keydown", () => window.scrollTo({ top: 4000 }), { capture: true, once: true });
+      const opener = document.querySelector<HTMLElement>('[data-ouro-control="dialog"][data-ouro-part="trigger"]')!;
+      if (input === "pointer") {
+        await commands.pointerPress({ selector: '[data-ouro-control="dialog"][data-ouro-part="trigger"]', action: "down" });
+        for (let index = 0; index < 10; index++) await frame();
+        await commands.pointerPress({ action: "up" });
+      } else {
+        opener.focus({ preventScroll: true });
+        await userEvent.keyboard("{Enter}");
+      }
+      await expect.poll(() => opener.getAttribute("aria-expanded") === "true").toBe(true);
+      await frame();
+      await frame();
+      expect(window.scrollY).toBe(2000);
+      expect((input === "pointer" ? pointerDown : keyDown).mock.calls.length).toBe(1);
+    });
+  }
+});
+
+describe("DialogTrigger with no handlers of its own", () => {
+  for (const input of ["pointer", "Enter"] as const) {
+    it(`opens from ${input === "pointer" ? "a press" : "Enter"}, and the press hold raises no error`, async () => {
+      await render(<DialogRoot><DialogTrigger>Open</DialogTrigger></DialogRoot>);
+      const errors: string[] = [];
+      const onError = (event: ErrorEvent) => {
+        errors.push(event.message);
+        event.preventDefault();
+      };
+      window.addEventListener("error", onError);
+      const opener = document.querySelector<HTMLElement>('[data-ouro-control="dialog"][data-ouro-part="trigger"]')!;
+      if (input === "pointer") {
+        await commands.pointerPress({ selector: '[data-ouro-control="dialog"][data-ouro-part="trigger"]', action: "down" });
+        await commands.pointerPress({ action: "up" });
+      } else {
+        opener.focus();
+        await userEvent.keyboard("{Enter}");
+      }
+      await expect.poll(() => opener.getAttribute("aria-expanded")).toBe("true");
+      window.removeEventListener("error", onError);
+      expect(errors).toEqual([]);
+    });
+  }
+});
+
+describe("Dialog's Button trigger with no handlers of its own", () => {
+  for (const input of ["pointer", "Enter"] as const) {
+    it(`opens from ${input === "pointer" ? "a press" : "Enter"}, and the press hold raises no error`, async () => {
+      await render(<Dialog title="Edit recipe" trigger={<Button>Edit</Button>}><input aria-label="Name" /></Dialog>);
+      const errors: string[] = [];
+      const onError = (event: ErrorEvent) => {
+        errors.push(event.message);
+        event.preventDefault();
+      };
+      window.addEventListener("error", onError);
+      const opener = document.querySelector<HTMLElement>('[data-ouro="button"]')!;
+      if (input === "pointer") {
+        await commands.pointerPress({ selector: '[data-ouro="button"]', action: "down" });
+        await commands.pointerPress({ action: "up" });
+      } else {
+        opener.focus();
+        await userEvent.keyboard("{Enter}");
+      }
+      await expect.poll(() => opener.getAttribute("aria-expanded")).toBe("true");
+      window.removeEventListener("error", onError);
+      expect(errors).toEqual([]);
+    });
+  }
+});
+
+describe("DialogTrigger rendered as another element", () => {
+  // Base UI clicks a trigger that is no <button> itself, at Enter's keydown and Space's keyup, so its
+  // click ends the press's hold there too, and an app's scroll right after the dialog opens is its own.
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  afterEach(() => {
+    document.documentElement.removeAttribute("style");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  });
+
+  for (const key of ["Enter", "Space"] as const) {
+    it(`lets the page go at the click ${key} makes, with nativeButton={false}`, async () => {
+      await render(
+        <div style={{ height: 5000 }}>
+          <header style={{ position: "sticky", top: 0, height: 100 }}>
+            <DialogRoot>
+              <DialogTrigger nativeButton={false} render={<span tabIndex={0} />}>
+                Open
+              </DialogTrigger>
+            </DialogRoot>
+          </header>
+        </div>,
+      );
+      window.scrollTo({ top: 2000, behavior: "instant" });
+      const opener = document.querySelector<HTMLElement>("header span")!;
+      opener.focus({ preventScroll: true });
+      await userEvent.keyboard(`{${key}}`);
+      await expect.poll(() => opener.getAttribute("aria-expanded")).toBe("true");
+      window.scrollTo({ top: 1500, behavior: "instant" });
+      await frame();
+      await frame();
+      expect(window.scrollY).toBe(1500);
+    });
+  }
+});
+
+describe("first focus with a scrolling body", () => {
+  const tall = <p style={{ margin: 0, height: 2000 }}>A long note.</p>;
+  const name = () => document.querySelector<HTMLElement>('input[aria-label="Name"]');
+  const body = () => document.querySelector<HTMLElement>("[data-ouro-dialog-content]");
+  const close = () => document.querySelector<HTMLElement>("[data-ouro-dialog-close]");
+  const field = (
+    <label>
+      Name <input aria-label="Name" />
+    </label>
+  );
+  // A keyboard open: Enter on the trigger, which is what puts first focus on the first tab stop.
+  async function openByKeyboard(children: ReactNode) {
+    await render(
+      <Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>
+        {children}
+      </Dialog>,
+    );
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+  }
+
+  it("puts first focus on the first control in a scrolling body, not on the body", async () => {
+    await openByKeyboard(<>{field}{tall}</>);
+    await expect.poll(() => body()?.getAttribute("tabindex")).toBe("0");
+    await expect.poll(() => document.activeElement).toBe(name());
+  });
+
+  it("puts first focus on a control below the fold, not on the body", async () => {
+    await openByKeyboard(<>{tall}{field}</>);
+    await expect.poll(() => body()?.getAttribute("tabindex")).toBe("0");
+    await expect.poll(() => document.activeElement).toBe(name());
+  });
+
+  it("puts first focus on the close button when the body has no control", async () => {
+    await openByKeyboard(tall);
+    await expect.poll(() => body()?.getAttribute("tabindex")).toBe("0");
+    await expect.poll(() => document.activeElement).toBe(close());
+  });
+
+  it("keeps the scrolling body in reach of Tab", async () => {
+    await openByKeyboard(<>{field}{tall}</>);
+    await expect.poll(() => document.activeElement).toBe(name());
+    await pressTab({ shift: true });
+    await expect.poll(() => document.activeElement).toBe(body());
+  });
+
+  it("skips a disabled control and one that is hidden when it picks the first", async () => {
+    await openByKeyboard(
+      <>
+        <button disabled>Off</button>
+        <button hidden>Gone</button>
+        <button>Edit name</button>
+        {tall}
+      </>,
+    );
+    await expect.poll(() => document.activeElement?.textContent).toBe("Edit name");
+  });
+});
+
+describe("first focus after the last press, with and without a trigger", () => {
+  const tall = <p style={{ margin: 0, height: 2000 }}>A long note.</p>;
+  const name = () => document.querySelector<HTMLElement>('input[aria-label="Name"]');
+  const children = (
+    <>
+      <label>
+        Name <input aria-label="Name" />
+      </label>
+      {tall}
+    </>
+  );
+
+  // A press on the page, which the document's listener records as the last input.
+  const press = (pointerType: string) => {
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { pointerType, bubbles: true }));
+  };
+
+  // An app's own button opens this dialog, which has no trigger of its own, after the given press.
+  async function openControlled(pointerType: string) {
+    const view = await render(
+      <Dialog title="Edit recipe" open={false} onOpenChange={() => {}}>
+        {children}
+      </Dialog>,
+    );
+    press(pointerType);
+    await view.rerender(
+      <Dialog title="Edit recipe" open onOpenChange={() => {}}>
+        {children}
+      </Dialog>,
+    );
+    await settled();
+    return popup()!;
+  }
+
+  // A press on the dialog's own trigger, then the click it makes.
+  async function openWithTrigger(pointerType: string) {
+    await render(
+      <Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>
+        {children}
+      </Dialog>,
+    );
+    const node = trigger();
+    await act(() => node.dispatchEvent(new PointerEvent("pointerdown", { pointerType, bubbles: true })));
+    await act(() => node.dispatchEvent(new MouseEvent("click", { detail: 1, bubbles: true })));
+    await settled();
+    return popup()!;
+  }
+
+  it("focuses the popup after a touch, when the dialog has no trigger", async () => {
+    const element = await openControlled("touch");
+    await expect.poll(() => document.activeElement).toBe(element);
+  });
+
+  it("focuses the popup after a pen press, when the dialog has no trigger", async () => {
+    const element = await openControlled("pen");
+    await expect.poll(() => document.activeElement).toBe(element);
+  });
+
+  it("focuses the body's first control after a mouse press, when the dialog has no trigger", async () => {
+    await openControlled("mouse");
+    await expect.poll(() => document.activeElement).toBe(name());
+  });
+
+  it("focuses the body's first control after a mouse click opens a dialog with a trigger", async () => {
+    await openWithTrigger("mouse");
+    await expect.poll(() => document.activeElement).toBe(name());
+  });
+
+  it("focuses the popup after a tap opens a dialog with a trigger", async () => {
+    const element = await openWithTrigger("touch");
+    await expect.poll(() => document.activeElement).toBe(element);
+  });
+
+  it("focuses the body's first control when a trigger's click has no press of its own, after a touch elsewhere", async () => {
+    await render(
+      <Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>
+        {children}
+      </Dialog>,
+    );
+    press("touch");
+    trigger().dispatchEvent(new MouseEvent("click", { detail: 1, bubbles: true }));
+    await settled();
+    await expect.poll(() => document.activeElement).toBe(name());
+  });
+});
+

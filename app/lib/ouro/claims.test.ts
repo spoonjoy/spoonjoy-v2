@@ -27,6 +27,13 @@ describe("parseClaimSource", () => {
     expect(parseClaimSource("scripts/claims.mjs@c752a8bb")).toEqual({ file: "scripts/claims.mjs", commit: "c752a8bb" });
   });
 
+  it("reads a route file whose name holds a $, as Remix and React Router name a route's parameter", () => {
+    expect(parseClaimSource("app/routes/agent.connect.$requestId.tsx")).toEqual({ file: "app/routes/agent.connect.$requestId.tsx" });
+    expect(parseClaimSource("app/routes/$.tsx#L4")).toEqual({ file: "app/routes/$.tsx", line: 4 });
+    expect(parseClaimSource("$id.tsx")).toEqual({ file: "$id.tsx" });
+    expect(parseClaimCheck("fileLine(app/routes/agent.connect.$requestId.tsx, /export default/)")).toEqual({ fileLine: "app/routes/agent.connect.$requestId.tsx", pattern: "export default" });
+  });
+
   it("reads a CI run, a test, an evidence file and a spec", () => {
     expect(parseClaimSource("https://github.com/ourostack/ouro-ui/actions/runs/123/job/456")).toEqual({ ciRun: "https://github.com/ourostack/ouro-ui/actions/runs/123/job/456" });
     expect(parseClaimSource("test:a.test.ts::A > works")).toEqual({ test: "a.test.ts::A > works" });
@@ -38,6 +45,7 @@ describe("parseClaimSource", () => {
     expect(() => parseClaimSource("")).toThrow(/needs a source/);
     expect(() => parseClaimSource("/etc/hosts")).toThrow(/repository-relative path/);
     expect(() => parseClaimSource("../desk/notes.md")).toThrow(/repository-relative path/);
+    expect(() => parseClaimSource("scripts/..")).toThrow(/repository-relative path/);
     expect(() => parseClaimSource("my notes")).toThrow(/repository-relative path/);
     expect(() => parseClaimSource("notes.md#section")).toThrow(/<repository path>\[#L<line>\]\[@<commit>\]/);
     expect(() => parseClaimSource("test:a.test.ts")).toThrow(/<file>::<full test name>/);

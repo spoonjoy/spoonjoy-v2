@@ -118,7 +118,7 @@ function SwitchTrack(props: {
  * applies when a form is submitted, such as accepting terms.
  *
  * @group Forms
- * @see https://ui.ouro.bot/docs/switch
+ * @see https://ui.ouroboros.bot/docs/switch
  *
  * @example
  * <Switch label="Wi-Fi" checked={wifi} onCheckedChange={setWifi} />

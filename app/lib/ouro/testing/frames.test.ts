@@ -55,7 +55,11 @@ it("still cancels a frame the browser was asked for before the hold", async () =
 it("steps until a condition holds, and gives up when it never does", () => {
   frames = holdFrames();
   let count = 0;
+  let done = false;
+  // The loop ends with the test: left running on the browser's frames, it would ask for one inside a
+  // later test's hold, and that frame would keep cancelling borrowed until it ran.
   const loop = () => {
+    if (done) return;
     count++;
     requestAnimationFrame(loop);
   };
@@ -65,6 +69,7 @@ it("steps until a condition holds, and gives up when it never does", () => {
   frames.until(() => true);
   expect(count).toBe(5);
   expect(() => frames!.until(() => false, 1)).toThrow("still not done after 2000 steps of 1ms");
+  done = true;
 });
 
 it("gives frames and the clock back, and the waiting frames to the browser", async () => {
