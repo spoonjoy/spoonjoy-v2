@@ -35,8 +35,8 @@ function listTextFiles(dirs: string[]): string[] {
   return found;
 }
 
-// Every file the HX CLI installs from v1.2.13 (tag commit
-// 36c22fe62b8783402d000df776c78620c15eafd9), whatever its extension or folder: components, lib
+// Every file the HX CLI installs from v1.3.33 (tag commit
+// 0023c1b6b5683a68d5e44f64404f1d0a3bf0c2d3), whatever its extension or folder: components, lib
 // modules, specs, the census and source-rule kits and the claims checker. The CLI's binding
 // (.github/task21-v083-cli.mjs) checks the CLI's output against this same map, and the digest
 // below pins the map itself, including the CLI's omission of the checker's leading docs comment.
@@ -79,11 +79,11 @@ describe("Spoonjoy UI design-system hygiene", () => {
     expect(existsSync(resolve(process.cwd(), "app/components/button.tsx"))).toBe(false);
   });
   it("pins every file the HX CLI installed, in every folder and of every type, to the tag's bytes", () => {
-    expect(installed.tag).toBe("v1.2.13");
-    expect(installed.tagCommit).toBe("36c22fe62b8783402d000df776c78620c15eafd9");
-    expect(installedFiles).toHaveLength(553);
+    expect(installed.tag).toBe("v1.3.33");
+    expect(installed.tagCommit).toBe("0023c1b6b5683a68d5e44f64404f1d0a3bf0c2d3");
+    expect(installedFiles).toHaveLength(612);
     expect(sha256(JSON.stringify(installedFiles.map((file) => [file, installed.files[file]]))))
-      .toBe("50f6519566793701b322de74f9c5e842f85793aa0a0401605c693f98d3eac0f6");
+      .toBe("7e8a0db9665e64f2f82023346d3ed53569104de4726e58a928ca7a4a9888f057");
     const actual = Object.fromEntries(installedFiles.map((file) => [
       file,
       existsSync(resolve(process.cwd(), file)) ? sha256(normalizedRegistrySource(readSourceFile(file))) : null,

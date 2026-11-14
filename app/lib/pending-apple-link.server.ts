@@ -19,7 +19,7 @@ export const APPLE_EMAIL_UNAVAILABLE = "apple_email_unavailable";
 export const PENDING_APPLE_LINK_TTL_MS = 30 * 60 * 1000;
 export const PENDING_APPLE_LINK_TOKEN_PREFIX = "pal_";
 export const PENDING_APPLE_LINK_MESSAGE =
-  "We couldn't find a Spoonjoy account for this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.";
+  "No Spoonjoy account uses this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.";
 const PENDING_APPLE_LINK_COOKIE = "__apple_pending";
 const APPLE_PROVIDER_USERNAME_FALLBACK = "Apple ID";
 const MAX_TOKEN_LENGTH = 128;

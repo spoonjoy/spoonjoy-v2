@@ -1,4 +1,4 @@
-export { currentHref, currentTabHref };
+export { currentHref, currentTabHref, samePath };
 
 /**
  * The path of an `href` or a pathname: no query, no hash, no trailing slash (the root stays `/`).
@@ -35,6 +35,21 @@ function currentHref(hrefs: readonly string[], currentPath: string | undefined):
     }
   }
   return best;
+}
+
+/**
+ * Whether `href` is the page at `currentPath` itself, rather than a page above it: the same path, ignoring a trailing
+ * slash, a query and a hash. A navigation marks that link `aria-current="page"`, and the link of the section a deeper
+ * page is in `aria-current="true"`.
+ *
+ * @internal Shared by Navbar and NavigationMenu; apps pass `currentPath`.
+ * @example
+ * samePath("/recipes", "/recipes/?sort=new"); // true
+ * samePath("/recipes", "/recipes/12"); // false
+ * @claim "Whether `href` is the page" registry/ouro/lib/ouro/current-path.test.ts verify:testExists(registry/ouro/lib/ouro/current-path.test.ts::samePath > is the page itself, ignoring a trailing slash, a query and a hash, and not a page above it)
+ */
+function samePath(href: string, currentPath: string | undefined): boolean {
+  return currentPath !== undefined && pathOf(href) === pathOf(currentPath);
 }
 
 /** An `href`'s query, without its hash. */

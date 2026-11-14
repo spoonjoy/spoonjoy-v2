@@ -33,8 +33,8 @@ function Chores() {
           {chore}
         </label>
       ))}
-      <div style={{ display: "flex", justifyContent: "center", minHeight: 40 }}>
-        <Celebrate show={done.length === chores.length} message="All done for today" />
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <Celebrate show={done.length === chores.length} message="All done for today" className="h-24 w-full" />
       </div>
     </div>
   );

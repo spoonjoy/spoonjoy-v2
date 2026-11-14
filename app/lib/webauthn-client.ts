@@ -139,5 +139,5 @@ function passkeyCeremonyError(error: unknown): string {
   if (error instanceof Error && error.name === "NotAllowedError") {
     return "Passkey prompt was dismissed or timed out.";
   }
-  return error instanceof Error ? error.message : "Passkey ceremony failed.";
+  return error instanceof Error ? error.message : "The passkey prompt stopped without saying why.";
 }

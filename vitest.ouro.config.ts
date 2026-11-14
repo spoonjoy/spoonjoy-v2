@@ -25,6 +25,10 @@ for (const project of projects) {
   const browser = test?.browser;
   if (browser) browser.commands = { ...browser.commands, nativeShoppingInput, shoppingInputBounds, task21PrintMedia, parkPointer };
   if (test && test.name !== "ouro-touch") test.setupFiles = [...[test.setupFiles ?? []].flat(), parkPointerSetup];
+  // HX's tests run on Vitest 5, where a spy a test made is gone by the next test. On our pinned
+  // Vitest 4 a second vi.spyOn of the same method returns the first spy, its calls still counted,
+  // so restore every spy after each test (page-scroll-hold.test.ts counts document listeners).
+  if (test) test.restoreMocks = true;
 }
 
 // Registry tests run only in CI browsers, with Spoonjoy's real theme and pinned Vitest 4.
@@ -69,6 +73,9 @@ export default defineConfig({
         "**/*.test-d.ts",
         "**/*.d.ts",
         "app/lib/ouro/testing/**",
+        // Ouro AX (ax-xray) runs in Node, not a browser; HX covers it in its own Node tests, and
+        // leaves it out of its browser coverage the same way.
+        "app/lib/ouro/ax/**",
       ],
       thresholds: { lines: 100, branches: 100, functions: 100, statements: 100 },
     },

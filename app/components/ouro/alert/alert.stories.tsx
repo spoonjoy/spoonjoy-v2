@@ -45,7 +45,7 @@ export const Playground: Story = {};
 const copy = {
   primary: ["New: meal plans", "Plan the week from your saved recipes."],
   secondary: ["Shared cookbook", "Changes you make here show for everyone in it."],
-  destructive: ["Couldn't save", "Check your connection and try again."],
+  destructive: ["Not saved: you're offline", "Check your connection and try again."],
   success: ["Recipe saved", "It's in your cookbook now."],
   warning: ["Two jars left", "Restock the pantry before Sunday."],
 } as const;
@@ -69,7 +69,7 @@ function Dismissible() {
       {error && (
         <Alert
           tone="destructive"
-          title="Couldn't save"
+          title="Not saved: you're offline"
           description="Check your connection and try again."
           action={
             <Button size="sm" tone="destructive" variant="soft" onClick={() => setError(false)}>

@@ -79,7 +79,7 @@ export function createGitHubAuthorizationURL(
 function isOAuthRequestError(error: unknown): boolean {
   return error instanceof Error && (
     error.name === "OAuth2RequestError" ||
-    error.message.startsWith("OAuth request error:")
+    /^OAuth request error:/.test(error.message)
   );
 }
 

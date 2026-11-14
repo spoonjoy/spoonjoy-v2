@@ -7571,7 +7571,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"26 components\" [inspector/list] in region \"X-ray\"",
+          "identity": "button \"25 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {
@@ -13705,7 +13705,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"22 components\" [inspector/list] in region \"X-ray\"",
+          "identity": "button \"21 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {

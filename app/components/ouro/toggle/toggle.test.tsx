@@ -145,6 +145,12 @@ describe("Toggle", () => {
     expect(onClick).toHaveBeenCalled();
   });
 
+  it("draws a 1px solid border and keeps its label on one line", async () => {
+    const { toggle } = await render(<Toggle label="Show completed items" />);
+    const style = getComputedStyle(toggle);
+    expect([style.borderTopWidth, style.borderTopStyle, style.whiteSpace]).toEqual(["1px", "solid", "nowrap"]);
+  });
+
   it("lets app layout classes win", async () => {
     const { toggle } = await render(<Toggle label="Bold" className="mt-6" />);
     expect(getComputedStyle(toggle).marginTop).toBe("24px");
@@ -152,6 +158,13 @@ describe("Toggle", () => {
 });
 
 describe("Toggle looks", () => {
+  it("draws its hover wash with the toggle's own corner shape", async () => {
+    const { toggle } = await render(<Toggle label="Bold" />);
+    const own = getComputedStyle(toggle).getPropertyValue("corner-shape");
+    expect(own).toBe("superellipse(2)");
+    expect(getComputedStyle(toggle, "::before").getPropertyValue("corner-shape")).toBe(own);
+  });
+
   it("tints the pressed toggle with the primary color", async () => {
     const { host } = await render(
       <>
@@ -181,18 +194,60 @@ describe("Toggle looks", () => {
     await page.viewport(390, 844);
     const { host } = await render(
       <>
+        <Toggle label="Extra small" size="xs" />
         <Toggle label="Small" size="sm" />
         <Toggle label="Medium" />
         <Toggle label="Large" size="lg" />
       </>,
     );
-    const [sm, md, lg] = [...host.querySelectorAll<HTMLElement>('[data-ouro="toggle"]')];
-    const heights = () => [sm!, md!, lg!].map((element) => element.getBoundingClientRect().height);
-    expect(heights()).toEqual([36, 44, 48]);
+    const [xs, sm, md, lg] = [...host.querySelectorAll<HTMLElement>('[data-ouro="toggle"]')];
+    const heights = () => [xs!, sm!, md!, lg!].map((element) => element.getBoundingClientRect().height);
+    const paddings = () => [xs!, sm!].map((element) => getComputedStyle(element).paddingInlineStart);
+    expect(heights()).toEqual([32, 36, 44, 48]);
+    expect(paddings()).toEqual(["12px", "12px"]);
+    expect(getComputedStyle(xs!).fontSize).toBe("14px");
     expect(getComputedStyle(md!).fontSize).toBe("16px");
     await page.viewport(1280, 800);
-    await expect.poll(heights).toEqual([32, 36, 44]);
+    await expect.poll(heights).toEqual([24, 32, 36, 44]);
+    expect(paddings()).toEqual(["10px", "10px"]);
+    expect(getComputedStyle(xs!).fontSize).toBe("12px");
     expect(getComputedStyle(md!).fontSize).toBe("14px");
+  });
+
+  it("rounds fully with regular-weight text with shape pill", async () => {
+    const { host } = await render(
+      <>
+        <Toggle label="Rect" />
+        <Toggle label="Pill" shape="pill" size="xs" variant="outline" />
+        <Toggle label="Bold" icon={BoldIcon} hideLabel shape="pill" />
+      </>,
+    );
+    const [rect, pill, round] = [...host.querySelectorAll<HTMLElement>('[data-ouro="toggle"]')];
+    expect(rect!.getAttribute("data-shape")).toBe("rect");
+    expect(pill!.getAttribute("data-shape")).toBe("pill");
+    expect(getComputedStyle(rect!).fontWeight).toBe("500");
+    expect(getComputedStyle(pill!).fontWeight).toBe("400");
+    const radius = (element: HTMLElement) => parseFloat(getComputedStyle(element).borderTopLeftRadius);
+    expect(radius(rect!)).toBeLessThan(rect!.getBoundingClientRect().height / 2);
+    expect(radius(pill!)).toBeGreaterThanOrEqual(pill!.getBoundingClientRect().height / 2);
+    // An icon-only pill is a circle.
+    const box = round!.getBoundingClientRect();
+    expect(Math.round(box.width)).toBe(Math.round(box.height));
+    expect(radius(round!)).toBeGreaterThanOrEqual(box.height / 2);
+  });
+
+  it("keeps a pill's pressed look clear: the primary tint, and the primary border with outline", async () => {
+    const { host } = await render(
+      <>
+        <Toggle label="Off" shape="pill" variant="outline" />
+        <Toggle label="On" shape="pill" variant="outline" defaultPressed />
+      </>,
+    );
+    const [off, on] = [...host.querySelectorAll<HTMLElement>('[data-ouro="toggle"]')];
+    expect(getComputedStyle(off!).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(on!).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(on!).borderTopColor).not.toBe(getComputedStyle(off!).borderTopColor);
+    expect(getComputedStyle(on!).fontWeight).toBe(getComputedStyle(off!).fontWeight);
   });
 
   it("outlines on keyboard focus in the ring color", async () => {
@@ -267,11 +322,14 @@ describe("Toggle development messages", () => {
     ["variant", "solid", 'variant="solid" is not a variant', '<Toggle variant="plain">'],
     ["size", "default", 'size="default" is not a size', '<Toggle size="md">'],
     ["size", "xl", 'size="xl" is not a size', '<Toggle size="md">'],
+    ["shape", "rounded", 'shape="rounded" is not a shape', '<Toggle shape="pill">'],
+    ["shape", "square", 'shape="square" is not a shape', "<Toggle>"],
   ])("renders the default and warns for %s=%s", async (prop, value, problem, fix) => {
     const props = { label: "Bold", [prop]: value } as unknown as ToggleProps;
     const { toggle } = await render(<Toggle {...props} />);
     expect(warn).toHaveBeenCalledWith(`[ouro-ui] Toggle: ${problem}. Fix: ${fix}.`);
     expect(toggle.className).toContain("border-transparent");
+    expect(toggle.getAttribute("data-shape")).toBe("rect");
   });
 
   it("warns when hideLabel would leave the toggle empty", async () => {
@@ -297,15 +355,33 @@ describe("Toggle development messages", () => {
     const props = { label: "Bold", children: <b>Bold</b> } as unknown as ToggleProps;
     await render(<Toggle {...props} className="rounded-full text-lg" />);
     expect(warn).toHaveBeenCalledWith('[ouro-ui] Toggle: children is not a prop; the label is. Fix: <Toggle label="Bold">.');
-    expect(warn).toHaveBeenCalledWith(
-      '[ouro-ui] Toggle: "rounded-full" sets appearance, and className is for layout only. Fix: :root { --radius: 999px }.',
-    );
+    expect(warn).toHaveBeenCalledWith('[ouro-ui] Toggle: "rounded-full" sets appearance, and className is for layout only. Fix: <Toggle shape="pill">.');
     await render(<Toggle label="Bold" className="text-lg" />);
     expect(warn).toHaveBeenCalledWith('[ouro-ui] Toggle: "text-lg" sets appearance, and className is for layout only. Fix: <Toggle size="lg">.');
+    await render(<Toggle label="Bold" className="rounded-md" />);
+    expect(warn).toHaveBeenCalledWith(
+      '[ouro-ui] Toggle: "rounded-md" sets appearance, and className is for layout only. Fix: :root { --radius: 0.75rem }.',
+    );
+    await render(<Toggle label="Bold" className="text-xs" />);
+    expect(warn).toHaveBeenCalledWith('[ouro-ui] Toggle: "text-xs" sets appearance, and className is for layout only. Fix: <Toggle size="xs">.');
+  });
+
+  it.each([
+    ["text-xs", "xs"],
+    ["text-sm", "sm"],
+    ["text-base", "md"],
+    ["text-lg", "lg"],
+    ["text-xl", "lg"],
+    ["text-2xl", "lg"],
+    ["text-5xl", "lg"],
+  ])("maps %s to size=%s", async (token, size) => {
+    await render(<Toggle label="Bold" className={token} />);
+    expect(warn).toHaveBeenCalledWith(`[ouro-ui] Toggle: "${token}" sets appearance, and className is for layout only. Fix: <Toggle size="${size}">.`);
   });
 
   it("says nothing for a full, valid toggle", async () => {
     await render(<Toggle label="Bold" icon={BoldIcon} hideLabel variant="outline" size="sm" defaultPressed className="mt-2" />);
+    await render(<Toggle label="Unread" variant="outline" size="xs" shape="pill" />);
     expect(warn).not.toHaveBeenCalled();
   });
 });
@@ -356,6 +432,35 @@ describe("Toggle under more contrast", () => {
       await expect.poll(() => getComputedStyle(toggle).borderTopColor).toBe(getComputedStyle(toggle).color);
     } finally {
       await commands.emulateMedia({ contrast: "no-preference" });
+    }
+  });
+});
+
+describe("Toggle under forced colours", () => {
+  it("fills a pressed toggle with Highlight and HighlightText, in either shape", async () => {
+    try {
+      const { host } = await render(
+        <>
+          <Toggle label="Off" variant="outline" />
+          <Toggle label="On" variant="outline" defaultPressed />
+          <Toggle label="Unread" variant="outline" shape="pill" size="xs" defaultPressed />
+        </>,
+      );
+      await commands.emulateMedia({ forcedColors: "active" });
+      expect(matchMedia("(forced-colors: active)").matches).toBe(true);
+      const look = (element: HTMLElement) => `${getComputedStyle(element).backgroundColor} ${getComputedStyle(element).color}`;
+      const [off, on, pill] = [...host.querySelectorAll<HTMLElement>('[data-ouro="toggle"]')];
+      // The system colours a contrast theme gives a selection, set on a probe for comparison.
+      const probe = document.body.appendChild(document.createElement("span"));
+      probe.style.cssText = "background-color: Highlight; color: HighlightText";
+      const highlight = look(probe);
+      probe.remove();
+      // The colours change with a transition, so read them once it has run.
+      await expect.poll(() => look(on!)).toBe(highlight);
+      await expect.poll(() => look(pill!)).toBe(highlight);
+      expect(look(off!)).not.toBe(highlight);
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
     }
   });
 });

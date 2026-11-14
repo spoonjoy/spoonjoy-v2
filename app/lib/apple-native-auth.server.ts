@@ -174,7 +174,7 @@ async function importApplePublicKey(jwk: AppleJsonWebKey): Promise<CryptoKey> {
 async function appleJwks(fetcher: typeof fetch = fetch): Promise<AppleJwks> {
   const response = await fetcher(APPLE_JWKS_URL, { headers: { Accept: "application/json" } });
   if (!response.ok) {
-    throw new NativeAppleAuthError("apple_keys_unavailable", "Could not load Apple's Sign in with Apple keys.", 502);
+    throw new NativeAppleAuthError("apple_keys_unavailable", "Apple's Sign in with Apple key server didn't answer, so Spoonjoy can't check this sign-in.", 502);
   }
   return await response.json() as AppleJwks;
 }
@@ -287,7 +287,7 @@ export async function handleNativeAppleSignIn(
     throw new NativeAppleAuthError(APPLE_EMAIL_UNAVAILABLE, PENDING_APPLE_LINK_MESSAGE, 409, pendingLink ?? undefined);
   }
   if (!callback.success || !callback.userId) {
-    throw new NativeAppleAuthError(callback.error ?? "apple_sign_in_failed", callback.message ?? "Apple sign-in failed.", 409);
+    throw new NativeAppleAuthError(callback.error ?? "apple_sign_in_failed", callback.message ?? "Apple sign-in didn't finish: Spoonjoy returned no account for it.", 409);
   }
 
   const action = callback.action === "user_created" ? "user_created" : "user_logged_in";

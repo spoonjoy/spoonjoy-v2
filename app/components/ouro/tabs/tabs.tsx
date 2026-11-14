@@ -153,7 +153,7 @@ function duplicateValue(items: readonly { value: string }[]): string | undefined
  * navigation. Use the parts in `tabs-parts` when `items` cannot express your layout.
  *
  * @group Navigation
- * @see https://ui.ouro.bot/docs/tabs
+ * @see https://ui.ouroboros.bot/docs/tabs
  *
  * @example
  * <Tabs

@@ -539,7 +539,7 @@ describe("Recipes $id Steps New Route", () => {
 
         const { data, status } = extractResponseData(response);
         expect(status).toBe(500);
-        expect(data.errors.parse).toBe("An unexpected error occurred while parsing ingredients");
+        expect(data.errors.parse).toBe("The ingredient reader stopped on a fault Spoonjoy doesn't recognise. Add the ingredients by hand, or try again.");
       } finally {
         parseSpy.mockRestore();
       }

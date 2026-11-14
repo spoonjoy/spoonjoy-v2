@@ -528,6 +528,101 @@ describe("appearance", () => {
   });
 });
 
+describe("inline size", () => {
+  const line = { fontSize: "13px", lineHeight: "18px", margin: 0 } as const;
+  const middle = (rect: DOMRect) => rect.top + rect.height / 2;
+  afterEach(async () => {
+    await page.viewport(414, 896);
+  });
+
+  it("sits in a line of text at the text's size without moving the line, and keeps a 24px target", async () => {
+    await page.viewport(1280, 800);
+    const { host } = await render(
+      <>
+        <p style={line}>
+          Built from your folders. <span>Why</span>
+        </p>
+        <p style={line}>
+          Built from your folders.{" "}
+          <Button size="inline" variant="plain">
+            Why
+          </Button>
+        </p>
+      </>,
+    );
+    const [text, withButton] = [...host.querySelectorAll("p")];
+    expect(withButton!.getBoundingClientRect().height).toBe(text!.getBoundingClientRect().height);
+    const button = host.querySelector("button")!;
+    expect(getComputedStyle(button).fontSize).toBe("13px");
+    expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(24);
+    const word = middle(text!.querySelector("span")!.getBoundingClientRect()) - text!.getBoundingClientRect().top;
+    const label = middle(button.querySelector("[data-ouro-label]")!.getBoundingClientRect()) - withButton!.getBoundingClientRect().top;
+    expect(Math.abs(label - word)).toBeLessThanOrEqual(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("is at least 24px wide around a one-letter label", async () => {
+    await page.viewport(1280, 800);
+    const { button } = await render(
+      <Button size="inline" variant="plain" aria-label="Help">
+        ?
+      </Button>,
+    );
+    expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(24);
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("icon-only size", () => {
+  it.each([
+    ["has no width or height", {}],
+    ["is Lucide's 24px icon", { width: 24, height: 24 }],
+  ])("sizes an icon-only button's icon, whose svg %s, as startIcon does", async (_, attributes) => {
+    const { host } = await render(
+      <>
+        <Button aria-label="Add">
+          <Star {...attributes} />
+        </Button>
+        <Button startIcon={Star}>Add</Button>
+      </>,
+    );
+    const [iconOnly, withStart] = [...host.querySelectorAll<HTMLElement>('[data-ouro="button"]')];
+    const icon = iconOnly!.querySelector("svg")!.getBoundingClientRect();
+    const reference = withStart!.querySelector("svg")!.getBoundingClientRect();
+    expect(icon.width).toBeGreaterThan(0);
+    expect(icon.width).toBe(reference.width);
+    expect(icon.height).toBe(reference.height);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("sizes an icon-only link's icon as startIcon does", async () => {
+    const { host } = await render(
+      <>
+        <Button href="/add" aria-label="Add">
+          <Star />
+        </Button>
+        <Button href="/add" startIcon={Star}>
+          Add
+        </Button>
+      </>,
+    );
+    const [iconOnly, withStart] = [...host.querySelectorAll<HTMLElement>('[data-ouro="button"]')];
+    const icon = iconOnly!.querySelector("svg")!.getBoundingClientRect();
+    expect(icon.width).toBeGreaterThan(0);
+    expect(icon.width).toBe(withStart!.querySelector("svg")!.getBoundingClientRect().width);
+  });
+
+  it("keeps the size an icon sets for itself", async () => {
+    const { button } = await render(
+      <Button aria-label="Add">
+        <Star className="size-8" />
+      </Button>,
+    );
+    const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    expect(button.querySelector("svg")!.getBoundingClientRect().width).toBe(2 * rootFontSize);
+  });
+});
+
 describe("density", () => {
   afterEach(async () => {
     await page.viewport(414, 896);
@@ -857,6 +952,39 @@ describe("theme", () => {
   });
 });
 
+describe("the pointer between tests", () => {
+  // The two tests run in order. The first leaves the pointer over a button at the top left, as an
+  // earlier test can. The second renders a button in that place: the browser re-checks hover after
+  // layout (WebKit late), so the button would turn :hover and fade to --ouro-action-hover, which the
+  // theme tests do not set.
+  it("hovers a button at the top left, leaving the pointer on it", async () => {
+    const { button } = await render(<Button>Light</Button>);
+    await userEvent.hover(button);
+    await expect.poll(() => button.matches(":hover")).toBe(true);
+  });
+
+  it("renders a button under the old pointer without hovering it, under a theme with a hover colour", async () => {
+    const style = document.createElement("style");
+    style.textContent = ":root { --ouro-action: rgb(10, 20, 30); --ouro-action-hover: rgb(31, 27, 23); }";
+    document.head.append(style);
+    mounted.push(style);
+    const { host } = await render(
+      <>
+        <Button>Light</Button>
+        <div className="dark">
+          <Button>Dark</Button>
+        </div>
+      </>,
+    );
+    const light = host.querySelector<HTMLElement>("button")!;
+    for (let frame = 0; frame < 10; frame++) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect({ hovered: light.matches(":hover"), background: getComputedStyle(light).backgroundColor }).toEqual({
+      hovered: false,
+      background: "rgb(10, 20, 30)",
+    });
+  });
+});
+
 describe("touch target", () => {
   it("does not grow the hit area for a fine pointer", async () => {
     const { button } = await render(<Button size="sm">Tap</Button>);
@@ -926,3 +1054,79 @@ describe("Button state layer", () => {
     }
   });
 });
+
+describe("Button and a page scroll at the press", () => {
+  // A smooth scroll begins as the press goes down, ahead of the button's own handlers. A button that
+  // opens a dialog stops it where it is; any other leaves the page alone.
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  afterEach(() => {
+    document.documentElement.removeAttribute("style");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  });
+
+  /** Presses the button as a smooth scroll starts, and returns where the page is once the press is over. */
+  async function pressAsScrollStarts(input: "pointer" | "Enter" | "ArrowDown") {
+    // The page rests at 2000 for two frames before the press, so the compositor, which runs a
+    // keyboard scroll, has it there too, and nothing from an earlier test is still moving it.
+    for (let still = 0; still < 2; ) {
+      if (window.scrollY !== 2000) window.scrollTo({ top: 2000, behavior: "instant" });
+      await frame();
+      still = window.scrollY === 2000 ? still + 1 : 0;
+    }
+    document.documentElement.style.scrollBehavior = "smooth";
+    document.addEventListener(input === "pointer" ? "pointerdown" : "keydown", () => window.scrollTo({ top: 4000 }), { capture: true, once: true });
+    if (input === "pointer") {
+      await commands.pointerPress({ selector: '[data-ouro="button"]', action: "down" });
+      for (let index = 0; index < 10; index++) await frame();
+      await commands.pointerPress({ action: "up" });
+    } else {
+      document.querySelector<HTMLElement>('[data-ouro="button"]')!.focus({ preventScroll: true });
+      await userEvent.keyboard(`{${input}}`);
+    }
+    for (let index = 0; index < 10; index++) await frame();
+    return window.scrollY;
+  }
+
+  const page5000 = (button: ReactNode) => (
+    <div style={{ height: 5000 }}>
+      <header style={{ position: "sticky", top: 0, height: 100 }}>{button}</header>
+    </div>
+  );
+
+  for (const input of ["pointer", "Enter"] as const) {
+    it(`with aria-haspopup="dialog", stops the scroll where ${input === "pointer" ? "a press" : "Enter"} found it, and keeps its own handlers`, async () => {
+      const pointerDown = vi.fn();
+      const keyDown = vi.fn();
+      await render(page5000(<Button aria-haspopup="dialog" onPointerDown={pointerDown} onKeyDown={keyDown}>Open</Button>));
+      expect(await pressAsScrollStarts(input)).toBe(2000);
+      expect((input === "pointer" ? pointerDown : keyDown).mock.calls.length).toBe(1);
+    });
+  }
+
+  for (const input of ["pointer", "Enter"] as const) {
+    it(`with aria-haspopup="dialog" and no handlers of its own, stops the scroll where ${input === "pointer" ? "a press" : "Enter"} found it, raising no error`, async () => {
+      await render(page5000(<Button aria-haspopup="dialog">Open</Button>));
+      const errors: string[] = [];
+      const onError = (event: ErrorEvent) => {
+        errors.push(event.message);
+        event.preventDefault();
+      };
+      window.addEventListener("error", onError);
+      expect(await pressAsScrollStarts(input)).toBe(2000);
+      window.removeEventListener("error", onError);
+      expect(errors).toEqual([]);
+    });
+  }
+
+  for (const [name, button, input] of [
+    ["without aria-haspopup", <Button key="plain">Save</Button>, "pointer"],
+    ['with aria-haspopup="menu"', <Button key="menu" aria-haspopup="menu">More</Button>, "pointer"],
+    ['with aria-haspopup="dialog", at an arrow key', <Button key="arrow" aria-haspopup="dialog">Open</Button>, "ArrowDown"],
+  ] as const) {
+    it(`${name}, leaves the scroll going`, async () => {
+      await render(page5000(button));
+      expect(await pressAsScrollStarts(input)).toBeGreaterThan(2000);
+    });
+  }
+});
+

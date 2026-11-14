@@ -572,7 +572,8 @@ describe("Users $identifier Route", () => {
       render(<Stub initialEntries={["/users/chef-empty"]} />);
 
       expect(await screen.findByRole("heading", { name: "chef-empty" })).toBeInTheDocument();
-      expect(screen.getByRole("img", { name: "chef-empty" })).toHaveTextContent("C");
+      // HX draws the initials from an attribute (CSS generated content), not as text.
+      expect(screen.getByRole("img", { name: "chef-empty" }).querySelector("[data-ouro-avatar-initials]")).toHaveAttribute("data-ouro-avatar-initials", "C");
       expect(profileLine("Joined May 2026 • 0 recipes • 0 cookbooks")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open settings" })).toHaveAttribute("href", "/account/settings");
       expect(screen.getByRole("button", { name: "Log out" })).toBeInTheDocument();

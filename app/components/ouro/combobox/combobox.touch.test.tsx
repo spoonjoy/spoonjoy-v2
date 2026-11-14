@@ -139,6 +139,18 @@ describe("Combobox on a phone", () => {
     expect(host.querySelector<HTMLElement>("[data-ouro-input-group]")!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   });
 
+  it("shows no clear button beside a read-only field, and no remove buttons on its chips", async () => {
+    const host = await render(
+      <>
+        <Combobox label="Herb" items={herbs} defaultValue="Dill" readOnly />
+        <Combobox label="Herbs" multiple items={herbs} defaultValue={["Basil"]} readOnly />
+      </>,
+    );
+    expect(host.querySelectorAll(TRIGGER)).toHaveLength(2);
+    expect(host.querySelector("button[data-ouro-combobox-clear]")).toBeNull();
+    expect(host.querySelector("[data-ouro-combobox-chip-remove]")).toBeNull();
+  });
+
   it("clears a single pick with a clear button beside the field, by tap or from the keyboard", async () => {
     const onValueChange = vi.fn();
     const host = await render(

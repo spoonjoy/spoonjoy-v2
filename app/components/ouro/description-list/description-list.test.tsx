@@ -9,8 +9,9 @@ import { act } from "~/lib/ouro/testing/act";
 const roots: Root[] = [];
 let mounted: Element[] = [];
 
-async function render(node: ReactNode) {
+async function render(node: ReactNode, width?: number) {
   const host = document.createElement("div");
+  if (width !== undefined) host.style.width = `${width}px`;
   document.body.append(host);
   mounted.push(host);
   const root = createRoot(host);
@@ -55,9 +56,9 @@ describe("DescriptionList", () => {
     ]);
   });
 
-  it("puts each term beside its details from 640px, in one shared column of terms", async () => {
+  it("puts each term beside its details in a list 28rem wide or more, in one shared column of terms", async () => {
     await page.viewport(1280, 800);
-    const { list } = await render(<DescriptionList items={items} />);
+    const { list } = await render(<DescriptionList items={items} />, 448);
     const [dt1, dd1, dt2, dd2] = boxes(list);
     expect(dd1!.rect.top).toBe(dt1!.rect.top);
     expect(dd1!.rect.left).toBeGreaterThanOrEqual(dt1!.rect.right);
@@ -73,6 +74,32 @@ describe("DescriptionList", () => {
     expect(getComputedStyle(list.children[2]!).paddingTop).toBe(getComputedStyle(list.children[3]!).paddingTop);
     // A mouse gets 14px text; a touch screen keeps 16px (description-list.touch.test.tsx).
     expect(getComputedStyle(list.children[0]!).fontSize).toBe("14px");
+  });
+
+  it("stacks each term above its details in a list narrower than 28rem, however wide the window", async () => {
+    await page.viewport(1280, 800);
+    // A side sheet's content width.
+    const { list } = await render(<DescriptionList items={items} />, 352);
+    const [dt1, dd1, dt2] = boxes(list);
+    expect(dd1!.rect.top).toBeGreaterThanOrEqual(dt1!.rect.bottom - 1);
+    expect(dd1!.rect.left).toBe(dt1!.rect.left);
+    expect(dd1!.rect.width).toBe(352);
+    expect(dt2!.rect.top).toBeGreaterThanOrEqual(dd1!.rect.bottom - 1);
+    expect(getComputedStyle(list.children[2]!).borderTopWidth).toBe("1px");
+    expect(getComputedStyle(list.children[3]!).borderTopWidth).toBe("0px");
+  });
+
+  it("takes the width it is given in a row, as a size container must", async () => {
+    const { list } = await render(
+      <div style={{ display: "flex", gap: 16 }}>
+        <DescriptionList items={items} />
+        <span>Beside it</span>
+      </div>,
+      600,
+    );
+    expect(list.getBoundingClientRect().width).toBeGreaterThan(448);
+    const [dt1, dd1] = boxes(list);
+    expect(dd1!.rect.top).toBe(dt1!.rect.top);
   });
 
   it("stacks each term above its details on a phone", async () => {
@@ -103,14 +130,17 @@ describe("DescriptionList", () => {
     for (const cell of list.children) expect(cell.scrollWidth).toBeLessThanOrEqual(cell.clientWidth);
   });
 
-  it("stacks until 768px with stackBelow=md", async () => {
-    await page.viewport(700, 800);
-    const { list: md } = await render(<DescriptionList items={items} stackBelow="md" />);
+  it("stacks below 32rem with stackBelow=md", async () => {
+    const { list: md } = await render(<DescriptionList items={items} stackBelow="md" />, 500);
     const [dt, dd] = boxes(md);
     expect(dd!.rect.top).toBeGreaterThanOrEqual(dt!.rect.bottom - 1);
-    const { list: sm } = await render(<DescriptionList items={items} />);
+    const { list: sm } = await render(<DescriptionList items={items} />, 500);
     const [smDt, smDd] = boxes(sm);
     expect(smDd!.rect.top).toBe(smDt!.rect.top);
+    const { list: wide } = await render(<DescriptionList items={items} stackBelow="md" />, 512);
+    const [wideDt, wideDd] = boxes(wide);
+    expect(wideDd!.rect.top).toBe(wideDt!.rect.top);
+    expect(getComputedStyle(wide.children[3]!).borderTopWidth).toBe("1px");
   });
 
   it("passes attributes and a ref through, and lets layout classes win", async () => {
@@ -155,8 +185,7 @@ describe("DescriptionList development messages", () => {
   });
 
   it("stacks below sm for an unknown breakpoint", async () => {
-    await page.viewport(700, 800);
-    const { list } = await render(<DescriptionList {...({ items, stackBelow: "lg" } as unknown as Parameters<typeof DescriptionList>[0])} />);
+    const { list } = await render(<DescriptionList {...({ items, stackBelow: "lg" } as unknown as Parameters<typeof DescriptionList>[0])} />, 500);
     const [dt, dd] = boxes(list);
     expect(dd!.rect.top).toBe(dt!.rect.top);
   });

@@ -150,7 +150,7 @@ describe("webauthn-route orchestration", () => {
       vi.mocked(verifyRegistration).mockRejectedValue("string failure");
       await expect(
         finishRegistration(db, user.id, config, {} as never),
-      ).rejects.toMatchObject({ status: 400, message: "Registration verification failed" });
+      ).rejects.toMatchObject({ status: 400, message: "Registration verification threw a value that is not an Error" });
     });
 
     it("throws 400 when the credential cannot be mapped", async () => {
@@ -161,7 +161,7 @@ describe("webauthn-route orchestration", () => {
       vi.mocked(credentialFromRegistration).mockReturnValue(null);
       await expect(
         finishRegistration(db, user.id, config, {} as never),
-      ).rejects.toMatchObject({ status: 400, message: "Registration could not be verified" });
+      ).rejects.toMatchObject({ status: 400, message: "The passkey's registration response did not verify" });
     });
 
     it("stores a trimmed name and createdAt when a label is provided", async () => {
@@ -440,7 +440,7 @@ describe("webauthn-route orchestration", () => {
       vi.mocked(verifyAuthentication).mockRejectedValue("nope");
       await expect(
         finishAuthentication(db, user.email, config, { id: "auth_cred" } as never),
-      ).rejects.toMatchObject({ status: 400, message: "Authentication verification failed" });
+      ).rejects.toMatchObject({ status: 400, message: "Authentication verification threw a value that is not an Error" });
     });
 
     it("throws 400 when verification reports unverified", async () => {
@@ -448,7 +448,7 @@ describe("webauthn-route orchestration", () => {
       vi.mocked(verifyAuthentication).mockResolvedValue({ verified: false } as never);
       await expect(
         finishAuthentication(db, user.email, config, { id: "auth_cred" } as never),
-      ).rejects.toMatchObject({ status: 400, message: "Authentication could not be verified" });
+      ).rejects.toMatchObject({ status: 400, message: "The passkey's signature did not verify" });
     });
   });
 
@@ -598,7 +598,7 @@ describe("webauthn-route orchestration", () => {
 
       await expect(
         finishRegistration(db, user.id, config, { id: "x" } as never, null, telemetry),
-      ).rejects.toMatchObject({ status: 400, message: "Registration could not be verified" });
+      ).rejects.toMatchObject({ status: 400, message: "The passkey's registration response did not verify" });
       expect(telemetry.captureEvent).toHaveBeenCalledWith(
         "spoonjoy.webauthn.failure",
         user.id,
@@ -665,7 +665,7 @@ describe("webauthn-route orchestration", () => {
 
       await expect(
         finishAuthentication(db, user.email, config, { id: "ac2" } as never, telemetry),
-      ).rejects.toMatchObject({ status: 400, message: "Authentication could not be verified" });
+      ).rejects.toMatchObject({ status: 400, message: "The passkey's signature did not verify" });
       expect(telemetry.captureEvent).toHaveBeenCalledWith(
         "spoonjoy.webauthn.failure",
         user.id,
@@ -744,7 +744,7 @@ describe("webauthn-route orchestration", () => {
 
         await expect(
           finishAuthentication(db, user.email, config, { id: "auth_cred" } as never, sink),
-        ).rejects.toMatchObject({ name: "WebAuthnError", status: 400, message: "Authentication could not be completed" });
+        ).rejects.toMatchObject({ name: "WebAuthnError", status: 400, message: "This passkey sign-in was already used or is out of date: start sign-in again" });
 
         expect(await state(user.id)).toEqual({ challenge: null, counter: 2n });
         expect(sink.captureEvent).toHaveBeenCalledWith("spoonjoy.webauthn.failure", user.id, staleEvent);
@@ -757,7 +757,7 @@ describe("webauthn-route orchestration", () => {
 
         await expect(
           finishAuthentication(db, user.email, config, { id: "auth_cred" } as never),
-        ).rejects.toMatchObject({ status: 400, message: "Authentication could not be completed" });
+        ).rejects.toMatchObject({ status: 400, message: "This passkey sign-in was already used or is out of date: start sign-in again" });
 
         // The challenge is spent first, so it cannot be presented again; the counter is not written.
         expect(await state(user.id)).toEqual({ challenge: null, counter: 7n });

@@ -1,8 +1,8 @@
 import type { ComponentType, SVGProps } from "react";
 import { radiusFor, sizeFor } from "~/lib/ouro/appearance-hints";
 
-export { iconClass, looks, sizes, squareClass, toggleBase, toggleHint, toggleSizeWarning, toggleVariantWarning };
-export type { ToggleIcon, ToggleSize, ToggleVariant };
+export { iconClass, looks, shapes, sizes, squareClass, toggleBase, toggleHint, toggleShapeWarning, toggleSizeWarning, toggleVariantWarning };
+export type { ToggleIcon, ToggleShape, ToggleSize, ToggleVariant };
 
 // Class strings, value lists and dev-message helpers shared by Toggle and ToggleGroup, apart
 // from the components so each component file exports only components (React Fast Refresh).
@@ -24,16 +24,20 @@ type ToggleIcon = ComponentType<SVGProps<SVGSVGElement>>;
  */
 const toggleBase =
   "press relative box-border inline-flex shrink-0 items-center justify-center align-middle " +
-  "rounded-lg border border-solid font-medium whitespace-nowrap " +
+  "border border-solid whitespace-nowrap " +
   "no-underline select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
-  "before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:bg-current " +
+  "before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:[corner-shape:inherit] before:bg-current " +
   "before:opacity-0 before:transition-opacity before:duration-(--ouro-duration-fast) before:ease-[ease] " +
   "not-data-disabled:not-active:pointer-fine:hover:before:opacity-8 not-data-disabled:active:before:opacity-14 " +
   "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
   "disabled:cursor-not-allowed disabled:opacity-50 " +
   // Pressed: the primary tone at 10% behind text mixed 20% toward the foreground, as Button's soft look.
-  "data-pressed:bg-primary/10 data-pressed:text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))] contrast-more:data-pressed:border-current";
+  // Forced colours drop the tint, so a pressed toggle fills with the system highlight there. It opts
+  // out of forcing, or the label's backplate would hide HighlightText; its focus ring stays a system colour.
+  "data-pressed:bg-primary/10 data-pressed:text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))] contrast-more:data-pressed:border-current " +
+  "forced-colors:data-pressed:forced-color-adjust-none forced-colors:data-pressed:border-[Highlight] forced-colors:data-pressed:bg-[Highlight] " +
+  "forced-colors:data-pressed:text-[HighlightText] forced-colors:data-pressed:outline-[CanvasText]";
 
 /**
  * Height and padding read two variables, so the toggle has one unprefixed `h-*` and `px-*`
@@ -48,6 +52,9 @@ const toggleBase =
  * @claim "Height and padding read two variables" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle > lets app layout classes win)
  */
 const sizes = {
+  xs:
+    "h-(--ouro-toggle-h) px-(--ouro-toggle-px) gap-1 text-sm sm:pointer-fine:text-xs [--ouro-toggle-h:calc(var(--spacing)*8)] [--ouro-toggle-px:calc(var(--spacing)*3)] " +
+    "sm:pointer-fine:[--ouro-toggle-h:calc(var(--spacing)*6)] sm:pointer-fine:[--ouro-toggle-px:calc(var(--spacing)*2.5)]",
   sm:
     "h-(--ouro-toggle-h) px-(--ouro-toggle-px) gap-1.5 text-sm [--ouro-toggle-h:calc(var(--spacing)*9)] [--ouro-toggle-px:calc(var(--spacing)*3)] " +
     "sm:pointer-fine:[--ouro-toggle-h:calc(var(--spacing)*8)] sm:pointer-fine:[--ouro-toggle-px:calc(var(--spacing)*2.5)]",
@@ -65,6 +72,25 @@ const sizes = {
  * @internal
  */
 type ToggleSize = keyof typeof sizes;
+
+/**
+ * `rect` has the theme's corners (`--radius`) and medium text; `pill` is fully rounded with
+ * regular-weight text, as filter chips are. An icon-only pill is a circle.
+ *
+ * @internal
+ * @claim "`pill` is fully rounded with regular-weight" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle looks > rounds fully with regular-weight text with shape pill)
+ */
+const shapes = {
+  rect: "rounded-lg font-medium",
+  pill: "rounded-full font-normal",
+} as const;
+
+/**
+ * A toggle shape.
+ *
+ * @internal
+ */
+type ToggleShape = keyof typeof shapes;
 
 /**
  * An icon-only toggle is as wide as it is tall.
@@ -105,8 +131,9 @@ const iconClass = "size-[1.25em] shrink-0";
  */
 function toggleHint(component: string): (token: string) => string {
   return (token) => {
-    const size = sizeFor(token, ["sm", "sm", "md", "lg", "lg", "lg", "lg"]);
+    const size = sizeFor(token, ["xs", "sm", "md", "lg", "lg", "lg", "lg"]);
     if (size) return `<${component} size="${size}">`;
+    if (token === "rounded-full") return `<${component} shape="pill">`;
     if (token.startsWith("rounded")) return radiusFor(token);
     return `<${component} variant="outline">`;
   };
@@ -120,6 +147,16 @@ function toggleHint(component: string): (token: string) => string {
 function toggleVariantWarning(component: string, variant: string): readonly [string, string] {
   const shadcn = variant === "default" || variant === "ghost";
   return [`variant="${variant}" is not a variant`, shadcn ? `<${component}>` : `<${component} variant="plain">`];
+}
+
+/**
+ * The dev message for a shape that is not one of the toggle's. A round guess points to `pill`. Development only.
+ *
+ * @internal
+ */
+function toggleShapeWarning(component: string, shape: string): readonly [string, string] {
+  const round = /round|full|circle|chip/i.test(shape);
+  return [`shape="${shape}" is not a shape`, round ? `<${component} shape="pill">` : `<${component}>`];
 }
 
 /**

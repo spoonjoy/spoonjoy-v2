@@ -146,7 +146,7 @@ describe("ForkRecipeButton", () => {
   });
 
   it("keeps the dialog open with the server's message when the fork could not be saved, and clears it on the next opening", async () => {
-    const forkAction = vi.fn(async () => ({ error: "Spoonjoy couldn't save that just now. Please try again in a moment." }));
+    const forkAction = vi.fn(async () => ({ error: "Spoonjoy's database is busy and didn't save that. Try again in a moment." }));
     renderButton({ isOwner: false }, forkAction);
     const token = () => (document.querySelector("form input[name='forkToken']") as HTMLInputElement).value;
 
@@ -155,7 +155,7 @@ describe("ForkRecipeButton", () => {
     const sent = token();
     await userEvent.click(dialog.querySelector("button[type='submit']")!);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Spoonjoy couldn't save that just now. Please try again in a moment.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Spoonjoy's database is busy and didn't save that. Try again in a moment.");
     expect(forkAction).toHaveBeenCalledTimes(1);
     // Trying again sends the same token, so it cannot make a second fork.
     expect(token()).toBe(sent);

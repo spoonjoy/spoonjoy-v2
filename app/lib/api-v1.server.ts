@@ -1659,7 +1659,7 @@ function normalizeRecipeCoverImageUrl(value: unknown, origin: string): string {
 function coverMutationError(error: unknown, coverId: string): ApiV1Error {
   // The database being briefly unavailable is not the client's mistake; it passes through.
   if (isD1Unavailable(error)) throw error;
-  const message = error instanceof Error ? error.message : "Cover mutation failed";
+  const message = error instanceof Error ? error.message : "The cover change threw a value that is not an Error";
   if (/cover was not found/i.test(message)) {
     return new ApiV1Error("not_found", "Cover not found", { resource: "recipe_cover", coverId });
   }
@@ -4583,7 +4583,7 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
         scaleFactor,
       );
     } catch {
-      throw new ApiV1Error("internal_error", "Internal error");
+      throw new ApiV1Error("internal_error", "Internal error: Spoonjoy's server hit an unexpected fault");
     }
     const nativeD1 = asCompatibleD1Database(apiV1CloudflareFor(args)?.env?.DB);
     // Quantities add up, so on D1 the batch writes once under this client's mutation: a retry
@@ -8248,7 +8248,7 @@ export function normalizeApiV1InternalError(error: unknown): ApiV1Error {
       retryAfterSeconds: D1_WRITE_RETRY_AFTER_SECONDS,
     });
   }
-  return new ApiV1Error("internal_error", "Internal error");
+  return new ApiV1Error("internal_error", "Internal error: Spoonjoy's server hit an unexpected fault");
 }
 
 /**

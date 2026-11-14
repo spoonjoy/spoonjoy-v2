@@ -793,7 +793,7 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
       requestId: blockedRequestId,
       error: {
         code: "internal_error",
-        message: "Internal error",
+        message: "Internal error: Spoonjoy's server hit an unexpected fault",
         status: 500,
       },
     });

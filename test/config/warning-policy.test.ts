@@ -1066,6 +1066,26 @@ describe("Playwright warning policy", () => {
     expect(() => duplicate.assertClean()).toThrowError(/console\.error: owned once/);
   });
 
+  it("drops an allowed notice every time it occurs, without requiring it", async () => {
+    const { createBrowserDiagnosticCollector } = await vi.importActual<
+      typeof import("../../e2e/warning-policy")
+    >("../../e2e/warning-policy");
+    const allowed = createBrowserDiagnosticCollector();
+    allowed.allowDiagnostic(/known notice/g);
+    allowed.captureConsole("error", "known notice");
+    allowed.captureConsole("warning", "known notice");
+    expect(() => allowed.assertClean()).not.toThrow();
+
+    const unused = createBrowserDiagnosticCollector();
+    unused.allowDiagnostic(/known notice/);
+    expect(() => unused.assertClean()).not.toThrow();
+
+    const other = createBrowserDiagnosticCollector();
+    other.allowDiagnostic(/known notice/);
+    other.captureConsole("error", "something else");
+    expect(() => other.assertClean()).toThrowError(/console\.error: something else/);
+  });
+
   it("provides an executable automatic context-wide diagnostic fixture", async () => {
     const fixture = readFileSync("e2e/fixtures.ts", "utf8");
     const exported = await vi.importActual<typeof import("../../e2e/fixtures")>(
@@ -1087,7 +1107,7 @@ describe("Playwright warning policy", () => {
     fakeContext.pages = () => [page];
     const runFixture = exported.runBrowserDiagnosticFixture as (
       context: typeof fakeContext,
-      use: (diagnostics: { expect(pattern: RegExp): void }) => Promise<void>,
+      use: (diagnostics: { expect(pattern: RegExp): void; allow(pattern: RegExp): void }) => Promise<void>,
     ) => Promise<void>;
 
     expect(hasAutomaticDiagnosticFixture(fixture)).toBe(true);
@@ -1102,6 +1122,13 @@ describe("Playwright warning policy", () => {
     await expect(runFixture(fakeContext, async (diagnostics) => {
       diagnostics.expect(/fixture-owned warning/);
       page.emit("console", { type: () => "warning", text: () => "fixture-owned warning" });
+    })).resolves.toBeUndefined();
+    await expect(runFixture(fakeContext, async (diagnostics) => {
+      diagnostics.allow(/fixture-tolerated warning/);
+      page.emit("console", { type: () => "warning", text: () => "fixture-tolerated warning" });
+    })).resolves.toBeUndefined();
+    await expect(runFixture(fakeContext, async (diagnostics) => {
+      diagnostics.allow(/fixture-tolerated warning/);
     })).resolves.toBeUndefined();
 
     const automaticContext = new FakeEmitter() as FakeEmitter & { pages(): FakeEmitter[] };

@@ -1,12 +1,14 @@
 import { createElement, type ComponentProps } from "react";
 import { expectTypeOf } from "vitest";
 import { CodeBlock, type CodeBlockProps } from "~/components/ouro/code-block/code-block";
+import type { EmojiCatalogue } from "~/components/ouro/emoji/emoji";
 
 // Type tests: `pnpm typecheck` compiles this file.
 
 expectTypeOf<{ code: "npm i" }>().toExtend<CodeBlockProps>();
 expectTypeOf<{ code: "x"; language: "bash"; title: "install.sh"; copy: false; copyLabel: "Copy command"; wrap: true; className: "max-h-80" }>().toExtend<CodeBlockProps>();
 expectTypeOf<ComponentProps<typeof CodeBlock>>().toEqualTypeOf<CodeBlockProps>();
+expectTypeOf<{ code: "x"; catalogue: EmojiCatalogue }>().toExtend<CodeBlockProps>();
 
 // code is required.
 expectTypeOf<{ language: "bash" }>().not.toExtend<CodeBlockProps>();

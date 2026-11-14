@@ -25,13 +25,16 @@ export interface DescriptionListOwnProps {
   /** The pairs, in order: `{ term, details }`. */
   items: readonly DescriptionListItem[];
   /**
-   * Below this breakpoint each term sits above its details, as on a phone; from it up, the
-   * terms form a column beside them.
+   * While the list itself is narrower than this, each term sits above its details, as on a
+   * phone or in a narrow sheet; from it up, the terms form a column beside them. `sm` is
+   * 28rem (448px), `md` 32rem (512px). The list's own width decides, not the window's, so a
+   * list in a side sheet stacks on a wide screen too.
    * @default "sm"
-   * @claim "Below this breakpoint each term sits" registry/ouro/components/ouro/description-list/description-list.test.tsx verify:testExists(registry/ouro/components/ouro/description-list/description-list.test.tsx::DescriptionList > puts each term beside its details from 640px, in one shared column of terms)
-   * @claim "Below this breakpoint each term sits" registry/ouro/components/ouro/description-list/description-list.test.tsx verify:testExists(registry/ouro/components/ouro/description-list/description-list.test.tsx::DescriptionList > stacks each term above its details on a phone)
+   * @claim "While the list itself is narrower" registry/ouro/components/ouro/description-list/description-list.test.tsx verify:testExists(registry/ouro/components/ouro/description-list/description-list.test.tsx::DescriptionList > puts each term beside its details in a list 28rem wide or more, in one shared column of terms)
+   * @claim "While the list itself is narrower" registry/ouro/components/ouro/description-list/description-list.test.tsx verify:testExists(registry/ouro/components/ouro/description-list/description-list.test.tsx::DescriptionList > stacks each term above its details in a list narrower than 28rem, however wide the window)
+   * @claim "`sm` is 28rem (448px), `md`" registry/ouro/components/ouro/description-list/description-list.test.tsx verify:testExists(registry/ouro/components/ouro/description-list/description-list.test.tsx::DescriptionList > stacks below 32rem with stackBelow=md)
    */
-  stackBelow?: "sm" | "md" | (string & { 'Use "sm" (640px) or "md" (768px)': never }) | undefined;
+  stackBelow?: "sm" | "md" | (string & { 'Use "sm" (448px) or "md" (512px)': never }) | undefined;
   /** Layout only: margins, width (`mt-6`, `max-w-2xl`). Appearance classes warn in development. */
   className?: string | undefined;
   ref?: Ref<HTMLDListElement> | undefined;
@@ -45,18 +48,20 @@ export interface DescriptionListOwnProps {
 /** Props for {@link DescriptionList}: its own props and the `<dl>` attributes it passes through. */
 export type DescriptionListProps = Omit<HTMLAttributes<HTMLDListElement>, keyof DescriptionListOwnProps> & DescriptionListOwnProps;
 
-// The columns read a variable that the breakpoint sets, so an app's grid-cols-* class still
-// wins. Stacked, a line runs above each term; side by side, above each term and its details.
+// The list is a size container, so its own width, not the window's, decides the layout. Its
+// columns read a variable, so an app's grid-cols-* class still wins; stacked, each term and its
+// details span both columns. Stacked, a line runs above each term; side by side, above each
+// term and its details.
 const layouts = {
   sm: {
-    root: "grid-cols-(--ouro-dl-cols) [--ouro-dl-cols:minmax(0,1fr)] sm:[--ouro-dl-cols:min(40%,14rem)_minmax(0,1fr)]",
-    term: "pt-3 pb-1 sm:py-3 first:pt-0 sm:first:pt-0",
-    details: "pb-3 sm:border-t sm:border-border sm:py-3 sm:nth-2:border-t-0 sm:nth-2:pt-0",
+    root: "@container grid-cols-(--ouro-dl-cols) [--ouro-dl-cols:min(40%,14rem)_minmax(0,1fr)]",
+    term: "col-span-full @md:col-span-1 pt-3 pb-1 @md:py-3 first:pt-0 @md:first:pt-0",
+    details: "col-span-full @md:col-span-1 pb-3 @md:border-t @md:border-border @md:py-3 @md:nth-2:border-t-0 @md:nth-2:pt-0",
   },
   md: {
-    root: "grid-cols-(--ouro-dl-cols) [--ouro-dl-cols:minmax(0,1fr)] md:[--ouro-dl-cols:min(40%,14rem)_minmax(0,1fr)]",
-    term: "pt-3 pb-1 md:py-3 first:pt-0 md:first:pt-0",
-    details: "pb-3 md:border-t md:border-border md:py-3 md:nth-2:border-t-0 md:nth-2:pt-0",
+    root: "@container grid-cols-(--ouro-dl-cols) [--ouro-dl-cols:min(40%,14rem)_minmax(0,1fr)]",
+    term: "col-span-full @lg:col-span-1 pt-3 pb-1 @lg:py-3 first:pt-0 @lg:first:pt-0",
+    details: "col-span-full @lg:col-span-1 pb-3 @lg:border-t @lg:border-border @lg:py-3 @lg:nth-2:border-t-0 @lg:nth-2:pt-0",
   },
 } as const;
 
@@ -70,14 +75,15 @@ function itemWarnings(items: readonly DescriptionListItem[]): DevWarning[] {
 
 /**
  * One thing's details as pairs of a term and its value: a recipe's prep time and servings,
- * an order's date and total, an account's email. On a phone each term sits above its
- * details; from 640px the terms form a column beside them, with a line between the pairs.
+ * an order's date and total, an account's email. In a narrow space, a phone or a side sheet,
+ * each term sits above its details; once the list is 28rem wide the terms form a column beside
+ * them, with a line between the pairs. It takes the width it is given.
  *
  * Use `Table` instead to compare many things across the same columns, and `ItemGroup` for
  * a list of things a person opens or acts on.
  *
  * @group Display
- * @see https://ui.ouro.bot/docs/description-list
+ * @see https://ui.ouroboros.bot/docs/description-list
  *
  * @example
  * <DescriptionList
@@ -87,8 +93,10 @@ function itemWarnings(items: readonly DescriptionListItem[]): DevWarning[] {
  *     { term: "Serves", details: "6" },
  *   ]}
  * />
- * @claim "On a phone each term sits" registry/ouro/components/ouro/description-list/description-list.test.tsx verify:testExists(registry/ouro/components/ouro/description-list/description-list.test.tsx::DescriptionList > puts each term beside its details from 640px, in one shared column of terms)
- * @claim "On a phone each term sits" registry/ouro/components/ouro/description-list/description-list.test.tsx verify:testExists(registry/ouro/components/ouro/description-list/description-list.test.tsx::DescriptionList > stacks each term above its details on a phone)
+ * @claim "In a narrow space, a phone" registry/ouro/components/ouro/description-list/description-list.test.tsx verify:testExists(registry/ouro/components/ouro/description-list/description-list.test.tsx::DescriptionList > puts each term beside its details in a list 28rem wide or more, in one shared column of terms)
+ * @claim "In a narrow space, a phone" registry/ouro/components/ouro/description-list/description-list.test.tsx verify:testExists(registry/ouro/components/ouro/description-list/description-list.test.tsx::DescriptionList > stacks each term above its details in a list narrower than 28rem, however wide the window)
+ * @claim "In a narrow space, a phone" registry/ouro/components/ouro/description-list/description-list.test.tsx verify:testExists(registry/ouro/components/ouro/description-list/description-list.test.tsx::DescriptionList > stacks each term above its details on a phone)
+ * @claim "It takes the width it is" registry/ouro/components/ouro/description-list/description-list.test.tsx verify:testExists(registry/ouro/components/ouro/description-list/description-list.test.tsx::DescriptionList > takes the width it is given in a row, as a size container must)
  */
 export function DescriptionList(props: DescriptionListProps): JSX.Element {
   const { items: itemsProp, stackBelow: stackBelowProp = "sm", className, data, children, ...rest } = props;
@@ -122,7 +130,7 @@ export function DescriptionList(props: DescriptionListProps): JSX.Element {
   );
   const layout = layouts[stackBelow];
   return (
-    <dl {...rest} data-ouro="description-list" className={cn("[@layer_ouro-reset]:m-0 grid text-base pointer-fine:text-sm", layout.root, className)}>
+    <dl {...rest} data-ouro="description-list" className={cn("[@layer_ouro-reset]:m-0 grid w-full min-w-0 text-base pointer-fine:text-sm", layout.root, className)}>
       {items.map((item, index) => {
         // A guessed `label` or `value` still shows, beside its development message.
         const loose = item as unknown as { label?: ReactNode; value?: ReactNode; description?: ReactNode };

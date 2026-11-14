@@ -37,8 +37,8 @@ const FAILURE_COPY: Record<string, string> = {
   permission_denied: "Permission was denied — re-enable notifications in your browser to continue.",
   permission_dismissed: "Notifications need permission. Tap Enable again to try once more.",
   unsupported: "Notifications are not available on this browser.",
-  public_key_unavailable: "Unable to enable notifications right now (server key unavailable).",
-  server_error: "Unable to enable notifications right now (server error). Please try again.",
+  public_key_unavailable: "Notifications can't be switched on yet: Spoonjoy's server has no push key set up.",
+  server_error: "Notifications didn't switch on: Spoonjoy's server refused the subscription. Try again in a moment.",
 };
 
 const PREF_LABELS: Array<{
@@ -91,7 +91,7 @@ export function NotificationsSection({
         setSubscribed(true);
         toast("Notifications enabled.", { tone: "success" });
       } else {
-        const msg = FAILURE_COPY[result.reason] ?? "Unable to enable notifications.";
+        const msg = FAILURE_COPY[result.reason] ?? "Notifications didn't switch on, and the browser gave no reason.";
         toast(msg, { tone: "destructive" });
       }
     } finally {
@@ -107,7 +107,7 @@ export function NotificationsSection({
         setSubscribed(false);
         toast("Notifications disabled.");
       } else {
-        toast("Unable to disable notifications. Please try again.", { tone: "destructive" });
+        toast("Notifications are still on: the browser kept the subscription. Try again.", { tone: "destructive" });
       }
     } finally {
       setBusy(false);
@@ -132,7 +132,7 @@ export function NotificationsSection({
     } catch {
       // Rollback on failure.
       setPrefs((p) => ({ ...p, [key]: previous }));
-      toast("Unable to update notification preferences. Please try again.", { tone: "destructive" });
+      toast("That setting is back as it was: Spoonjoy's server didn't save the change. Try again.", { tone: "destructive" });
     }
   }
 

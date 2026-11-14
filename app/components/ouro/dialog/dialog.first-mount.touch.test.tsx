@@ -1,5 +1,5 @@
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 import { commands } from "vitest/browser";
 import { act } from "~/lib/ouro/testing/act";
@@ -11,7 +11,13 @@ import { rotate } from "~/lib/ouro/testing/rotate";
 
 let root: Root | undefined;
 const nodes: Element[] = [];
+let warn: ReturnType<typeof vi.spyOn>;
+beforeEach(() => {
+  // Mounting already open is the pattern the development message is about.
+  warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+});
 afterEach(async () => {
+  vi.restoreAllMocks();
   await act(() => root?.unmount());
   for (const node of nodes.splice(0)) node.remove();
   await rotate(390, 844);
@@ -54,5 +60,20 @@ describe("Dialog mounted by the tap that opens it", () => {
       .toBe(true);
     await expect.poll(() => popup()!.contains(document.activeElement)).toBe(true);
     expect(document.activeElement).toBe(popup());
+  });
+
+  it("says once in development that its open and close transitions don't run", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    nodes.push(host);
+    root = createRoot(host);
+    await act(() => root!.render(<MountOnOpen />));
+    expect(warn).not.toHaveBeenCalled();
+    await commands.tap("[data-app-opener]");
+    await expect.poll(() => document.querySelector('[data-ouro="dialog"]')).not.toBeNull();
+    await act(() => root!.render(<MountOnOpen />));
+    expect(warn.mock.calls.map((call: unknown[]) => String(call[0]))).toEqual([
+      "[ouro-ui] Dialog: mounted already open, so its open and close transitions don't run; mount it closed and change open. Fix: <Dialog open={open} onOpenChange={setOpen}>.",
+    ]);
   });
 });

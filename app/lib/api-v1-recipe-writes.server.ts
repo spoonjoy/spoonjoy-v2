@@ -658,7 +658,7 @@ export async function forkNativeRecipe(
       return failure("not_found", "Source recipe not found");
     }
     if (error instanceof ForkTitleExhaustedError) {
-      return failure("validation_error", "Could not resolve a unique title for the fork");
+      return failure("validation_error", "Every title for this fork is already taken: rename the recipe, then fork it again");
     }
     throw error;
   }

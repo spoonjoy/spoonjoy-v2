@@ -17,10 +17,10 @@ describe("routeErrorCopy", () => {
     [errorResponse(400, "   "), "We can't open that.", "Try again, or head back home."],
     [errorResponse(400, { message: "object" }), "We can't open that.", "Try again, or head back home."],
     [errorResponse(503, "Spoonjoy couldn't save that just now."), "Not just now.", "Spoonjoy couldn't save that just now."],
-    [errorResponse(503, "  "), "Something went wrong.", "We hit an unexpected snag. Try again in a moment."],
-    [errorResponse(503, { message: "object" }), "Something went wrong.", "We hit an unexpected snag. Try again in a moment."],
-    [errorResponse(502, "down"), "Something went wrong.", "We hit an unexpected snag. Try again in a moment."],
-    [new Error("boom"), "Something went wrong.", "We hit an unexpected snag. Try again in a moment."],
+    [errorResponse(503, "  "), "That's on our side.", "We hit an unexpected snag. Try again in a moment."],
+    [errorResponse(503, { message: "object" }), "That's on our side.", "We hit an unexpected snag. Try again in a moment."],
+    [errorResponse(502, "down"), "That's on our side.", "We hit an unexpected snag. Try again in a moment."],
+    [new Error("boom"), "That's on our side.", "We hit an unexpected snag. Try again in a moment."],
   ])("words %o as %s", (error, title, message) => {
     expect(routeErrorCopy(error)).toMatchObject({ title, message });
   });
@@ -41,7 +41,7 @@ describe("RouteErrorContent", () => {
 
   it("offers only home for other errors", () => {
     renderContent(new Error("boom"));
-    expect(screen.getByRole("heading", { level: 1, name: "Something went wrong." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "That's on our side." })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Log in" })).toBeNull();
   });
 });

@@ -153,7 +153,7 @@ async function handleShoppingListIntent(userId: string, formData: FormData, cont
             return data(
               {
                 errors: {
-                  parse: "Couldn't confidently parse one item. Review and correct before adding.",
+                  parse: "Spoonjoy isn't sure how to read this item. Review and correct before adding.",
                 },
                 parseDraft: fallbackDraft,
               },
@@ -170,7 +170,7 @@ async function handleShoppingListIntent(userId: string, formData: FormData, cont
             const parseMessage =
               error instanceof IngredientParseError
                 ? error.message
-                : "Unable to parse item right now. Review and correct before adding.";
+                : "The AI item reader didn't answer, so Spoonjoy read this item with its basic rules. Review and correct before adding.";
 
             return data(
               {
@@ -196,7 +196,7 @@ async function handleShoppingListIntent(userId: string, formData: FormData, cont
       return data(
         {
           errors: {
-            parse: "Couldn't confidently parse one item. Review and correct before adding.",
+            parse: "Spoonjoy isn't sure how to read this item. Review and correct before adding.",
           },
           parseDraft: parsedDraft,
         },

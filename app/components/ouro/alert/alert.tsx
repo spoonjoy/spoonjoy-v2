@@ -16,7 +16,7 @@ export type AlertIcon = ComponentType<SVGProps<SVGSVGElement>>;
 /** The props Alert adds to the `<div>` attributes it passes through. */
 export interface AlertOwnProps {
   /**
-   * What happened, in a few words: "Recipe saved", "Couldn't save". Required, so every
+   * What happened, in a few words: "Recipe saved", "Not saved: you're offline". Required, so every
    * alert says what it is about.
    * @claim "Required, so every alert says what" registry/ouro/components/ouro/alert/alert.test-d.ts verify:fileLine(registry/ouro/components/ouro/alert/alert.test-d.ts, /title is required/)
    */
@@ -179,7 +179,7 @@ function toneFromSeverity(value: unknown): ToneName {
  * (`role="alert"`); the others politely (`role="status"`).
  *
  * In and around forms, use Alert for a message that belongs to neither a field nor the form
- * as a whole: a reorder or a deletion the server refused, a step that could not be parsed. Render it where the action was taken, with `action` for the way out.
+ * as a whole: a reorder or a deletion the server refused, an imported step the parser rejected. Render it where the action was taken, with `action` for the way out.
  *
  * Use `Toast` instead for a brief message that disappears by itself, `ConfirmDialog` to
  * ask before a destructive action, and `Field`'s `error` for a message about one field.
@@ -187,13 +187,13 @@ function toneFromSeverity(value: unknown): ToneName {
  * the message under that field, and the `form` key shows it at the top of the form.
  *
  * @group Display
- * @see https://ui.ouro.bot/docs/alert
+ * @see https://ui.ouroboros.bot/docs/alert
  *
  * @example
  * <Alert tone="success" title="Recipe saved" />
  * <Alert
  *   tone="destructive"
- *   title="Couldn't save"
+ *   title="Not saved: you're offline"
  *   description="Check your connection and try again."
  *   action={<Button size="sm" onClick={retry}>Try again</Button>}
  *   onDismiss={() => setError(null)}

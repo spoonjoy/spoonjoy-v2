@@ -328,7 +328,7 @@ function mapOpenAIError(error: unknown): IngredientParseError {
   const status = getErrorStatus(error)
 
   if (status === 401 || status === 403) {
-    return new IngredientParseError('OpenAI authentication failed', error)
+    return new IngredientParseError('OpenAI rejected the API key (authentication)', error)
   }
 
   if (status === 429) {
@@ -345,7 +345,7 @@ function mapOpenAIError(error: unknown): IngredientParseError {
   }
 
   if (message.includes('network') || message.includes('connection')) {
-    return new IngredientParseError('OpenAI connection failed', error)
+    return new IngredientParseError('OpenAI connection dropped before it answered', error)
   }
 
   return new IngredientParseError('Failed to parse ingredients', error)
@@ -375,7 +375,7 @@ export function isRetryableForFallback(error: IngredientParseError): boolean {
     message.includes('timed out') ||
     message.includes('connection') ||
     message.includes('network') ||
-    message.includes('temporary service failure')
+    /temporary service failure/.test(message)
   )
 }
 
@@ -462,7 +462,7 @@ export async function parseIngredients(
         const geminiMapped =
           geminiError instanceof IngredientParseError
             ? geminiError
-            : new IngredientParseError('Gemini fallback failed', geminiError)
+            : new IngredientParseError('Gemini fallback threw something other than a parse error', geminiError)
 
         await reportIngredientParseFailure(env, config, 'gemini', geminiMapped, telemetry)
       }

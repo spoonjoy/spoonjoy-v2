@@ -239,6 +239,6 @@ export function parseJsonRpcLine(line: string): ParsedJsonRpcLine {
   try {
     return { ok: true, value: JSON.parse(line) as unknown };
   } catch {
-    return { ok: false, error: failure(null, PARSE_ERROR, "Parse error") };
+    return { ok: false, error: failure(null, PARSE_ERROR, "Parse error: the message is not valid JSON") };
   }
 }

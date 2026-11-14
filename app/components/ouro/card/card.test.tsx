@@ -262,7 +262,7 @@ describe("Card with href", () => {
         description="12 recipes"
       >
         <p>
-          By <a href="/cooks/ari">Ari</a>, after <Link href="/cooks/sam">Sam</Link>
+          By <a href="/cooks/ari">Ari</a>, after <Link href="/cooks/jo">Jo</Link>
         </p>
       </Card>,
     );
@@ -270,7 +270,7 @@ describe("Card with href", () => {
     const share = page.getByRole("button", { name: "Share" }).element() as HTMLElement;
     // The share button keeps its own position over the cover.
     expect(getComputedStyle(share).position).toBe("absolute");
-    for (const control of [share, page.getByRole("link", { name: "Ari" }).element(), page.getByRole("link", { name: "Sam" }).element()]) {
+    for (const control of [share, page.getByRole("link", { name: "Ari" }).element(), page.getByRole("link", { name: "Jo" }).element()]) {
       const [x, y] = center(control);
       expect(control.contains(document.elementFromPoint(x, y))).toBe(true);
     }

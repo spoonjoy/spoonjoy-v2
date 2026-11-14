@@ -285,18 +285,12 @@ export default function RecipeDetail() {
       return;
     }
 
-    const revalidateIfVisible = () => {
-      if (document.visibilityState !== "hidden") {
-        revalidator.revalidate();
-      }
-    };
-
-    const intervalId = globalThis.setInterval(revalidateIfVisible, COVER_PROCESSING_POLL_INTERVAL_MS);
-    document.addEventListener("visibilitychange", revalidateIfVisible);
+    // Poll while the cover is being made, whether or not the tab is in view, so the finished
+    // cover is already there when the cook comes back (HX gated-load).
+    const intervalId = globalThis.setInterval(() => revalidator.revalidate(), COVER_PROCESSING_POLL_INTERVAL_MS);
 
     return () => {
       globalThis.clearInterval(intervalId);
-      document.removeEventListener("visibilitychange", revalidateIfVisible);
     };
   }, [activeCoverProcessing?.coverId, revalidator]);
 

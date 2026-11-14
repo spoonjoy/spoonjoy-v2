@@ -9,6 +9,7 @@ import { TabsIndicator, TabsList, TabsPanel, TabsRoot, TabsTab } from "~/compone
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
 import { pressTab } from "~/lib/ouro/testing/tab";
+import { computedValue } from "~/lib/ouro/testing/computed";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -92,6 +93,28 @@ describe("Tabs", () => {
       await expect.poll(() => look(selected!)).toBe(highlight);
       for (const tab of others) expect(look(tab)).not.toBe(look(selected!));
     } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
+  it("keeps HighlightText on the selected tab under forced colours while the pointer rests on it", async () => {
+    try {
+      const { tabs } = await render(<Tabs label="Recipe" items={items} />);
+      const [selected] = tabs;
+      const look = (tab: HTMLElement) => `${getComputedStyle(tab).backgroundColor} ${getComputedStyle(tab).color}`;
+      // The pointer rests on the selected tab, as one a test or a person leaves there does.
+      await userEvent.hover(selected!);
+      await commands.emulateMedia({ forcedColors: "active" });
+      expect(matchMedia("(forced-colors: active)").matches).toBe(true);
+      const probe = document.body.appendChild(document.createElement("span"));
+      probe.style.cssText = "background-color: Highlight; color: HighlightText";
+      const highlight = look(probe);
+      probe.remove();
+      expect(selected!.matches(":hover")).toBe(true);
+      await settled(selected!);
+      expect(look(selected!)).toBe(highlight);
+    } finally {
+      await userEvent.hover(document.documentElement, { position: { x: -8, y: -8 }, force: true });
       await commands.emulateMedia({ forcedColors: "none" });
     }
   });
@@ -572,7 +595,7 @@ describe("Tabs as links", () => {
     expect(all!.getBoundingClientRect().width).toBe(list.getBoundingClientRect().width);
     const line = recipes!.querySelector<HTMLElement>("[data-ouro-tabs-indicator]")!.getBoundingClientRect();
     expect([line.width, line.right, line.height]).toEqual([2, list.getBoundingClientRect().right, recipes!.getBoundingClientRect().height]);
-    expect(getComputedStyle(chefs!).justifyContent).toBe("flex-start");
+    expect(getComputedStyle(chefs!).justifyContent).toBe(computedValue("justify-content", "flex-start"));
     await page.viewport(390, 844);
     await expect.poll(() => list.getAttribute("data-orientation")).toBe("horizontal");
     expect(root.getAttribute("data-orientation")).toBe("horizontal");

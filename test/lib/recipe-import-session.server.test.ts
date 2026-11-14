@@ -335,7 +335,7 @@ describe("importRecipeForSession", () => {
     expect(outcome).toEqual({
       ok: false,
       kind: "text",
-      message: "We couldn't find a recipe in that text. Include the ingredients and the steps.",
+      message: "Spoonjoy found no recipe in that text. Include the ingredients and the steps.",
     });
   });
 
@@ -345,7 +345,7 @@ describe("importRecipeForSession", () => {
       { kind: "link", url: "https://example.com/blog" },
       { pipeline: { fetchImpl, llmRunner: llm({ title: "" }) } },
     ));
-    expect(outcome).toEqual({ ok: false, kind: "link", message: "We couldn't find a recipe there. Paste the recipe text instead." });
+    expect(outcome).toEqual({ ok: false, kind: "link", message: "Spoonjoy found no recipe on that page. Paste the recipe text instead." });
   });
 
   it("explains a model outage", async () => {
@@ -408,7 +408,7 @@ describe("importRecipeForSession", () => {
     expect(outcome).toEqual({
       ok: false,
       kind: "photo",
-      message: "We couldn't read a recipe in that photo. Try a sharper photo with the whole recipe in it, or paste the recipe instead.",
+      message: "Spoonjoy found no recipe in that photo. Try a sharper photo with the whole recipe in it, or paste the recipe instead.",
     });
   });
 

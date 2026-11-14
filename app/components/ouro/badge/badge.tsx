@@ -125,7 +125,7 @@ const base =
 const interactive =
   "press cursor-pointer select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
-  "before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:bg-current " +
+  "before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:[corner-shape:inherit] before:bg-current " +
   "before:opacity-0 before:transition-opacity before:duration-(--ouro-duration-fast) before:ease-[ease] " +
   "not-data-disabled:not-active:pointer-fine:hover:before:opacity-8 not-data-disabled:active:before:opacity-14 " +
   "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
@@ -184,7 +184,7 @@ function badgeHint(token: string): string {
  * a message the reader must notice.
  *
  * @group Display
- * @see https://ui.ouro.bot/docs/badge
+ * @see https://ui.ouroboros.bot/docs/badge
  *
  * @example
  * <Badge>Draft</Badge>

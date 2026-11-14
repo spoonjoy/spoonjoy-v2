@@ -4,7 +4,7 @@ import { NavigationMenu as BaseNavigationMenu } from "@base-ui/react/navigation-
 import { useState, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
-import { currentHref } from "~/lib/ouro/current-path";
+import { currentHref, samePath } from "~/lib/ouro/current-path";
 import { floatingPortalClass } from "~/lib/ouro/floating";
 import { RouterLink } from "~/lib/ouro/router-link";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
@@ -105,8 +105,9 @@ export interface NavigationMenuProps {
   items: readonly NavigationMenuItem[];
   /**
    * The path of the page being shown, from your router (`useLocation().pathname`, or
-   * `usePathname()` in Next.js). The link to that path, or else the longest link above it,
-   * gets `aria-current="page"`, in the row or in a panel.
+   * `usePathname()` in Next.js). The link to that path gets `aria-current="page"`, in the row
+   * or in a panel; else the longest link above it, the section the page is in, gets
+   * `aria-current="true"`, so a screen reader hears one current page.
    */
   currentPath?: string | undefined;
   /** Layout only: margins, grid placement (`ms-4`). Appearance classes warn in development. */
@@ -126,15 +127,15 @@ export interface NavigationMenuProps {
 // Class strings are literal so the app's Tailwind finds them when it compiles.
 
 // A row item, link or button: 44px with 16px text on a coarse pointer at every width, 36px
-// with 14px text with a fine one.
+// with 14px text with a fine one. The current page, or the section it is in, is underlined in the primary colour, as in
+// FamilyBar; forced colours keep the underline.
 const rowItem =
   "press relative m-0 box-border inline-flex h-11 min-w-11 pointer-fine:h-9 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap " +
   "rounded-md border-0 forced-colors:border forced-colors:border-solid bg-transparent px-3 font-[inherit] text-base pointer-fine:text-sm leading-5 font-medium text-muted-foreground no-underline " +
   "select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "pointer-fine:hover:bg-accent pointer-fine:hover:text-accent-foreground data-popup-open:bg-accent data-popup-open:text-accent-foreground " +
-  "aria-[current=page]:font-semibold aria-[current=page]:text-foreground data-current:text-foreground " +
-  "aria-[current=page]:before:absolute aria-[current=page]:before:inset-y-2 aria-[current=page]:before:start-0 aria-[current=page]:before:w-0.5 aria-[current=page]:before:rounded-full aria-[current=page]:before:bg-current aria-[current=page]:before:content-[''] " +
-  "forced-colors:aria-[current=page]:before:border-s-2 forced-colors:aria-[current=page]:before:border-solid forced-colors:aria-[current=page]:before:border-current " +
+  "aria-[current=page]:font-semibold aria-[current=page]:text-foreground aria-[current=true]:font-semibold aria-[current=true]:text-foreground data-current:text-foreground " +
+  "aria-[current=page]:underline aria-[current=true]:underline decoration-primary decoration-2 underline-offset-5 [text-decoration-skip-ink:none] " +
   "motion-safe:active:scale-(--ouro-press-scale) outline-ring -outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";
 
 // The theme's enter and exit curve.
@@ -171,9 +172,9 @@ const panelLink =
   "relative m-0 box-border flex min-h-11 pointer-fine:min-h-9 flex-col justify-center gap-0.5 rounded-md px-3 py-2 text-base pointer-fine:text-sm leading-5 " +
   "text-popover-foreground no-underline select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "transition-colors duration-(--ouro-duration-fast) ease-[ease] pointer-fine:hover:bg-accent pointer-fine:hover:text-accent-foreground active:bg-accent active:text-accent-foreground " +
-  "aria-[current=page]:before:absolute aria-[current=page]:before:inset-y-2 aria-[current=page]:before:start-0 aria-[current=page]:before:w-0.5 aria-[current=page]:before:rounded-full aria-[current=page]:before:bg-current aria-[current=page]:before:content-[''] " +
-  "forced-colors:aria-[current=page]:before:border-s-2 forced-colors:aria-[current=page]:before:border-solid forced-colors:aria-[current=page]:before:border-current " +
   "outline-ring -outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";
+// A panel link's label, which carries the current page's mark, so that its line of description stays plain.
+const panelLabel = "decoration-primary decoration-2 underline-offset-5 [text-decoration-skip-ink:none]";
 
 const example =
   '<NavigationMenu label="Main" items={[{ label: "Recipes", links: [{ label: "Browse", href: "/recipes" }] }, { label: "Pricing", href: "/pricing" }]} />';
@@ -182,7 +183,7 @@ const example =
  * A row of links where some open a panel of further links, each with a line of
  * description: the navigation of a site with more pages than fit in a bar. Panels open on
  * hover or click, move between each other without closing, and close on Escape, on an
- * outside press and when a link is chosen. The current page is marked `aria-current="page"` and a bar at the start edge, distinct from hover and press highlights.
+ * outside press and when a link is chosen. The current page is marked `aria-current="page"`, and the link of the section it is in `aria-current="true"`, both underlined in the primary colour, distinct from hover and press highlights.
  * Built on Base UI's Navigation Menu.
  *
  * Use `Navbar` instead when every item is a plain link; it also collapses into a drawer on
@@ -190,7 +191,7 @@ const example =
  * for a column of links.
  *
  * @group Navigation
- * @see https://ui.ouro.bot/docs/navigation-menu
+ * @see https://ui.ouroboros.bot/docs/navigation-menu
  *
  * @example
  * <NavigationMenu
@@ -301,6 +302,9 @@ export function NavigationMenuView(props: NavigationMenuViewProps): JSX.Element 
         currentPath,
       );
   const isCurrent = (link: { href: string; current?: boolean | undefined }) => Boolean(link.current) || link.href === marked;
+  // The page itself is the current page; a link above it, the section it is in, is current but not the page.
+  const currentOf = (link: { href: string; current?: boolean | undefined }) =>
+    !isCurrent(link) ? undefined : link.current || samePath(link.href, currentPath) ? ("page" as const) : ("true" as const);
   const closeOnLink = (event: ReactMouseEvent) => {
     if ((event.target as Element).closest("a[href]")) setValue(null);
   };
@@ -347,8 +351,16 @@ export function NavigationMenuView(props: NavigationMenuViewProps): JSX.Element 
                     <ul className={cn("m-0 grid list-none gap-1 p-0", item.columns === 2 && "sm:grid-cols-2")}>
                       {item.links.map((link, position) => (
                         <li key={position}>
-                          <BaseNavigationMenu.Link render={<RouterLink href={link.href} />} active={isCurrent(link)} closeOnClick data-ouro-control="navigation-menu" data-ouro-part="panel-link" className={panelLink}>
-                            <span className={cn("font-medium", isCurrent(link) && "font-semibold")}>{link.label}</span>
+                          <BaseNavigationMenu.Link
+                            render={<RouterLink href={link.href} />}
+                            active={currentOf(link) === "page"}
+                            aria-current={currentOf(link)}
+                            closeOnClick
+                            data-ouro-control="navigation-menu"
+                            data-ouro-part="panel-link"
+                            className={panelLink}
+                          >
+                            <span className={cn("font-medium", panelLabel, isCurrent(link) && "font-semibold underline")}>{link.label}</span>
                             {link.description !== undefined && <span className="text-sm leading-5 text-muted-foreground">{link.description}</span>}
                           </BaseNavigationMenu.Link>
                         </li>
@@ -360,7 +372,14 @@ export function NavigationMenuView(props: NavigationMenuViewProps): JSX.Element 
             </BaseNavigationMenu.Item>
           ) : (
             <BaseNavigationMenu.Item key={index} value={index}>
-              <BaseNavigationMenu.Link render={<RouterLink href={item.href} />} active={isCurrent(item)} data-ouro-control="navigation-menu" data-ouro-part="link" className={rowItem}>
+              <BaseNavigationMenu.Link
+                render={<RouterLink href={item.href} />}
+                active={currentOf(item) === "page"}
+                aria-current={currentOf(item)}
+                data-ouro-control="navigation-menu"
+                data-ouro-part="link"
+                className={rowItem}
+              >
                 {item.label}
               </BaseNavigationMenu.Link>
             </BaseNavigationMenu.Item>

@@ -639,7 +639,7 @@ export async function stylizeSpoonPhoto(
     }
     throw new AggregateError(failures, "All image edit providers failed");
   } catch (cause) {
-    throw new ImageGenError("Stylization failed", { cause });
+    throw new ImageGenError("Stylization stopped: no image provider returned an image", { cause });
   }
 }
 

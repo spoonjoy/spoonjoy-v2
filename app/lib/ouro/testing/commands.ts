@@ -3,6 +3,7 @@ import type { CDPSession, Frame, Page } from "playwright";
 import type { BrowserCommand } from "vitest/node";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import { hrtime } from "node:process";
+import { setTimeout as sleep } from "node:timers/promises";
 
 export interface EmulateMediaOptions {
   reducedMotion?: "reduce" | "no-preference";
@@ -10,6 +11,17 @@ export interface EmulateMediaOptions {
   forcedColors?: "active" | "none";
   contrast?: "more" | "no-preference";
 }
+
+/** The media features `emulateMedia` sets, with their values. */
+export type MediaState = Required<EmulateMediaOptions>;
+
+/** A page's media before any emulation, which Playwright's `emulateMedia` documents as its defaults for these features. */
+const DEFAULT_MEDIA: MediaState = { reducedMotion: "no-preference", colorScheme: "light", forcedColors: "none", contrast: "no-preference" };
+
+/** The value the kit last emulated for a page's features; a feature not yet emulated has the browser's default. */
+const emulatedMedia = new WeakMap<object, MediaState>();
+
+const currentMedia = (page: object): MediaState => emulatedMedia.get(page) ?? DEFAULT_MEDIA;
 
 export interface DragOptions {
   /** Viewport coordinates of the pointer-down point. */
@@ -29,24 +41,117 @@ export interface DragOptions {
 
 /**
  * Wraps Playwright's `page.emulateMedia` for motion, color, contrast and forced-color preferences.
+ * This returns once the test frame's `matchMedia` matches every preference passed, so a test reads the
+ * new styles on its next line.
  * A forced-colours switch restyles the page at once, and a colour with a transition (the `press`
- * utility's) then eases to its new value, so this returns once those transitions have finished:
- * a test reads where each colour lands, not a colour between the two.
+ * utility's) then eases to its new value, so this also returns once those transitions have finished:
+ * a test reads where each colour lands, not a colour between the two. The kit keeps the value it
+ * set, so `mediaState` and `restoreMedia` can put them back.
  *
- * @claim "this returns once those transitions have finished" registry/ouro/lib/ouro/testing/commands.test.ts verify:fileLine(registry/ouro/lib/ouro/testing/commands.test.ts, /emulateMedia returns once forced colours have settled, past any transition the switch started/)
+ * @claim "This returns once the test frame's `matchMedia` matches every preference passed" registry/ouro/lib/ouro/testing/commands.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.test.ts::emulateMedia returns once the frame matches the preference, so the next line reads its styles)
+ * @claim "this also returns once those transitions have finished" registry/ouro/lib/ouro/testing/commands.test.ts verify:fileLine(registry/ouro/lib/ouro/testing/commands.test.ts, /emulateMedia returns once forced colours have settled, past any transition the switch started/)
  */
 export const emulateMedia: BrowserCommand<[EmulateMediaOptions]> = async (ctx, options) => {
-  await ctx.page.emulateMedia(options);
-  if (!("forcedColors" in options)) return;
-  const frame = await ctx.frame();
-  await within(frame.evaluate(SETTLE_TRANSITIONS), 3000, "transitions did not settle within 3s").catch(() => undefined);
+  await applyMedia(ctx, options);
 };
+
+/**
+ * The page's media as the kit last emulated it; a feature not yet emulated reads as the browser's
+ * default. A test or setup reads it before a change, to put it back with `restoreMedia`.
+ */
+export const mediaState: BrowserCommand<[]> = async (ctx) => ({ ...currentMedia(ctx.page) });
+
+/**
+ * Puts back the media a `mediaState` read. It emulates only the features that differ from the
+ * page's current media, so a restore after a test that changed a feature's value is a single call.
+ */
+export const restoreMedia: BrowserCommand<[MediaState]> = async (ctx, state) => {
+  const current = currentMedia(ctx.page);
+  const changed: EmulateMediaOptions = {};
+  for (const feature of Object.keys(DEFAULT_MEDIA) as (keyof MediaState)[]) {
+    if (current[feature] !== state[feature]) Object.assign(changed, { [feature]: state[feature] });
+  }
+  if (Object.keys(changed).length > 0) await applyMedia(ctx, changed);
+};
+
+/** Puts the browser's defaults back, for the start of a test file. */
+export const resetMedia: BrowserCommand<[]> = async (ctx) => {
+  await restoreMedia(ctx, DEFAULT_MEDIA);
+};
+
+async function applyMedia(ctx: Parameters<BrowserCommand<[]>>[0], options: EmulateMediaOptions): Promise<void> {
+  await ctx.page.emulateMedia(options);
+  emulatedMedia.set(ctx.page, { ...currentMedia(ctx.page), ...options });
+  const frame = await ctx.frame();
+  const queries = mediaQueries(options);
+  if (queries.length > 0) await awaitMedia(frame, queries);
+  if (!("forcedColors" in options)) return;
+  await within(frame.evaluate(SETTLE_TRANSITIONS), 3000, "transitions did not settle within 3s").catch(() => undefined);
+}
+
+const MEDIA_FEATURES: Record<keyof EmulateMediaOptions, string> = {
+  reducedMotion: "prefers-reduced-motion",
+  colorScheme: "prefers-color-scheme",
+  forcedColors: "forced-colors",
+  contrast: "prefers-contrast",
+};
+
+/** The media queries a set of preferences makes true, one per preference passed. */
+function mediaQueries(options: EmulateMediaOptions): string[] {
+  return (Object.keys(MEDIA_FEATURES) as (keyof EmulateMediaOptions)[]).flatMap((key) => (options[key] === undefined ? [] : [`(${MEDIA_FEATURES[key]}: ${options[key]})`]));
+}
+
+/** How long `emulateMedia` waits for the test frame to match: as long as a poll waits. */
+const MEDIA_WAIT_MS = 10_000;
+
+/** How long `emulateMedia` gives the frame to answer one read of its media, however close the deadline. */
+const MEDIA_ANSWER_MS = 3000;
+
+/**
+ * Polls the frame's `matchMedia` from Node until the queries match. The poll runs here, not in the
+ * frame, because a test's fake timers in the frame would stall a wait that the frame's own timers drive.
+ * @claim "Polls the frame's `matchMedia` from Node until the queries match" registry/ouro/lib/ouro/testing/commands.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.test.ts::emulateMedia returns while the test's fake timers are on)
+ */
+async function awaitMedia(frame: Frame, queries: string[]): Promise<void> {
+  // As long as a poll waits (the projects' 10 s), since a loaded runner can be slow to answer.
+  const deadline = performance.now() + MEDIA_WAIT_MS;
+  const unmatched = `${JSON.stringify(queries)}.find((query) => !matchMedia(query).matches)`;
+  // The query the frame last said it does not match.
+  let unmatchedBefore: string | undefined;
+  for (;;) {
+    // Each read gets at least MEDIA_ANSWER_MS, so a read begun just before the deadline can still answer
+    // and the failure names the query that does not match, not a frame that did not answer.
+    const limit = Math.max(deadline - performance.now(), MEDIA_ANSWER_MS);
+    let missing: string | undefined;
+    try {
+      missing = await within(frame.evaluate<string | undefined>(unmatched), limit, `the test frame did not answer for ${queries.join(" and ")} within ${Math.round(limit)}ms`);
+    } catch (problem) {
+      // A frame that said what it does not match, then stalled on the last read (a loaded runner), still does not match it.
+      if (unmatchedBefore !== undefined && performance.now() > deadline) {
+        throw new Error(`the test frame does not match ${unmatchedBefore} within ${MEDIA_WAIT_MS / 1000}s (and its last read did not answer within ${Math.round(limit)}ms)`, { cause: problem });
+      }
+      throw problem;
+    }
+    if (missing === undefined) return;
+    unmatchedBefore = missing;
+    if (performance.now() > deadline) throw new Error(`the test frame does not match ${missing} within ${MEDIA_WAIT_MS / 1000}s`);
+    await sleep(10);
+  }
+}
 
 /** Waits for the running transitions in a frame (`getAnimations` restyles first, starting them). */
 const SETTLE_TRANSITIONS = `Promise.all(document.getAnimations().filter((animation) => animation instanceof CSSTransition && animation.playState === "running").map((animation) => animation.finished.catch(() => undefined))).then(() => undefined)`;
 
 /** How much longer than its `durationMs` a mouse drag runs before it logs where it is waiting. */
 export const DRAG_SLOW_MS = 3000;
+
+/**
+ * Prints a mouse drag's trace as information, and only when `OURO_TOUCH_TRACE=1` is set: the same
+ * switch as the touch commands' trace, so an app has one switch for the kit's pointer traces.
+ */
+function dragTrace(message: string) {
+  if (process.env.OURO_TOUCH_TRACE === "1") console.info(message);
+}
 
 /**
  * Drags with real mouse events through Playwright's `page.mouse`, spreading the
@@ -56,10 +161,13 @@ export const DRAG_SLOW_MS = 3000;
  * A drag still running `DRAG_SLOW_MS` past its `durationMs` logs the step the browser
  * has not answered yet and how long each step before it took, so a test that then hits
  * its time limit says where the drag stalled; if the drag finishes after all, it logs
- * every step's time. A drag that finishes in time logs nothing, and a slow one is not refused.
- * @claim "logs the step the browser" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a mouse drag the browser stops answering logs the move it is stuck on and each earlier move's time, and is not refused)
- * @claim "if the drag finishes after all" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a slow mouse drag that finishes logs every step's time once it ends)
- * @claim "A drag that finishes in time logs nothing" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a mouse drag that finishes in time logs nothing)
+ * every step's time. Those lines print only with `OURO_TOUCH_TRACE=1`, as information; without
+ * it a slow drag prints nothing. A drag that finishes in time logs nothing, and a slow one is not refused.
+ * @claim "logs the step the browser" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::with OURO_TOUCH_TRACE set, a mouse drag the browser stops answering logs the move it is stuck on and each earlier move's time as information, and is not refused)
+ * @claim "Those lines print only with" registry/ouro/lib/ouro/testing/commands.ts verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /process\.env\.OURO_TOUCH_TRACE === "1"\) console\.info\(message\)/)
+ * @claim "without it a slow drag prints nothing" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::without OURO_TOUCH_TRACE, a mouse drag the browser stops answering prints nothing, and is not refused) verify:testExists(scripts/touch-kit-frames.test.mjs::without OURO_TOUCH_TRACE, a slow mouse drag that finishes prints nothing)
+ * @claim "if the drag finishes after all" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::with OURO_TOUCH_TRACE set, a slow mouse drag that finishes logs where it waited and every step's time as information once it ends)
+ * @claim "A drag that finishes in time logs nothing" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a mouse drag that finishes in time logs nothing, even with OURO_TOUCH_TRACE set)
  */
 export const drag: BrowserCommand<[DragOptions]> = async (ctx, { from, to, steps, durationMs, hold }) => {
   const { page } = ctx;
@@ -75,7 +183,7 @@ export const drag: BrowserCommand<[DragOptions]> = async (ctx, { from, to, steps
   let logged = false;
   const cancel = after({ kit: kitNow() + slow, real: start + slow }, () => {
     logged = true;
-    console.warn(`drag: still waiting on ${waiting} after ${since(begun)}ms, ${since(start)}ms into ${about()}. Each step before it, pauses between moves left out: ${timesText()}.`);
+    dragTrace(`drag: still waiting on ${waiting} after ${since(begun)}ms, ${since(start)}ms into ${about()}. Each step before it, pauses between moves left out: ${timesText()}.`);
   });
   const timed = async (name: string, run: () => Promise<unknown>) => {
     waiting = name;
@@ -99,7 +207,7 @@ export const drag: BrowserCommand<[DragOptions]> = async (ctx, { from, to, steps
   } finally {
     cancel();
   }
-  if (logged) console.warn(`drag: finished after ${since(start)}ms, in ${about()}. Each step, pauses between moves left out: ${timesText()}.`);
+  if (logged) dragTrace(`drag: finished after ${since(start)}ms, in ${about()}. Each step, pauses between moves left out: ${timesText()}.`);
 };
 
 export interface FlickOptions {
@@ -445,7 +553,7 @@ const TOUCH_TIDY_MS = 1000;
  * goes to, even one Playwright does not list yet. It takes a point in the top-level document,
  * and a touch a point in the visual viewport, so where that viewport is in the page is added: the
  * top-level page's scroll, and the pan of a pinch-zoomed page. "unknown" means
- * the kit could not place the point in a frame: Chromium found nothing there, as for a point
+ * the hit test gave the kit nothing to place: Chromium found nothing there, as for a point
  * outside the viewport, or the node there lacks a window.
  * @claim "`DOM.getNodeForLocation` hit-tests the way input does" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::the kit waits for the frame under a pointer-events: none overlay, where the touch lands)
  * @claim "`DOM.getNodeForLocation` hit-tests the way input does" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::the kit does not wait for a pointer-events: none iframe, which the touch passes through)
@@ -595,7 +703,7 @@ const TOUCH_SLOW_MS = 1000;
  * What one touch command waited for, logged when it succeeds but is slow: its steps with their
  * times, when each frame's watch answered, and how late Node's event loop ran meanwhile. A refused
  * touch logs nothing; its error says why.
- * @claim "What one touch command waited for" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a touch command that takes longer than a second logs its steps, when each frame's watch answered and how late Node ran) verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /const\sTOUCH_SLOW_MS\s=\s1000;/)
+ * @claim "What one touch command waited for" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::with OURO_TOUCH_TRACE set, a touch command that takes longer than a second logs its steps as information, when each frame's watch answered and how late Node ran) verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /const\sTOUCH_SLOW_MS\s=\s1000;/)
  * @claim "A refused touch logs nothing" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a refused touch logs no trace: its error says why)
  */
 interface TouchTrace {
@@ -625,16 +733,16 @@ function stepsText(trace: TouchTrace): string {
   return [...steps.slice(0, TRACE_HEAD), `… ${steps.length - TRACE_HEAD - TRACE_TAIL} steps left out …`, ...steps.slice(-TRACE_TAIL)].join("; ");
 }
 
-/** Logs `trace` when the command took longer than TOUCH_SLOW_MS. Only a command that succeeded logs: a refusal's error says why. */
+/** Prints `trace` as information, not a warning, when the command took longer than TOUCH_SLOW_MS and `OURO_TOUCH_TRACE=1`. Only a command that succeeded prints: a refusal's error says why. */
 function logIfSlow(command: string, expected: TouchPoint, trace: TouchTrace, frames: Iterable<Frame>) {
   const took = Date.now() - trace.start;
   trace.loop.disable();
-  if (took <= TOUCH_SLOW_MS) return;
+  if (took <= TOUCH_SLOW_MS || process.env.OURO_TOUCH_TRACE !== "1") return;
   const watches = [...frames].map((frame) => {
     const at = trace.answered.get(frame);
     return `${frame.url() || "a frame with no URL yet"} ${at === undefined ? "had not answered" : `answered at +${at}ms`}`;
   });
-  console.warn(
+  console.info(
     `${command}: the ${expected.type} at (${Math.round(expected.x)}, ${Math.round(expected.y)}) took ${took}ms. ` +
       `Steps: ${stepsText(trace)}. Watches: ${watches.join("; ")}. ` +
       `Node's event loop ran up to ${Math.round(trace.loop.max / 1e6)}ms late.`,
@@ -711,8 +819,8 @@ async function watchTarget(
       traceStep(trace, `the gesture's frame answered: ${answer.url}`);
       if (answer.error === undefined) return { calls };
       // A lift is sent all the same, so the finger is not left down.
-      const gone = `${command}: could not watch ${answer.url}, the frame the gesture's touchstart went to: ${answer.error}.`;
-      if (expected.type === "touchEnd") return { calls, gone: `${gone} The touchEnd was sent, but nothing could see it.` };
+      const gone = `${command}: the watch for the ${expected.type} did not start in ${answer.url}, the frame the gesture's touchstart went to: ${answer.error}.`;
+      if (expected.type === "touchEnd") return { calls, gone: `${gone} The touchEnd was sent, but no watcher saw it.` };
       throw new Error(`${gone} The ${expected.type} was not sent.`);
     }
     // Whether the frame at the point is armed but the hit test there does not reach inside it yet, which no change announces.
@@ -785,7 +893,7 @@ async function watchTarget(
           ),
         ).then((notes) => notes.filter((note) => note !== undefined));
         throw new Error(
-          `${command}: could not watch the frame at (${Math.round(target.point.x)}, ${Math.round(target.point.y)}) within ${TOUCH_HANDLED_TIMEOUT_MS}ms, so the ${expected.type} was not sent. ` +
+          `${command}: the frame at (${Math.round(target.point.x)}, ${Math.round(target.point.y)}) was not ready for the ${expected.type} within ${TOUCH_HANDLED_TIMEOUT_MS}ms, so it was not sent. ` +
             (inside === false
               ? `The frame there is ${at.where}: its watcher is armed, but Chromium's hit test at that point does not reach inside it yet`
               : `The frame there is ${at.where}, and it has no watcher`) +
@@ -994,6 +1102,7 @@ export interface TouchDragOptions {
  * and touch events, as from a phone: a swipe to dismiss. Needs a context with
  * `hasTouch`, as in the `touch` project. Coordinates are relative to the top-level page.
  * It resolves once the page has handled the whole gesture, touchend included.
+ * A slow gesture's trace prints as information only when `OURO_TOUCH_TRACE=1` is set in the test run's environment.
  * With `durationMs`, it queues the whole timed path before waiting for protocol replies:
  * delayed acknowledgments must not turn its first small moves into a long press.
  * Use `touchStep` when the finger should actually stay down between commands.
@@ -1061,28 +1170,112 @@ export const touchDrag: BrowserCommand<[TouchDragOptions]> = async (ctx, { from,
   }
 };
 
+export interface DoubleTapOptions {
+  /** Viewport coordinates of both taps. */
+  at: [number, number];
+  /**
+   * Time from the first tap's lift to the second tap's touch down, as the page's event timestamps
+   * report it, in milliseconds. @default 100
+   */
+  gapMs?: number;
+}
+
+/**
+ * Two one-finger taps at the same point, in one command, with real touch input (Chromium only,
+ * through CDP `Input.dispatchTouchEvent`), so the page sees `pointerType: "touch"` pointer events
+ * and touch events, as from a phone: a double-tap to zoom. The events carry the gesture's own
+ * timestamps, each tap 50ms down and `gapMs` apart, so a busy test machine can't stretch the gap
+ * the page measures past a double-tap's window. Needs a context with `hasTouch`, as in the `touch` project.
+ * Coordinates are relative to the top-level page. It resolves once the page has handled the second
+ * touchend, and waits and throws as `touchDrag` does.
+ *
+ * @claim "Two one-finger taps at the same" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::doubleTap taps twice at one point, the gap it is given apart in the page's event timestamps)
+ * @claim "The events carry the gesture's own" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::doubleTap taps twice at one point, the gap it is given apart in the page's event timestamps)
+ * @claim "The events carry the gesture's own" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::doubleTap keeps its gap in the page's timestamps when the page is busy between the taps)
+ */
+export const doubleTap: BrowserCommand<[DoubleTapOptions]> = async (ctx, { at, gapMs = 100 }) => {
+  const { page } = ctx;
+  if (ctx.provider.name !== "playwright" || page.context().browser()?.browserType().name() !== "chromium") {
+    throw new Error("doubleTap: CDP input is Chromium only");
+  }
+  let session = cdpSessions.get(page);
+  if (!session) {
+    session = await page.context().newCDPSession(page);
+    cdpSessions.set(page, session);
+  }
+  const [x, y] = at;
+  const start = Date.now() / 1000;
+  const down = 50;
+  await releaseFinger("doubleTap", page, session);
+  // Each tap is its own touch, queued whole and waited for in the page. Its events carry the
+  // timestamps of the gesture, not of their delivery, so however late the second tap arrives, the
+  // page measures the gap asked for.
+  for (const offset of [0, down + gapMs]) {
+    let refused = false;
+    const tap = async () => {
+      const deliveries: Promise<unknown>[] = [];
+      for (const [type, ms] of [["touchStart", offset], ["touchEnd", offset + down]] as const) {
+        if (refused) return;
+        if (type === "touchEnd") fingersDown.delete(page);
+        else fingersDown.set(page, { x, y, frame: undefined });
+        deliveries.push(session.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1 }], timestamp: start + ms / 1000 }));
+      }
+      await Promise.all(deliveries);
+    };
+    try {
+      await sendTouch("doubleTap", page, session, { type: "touchEnd", x, y }, { point: { x, y } }, tap);
+    } catch (error) {
+      refused = true;
+      throw error;
+    }
+  }
+};
+
 export interface PointerPressOptions {
   /** CSS selector of the element to press, inside the test iframe. Not needed for `up`. */
   selector?: string;
-  /** `down` moves to the element's center and presses; `up` releases. */
-  action: "down" | "up";
+  /**
+   * `down` moves to the element's center and presses; `up` releases; `click` moves there,
+   * presses and releases in one command, so the release follows the press however loaded the
+   * runner is, and, unlike `userEvent.click`, nothing scrolls the element into view first.
+   *
+   * @claim "presses and releases in one command" registry/ouro/lib/ouro/testing/commands.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.test.ts::pointerPress click presses and releases in one command, leaving the page's scroll alone)
+   */
+  action: "down" | "up" | "click";
+  /** The button to press and release; the primary one unless `right`, which opens a context menu. */
+  button?: "left" | "right";
 }
 
 /**
  * Presses or releases the real mouse over an element, so `:active` styles apply.
  * Coordinates come from Playwright, so the iframe offset is already included.
  */
-export const pointerPress: BrowserCommand<[PointerPressOptions]> = async (ctx, { selector, action }) => {
+export const pointerPress: BrowserCommand<[PointerPressOptions]> = async (ctx, { selector, action, button = "left" }) => {
   const { page } = ctx;
   if (action === "up") {
-    await page.mouse.up();
+    await page.mouse.up({ button });
     return;
   }
-  if (!selector) throw new Error("pointerPress: down needs a selector");
+  if (!selector) throw new Error(`pointerPress: ${action} needs a selector`);
   const box = await ctx.iframe.locator(selector).boundingBox();
   if (!box) throw new Error(`pointerPress: ${selector} is not visible`);
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
+  await page.mouse.down({ button });
+  if (action === "click") await page.mouse.up({ button });
+};
+
+/**
+ * Moves the real mouse off the test frame, so a test starts with no hover from an earlier one.
+ * The browser re-checks hover after layout (WebKit late), and a button under the pointer then
+ * fades to its hover colour. The point is outside the viewport, which the test frame fills, so the
+ * move leaves the page's own pointer listeners quiet: a point inside it would count as the person's input.
+ * The mouse projects call this before each test (testing/pointer-setup.ts).
+ * @claim "Moves the real mouse off the test frame, so a test starts with no hover from an earlier one." registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::the pointer between tests > renders a button under the old pointer without hovering it, under a theme with a hover colour)
+ * @claim "The mouse projects call this before each test" registry/ouro/lib/ouro/testing/pointer-setup.ts verify:fileLine(registry/ouro/lib/ouro/testing/pointer-setup.ts, /commands\.parkPointer/)
+ * @claim "leaves the page's own pointer listeners quiet" registry/ouro/lib/ouro/use-mounted-open.test.tsx verify:testExists(registry/ouro/lib/ouro/use-mounted-open.test.tsx::useMountedOpen > does not count an overlay open before anything was pressed)
+ */
+export const parkPointer: BrowserCommand<[]> = async (ctx) => {
+  await ctx.page.mouse.move(-1, -1);
 };
 
 /**
@@ -1145,6 +1338,94 @@ export const restoreTouch: BrowserCommand<[]> = async (ctx) => {
   await (await chromiumSession(ctx))?.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
 };
 
+/** A layer Chromium's compositor draws on its own, and the element it draws. */
+export interface CompositedLayer {
+  /** The element, as `TAG[data-ouro="…"][data-ouro-part="…"]` (with the attributes it has), or null for a layer of the page's own. */
+  element: string | null;
+  width: number;
+  height: number;
+}
+
+/**
+ * The page's composited layers now, from Chromium's compositor (CDP `LayerTree`), with the
+ * element that each draws. An element gets one while it has `will-change: transform` or a running
+ * transform animation, or when it overlaps one; compare the count at rest, during motion and once
+ * it has settled. Chromium only: it throws elsewhere.
+ *
+ * @example
+ * const before = await commands.compositedLayers();
+ * // … scroll, then wait for the motion to settle …
+ * expect(await commands.compositedLayers()).toHaveLength(before.length);
+ * @claim "with the element that each draws" registry/ouro/lib/ouro/testing/commands.ts verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /DOM\.describeNode/)
+ * @claim "An element gets one while it has `will-change: transform`" registry/ouro/lib/ouro/testing/commands.test.ts verify:fileLine(registry/ouro/lib/ouro/testing/commands.test.ts, /compositedLayers lists a layer for an element only while it has will-change: transform/)
+ * @claim "Chromium only: it throws elsewhere" registry/ouro/lib/ouro/testing/commands.test.ts verify:fileLine(registry/ouro/lib/ouro/testing/commands.test.ts, /compositedLayers throws outside Chromium/)
+ */
+export const compositedLayers: BrowserCommand<[]> = async (ctx) => {
+  const session = await chromiumSession(ctx);
+  if (!session) throw new Error("compositedLayers: CDP is Chromium only");
+  type Layer = { backendNodeId?: number; width: number; height: number };
+  const trees: Layer[][] = [];
+  const changed = (event: { layers?: Layer[] }) => {
+    if (event.layers) trees.push(event.layers);
+  };
+  // Chromium reports the tree only when it changes, so a probe of its own changes it: a layer off the page's top
+  // start, painted last, which overlaps nothing and so moves nothing else onto a layer. The tree that has it is the
+  // page's, less the probe.
+  // Runs in the page; written without DOM types, which an app's config for this file may lack.
+  type Page = {
+    document: { getElementById: (id: string) => { remove: () => void } | null; createElement: (tag: string) => { id: string; style: { cssText: string } }; body: { append: (node: object) => void } };
+    requestAnimationFrame: (callback: () => void) => number;
+  };
+  const frames = () =>
+    ctx.page.evaluate(() => {
+      const page = globalThis as unknown as Page;
+      return new Promise<void>((resolve) => page.requestAnimationFrame(() => page.requestAnimationFrame(resolve)));
+    });
+  const probe = (add: boolean) =>
+    ctx.page.evaluate((add) => {
+      const page = globalThis as unknown as Page;
+      page.document.getElementById("ouro-compositor-probe")?.remove();
+      if (!add) return;
+      const node = page.document.createElement("div");
+      node.id = "ouro-compositor-probe";
+      node.style.cssText = "position:fixed;top:-8px;left:-8px;width:1px;height:1px;will-change:transform;pointer-events:none";
+      page.document.body.append(node);
+    }, add);
+  session.on("LayerTree.layerTreeDidChange", changed);
+  let tree: Layer[] | undefined;
+  let probeId: number | undefined;
+  try {
+    await session.send("LayerTree.enable");
+    await probe(true);
+    const { result } = await session.send("Runtime.evaluate", { expression: 'document.getElementById("ouro-compositor-probe")' });
+    probeId = (await session.send("DOM.describeNode", { objectId: result.objectId! })).node.backendNodeId;
+    const probed = () => trees.filter((layers) => layers.some((layer) => layer.backendNodeId === probeId)).at(-1);
+    for (let attempt = 0; attempt < 30 && probed() === undefined; attempt++) await frames();
+    // Two frames more, so a change the page made just before the call is in the tree too.
+    await frames();
+    tree = probed();
+  } finally {
+    session.off("LayerTree.layerTreeDidChange", changed);
+    await session.send("LayerTree.disable");
+    await probe(false);
+  }
+  if (tree === undefined) throw new Error("compositedLayers: Chromium sent no layer tree");
+  return Promise.all(
+    tree
+      .filter((layer) => layer.backendNodeId !== probeId)
+      .map(async ({ backendNodeId, width, height }): Promise<CompositedLayer> => {
+        if (backendNodeId === undefined) return { element: null, width, height };
+        const { node } = await session.send("DOM.describeNode", { backendNodeId });
+        const attributes = node.attributes ?? [];
+        const named = ["data-ouro", "data-ouro-part"].flatMap((name) => {
+          const at = attributes.indexOf(name);
+          return at % 2 === 0 ? [`[${name}="${attributes[at + 1]}"]`] : [];
+        });
+        return { element: `${node.nodeName}${named.join("")}`, width, height };
+      }),
+  );
+};
+
 export type TouchStepOptions =
   | {
       /** `touchStart` puts the finger down and `touchMove` moves it. */
@@ -1180,24 +1461,41 @@ function acknowledged(command: string, point: TouchPoint, send: () => Promise<un
   );
 }
 
-/** Lifts a finger `touchStep` left down, so the next gesture starts clean. */
+/**
+ * Whether Chromium refused a touch event because it holds no finger to move or lift, as when a
+ * timed-out test's body moves a finger its afterEach has already lifted.
+ * @claim "Whether Chromium refused a touch event" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::a move sent after a timed-out test's finger was lifted leaves no finger behind, so a later gesture in the tab works)
+ */
+function noFingerDown(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("Must send a TouchStart first");
+}
+
+/**
+ * Lifts a finger `touchStep` left down, so the next gesture starts clean. A finger Chromium no
+ * longer holds is already lifted: the kit forgets it rather than refusing every later gesture.
+ * @claim "A finger Chromium no longer holds" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a lift Chromium refuses because it holds no finger forgets that finger, so every later gesture starts clean)
+ */
 async function releaseFinger(command: string, page: Page, session: CDPSession) {
   const finger = fingersDown.get(page);
   if (!finger) return;
   fingersDown.delete(page);
   const send = () => session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   const end = { type: "touchEnd" as const, x: finger.x, y: finger.y };
-  if (finger.frame) {
-    await sendTouch(command, page, session, end, { frame: finger.frame }, send);
-    return;
+  try {
+    if (finger.frame) {
+      await sendTouch(command, page, session, end, { frame: finger.frame }, send);
+      return;
+    }
+    // A page that never handled the touchstart gets no touchend to wait for. A lift Chromium does not
+    // acknowledge keeps the finger down, to lift before the next gesture.
+    await acknowledged(command, end, send, TOUCH_HANDLED_TIMEOUT_MS).catch((error: unknown) => {
+      if (!noFingerDown(error)) fingersDown.set(page, finger);
+      throw error;
+    });
+    await Promise.all(watchTouch(page, "settle", end, TOUCH_TIDY_MS));
+  } catch (error) {
+    if (!noFingerDown(error)) throw error;
   }
-  // A page that never handled the touchstart gets no touchend to wait for. A lift Chromium does not
-  // acknowledge keeps the finger down, to lift before the next gesture.
-  await acknowledged(command, end, send, TOUCH_HANDLED_TIMEOUT_MS).catch((error: unknown) => {
-    fingersDown.set(page, finger);
-    throw error;
-  });
-  await Promise.all(watchTouch(page, "settle", end, TOUCH_TIDY_MS));
 }
 
 /**
@@ -1205,7 +1503,8 @@ async function releaseFinger(command: string, page: Page, session: CDPSession) {
  * gestures `touchDrag` can't make: a finger that stops and stays down mid-swipe. The same
  * finger stays down between calls until `touchEnd`. Lift it in a `finally`, so a failed
  * assertion mid-gesture doesn't leave it down; a finger left down anyway is lifted before
- * the next `touchStart` or `touchDrag`.
+ * the next `touchStart` or `touchDrag`. A step Chromium refuses leaves the finger where it was,
+ * or none when Chromium holds no finger, so a later gesture in the tab still starts clean.
  *
  * Each step resolves once the page has handled its event. A `touchStart` first waits until
  * the frame at its point has the kit's watcher, up to 5 seconds, and throws naming that frame
@@ -1219,6 +1518,9 @@ async function releaseFinger(command: string, page: Page, session: CDPSession) {
  * @claim "Once the gesture scrolls the page" https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/platform/widget/input/main_thread_event_queue.cc verify:urlOk(https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/platform/widget/input/main_thread_event_queue.cc)
  * @claim "So a step can take up" registry/ouro/lib/ouro/testing/commands.ts verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /const\sTOUCH_HANDLED_TIMEOUT_MS\s=\s5000;/)
  * @claim "So a step can take up" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::a lift into a frame that has gone is sent all the same, and throws naming the frame)
+ * @claim "A step Chromium refuses leaves" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::a move sent after a timed-out test's finger was lifted leaves no finger behind, so a later gesture in the tab works)
+ * @claim "A step Chromium refuses leaves" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a move Chromium refuses because it holds no finger records none, as after a timed-out test's afterEach lifted it, so later gestures go on)
+ * @claim "A step Chromium refuses leaves" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a lift Chromium refuses because it holds no finger forgets that finger, so every later gesture starts clean)
  */
 export const touchStep: BrowserCommand<[TouchStepOptions]> = async (ctx, step) => {
   const session = await chromiumSession(ctx);
@@ -1230,9 +1532,18 @@ export const touchStep: BrowserCommand<[TouchStepOptions]> = async (ctx, step) =
   const last = fingersDown.get(page);
   const finger: { x: number; y: number; frame: Frame | undefined } = { x, y, frame: type === "touchMove" ? last?.frame : undefined };
   // The finger is down once the event is sent, and not before: a touch the kit refuses to send leaves none to lift.
+  // One Chromium refuses leaves the finger where it was, or none when Chromium holds no finger.
   const send = async () => {
     fingersDown.set(page, finger);
-    await session.send("Input.dispatchTouchEvent", { type, touchPoints: [{ x, y, id: 1 }] });
+    try {
+      await session.send("Input.dispatchTouchEvent", { type, touchPoints: [{ x, y, id: 1 }] });
+    } catch (error) {
+      if (fingersDown.get(page) === finger) {
+        if (last && !noFingerDown(error)) fingersDown.set(page, last);
+        else fingersDown.delete(page);
+      }
+      throw error;
+    }
   };
   // Chromium sends the page nothing for a move to where the finger already is.
   if (type === "touchMove" && last?.x === x && last.y === y) await acknowledged("touchStep", { type, x, y }, send, TOUCH_HANDLED_TIMEOUT_MS);
@@ -1243,14 +1554,37 @@ export const touchStep: BrowserCommand<[TouchStepOptions]> = async (ctx, step) =
   }
 };
 
-export const commands = { emulateMedia, drag, flick, pageZoom, pointerPress, resetPageZoom, restoreTouch, setPageZoom, tap, touchDrag, touchStep };
+export const commands = {
+  compositedLayers,
+  emulateMedia,
+  mediaState,
+  restoreMedia,
+  resetMedia,
+  doubleTap,
+  drag,
+  flick,
+  pageZoom,
+  parkPointer,
+  pointerPress,
+  resetPageZoom,
+  restoreTouch,
+  setPageZoom,
+  tap,
+  touchDrag,
+  touchStep,
+};
 
 declare module "vitest/browser" {
   interface BrowserCommands {
     emulateMedia: (options: EmulateMediaOptions) => Promise<void>;
+    mediaState: () => Promise<MediaState>;
+    restoreMedia: (state: MediaState) => Promise<void>;
+    resetMedia: () => Promise<void>;
+    parkPointer: () => Promise<void>;
     drag: (options: DragOptions) => Promise<void>;
     flick: (options: FlickOptions) => Promise<void>;
     tap: (selector: string) => Promise<void>;
+    doubleTap: (options: DoubleTapOptions) => Promise<void>;
     touchDrag: (options: TouchDragOptions) => Promise<void>;
     touchStep: (options: TouchStepOptions) => Promise<void>;
     pointerPress: (options: PointerPressOptions) => Promise<void>;
@@ -1258,5 +1592,6 @@ declare module "vitest/browser" {
     resetPageZoom: () => Promise<void>;
     restoreTouch: () => Promise<void>;
     setPageZoom: (scale: number) => Promise<void>;
+    compositedLayers: () => Promise<CompositedLayer[]>;
   }
 }

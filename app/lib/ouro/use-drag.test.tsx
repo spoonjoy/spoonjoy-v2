@@ -112,6 +112,11 @@ describe("useDrag", () => {
     await fire(pad, "pointerdown", 100, 50);
     await fire(pad, "pointermove", 112, 62);
     await fire(pad, "pointerup", 112, 62);
+    expect(calls.start).toEqual([]);    // So does the other axis reaching exactly 10px first: a later sideways move starts nothing.
+    await fire(pad, "pointerdown", 100, 50);
+    await fire(pad, "pointermove", 104, 60);
+    await fire(pad, "pointermove", 140, 60);
+    await fire(pad, "pointerup", 140, 60);
     expect(calls.start).toEqual([]);
   });
 
@@ -124,6 +129,43 @@ describe("useDrag", () => {
     expect(calls.start.length).toBe(1);
     expect(calls.move.map((state) => state.delta)).toEqual([11]);
     await fire(pad, "pointerup", 170, 61);
+  });
+
+  it("follows both axes when asked, from its threshold in any direction, with the other axis's movement and velocity", async () => {
+    const { calls, pad } = await mount({ axis: "x", crossAxis: "follow", threshold: 5 });
+    await fire(pad, "pointerdown", 100, 50);
+    // 3 and 3 is less than 5 away, even though neither axis alone reaches it.
+    await fire(pad, "pointermove", 103, 53);
+    expect(calls.start).toEqual([]);
+    // 3 and 4 is 5 away: it starts, mostly down, where the other axis would have won.
+    await fire(pad, "pointermove", 103, 54, 10);
+    expect(calls.start.length).toBe(1);
+    // Straight down, it goes on.
+    await fire(pad, "pointermove", 100, 56, 0);
+    expect(calls.move.map(({ delta, crossDelta }) => [delta, crossDelta])).toEqual([
+      [3, 4],
+      [0, 6],
+    ]);
+    await fire(pad, "pointermove", 140, 106, 20);
+    const last = calls.move.at(-1)!;
+    expect([last.delta, last.crossDelta]).toEqual([40, 56]);
+    // From the press 46ms before: 40px and 56px.
+    expect(last.velocity).toBeCloseTo(40 / 46);
+    expect(last.crossVelocity).toBeCloseTo(56 / 46);
+    await fire(pad, "pointerup", 140, 106, 0);
+    expect(calls.end[0]).toMatchObject({ delta: 40, crossDelta: 56, cancelled: false });
+    expect(calls.end[0]!.crossVelocity).toBeCloseTo(56 / 46);
+  });
+
+  it("reports the other axis on a one-axis drag too, and nothing for a release with no time to measure", async () => {
+    const { calls, pad } = await mount({ axis: "y" });
+    await fire(pad, "pointerdown", 100, 50);
+    await fire(pad, "pointermove", 104, 70, 20, {}, null);
+    expect(calls.move.map(({ delta, crossDelta }) => [delta, crossDelta])).toEqual([[20, 4]]);
+    expect(calls.move[0]!.crossVelocity).toBeCloseTo(4 / 20);
+    // A release 100ms or more after the last move has no moves to measure.
+    await fire(pad, "pointerup", 104, 70, 150);
+    expect(calls.end[0]).toMatchObject({ velocity: 0, crossVelocity: 0 });
   });
 
   it("takes its own threshold", async () => {
@@ -180,6 +222,12 @@ describe("useDrag", () => {
     // 3px in the 60ms from the oldest move of the last 100ms to the lift.
     expect(calls.end[3]!.velocity).toBeCloseTo(0.05, 9);
     expect(calls.end[3]!.flick).toBe(false);
+    // Exactly FLICK_VELOCITY is a flick: 11px in 100ms.
+    await fire(pad, "pointerdown", 100, 50, 1000);
+    await fire(pad, "pointermove", 111, 50, 100);
+    expect(calls.move.at(-1)).toMatchObject({ velocity: FLICK_VELOCITY, flick: true });
+    await fire(pad, "pointerup", 111, 50, 0);
+    expect(calls.end[4]).toMatchObject({ velocity: FLICK_VELOCITY, flick: true });
     // Two events in the same instant give no velocity, not a division by zero.
     await fire(pad, "pointerdown", 100, 50, 1000);
     await fire(pad, "pointermove", 130, 50, 0);

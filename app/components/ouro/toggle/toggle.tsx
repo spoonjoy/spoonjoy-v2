@@ -9,10 +9,12 @@ import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import {
   iconClass,
   looks,
+  shapes,
   sizes,
   squareClass,
   toggleBase,
   toggleHint,
+  toggleShapeWarning,
   toggleSizeWarning,
   toggleVariantWarning,
   type ToggleIcon,
@@ -48,16 +50,25 @@ export interface ToggleOwnProps {
    */
   variant?: "plain" | "outline" | (string & { 'From shadcn? default is "plain"; use "plain" or "outline"': never }) | undefined;
   /**
-   * Control size, as Button's: each is taller on phones and steps down to desktop density from
-   * the `sm` breakpoint with a fine pointer. shadcn's `default` is `md`.
+   * Control size, as Button's, plus `xs` for dense rows of filter chips: each is taller on phones
+   * and steps down to desktop density from the `sm` breakpoint with a fine pointer. `xs` is 24px
+   * there and keeps a 44px touch target on phones. shadcn's `default` is `md`.
    * @default "md"
-   * @claim "Control size, as Button's: each is" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle looks > is 44px tall on phones and steps down with a fine pointer from sm, per size)
-   * @claim "Control size, as Button's: each is" https://ui.shadcn.com/docs/components/toggle verify:urlOk(https://ui.shadcn.com/docs/components/toggle)
+   * @claim "Control size, as Button's, plus" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle looks > is 44px tall on phones and steps down with a fine pointer from sm, per size)
+   * @claim "Control size, as Button's, plus" https://ui.shadcn.com/docs/components/toggle verify:urlOk(https://ui.shadcn.com/docs/components/toggle)
+   * @claim "`xs` is 24px there and keeps" registry/ouro/components/ouro/toggle/toggle.touch.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.touch.test.tsx::gives an extra-small pill a 44px hit area)
    */
-  size?: "sm" | "md" | "lg" | (string & { 'From shadcn? default is "md"': never }) | undefined;
+  size?: "xs" | "sm" | "md" | "lg" | (string & { 'From shadcn? default is "md"': never }) | undefined;
+  /**
+   * `rect` has the theme's corners and medium text; `pill` is fully rounded with regular-weight
+   * text, for filter chips. With `hideLabel` a pill is a circle.
+   * @default "rect"
+   * @claim "`pill` is fully rounded with regular-weight" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle looks > rounds fully with regular-weight text with shape pill)
+   */
+  shape?: "rect" | "pill" | (string & { 'Use "rect" or "pill"; rounded-full is "pill"': never }) | undefined;
   /**
    * Layout only: margins, grid placement (`mt-4`). Appearance classes warn in development;
-   * use `variant` and `size` instead.
+   * use `variant`, `size` and `shape` instead.
    */
   className?: string | undefined;
   /** The button element. */
@@ -110,11 +121,12 @@ export type ToggleProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, keyof To
  * instead for a setting that takes effect at once, and `Checkbox` for a form value.
  *
  * @group Actions
- * @see https://ui.ouro.bot/docs/toggle
+ * @see https://ui.ouroboros.bot/docs/toggle
  *
  * @example
  * <Toggle label="Bold" icon={BoldIcon} hideLabel pressed={bold} onPressedChange={setBold} />
  * <Toggle label="Show completed" variant="outline" defaultPressed />
+ * <Toggle label="Unread" variant="outline" shape="pill" size="xs" />
  */
 export function Toggle(props: ToggleProps): JSX.Element {
   const {
@@ -127,6 +139,7 @@ export function Toggle(props: ToggleProps): JSX.Element {
     disabled,
     variant: variantProp = "plain",
     size: sizeProp = "md",
+    shape: shapeProp = "rect",
     className,
     ref,
     // Guard props (hint types), dropped here so they never reach the DOM.
@@ -146,6 +159,7 @@ export function Toggle(props: ToggleProps): JSX.Element {
   // A variant or size that is not one of Toggle's (a type error) warns and renders the default.
   const variant = Object.hasOwn(looks, variantProp) ? (variantProp as keyof typeof looks) : "plain";
   const size = Object.hasOwn(sizes, sizeProp) ? (sizeProp as keyof typeof sizes) : "md";
+  const shape = Object.hasOwn(shapes, shapeProp) ? (shapeProp as keyof typeof shapes) : "rect";
   useAppearanceClassNameCheck(
     "Toggle",
     className,
@@ -157,6 +171,7 @@ export function Toggle(props: ToggleProps): JSX.Element {
       ? () => [
           variant !== variantProp && toggleVariantWarning("Toggle", String(variantProp)),
           size !== sizeProp && toggleSizeWarning("Toggle", String(sizeProp)),
+          shape !== shapeProp && toggleShapeWarning("Toggle", String(shapeProp)),
           !label && ["label is empty, so the toggle has no name", '<Toggle label="Bold">'],
           hideLabel && !Icon && ["hideLabel leaves nothing to see without an icon", `<Toggle label="${label}" icon={BoldIcon} hideLabel>`],
           children !== undefined && ["children is not a prop; the label is", `<Toggle label="${typeof children === "string" ? children : "Bold"}">`],
@@ -188,7 +203,8 @@ export function Toggle(props: ToggleProps): JSX.Element {
       aria-label={hideLabel ? label : rest["aria-label"]}
       data-ouro="toggle"
       data-variant={variant}
-      className={cn(toggleBase, sizes[size], looks[variant], iconOnly && squareClass, className)}
+      data-shape={shape}
+      className={cn(toggleBase, shapes[shape], sizes[size], looks[variant], iconOnly && squareClass, className)}
     >
       <TouchTarget />
       {Icon && <Icon aria-hidden="true" className={cn(iconClass, "relative", !hideLabel && "-ms-0.5")} />}

@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, type KeyboardEvent, type ReactElement } from "react";
 import { expectTypeOf } from "vitest";
 import { Combobox, type ComboboxProps } from "~/components/ouro/combobox/combobox";
 expectTypeOf<readonly ["Taken."]>().toExtend<NonNullable<ComboboxProps["error"]>>();
@@ -8,6 +8,18 @@ expectTypeOf<readonly ["Taken."]>().toExtend<NonNullable<ComboboxProps["error"]>
 
 // Valid shapes: the Field contract, items as strings or objects, and each mode.
 expectTypeOf<{ label: "Herb"; items: ["Basil", "Dill"] }>().toExtend<ComboboxProps>();
+expectTypeOf<{
+  label: "To";
+  multiple: true;
+  items: [{ value: "rowan"; label: "Rowan Vale"; description: "Designer"; media: ReactElement; meta: ReactElement }];
+  autoHighlight: true;
+  inputValue: "Ro";
+  onInputChange: (text: string) => void;
+  onInputKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
+  readOnly: true;
+}>().toExtend<ComboboxProps>();
+// allowCustomValue's text is its value, so it takes no inputValue.
+expectTypeOf<{ label: "Cuisine"; items: []; allowCustomValue: true; inputValue: "Thai" }>().not.toExtend<ComboboxProps>();
 expectTypeOf<{
   label: "Cheese";
   hideLabel: true;

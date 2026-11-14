@@ -212,12 +212,26 @@ describe("audit", () => {
       '<svg role="img" aria-label="Plan" width="300" height="80"><defs><linearGradient id="paper"><stop offset="0" stop-color="#fff" /><stop offset="1" stop-color="#eee" /></linearGradient></defs>' +
         '<rect width="300" height="80" fill="url(#paper)" /><text id="dark-label" x="10" y="30" fill="#111">232 FEET</text><text id="faint-label" x="10" y="60" fill="#aaa">26 FT</text></svg>',
     );
-    const shots = vi.spyOn(page, "screenshot");
-    const findings = await scanPage();
-    expect(findings.map((finding) => `${finding.undecided ? "undecided " : ""}${finding.rule} ${finding.target}`)).toEqual(["undecided color-contrast #faint-label"]);
+    // The pictures the kit got. A try that ran out of time is no picture: on a box that holds still
+    // the kit tries once more, as when Vitest's own process stalled on a loaded runner.
+    const take = page.screenshot.bind(page);
+    const pictures: Element[] = [];
+    const shots = vi.spyOn(page, "screenshot").mockImplementation((options) =>
+      take(options).then((data) => {
+        pictures.push((options as { element: Element }).element);
+        return data;
+      }),
+    );
+    try {
+      const findings = await scanPage();
+      expect(findings.map((finding) => `${finding.undecided ? "undecided " : ""}${finding.rule} ${finding.target}`)).toEqual(["undecided color-contrast #faint-label"]);
+    } finally {
+      shots.mockRestore();
+    }
     // One picture of the SVG, and one of the faint label alone, as a sticky bar could have covered it.
-    expect(shots).toHaveBeenCalledTimes(2);
-    shots.mockRestore();
+    const svg = document.querySelector("svg")!;
+    const faint = document.querySelector("#faint-label")!;
+    expect(pictures.map((element) => (element === faint ? "the faint label" : element.contains(svg) ? "the SVG" : element.localName))).toEqual(["the SVG", "the faint label"]);
   });
 
   it("fails text that other text is drawn over, as a tag without a background over a line", async () => {
@@ -455,6 +469,26 @@ describe("audit", () => {
     expect([window.scrollY, box.scrollTop]).toEqual([100, 50]);
   });
 
+  it("scrolls to the text at once under scroll-behavior: smooth, so it never measures a page still scrolling", async () => {
+    // Under a smooth scroll the screenshot could catch the page still moving, its pixels offset from the text's cells, so
+    // they would fall on what is next to the text (ourostack/ouro-ui#535).
+    document.documentElement.style.scrollBehavior = "smooth";
+    const seen = new Set<number>();
+    const record = () => seen.add(Math.round(window.scrollY));
+    try {
+      mountPage('<div style="height:3000px"></div><p id="far" style="margin:0;padding:8px;color:#111;background:#fff">Far down the page</p><div style="height:3000px"></div>');
+      window.scrollTo({ top: 0, behavior: "instant" });
+      window.addEventListener("scroll", record);
+      expect(await measureTextContrast(document.querySelector("#far")!, 4.5)).toEqual({ pass: true });
+    } finally {
+      window.removeEventListener("scroll", record);
+      document.documentElement.style.scrollBehavior = "";
+    }
+    // Where it scrolled to measure, and back to the top: no place in between.
+    expect(seen.size).toBeLessThanOrEqual(2);
+    expect(window.scrollY).toBe(0);
+  });
+
   it("puts back the scroll position of a scrolled box inside a shadow root", async () => {
     const gradient = "margin:0;padding:8px;color:#111;background:linear-gradient(90deg,#fff,#eee)";
     const scroller = (name: string) =>
@@ -496,11 +530,26 @@ describe("audit", () => {
 
   it("tries a screenshot once more when it ran out of time on a box that shows and holds still, as when Vitest's own process stalled", async () => {
     mountPage('<p id="text" style="margin:0;padding:8px;color:#111;background:linear-gradient(90deg,#fff,#eee)">Text on a gradient</p>');
-    const take = page.screenshot.bind(page);
-    const shots = vi.spyOn(page, "screenshot").mockRejectedValueOnce(new Error("locator.screenshot: Timeout 555ms exceeded.")).mockImplementation((options) => take(options));
+    // The second shot is drawn here rather than taken, so a stall of the runner, the one the retry is for, cannot fail
+    // the test that proves it: a white box the size of the element, as the page shows it with its glyphs hidden.
+    const drawn = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(box.width * devicePixelRatio);
+      canvas.height = Math.round(box.height * devicePixelRatio);
+      const context = canvas.getContext("2d")!;
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/png").slice("data:image/png;base64,".length);
+    };
+    const shots = vi
+      .spyOn(page, "screenshot")
+      .mockRejectedValueOnce(new Error("locator.screenshot: Timeout 555ms exceeded."))
+      .mockImplementation(async (options) => drawn(options!.element as Element));
     try {
       expect(await measureTextContrast(document.querySelector("#text")!, 4.5)).toEqual({ pass: true });
       expect(shots).toHaveBeenCalledTimes(2);
+      expect(shots.mock.calls.map(([options]) => options?.timeout)).toEqual([5000, 15_000]);
     } finally {
       shots.mockRestore();
     }
@@ -510,7 +559,7 @@ describe("audit", () => {
     mountPage('<p id="flat" style="margin:0;height:0;color:#111;background:#fff">Text over a box with no height</p>');
     const shots = vi.spyOn(page, "screenshot").mockRejectedValue(new Error("locator.screenshot: Timeout 5000ms exceeded."));
     try {
-      expect(await measureTextContrast(document.querySelector("#flat")!, 4.5)).toEqual({ pass: false, reason: expect.stringMatching(/could not be screenshotted: locator\.screenshot: Timeout 5000ms exceeded\.$/) });
+      expect(await measureTextContrast(document.querySelector("#flat")!, 4.5)).toEqual({ pass: false, reason: expect.stringMatching(/the screenshot to measure it threw: locator\.screenshot: Timeout 5000ms exceeded\.$/) });
       expect(shots).toHaveBeenCalledTimes(1);
     } finally {
       shots.mockRestore();

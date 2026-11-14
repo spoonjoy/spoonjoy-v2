@@ -190,3 +190,43 @@ export const Parts: Story = {
     </SheetRoot>
   ),
 };
+
+const looks = [
+  { name: "Ocean", color: "oklch(0.55 0.15 245)" },
+  { name: "Forest", color: "oklch(0.52 0.12 150)" },
+  { name: "Sunset", color: "oklch(0.62 0.17 45)" },
+] as const;
+
+/**
+ * `modal={false}`: a panel beside a page that stays in use, here a live preview of a look. No
+ * backdrop dims the page, its controls stay in reach, and the sheet closes with Escape or its
+ * close button.
+ */
+export const NonModal: Story = {
+  parameters: { screenshot: { name: "sheet-non-modal", open: true }, layout: "fullscreen" },
+  render: function Render() {
+    const [look, setLook] = useState<(typeof looks)[number]>(looks[0]);
+    return (
+      <div style={{ ...stack, padding: 24, maxWidth: 520 }}>
+        <span style={caption}>Preview</span>
+        <div style={{ display: "grid", gap: 8, padding: 16, borderRadius: 12, border: "1px solid var(--border)" }}>
+          <p style={{ ...body, fontWeight: 600 }}>Shakshuka for two</p>
+          <p style={{ ...body, color: "var(--muted-foreground)" }}>Eggs poached in a spiced tomato sauce, ready in 25 minutes.</p>
+          <span style={{ height: 8, borderRadius: 4, background: look.color }} />
+        </div>
+        <div style={row}>
+          <Sheet title="Look" description="Pick one; the page shows it at once." side="right" modal={false} trigger={<Button variant="soft">Change look</Button>}>
+            <div style={{ display: "grid", gap: 4 }}>
+              {looks.map((item) => (
+                <Button key={item.name} variant={item === look ? "soft" : "plain"} tone={item === look ? "primary" : "secondary"} fullWidth aria-pressed={item === look} onClick={() => setLook(item)}>
+                  {item.name}
+                </Button>
+              ))}
+            </div>
+          </Sheet>
+          <span style={caption}>{look.name}</span>
+        </div>
+      </div>
+    );
+  },
+};

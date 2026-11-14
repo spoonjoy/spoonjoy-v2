@@ -129,7 +129,7 @@ describe("shopping list OpenAI and add-from-recipe coverage", () => {
       init: { status: 400 },
       data: {
         errors: {
-          parse: "Couldn't confidently parse one item. Review and correct before adding.",
+          parse: "Spoonjoy isn't sure how to read this item. Review and correct before adding.",
         },
         parseDraft: {
           quantity: "2",
@@ -204,7 +204,7 @@ describe("shopping list OpenAI and add-from-recipe coverage", () => {
       init: { status: 400 },
       data: {
         errors: {
-          parse: "Unable to parse item right now. Review and correct before adding.",
+          parse: "The AI item reader didn't answer, so Spoonjoy read this item with its basic rules. Review and correct before adding.",
         },
       },
     });

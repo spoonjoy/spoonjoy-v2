@@ -245,7 +245,41 @@ function recorder(audit: SchemeAudit): Recorder {
  * Everything but the tab-order walk, in the theme the page shows now. The walk moves focus, and Tab
  * can close a popup, so it runs after every other measurement (walkFocus).
  */
+/**
+ * Ouro UI's CodeBlock (v1.3.33) draws its focus ring on an empty, aria-hidden span stacked over the
+ * code in the same grid cell (`data-slot="focus-ring"`, `relative z-1`). It paints nothing until the
+ * code has keyboard focus, but axe sees an element over the code and cannot decide its contrast
+ * ("bgOverlap"), so each line was measured from screenshots instead: on /developers, 57 code
+ * blocks, 484 screenshots and 1,027 element waits, past the test's 60 s (journeys run 43596941633).
+ * The audit takes the empty span out while it measures, so axe judges the code as painted.
+ */
+export const FOCUS_RING_HOLD_CSS = '[data-ouro="code-block"] > [data-slot="focus-ring"] { display: none !important; }';
+const FOCUS_RING_HOLD_ID = "sj-audit-code-focus-ring-hold";
+
+async function holdCodeFocusRings(page: Page): Promise<void> {
+  await page.evaluate(({ id, css }) => {
+    if (document.getElementById(id)) return;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent = css;
+    document.head.append(style);
+  }, { id: FOCUS_RING_HOLD_ID, css: FOCUS_RING_HOLD_CSS });
+}
+
+async function releaseCodeFocusRings(page: Page): Promise<void> {
+  await page.evaluate((id) => document.getElementById(id)?.remove(), FOCUS_RING_HOLD_ID);
+}
+
 async function measureShownScheme(page: Page, options: AuditOptions): Promise<{ audit: SchemeAudit; walks: FocusWalk[] }> {
+  await holdCodeFocusRings(page);
+  try {
+    return await measureShownSchemeHeld(page, options);
+  } finally {
+    await releaseCodeFocusRings(page);
+  }
+}
+
+async function measureShownSchemeHeld(page: Page, options: AuditOptions): Promise<{ audit: SchemeAudit; walks: FocusWalk[] }> {
   await settle(page);
   const scheme = await shownScheme(page);
   const results = await runAxe(page, options.target);

@@ -327,7 +327,7 @@ describe("/api/v1 shell", () => {
       requestId: "req_auth_storage_failure",
       error: {
         code: "internal_error",
-        message: "Internal error",
+        message: "Internal error: Spoonjoy's server hit an unexpected fault",
         status: 500,
       },
     });
@@ -561,12 +561,12 @@ describe("/api/v1 shell", () => {
 	    expect(normalizeApiV1InternalError(new Error("Exploded"))).toMatchObject({
 	      code: "internal_error",
 	      status: 500,
-      message: "Internal error",
+      message: "Internal error: Spoonjoy's server hit an unexpected fault",
     });
     expect(normalizeApiV1InternalError("surprise")).toMatchObject({
       code: "internal_error",
       status: 500,
-      message: "Internal error",
+      message: "Internal error: Spoonjoy's server hit an unexpected fault",
     });
   });
 
@@ -664,7 +664,7 @@ describe("/api/v1 shell", () => {
       requestId: "req_platform_error",
       error: {
         code: "internal_error",
-        message: "Internal error",
+        message: "Internal error: Spoonjoy's server hit an unexpected fault",
         status: 500,
       },
     });

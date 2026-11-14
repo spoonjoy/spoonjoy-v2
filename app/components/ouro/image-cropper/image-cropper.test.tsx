@@ -250,6 +250,16 @@ describe("ImageCropper", () => {
     expect(area().getAttribute("aria-busy")).toBe("true");
   });
 
+  it("reads its labels again when the app gives others", async () => {
+    const image = await photo();
+    const { root } = await render(<Harness image={image} onCropped={() => {}} labels={{ save: "Use photo" }} />);
+    await loaded();
+    await expect.element(page.getByRole("button", { name: "Use photo" })).toBeVisible();
+    await act(async () => root.render(<Harness image={image} onCropped={() => {}} labels={{ save: "Utiliser" }} />));
+    await expect.element(page.getByRole("button", { name: "Utiliser" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Use photo" })).not.toBeInTheDocument();
+  });
+
   it("closes on Cancel without cropping", async () => {
     const onCropped = vi.fn();
     const onOpen = vi.fn();
@@ -260,19 +270,21 @@ describe("ImageCropper", () => {
     expect(onCropped).not.toHaveBeenCalled();
   });
 
+  const fileError = "The browser can't read this file as a photo. Choose a JPEG or PNG photo instead.";
+  const addressError = "The browser didn't load the photo at this address: it is missing, blocked, or not a photo the browser can read. Choose another photo.";
   it.each([
-    ["a file the browser cannot decode", () => new File(["not a picture"], "scan.heic", { type: "image/heic" })],
-    ["an address it cannot read", () => "data:image/png;base64,AAAA"],
-  ])("says so, stops waiting and tells the app when it cannot open %s", async (_name, make) => {
+    ["a file the browser cannot decode", () => new File(["not a picture"], "scan.heic", { type: "image/heic" }), fileError],
+    ["an address it cannot read", () => "data:image/png;base64,AAAA", addressError],
+    ["an address with nothing there", () => `${location.origin}/no-such-photo-${Date.now()}.png`, addressError],
+  ])("says so, stops waiting and tells the app when it cannot open %s", async (_name, make, message) => {
     const announced = watchAnnouncements();
     const onError = vi.fn();
     await render(<Harness image={make()} onCropped={() => {}} onError={onError} />);
     await expect.poll(() => onError.mock.calls).toEqual([["open"]]);
-    const message = "This photo could not be opened. Choose another one.";
     await expect.poll(() => status().textContent).toBe(message);
     await expect.element(page.getByText(message)).toBeVisible();
     expect(area().hasAttribute("aria-busy")).toBe(false);
-    await expect.element(page.getByRole("application", { name: "Photo to crop" })).toHaveAccessibleDescription(/could not be opened/);
+    await expect.element(page.getByRole("application", { name: "Photo to crop" })).toHaveAccessibleDescription(new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     await expect.element(save()).toBeDisabled();
     await expect.element(page.getByRole("slider", { name: "Zoom" })).toBeDisabled();
     expect(area().querySelector("img")!.style.visibility).toBe("hidden");
@@ -304,6 +316,15 @@ describe("ImageCropper", () => {
     await expect.poll(() => onCropped.mock.calls.length).toBe(1);
     expect(onOpen).toHaveBeenCalledExactlyOnceWith(false);
     announced.stop();
+  });
+
+  it("by default names Save by its own label when the browser cannot encode the image", async () => {
+    const file = await photo();
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => callback(null));
+    await render(<Harness image={file} onCropped={() => {}} labels={{ save: "Use photo" }} />);
+    await loaded();
+    await userEvent.click(page.getByRole("button", { name: "Use photo" }));
+    await expect.poll(() => status().textContent).toBe("The browser didn't turn the crop into a file. Press Use photo to try again, or choose another photo.");
   });
 
   it("lets an error thrown by onCrop reach the app instead of hiding it", async () => {

@@ -37,7 +37,7 @@ export class ForkSourceNotFoundError extends Error {
 export class ForkTitleExhaustedError extends Error {
   constructor(baseTitle: string) {
     super(
-      `Could not resolve a unique title for fork of "${baseTitle}" after ${MAX_VARIATION_ATTEMPTS} attempts`,
+      `No unique title is left for a fork of "${baseTitle}": all ${MAX_VARIATION_ATTEMPTS} variations are taken`,
     );
     this.name = "ForkTitleExhaustedError";
   }

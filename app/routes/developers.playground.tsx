@@ -379,7 +379,7 @@ export async function playgroundResponseFromFetchResult(
   }
   return {
     status: result.status,
-    statusText: result.statusText || (result.ok ? "OK" : "ERROR"),
+    statusText: result.statusText || (result.ok ? "OK" : `HTTP ${result.status}`),
     requestId: result.headers.get("X-Request-Id"),
     headers: responseHeadersFrom(result),
     body,
@@ -392,10 +392,10 @@ export async function playgroundResponseFromFetchResult(
 export function playgroundNetworkError(error: unknown): PlaygroundResponse {
   return {
     status: 0,
-    statusText: "NETWORK ERROR",
+    statusText: "NO RESPONSE",
     requestId: null,
     headers: [],
-    body: error instanceof Error ? error.message : "Request failed",
+    body: error instanceof Error ? error.message : "The request threw before a response came back",
     elapsedMs: 0,
   };
 }

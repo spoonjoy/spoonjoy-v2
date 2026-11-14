@@ -1342,14 +1342,14 @@ describe("scheduleSpoonCoverStylization", () => {
       parentCoverId: parentCover.id,
       promptAddition: "try a brighter table",
     });
-    expect(cover.failureReason).toContain("Stylization failed");
+    expect(cover.failureReason).toContain("Stylization stopped: no image provider returned an image");
     expect(cover.failureReason).toContain("img failed");
     expect(postHogBodies(analyticsFetchImpl)).toEqual([
       expect.objectContaining({
         event: "$exception",
         distinct_id: userId,
         properties: expect.objectContaining({
-          $exception_message: "Stylization failed",
+          $exception_message: "Stylization stopped: no image provider returned an image",
           errorDetails: expect.stringContaining("img failed"),
           feature: "recipe_image_generation",
           operation: "cover_stylize",
@@ -1385,7 +1385,7 @@ describe("scheduleSpoonCoverStylization", () => {
     });
 
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
-    expect(cover.failureReason).toBe(`Stylization failed: ${duplicateMessage}`);
+    expect(cover.failureReason).toBe(`Stylization stopped: no image provider returned an image: ${duplicateMessage}`);
   });
 
   it("marks a processing cover failed without consuming quota when the source image is missing", async () => {
@@ -1479,7 +1479,7 @@ describe("scheduleSpoonCoverStylization", () => {
     const [, payload] = errorSpy.error.mock.calls[0];
     expect(payload).toMatchObject({
       name: "ImageGenError",
-      message: "Stylization failed",
+      message: "Stylization stopped: no image provider returned an image",
       cause: expect.objectContaining({
         name: "ImageProviderAttemptError",
         provider: "openai",
@@ -1770,7 +1770,7 @@ describe("scheduleSpoonCoverStylization", () => {
     };
     expectConsoleError("spoon cover stylization failed", {
       name: "ImageGenError",
-      message: "Stylization failed",
+      message: "Stylization stopped: no image provider returned an image",
       code: null,
       status: null,
       type: null,

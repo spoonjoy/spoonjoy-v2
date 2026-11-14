@@ -12,7 +12,7 @@ import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { act } from "~/lib/ouro/testing/act";
 import { pressTab } from "~/lib/ouro/testing/tab";
-import { FormErrorsContext, type ErrorMessages } from "~/lib/ouro/use-field";
+import { FormErrorsContext, useField, type ErrorMessages } from "~/lib/ouro/use-field";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -225,7 +225,7 @@ describe("Form", () => {
             name: ["Too short.", <a key="rules" href="/rules">Read the rules</a>],
             form: (
               <>
-                Could not save. <a href="/status">Status</a>
+                The server is down. <a href="/status">Status</a>
               </>
             ),
           }}
@@ -393,17 +393,17 @@ describe("Form", () => {
     it("re-announces an equal form message only when the answer arrives", async () => {
       const { host } = await render(<RouterPage withAnswer />);
       await userEvent.click(page.getByRole("button", { name: "Save" }));
-      await act(async () => answer({ general: "Could not save." }));
+      await act(async () => answer({ general: "The server is down." }));
       const first = host.querySelector('[role="alert"]')!;
-      expect(first.textContent).toBe("Could not save.");
+      expect(first.textContent).toBe("The server is down.");
       await userEvent.click(page.getByRole("button", { name: "Save" }));
       await expect.element(page.getByRole("button", { name: "Saving" })).toBeVisible();
       // The same element, so nothing is announced at submit time.
       expect(host.querySelector('[role="alert"]')).toBe(first);
-      await act(async () => answer({ general: "Could not save." }));
+      await act(async () => answer({ general: "The server is down." }));
       const second = host.querySelector('[role="alert"]')!;
       expect(second).not.toBe(first);
-      expect(second.textContent).toBe("Could not save.");
+      expect(second.textContent).toBe("The server is down.");
     });
 
     it("with a raw record, keeps a cleared message cleared through a submit's stale re-render", async () => {
@@ -471,12 +471,12 @@ describe("Form", () => {
     it("shows errors on a page an action's plain navigation rendered, with no submit handler", async () => {
       // A form posted without JavaScript comes back as a new page: the Form mounts with the answer.
       const { host } = await render(
-        <Form action="/subscribe" method="post" errors={{ email: "That email is taken.", form: "Could not subscribe." }}>
+        <Form action="/subscribe" method="post" errors={{ email: "That email is taken.", form: "The mailing list is closed." }}>
           <TextField label="Email" name="email" />
         </Form>,
       );
       expect(emailInput().getAttribute("aria-invalid")).toBe("true");
-      expect(host.querySelector('[role="alert"]')!.textContent).toBe("Could not subscribe.");
+      expect(host.querySelector('[role="alert"]')!.textContent).toBe("The mailing list is closed.");
       expect(host.contains(document.activeElement)).toBe(false);
     });
   });
@@ -486,7 +486,7 @@ describe("Form", () => {
       <TextField label="Email" name="email" />
       <TextField label="Name" name="name" />
     </>;
-    const notes = { email: "Taken.", form: "Could not save." };
+    const notes = { email: "Taken.", form: "The server is down." };
     function ClearRequests() {
       const context = useContext(FormErrorsContext)!;
       return <button type="button" onClick={() => {
@@ -683,6 +683,47 @@ describe("Form", () => {
     await userEvent.fill(page.getByRole("textbox", { name: "Email" }), "new@example.com");
     expect(document.activeElement).toBe(input("email"));
     expect(input("bio").getAttribute("aria-invalid")).toBe("true");
+  });
+});
+
+/** A radio group built on Field, as RadioGroup is: each radio takes the field's validity. */
+function Sizes({ picked, pickedDisabled = false }: { picked?: string | undefined; pickedDisabled?: boolean }) {
+  const field = useField()!;
+  return (
+    <div role="radiogroup" aria-labelledby={field.labelId}>
+      {["Small", "Medium", "Large"].map((size) => (
+        <span
+          key={size}
+          role="radio"
+          tabIndex={-1}
+          aria-label={size}
+          aria-checked={size === picked}
+          aria-invalid={field.invalid || undefined}
+          aria-disabled={(pickedDisabled && size === picked) || undefined}
+        />
+      ))}
+    </div>
+  );
+}
+
+describe("Form focus in a radio group", () => {
+  it.each([
+    ["the first radio when none is picked", undefined, false, "Small"],
+    ["the picked radio", "Large", false, "Large"],
+    ["the first radio when the picked one is disabled", "Large", true, "Small"],
+  ])("moves focus to %s when the group's error arrives", async (_name, picked, pickedDisabled, focused) => {
+    const node = (errors: FormErrors | undefined) => (
+      <Form errors={errors}>
+        <Field label="Size" name="size">
+          <Sizes picked={picked} pickedDisabled={pickedDisabled} />
+        </Field>
+      </Form>
+    );
+    const { rerender } = await render(node(undefined));
+    await rerender(node({ size: "That size is sold out." }));
+    await expect.poll(() => document.activeElement?.getAttribute("aria-label")).toBe(focused);
+    expect(document.activeElement!.getAttribute("aria-invalid")).toBe("true");
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 
@@ -928,7 +969,7 @@ describe("Form-level messages (review fix round 1, finding 3)", () => {
 
   it("warns in development about a key no field claims, naming the key, the form's fields and both fixes", async () => {
     await render(
-      <Form errors={{ general: "Could not save.", form: "Shown at the top." }}>
+      <Form errors={{ general: "The server is down.", form: "Shown at the top." }}>
         <TextField label="Email" name="email" />
         <TextField label="Name" name="name" />
       </Form>,
@@ -942,7 +983,7 @@ describe("Form-level messages (review fix round 1, finding 3)", () => {
   });
 
   it("follows its own fix: an object mapped key by key shows the message once and warns about nothing, whatever is missing", async () => {
-    const answers: (Record<string, string | null | undefined> | undefined)[] = [undefined, { general: "Could not save." }, { email: "That email is taken.", name: null }];
+    const answers: (Record<string, string | null | undefined> | undefined)[] = [undefined, { general: "The server is down." }, { email: "That email is taken.", name: null }];
     function Mapped({ answer }: { answer: Record<string, string | null | undefined> | undefined }) {
       return (
         <Form errors={{ form: answer?.general, email: answer?.email, name: answer?.name }}>
@@ -955,7 +996,7 @@ describe("Form-level messages (review fix round 1, finding 3)", () => {
     expect(host.querySelector('[role="alert"]')).toBeNull();
     expect(input("email").getAttribute("aria-invalid")).toBeNull();
     await rerender(<Mapped answer={answers[1]} />);
-    expect(host.querySelector('[role="alert"]')!.textContent).toBe("Could not save.");
+    expect(host.querySelector('[role="alert"]')!.textContent).toBe("The server is down.");
     await rerender(<Mapped answer={answers[2]} />);
     expect(host.querySelector('[role="alert"]')).toBeNull();
     expect(input("email").getAttribute("aria-invalid")).toBe("true");
@@ -975,12 +1016,12 @@ describe("Form-level messages (review fix round 1, finding 3)", () => {
 
   it("leaves focus where the browser put it when the page loads with errors", async () => {
     const { input, host } = await render(
-      <Form errors={{ email: "That email is taken.", form: "Could not save." }}>
+      <Form errors={{ email: "That email is taken.", form: "The server is down." }}>
         <TextField label="Email" name="email" />
       </Form>,
     );
     await expect.poll(() => input("email").getAttribute("aria-invalid")).toBe("true");
-    expect(host.querySelector('[role="alert"]')!.textContent).toBe("Could not save.");
+    expect(host.querySelector('[role="alert"]')!.textContent).toBe("The server is down.");
     expect(host.contains(document.activeElement)).toBe(false);
   });
 
@@ -1000,7 +1041,7 @@ describe("Form-level messages (review fix round 1, finding 3)", () => {
 
   it("warns about a key no field claims in a form with no named field", async () => {
     await render(
-      <Form errors={{ general: "Could not save." }}>
+      <Form errors={{ general: "The server is down." }}>
         <button type="submit">Log out</button>
       </Form>,
     );

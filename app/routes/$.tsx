@@ -7,7 +7,7 @@ import { PageHeader } from "~/components/ouro/page-header/page-header";
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "404 - Page not found | Spoonjoy" },
-    { name: "description", content: "The page you requested could not be found." },
+    { name: "description", content: "There's no page at this address on Spoonjoy." },
   ];
 }
 

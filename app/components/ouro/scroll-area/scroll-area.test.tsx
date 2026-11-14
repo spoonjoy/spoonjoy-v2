@@ -2,7 +2,8 @@ import { type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, server, userEvent } from "vitest/browser";
+import { Button } from "~/components/ouro/button/button";
 import { ScrollArea } from "~/components/ouro/scroll-area/scroll-area";
 import { act } from "~/lib/ouro/testing/act";
 
@@ -93,6 +94,40 @@ describe("ScrollArea", () => {
     expect(getComputedStyle(scrollbar).pointerEvents).toBe("auto");
   });
 
+  it("keeps a vertical area's content to the viewport's width, so a child that cannot wrap does not widen the text beside it", async () => {
+    const unbroken = "a".repeat(300);
+    const { area, viewport } = await render(
+      <ScrollArea className="h-40 w-[380px]" label="Method">
+        <div>
+          <p>Stir the sauce until it thickens, then pour it over the rice.</p>
+          <Button>{unbroken}</Button>
+        </div>
+      </ScrollArea>,
+    );
+    expect(area.getBoundingClientRect().width).toBe(380);
+    const content = viewport.firstElementChild as HTMLElement;
+    const paragraph = content.querySelector("p")!;
+    await expect.poll(() => paragraph.getBoundingClientRect().height).toBeGreaterThan(20);
+    expect(content.getBoundingClientRect().width).toBe(viewport.clientWidth);
+    expect(paragraph.getBoundingClientRect().width).toBeLessThanOrEqual(380);
+  });
+
+  it("lets a horizontal or both area's content grow wider than the viewport", async () => {
+    const { viewport } = await render(
+      <ScrollArea orientation="horizontal" className="w-[380px]">
+        <div style={{ width: 900 }}>{tall}</div>
+      </ScrollArea>,
+    );
+    const content = viewport.firstElementChild as HTMLElement;
+    expect(content.getBoundingClientRect().width).toBe(900);
+    const { viewport: both } = await render(
+      <ScrollArea orientation="both" className="h-40 w-[380px]">
+        <div style={{ width: 900 }}>{tall}</div>
+      </ScrollArea>,
+    );
+    expect((both.firstElementChild as HTMLElement).getBoundingClientRect().width).toBe(900);
+  });
+
   it("scrolls horizontally with orientation=horizontal, and both ways with both", async () => {
     const { area, viewport } = await render(<ScrollArea orientation="horizontal">{wide}</ScrollArea>);
     expect(viewport.scrollWidth).toBe(900);
@@ -106,8 +141,52 @@ describe("ScrollArea", () => {
     await expect.poll(() => both.querySelectorAll(":scope > [data-orientation]").length).toBe(2);
   });
 
+  it("fades out at the side that hides more, drawing its focus ring over the fade, and keeps keyboard scrolling", async () => {
+    const { area, viewport } = await render(
+      <ScrollArea orientation="horizontal" label="Tags">
+        {wide}
+      </ScrollArea>,
+    );
+    await expect.poll(() => viewport.hasAttribute("data-ouro-scroll-fade")).toBe(true);
+    expect(viewport.style.getPropertyValue("--ouro-scroll-fade-right")).toBe(`${900 - viewport.clientWidth}px`);
+    expect(getComputedStyle(viewport).maskImage).toContain("linear-gradient");
+    await expect.poll(() => viewport.tabIndex).toBe(0);
+    expect(getComputedStyle(area).outlineStyle).toBe("none");
+    viewport.focus();
+    expect(getComputedStyle(viewport).outlineStyle).toBe("none");
+    expect(getComputedStyle(area).outlineStyle).toBe("solid");
+    expect(getComputedStyle(area).outlineWidth).toBe("2px");
+    // WebKit under Playwright scrolls a focused box with no arrow key, masked or not, so it scrolls by script there.
+    if (server.browser === "chromium") await userEvent.keyboard("{ArrowRight}");
+    else viewport.scrollLeft = 40;
+    await expect.poll(() => viewport.scrollLeft).toBeGreaterThan(0);
+    // The arrow key may scroll smoothly, so the fade catches up with each frame of it.
+    await expect.poll(() => viewport.style.getPropertyValue("--ouro-scroll-fade-left") === `${viewport.scrollLeft}px`).toBe(true);
+    // Content that fits adds no fade.
+    const { viewport: fits } = await render(<ScrollArea className="h-40">{tall}</ScrollArea>);
+    await act(async () => new Promise(requestAnimationFrame));
+    expect(fits.hasAttribute("data-ouro-scroll-fade")).toBe(false);
+    expect(getComputedStyle(fits).maskImage).toBe("none");
+  });
+
+  it("draws its scrollbar thumb in CanvasText under forced colors", async () => {
+    try {
+      const { area } = await render(<ScrollArea orientation="horizontal">{wide}</ScrollArea>);
+      await expect.poll(() => area.querySelector('[data-orientation="horizontal"] > *')).not.toBeNull();
+      const thumb = area.querySelector<HTMLElement>('[data-orientation="horizontal"] > *')!;
+      await commands.emulateMedia({ forcedColors: "active" });
+      const probe = document.body.appendChild(document.createElement("span"));
+      probe.style.backgroundColor = "CanvasText";
+      const canvasText = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      expect(getComputedStyle(thumb).backgroundColor).toBe(canvasText);
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
   it("is a keyboard-scrollable region named by label", async () => {
-    const { viewport } = await render(
+    const { area, viewport } = await render(
       <ScrollArea className="h-40" label="Method">
         {tall}
       </ScrollArea>,
@@ -116,8 +195,17 @@ describe("ScrollArea", () => {
     await expect.element(region).toBeVisible();
     expect(region.element()).toBe(viewport);
     await expect.poll(() => viewport.tabIndex).toBe(0);
+    const scrollbar = area.querySelector<HTMLElement>('[data-orientation="vertical"]')!;
+    const away = document.createElement("div");
+    away.style.cssText = "position:fixed;right:0;bottom:0;width:20px;height:20px";
+    document.body.append(away);
+    mounted.push(away);
+    await userEvent.hover(away);
+    await expect.poll(() => getComputedStyle(scrollbar).opacity).toBe("0");
     viewport.focus();
-    expect(getComputedStyle(viewport).outlineStyle).toBe("solid");
+    expect(getComputedStyle(area).outlineStyle).toBe("solid");
+    // Keyboard focus on the viewport shows the scrollbar, with no pointer over it.
+    await expect.poll(() => getComputedStyle(scrollbar).opacity).toBe("1");
     await userEvent.keyboard("{PageDown}");
     await expect.poll(() => viewport.scrollTop).toBeGreaterThan(0);
   });

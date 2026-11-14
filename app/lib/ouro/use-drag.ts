@@ -31,6 +31,18 @@ export interface DragState {
   velocity: number;
   /** Whether the velocity is a flick: `Math.abs(velocity) >= FLICK_VELOCITY`. */
   flick: boolean;
+  /**
+   * Movement from the grab point along the other axis, in px, for a drag that follows both (`crossAxis: "follow"`).
+   *
+   * @claim "Movement from the grab point along" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > follows both axes when asked, from its threshold in any direction, with the other axis's movement and velocity)
+   */
+  crossDelta: number;
+  /**
+   * Velocity along the other axis in px/ms, measured as `velocity` is.
+   *
+   * @claim "Velocity along the other axis in" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > follows both axes when asked, from its threshold in any direction, with the other axis's movement and velocity)
+   */
+  crossVelocity: number;
   event: PointerEvent;
 }
 
@@ -47,12 +59,15 @@ export interface DragOptions {
    * What a move along the other axis means. `scroll`: it is left to the browser, so the
    * page scrolls, and the gesture is given up when it wins the first `threshold` px.
    * `ignore`: for an element with `touch-action: none`, such as a drag handle, where
-   * every touch is the gesture's.
+   * every touch is the gesture's. `follow`: the element moves on both axes, as a floating
+   * picture does, also with `touch-action: none`; the drag starts once the pointer has moved
+   * `threshold` px in any direction, and `crossDelta` and `crossVelocity` say how it moved
+   * along the other axis.
    * @default "scroll"
    * @claim "`ignore`: for an element with `touch-action" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > ignores the other axis for an element that takes every touch)
    * @claim "`ignore`: for an element with `touch-action" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > takes the touch moves of a drag, and of nothing else, so the browser makes no scroll or fling of them)
    */
-  crossAxis?: "scroll" | "ignore" | undefined;
+  crossAxis?: "scroll" | "ignore" | "follow" | undefined;
   /**
    * Called when a pointer this hook will follow goes down, before it has moved. Stop a
    * running spring here, so what is on screen holds still under the finger.
@@ -111,8 +126,9 @@ interface Gesture {
 }
 
 /**
- * Pointer handlers for a one-axis drag. The element also needs `touch-pan-y` (axis "x")
- * or `touch-pan-x` (axis "y"), or `touch-none` with `crossAxis: "ignore"`.
+ * Pointer handlers for a one-axis drag, or a drag on both axes with `crossAxis: "follow"`. The
+ * element also needs `touch-pan-y` (axis "x") or `touch-pan-x` (axis "y"), or `touch-none` with
+ * `crossAxis: "ignore"` or `"follow"`.
  *
  * It follows the first pointer only and a mouse's primary button only, ignores a second
  * finger, gives up without capturing when the cross axis wins the first 10px, captures
@@ -168,7 +184,7 @@ export function useDrag(options: DragOptions): DragProps {
     const across = (at: PointerEvent) => (horizontal ? at.clientY : at.clientX);
     const origin = along(event.nativeEvent);
     const crossOrigin = across(event.nativeEvent);
-    let samples = [{ position: origin, time: event.timeStamp }];
+    let samples = [{ position: origin, cross: crossOrigin, time: event.timeStamp }];
     let started = false;
     // The element's handlers and the window's listeners can hear the same event: it counts once.
     let seen: Event = event.nativeEvent;
@@ -177,8 +193,10 @@ export function useDrag(options: DragOptions): DragProps {
       // From the oldest move of the last 100ms up to this event itself: time the finger
       // spent still before lifting counts, so a pause slows the release.
       const first = samples.find((sample) => at.timeStamp - sample.time <= VELOCITY_WINDOW);
-      const velocity = first && at.timeStamp > first.time ? (along(at) - first.position) / (at.timeStamp - first.time) : 0;
-      return { delta: along(at) - origin, velocity, flick: Math.abs(velocity) >= FLICK_VELOCITY, event: at };
+      const span = first ? at.timeStamp - first.time : 0;
+      const velocity = span ? (along(at) - first!.position) / span : 0;
+      const crossVelocity = span ? (across(at) - first!.cross) / span : 0;
+      return { delta: along(at) - origin, velocity, flick: Math.abs(velocity) >= FLICK_VELOCITY, crossDelta: across(at) - crossOrigin, crossVelocity, event: at };
     };
     const release = (silent = false) => {
       removeEventListener("pointermove", move);
@@ -197,15 +215,21 @@ export function useDrag(options: DragOptions): DragProps {
       // without turning them into additional drag callbacks.
       samples = [
         ...samples,
-        ...(moved.getCoalescedEvents?.() ?? []).map((sample) => ({ position: along(sample), time: sample.timeStamp })),
-        { position: along(moved), time: moved.timeStamp },
+        // Stryker disable next-line ArrayDeclaration: anything in place of the empty list has no timeStamp, so the window filter below drops it.
+        ...(moved.getCoalescedEvents?.() ?? []).map((sample) => ({ position: along(sample), cross: across(sample), time: sample.timeStamp })),
+        { position: along(moved), cross: across(moved), time: moved.timeStamp },
       ].filter((sample) => moved.timeStamp - sample.time <= VELOCITY_WINDOW);
       if (!started) {
         const distance = Math.abs(along(moved) - origin);
-        const cross = crossAxis === "scroll" ? Math.abs(across(moved) - crossOrigin) : 0;
-        if (distance < threshold && cross < threshold) return;
-        // The other axis won: the gesture is the browser's, a scroll.
-        if (cross >= distance) return release();
+        const cross = crossAxis === "ignore" ? 0 : Math.abs(across(moved) - crossOrigin);
+        if (crossAxis === "follow") {
+          // Both axes are the gesture's: it starts once the pointer is `threshold` px away in any direction.
+          if (Math.hypot(distance, cross) < threshold) return;
+        } else {
+          if (distance < threshold && cross < threshold) return;
+          // The other axis won: the gesture is the browser's, a scroll.
+          if (cross >= distance) return release();
+        }
         if (onStart?.(state(moved)) === false) return release();
         started = true;
         try {

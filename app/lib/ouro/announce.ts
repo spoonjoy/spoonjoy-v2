@@ -38,6 +38,8 @@ function getRegion(): HTMLElement {
  * created at the end of `document.body` on first use. The message is written
  * about 100ms later, or `delayMs` later when that is longer. Calling it again with
  * the same message speaks it again. On the server it does nothing.
+ * Returns a cleanup that cancels only this call's pending message.
+ * Calls `onWrite` after setting the region's text, not when speech finishes.
  *
  * The region lives outside every component, so it never changes a control's
  * accessible name and never sits inside an `aria-busy` subtree.
@@ -50,9 +52,15 @@ function getRegion(): HTMLElement {
  * @claim "The message is written about 100ms" registry/ouro/lib/ouro/announce.test.ts verify:testExists(registry/ouro/lib/ouro/announce.test.ts::announce > waits 100ms after creating the region before writing the first message (Safari))
  * @claim "The message is written about 100ms" registry/ouro/lib/ouro/announce.test.ts verify:testExists(registry/ouro/lib/ouro/announce.test.ts::announce > reuses the region across calls, keeping only the last message)
  * @claim "or `delayMs` later when that is longer" registry/ouro/lib/ouro/announce.test.ts verify:testExists(registry/ouro/lib/ouro/announce.test.ts::announce > waits the longer delay a caller asks for, never less than 100ms)
+ * @claim "cancels only this call's pending message" registry/ouro/lib/ouro/announce.test.ts verify:testExists(registry/ouro/lib/ouro/announce.test.ts::announce > can cancel a pending message without cancelling a later caller's message)
+ * @claim "cancels only this call's pending message" registry/ouro/lib/ouro/announce.test.ts verify:testExists(registry/ouro/lib/ouro/announce.test.ts::announce > ignores an older cancellation after another message takes its place or finishes)
+ * @claim "Calls `onWrite` after setting the region's text" registry/ouro/lib/ouro/announce.test.ts verify:testExists(registry/ouro/lib/ouro/announce.test.ts::announce > notifies the caller only after its message is written, not when cancelled or superseded)
  * @claim "The region lives outside every component" registry/ouro/lib/ouro/announce.test.ts verify:testExists(registry/ouro/lib/ouro/announce.test.ts::announce > reuses the region across calls, keeping only the last message)
  */
-export function announce(message: string, { delayMs = DELAY_MS }: { delayMs?: number } = {}): void {
+export function announce(
+  message: string,
+  { delayMs = DELAY_MS, onWrite }: { delayMs?: number; onWrite?: () => void } = {},
+): (() => void) | undefined {
   // Components call this from effects, which never run on the server.
   /* istanbul ignore if @preserve -- server only */
   if (typeof document === "undefined") return;
@@ -60,8 +68,15 @@ export function announce(message: string, { delayMs = DELAY_MS }: { delayMs?: nu
   // Clear first and set the text after the delay, so an identical message is a change.
   target.textContent = "";
   clearTimeout(timer);
-  timer = setTimeout(() => {
+  const pending = setTimeout(() => {
     timer = undefined;
     target.textContent = message;
+    onWrite?.();
   }, Math.max(DELAY_MS, delayMs));
+  timer = pending;
+  return () => {
+    if (timer !== pending) return;
+    clearTimeout(pending);
+    timer = undefined;
+  };
 }

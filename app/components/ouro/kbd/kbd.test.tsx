@@ -78,7 +78,7 @@ describe("Kbd", () => {
   it("names Apple glyphs for screen readers", async () => {
     onPlatform("macOS");
     const { kbd } = await render(<Kbd keys={["mod", "alt", "ctrl", "enter"]} />);
-    expect(kbd.textContent).toBe("⌃Control⌥Option⌘Command↩Return");
+    expect(kbd.textContent).toBe("⌃Control⌥Option⌘Command↩\uFE0EReturn");
     for (const glyph of kbd.querySelectorAll("[data-glyph]")) expect(glyph.getAttribute("aria-hidden")).toBe("true");
   });
 
@@ -93,8 +93,8 @@ describe("Kbd", () => {
     [["alt"], "⌥", "Alt"],
     [["option"], "⌥", "Alt"],
     [["shift"], "⇧", "Shift"],
-    [["enter"], "↩", "Enter"],
-    [["return"], "↩", "Enter"],
+    [["enter"], "↩\uFE0E", "Enter"],
+    [["return"], "↩\uFE0E", "Enter"],
     [["escape"], "Esc", "Esc"],
     [["esc"], "Esc", "Esc"],
     [["tab"], "⇥", "Tab"],
@@ -116,6 +116,22 @@ describe("Kbd", () => {
     onPlatform("Windows");
     const windows = await render(<Kbd keys={keys} />);
     expect(visible(windows.kbd)).toBe(other);
+  });
+
+  it("draws a key that is also an emoji as text", async () => {
+    onPlatform("macOS");
+    for (const [key, shown] of [
+      ["⌨", "⌨\uFE0E"],
+      ["😀", "😀\uFE0E"],
+      ["⏎", "⏎"],
+      ["1", "1"],
+      ["#", "#"],
+      ["⌨x", "⌨x"],
+      ["x⌨", "x⌨"],
+    ] as const) {
+      const { kbd } = await render(<Kbd keys={[key]} />);
+      expect(visible(kbd), key).toBe(shown);
+    }
   });
 
   it.each([

@@ -291,11 +291,18 @@ describe("Reorderable on a phone", () => {
     // Twelve rows, taller than the screen: the last ones start out of view.
     const { list, onReorder } = await renderSteps({ count: 12, before: 300, after: 300 });
     const [x, y] = middle(handle(list, "Sear the ribs"));
+    // The page scrolls for as long as the finger is held, and the row stops following the finger
+    // once it reaches the end of the list. The frames are the test's to step, so the page is read
+    // where the frames scrolled it, not wherever a late reply from a loaded runner finds it.
+    const frames = holdFrames();
+    cleanups.push(() => frames.release());
     try {
       await commands.touchStep({ type: "touchStart", x, y });
       for (let step = 1; step <= 6; step++) await commands.touchStep({ type: "touchMove", x, y: y + ((innerHeight - 12 - y) * step) / 6 });
-      // The finger rests 12px above the bottom edge: the page scrolls on its own.
-      await expect.poll(() => scrollY).toBeGreaterThan(150);
+      await expect.poll(() => list.hasAttribute("data-dragging")).toBe(true);
+      expect(scrollY).toBe(0);
+      // The finger rests 12px above the bottom edge: the page scrolls on its own, frame by frame.
+      frames.until(() => scrollY > 150);
       // The dragged row is still under the finger.
       const dragged = rows(list)[0]!.getBoundingClientRect();
       expect(dragged.top).toBeLessThan(innerHeight);
@@ -309,5 +316,8 @@ describe("Reorderable on a phone", () => {
     // It was dropped beyond the rows that were on screen when the drag began.
     expect(move.to).toBeGreaterThanOrEqual(8);
     expect(ids[move.to]).toBe("step-1");
+    frames.until(() => !list.hasAttribute("data-ouro-settling"));
+    frames.release();
+    expect(order(list)[move.to]).toBe("Sear the ribs");
   });
 });

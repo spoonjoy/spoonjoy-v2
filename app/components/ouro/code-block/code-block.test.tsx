@@ -2,9 +2,11 @@ import { type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page, server, userEvent } from "vitest/browser";
 import { CodeBlock } from "~/components/ouro/code-block/code-block";
+import type { EmojiCatalogue } from "~/components/ouro/emoji/emoji";
 import { act } from "~/lib/ouro/testing/act";
+import { pressTab } from "~/lib/ouro/testing/tab";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -185,6 +187,40 @@ describe("CodeBlock", () => {
     expect(pre.hasAttribute("tabindex")).toBe(false);
   });
 
+  it("fades out at the side where a long line goes on, with its focus ring over the fade", async () => {
+    const { host, pre } = await render(
+      <div style={{ width: 320 }}>
+        <CodeBlock code={long} language="ts" />
+      </div>,
+    );
+    await expect.poll(() => pre.hasAttribute("data-ouro-scroll-fade")).toBe(true);
+    expect(getComputedStyle(pre).maskImage).toContain("linear-gradient");
+    expect(pre.style.getPropertyValue("--ouro-scroll-fade-left")).toBe("0px");
+    const ring = host.querySelector<HTMLElement>('[data-slot="focus-ring"]')!;
+    expect(ring.getAttribute("aria-hidden")).toBe("true");
+    expect(ring.getBoundingClientRect().toJSON()).toEqual(pre.getBoundingClientRect().toJSON());
+    expect(getComputedStyle(ring).outlineStyle).toBe("none");
+    await pressTab();
+    await pressTab();
+    expect(document.activeElement).toBe(pre);
+    expect(getComputedStyle(pre).outlineStyle).toBe("none");
+    expect(getComputedStyle(ring).outlineStyle).toBe("solid");
+    // WebKit under Playwright scrolls a focused box with no arrow key, masked or not, so it scrolls by script there.
+    if (server.browser === "chromium") await userEvent.keyboard("{ArrowRight}");
+    else pre.scrollLeft = 40;
+    await expect.poll(() => pre.style.getPropertyValue("--ouro-scroll-fade-left")).not.toBe("0px");
+    // Without a bar, the ring still covers the code.
+    const bare = await render(<div style={{ width: 320 }}><CodeBlock code={long} copy={false} /></div>);
+    expect(bare.host.querySelector('[data-slot="focus-ring"]')!.getBoundingClientRect().toJSON()).toEqual(bare.pre.getBoundingClientRect().toJSON());
+    // Short code and wrapped code don't fade.
+    for (const node of [<CodeBlock key="short" code="short" />, <CodeBlock key="wrap" code={long} wrap />]) {
+      const { pre: plain } = await render(<div style={{ width: 320 }}>{node}</div>);
+      await act(async () => new Promise(requestAnimationFrame));
+      expect(plain.hasAttribute("data-ouro-scroll-fade")).toBe(false);
+      expect(getComputedStyle(plain).maskImage).toBe("none");
+    }
+  });
+
   it("stops listening for focus leaving when it unmounts", async () => {
     const { root, pre } = await render(<CodeBlock code="x" />);
     const removed = vi.spyOn(pre, "removeEventListener");
@@ -255,5 +291,76 @@ describe("CodeBlock development messages", () => {
     expect(html).toContain('data-ouro="code-block"');
     expect(html).toContain("a &lt; b");
     expect(error).not.toHaveBeenCalled();
+  });
+});
+
+describe("CodeBlock emoji", () => {
+  /** A blank image whose address names it. */
+  const image = (name: string) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><title>${name}</title></svg>`)}`;
+  const catalogue: EmojiCatalogue = {
+    categories: [
+      {
+        id: "symbols",
+        label: "Symbols",
+        items: [
+          { id: "party", name: "Party popper", shortcodes: ["party"], text: "🎉", src: image("party"), animatedSrc: image("party moving") },
+          { id: "rocket", name: "Rocket", text: "🚀", src: image("rocket") },
+        ],
+      },
+    ],
+  };
+  const source = 'const cheer = "🎉 shipped";\n// :party: stays as typed 🚀\nlet next = "🚀🎉";';
+
+  it("draws the catalogue's emoji as 1em pictures over the code's own characters, without moving a line", async () => {
+    const { host } = await render(
+      <>
+        <CodeBlock code={source} copy={false} />
+        <CodeBlock code={source} copy={false} catalogue={catalogue} />
+        <CodeBlock code={source} copy={false} catalogue={catalogue} wrap className="w-48" />
+        <CodeBlock code={source} copy={false} wrap className="w-48" />
+      </>,
+    );
+    const [plain, drawn, drawnWrapped, plainWrapped] = [...host.querySelectorAll("code")];
+    const size = (element: Element) => {
+      const { width, height } = element.getBoundingClientRect();
+      return [width, height];
+    };
+    expect(size(drawn!)).toEqual(size(plain!));
+    expect(size(drawnWrapped!)).toEqual(size(plainWrapped!));
+    const emoji = [...drawn!.querySelectorAll<HTMLElement>("[data-ouro-code-emoji]")];
+    expect(emoji.map((element) => element.textContent)).toEqual(["🎉", "🚀", "🚀", "🎉"]);
+    for (const element of emoji) {
+      const characters = element.firstElementChild!;
+      expect(getComputedStyle(characters).color).toBe("rgba(0, 0, 0, 0)");
+      const picture = element.querySelector<HTMLImageElement>('[data-ouro="emoji"]')!;
+      expect(picture.closest('[aria-hidden="true"]')).not.toBeNull();
+      expect(picture.getBoundingClientRect().width).toBe(parseFloat(getComputedStyle(drawn!).fontSize));
+      // Centered over the characters it stands for.
+      const box = characters.getBoundingClientRect();
+      const drawnBox = picture.getBoundingClientRect();
+      expect(Math.abs(drawnBox.left + drawnBox.width / 2 - (box.left + box.width / 2))).toBeLessThan(1);
+    }
+    // Code stays still: an animated emoji shows its still picture.
+    expect(emoji[0]!.querySelector("img")!.getAttribute("src")).toBe(image("party"));
+  });
+
+  it("copies and selects the code's own characters, and leaves shortcode text as it is", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const { pre } = await render(<CodeBlock code={source} catalogue={catalogue} />);
+      expect(pre.textContent).toBe(source);
+      expect(pre.querySelectorAll("[data-ouro-code-emoji]")).toHaveLength(4);
+      const range = document.createRange();
+      range.selectNodeContents(pre);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      expect(selection.toString()).toBe(source);
+      selection.removeAllRanges();
+      await userEvent.click(page.getByRole("button", { name: "Copy code" }));
+      expect(clipboard).toEqual([source]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

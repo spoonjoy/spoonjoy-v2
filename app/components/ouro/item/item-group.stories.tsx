@@ -18,7 +18,7 @@ function Page({ children }: { children: ReactNode }) {
 
 const recipes = [
   { slug: "short-ribs", title: "Braised short ribs", by: "Ari · 4 servings", colors: ["#f59e0b", "#7c2d12"] },
-  { slug: "lemon-pasta", title: "Lemon pasta", by: "Sam · 2 servings", colors: ["#fde047", "#a16207"] },
+  { slug: "lemon-pasta", title: "Lemon pasta", by: "Jo · 2 servings", colors: ["#fde047", "#a16207"] },
   { slug: "green-curry", title: "Green curry", by: "Noor · 6 servings", colors: ["#86efac", "#166534"] },
 ];
 

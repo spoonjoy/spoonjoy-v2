@@ -1,10 +1,11 @@
 "use client";
 
-export { PortalScope, usePortalContainer };
+export { PortalScope, TooltipsHidden, usePortalContainer };
 export type { PortalContainerProps };
 
-import { createContext, createElement, useCallback, useContext, useSyncExternalStore, type JSX, type ReactNode, type RefObject } from "react";
+import { createContext, createElement, useContext, useRef, useState, useSyncExternalStore, type JSX, type ReactNode, type RefObject } from "react";
 import { devWarn } from "~/lib/ouro/dev";
+import { holdPageScroll } from "~/lib/ouro/page-scroll-hold";
 import { useOuro } from "~/lib/ouro/use-ouro";
 
 // Where a floating layer (Select, Menu, Combobox, Popover, Tooltip, HoverCard,
@@ -14,6 +15,13 @@ import { useOuro } from "~/lib/ouro/use-ouro";
 
 /** True inside an Ouro UI portal. */
 const InsidePortal = createContext(false);
+
+/**
+ * Internal: whether a container hides the controls inside it, as an auto-hiding `Toolbar` does
+ * once it fades. A `Tooltip` inside closes as it turns true, so it goes with the controls it
+ * names, and opens again as usual after.
+ */
+const TooltipsHidden = createContext(false);
 
 /**
  * Wraps what renders inside an Ouro UI portal, so a popup opened from it portals into it
@@ -48,14 +56,20 @@ const landmark =
 /**
  * The props for a floating layer's Base UI `Portal`: OuroProvider's `portalContainer`, and
  * in development a ref that warns when the open popup lands outside every landmark of a
- * page that has a `<main>`. Inside another Ouro UI portal it gives neither.
+ * page that has a `<main>`. Inside another Ouro UI portal it gives neither. With
+ * `holdPage`, for a layer that takes focus (Menu, Popover, Select, Combobox), the ref also
+ * keeps the page where it is while the layer is open (`holdPageScroll`), inside another
+ * portal too; such a layer spreads `holdPageAtPress` on its trigger, so the hold starts at the
+ * press that opens it.
  *
  * @internal
  * @claim "The props for a floating layer's" registry/ouro/lib/ouro/portal-container.test.tsx verify:testExists(registry/ouro/lib/ouro/portal-container.test.tsx::usePortalContainer > renders a popup into OuroProvider's portalContainer, given as an element)
  * @claim "The props for a floating layer's" registry/ouro/lib/ouro/portal-container.test.tsx verify:testExists(registry/ouro/lib/ouro/portal-container.test.tsx::usePortalContainer > warns once, in development, when a popup opens outside every landmark of a page that has a main)
  * @claim "Inside another Ouro UI portal it" registry/ouro/lib/ouro/portal-container.test.tsx verify:testExists(registry/ouro/lib/ouro/portal-container.test.tsx::usePortalContainer > renders a popup opened from inside another popup into that popup's portal, not the portalContainer)
+ * @claim "the ref also keeps the page where it is while the layer is open" registry/ouro/lib/ouro/portal-container.test.tsx verify:testExists(registry/ouro/lib/ouro/portal-container.test.tsx::usePortalContainer > holdPage > with holdPage, keeps the page where it is while the layer is open, and lets it go once it closes)
+ * @claim "so the hold starts at the press that opens it" registry/ouro/components/ouro/menu/menu.test.tsx verify:fileLine(registry/ouro/components/ouro/menu/menu.test.tsx, /stays open and stops the page where it is, pressed mid-scroll/)
  */
-function usePortalContainer(component: string): PortalContainerProps {
+function usePortalContainer(component: string, holdPage = false): PortalContainerProps {
   const { portalContainer } = useOuro();
   const nested = useContext(InsidePortal);
   // Base UI reads its container once, as the portal mounts. A ref's element can commit after this
@@ -67,8 +81,15 @@ function usePortalContainer(component: string): PortalContainerProps {
     () => resolve(portalContainer),
     () => undefined,
   );
-  const check = useCallback(
-    (node: HTMLDivElement | null) => {
+  const letGo = useRef<(() => void) | undefined>(undefined);
+  // One pair of ref callbacks for the layer's life: its component and holdPage are fixed where it calls this.
+  const [refs] = useState(() => {
+    const hold = (node: HTMLDivElement | null) => {
+      letGo.current?.();
+      letGo.current = node ? holdPageScroll(node) : undefined;
+    };
+    const check = (node: HTMLDivElement | null) => {
+      if (holdPage) hold(node);
       /* istanbul ignore else @preserve -- the else path exists only in production bundles; scripts/dev-strip.test.mjs covers it */
       if (process.env.NODE_ENV !== "production") {
         if (!node || !document.querySelector('main, [role="main"]') || node.parentElement!.closest(landmark)) return;
@@ -78,12 +99,10 @@ function usePortalContainer(component: string): PortalContainerProps {
           "<OuroProvider portalContainer={popups}> around the app, with <div ref={popups} /> inside <main>",
         );
       }
-    },
-    [component],
-  );
-  if (nested) return {};
-  return {
-    ...(container ? { container } : {}),
-    ...(process.env.NODE_ENV !== "production" ? { ref: check } : /* istanbul ignore next @preserve -- production only */ {}),
-  };
+    };
+    return { hold, check };
+  });
+  // A layer inside another portal (a dialog's, say) holds the page itself.
+  if (nested) return holdPage ? { ref: refs.hold } : {};
+  return { ...(container ? { container } : {}), ref: refs.check };
 }

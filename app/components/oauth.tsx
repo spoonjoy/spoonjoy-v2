@@ -71,12 +71,12 @@ export function OAuthError({ error, className }: OAuthErrorProps) {
   if (!error) return null
 
   const messages: Record<string, string> = {
-    apple_email_unavailable: "We couldn't find a Spoonjoy account for this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.",
+    apple_email_unavailable: "No Spoonjoy account uses this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.",
     account_exists: 'An account with this email already exists. Please log in to link your account.',
     account_exists_unverified: 'An account with this email already exists. Sign in to it the way you usually do, then link this sign-in from Account settings.',
     email_required: 'An email address is required to create an account. Please allow email access and try again.',
     email_unverified: 'Your OAuth provider must return a verified email address before Spoonjoy can use it for sign-in.',
-    invalid_state: 'Your OAuth session expired or could not be verified. Please try again.',
+    invalid_state: 'Your sign-in session expired, or its security check didn\'t match. Start sign-in again.',
     invalid_code: 'The OAuth provider did not return a usable authorization code. Please try again.',
     invalid_code_verifier: 'Your OAuth security verifier was missing. Please try again.',
     invalid_request: 'That OAuth callback method is not supported. Please start sign-in again.',
@@ -84,10 +84,10 @@ export function OAuthError({ error, className }: OAuthErrorProps) {
     oauth_unconfigured: 'OAuth is not configured for this environment yet. Email/password login still works.',
     provider_account_taken: 'That OAuth account is already linked to another Spoonjoy account.',
     provider_already_linked: 'That OAuth provider is already linked to your account.',
-    temporarily_unavailable: "Spoonjoy couldn't save your sign-in just now. Please try again in a moment.",
+    temporarily_unavailable: "Spoonjoy's database is busy and didn't save your sign-in. Try again in a moment.",
   }
 
-  const message = messages[error] ?? 'Something went wrong. Please try again.'
+  const message = messages[error] ?? 'Sign-in stopped with an answer Spoonjoy doesn\'t recognise. Start sign-in again.'
 
   return (
     <div

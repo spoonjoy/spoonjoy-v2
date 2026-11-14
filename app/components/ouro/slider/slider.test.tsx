@@ -4,6 +4,7 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { Slider, type SliderProps } from "~/components/ouro/slider/slider";
+import { widestTexts } from "~/components/ouro/slider/slider-styles";
 import { Form } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
 
@@ -351,6 +352,27 @@ describe("Slider server rendering", () => {
     // With the locale given, the server measures it as the reader will.
     const fixed = new DOMParser().parseFromString(renderToString(<Slider label="Kochzeit" name="kochzeit" defaultValue={20} max={90} showValue locale="de-DE" />), "text/html");
     expect(fixed.querySelectorAll("[data-ouro-slider-sample]").length).toBeGreaterThan(0);
+  });
+});
+
+describe("the value's widest texts", () => {
+  it("samples each end with the step's decimals and each power of ten in range, both signs, ends included", () => {
+    expect(widestTexts(0, 100, 1, "en-US", undefined)).toEqual(["0", "100", "2", "9", "18", "88", "99"]);
+    expect(widestTexts(-100, 100, 5, "en-US", undefined)).toEqual(["-100", "100", "0", "10", "-10", "5", "-5", "20", "-20", "90", "-90", "95", "-95"]);
+    expect(widestTexts(-9.5, 9.5, 0.5, "en-US", undefined)).toEqual(["-9.8", "9.8", "2", "-2", "9", "-9", "9.5", "-9.5"]);
+    expect(widestTexts(0, 10000, 1, "en-US", { notation: "compact" })).toEqual(["0", "10K", "2", "9", "18", "88", "99", "180", "880", "999", "1.8K", "8.8K"]);
+    // Every decimal of the step counts, and an end between whole numbers keeps its own value when the step is whole.
+    expect(widestTexts(0, 1, 0.25, "en-US", undefined)).toEqual(["0.88", "1.88"]);
+    expect(widestTexts(0.5, 10.5, 1, "en-US", undefined)).toEqual(["0.5", "10.5", "1.5", "8.5", "9.5"]);
+    // A larger end of exactly 1 still samples its power: here the step snaps a sample to the smaller end's own text.
+    expect(widestTexts(-0.95, 1, 1.8, "en-US", undefined)).toEqual(["-0.8", "1.8", "-0.95"]);
+  });
+
+  it("reserves the samples for the slider's own range, step and format, and Base UI's 0 to 100 by default", () => {
+    const samples = (node: ReactNode) =>
+      [...new DOMParser().parseFromString(renderToString(node), "text/html").querySelectorAll("[data-ouro-slider-sample]")].map((sample) => sample.getAttribute("data-ouro-slider-sample"));
+    expect(samples(<Slider label="Volume" name="volume" defaultValue={20} showValue locale="en-US" />)).toEqual(["0", "100", "2", "9", "18", "88", "99"]);
+    expect(samples(<Slider label="Balance" name="balance" defaultValue={0} min={-9.5} max={9.5} step={0.5} showValue locale="en-US" />)).toEqual(["-9.8", "9.8", "2", "-2", "9", "-9", "9.5", "-9.5"]);
   });
 });
 

@@ -1,4 +1,4 @@
-import { useState, type ComponentProps, type ReactNode } from "react";
+import { useState, type ComponentProps, type CSSProperties, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -123,6 +123,15 @@ describe("Pagination", () => {
     expect(html).toContain('href="?page=1"');
     expect(html).toContain('href="?page=3"');
     expect(html).toMatch(/aria-current="page"[^>]*href="\?page=2"|href="\?page=2"[^>]*aria-current="page"/);
+  });
+
+  it("server HTML leaves the page list to the sm rule rather than hiding it, before anything is measured", () => {
+    const host = document.createElement("div");
+    host.innerHTML = renderToString(<Pagination page={6} pageCount={12} href={href} />);
+    const pageItem = host.querySelector("[data-ouro-pagination-page]")!.closest("li")!;
+    expect(pageItem.classList.contains("max-sm:hidden")).toBe(true);
+    expect(pageItem.classList.contains("hidden")).toBe(false);
+    expect(host.querySelector("[data-ouro-pagination-summary]")!.closest("li")!.classList.contains("sm:hidden")).toBe(true);
   });
 
   it("shows every page when they fit", async () => {
@@ -327,6 +336,267 @@ describe("Pagination", () => {
     );
     const both = { page: 1, pageCount: 2, href, onPageChange: () => {} } as unknown as PaginationProps;
     expect(() => renderToString(<Pagination {...both} />)).toThrow("[ouro-ui] Pagination: takes href or onPageChange, not both.");
+  });
+});
+
+describe("Pagination in a column", () => {
+  const navOf = (host: Element) => host.querySelector<HTMLElement>('[data-ouro="pagination"]')!;
+  const itemOf = (element: Element) => element.closest("li")!;
+  const shown = (element: Element) => getComputedStyle(element).display !== "none";
+  const pageItems = (nav: HTMLElement) => [...nav.querySelectorAll<HTMLElement>("[data-ouro-pagination-page]")].map(itemOf);
+  const summaryItem = (nav: HTMLElement) => itemOf(nav.querySelector("[data-ouro-pagination-summary]")!);
+
+  /** The page list's width in full, as the component measures it: every cell and the gaps between them. */
+  const fullListWidth = (nav: HTMLElement) => {
+    const list = nav.querySelector("ul")!;
+    const cells = [...list.children].filter((item) => !item.querySelector("[data-ouro-pagination-summary]"));
+    return cells.reduce((sum, cell) => sum + cell.getBoundingClientRect().width, 0) + parseFloat(getComputedStyle(list).columnGap) * (cells.length - 1);
+  };
+
+  /** Two frames: the observers' first calls, which a change made before them would otherwise stand in for, run at the layout the page had at mount. */
+  const settle = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  /** Mounts `node` in a div with `style`, and returns the root to render again. */
+  async function mountIn(node: ReactNode, style: CSSProperties) {
+    const host = document.createElement("div");
+    host.style.padding = "24px";
+    document.body.append(host);
+    mounted.push(host);
+    const root = createRoot(host);
+    roots.push(root);
+    await act(async () => root.render(<div style={style}>{node}</div>));
+    return { host, root, nav: navOf(host), column: navOf(host).parentElement! };
+  }
+
+  it("shows the summary, not overflowing, in a column too narrow for every page", async () => {
+    await page.viewport(1280, 800);
+    const { nav, column } = await mountIn(<Pagination page={6} pageCount={12} href={href} />, { width: 420 });
+    await expect.poll(() => shown(summaryItem(nav))).toBe(true);
+    for (const item of pageItems(nav)) expect(shown(item)).toBe(false);
+    expect(nav.scrollWidth).toBeLessThanOrEqual(column.clientWidth);
+    await expect.element(page.getByRole("link", { name: "Previous" })).toBeVisible();
+    await expect.element(page.getByRole("link", { name: "Next" })).toBeVisible();
+  });
+
+  it("shows every page in a wide column", async () => {
+    await page.viewport(1280, 800);
+    const { nav } = await mountIn(<Pagination page={6} pageCount={12} href={href} />, { width: 1000 });
+    await expect.poll(() => pageItems(nav).every(shown)).toBe(true);
+    expect(shown(summaryItem(nav))).toBe(false);
+  });
+
+  it("keeps its natural width in a shrink-wrapped flex row, showing every page", async () => {
+    await page.viewport(1280, 800);
+    const { nav } = await mountIn(<Pagination page={6} pageCount={12} href={href} />, { display: "flex" });
+    await expect.poll(() => pageItems(nav).every(shown)).toBe(true);
+    expect(shown(summaryItem(nav))).toBe(false);
+    expect(nav.getBoundingClientRect().width).toBeGreaterThan(300);
+  });
+
+  it("switches to the summary when the column narrows, and back when it widens", async () => {
+    await page.viewport(1280, 800);
+    const { nav, column } = await mountIn(<Pagination page={6} pageCount={12} href={href} />, { width: 1000 });
+    await expect.poll(() => pageItems(nav).every(shown)).toBe(true);
+    column.style.width = "420px";
+    await expect.poll(() => shown(summaryItem(nav))).toBe(true);
+    column.style.width = "1000px";
+    await expect.poll(() => pageItems(nav).every(shown)).toBe(true);
+    expect(shown(summaryItem(nav))).toBe(false);
+  });
+
+  it("re-measures when the page count changes while the summary shows", async () => {
+    await page.viewport(1280, 800);
+    const { root, nav } = await mountIn(<Pagination page={1} pageCount={12} href={href} />, { width: 420 });
+    await expect.poll(() => shown(summaryItem(nav))).toBe(true);
+    await act(async () => root.render(<div style={{ width: 420 }}><Pagination page={1} pageCount={5} href={href} /></div>));
+    await expect.poll(() => pageItems(nav).every(shown)).toBe(true);
+    expect(shown(summaryItem(nav))).toBe(false);
+    await act(async () => root.render(<div style={{ width: 420 }}><Pagination page={1} pageCount={12} href={href} /></div>));
+    await expect.poll(() => shown(summaryItem(nav))).toBe(true);
+  });
+
+  it("moves focus to Next when the page number that has it is replaced by the summary", async () => {
+    await page.viewport(1280, 800);
+    const { nav, column } = await mountIn(<Pagination page={6} pageCount={12} href={href} />, { width: 1000 });
+    const seven = pageItems(nav).map((item) => item.querySelector<HTMLElement>("a")!).find((link) => link.textContent === "7")!;
+    seven.focus();
+    expect(document.activeElement).toBe(seven);
+    column.style.width = "420px";
+    await expect.poll(() => document.activeElement).toBe(nav.querySelector("[data-ouro-pagination-next]"));
+  });
+
+  it("moves focus to Previous when the summary replaces the last page, where Next is disabled", async () => {
+    await page.viewport(1280, 800);
+    const { nav, column } = await mountIn(<Pagination page={12} pageCount={12} href={href} />, { width: 1000 });
+    const eleven = pageItems(nav).map((item) => item.querySelector<HTMLElement>("a")!).find((link) => link.textContent === "11")!;
+    eleven.focus();
+    column.style.width = "420px";
+    await expect.poll(() => document.activeElement).toBe(nav.querySelector("[data-ouro-pagination-previous]"));
+  });
+
+  it("keeps its fit when a font loads, and measures nothing once unmounted", async () => {
+    await page.viewport(1280, 800);
+    const { root, nav } = await mountIn(<Pagination page={6} pageCount={12} href={href} />, { width: 420 });
+    await expect.poll(() => shown(summaryItem(nav))).toBe(true);
+    document.fonts.dispatchEvent(new Event("loading"));
+    await document.fonts.ready;
+    expect(shown(summaryItem(nav))).toBe(true);
+    document.fonts.dispatchEvent(new Event("loading"));
+    await act(async () => root.unmount());
+    roots.splice(roots.indexOf(root), 1);
+    await document.fonts.ready;
+  });
+
+  it("measures again when a font loads and the labels are wider than they were measured", async () => {
+    await page.viewport(1280, 800);
+    const { nav, column } = await mountIn(<Pagination page={6} pageCount={12} href={href} />, { width: 500 });
+    await expect.poll(() => pageItems(nav).every(shown)).toBe(true);
+    await settle();
+    // Letter spacing is inherited, so the labels widen while the column and the nav keep their sizes, and no observer fires.
+    column.style.letterSpacing = "5px";
+    document.fonts.dispatchEvent(new Event("loading"));
+    await expect.poll(() => shown(summaryItem(nav))).toBe(true);
+  });
+
+  it("measures again once the fonts are ready after mount", async () => {
+    await page.viewport(1280, 800);
+    let resolve!: (fonts: FontFaceSet) => void;
+    const ready = new Promise<FontFaceSet>((done) => (resolve = done));
+    Object.defineProperty(document.fonts, "ready", { configurable: true, get: () => ready });
+    try {
+      const { nav, column } = await mountIn(<Pagination page={6} pageCount={12} href={href} />, { width: 500 });
+      await expect.poll(() => pageItems(nav).every(shown)).toBe(true);
+      await settle();
+      column.style.letterSpacing = "5px";
+      resolve(document.fonts);
+      await expect.poll(() => shown(summaryItem(nav))).toBe(true);
+    } finally {
+      Reflect.deleteProperty(document.fonts, "ready");
+    }
+  });
+
+  it("stops listening for fonts when it unmounts, and measures nothing when a font loads after", async () => {
+    await page.viewport(1280, 800);
+    const { root } = await mountIn(<Pagination page={6} pageCount={12} href={href} />, { width: 420 });
+    const removeListener = vi.spyOn(document.fonts, "removeEventListener");
+    try {
+      document.fonts.dispatchEvent(new Event("loading"));
+      await act(async () => root.unmount());
+      roots.splice(roots.indexOf(root), 1);
+      expect(removeListener).toHaveBeenCalledWith("loading", expect.any(Function));
+      await document.fonts.ready;
+    } finally {
+      removeListener.mockRestore();
+    }
+  });
+
+  it("re-measures when the viewport widens while the column stays the same width", async () => {
+    await page.viewport(390, 844);
+    const { nav } = await mountIn(<Pagination page={6} pageCount={12} href={href} />, { width: 420 });
+    await settle();
+    await page.viewport(1280, 800);
+    await expect.poll(() => shown(summaryItem(nav))).toBe(true);
+  });
+
+  it("shows the summary when the only page has focus and neither Next nor Previous can take it", async () => {
+    await page.viewport(1280, 800);
+    const { nav, column } = await mountIn(<Pagination page={1} pageCount={1} href={href} />, { width: 1000 });
+    nav.querySelector<HTMLElement>("[data-ouro-pagination-page]")!.focus();
+    column.style.width = "150px";
+    await expect.poll(() => shown(summaryItem(nav))).toBe(true);
+  });
+
+  it("moves focus to Next without scrolling the page's scroller", async () => {
+    await page.viewport(1280, 800);
+    const { nav, column } = await mountIn(
+      <div style={{ width: 300, overflow: "auto" }}>
+        <div style={{ width: 1000 }}>
+          <Pagination page={6} pageCount={12} href={href} />
+        </div>
+      </div>,
+      {},
+    );
+    const scroller = column.parentElement!;
+    const seven = pageItems(nav).map((item) => item.querySelector<HTMLElement>("a")!).find((link) => link.textContent === "7")!;
+    // The test's own focus must not scroll: WebKit can reveal the focused link after the reset below.
+    seven.focus({ preventScroll: true });
+    scroller.scrollLeft = 0;
+    column.style.width = "420px";
+    await expect.poll(() => document.activeElement).toBe(nav.querySelector("[data-ouro-pagination-next]"));
+    expect(scroller.scrollLeft).toBe(0);
+  });
+
+  it("fits the pages to the column's room less its padding and the nav's margins, to the pixel", async () => {
+    await page.viewport(1280, 800);
+    const { nav, column } = await mountIn(<Pagination className="mx-2" page={6} pageCount={12} href={href} />, { width: 1000, paddingLeft: 8, paddingRight: 8 });
+    await expect.poll(() => pageItems(nav).every(shown)).toBe(true);
+    const full = Math.round(fullListWidth(nav));
+    // The room is the column's width less 8px of padding and 8px of margin on each side: 32px in all.
+    column.style.width = `${full - 4 + 32}px`;
+    await expect.poll(() => shown(summaryItem(nav))).toBe(true);
+    column.style.width = `${full + 32}px`;
+    await expect.poll(() => pageItems(nav).every(shown)).toBe(true);
+    expect(shown(summaryItem(nav))).toBe(false);
+  });
+
+  it("keeps every page at the room's exact edge, and brings them back there after the summary", async () => {
+    await page.viewport(1280, 800);
+    const { nav, column } = await mountIn(<Pagination page={6} pageCount={12} href={href} />, { width: 1000 });
+    await expect.poll(() => pageItems(nav).every(shown)).toBe(true);
+    // The room is the column's width plus half a pixel, so widen the first page by the rest to lay the list out exactly that wide.
+    const room = Math.ceil(fullListWidth(nav));
+    pageItems(nav)[0]!.style.paddingRight = `${room + 0.5 - fullListWidth(nav)}px`;
+    expect(fullListWidth(nav)).toBe(room + 0.5);
+    column.style.width = `${room}px`;
+    await settle();
+    expect(pageItems(nav).every(shown)).toBe(true);
+    expect(shown(summaryItem(nav))).toBe(false);
+    column.style.width = "420px";
+    await expect.poll(() => shown(summaryItem(nav))).toBe(true);
+    column.style.width = `${room}px`;
+    await expect.poll(() => pageItems(nav).every(shown)).toBe(true);
+    expect(shown(summaryItem(nav))).toBe(false);
+  });
+
+  it("does not measure the pages on a phone, so their classes stay as the sm rule has them", async () => {
+    await page.viewport(390, 844);
+    const { nav, column } = await mountIn(<Pagination className="mx-2" page={25} pageCount={50} href={href} />, { width: 1000 });
+    await settle();
+    const widthOf = (selector: string) => itemOf(nav.querySelector(selector)!).getBoundingClientRect().width;
+    const expectSmClasses = () => {
+      expect(summaryItem(nav).classList.contains("sm:hidden")).toBe(true);
+      for (const item of pageItems(nav)) {
+        expect(item.classList.contains("max-sm:hidden")).toBe(true);
+        expect(item.classList.contains("hidden")).toBe(false);
+      }
+    };
+    // A column no wider than Previous and Next, with the nav's 8px margins on each side. The pages' gaps, which a phone does not measure, would overflow it.
+    column.style.width = `${Math.ceil(widthOf("[data-ouro-pagination-previous]") + widthOf("[data-ouro-pagination-next]")) + 16}px`;
+    await settle();
+    expectSmClasses();
+    // Narrower than the margins, the room is negative, and a measure of the hidden list would still find it too small.
+    column.style.width = "8px";
+    await settle();
+    expectSmClasses();
+  });
+
+  it("keeps focus on a control outside the pager when the summary replaces the pages", async () => {
+    await page.viewport(1280, 800);
+    const { host, nav, column } = await mountIn(
+      <>
+        <Pagination page={6} pageCount={12} href={href} />
+        <button type="button" data-test-harness>
+          Outside
+        </button>
+      </>,
+      { width: 1000 },
+    );
+    await expect.poll(() => pageItems(nav).every(shown)).toBe(true);
+    const outside = host.querySelector("button")!;
+    outside.focus();
+    column.style.width = "420px";
+    await expect.poll(() => shown(summaryItem(nav))).toBe(true);
+    expect(document.activeElement).toBe(outside);
   });
 });
 

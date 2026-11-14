@@ -604,7 +604,7 @@ describe("native Sign in with Apple API", () => {
 
     expect(response.status).toBe(400);
     expect(json.error).toMatchObject({ code: "validation_error", details: { providerCode: "apple_email_unavailable" } });
-    expect(json.error.message).toBe("We couldn't find a Spoonjoy account for this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.");
+    expect(json.error.message).toBe("No Spoonjoy account uses this Apple ID yet. Sign in with Google or your password and we'll connect Apple for you.");
     expect(json.error.details.pendingAppleLinkToken).toMatch(/^pal_/);
     await expect(db.pendingAppleLink.count()).resolves.toBe(1);
     await expect(db.user.findMany({ select: { id: true } })).resolves.toEqual([{ id: existing.id }]);
@@ -693,7 +693,7 @@ describe("native Sign in with Apple API", () => {
 
     expect(response.status).toBe(400);
     expect(json.error.details.providerCode).toBe("apple_email_unavailable");
-    expect(json.error.message).toMatch(/^We couldn't find a Spoonjoy account for this Apple ID yet\./);
+    expect(json.error.message).toMatch(/^No Spoonjoy account uses this Apple ID yet\./);
     expect(json.error.details).not.toHaveProperty("pendingAppleLinkToken");
   });
 

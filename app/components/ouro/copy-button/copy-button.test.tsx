@@ -175,7 +175,7 @@ describe("CopyButton", () => {
         throw new Error("blocked");
       },
     ],
-  ])("says Couldn't copy, once, when the browser refuses and the selection %s", async (_how, exec) => {
+  ])("says that the browser blocked copying, once, when the browser refuses and the selection %s", async (_how, exec) => {
     stubClipboard("refuse");
     vi.spyOn(document, "execCommand").mockImplementation(exec);
     const announced = watchAnnouncements();
@@ -190,6 +190,87 @@ describe("CopyButton", () => {
       expect(onCopy).not.toHaveBeenCalled();
     } finally {
       announced.stop();
+    }
+  });
+
+  it("by default shows Browser blocked copying, with how to copy by hand as its tooltip, and announces the whole sentence once", async () => {
+    stubClipboard("refuse");
+    vi.spyOn(document, "execCommand").mockReturnValue(false);
+    const sentence = "The browser blocked copying. Select the text and copy it by hand.";
+    const announced = watchAnnouncements();
+    try {
+      const { button, host } = await render(
+        <>
+          <CopyButton value="x" title="Copy the key" />
+          <CopyButton value="x" label="Copy link" hideLabel />
+        </>,
+      );
+      await userEvent.click(button);
+      await until(() => button.textContent, "Browser blocked copying");
+      expect(button.title).toBe(sentence);
+      await wait(100);
+      expect(announced.count(sentence)).toBe(1);
+      const icon = host.querySelectorAll<HTMLButtonElement>('[data-ouro-control="copy-button"]')[1]!;
+      await userEvent.click(icon);
+      await until(() => icon.getAttribute("aria-label"), "Browser blocked copying");
+      expect(icon.title).toBe(sentence);
+      await wait(100);
+      expect(announced.count(sentence)).toBe(2);
+      await wait(2000);
+      expect(button.textContent).toBe("Copy");
+      expect(button.title).toBe("Copy the key");
+      expect(icon.getAttribute("aria-label")).toBe("Copy link");
+      expect(icon.hasAttribute("title")).toBe(false);
+    } finally {
+      announced.stop();
+    }
+  });
+
+  it("announces failedMessage, and shows it as the tooltip, beside a short failedLabel", async () => {
+    stubClipboard("refuse");
+    vi.spyOn(document, "execCommand").mockReturnValue(false);
+    const announced = watchAnnouncements();
+    try {
+      const { button } = await render(<CopyButton value="x" failedLabel="Copia bloqueada" failedMessage="El navegador bloqueó la copia. Cópialo a mano." />);
+      await userEvent.click(button);
+      await until(() => button.textContent, "Copia bloqueada");
+      expect(button.title).toBe("El navegador bloqueó la copia. Cópialo a mano.");
+      await wait(100);
+      expect(announced.count("El navegador bloqueó la copia. Cópialo a mano.")).toBe(1);
+      expect(announced.count("Copia bloqueada")).toBe(0);
+    } finally {
+      announced.stop();
+    }
+  });
+
+  it("keeps a 390px-wide page from scrolling sideways when it says the browser blocked copying, at every size", async () => {
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(390, 844);
+    try {
+      stubClipboard("refuse");
+      vi.spyOn(document, "execCommand").mockReturnValue(false);
+      const { host } = await render(
+        <>
+          <div>
+            <CopyButton value="x" size="sm" />
+          </div>
+          <div>
+            <CopyButton value="x" size="md" />
+          </div>
+          <div>
+            <CopyButton value="x" size="lg" />
+          </div>
+        </>,
+      );
+      for (const button of host.querySelectorAll<HTMLButtonElement>('[data-ouro-control="copy-button"]')) {
+        await userEvent.click(button);
+        await until(() => button.closest('[data-ouro="copy-button"]')!.getAttribute("data-status"), "failed");
+        expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(document.documentElement.clientWidth);
+        expect(button.textContent).toBe("Browser blocked copying");
+      }
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    } finally {
+      await page.viewport(before.width, before.height);
     }
   });
 

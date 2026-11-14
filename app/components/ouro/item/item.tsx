@@ -31,7 +31,10 @@ export interface ItemOwnProps {
   description?: ReactNode;
   /**
    * Leading media: an `<img>` (cropped square), an `Avatar`, or an icon with
-   * `mediaSize="icon"`. Give an image `alt=""` when the title already names it.
+   * `mediaSize="icon"`. Give an image `alt=""` when the title already names it. Beside a
+   * description, it lines up with the title and the description's first line, so it stays
+   * level with the title however long the description runs; beside a title alone, it is centered.
+   * @claim "Beside a description, it lines up" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item > keeps the media level with the title when the description runs past one line, and centered beside shorter text)
    */
   media?: ReactNode;
   /**
@@ -148,6 +151,15 @@ const mediaSizes = {
   md: "size-16 rounded-lg overflow-hidden *:size-full *:object-cover",
   lg: "size-28 rounded-lg overflow-hidden *:size-full *:object-cover",
 } as const;
+// With a description, the media lines up with the title and the description's first line (24px,
+// 2px apart, 20px: 46px) instead of the whole text, so it stays level with the title when the
+// description runs longer. A 40px media sits 3px down that band, where centering put it before.
+const mediaWithDescription = {
+  icon: "self-start mt-0.75",
+  sm: "self-start mt-0.75",
+  md: "self-start",
+  lg: "self-start",
+} as const;
 
 // Columns for each layout, and the stacked layout below a breakpoint, where the actions
 // move under the text into the title's column. Literal strings so the app's Tailwind finds them.
@@ -199,7 +211,7 @@ const above = {
  * plain horizontal layout with no list semantics.
  *
  * @group Lists
- * @see https://ui.ouro.bot/docs/item
+ * @see https://ui.ouroboros.bot/docs/item
  *
  * @example
  * <Item
@@ -326,7 +338,10 @@ export function Item(props: ItemProps): JSX.Element {
       ),
     },
     media && (
-      <div aria-hidden={mediaSize === "icon" ? true : undefined} className={cn("shrink-0", mediaSizes[mediaSize], lifted?.media)}>
+      <div
+        aria-hidden={mediaSize === "icon" ? true : undefined}
+        className={cn("shrink-0", mediaSizes[mediaSize], description && !lifted && mediaWithDescription[mediaSize], lifted?.media)}
+      >
         {media}
       </div>
     ),

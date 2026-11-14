@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { ChangeEvent, JSX, ReactNode, Ref, TextareaHTMLAttributes } from "react";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl, type FieldControlProps } from "~/components/ouro/field/field-parts";
@@ -9,8 +9,52 @@ import { cn } from "~/lib/ouro/cn";
 import { useMergedRef } from "~/lib/ouro/refs";
 import { FieldOwnerContext, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
-import { fitHeight, textAreaClass, textAreaSizes, textAreaVariants } from "~/components/ouro/text-field/text-area-styles";
+import {
+  describeHighlights,
+  fitHeight,
+  fitHeightNative,
+  supportsFieldSizing,
+  highlightLayerClass,
+  highlightRuns,
+  highlightTone,
+  highlightTones,
+  highlightWarnings,
+  highlightsKey,
+  mirroredStyles,
+  moveHighlights,
+  normalizeHighlights,
+  textAreaClass,
+  textAreaSizes,
+  textAreaVariants,
+  type HighlightEdit,
+} from "~/components/ouro/text-field/text-area-styles";
 import { controlSizeWarning, controlVariantWarning } from "~/components/ouro/text-field/text-field-styles";
+
+/**
+ * A range of a TextArea's text that it marks: words an assistant suggested in the person's
+ * draft, a possible spelling mistake. `start` and `end` are JavaScript string indexes, and
+ * `end` is exclusive, so a mark covers `text.slice(start, end)`.
+ */
+export interface TextAreaHighlight {
+  /** Where the mark starts: the index of its first character in the text. */
+  start: number;
+  /** Where it ends: the index just after its last character. */
+  end: number;
+  /**
+   * What the mark means, which screen readers hear with the words it marks: "Suggested by
+   * your assistant", "Possible spelling mistake". Required, so no mark is shown only to sighted people.
+   * @claim "Required, so no mark is shown" registry/ouro/components/ouro/text-field/text-area.test-d.ts verify:fileLine(registry/ouro/components/ouro/text-field/text-area.test-d.ts, /expectTypeOf<\{\sstart:\s0;\send:\s5\s\}>\(\)\.not\.toExtend<TextAreaHighlight>/)
+   */
+  label: string;
+  /**
+   * The mark's colour, a theme tone. `destructive` and `warning` draw a wavy underline, as
+   * spelling and grammar checkers do; the others a dotted underline on a faint tint.
+   * @default "primary"
+   */
+  tone?: "primary" | "secondary" | "destructive" | "success" | "warning" | (string & { 'danger is "destructive"; accent is "primary"; neutral is "secondary"': never }) | undefined;
+  /** Your own id for the mark. An edit inside a mark splits it, and both pieces keep its id. */
+  id?: string | undefined;
+}
 
 /** The props TextArea adds to the textarea attributes it passes through. */
 export interface TextAreaOwnProps {
@@ -87,12 +131,38 @@ export interface TextAreaOwnProps {
    */
   onValueChange?: FieldControlProps["onValueChange"];
   /**
+   * Ranges of the text to mark in place, each with a tone and a label: words an assistant
+   * wrote in the person's draft, or spelling and grammar notes. The marks wrap with the words
+   * and scroll with them, and screen readers hear each label with the words it marks in the
+   * field's description. As the person types, pastes or undoes, the marks follow their
+   * words: what the person types is never marked, an edit inside a mark splits it, and undo
+   * brings back the marks the text had. Pass `[]` for none, rather than switching the prop
+   * off and on, which remounts the textarea: with no marks the layer draws nothing and costs
+   * nothing as the person types.
+   * @claim "with no marks the layer draws nothing" registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx::TextArea highlights' cost > copies nothing and draws no text with no marks, as the person types or the parent renders, and stays hidden)
+   * @claim "Ranges of the text to mark in" registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx::TextArea highlights > marks each range over its words, in a layer with the textarea's box and type, and lets the pointer through)
+   * @claim "The marks wrap with the words" registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx::TextArea highlights > wraps a mark with its words onto the next line)
+   * @claim "The marks wrap with the words" registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx::TextArea highlights layout > scrolls the marks with the text once autoGrow stops at maxRows)
+   * @claim "The marks wrap with the words" registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx::TextArea highlights > describes the marks after the field's own description: each label once, with the words it marks)
+   * @claim "As the person types, pastes or" registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx::TextArea highlights as the person edits > never marks what the person types, before, after or inside a mark, and splits a mark they type inside)
+   * @claim "As the person types, pastes or" registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx::TextArea highlights as the person edits > brings the marks back when the person undoes an edit, and takes them away again on redo)
+   */
+  highlights?: readonly TextAreaHighlight[] | undefined;
+  /**
+   * Called with the highlights moved to fit the text after the person edits it. Store them
+   * and pass them back as `highlights`, or recompute your own from your data.
+   */
+  onHighlightsChange?: ((highlights: TextAreaHighlight[]) => void) | undefined;
+  /**
    * Layout only: margins, width, grid placement (`mt-4`, `col-span-2`). Appearance classes
    * warn in development; style fields in your theme.
    */
   className?: string | undefined;
   /** The textarea element. */
   ref?: Ref<HTMLTextAreaElement> | undefined;
+
+  /** Not a prop. Ouro UI uses `highlights`: `<TextArea highlights={[{ start: 0, end: 5, label: "Suggested" }]}>`. */
+  marks?: { 'Use <TextArea highlights={[{ start: 0, end: 5, label: "Suggested" }]}>': never };
 
   /** Not a prop. Ouro UI uses `error`: `<TextArea error="Required.">`. */
   errorMessage?: { 'Use <TextArea error="Required.">': never };
@@ -126,17 +196,28 @@ const owner = { name: "TextArea", data: "text-area" };
  * with the text from `rows` lines up to `maxRows`.
  *
  * `variant="plain"` draws no frame, for a textarea inside a box your app draws, and
- * `size="lg"` sets 20px text.
+ * `size="lg"` sets 20px text. `highlights` marks ranges of the text in place, each with a
+ * tone and a label screen readers hear, and the marks follow their words as the person edits.
  *
- * Use `TextField` instead for one line, and `Field` with `FieldControl` for a control that
- * is not text.
+ * Use `TextField` instead for one line, `Composer` for a chat message box with its send
+ * button, and `Field` with `FieldControl` for a control that is not text.
  *
  * @group Forms
- * @see https://ui.ouro.bot/docs/text-area
+ * @see https://ui.ouroboros.bot/docs/text-area
  *
  * @example
  * <TextArea label="Notes" name="notes" description="Only you see these." />
  * <TextArea label="Message" name="message" autoGrow rows={2} maxRows={8} required error={errors?.message} />
+ *
+ * @example
+ * // Words an assistant suggested, marked in the person's draft; the marks follow edits.
+ * <TextArea
+ *   label="Reply"
+ *   value={text}
+ *   onValueChange={setText}
+ *   highlights={[{ start: 0, end: 22, label: "Suggested by your assistant" }]}
+ *   onHighlightsChange={setHighlights}
+ * />
  *
  * @example
  * // A chat composer: the box is the app's, and the textarea inside it has no frame.
@@ -144,6 +225,8 @@ const owner = { name: "TextArea", data: "text-area" };
  *   <TextArea label="Message" hideLabel name="message" placeholder="Ask anything" variant="plain" autoGrow rows={1} maxRows={8} className="flex-1" />
  *   <Button type="submit">Send</Button>
  * </form>
+ * @claim "marks ranges of the text in place" registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx::TextArea highlights > describes the marks after the field's own description: each label once, with the words it marks)
+ * @claim "marks ranges of the text in place" registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx::TextArea highlights as the person edits > never marks what the person types, before, after or inside a mark, and splits a mark they type inside)
  * @claim "` draws no frame, for a textarea inside" registry/ouro/components/ouro/text-field/text-area.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.test.tsx::TextArea variant and size > sets 20px text on 28px lines with size lg, at phone and desktop widths)
  * @claim "` draws no frame, for a textarea inside" registry/ouro/components/ouro/text-field/text-area.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.test.tsx::TextArea variant and size > draws no frame of its own with variant plain, and still outlines on keyboard focus)
  */
@@ -164,6 +247,8 @@ export function TextArea(props: TextAreaProps): JSX.Element {
     className,
     ref,
     onChange,
+    highlights,
+    onHighlightsChange,
     // Guard props (hint types), dropped here so they never reach the DOM.
     errorMessage,
     helperText,
@@ -174,6 +259,7 @@ export function TextArea(props: TextAreaProps): JSX.Element {
     minRows,
     autoResize,
     autosize,
+    marks,
     ...rest
   } = props;
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -191,26 +277,49 @@ export function TextArea(props: TextAreaProps): JSX.Element {
           autoResize !== undefined && ["autoResize is not a prop", "<TextArea autoGrow>"],
           autosize !== undefined && ["autosize is not a prop", "<TextArea autoGrow>"],
           maxRows !== undefined && !autoGrow && ["maxRows only applies with autoGrow", `<TextArea autoGrow maxRows={${maxRows}}>`],
+          marks !== undefined && ["marks is not a prop", '<TextArea highlights={[{ start: 0, end: 5, label: "Suggested" }]}>'],
+          ...highlightWarnings(highlights),
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
 
-  // With autoGrow, fit after every render (a controlled value, a prop change) and on every
-  // keystroke. Without it, measure nothing: the inline height is the user's resize handle.
-  // Turning autoGrow off once clears the height autoGrow set, so `rows` applies again.
+  const highlighting = highlights !== undefined;
+  const marked = useHighlights(textareaRef, highlights, rest.value, rest.defaultValue);
+
+  // With autoGrow, fit once per change of the text and when a prop that sets the height changes:
+  // an uncontrolled field as the person types, a controlled one once its value arrives. A render
+  // that changes neither (a parent's, as a message arrives beside a composer) measures nothing,
+  // since each fit reads the textarea's style and lays out the page. Without autoGrow, measure
+  // nothing: the inline height is the user's resize handle. Turning autoGrow off once clears the
+  // height autoGrow set, so `rows` applies again.
+  const controlled = rest.value !== undefined;
   const grew = useRef(autoGrow);
+  const native = autoGrow && supportsFieldSizing();
   const fit = () => {
     const textarea = textareaRef.current!;
-    if (autoGrow) fitHeight(textarea, rows, maxRows);
+    if (autoGrow && native) fitHeightNative(textarea, rows, maxRows);
+    else if (autoGrow) fitHeight(textarea, rows, maxRows);
+    // Stryker disable next-line ConditionalExpression: clearing styles that were never set changes nothing.
     else if (grew.current) {
       textarea.style.height = "";
       textarea.style.overflowY = "";
+      textarea.style.removeProperty("field-sizing");
+      textarea.style.minHeight = "";
+      textarea.style.maxHeight = "";
     }
     grew.current = autoGrow;
   };
-  useLayoutEffect(fit);
+  const watched = native ? undefined : rest.value;
+  useLayoutEffect(fit, [autoGrow, native, rows, maxRows, size, variant, watched]);
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    if (autoGrow) fitHeight(event.currentTarget, rows, maxRows);
+    // A controlled field fits once its value arrives, in the effect above.
+    if (autoGrow && !native && !controlled) fitHeight(event.currentTarget, rows, maxRows);
+    // Without highlights there is nothing to move, so this only skips the work.
+    // Stryker disable next-line ConditionalExpression: as above.
+    if (highlights !== undefined) {
+      const moved = marked.edit(event.currentTarget.value, event.currentTarget.selectionStart, (event.nativeEvent as InputEvent).inputType);
+      if (moved) onHighlightsChange?.(moved);
+    }
     onChange?.(event);
   };
   // The text rewraps when the width changes (a rotated phone, a resized window). The refit
@@ -218,7 +327,8 @@ export function TextArea(props: TextAreaProps): JSX.Element {
   // observation the browser cannot deliver in the same frame, which it reports on the window
   // as "ResizeObserver loop completed with undelivered notifications".
   useEffect(() => {
-    if (!autoGrow) return;
+    // Stryker disable next-line ConditionalExpression: observing on the native path only refits to the same height.
+    if (!autoGrow || native) return;
     const textarea = textareaRef.current!;
     let width = textarea.offsetWidth;
     let frame = 0;
@@ -233,9 +343,14 @@ export function TextArea(props: TextAreaProps): JSX.Element {
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [autoGrow, rows, maxRows]);
+  },
+  // Stryker disable next-line ArrayDeclaration: an empty list keeps the first rows and maxRows, which the width refit tests change.
+  [autoGrow, native, rows, maxRows]);
 
   const setRef = useMergedRef(ref, textareaRef);
+  const descriptionId = useId();
+  const marksDescription = highlighting ? describeHighlights(marked.text, marked.ranges) : "";
+  const describedBy = [rest["aria-describedby"], marksDescription ? descriptionId : undefined].filter(Boolean).join(" ") || undefined;
 
   return (
     <FieldOwnerContext.Provider value={owner}>
@@ -251,21 +366,185 @@ export function TextArea(props: TextAreaProps): JSX.Element {
       >
         <FieldControl
           {...(rest as Omit<FieldControlProps, "className">)}
+          aria-describedby={describedBy}
           ref={setRef as Ref<HTMLInputElement>}
           onChange={handleChange as unknown as FieldControlProps["onChange"]}
-          render={(controlProps) => (
-            <textarea
-              {...(controlProps as TextareaHTMLAttributes<HTMLTextAreaElement>)}
-              rows={rows}
-              data-ouro-control="text-area"
-              data-ouro-part="input"
-              data-variant={variant}
-              data-size={size}
-              className={cn(textAreaClass, textAreaVariants[variant], textAreaSizes[size], autoGrow ? "resize-none" : "resize-y")}
-            />
-          )}
+          render={(controlProps) => {
+            const textarea = (
+              <textarea
+                {...(controlProps as TextareaHTMLAttributes<HTMLTextAreaElement>)}
+                rows={rows}
+                data-ouro-control="text-area"
+                data-ouro-part="input"
+                data-variant={variant}
+                data-size={size}
+                className={cn(textAreaClass, textAreaVariants[variant], textAreaSizes[size], autoGrow ? "resize-none" : "resize-y")}
+              />
+            );
+            if (!highlighting) return textarea;
+            // The marks are drawn over the textarea in a layer the same size, so they need a box around both.
+            return (
+              <div data-ouro-highlights="" className="relative min-w-0">
+                {textarea}
+                <HighlightLayer textareaRef={textareaRef} text={marked.text} highlights={marked.ranges} styleKey={`${size} ${variant}`} />
+                {marksDescription && (
+                  <span id={descriptionId} hidden>
+                    {marksDescription}
+                  </span>
+                )}
+              </div>
+            );
+          }}
         />
       </Field>
     </FieldOwnerContext.Provider>
+  );
+}
+
+/** What `useHighlights` gives TextArea: the text, the marks that fit it, and the edit handler. */
+interface Highlighted {
+  text: string;
+  ranges: TextAreaHighlight[];
+  /** Moves the marks for the text after an edit of the input type given; returns them when they changed. */
+  edit: (next: string, caret: number, inputType: string | undefined) => TextAreaHighlight[] | undefined;
+}
+
+/** The marks undo can bring back, at most this many texts. */
+const historyLength = 100;
+
+/**
+ * The marks that fit the text now. New `highlights` (by content, not by array) are taken as
+ * given; otherwise, when the text changes, the marks move with it: by the person's edit when
+ * they made one, and by comparing the texts when the app changed the value.
+ */
+function useHighlights(textareaRef: { current: HTMLTextAreaElement | null }, highlights: readonly TextAreaHighlight[] | undefined, value: unknown, defaultValue: unknown): Highlighted {
+  const controlled = value !== undefined;
+  const [ownText, setOwnText] = useState(() => (defaultValue === undefined ? "" : String(defaultValue)));
+  const text = controlled ? String(value) : ownText;
+  const key = highlightsKey(highlights);
+  // Stryker disable next-line ObjectLiteral: an empty start differs from the first render's key, which then takes the highlights as given all the same.
+  const [track, setTrack] = useState(() => ({ key, text, ranges: normalizeHighlights(highlights, text.length) }));
+  // The marks the person's last edit gave, for the text it made.
+  const [edited, setEdited] = useState<{ text: string; ranges: TextAreaHighlight[] } | null>(null);
+  // The selection when the input in progress began (the native beforeinput), so an edit is placed where it was made.
+  const input = useRef<HighlightEdit["before"] | null>(null);
+  const history = useRef(new Map<string, TextAreaHighlight[]>());
+
+  let ranges = track.ranges;
+  if (track.key !== key || track.text !== text) {
+    if (track.key !== key) ranges = normalizeHighlights(highlights, text.length);
+    else if (edited?.text === text) ranges = edited.ranges;
+    else ranges = moveHighlights(track.ranges, track.text, text, null);
+    setTrack({ key, text, ranges });
+  }
+
+  useEffect(() => {
+    const seen = history.current;
+    // A text seen before keeps its first place, so undo reaches back about historyLength texts.
+    if (!seen.has(track.text)) seen.set(track.text, track.ranges);
+    if (seen.size > historyLength) seen.delete(seen.keys().next().value!);
+  }, [track]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current!;
+    const record = () => {
+      input.current = { start: textarea.selectionStart, end: textarea.selectionEnd };
+    };
+    textarea.addEventListener("beforeinput", record);
+    // Stryker disable next-line ArrowFunction,StringLiteral: an unmounted textarea's listener records a selection nothing reads.
+    return () => textarea.removeEventListener("beforeinput", record);
+  },
+  // Stryker disable next-line ArrayDeclaration: the textarea is the same for the field's life, so once is enough with any fixed list.
+  [textareaRef]);
+
+  const edit = (next: string, caret: number, inputType: string | undefined) => {
+    const before = input.current;
+    input.current = null;
+    // Undo and redo bring back the marks the text had, when it had any.
+    const restored = inputType?.startsWith("history") ? history.current.get(next) : undefined;
+    const moved = restored ?? moveHighlights(ranges, text, next, before && { before, caret });
+    setEdited({ text: next, ranges: moved });
+    // A controlled field reads its text from value, so its own copy is never read.
+    // Stryker disable next-line ConditionalExpression: as above.
+    if (!controlled) setOwnText(next);
+    return highlightsKey(moved) === highlightsKey(ranges) ? undefined : moved;
+  };
+  return { text, ranges, edit };
+}
+
+/** Copies the textarea's box and type onto the layer and scrolls the layer's text with it. */
+function syncLayer(textarea: HTMLTextAreaElement, layer: HTMLDivElement): void {
+  const style = getComputedStyle(textarea);
+  const target = layer.style;
+  for (const name of mirroredStyles) target[name] = style[name];
+  // A classic scrollbar takes width from the text, at the inline end.
+  const borders = parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
+  const scrollbar = Math.max(0, textarea.offsetWidth - textarea.clientWidth - borders);
+  const side = style.direction === "rtl" ? "paddingLeft" : "paddingRight";
+  target[side] = `${parseFloat(style[side]) + scrollbar}px`;
+  (layer.firstElementChild as HTMLElement).style.transform = `translateY(${-textarea.scrollTop}px)`;
+  target.visibility = "visible";
+}
+
+/**
+ * The marks, drawn over the textarea: the same text, transparent, with the marked runs
+ * underlined in their tones. It is measured after mount, so the server writes it hidden.
+ *
+ * Copying the textarea's box and type reads its computed style and lays out the page, so it runs
+ * only when that can change: when marks appear, when a prop that styles the textarea changes
+ * (`styleKey`), when the textarea's size changes (a breakpoint's type, a scrollbar) and when it
+ * scrolls. Not as the person types: the layer's text changes with the textarea's, in the same
+ * box. With no marks it draws no text and copies nothing, and stays hidden.
+ *
+ * @claim "With no marks it draws no text" registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.highlights.test.tsx::TextArea highlights' cost > copies nothing and draws no text with no marks, as the person types or the parent renders, and stays hidden)
+ */
+function HighlightLayer({ textareaRef, text, highlights, styleKey }: { textareaRef: { current: HTMLTextAreaElement | null }; text: string; highlights: readonly TextAreaHighlight[]; styleKey: string }): JSX.Element {
+  const layerRef = useRef<HTMLDivElement>(null);
+  const marking = highlights.length > 0;
+  const live = useRef(marking);
+  useLayoutEffect(() => {
+    live.current = marking;
+    const layer = layerRef.current!;
+    if (marking) syncLayer(textareaRef.current!, layer);
+    // Without marks the class hides it again.
+    else layer.style.visibility = "";
+  }, [textareaRef, marking, styleKey]);
+  useEffect(() => {
+    const textarea = textareaRef.current!;
+    const layer = layerRef.current!;
+    const sync = () => {
+      if (live.current) syncLayer(textarea, layer);
+    };
+    textarea.addEventListener("scroll", sync);
+    // The type can change with the size (a breakpoint's font size). As in autoGrow, the sync runs in the next frame, never inside the observer's callback.
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      // Stryker disable next-line CallExpression: a second sync in the same frame copies the same styles.
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(sync);
+    });
+    observer.observe(textarea);
+    // Stryker disable next-line ArrowFunction,CallExpression,StringLiteral: an unmounted layer is gone, so its syncs change nothing shown.
+    return () => (cancelAnimationFrame(frame), observer.disconnect(), textarea.removeEventListener("scroll", sync));
+  },
+  // Stryker disable next-line ArrayDeclaration: the textarea is the same for the field's life, so once is enough with any fixed list.
+  [textareaRef]);
+  return (
+    <div ref={layerRef} aria-hidden="true" data-ouro-highlights-layer="" className={cn(highlightLayerClass, "invisible")}>
+      <div>
+        {marking &&
+          highlightRuns(text, highlights).map((run, index) => {
+            if (run.mark === undefined) return run.text;
+            const tone = highlightTone(highlights[run.mark]!);
+            return (
+              <span key={index} data-ouro-highlight={tone} className={cn("rounded-xs box-decoration-clone forced-colors:decoration-[CanvasText]", highlightTones[tone])}>
+                {run.text}
+              </span>
+            );
+          })}
+        {/* The textarea keeps a line under a last line break; so does the layer. */}
+        {"\n\u200b"}
+      </div>
+    </div>
   );
 }

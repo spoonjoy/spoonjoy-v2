@@ -39,7 +39,7 @@ function statusLabel(status: string, generationStatus: string, archivedAt?: stri
   // A failed, unarchived cover is labelled by failedAttemptLabel before this is reached.
   if (status === "archived" || archivedAt) return "Archived";
   if (status === "processing" || generationStatus === "processing") return "Processing";
-  if (generationStatus === "failed") return "Editorial failed";
+  if (generationStatus === "failed") return "No editorial made";
   if (status !== "ready") return "Unavailable";
   return "Ready";
 }
@@ -50,7 +50,7 @@ function statusLabel(status: string, generationStatus: string, archivedAt?: stri
  */
 function failedAttemptLabel(cover: RecipeCoverHistoryItem): string | null {
   if (cover.status !== "failed" || cover.archivedAt) return null;
-  return cover.parentCoverId ? "Regeneration failed" : "Generation failed";
+  return cover.parentCoverId ? "No new image made" : "No image made";
 }
 
 function variantName(variant: "image" | "stylized") {
@@ -98,7 +98,7 @@ function ActiveCoverChoice({ covers }: { covers: RecipeCoverHistoryItem[] }) {
       value: choiceValue(cover.id, variant.variant),
       label: normalizeRequiredCoverProvenanceLabel(variant.provenanceLabel),
       description: `${variantName(variant.variant)}, ${createdDateLabel(cover.createdAt)}`,
-      media: <img src={variant.imageUrl} alt="" loading="lazy" decoding="async" />,
+      media: <img src={variant.imageUrl} alt="" decoding="async" />,
     })),
   );
   const activeCover = covers.find((cover) => cover.isActive && cover.status !== "archived" && !cover.archivedAt);
@@ -226,7 +226,6 @@ export function RecipeCoverHistory({
                     <img
                       src={thumbnail}
                       alt=""
-                      loading="lazy"
                       decoding="async"
                       className="h-full w-full object-cover"
                     />
@@ -374,7 +373,6 @@ export function RecipeCoverHistory({
                   <img
                     src={spoon.photoUrl}
                     alt=""
-                    loading="lazy"
                     decoding="async"
                     className="h-full w-full object-cover"
                   />

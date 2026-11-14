@@ -4,6 +4,7 @@ export {
   menuBarTriggerClass,
   menuContextTriggerClass,
   menuGroupLabelClass,
+  menuGuardsClass,
   menuIndicatorClass,
   menuItemClass,
   menuPopupClass,
@@ -139,6 +140,13 @@ const menuSeparatorClass = "-mx-1 my-1 h-px border-0 bg-border";
  * @internal
  */
 const menuBarClass = "box-border flex items-center gap-1";
+
+/**
+ * The holder of a bar menu's or a submenu's focus guards: out of the flow, so the bar's gap stays shut.
+ *
+ * @internal
+ */
+const menuGuardsClass = "absolute";
 
 /**
  * A menubar's menu button: 44px tall on a coarse pointer, 32px with a fine pointer,

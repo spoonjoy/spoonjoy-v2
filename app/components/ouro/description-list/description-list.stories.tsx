@@ -47,3 +47,23 @@ export const InContext: Story = {
     </Page>
   ),
 };
+
+/** In a 352px side pane on a wide screen, the list measures itself, not the window, so each term sits above its details. */
+export const InANarrowPane: Story = {
+  parameters: { screenshot: { name: "description-list-narrow-pane" } },
+  render: () => (
+    // On a phone the pane wraps below the recipe instead of squeezing it to nothing.
+    <div style={{ background: "var(--background)", color: "var(--foreground)", padding: 24, display: "flex", flexWrap: "wrap", gap: 24, alignItems: "flex-start" }}>
+      <div style={{ flex: "1 1 12rem", color: "var(--muted-foreground)" }}>The recipe, with its steps and photos.</div>
+      <div style={{ width: "min(100%, 352px)", flexShrink: 0, border: "1px solid var(--border)", borderRadius: "calc(var(--radius) + 4px)", padding: 16 }}>
+        <DescriptionList
+          items={[
+            { term: "Saved", details: "You saved it after cooking it twice last month, both times on a Sunday." },
+            { term: "Shared", details: "Two friends shared it with you, and one left a note about the oven." },
+            { term: "Season", details: "Short ribs are on sale this week at the market you follow." },
+          ]}
+        />
+      </div>
+    </div>
+  ),
+};

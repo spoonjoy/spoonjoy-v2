@@ -226,6 +226,15 @@ class MockResizeObserver {
 }
 global.ResizeObserver = MockResizeObserver;
 
+// happy-dom has no document.fonts (FontFaceSet), which HX's Pagination reads to measure again when a
+// font finishes loading; here every font has already loaded and none ever starts.
+if (typeof document !== "undefined" && !("fonts" in document)) {
+  Object.defineProperty(document, "fonts", {
+    configurable: true,
+    value: { ready: Promise.resolve(), addEventListener() {}, removeEventListener() {} },
+  });
+}
+
 // happy-dom has no Element.checkVisibility or Document.getAnimations, which HX's Inspector (X-ray)
 // reads to skip hidden components and wait for the page to settle; here every element is visible
 // and nothing is moving.

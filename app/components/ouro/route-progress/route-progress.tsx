@@ -32,13 +32,15 @@ export interface RouteProgressProps {
 const rootClass = "pointer-events-none fixed inset-x-0 top-0 z-(--ouro-layer) block h-0.5 print:hidden";
 // The bar fades in and out; with reduced motion it fades faster.
 const barClass =
-  "group absolute inset-0 overflow-hidden transition-opacity duration-(--ouro-duration-base) ease-(--ouro-ease-out) data-closed:opacity-0 " +
+  "absolute inset-0 overflow-hidden transition-opacity duration-(--ouro-duration-base) ease-(--ouro-ease-out) data-closed:opacity-0 " +
   "motion-reduce:duration-(--ouro-duration-fast)";
 // The filled part grows from the start edge to --ouro-route-progress of the width, easing into each step while
-// the bar shows. With reduced motion it is the whole width and never grows.
+// the bar shows. With reduced motion it is the whole width and never grows. A child selector, not `group-data-open`:
+// Chrome restyles every element under anything that gains or loses `data-open` while a `group-data-*` rule on it
+// exists, so each sheet, menu and popover open restyled the whole of it again (ourostack/ouro-ui#648).
 const indicatorClass =
   "h-full w-full origin-left rtl:origin-right bg-primary scale-x-(--ouro-route-progress) " +
-  "motion-safe:group-data-open:transition-[scale] motion-safe:group-data-open:duration-(--ouro-duration-slow) motion-safe:group-data-open:ease-(--ouro-ease-out) " +
+  "motion-safe:[[data-open]>&]:transition-[scale] motion-safe:[[data-open]>&]:duration-(--ouro-duration-slow) motion-safe:[[data-open]>&]:ease-(--ouro-ease-out) " +
   "motion-reduce:scale-x-100 forced-colors:bg-[CanvasText]";
 
 /** How long a navigation runs before the bar shows, so a fast one shows and says nothing. */
@@ -107,7 +109,7 @@ const fix = '<RouteProgress active={navigation.state !== "idle"} />';
  * that is busy, and `Button`'s `loading` for the one action a person just took.
  *
  * @group Feedback
- * @see https://ui.ouro.bot/docs/route-progress
+ * @see https://ui.ouroboros.bot/docs/route-progress
  *
  * @example
  * // React Router, in the root route:

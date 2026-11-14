@@ -19,7 +19,7 @@ export { dotClass, radioClass };
  */
 const radioClass =
   "press relative m-0 mt-0.5 box-border inline-flex size-5 shrink-0 items-center justify-center p-0 sm:pointer-fine:size-4 " +
-  "rounded-full border border-solid border-muted-foreground bg-transparent dark:not-data-checked:bg-input/30 " +
+  "[--corner-shape:round] [corner-shape:round] rounded-full border border-solid border-muted-foreground bg-transparent dark:not-data-checked:bg-input/30 " +
   "data-checked:border-primary data-checked:bg-primary " +
   "aria-invalid:border-destructive " +
   "cursor-default select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
@@ -35,7 +35,7 @@ const radioClass =
  * @claim "The dot in a chosen radio" registry/ouro/components/ouro/radio-group/radio-group.test.tsx verify:testExists(registry/ouro/components/ouro/radio-group/radio-group.test.tsx::RadioGroup > grows the dot in from 95% as it fades in, never from nothing, and only fades with reduced motion)
  */
 const dotClass =
-  "pointer-events-none block size-2 rounded-full bg-primary-foreground sm:pointer-fine:size-1.5 " +
+  "pointer-events-none block size-2 [--corner-shape:round] [corner-shape:round] rounded-full bg-primary-foreground sm:pointer-fine:size-1.5 " +
   "scale-95 opacity-0 data-checked:scale-100 data-checked:opacity-100 " +
   "motion-safe:[transition:scale_var(--ouro-duration-fast)_var(--ouro-ease-out),opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
   "motion-reduce:scale-100 motion-reduce:transition-opacity motion-reduce:duration-(--ouro-duration-fast)";

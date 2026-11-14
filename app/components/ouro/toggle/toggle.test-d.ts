@@ -22,6 +22,7 @@ expectTypeOf<{
   title: "Bold (Ctrl+B)";
 }>().toExtend<ToggleProps>();
 expectTypeOf<{ label: "Bold"; defaultPressed: true; variant: "plain"; size: "lg" }>().toExtend<ToggleProps>();
+expectTypeOf<{ label: "Unread"; variant: "outline"; size: "xs"; shape: "pill" }>().toExtend<ToggleProps>();
 
 // The label is required, and is a string; children are not the label.
 expectTypeOf<{ pressed: true }>().not.toExtend<ToggleProps>();
@@ -31,6 +32,7 @@ expectTypeOf<{ label: "Bold"; children: "Bold" }>().not.toExtend<ToggleProps>();
 // Unknown looks, and shadcn's, are type errors whose hint names the fix.
 expectTypeOf<{ label: "Bold"; variant: "default" }>().not.toExtend<ToggleProps>();
 expectTypeOf<{ label: "Bold"; size: "default" }>().not.toExtend<ToggleProps>();
+expectTypeOf<{ label: "Bold"; shape: "rounded" }>().not.toExtend<ToggleProps>();
 
 // The guessed names are hint types that name the real prop.
 expectTypeOf<{ label: "Bold"; isPressed: true }>().not.toExtend<ToggleProps>();

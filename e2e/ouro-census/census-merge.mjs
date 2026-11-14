@@ -55,7 +55,7 @@ export function main(argv = process.argv.slice(2), deps = {}) {
       expectedText = readFile(expectedFile);
     } catch (error) {
       throw new Error(
-        `Ouro census merge failed: ${expectedFile} could not be read (${error instanceof Error ? error.message : String(error)}): the census spec writes it when it starts, so the census did not run.`,
+        `Ouro census merge stopped: reading ${expectedFile} threw (${error instanceof Error ? error.message : String(error)}). The census spec writes it when it starts, so the census did not run: run the census spec, then merge again.`,
         { cause: error },
       );
     }

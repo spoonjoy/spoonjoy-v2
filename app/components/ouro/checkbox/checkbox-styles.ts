@@ -17,8 +17,9 @@ export { boxClass, dashClass, indicatorClass, tickClass };
  * @claim "The box: 20px on touch screens" registry/ouro/components/ouro/checkbox/checkbox.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox.test.tsx::Checkbox look > is 16px beside 14px text with a fine pointer from sm, centered on the label's first line)
  * @claim "Either way it sits 2px down" registry/ouro/components/ouro/checkbox/checkbox.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox.test.tsx::Checkbox look > is 16px beside 14px text with a fine pointer from sm, centered on the label's first line)
  */
+// Its own transition, not `press`'s: the box's fill eases before the tick draws, one choreographed motion.
 const boxClass =
-  "group press relative m-0 mt-0.5 box-border inline-flex size-5 shrink-0 items-center justify-center p-0 sm:pointer-fine:size-4 " +
+  "group [transition:scale_var(--ouro-duration-press)_var(--ouro-ease-out),background-color_var(--ouro-duration-fast)_ease,border-color_var(--ouro-duration-fast)_ease,color_var(--ouro-duration-fast)_ease,opacity_var(--ouro-duration-fast)_ease] relative m-0 mt-0.5 box-border inline-flex size-5 shrink-0 items-center justify-center p-0 sm:pointer-fine:size-4 " +
   "rounded-sm border border-solid border-muted-foreground bg-transparent text-primary-foreground dark:not-data-checked:not-data-indeterminate:bg-input/30 " +
   "data-checked:border-primary data-checked:bg-primary data-indeterminate:border-primary data-indeterminate:bg-primary " +
   "aria-invalid:border-destructive " +

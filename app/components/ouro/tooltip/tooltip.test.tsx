@@ -6,6 +6,7 @@ import { commands, page, userEvent } from "vitest/browser";
 import { Button } from "~/components/ouro/button/button";
 import { Tooltip, type TooltipProps } from "~/components/ouro/tooltip/tooltip";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
+import { TooltipsHidden } from "~/lib/ouro/portal-container";
 import { act } from "~/lib/ouro/testing/act";
 import { pressTab } from "~/lib/ouro/testing/tab";
 
@@ -83,6 +84,39 @@ describe("Tooltip", () => {
     await shown();
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => tooltip()).toBeNull();
+  });
+
+  it("closes as the container it is in hides, and opens again as usual after", async () => {
+    const inside = (hidden: boolean) => (
+      <>
+        <button type="button" data-test-harness="">
+          Before
+        </button>
+        <TooltipsHidden value={hidden}>
+          <Tooltip content="Add to cookbook">
+            <Button>Save</Button>
+          </Tooltip>
+        </TooltipsHidden>
+      </>
+    );
+    const tabToTrigger = async () => {
+      page.getByRole("button", { name: "Before" }).element().focus();
+      await pressTab();
+      expect(document.activeElement).toBe(trigger());
+    };
+    await render(inside(false));
+    const root = roots.at(-1)!;
+    await tabToTrigger();
+    await shown();
+    await act(async () => root.render(inside(true)));
+    await expect.poll(() => tooltip()).toBeNull();
+    expect(document.activeElement).toBe(trigger());
+    // Focus that comes back opens it, and the container showing again leaves it open.
+    await tabToTrigger();
+    await shown();
+    await act(async () => root.render(inside(false)));
+    await act(async () => {});
+    expect(tooltip()).not.toBeNull();
   });
 
   it.each([

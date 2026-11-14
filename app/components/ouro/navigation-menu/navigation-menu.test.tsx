@@ -58,15 +58,13 @@ describe("NavigationMenu current-page marks", () => {
    */
   async function assertMark(current: Element, other: Element, direction: "ltr" | "rtl") {
     await Promise.allSettled(current.getAnimations().map((animation) => animation.finished));
-    const marker = getComputedStyle(current, "::before");
-    expect(marker.content).toBe('""');
-    expect(parseFloat(marker.width)).toBe(2);
-    expect(parseFloat(marker.height)).toBeGreaterThan(0);
-    expect(marker.opacity).toBe("1");
-    expect(marker.visibility).toBe("visible");
-    expect(marker[direction === "rtl" ? "right" : "left"]).toBe("0px");
-    expect(getComputedStyle(other, "::before").content).toBe("none");
-    expect(isTransparent(getComputedStyle(current).backgroundColor)).toBe(true);
+    const mark = getComputedStyle(current);
+    expect(mark.textDecorationLine).toBe("underline");
+    expect(mark.textDecorationThickness).toBe("2px");
+    expect(mark.fontWeight).toBe("600");
+    expect(getComputedStyle(other).textDecorationLine).toBe("none");
+    expect(getComputedStyle(current).direction).toBe(direction);
+    expect(isTransparent(mark.backgroundColor)).toBe(true);
   }
 
   it("marks only the page link once a pointer that rested on it has moved to open a panel", async () => {
@@ -93,10 +91,13 @@ describe("NavigationMenu current-page marks", () => {
       await userEvent.click(page.getByRole("button", { name: "Recipes" }));
       const current = page.getByRole("link", { name: /^Drafts/ });
       await expect.element(current).toBeVisible();
-      await assertMark(current.element(), page.getByRole("link", { name: "Browse" }).element(), direction);
+      await expect.element(current).toHaveAttribute("aria-current", "page");
+      await expect.element(current).toHaveAttribute("data-active");
       const [label, description] = current.element().querySelectorAll("span");
+      await assertMark(label!, page.getByRole("link", { name: "Browse" }).element(), direction);
       expect(getComputedStyle(label!).fontWeight).toBe("600");
       expect(getComputedStyle(description!).fontWeight).toBe("400");
+      expect(getComputedStyle(description!).textDecorationLine).toBe("none");
     });
   }
 });
@@ -230,20 +231,27 @@ describe("NavigationMenu", () => {
     await expect.poll(() => popup()).toBeNull();
   });
 
-  it("marks the current page from currentPath, on a link and inside a panel", async () => {
+  it("marks the current page from currentPath, on a link and inside a panel, and a page's section as current but not the page", async () => {
     const top = await render(<NavigationMenu label="Main" items={items} currentPath="/pricing" />);
     await expect.element(page.getByRole("link", { name: "Pricing" })).toHaveAttribute("aria-current", "page");
+    // Base UI's active state, and its data-active, follow the page itself.
+    await expect.element(page.getByRole("link", { name: "Pricing" })).toHaveAttribute("data-active");
     expect(top.root.querySelector("[data-current]")).toBeNull();
     await act(async () => roots.splice(0).forEach((root) => root.unmount()));
     mounted.splice(0).forEach((node) => node.remove());
     await render(<NavigationMenu label="Main" items={items} currentPath="/recipes/drafts/4" />);
     await expect.element(page.getByRole("link", { name: "Pricing" })).not.toHaveAttribute("aria-current");
+    await expect.element(page.getByRole("link", { name: "Pricing" })).not.toHaveAttribute("data-active");
     const trigger = page.getByRole("button", { name: "Recipes" });
     await expect.element(trigger).toHaveAttribute("data-current");
     await expect.element(page.getByRole("button", { name: "Cookbooks" })).not.toHaveAttribute("data-current");
     await userEvent.click(trigger);
-    await expect.element(page.getByRole("link", { name: /Drafts/ })).toHaveAttribute("aria-current", "page");
+    // A page under a link: the link, its section, is current but not the page, so a screen reader hears one current page.
+    await expect.element(page.getByRole("link", { name: /Drafts/ })).toHaveAttribute("aria-current", "true");
+    await expect.element(page.getByRole("link", { name: /Drafts/ })).not.toHaveAttribute("data-active");
     await expect.element(page.getByRole("link", { name: /Browse/ })).not.toHaveAttribute("aria-current");
+    const label = page.getByRole("link", { name: /Drafts/ }).element().firstElementChild!;
+    expect(getComputedStyle(label).textDecorationLine).toBe("underline");
   });
 
   it("lets a link's own current win over currentPath", async () => {

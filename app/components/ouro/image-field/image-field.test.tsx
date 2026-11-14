@@ -121,9 +121,9 @@ describe("ImageField", () => {
 
   it("shows the saved photo with its alt text, offers Change photo, and Remove only with onRemove", async () => {
     const onRemove = vi.fn();
-    const { root, preview } = await render(<ImageField label="Photo" src={saved} alt="Sam smiling" />);
+    const { root, preview } = await render(<ImageField label="Photo" src={saved} alt="Jo smiling" />);
     expect(preview()!.getAttribute("src")).toBe(saved);
-    expect(preview()!.alt).toBe("Sam smiling");
+    expect(preview()!.alt).toBe("Jo smiling");
     await expect.element(page.getByRole("button", { name: "Change photo" })).toBeVisible();
     expect(document.querySelector('[data-ouro-part="remove"]')).toBeNull();
     await act(async () => root.render(<ImageField label="Photo" src={saved} onRemove={onRemove} />));
@@ -205,7 +205,7 @@ describe("ImageField", () => {
     const onFileChange = vi.fn();
     const { input, preview, field } = await render(<ImageField label="Photo" src={saved} onFileChange={onFileChange} />);
     await pick(input(), broken());
-    const message = "scan.heic could not be opened as a photo.";
+    const message = "The browser can't read scan.heic as a photo. Choose a JPEG or PNG photo instead.";
     await expect.poll(() => announced.count(message)).toBe(1);
     expect(field().hasAttribute("data-invalid")).toBe(true);
     expect(onFileChange).not.toHaveBeenCalled();
@@ -249,7 +249,7 @@ describe("ImageField", () => {
     await pick(input(), file);
     await expect.poll(() => document.querySelector('[data-ouro-part="area"]')?.hasAttribute("aria-busy")).toBe(false);
     await userEvent.click(page.getByRole("button", { name: "Save" }));
-    await expect.element(page.getByText("The photo could not be saved. Try again.")).toBeVisible();
+    await expect.element(page.getByText("The browser didn't turn the crop into a file. Press Save to try again, or choose another photo.")).toBeVisible();
     await expect.element(page.getByRole("dialog", { name: "Crop photo" })).toBeVisible();
     expect(status().textContent).toBe("");
     expect(onFileChange).not.toHaveBeenCalled();
@@ -399,7 +399,7 @@ describe("ImageField dropping a file", () => {
     await expect.poll(() => status().textContent).toMatch(/^huge\.png is larger than /);
     expect(announced.count("notes.txt is not an image this field takes.")).toBe(1);
     await dropOn(field(), broken());
-    await expect.poll(() => status().textContent).toBe("scan.heic could not be opened as a photo.");
+    await expect.poll(() => status().textContent).toBe("The browser can't read scan.heic as a photo. Choose a JPEG or PNG photo instead.");
     expect(onFileChange).not.toHaveBeenCalled();
     announced.stop();
     await act(async () => root.render(<ImageField label="Photo" crop onFileChange={onFileChange} />));

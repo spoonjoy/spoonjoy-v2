@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,7 +24,9 @@ async function render(node: ReactNode) {
   await act(async () => root.render(node));
   return {
     host,
-    rerender: (next: ReactNode) => act(async () => root.render(next)),
+    // flushSync, not act: act's await ends on a later task, and a loaded browser can run a 150ms
+    // transition to its end before that task comes.
+    rerender: (next: ReactNode) => flushSync(() => root.render(next)),
     get root() {
       return host.querySelector<HTMLElement>('[data-ouro="checkbox"]')!;
     },
@@ -345,7 +348,9 @@ describe("Checkbox look", () => {
     expect(Number.parseFloat(getComputedStyle(tick).strokeDasharray)).toBe(1);
     /** Toggles with a click in the page, not a real pointer, so the box's press scale stays out of its motion. */
     const toggle = async (state: "data-checked" | "data-unchecked", reduced: boolean) => {
-      await act(() => box.click());
+      // No await between the click and the motion checks: act's await ends on a later task, and a
+      // loaded browser can run a 150ms transition to its end before that task comes.
+      flushSync(() => box.click());
       const tickMotion: Record<string, number> = reduced ? { opacity: fast } : { "stroke-dashoffset": state === "data-checked" ? draw : fast };
       // Checking waits for the box to fill before the tick draws; unchecking takes the tick back at once.
       const delays = tick.getAnimations().map((animation) => animation.effect?.getComputedTiming().delay);
@@ -378,10 +383,10 @@ describe("Checkbox look", () => {
     const { box, host } = await render(<Checkbox label="Basil" />);
     await rest(box);
     const tick = host.querySelector<SVGPathElement>('[data-ouro-part="tick"]')!;
-    await act(() => box.click());
+    flushSync(() => box.click());
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(tick.getAnimations().length).toBeGreaterThan(0);
-    await act(() => box.click());
+    flushSync(() => box.click());
     expectTransition({ stem: "checkbox", from: "data-checked", to: "data-unchecked", interrupt: true });
     await expect.poll(() => [...box.getAnimations(), ...tick.getAnimations()].length).toBe(0);
     expect(box).toHaveAttribute("aria-checked", "false");
@@ -404,7 +409,8 @@ describe("Checkbox look", () => {
     expect(getComputedStyle(tick).transform).toBe(getComputedStyle(tickOf(ltr.host)).transform);
     expect(tick.getBoundingClientRect().width).toBeCloseTo(tickOf(ltr.host).getBoundingClientRect().width, 3);
     const fast = duration("--ouro-duration-fast");
-    await act(() => rtl.box.click());
+    // No await between the click and the motion checks, as in the toggle above.
+    flushSync(() => rtl.box.click());
     await Promise.all([
       expectMotion(tick, { stem: "checkbox", state: "data-checked", properties: { "stroke-dashoffset": duration("--ouro-duration-draw") }, reduced: false, dir: "rtl" }),
       expectMotion(rtl.box, { stem: "checkbox", state: "data-checked", properties: { "background-color": fast, "border-color": fast }, reduced: false, dir: "rtl" }),

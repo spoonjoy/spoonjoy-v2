@@ -337,7 +337,7 @@ test.describe("Shopping list", () => {
     await review.getByRole("button", { name: "Add to list", exact: true }).click();
     expect((await ambiguous).status(), FALLBACK_PARSER).toBe(400);
     await expect(
-      review.getByText("Couldn't confidently parse one item. Review and correct before adding."),
+      review.getByText("Spoonjoy isn't sure how to read this item. Review and correct before adding."),
       FALLBACK_PARSER,
     ).toBeVisible();
     await expect(review.getByLabel(requiredLabel("Ingredient"), { exact: true }), FALLBACK_PARSER).toHaveValue("salt");

@@ -187,7 +187,7 @@ export async function fetchOEmbedMetadata(
         cause: err,
       });
     }
-    throw new OEmbedError("oembed-failed", 502, "oEmbed network error", {
+    throw new OEmbedError("oembed-failed", 502, "oEmbed request got no answer: the network call threw", {
       cause: err,
     });
   }

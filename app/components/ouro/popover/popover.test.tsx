@@ -18,6 +18,7 @@ import {
   PopoverTrigger,
 } from "~/components/ouro/popover/popover-parts";
 import { act } from "~/lib/ouro/testing/act";
+import { pressDuringScroll } from "~/lib/ouro/testing/press";
 import { pressTab } from "~/lib/ouro/testing/tab";
 
 // Runs in Chromium and WebKit.
@@ -525,6 +526,21 @@ describe("Popover server rendering", () => {
 });
 
 describe("Popover dev messages", () => {
+  it("warns when its open popover renders outside every landmark of a page that has a main", async () => {
+    const main = document.body.appendChild(document.createElement("main"));
+    mounted.push(main);
+    await render(
+      <Popover title="Share recipe" trigger={<Button>Share</Button>}>
+        <input aria-label="Link" />
+      </Popover>,
+    );
+    await userEvent.click(trigger());
+    await settled();
+    expect(warnings()).toEqual([
+      "[ouro-ui] Popover: the open popup renders outside every landmark, so screen reader users who move by landmark miss it. Fix: <OuroProvider portalContainer={popups}> around the app, with <div ref={popups} /> inside <main>.",
+    ]);
+  });
+
   it("throws the exact fix when neither trigger nor open is passed", () => {
     // @ts-expect-error -- neither trigger nor open
     const popover = <Popover title="Share">Body</Popover>;
@@ -766,5 +782,149 @@ describe("Popover trigger press", () => {
     // Base UI mounts the positioner unplaced, then places it; a scaled trigger would add a third position.
     expect(seen.length).toBeLessThanOrEqual(2);
     expect(seen.at(-1)!.left).toBeCloseTo(restLeft, 1);
+  });
+});
+
+describe("Popover and the page's scroll", () => {
+  // A long page with smooth scrolling and a scroll padding under its sticky header (a docs site's,
+  // say), scrolled to 2000px, with the trigger in that header. Opening focuses and scrolls to what
+  // the popup holds, which the browser did for the page too, as far as its end.
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  afterEach(() => {
+    document.documentElement.removeAttribute("style");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  });
+
+  for (const reduced of [false, true]) {
+    for (const input of ["pointer", "keyboard"] as const) {
+      it(`leaves the page where it is as it opens and closes, by ${input}${reduced ? ", with reduced motion" : ""}`, async () => {
+        if (reduced) await commands.emulateMedia({ reducedMotion: "reduce" });
+        await render(
+          <div style={{ height: 5000 }}>
+            <header style={{ position: "sticky", top: 0, height: 100 }}>
+              <Popover title="Share recipe" trigger={<Button>Share</Button>}>
+                <input aria-label="Link" />
+              </Popover>
+            </header>
+          </div>,
+        );
+        window.scrollTo({ top: 2000, behavior: "instant" });
+        Object.assign(document.documentElement.style, { scrollBehavior: "smooth", scrollPaddingTop: "120px" });
+        const painted: number[] = [];
+        let reading = true;
+        const read = () => {
+          painted.push(window.scrollY);
+          if (reading) requestAnimationFrame(read);
+        };
+        requestAnimationFrame(read);
+        const opener = document.querySelector<HTMLElement>('[data-ouro="button"]')!;
+        if (input === "pointer") {
+          await commands.pointerPress({ selector: '[data-ouro="button"]', action: "down" });
+          await commands.pointerPress({ action: "up" });
+        } else {
+          opener.focus({ preventScroll: true });
+          await userEvent.keyboard("{Enter}");
+        }
+        await expect.poll(() => {
+          const open = popoverPopup();
+          return Boolean(open?.hasAttribute("data-open") && !open.hasAttribute("data-starting-style") && open.getAnimations().length === 0);
+        }).toBe(true);
+        await frame();
+        await frame();
+        await userEvent.keyboard("{Escape}");
+        await expect.poll(() => {
+          const open = popoverPopup();
+          return !open || (open.hasAttribute("data-closed") && open.getAnimations().length === 0);
+        }).toBe(true);
+        await frame();
+        await frame();
+        reading = false;
+        expect(painted.length).toBeGreaterThan(2);
+        expect(new Set(painted)).toEqual(new Set([2000]));
+      });
+    }
+  }
+
+  it("stays open and stops the page where it is, pressed as a smooth scroll begins", async () => {
+    // A smooth scroll begins as the press goes down, ahead of the trigger's own handlers: the press
+    // stops it where it is, holding the page from then on, not only once the popup opens, and the
+    // popup opens and stays open.
+    await render(
+      <div style={{ height: 5000 }}>
+        <header style={{ position: "sticky", top: 0, height: 100 }}>
+          <Popover title="Share recipe" trigger={<Button>Share</Button>}>
+            <input aria-label="Link" />
+          </Popover>
+        </header>
+      </div>,
+    );
+    const { behaviorAtPress } = await pressDuringScroll('[data-ouro="button"]', { from: 2000, to: 4000, scroll: "begins" });
+    await expect.poll(() => {
+      const open = popoverPopup();
+      return Boolean(open?.hasAttribute("data-open") && !open.hasAttribute("data-starting-style") && open.getAnimations().length === 0);
+    }).toBe(true);
+    await frame();
+    await frame();
+    expect(popoverPopup()!.hasAttribute("data-open")).toBe(true);
+    expect(behaviorAtPress).toBe("auto");
+    expect(window.scrollY).toBe(2000);
+  });
+
+  it("keeps the trigger part's own pointerdown and keydown handlers beside the press that holds the page", async () => {
+    const pointerDown = vi.fn();
+    const keyDown = vi.fn();
+    await render(
+      <PopoverRoot>
+        <PopoverTrigger onPointerDown={pointerDown} onKeyDown={keyDown}>Share</PopoverTrigger>
+      </PopoverRoot>,
+    );
+    const html = document.documentElement;
+    html.style.scrollBehavior = "smooth";
+    // The press holds the page, so its scrolls are instant, until a second passes with no popup.
+    // Read it as the key reaches the window, since a loaded runner's keyboard command can return after that second.
+    let atPress = "";
+    window.addEventListener("keydown", () => (atPress = html.style.scrollBehavior), { once: true });
+    document.querySelector<HTMLElement>('[data-ouro-control="popover"]')!.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(atPress).toBe("auto");
+    await commands.pointerPress({ selector: '[data-ouro-control="popover"][data-ouro-part="trigger"]', action: "down" });
+    await commands.pointerPress({ action: "up" });
+    expect([pointerDown.mock.calls.length, keyDown.mock.calls.length]).toEqual([1, 1]);
+    await expect.poll(() => html.style.scrollBehavior).toBe("smooth");
+  });
+
+  it("leaves the page free at an arrow key on its trigger, which opens nothing", async () => {
+    // Base UI's Popover opens on its trigger's click only, so an arrow held down on it (an emoji
+    // picker's button, say) must not hold the page, or each repeat would hold it a second more.
+    await render(
+      <div style={{ height: 5000 }}>
+        <header style={{ position: "sticky", top: 0, height: 100 }}>
+          <Popover title="Share recipe" trigger={<Button>Share</Button>}>
+            <input aria-label="Link" />
+          </Popover>
+        </header>
+      </div>,
+    );
+    window.scrollTo({ top: 2000, behavior: "instant" });
+    const html = document.documentElement;
+    html.style.scrollBehavior = "smooth";
+    let atPress = "";
+    window.addEventListener("keydown", () => (atPress = html.style.scrollBehavior), { once: true });
+    document.querySelector<HTMLElement>('[data-ouro="button"]')!.focus({ preventScroll: true });
+    await userEvent.keyboard("{ArrowDown}");
+    expect(atPress).toBe("smooth");
+    expect(html.style.scrollBehavior).toBe("smooth");
+    // The arrow scrolls the page a little, smoothly, as on any button; then an app's scroll still moves it.
+    let last = -1;
+    while (window.scrollY !== last) {
+      last = window.scrollY;
+      await frame();
+      await frame();
+    }
+    window.scrollTo({ top: 1500, behavior: "instant" });
+    await frame();
+    await frame();
+    expect(window.scrollY).toBe(1500);
+    expect(popoverPopup()).toBeNull();
   });
 });

@@ -21,6 +21,6 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
     return Response.json(options);
   } catch (error) {
-    return webAuthnErrorResponse(error, "Could not start registration");
+    return webAuthnErrorResponse(error, "Passkey setup didn't start: the server hit an unexpected fault");
   }
 }

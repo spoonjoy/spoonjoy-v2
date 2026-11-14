@@ -81,17 +81,34 @@ function sheetHint(open: string, close: string) {
  * module) and where there is no `CSS.registerProperty`: on the server and in a browser
  * without it, where the variables inherit as before.
  *
+ * It also registers Base UI's own drawer variables, as Base UI does (DrawerPopup's layout
+ * effect, through removeCSSVariableInheritance), when the module loads. Left to Base UI, they are registered as
+ * its first sheet opens, restyling the whole page in the middle of that press; registered
+ * here, Base UI finds them registered and does nothing.
+ *
  * @internal
  * @claim "Registers the variables a drag rewrites" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::feel > keeps the variables a drag rewrites out of the sheet's content)
  * @claim "It does nothing where they are" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::feel > registers its variables once: a second copy of the module finds them registered and does nothing)
+ * @claim "It also registers Base UI's own drawer variables" site/e2e/site-menu.spec.ts verify:testExists(site/e2e/site-menu.spec.ts::on a phone the menu's first open registers no CSS property, on the home page or a docs page, so it restyles no more of the page than the sheet)
  */
 function registerSheetProperties(): void {
-  const lengths = ["--ouro-sheet-x", "--ouro-sheet-y", "--ouro-sheet-grab"];
-  try {
-    for (const name of lengths) CSS.registerProperty({ name, syntax: "<length>", inherits: false, initialValue: "0px" });
+  const properties: PropertyDefinition[] = [
+    ...["--ouro-sheet-x", "--ouro-sheet-y", "--ouro-sheet-grab"].map((name) => ({ name, syntax: "<length>", inherits: false, initialValue: "0px" })),
     // A transform function, which no syntax but the universal one can hold with `var()` in it.
-    CSS.registerProperty({ name: "--ouro-sheet-transform", syntax: "*", inherits: false });
-  } catch {
-    // Registered already, or nothing to register with.
+    { name: "--ouro-sheet-transform", syntax: "*", inherits: false },
+    // Base UI's, as it registers them.
+    ...["--drawer-swipe-movement-x", "--drawer-swipe-movement-y", "--drawer-snap-point-offset"].map((name) => ({ name, syntax: "<length>", inherits: false, initialValue: "0px" })),
+    { name: "--drawer-swipe-progress", syntax: "<number>", inherits: false, initialValue: "0" },
+    { name: "--drawer-swipe-strength", syntax: "<number>", inherits: false, initialValue: "1" },
+    // Base UI's too, which it sets on the popup as each sheet opens and does not register: inherited, it restyled the
+    // whole sheet once more in the middle of the press. Base UI reads it on the popup only.
+    { name: "--drawer-frontmost-height", syntax: "*", inherits: false },
+  ];
+  for (const property of properties) {
+    try {
+      CSS.registerProperty(property);
+    } catch {
+      // Registered already, or nothing to register with.
+    }
   }
 }

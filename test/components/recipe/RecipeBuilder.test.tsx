@@ -837,7 +837,7 @@ describe("RecipeBuilder", () => {
         fireEvent.change(within(field).getByLabelText("Recipe image", { selector: "input" }), {
           target: { files: [new File(["?"], "broken.jpg", { type: "image/jpeg" })] },
         });
-        await waitFor(() => expect(within(field).getByText("broken.jpg could not be opened as a photo.")).toBeInTheDocument());
+        await waitFor(() => expect(within(field).getByText("broken.jpg isn't a photo this browser can open.")).toBeInTheDocument());
       } finally {
         decode.mockRestore();
       }

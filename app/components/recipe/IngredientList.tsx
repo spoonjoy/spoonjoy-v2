@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import { Checklist, type ChecklistItemData } from '~/components/ouro/checklist/checklist'
 import type { IngredientIconKey } from '~/lib/ingredient-affordances'
 import { formatAmount, scaleQuantity } from '~/lib/quantity'
@@ -104,7 +104,7 @@ export function IngredientList({
   checkedStepOutputIds,
   onStepOutputToggle,
 }: IngredientListProps) {
-  const outputIds = new Set(stepOutputUses.map((reference) => reference.id))
+  const outputIds = useMemo(() => new Set(stepOutputUses.map((reference) => reference.id)), [stepOutputUses])
   const items: ChecklistItemData[] = uncheckedFirst([
     ...stepOutputUses.map((reference) => ({
       id: reference.id,

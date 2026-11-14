@@ -457,7 +457,7 @@ describe("handleMcpHttpRequest", () => {
         id: 73,
         error: {
           code: -32002,
-          message: "Spoonjoy couldn't save that just now. Please try again in a moment.",
+          message: "Spoonjoy's database is busy and didn't save that. Try again in a moment.",
           data: { code: "temporarily_unavailable", status: 503, retryable: true, retryAfterSeconds: 1 },
         },
       });

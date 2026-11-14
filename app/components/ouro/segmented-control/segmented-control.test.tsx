@@ -290,6 +290,30 @@ describe("SegmentedControl", () => {
     }
   });
 
+  it("keeps HighlightText on the pressed segment under forced colours while the pointer rests on it", async () => {
+    try {
+      const r = await render(<SegmentedControl label="View" items={items} defaultValue="grid" />);
+      const pressed = r.segments[1]!;
+      expect(pressed.hasAttribute("data-pressed")).toBe(true);
+      // The pointer rests on the pressed segment, as one a test or a person leaves there does.
+      await userEvent.hover(pressed);
+      await commands.emulateMedia({ forcedColors: "active" });
+      expect(matchMedia("(forced-colors: active)").matches).toBe(true);
+      // The system colours a contrast theme gives a selection, set on a probe for comparison.
+      const probe = document.body.appendChild(document.createElement("span"));
+      probe.style.cssText = "background-color: Highlight; color: HighlightText";
+      const { backgroundColor: highlight, color: highlightText } = getComputedStyle(probe);
+      probe.remove();
+      expect(pressed.matches(":hover")).toBe(true);
+      await settled(r.root);
+      expect(getComputedStyle(pressed).color).toBe(highlightText);
+      expect(getComputedStyle(r.thumb).backgroundColor).toBe(highlight);
+    } finally {
+      await userEvent.hover(document.documentElement, { position: { x: -8, y: -8 }, force: true });
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
   it("slides the thumb on the ease-in-out token, and moves it at once on an arrow key", async () => {
     const r = await render(<SegmentedControl label="View" items={items} />);
     const style = () => getComputedStyle(r.thumb);

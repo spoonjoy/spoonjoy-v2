@@ -66,7 +66,7 @@ export default function TestKitchen() {
           setVisit((current) => current + 1);
         }}
       />
-      {resetWarning ? <Alert tone="destructive" title="Some timer resets could not be saved. They may return after a reload." /> : null}
+      {resetWarning ? <Alert tone="destructive" title="Spoonjoy didn't save some timer resets, so those timers may come back after a reload." /> : null}
     </>
   );
 }

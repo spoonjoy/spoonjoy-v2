@@ -97,7 +97,7 @@ const listClass = "box-border min-h-0 flex-1 overflow-y-auto overscroll-contain 
  *
  * @internal
  * @claim "An item: 44px tall on phones" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox looks > uses a 16px font and a 44px box on phones, stepping down with a mouse on wider screens)
- * @claim "An item: 44px tall on phones" registry/ouro/components/ouro/combobox/combobox.tsx verify:fileLine(registry/ouro/components/ouro/combobox/combobox.tsx, /<BaseCombobox.ItemIndicator\sclassName="col-start-1\sflex">/)
+ * @claim "An item: 44px tall on phones" registry/ouro/components/ouro/combobox/combobox.tsx verify:fileLine(registry/ouro/components/ouro/combobox/combobox.tsx, /<BaseCombobox.ItemIndicator\sclassName="col-start-1\sflex\s\[&_svg\]:size-4">/)
  */
 const itemClass =
   "relative box-border grid min-h-11 cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-sm px-2 py-1.5 " +
@@ -105,7 +105,7 @@ const itemClass =
   "data-highlighted:bg-accent data-highlighted:text-accent-foreground not-data-disabled:active:bg-accent not-data-disabled:active:text-accent-foreground " +
   // Forced colours drop the fill, so the highlight takes the system's pair.
   "forced-colors:data-highlighted:bg-[Highlight] forced-colors:data-highlighted:text-[HighlightText] " +
-  "data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:size-4";
+  "data-disabled:cursor-not-allowed data-disabled:opacity-50";
 
 /**
  * The line that says nothing matched.

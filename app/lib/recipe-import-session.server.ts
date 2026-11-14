@@ -67,7 +67,7 @@ export const IMPORT_MESSAGES = {
   photoTooLarge: `That photo is over ${RECIPE_PHOTO_MAX_BYTES / (1024 * 1024)} MB. Try a smaller one, or a screenshot of it.`,
   unavailable: "Importing isn't switched on here yet. You can still write the recipe below.",
   busy: "That's a lot of imports at once. Wait a minute, then try again.",
-  failed: "Something went wrong while bringing that recipe in. Try again, or write it below.",
+  failed: "Spoonjoy stopped partway through bringing that recipe in. Try again, or write it below.",
 } as const;
 
 const PIPELINE_MESSAGES: Record<ImportRecipeCode, string> = {
@@ -77,21 +77,21 @@ const PIPELINE_MESSAGES: Record<ImportRecipeCode, string> = {
   "fetch-too-large": "That page is too big to read. Paste the recipe instead.",
   "fetch-failed": "That site wouldn't share the page. Paste the recipe instead.",
   "not-html": "That link isn't a web page. Paste the recipe instead.",
-  "no-content": "We couldn't find a recipe there. Paste the recipe text instead.",
+  "no-content": "Spoonjoy found no recipe on that page. Paste the recipe text instead.",
   "llm-failed": "Recipe reading isn't working right now. Try again in a few minutes, or write the recipe below.",
   "rate-limited": `You've brought in ${IMPORT_DAILY_CAP} recipes today, the daily limit. You can import more tomorrow, or write this one below.`,
   "title-conflict": "You already have recipes with this title. Rename one of them, then import again.",
-  "oembed-failed": "We couldn't read that video. Paste the recipe from its description instead.",
+  "oembed-failed": "That video's details didn't load from its site. Paste the recipe from its description instead.",
   "video-unavailable": "That video isn't available. Paste the recipe from its description instead.",
   "bad-image": IMPORT_MESSAGES.photoType,
 };
 
 const PHOTO_MESSAGES: Partial<Record<ImportRecipeCode, string>> = {
-  "no-content": "We couldn't read a recipe in that photo. Try a sharper photo with the whole recipe in it, or paste the recipe instead.",
+  "no-content": "Spoonjoy found no recipe in that photo. Try a sharper photo with the whole recipe in it, or paste the recipe instead.",
   "rate-limited": `You've read ${PHOTO_IMPORT_DAILY_CAP} recipe photos today, the daily limit. Paste the recipe instead, or try the photo tomorrow.`,
 };
 
-const TEXT_NO_CONTENT_MESSAGE = "We couldn't find a recipe in that text. Include the ingredients and the steps.";
+const TEXT_NO_CONTENT_MESSAGE = "Spoonjoy found no recipe in that text. Include the ingredients and the steps.";
 
 /** The recipe id a session import writes, derived from the form's import id. */
 export function sessionImportRecipeId(importId: string): string {

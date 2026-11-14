@@ -4,7 +4,7 @@ import { openStory } from "./story";
 test("a destructive alert is an alert, and its close button dismisses it", async ({ page }) => {
   await openStory(page, "display-alert--with-action");
   const alert = page.getByRole("alert");
-  await expect(alert).toContainText("Couldn't save");
+  await expect(alert).toContainText("Not saved: you're offline");
   await alert.getByRole("button", { name: "Dismiss" }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await page.getByRole("button", { name: "Show the error again" }).click();

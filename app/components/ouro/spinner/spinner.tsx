@@ -62,19 +62,19 @@ function spinnerHint(token: string): string {
 }
 
 /**
- * A spinning ring that says something is loading. Screen readers hear its `label` as a
- * status; with reduced motion it pulses instead of spinning.
+ * A small spinning ring that says an action is under way, inline: in a field's adornment, a
+ * toast's or a menu entry's icon, or beside the words that say what is happening. Screen
+ * readers hear its `label` as a status; with reduced motion it pulses instead of spinning.
  *
- * Use `Button`'s `loading` instead when the wait follows a press, `Progress` when you
- * know how far along the work is, and `Skeleton` to hold the place of content that is
- * loading.
+ * Use `Skeleton` instead to hold the place of content that is loading (a spinner alone where
+ * content will be fails the source rule's `content-spinner`), `Button`'s `loading` when the
+ * wait follows a press, and `Progress` when you know how far along the work is.
  *
  * @group Feedback
- * @see https://ui.ouro.bot/docs/spinner
+ * @see https://ui.ouroboros.bot/docs/spinner
  *
  * @example
- * <Spinner />
- * <Spinner label="Loading recipes" size="lg" tone="primary" />
+ * <TextField label="Find" endAdornment={<Spinner size="sm" label="Searching" />} />
  */
 export function Spinner(props: SpinnerProps): JSX.Element {
   const { label = "Loading", size: sizeProp = "md", tone: toneProp, className, color, ...rest } = props;

@@ -22,3 +22,18 @@ test("several toggles at once with multiple", async ({ page }) => {
   await expect(group.getByRole("button", { name: "Italic" })).toHaveAttribute("aria-pressed", "true");
   await expect(group.getByRole("button", { name: "Underline" })).toHaveAttribute("aria-pressed", "true");
 });
+
+test("filter chips: the pressed pill pressed again goes back to All", async ({ page }) => {
+  await openStory(page, "actions-togglegroup--pills");
+  const group = page.getByRole("group", { name: "Show" });
+  const all = group.getByRole("button", { name: "All" });
+  const unread = group.getByRole("button", { name: "Unread" });
+  await expect(all).toHaveAttribute("aria-pressed", "true");
+  await unread.click();
+  await expect(unread).toHaveAttribute("aria-pressed", "true");
+  await expect(all).toHaveAttribute("aria-pressed", "false");
+  await unread.click();
+  await expect(all).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("ArrowRight");
+  await expect(group.getByRole("button", { name: "Mentions" })).toBeFocused();
+});

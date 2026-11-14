@@ -88,12 +88,13 @@ function claim<const Text extends string>(text: Text, evidence: ClaimEvidence): 
 const CHECK_FORMS = "count(<what>)=<n>, urlOk(<https URL>), testExists(<file>::<full test name>), ciJob([<workflow>#]<job>), fileLine(<path>[#L<line>], /<pattern>/) or equals(<file>#<field path>)=<value>";
 
 /**
- * A repository-relative path: no leading slash, no `..`, no spaces.
+ * A repository-relative path: no leading slash, no `..`, no spaces. A `$` is part of a name, as in a Remix or React Router
+ * route file (`app/routes/recipes.$id.tsx`).
  *
  * @claim "A repository-relative path: no leading slash" registry/ouro/lib/ouro/claims.test.ts verify:testExists(registry/ouro/lib/ouro/claims.test.ts::parseClaimSource > reads a repository path, with an optional line and commit)
  */
 function repoPath(path: string, what: string): string {
-  if (!/^[\w@.-][\w@./+-]*$/.test(path) || /(^|\/)\.\.(\/|$)/.test(path)) {
+  if (!/^[\w@.$-][\w@./+$-]*$/.test(path) || /(^|\/)\.\.(\/|$)/.test(path)) {
     throw new Error(`${what} "${path}" is not a repository-relative path (such as src/app/page.tsx). A source outside the repository cannot be checked by the next reader; commit it as evidence first.`);
   }
   return path;

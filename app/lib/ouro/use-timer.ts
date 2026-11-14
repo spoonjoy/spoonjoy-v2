@@ -235,7 +235,7 @@ function update(key: string, entry: Entry, stored: TimerState | null): boolean {
  * Invalid state throws before changing the timer.
  *
  * @group Feedback
- * @see https://ui.ouro.bot/docs/use-timer
+ * @see https://ui.ouroboros.bot/docs/use-timer
  * @example
  * restoreTimer("pasta", { status: "paused", duration: 600, remainingMs: 120000 });
  * @claim "Imports a saved countdown" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > restores a %s snapshot without changing its original time)
@@ -260,16 +260,16 @@ export function restoreTimer(timerId: string, state: TimerState): boolean {
 
 /**
  * Cancels or dismisses a timer by its timerId, including when its screen is not mounted.
- * Mounted readers return to idle. A false return means storage could not forget the timer;
- * mounted state still resets.
+ * Mounted readers return to idle. A false return means `localStorage` threw when it removed the
+ * timer (storage the browser blocks), so a reload brings it back; mounted state still resets.
  *
  * @group Feedback
- * @see https://ui.ouro.bot/docs/use-timer
+ * @see https://ui.ouroboros.bot/docs/use-timer
  * @example
  * resetTimer("pasta");
  * @claim "Cancels or dismisses a timer" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > resets a stored timer with no mounted reader)
  * @claim "Mounted readers return to idle" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > resets every mounted reader and its pending completion by timer id)
- * @claim "A false return means storage could" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > reports a blocked reset write while resetting mounted state)
+ * @claim "A false return means" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > reports a blocked reset write while resetting mounted state)
  */
 export function resetTimer(timerId: string): boolean {
   const entry = entries.get(timerId);
@@ -305,7 +305,7 @@ function remainingOf(stored: TimerState | null, duration: number, now: number): 
  * this hook for a timer of your own design.
  *
  * @group Feedback
- * @see https://ui.ouro.bot/docs/timer
+ * @see https://ui.ouroboros.bot/docs/timer
  *
  * @example
  * const timer = useTimer({ duration: 600, timerId: "pasta", onDone: () => chime() });
@@ -408,7 +408,7 @@ export function useTimer({ duration, timerId, onDone, fallback }: TimerOptions):
  * Seconds as a clock reads them: `9:05`, or `1:02:03` from an hour up.
  *
  * @group Feedback
- * @see https://ui.ouro.bot/docs/timer
+ * @see https://ui.ouroboros.bot/docs/timer
  *
  * @example
  * formatDuration(545); // "9:05"

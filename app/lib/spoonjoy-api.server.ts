@@ -735,7 +735,7 @@ function coverLifecycleApiError(error: unknown): never {
   // The database being briefly unavailable is not the client's mistake; it passes through.
   if (error instanceof ApiAuthError || isD1Unavailable(error)) throw error;
   if (error instanceof Error) throw new ApiAuthError(error.message, 400);
-  throw new ApiAuthError("Cover mutation failed", 400);
+  throw new ApiAuthError("The cover change threw a value that is not an Error", 400);
 }
 
 function normalizedMcpIdempotencyBody(args: Record<string, unknown>) {
@@ -3549,7 +3549,7 @@ const forkRecipeTool: SpoonjoyApiOperation = {
       }
       if (err instanceof ForkTitleExhaustedError) {
         throw new ApiAuthError(
-          "Could not resolve a unique title for the fork",
+          "Every title for this fork is already taken: rename the recipe, then fork it again",
           409,
         );
       }

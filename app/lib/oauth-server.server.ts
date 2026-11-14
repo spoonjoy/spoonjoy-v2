@@ -640,7 +640,7 @@ export async function consumeAuthorizationCode(
     throw new OAuthError("invalid_grant", "redirect_uri does not match the authorization request");
   }
   if (!(await verifyPkceS256(input.codeVerifier, record.codeChallenge))) {
-    throw new OAuthError("invalid_grant", "PKCE verification failed");
+    throw new OAuthError("invalid_grant", "code_verifier does not match the code_challenge");
   }
 
   // Read before the burn: a revocation that lands earlier has already spent the code, so the burn

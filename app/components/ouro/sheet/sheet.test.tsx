@@ -18,7 +18,7 @@ import {
   SheetViewport,
 } from "~/components/ouro/sheet/sheet-parts";
 import { registerSheetProperties } from "~/components/ouro/sheet/sheet-styles";
-import { Sheet, type SheetProps } from "~/components/ouro/sheet/sheet";
+import { Sheet, SheetFrame, type SheetProps } from "~/components/ouro/sheet/sheet";
 import { act } from "~/lib/ouro/testing/act";
 import { pageCss } from "~/lib/ouro/testing/page-css";
 import { pressTab } from "~/lib/ouro/testing/tab";
@@ -416,6 +416,37 @@ describe("feel", () => {
     expect(getComputedStyle(inside).getPropertyValue("--ouro-sheet-transform")).toBe("");
   });
 
+  it("SheetFrame tells onOpenChangeComplete once an open and a close have finished", async () => {
+    const complete = vi.fn();
+    const frame = (open: boolean) => (
+      <SheetFrame title="Filters" closeLabel="Close" side="left" open={open} onOpenChange={() => {}} onOpenChangeComplete={complete}>
+        <p>Body</p>
+      </SheetFrame>
+    );
+    const { rerender } = await render(frame(true));
+    await expect.poll(() => complete.mock.calls).toEqual([[true]]);
+    await rerender(frame(false));
+    await expect.poll(() => complete.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it("registers its own variables and Base UI's drawer ones, each with its syntax and starting value, none inherited", () => {
+    const register = vi.spyOn(CSS, "registerProperty").mockImplementation(() => undefined);
+    registerSheetProperties();
+    const length = (name: string) => ({ name, syntax: "<length>", inherits: false, initialValue: "0px" });
+    expect(register.mock.calls.map(([definition]) => definition)).toEqual([
+      length("--ouro-sheet-x"),
+      length("--ouro-sheet-y"),
+      length("--ouro-sheet-grab"),
+      { name: "--ouro-sheet-transform", syntax: "*", inherits: false },
+      length("--drawer-swipe-movement-x"),
+      length("--drawer-swipe-movement-y"),
+      length("--drawer-snap-point-offset"),
+      { name: "--drawer-swipe-progress", syntax: "<number>", inherits: false, initialValue: "0" },
+      { name: "--drawer-swipe-strength", syntax: "<number>", inherits: false, initialValue: "1" },
+      { name: "--drawer-frontmost-height", syntax: "*", inherits: false },
+    ]);
+  });
+
   it("registers its variables once: a second copy of the module finds them registered and does nothing", () => {
     expect(() => registerSheetProperties()).not.toThrow();
   });
@@ -445,6 +476,14 @@ describe("feel", () => {
     const durations = style.transitionDuration.split(", ");
     expect(durations[properties.indexOf("transform")]).toBe("0s");
     expect(durations[properties.indexOf("opacity")]).not.toBe("0s");
+  });
+
+  it("opens without restyling its content for Base UI's variables: the keyboard inset is already 0px above the viewport, and the frontmost height is not inherited", async () => {
+    const sheet = await openUncontrolled();
+    expect(getComputedStyle(viewport()!.parentElement!).getPropertyValue("--drawer-keyboard-inset").trim()).toBe("0px");
+    sheet.style.setProperty("--drawer-frontmost-height", "844px");
+    const inside = sheet.querySelector<HTMLElement>("[data-ouro-sheet-close]")!;
+    expect(getComputedStyle(inside).getPropertyValue("--drawer-frontmost-height")).toBe("");
   });
 
   it("pads the popup bottom by var(--drawer-keyboard-inset, 0px) so the keyboard never covers inputs", async () => {
@@ -684,6 +723,139 @@ describe("close control", () => {
   });
 });
 
+describe("non-modal sheet", () => {
+  /** A page with its own controls and a side sheet beside it that leaves it in use. */
+  function Preview({ onPage = () => {}, onOpenChange = () => {} }: { onPage?: () => void; onOpenChange?: (open: boolean) => void }) {
+    const [open, setOpen] = useState(true);
+    return (
+      <>
+        <main style={{ height: 1600 }}>
+          <Button onClick={onPage}>Page action</Button>
+          <input aria-label="Page field" />
+        </main>
+        <Sheet
+          title="Look"
+          side="right"
+          modal={false}
+          open={open}
+          onOpenChange={(next) => {
+            onOpenChange(next);
+            setOpen(next);
+          }}
+        >
+          <Button>Ocean</Button>
+        </Sheet>
+      </>
+    );
+  }
+
+  it("draws no backdrop and leaves the page at full strength, in reach and scrolling", async () => {
+    await page.viewport(1280, 800);
+    const onPage = vi.fn();
+    await render(<Preview onPage={onPage} />);
+    await settled();
+    expect(backdrop()).toBeNull();
+    const action = page.getByRole("button", { name: "Page action" }).element() as HTMLElement;
+    expect(action.closest("[inert], [aria-hidden='true']")).toBeNull();
+    const box = action.getBoundingClientRect();
+    expect(action.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);
+    await userEvent.click(action);
+    expect(onPage).toHaveBeenCalledOnce();
+    expect(popup()).not.toBeNull();
+    expect(getComputedStyle(document.documentElement).overflow).not.toBe("hidden");
+    window.scrollTo(0, 200);
+    await expect.poll(() => window.scrollY).toBe(200);
+    window.scrollTo(0, 0);
+  });
+
+  it("is a dialog without aria-modal, lets focus leave it, and stays open when focus or a press goes to the page", async () => {
+    await page.viewport(1280, 800);
+    const onOpenChange = vi.fn();
+    await render(<Preview onOpenChange={onOpenChange} />);
+    await settled();
+    const dialog = page.getByRole("dialog", { name: "Look" }).element();
+    expect(dialog.hasAttribute("aria-modal")).toBe(false);
+    await userEvent.click(page.getByRole("textbox", { name: "Page field" }));
+    expect(document.activeElement).toBe(page.getByRole("textbox", { name: "Page field" }).element());
+    await userEvent.keyboard("abc");
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(popup()).not.toBeNull();
+  });
+
+  it("closes on Escape from inside it, and from its close button, which shows at its top corner", async () => {
+    await page.viewport(1280, 800);
+    const onOpenChange = vi.fn();
+    await render(<Preview onOpenChange={onOpenChange} />);
+    await settled();
+    const close = page.getByRole("dialog").getByRole("button", { name: "Close" }).element() as HTMLElement;
+    const sheet = popup()!.getBoundingClientRect();
+    const corner = close.getBoundingClientRect();
+    expect(corner.width).toBeGreaterThanOrEqual(24);
+    expect(corner.top - sheet.top).toBeLessThan(24);
+    expect(sheet.right - corner.right).toBeLessThan(24);
+    await userEvent.click(close);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    await expect.poll(() => popup()).toBeNull();
+    await act(async () => roots[0]!.render(<Preview key="again" onOpenChange={onOpenChange} />));
+    await settled();
+    (page.getByRole("button", { name: "Ocean" }).element() as HTMLElement).focus();
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => popup()).toBeNull();
+  });
+
+  it("built from parts, stays open on a press on the page, unless the app passes disablePointerDismissal={false}", async () => {
+    await page.viewport(1280, 800);
+    for (const dismiss of [undefined, false] as const) {
+      await render(
+        <>
+          <Button>Page action</Button>
+          <SheetRoot side="right" modal={false} defaultOpen {...(dismiss === undefined ? {} : { disablePointerDismissal: dismiss })}>
+            <SheetPortal>
+              <SheetViewport>
+                <SheetPopup>
+                  <SheetTitle>Look</SheetTitle>
+                  <SheetContent>Pick a look.</SheetContent>
+                </SheetPopup>
+              </SheetViewport>
+            </SheetPortal>
+          </SheetRoot>
+        </>,
+      );
+      await settled();
+      expect(popup()!.getAttribute("data-modal")).toBe("false");
+      await userEvent.click(page.getByRole("button", { name: "Page action" }));
+      if (dismiss === undefined) expect(popup()).not.toBeNull();
+      else await expect.poll(() => popup()).toBeNull();
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    }
+  });
+
+  it("keeps a header row for its close button with the title hidden, where a modal sheet shows one only for a title or a description", async () => {
+    const cases = [
+      { hideTitle: false, description: undefined, modal: true, header: true },
+      { hideTitle: true, description: undefined, modal: true, header: false },
+      { hideTitle: true, description: "Pick a look.", modal: true, header: true },
+      { hideTitle: true, description: undefined, modal: false, header: true },
+    ];
+    for (const { header, ...props } of cases) {
+      await render(
+        <Sheet title="Look" open onOpenChange={() => {}} {...props}>
+          Body
+        </Sheet>,
+      );
+      await settled();
+      expect(popup()!.querySelector("[data-ouro-sheet-header]") !== null, JSON.stringify(props)).toBe(header);
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    }
+  });
+
+  it("stays modal by default, with its backdrop", async () => {
+    await openUncontrolled();
+    expect(backdrop()).not.toBeNull();
+    expect(trigger().closest("[inert], [aria-hidden='true']")).not.toBeNull();
+  });
+});
+
 /**
  * The compiled app CSS with its iOS-only rules (`@supports (-webkit-touch-callout: none)`)
  * switched on. Desktop test browsers never match that query, so the test swaps it for one
@@ -700,10 +872,41 @@ describe("Sheet iOS backdrop rule", () => {
     expect(withIosRules(pageCss())).not.toBe(pageCss());
   });
 
+  it("reads no layout as the backdrop mounts, where the backdrop is fixed", async () => {
+    const reads: Element[] = [];
+    const rect = Element.prototype.getBoundingClientRect;
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      reads.push(this);
+      return rect.call(this);
+    });
+    await render(
+      <SheetRoot defaultOpen>
+        <SheetPortal>
+          <SheetBackdrop />
+          <SheetViewport>
+            <SheetPopup>
+              <SheetTitle>Fixed</SheetTitle>
+            </SheetPopup>
+          </SheetViewport>
+        </SheetPortal>
+      </SheetRoot>,
+    );
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const layer = backdrop()!;
+    expect(getComputedStyle(layer).position).toBe("fixed");
+    expect(reads).not.toContain(layer);
+    expect(layer.style.getPropertyValue("--ouro-backdrop-top")).toBe("");
+  });
+
   // The rule applies under @supports (-webkit-touch-callout: none), which only iOS
   // matches, so the test switches the shipped rule on (withIosRules).
   it("covers the visible screen on a page scrolled 2000px", async () => {
+    // The anchor follows the same query, so it is switched on with the rules.
+    const supports = CSS.supports.bind(CSS);
     const ios = document.createElement("style");
+    vi.spyOn(CSS, "supports").mockImplementation((...query: [string, string?]) =>
+      query[0] === "-webkit-touch-callout" && query[1] === "none" ? true : supports(...(query as [string, string])),
+    );
     ios.textContent = withIosRules(pageCss());
     document.head.append(ios);
     mounted.push(ios);
@@ -1069,5 +1272,176 @@ describe("Sheet parts", () => {
     ["SheetClose", <SheetClose key="cl" />, shape("<SheetContent><SheetClose>…</SheetClose></SheetContent>")],
   ])("%s outside SheetRoot throws with the correct JSX shape", (name, element, jsx) => {
     expect(() => renderToString(element)).toThrow(`[ouro-ui] ${name}: must be rendered inside <SheetRoot>. Fix: ${jsx}.`);
+  });
+});
+
+describe("Sheet and the page's scroll", () => {
+  // A long page with smooth scrolling and a scroll padding under its sticky header (a docs site's,
+  // say), scrolled to 2000px, with the trigger in that header. Opening focuses and scrolls to what
+  // the popup holds, which the browser did for the page too, as far as its end.
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  afterEach(() => {
+    document.documentElement.removeAttribute("style");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  });
+
+  for (const reduced of [false, true]) {
+    for (const input of ["pointer", "keyboard"] as const) {
+      it(`leaves the page where it is as it opens and closes, by ${input}${reduced ? ", with reduced motion" : ""}`, async () => {
+        if (reduced) await commands.emulateMedia({ reducedMotion: "reduce" });
+        await render(
+          <div style={{ height: 5000 }}>
+            <header style={{ position: "sticky", top: 0, height: 100 }}>
+              <Sheet title="Save to cookbook" trigger={<Button>Save</Button>}>
+                <input aria-label="Name" />
+              </Sheet>
+            </header>
+          </div>,
+        );
+        window.scrollTo({ top: 2000, behavior: "instant" });
+        Object.assign(document.documentElement.style, { scrollBehavior: "smooth", scrollPaddingTop: "120px" });
+        const painted: number[] = [];
+        let reading = true;
+        const read = () => {
+          painted.push(window.scrollY);
+          if (reading) requestAnimationFrame(read);
+        };
+        requestAnimationFrame(read);
+        const opener = document.querySelector<HTMLElement>('[data-ouro="button"]')!;
+        if (input === "pointer") {
+          await commands.pointerPress({ selector: '[data-ouro="button"]', action: "down" });
+          await commands.pointerPress({ action: "up" });
+        } else {
+          opener.focus({ preventScroll: true });
+          await userEvent.keyboard("{Enter}");
+        }
+        await expect.poll(() => {
+          const open = popup();
+          return Boolean(open?.hasAttribute("data-open") && !open.hasAttribute("data-starting-style") && open.getAnimations().length === 0);
+        }).toBe(true);
+        await frame();
+        await frame();
+        await userEvent.keyboard("{Escape}");
+        await expect.poll(() => {
+          const open = popup();
+          return !open || (open.hasAttribute("data-closed") && open.getAnimations().length === 0);
+        }).toBe(true);
+        await frame();
+        await frame();
+        reading = false;
+        expect(painted.length).toBeGreaterThan(2);
+        expect(new Set(painted)).toEqual(new Set([2000]));
+      });
+    }
+  }
+});
+
+describe("SheetTrigger and a page scroll at the press", () => {
+  // A smooth scroll begins as the press goes down, ahead of the trigger's own handlers: the press
+  // stops it where it is, the release (or the key) clicks the trigger, and the dialog opens there.
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  afterEach(() => {
+    document.documentElement.removeAttribute("style");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  });
+
+  for (const input of ["pointer", "Enter"] as const) {
+    it(`stops a smooth scroll where ${input === "pointer" ? "a press" : "Enter"} on the part found it, and opens`, async () => {
+      const pointerDown = vi.fn();
+      const keyDown = vi.fn();
+      await render(
+        <div style={{ height: 5000 }}>
+          <header style={{ position: "sticky", top: 0, height: 100 }}>
+            <SheetRoot>
+              <SheetTrigger onPointerDown={pointerDown} onKeyDown={keyDown}>
+                Open
+              </SheetTrigger>
+            </SheetRoot>
+          </header>
+        </div>,
+      );
+      window.scrollTo({ top: 2000, behavior: "instant" });
+      document.documentElement.style.scrollBehavior = "smooth";
+      document.addEventListener(input === "pointer" ? "pointerdown" : "keydown", () => window.scrollTo({ top: 4000 }), { capture: true, once: true });
+      const opener = document.querySelector<HTMLElement>('[data-ouro-control="sheet"][data-ouro-part="trigger"]')!;
+      if (input === "pointer") {
+        await commands.pointerPress({ selector: '[data-ouro-control="sheet"][data-ouro-part="trigger"]', action: "down" });
+        for (let index = 0; index < 10; index++) await frame();
+        await commands.pointerPress({ action: "up" });
+      } else {
+        opener.focus({ preventScroll: true });
+        await userEvent.keyboard("{Enter}");
+      }
+      await expect.poll(() => opener.getAttribute("aria-expanded") === "true").toBe(true);
+      await frame();
+      await frame();
+      expect(window.scrollY).toBe(2000);
+      expect((input === "pointer" ? pointerDown : keyDown).mock.calls.length).toBe(1);
+    });
+  }
+});
+
+describe("SheetTrigger with no handlers of its own", () => {
+  for (const input of ["pointer", "Enter"] as const) {
+    it(`opens from ${input === "pointer" ? "a press" : "Enter"}, and the press hold raises no error`, async () => {
+      await render(<SheetRoot><SheetTrigger>Open</SheetTrigger></SheetRoot>);
+      const errors: string[] = [];
+      const onError = (event: ErrorEvent) => {
+        errors.push(event.message);
+        event.preventDefault();
+      };
+      window.addEventListener("error", onError);
+      const opener = document.querySelector<HTMLElement>('[data-ouro-control="sheet"][data-ouro-part="trigger"]')!;
+      if (input === "pointer") {
+        await commands.pointerPress({ selector: '[data-ouro-control="sheet"][data-ouro-part="trigger"]', action: "down" });
+        await commands.pointerPress({ action: "up" });
+      } else {
+        opener.focus();
+        await userEvent.keyboard("{Enter}");
+      }
+      await expect.poll(() => opener.getAttribute("aria-expanded")).toBe("true");
+      window.removeEventListener("error", onError);
+      expect(errors).toEqual([]);
+    });
+  }
+});
+
+describe("sheet first focus with a scrolling body", () => {
+  const tall = <p style={{ margin: 0, height: 2000 }}>A long note.</p>;
+  const body = () => document.querySelector<HTMLElement>("[data-ouro-sheet-content]");
+  const field = (
+    <label>
+      Note <input aria-label="Note" />
+    </label>
+  );
+  async function openWith(children: ReactNode) {
+    await render(
+      <Sheet title="Save to cookbook" trigger={<Button>Save</Button>}>
+        {children}
+      </Sheet>,
+    );
+    // A keyboard open: Enter on the trigger, which is what puts first focus on the first tab stop.
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+  }
+
+  it("gives first focus to the sheet, not its scrolling body, with a control above the fold", async () => {
+    await openWith(<>{field}{tall}</>);
+    await expect.poll(() => body()?.getAttribute("tabindex")).toBe("0");
+    await expect.poll(() => document.activeElement).toBe(popup());
+  });
+
+  it("gives first focus to the sheet, not its scrolling body, with a control below the fold", async () => {
+    await openWith(<>{tall}{field}</>);
+    await expect.poll(() => body()?.getAttribute("tabindex")).toBe("0");
+    await expect.poll(() => document.activeElement).toBe(popup());
+  });
+
+  it("keeps the scrolling body in reach of Tab", async () => {
+    await openWith(<>{field}{tall}</>);
+    await expect.poll(() => document.activeElement).toBe(popup());
+    await pressTab();
+    await expect.poll(() => document.activeElement).toBe(body());
   });
 });

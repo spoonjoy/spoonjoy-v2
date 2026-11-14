@@ -214,8 +214,8 @@ describe("RecipeCoverHistory", () => {
 
     expect(await screen.findByText("Processing")).toBeInTheDocument();
     // A failed attempt is labeled as one, on its status and in place of its photo.
-    expect(screen.getAllByText("Generation failed")).toHaveLength(2);
-    expect(screen.getByText("Editorial failed")).toBeInTheDocument();
+    expect(screen.getAllByText("No image made")).toHaveLength(2);
+    expect(screen.getByText("No editorial made")).toBeInTheDocument();
     expect(screen.getAllByText("Archived")).toHaveLength(2);
     expect(within(savedCovers()).getByText("Saved cover")).toBeInTheDocument();
     // The failed row shows its failure, not its unusable variant, so it adds no "Unavailable".
@@ -282,7 +282,7 @@ describe("RecipeCoverHistory", () => {
     expect(within(activeCoverChoice()).getByRole("radio", { name: "Editorial photo" })).toBeChecked();
     expect(current!).toBeInTheDocument();
 
-    for (const [card, label] of [[child!, "Regeneration failed"], [first!, "Generation failed"]] as const) {
+    for (const [card, label] of [[child!, "No new image made"], [first!, "No image made"]] as const) {
       // The status and the thumbnail both name the failure.
       expect(within(card).getAllByText(label)).toHaveLength(2);
       expect(within(card).getByTestId("recipe-cover-failed-thumbnail")).toHaveTextContent(label);
@@ -378,9 +378,9 @@ describe("RecipeCoverHistory", () => {
     expect(within(savedCovers()).getByText("Editorial photo")).toBeInTheDocument();
     expect(screen.queryByText(legacyChefPhotoLabel)).toBeNull();
     expect(screen.queryByText(legacyEditorializedChefPhotoLabel)).toBeNull();
-    expect(document.querySelector('img[src="/photos/raw.jpg"]')).toHaveAttribute("loading", "lazy");
+    expect(document.querySelector('img[src="/photos/raw.jpg"]')).not.toHaveAttribute("loading");
     expect(document.querySelector('img[src="/photos/raw.jpg"]')).toHaveAttribute("decoding", "async");
-    expect(document.querySelector('img[src="/photos/spoon-source.jpg"]')).toHaveAttribute("loading", "lazy");
+    expect(document.querySelector('img[src="/photos/spoon-source.jpg"]')).not.toHaveAttribute("loading");
     expect(document.querySelector('img[src="/photos/spoon-source.jpg"]')).toHaveAttribute("decoding", "async");
 
     await useCover(user, "Original photo");

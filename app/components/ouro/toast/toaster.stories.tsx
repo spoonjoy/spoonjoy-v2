@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { Toaster } from "~/components/ouro/toast/toaster";
 import { toast } from "~/lib/ouro/toast";
@@ -61,7 +61,7 @@ export const Tones: Story = {
       <Button variant="soft" tone="warning" onClick={() => toast("You're offline", { tone: "warning", description: "Changes save when you reconnect." })}>
         Warning
       </Button>
-      <Button variant="soft" tone="destructive" onClick={() => toast("Couldn't save", { tone: "destructive", description: "Check your connection." })}>
+      <Button variant="soft" tone="destructive" onClick={() => toast("Not saved: you're offline", { tone: "destructive", description: "Check your connection." })}>
         Destructive
       </Button>
       <Toaster {...args} />
@@ -89,7 +89,7 @@ function ShowOnMount() {
   useEffect(() => {
     toast("Recipe saved", { tone: "success", description: "Find it in your cookbook.", duration: 0 });
     toast("Recipe deleted", { duration: 0, action: { label: "Undo", onClick: () => {} } });
-    toast("Couldn't sync", { tone: "destructive", description: "We'll try again in a minute.", duration: 0 });
+    toast("Not synced: the server didn't answer", { tone: "destructive", description: "We'll try again in a minute.", duration: 0 });
     return () => toast.dismiss();
   }, []);
   return null;
@@ -111,6 +111,52 @@ export const Stack: Story = {
     <Surface>
       <span style={{ color: "var(--muted-foreground)" }}>Hover the toasts to fan them out.</span>
       <Toaster {...args} />
+      <ShowOnMount />
+    </Surface>
+  ),
+};
+
+/**
+ * `avoid` keeps the toasts clear of a control in their corner, here a call's Join button: they sit
+ * just above it while it shows. Press "Show a toast", then "Hide Join".
+ */
+export const KeepClear: Story = {
+  render: function Render(args) {
+    const [join, setJoin] = useState(true);
+    return (
+      <Surface>
+        <div style={{ display: "flex", gap: 12 }}>
+          <Button onClick={() => toast("Recording saved", { description: "It's in the meeting's chat." })}>Show a toast</Button>
+          <Button variant="outline" tone="secondary" onClick={() => setJoin(!join)}>
+            {join ? "Hide Join" : "Show Join"}
+          </Button>
+        </div>
+        {join && (
+          <div data-keep-clear="" style={{ position: "fixed", insetInlineEnd: 24, bottom: 24 }}>
+            <Button tone="success">Join</Button>
+          </div>
+        )}
+        <Toaster {...args} avoid="[data-keep-clear]" />
+      </Surface>
+    );
+  },
+};
+
+/** At the top of the screen, placed with layout classes: the newest toast at the top, older ones peeking out below, fanning out downward. */
+export const AtTheTop: Story = {
+  parameters: {
+    screenshot: { name: "toaster-top" },
+    conformance: {
+      focusExit: {
+        // As in Stack: the last toast's dismiss button, pressed with focus from nowhere, leaves focus on the page.
+        "toaster/close Dismiss": "the last toast's dismiss button, pressed with focus from nowhere, leaves focus on the page, as Toaster does on purpose",
+      },
+    },
+  },
+  render: (args) => (
+    <Surface>
+      <span style={{ color: "var(--muted-foreground)" }}>Hover the toasts to fan them out, downward.</span>
+      <Toaster {...args} className="top-4 bottom-auto" />
       <ShowOnMount />
     </Surface>
   ),

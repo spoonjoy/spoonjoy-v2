@@ -1,7 +1,7 @@
 "use client";
 
 import { NumberField as BaseNumberField } from "@base-ui/react/number-field";
-import type { ComponentPropsWithRef, JSX, ReactElement, ReactNode, Ref } from "react";
+import type { JSX, ReactElement, ReactNode, Ref } from "react";
 import { Field } from "~/components/ouro/field/field";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
 import { FieldOwnerContext, useField, useFormErrors, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
@@ -167,7 +167,7 @@ function Icon({ children }: { children: ReactNode }): JSX.Element {
  * code, and `Slider` when an approximate value in a range is enough.
  *
  * @group Forms
- * @see https://ui.ouro.bot/docs/number-field
+ * @see https://ui.ouroboros.bot/docs/number-field
  *
  * @example
  * <NumberField label="Servings" name="servings" defaultValue={4} min={1} max={24} />
@@ -326,12 +326,6 @@ function phoneKeyboard(
   return fractionalStep || fractionalFormat ? "decimal" : "numeric";
 }
 
-/**
- * A stepper without the `aria-label` Base UI gives it: its hidden text names it, and an
- * `aria-label` is label text, which a loose label lookup for the field would also match.
- */
-const unlabelled = (props: ComponentPropsWithRef<"button">) => <button {...props} aria-label={undefined} />;
-
 /** The steppers and the input, inside the Field, where they read its server-known description ids. */
 function NumberFieldGroup({
   inputRef,
@@ -352,9 +346,10 @@ function NumberFieldGroup({
   // Ouro's own invalid state (the error prop or the Form's error for this name), not Base UI's,
   // which would count it as a failed check and block the next submit.
   const invalid = field.invalid;
+  // Each stepper drops the aria-label Base UI gives it, since its hidden text names it. The render arrows stay inline: Base UI warns about a render function named with a capital, and a minifier can rename a named one to any name.
   return (
     <BaseNumberField.Group data-ouro-number-field-group="" className={groupClass}>
-      <BaseNumberField.Decrement data-ouro-decrement="" data-ouro-control="number-field" data-ouro-part="decrement" render={unlabelled} className={stepperClass}>
+      <BaseNumberField.Decrement data-ouro-decrement="" data-ouro-control="number-field" data-ouro-part="decrement" render={(props) => <button {...props} aria-label={undefined} />} className={stepperClass}>
         <TouchTarget />
         <Icon>
           <path d="M3.5 8h9" />
@@ -372,7 +367,7 @@ function NumberFieldGroup({
         {...(invalid ? { "aria-invalid": true } : {})}
         className={inputClass}
       />
-      <BaseNumberField.Increment data-ouro-increment="" data-ouro-control="number-field" data-ouro-part="increment" render={unlabelled} className={stepperClass}>
+      <BaseNumberField.Increment data-ouro-increment="" data-ouro-control="number-field" data-ouro-part="increment" render={(props) => <button {...props} aria-label={undefined} />} className={stepperClass}>
         <TouchTarget />
         <Icon>
           <path d="M3.5 8h9M8 3.5v9" />

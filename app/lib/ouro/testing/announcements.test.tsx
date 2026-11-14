@@ -37,12 +37,12 @@ it("records the text each live region exposes, polite and assertive, once per ch
   watch = watchAnnouncements();
   await render(<Regions status="Saved" alert="" />);
   await render(<Regions status="Saved" alert="" />);
-  await render(<Regions status="Saved" alert="Failed to save" />);
+  await render(<Regions status="Saved" alert="Not saved: you are offline" />);
   await expect.poll(() => watch!.count("Saved")).toBe(1);
-  await expect.poll(() => watch!.matching("Failed").length).toBe(1);
-  expect(watch.matching("Failed")[0]!.region.getAttribute("role")).toBe("alert");
+  await expect.poll(() => watch!.matching("Not saved").length).toBe(1);
+  expect(watch.matching("Not saved")[0]!.region.getAttribute("role")).toBe("alert");
   expect(watch.matching("Saved")[0]!.region.getAttribute("role")).toBe("status");
-  expect(watch.changes.map((change) => change.text)).toEqual(["Saved", "Failed to save"]);
+  expect(watch.changes.map((change) => change.text)).toEqual(["Saved", "Not saved: you are offline"]);
 });
 
 it("counts text replaced in place in a status region, not the text it was added with", async () => {
@@ -95,9 +95,9 @@ it("leaves out text beside a live region in a subtree added around it", async ()
 
 it("counts an alert added with its text, and leaves out a polite region's initial text", async () => {
   watch = watchAnnouncements();
-  await append('<div role="status">Draft kept</div><div role="alert">Could not <span aria-hidden="true">(!)</span>save</div><div aria-live="assertive">Offline</div>');
+  await append('<div role="status">Draft kept</div><div role="alert">Not <span aria-hidden="true">(!)</span>saved</div><div aria-live="assertive">Offline</div>');
   expect(watch.changes.map(({ region, text }) => [region.getAttribute("role") ?? region.getAttribute("aria-live"), text])).toEqual([
-    ["alert", "Could not save"],
+    ["alert", "Not saved"],
     ["assertive", "Offline"],
   ]);
 });

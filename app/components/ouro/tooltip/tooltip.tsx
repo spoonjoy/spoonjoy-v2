@@ -1,7 +1,7 @@
 "use client";
 
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
-import { useCallback, useEffect, useRef, type JSX, type ReactElement, type ReactNode, type Ref } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, type JSX, type ReactElement, type ReactNode, type Ref } from "react";
 import { devWarn } from "~/lib/ouro/dev";
 import {
   floatingAlign,
@@ -15,7 +15,7 @@ import {
 import { lastInput } from "~/lib/ouro/last-input";
 import { useMergedRef } from "~/lib/ouro/refs";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
-import { PortalScope, usePortalContainer } from "~/lib/ouro/portal-container";
+import { PortalScope, TooltipsHidden, usePortalContainer } from "~/lib/ouro/portal-container";
 
 export type { FloatingAlign as TooltipAlign, FloatingSide as TooltipSide } from "~/lib/ouro/floating";
 
@@ -89,7 +89,7 @@ function essential(detail: string): readonly [string, string] {
  * ouro-base.css), like Dialog and Sheet.
  *
  * @group Overlays
- * @see https://ui.ouro.bot/docs/tooltip
+ * @see https://ui.ouroboros.bot/docs/tooltip
  *
  * On a button that opens a Popover, Dialog or Menu, put the Tooltip inside that
  * component's `trigger`, never around the component: the Tooltip passes the trigger
@@ -199,9 +199,18 @@ export function Tooltip(props: TooltipProps): JSX.Element {
     }
   }, []);
 
+  // Closed as the container it is in hides, such as a toolbar that fades out. A layout effect, so
+  // the close is asked in the same commit that hides the container, not a frame later.
+  const hidden = useContext(TooltipsHidden);
+  const actions = useRef<BaseTooltip.Root.Actions>(null);
+  useLayoutEffect(() => {
+    if (hidden) actions.current!.close();
+  }, [hidden]);
+
   const portal = usePortalContainer("Tooltip");
   return (
     <BaseTooltip.Root
+      actionsRef={actions}
       onOpenChange={(next, details) => {
         // Never after a touch: a tap that focuses the trigger would otherwise show it,
         // and a phone has no way to hover it away.

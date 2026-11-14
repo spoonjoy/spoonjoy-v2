@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { expectTypeOf } from "vitest";
-import { TextArea, type TextAreaProps } from "~/components/ouro/text-field/text-area";
+import { TextArea, type TextAreaHighlight, type TextAreaProps } from "~/components/ouro/text-field/text-area";
 expectTypeOf<readonly ["Taken."]>().toExtend<NonNullable<TextAreaProps["error"]>>();
 
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
@@ -51,3 +51,11 @@ expectTypeOf<{ label: "Notes"; autosize: true }>().not.toExtend<TextAreaProps>()
 createElement(TextArea, { label: "Notes", minRows: 2 });
 // @ts-expect-error label is required.
 createElement(TextArea, { rows: 3 });
+
+// Highlights: ranges with a label, a named tone and an optional id; the label is required.
+expectTypeOf<{ label: "Reply"; highlights: [{ start: 0; end: 5; label: "Suggested"; tone: "warning"; id: "a" }]; onHighlightsChange: (highlights: TextAreaHighlight[]) => void }>().toExtend<TextAreaProps>();
+expectTypeOf<{ start: 0; end: 5 }>().not.toExtend<TextAreaHighlight>();
+expectTypeOf<{ start: 0; end: 5; label: "Suggested"; tone: "danger" }>().not.toExtend<TextAreaHighlight>();
+expectTypeOf<{ label: "Reply"; marks: [] }>().not.toExtend<TextAreaProps>();
+// @ts-expect-error a highlight needs a label.
+createElement(TextArea, { label: "Reply", highlights: [{ start: 0, end: 5 }] });

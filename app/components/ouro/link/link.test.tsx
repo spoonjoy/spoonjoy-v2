@@ -208,7 +208,7 @@ describe("Link", () => {
           From <Link href="/ari">Ari</Link>, with lemon.
         </p>
         <div>
-          From <Link href="/inline" inline>Sam</Link>, with salt.
+          From <Link href="/inline" inline>Jo</Link>, with salt.
         </div>
         <p>
           <Link href="/own" inline={false}>On its own</Link>

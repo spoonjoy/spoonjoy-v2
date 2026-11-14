@@ -63,7 +63,7 @@ test.describe("Site footer, signed out", () => {
 
     await bar.locator('[data-ouro-part="list"]').click();
     const list = page.getByRole("dialog", { name: "X-ray", exact: true });
-    await expect(list.getByRole("link", { name: "Docs for link (opens in a new tab)", exact: true }).first()).toHaveAttribute("href", "https://ui.ouro.bot/docs/link/");
+    await expect(list.getByRole("link", { name: "Docs for link (opens in a new tab)", exact: true }).first()).toHaveAttribute("href", "https://ui.ouroboros.bot/docs/link/");
     // The footer's own link is rendered by app/components/navigation/site-footer.tsx; the file is
     // checked in this checkout rather than fetched, since github.com rate-limits CI runners.
     const source = list.getByRole("link", { name: "Source of link (opens in a new tab)", exact: true }).first();

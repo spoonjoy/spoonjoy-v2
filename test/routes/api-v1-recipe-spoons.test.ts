@@ -671,7 +671,7 @@ describe("API v1 recipe spoons", () => {
       error: {
         code: "internal_error",
         status: 500,
-        message: "Internal error",
+        message: "Internal error: Spoonjoy's server hit an unexpected fault",
       },
     });
 

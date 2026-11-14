@@ -56,7 +56,7 @@ function ratioFix(ratio: string): string {
  * `media`), and `Item` with `media` for a thumbnail beside a row's title.
  *
  * @group Layout
- * @see https://ui.ouro.bot/docs/aspect-ratio
+ * @see https://ui.ouroboros.bot/docs/aspect-ratio
  *
  * @example
  * <AspectRatio ratio={16 / 9}>

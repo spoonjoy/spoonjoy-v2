@@ -1,7 +1,7 @@
 import { Card } from "~/components/ouro/card/card";
 import type { Route } from "./+types/account.settings";
 import { useLoaderData, useActionData, useRevalidator, useFetcher, Form as RouterForm } from "react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   handleAccountSettingsAction,
   loadAccountSettings,
@@ -143,7 +143,7 @@ export default function AccountSettings() {
     setPasswordFormState("idle");
   };
 
-  const linkedProviders = new Set(user.oauthAccounts.map((a) => a.provider));
+  const linkedProviders = useMemo(() => new Set(user.oauthAccounts.map((a) => a.provider)), [user.oauthAccounts]);
 
   // Determine if user can unlink OAuth (keeps a password, another OAuth
   // provider, or an enrolled passkey as a way back in).

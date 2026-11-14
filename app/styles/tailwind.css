@@ -27,12 +27,42 @@
   --ouro-shadow-sheet-top: 0 1px 0 color-mix(in oklab, var(--border) 60%, transparent), 0 8px 32px rgb(0 0 0 / 0.12);
   --ouro-shadow-sheet-left: 8px 0 32px rgb(0 0 0 / 0.12);
   --ouro-shadow-sheet-right: -8px 0 32px rgb(0 0 0 / 0.12);
+  /* Avatar's initials hues (red, orange, gold, green, teal, blue, purple, magenta), tinted toward the background and foreground. */
+  --avatar-1: #c4314b;
+  --avatar-2: #ca5010;
+  --avatar-3: #986f0b;
+  --avatar-4: #498205;
+  --avatar-5: #038387;
+  --avatar-6: #0f6cbd;
+  --avatar-7: #8764b8;
+  --avatar-8: #c239b3;
+  /* Every Ouro corner is a squircle (CSS corner-shape); Switch, radios, slider thumbs, presence dots and spinners stay round. */
+  --ouro-corner-shape: squircle;
+  /* Liquid Glass, as the switch's lens wears it: the tint over what is behind, its blur, the inner rim and the outer hairline. */
+  --ouro-glass: #ffffff;
+  --ouro-glass-tint: 34%;
+  --ouro-glass-blur: 6px;
+  --ouro-glass-rim: rgb(255 255 255 / 0.85);
+  --ouro-glass-edge: rgb(20 18 16 / 0.1);
+  --ouro-glass-solid: #ffffff;
 }
 
 .dark {
   --warning: #fbbf24;
   --warning-foreground: #000000;
   --ouro-backdrop-color: #000000;
+  --avatar-1: #ee8a99;
+  --avatar-2: #f4a46c;
+  --avatar-3: #f2c661;
+  --avatar-4: #8bd17b;
+  --avatar-5: #4bc4c8;
+  --avatar-6: #6cb8f6;
+  --avatar-7: #c3a6ec;
+  --avatar-8: #ef85e2;
+  --ouro-glass-tint: 12%;
+  --ouro-glass-rim: rgb(255 255 255 / 0.3);
+  --ouro-glass-edge: rgb(8 6 4 / 0.35);
+  --ouro-glass-solid: #e9e6e1;
 }
 
 /*
@@ -267,14 +297,18 @@
 
 html {
   background: var(--sj-page);
-  /* Below 1024px the phone tab bar is fixed to the bottom of the screen. Scrolling something into
-     view (keyboard focus, a #hash link, scrollIntoView) stops short of it instead of leaving the
-     target underneath: the tab bar's bottom margin plus its 4rem height and a 1rem gap. */
+}
+
+/* Below 1024px the phone tab bar is fixed to the bottom of the screen. Scrolling something into
+   view (keyboard focus, a #hash link, scrollIntoView) stops short of it instead of leaving the
+   target underneath: the tab bar's bottom margin plus its 4rem height and a 1rem gap. A page with
+   no tab bar (signed-out, or a component rendered alone) keeps its whole height to scroll into. */
+html:has(.sj-tab-bar) {
   scroll-padding-bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 5rem);
 }
 
 @media (min-width: 1024px) {
-  html {
+  html:has(.sj-tab-bar) {
     scroll-padding-bottom: 0;
   }
 }
@@ -717,6 +751,14 @@ body:has(#cook) .sj-site-footer {
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-avatar-1: var(--avatar-1);
+  --color-avatar-2: var(--avatar-2);
+  --color-avatar-3: var(--avatar-3);
+  --color-avatar-4: var(--avatar-4);
+  --color-avatar-5: var(--avatar-5);
+  --color-avatar-6: var(--avatar-6);
+  --color-avatar-7: var(--avatar-7);
+  --color-avatar-8: var(--avatar-8);
   @keyframes ouro-spin {
   to {
     rotate: 1turn;
@@ -735,16 +777,59 @@ body:has(#cook) .sj-site-footer {
     translate: 300% 0;
     }
   }
-  @keyframes ouro-shimmer {
+  @keyframes ouro-shimmer-band {
   from {
-    background-position: 100% 0;
+    translate: -100% 0;
     }
   to {
-    background-position: -100% 0;
+    translate: 100% 0;
+    }
+  }
+  @keyframes ouro-scroll-fade-left {
+  from {
+    animation-timing-function: linear;
+    mask-image: var(--ouro-scroll-fade-ramps);
+    mask-repeat: no-repeat;
+    mask-composite: intersect;
+    mask-position: -2rem 0, 0 0;
+    }
+  to {
+    mask-image: var(--ouro-scroll-fade-ramps);
+    mask-repeat: no-repeat;
+    mask-composite: intersect;
+    mask-position: 0 0, 0 0;
+    }
+  }
+  @keyframes ouro-scroll-fade-right {
+  from {
+    animation-timing-function: linear;
+    mask-size: calc(100% + 2rem) 100%, calc(100% + 2rem) 100%;
+    }
+  to {
+    mask-size: calc(100% + 2rem) 100%, 100% 100%;
+    }
+  }
+  @keyframes ouro-hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+    }
+  }
+  @keyframes ouro-hero-fade {
+  from {
+    opacity: 0;
     }
   }
 }
 
 @utility press {
-    transition: scale var(--ouro-duration-press) var(--ouro-ease-out), background-color var(--ouro-duration-fast) ease, border-color var(--ouro-duration-fast) ease, color var(--ouro-duration-fast) ease, opacity var(--ouro-duration-fast) ease;
+    transition: scale var(--ouro-duration-press) var(--ouro-ease-out), opacity var(--ouro-duration-fast) ease;
+}
+
+/* Every rounded Ouro element takes the corner shape (only those: setting it on every element slowed paint). */
+@layer base {
+  :where([data-ouro], [data-ouro] *)[class*="rounded"] {
+    --corner-shape: var(--ouro-corner-shape);
+    corner-shape: var(--ouro-corner-shape);
+  }
 }

@@ -126,7 +126,7 @@ export async function generateUsername(
 function isUniqueConflict(error: unknown): boolean {
   if (error && typeof error === "object" && (error as { code?: unknown }).code === "P2002") return true;
   const message = error instanceof Error ? error.message : "";
-  return message.includes("UNIQUE constraint failed");
+  return /UNIQUE constraint failed/.test(message);
 }
 
 async function findUserIdByEmail(db: PrismaClient, normalizedEmail: string): Promise<string | null> {

@@ -5,7 +5,7 @@ import { Alert, type AlertProps } from "~/components/ouro/alert/alert";
 // Type tests: `pnpm typecheck` compiles this file.
 
 expectTypeOf<{ title: "Saved" }>().toExtend<AlertProps>();
-expectTypeOf<{ title: "Couldn't save"; description: "Try again."; tone: "destructive"; onDismiss: () => void; dismissLabel: "Close"; icon: null }>().toExtend<AlertProps>();
+expectTypeOf<{ title: "Not saved: you're offline"; description: "Try again."; tone: "destructive"; onDismiss: () => void; dismissLabel: "Close"; icon: null }>().toExtend<AlertProps>();
 expectTypeOf<ComponentProps<typeof Alert>>().toEqualTypeOf<AlertProps>();
 
 // title is required; other libraries' props name the fix.

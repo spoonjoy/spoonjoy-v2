@@ -76,13 +76,13 @@ export async function cropImageToBlob(
   canvas.height = output;
 
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not get 2d context");
+  if (!ctx) throw new Error("This browser gave no 2d canvas context to crop with");
 
   ctx.drawImage(image, crop.sx, crop.sy, crop.sWidth, crop.sHeight, 0, 0, output, output);
 
   return new Promise((resolve, reject) =>
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error("Could not export image"))),
+      (blob) => (blob ? resolve(blob) : reject(new Error("The canvas returned no image for the crop"))),
       opts?.type ?? "image/jpeg",
       opts?.quality ?? 0.92
     )

@@ -1,15 +1,18 @@
 import { StrictMode, type ReactNode } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
+import { flushSync } from "react-dom";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, server, userEvent } from "vitest/browser";
 import { Toaster, type ToasterProps } from "~/components/ouro/toast/toaster";
 import { toast, type ToastOptions } from "~/lib/ouro/toast";
-import { springAt } from "~/lib/ouro/spring";
+import { rubberband, springAt } from "~/lib/ouro/spring";
+import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
 import { pressTab } from "~/lib/ouro/testing/tab";
 import { holdFrames } from "~/lib/ouro/testing/frames";
 import { watchAnnouncements } from "~/lib/ouro/testing/announcements";
+import { watchLayoutReads } from "~/lib/ouro/testing/layout-reads";
 
 const chromiumOnly = it.skipIf(server.browser !== "chromium");
 
@@ -109,6 +112,111 @@ afterEach(async () => {
 const warnings = () => warn.mock.calls.map((call: unknown[]) => String(call[0]));
 
 describe("Toaster", () => {
+  it("lays nothing out when it mounts, and reads its edge once the page is laid out", async () => {
+    // The first Toaster of a page checks the theme once, which reads layout and is not what this measures.
+    await (await render(<Toaster />)).unmount();
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    const root = createRoot(host);
+    roots.push(root);
+    const reads = watchLayoutReads();
+    // Synchronously: a slow runner can reach a frame, where the observer's first read is allowed, before an awaited act returns.
+    flushSync(() => root.render(<Toaster />));
+    reads.stop();
+    expect(reads.names()).toEqual([]);
+    await act(async () => {});
+    expect(viewport()).not.toBeNull();
+    await until(() => viewport()!.getAttribute("data-edge"), "bottom");
+  });
+
+  it("reads its edge when a toast arrives, and not when the last one leaves", async () => {
+    await render(<Toaster />);
+    await show("Only", { duration: 0 });
+    const reads = watchLayoutReads();
+    await act(async () => toast.dismiss());
+    await gone("Only");
+    reads.stop();
+    expect(reads.reads.filter((read) => read.name === "getBoundingClientRect" && read.target === viewport())).toEqual([]);
+    const arriving = watchLayoutReads();
+    await show("Next", { duration: 0 });
+    arriving.stop();
+    expect(arriving.reads.some((read) => read.name === "getBoundingClientRect" && read.target === viewport())).toBe(true);
+  });
+
+  it("hangs from the top and unfurls downward when its layout classes put it at the top", async () => {
+    const box = (message: string) => toastNamed(message)!.getBoundingClientRect();
+    // At the bottom, by default: the older toast peeks out above the newest.
+    const { unmount } = await render(<Toaster />);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(viewport()!.getAttribute("data-edge")).toBe("bottom");
+    await show("Older", { duration: 0 });
+    await show("Newer", { duration: 0 });
+    expect(box("Older").top).toBeLessThan(box("Newer").top);
+    await act(async () => toast.dismiss());
+    await gone("Older");
+    await gone("Newer");
+    const removed = vi.spyOn(window, "removeEventListener");
+    const disconnected = vi.spyOn(ResizeObserver.prototype, "disconnect");
+    await unmount();
+    expect(removed).toHaveBeenCalledWith("resize", expect.any(Function));
+    expect(disconnected).toHaveBeenCalledTimes(1);
+    removed.mockRestore();
+    disconnected.mockRestore();
+    // At the top: the newest at the top, the older one peeking out below it.
+    await render(<Toaster className="top-4 bottom-auto" />);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(viewport()!.getAttribute("data-edge")).toBe("top");
+    await show("Older", { duration: 0 });
+    await show("Newer", { duration: 0 });
+    expect(Math.abs(box("Newer").top - viewport()!.getBoundingClientRect().top)).toBeLessThan(2);
+    expect(box("Older").bottom).toBeGreaterThan(box("Newer").bottom);
+    // Fanned out, the older one sits below the newest.
+    await userEvent.hover(toastNamed("Newer")!);
+    await until(() => viewport()!.hasAttribute("data-expanded"), true);
+    await until(() => toastNamed("Older")!.getAnimations().length, 0);
+    expect(box("Older").top).toBeGreaterThanOrEqual(box("Newer").bottom);
+    // Layout classes that move it to the bottom read the edge again, with no resize.
+    await act(async () => roots.at(-1)!.render(<Toaster className="bottom-4" />));
+    expect(viewport()!.getAttribute("data-edge")).toBe("bottom");
+    await act(async () => roots.at(-1)!.render(<Toaster className="top-4 bottom-auto" />));
+    expect(viewport()!.getAttribute("data-edge")).toBe("top");
+    // A toast arriving reads the edge again, after the app's own CSS moved the toaster with no resize.
+    await act(async () => toast.dismiss());
+    await gone("Older");
+    await gone("Newer");
+    await act(async () => roots.at(-1)!.render(<Toaster />));
+    expect(viewport()!.getAttribute("data-edge")).toBe("bottom");
+    const sheet = document.head.appendChild(document.createElement("style"));
+    sheet.textContent = '[data-ouro="toaster"] { top: 72px !important; bottom: auto !important; }';
+    try {
+      await show("Moved", { duration: 0 });
+      expect(viewport()!.getAttribute("data-edge")).toBe("top");
+    } finally {
+      sheet.remove();
+    }
+    // The attribute is written only when the edge changes.
+    const writes: MutationRecord[] = [];
+    const observer = new MutationObserver((records) => writes.push(...records));
+    observer.observe(viewport()!, { attributeFilter: ["data-edge"] });
+    window.dispatchEvent(new Event("resize"));
+    window.dispatchEvent(new Event("resize"));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    observer.disconnect();
+    expect(writes.length).toBe(1);
+    expect(viewport()!.getAttribute("data-edge")).toBe("bottom");
+    // A bottom toaster `avoid` lifted past the middle (an inline bottom) stays at the bottom.
+    viewport()!.style.bottom = `${window.innerHeight / 2 + 40}px`;
+    window.dispatchEvent(new Event("resize"));
+    expect(viewport()!.getAttribute("data-edge")).toBe("bottom");
+    viewport()!.style.bottom = "";
+    await act(async () => roots.at(-1)!.render(<Toaster className="top-4 bottom-auto" />));
+    // A resize reads the edge again: a viewport whose top edge is at the middle counts as the bottom.
+    viewport()!.style.top = "50vh";
+    window.dispatchEvent(new Event("resize"));
+    expect(viewport()!.getAttribute("data-edge")).toBe("bottom");
+  });
+
   // Prospective cast lets the RED browser run reach unchanged pre-className runtime.
   // toaster.test-d.ts independently checks the real public API without a cast.
   const layoutProps = (className: string) => ({ className }) as unknown as ToasterProps;
@@ -416,7 +524,7 @@ describe("toast()", () => {
     fakeClock();
     expect((await show("Plain")).getAttribute("data-tone")).toBe("secondary");
     const options = { tone: "error" } as unknown as ToastOptions;
-    expect((await show("Failed", options)).getAttribute("data-tone")).toBe("secondary");
+    expect((await show("Upload paused", options)).getAttribute("data-tone")).toBe("secondary");
     const odd = { tone: "loud" } as unknown as ToastOptions;
     await show("Odd", odd);
     expect(warnings()).toEqual([
@@ -445,7 +553,7 @@ describe("toast()", () => {
     let saved = "";
     await act(async () => {
       saved = shortcuts.success("Saved");
-      shortcuts.error("Failed");
+      shortcuts.error("Not saved: you are offline");
       shortcuts.warning("Careful");
       shortcuts.info("Heads up", { description: "More" });
     });
@@ -457,7 +565,7 @@ describe("toast()", () => {
       '[ouro-ui] toast: timeout is not an option. Fix: toast("…", { duration: 8000 }).',
       '[ouro-ui] toast: title is not an option; the message is the first argument. Fix: toast("Saved").',
       '[ouro-ui] toast: toast.success is not a function. Fix: toast("Saved", { tone: "success" }).',
-      '[ouro-ui] toast: toast.error is not a function. Fix: toast("Failed", { tone: "destructive" }).',
+      '[ouro-ui] toast: toast.error is not a function. Fix: toast("Not saved: you are offline", { tone: "destructive" }).',
       '[ouro-ui] toast: toast.warning is not a function. Fix: toast("Careful", { tone: "warning" }).',
       '[ouro-ui] toast: toast.info is not a function. Fix: toast("Heads up", { tone: "primary" }).',
     ]);
@@ -570,6 +678,23 @@ describe("toast()", () => {
     });
     await expect.poll(() => showing("Uploaded")).toBe(true);
     expect(toasts()).toHaveLength(1);
+  });
+
+  it("grows and shrinks a showing toast to fit new words", async () => {
+    await render(<Toaster />);
+    const item = await show("Uploading", { id: "upload", duration: 0 });
+    const height = () => parseFloat(item.style.getPropertyValue("--toast-height"));
+    const short = height();
+    expect(short).toBeGreaterThan(0);
+    const long = "Every photo in the album, its captions and the order they were taken in. ".repeat(4);
+    await act(async () => {
+      toast("Uploading", { id: "upload", description: long, duration: 0 });
+    });
+    await expect.poll(height).toBeGreaterThan(short + 40);
+    await act(async () => {
+      toast("Uploading", { id: "upload", duration: 0 });
+    });
+    await expect.poll(height).toBe(short);
   });
 
   it("keeps a toast that has an action until it is dismissed, unless duration is given", async () => {
@@ -707,16 +832,16 @@ describe("toast()", () => {
     await act(async () => {
       for (const n of [1, 2, 3]) ids.push(toast(`Undo ${n}`, { action: { label: "Undo", onClick: () => {} } }));
       toast("Synced", { tone: "primary", duration: 0 });
-      toast("Couldn't save", { tone: "destructive", duration: 0 });
-      toast("Also failed", { tone: "destructive", duration: 0 });
+      toast("Not saved: you're offline", { tone: "destructive", duration: 0 });
+      toast("Upload stopped: the disk is full", { tone: "destructive", duration: 0 });
     });
     await expect.poll(() => titles()).toEqual(["Undo 3", "Undo 2", "Undo 1"]);
     await act(async () => toast.dismiss(ids[0]));
-    await expect.poll(() => titles()).toEqual(["Couldn't save", "Undo 3", "Undo 2"]);
+    await expect.poll(() => titles()).toEqual(["Not saved: you're offline", "Undo 3", "Undo 2"]);
     await act(async () => toast.dismiss(ids[1]));
-    await expect.poll(() => titles()).toEqual(["Also failed", "Couldn't save", "Undo 3"]);
+    await expect.poll(() => titles()).toEqual(["Upload stopped: the disk is full", "Not saved: you're offline", "Undo 3"]);
     await act(async () => toast.dismiss(ids[2]));
-    await expect.poll(() => titles()).toEqual(["Synced", "Also failed", "Couldn't save"]);
+    await expect.poll(() => titles()).toEqual(["Synced", "Upload stopped: the disk is full", "Not saved: you're offline"]);
   });
 
   /** Shows three kept toasts, runs `queue` while they show, then frees all three slots and returns what showed next. */
@@ -804,7 +929,7 @@ describe("toast()", () => {
   it("keeps every toast, its action and its dismiss button reachable by a screen reader while the stack rests collapsed", async () => {
     await render(<Toaster />);
     await show("Recipe saved", { tone: "success", duration: Infinity });
-    await show("Couldn't sync", { tone: "destructive", action: { label: "Retry", onClick: () => {} } });
+    await show("Not synced: the server didn't answer", { tone: "destructive", action: { label: "Retry", onClick: () => {} } });
     // At rest: nothing has focus in the toasts and no pointer is over them, so the stack is collapsed.
     expect(viewport()!.hasAttribute("data-expanded")).toBe(false);
     // A touch screen reader (VoiceOver on iPhone) moves only through what is exposed, and a
@@ -815,7 +940,7 @@ describe("toast()", () => {
     expect(buttons.map((button) => button.textContent || button.getAttribute("aria-label"))).toEqual(["Retry", "Dismiss", "Dismiss"]);
     for (const button of buttons) expect(hidden(button), button.outerHTML).toBe(false);
     // The destructive toast is still told apart: an alertdialog, named by its message.
-    expect(toastNamed("Couldn't sync")!.getAttribute("role")).toBe("alertdialog");
+    expect(toastNamed("Not synced: the server didn't answer")!.getAttribute("role")).toBe("alertdialog");
     expect(toastNamed("Recipe saved")!.getAttribute("role")).toBe("dialog");
     expect(toasts().map((item) => item.getAttribute("data-ouro-part"))).toEqual(["alert", "toast"]);
   });
@@ -1008,7 +1133,7 @@ describe("toast()", () => {
       toast("Photo added", { tone: "primary" });
     });
     await act(async () => {
-      toast("Couldn't sync", { tone: "destructive", description: "Check your connection.", action: { label: "Retry", onClick: () => {} } });
+      toast("Not synced: the server didn't answer", { tone: "destructive", description: "Check your connection.", action: { label: "Retry", onClick: () => {} } });
     });
     await until(() => toasts().length, 3);
     // Let height measurement and the enter transition run, which must not repeat the text.
@@ -1018,13 +1143,13 @@ describe("toast()", () => {
     expect(announced.count("Recipe saved")).toBe(1);
     expect(announced.count("In your cookbook.")).toBe(1);
     expect(announced.count("Photo added")).toBe(1);
-    expect(announced.count("Couldn't sync")).toBe(1);
+    expect(announced.count("Not synced: the server didn't answer")).toBe(1);
     expect(announced.count("Check your connection.")).toBe(1);
     // The toasts' buttons are reachable, but nobody hears them read out as a toast arrives.
     expect(announced.count("Dismiss")).toBe(0);
     expect(announced.count("Retry")).toBe(0);
     const politely = announced.matching("Recipe saved")[0]!.region;
-    const assertively = announced.matching("Couldn't sync")[0]!.region;
+    const assertively = announced.matching("Not synced: the server didn't answer")[0]!.region;
     expect(politely.getAttribute("aria-live")).toBe("polite");
     expect(announced.matching("Photo added")[0]!.region).toBe(politely);
     expect(assertively.getAttribute("aria-live")).toBe("assertive");
@@ -1248,10 +1373,32 @@ describe("swiping", () => {
       target.dispatchEvent(event);
     };
   }
+  /**
+   * A mouse on the toast's message, as `pointerOn`, along both axes: `send(type, dx, dy, at)`. Its moves reach the page at
+   * once and carry their own times, so a test of many drags runs in the same time on a busy machine; real drags
+   * (`commands.drag`) wait on the browser for every move, and on a loaded runner one 200ms drag has taken over 8 s.
+   */
+  function mouseOn(item: HTMLElement) {
+    const rect = item.getBoundingClientRect();
+    const y = rect.top + rect.height / 2;
+    const send = pointerOn(item);
+    // The button is down from the press to the release, as a real drag's moves say.
+    return (type: string, dx: number, dy: number, at: number) => send(type, dx, at, { pointerType: "mouse", clientY: y + dy, buttons: type === "pointerup" ? 0 : 1 });
+  }
+  /** A mouse drag of `steps` moves over `durationMs`, let go where it stops at once, unless `hold`: then the button stays down. */
+  function mouseDrag(item: HTMLElement, dx: number, dy: number, { steps, durationMs, hold = false }: { steps: number; durationMs: number; hold?: boolean }) {
+    const send = mouseOn(item);
+    send("pointerdown", 0, 0, 0);
+    for (let step = 1; step <= steps; step++) send("pointermove", (dx * step) / steps, (dy * step) / steps, (durationMs * step) / steps);
+    // A mouse held still before it is let go has no velocity: the distance decides.
+    const release = (at = durationMs) => send("pointerup", dx, dy, at);
+    if (!hold) release();
+    return release;
+  }
   const offsetOf = (item: HTMLElement) => parseFloat(getComputedStyle(item).translate.replace("none", "0"));
   const atRest = (item: HTMLElement) => expect.poll(() => !item.hasAttribute("data-ouro-settling") && item.style.translate === "").toBe(true);
 
-  chromiumOnly("dismisses with a swipe down, right or left", async () => {
+  it("dismisses with a swipe down, right or left", async () => {
     await render(<Toaster />);
     for (const [message, dx, dy] of [
       ["Down", 0, 120],
@@ -1259,7 +1406,7 @@ describe("swiping", () => {
       ["Left", -200, 0],
     ] as const) {
       const item = await show(message, { duration: 0 });
-      await swipe(item, dx, dy);
+      await act(async () => void mouseDrag(item, dx, dy, { steps: 12, durationMs: 200 }));
       await gone(message);
     }
   });
@@ -1289,6 +1436,45 @@ describe("swiping", () => {
     }
     await expect.poll(() => !item.hasAttribute("data-ouro-settling") && item.style.translate === "").toBe(true);
     expect(showing("Follows")).toBe(true);
+  });
+
+  it("holds a mouse drag back toward the screen's edge it cannot leave by, and follows it 1:1 the way it can, at either edge", async () => {
+    const dragY = async (item: HTMLElement, dy: number, dx = 0) => {
+      let release: (at?: number) => void = () => {};
+      try {
+        await act(async () => void (release = mouseDrag(item, dx, dy, { steps: 8, durationMs: 200, hold: true })));
+        const [shiftX = "0", shiftY = "0"] = getComputedStyle(item).translate.replace("none", "0").split(" ");
+        return dx ? parseFloat(shiftX) : parseFloat(shiftY);
+      } finally {
+        await act(async () => release(400));
+        await expect.poll(() => !item.hasAttribute("data-ouro-settling") && item.style.translate === "").toBe(true);
+      }
+    };
+    const { unmount } = await render(<Toaster />);
+    let item = await show("Bottom", { duration: 0 });
+    const height = item.offsetHeight;
+    // At the bottom: up is held back, down follows the mouse (short of the 40px that would dismiss).
+    expect(await dragY(item, -60)).toBeCloseTo(rubberband(-60, height), 0);
+    expect(await dragY(item, 30)).toBe(30);
+    // Sideways follows 1:1 both ways: the band is only along the edge's axis.
+    expect(await dragY(item, 0, -30)).toBe(-30);
+    // Let go far up, where even the held-back offset is past the 40px a slow release needs: it comes back rather than leaving.
+    expect(Math.abs(rubberband(-300, height))).toBeGreaterThan(40);
+    await act(async () => void mouseDrag(item, 0, -300, { steps: 12, durationMs: 400 }));
+    await atRest(item);
+    expect(item.hasAttribute("data-ouro-swiped")).toBe(false);
+    expect(showing("Bottom")).toBe(true);
+    await act(async () => toast.dismiss());
+    await gone("Bottom");
+    await unmount();
+    await render(<Toaster className="top-4 bottom-auto" />);
+    item = await show("Top", { duration: 0 });
+    // At the top: down is held back, up follows the mouse.
+    expect(await dragY(item, 60)).toBeCloseTo(rubberband(60, height), 0);
+    expect(await dragY(item, -30)).toBe(-30);
+    // Let go 60px up, past the 40px a slow release needs: it leaves.
+    await act(async () => void mouseDrag(item, 0, -60, { steps: 8, durationMs: 300 }));
+    await gone("Top");
   });
 
   chromiumOnly("dismisses on a quick flick of 30px, short of the 40px a slow release needs", async () => {
@@ -1412,6 +1598,62 @@ describe("swiping", () => {
     // One and a half times its height, down and off the screen.
     expect(slidesTo(closed)).toBeCloseTo(closed.offsetHeight * 1.5, 0);
     await gone("Closed");
+  });
+
+  it("throws a swiped toast on under OuroProvider's motion=\"full\", and lets it fade where it is under \"reduced\", whatever the device says", async () => {
+    const swipeAway = async (item: HTMLElement) => {
+      const send = pointerOn(item);
+      send("pointerdown", 0, 0);
+      send("pointermove", 15, 15);
+      send("pointermove", 30, 30);
+      await act(async () => send("pointerup", 30, 30));
+    };
+    const { unmount } = await render(
+      <OuroProvider motion="reduced">
+        <Toaster />
+      </OuroProvider>,
+    );
+    const still = await show("Still", { duration: 0 });
+    await swipeAway(still);
+    const seen: string[] = [];
+    await expect.poll(() => (seen.push(still.style.translate), still.isConnected)).toBe(false);
+    expect([...new Set(seen.map((translate) => parseFloat(translate)))]).toEqual([30]);
+    await unmount();
+
+    await commands.emulateMedia({ reducedMotion: "reduce" });
+    await render(
+      <OuroProvider motion="full">
+        <Toaster />
+      </OuroProvider>,
+    );
+    const thrown = await show("Thrown", { duration: 0 });
+    thrown.style.transitionDuration = "20s";
+    await swipeAway(thrown);
+    await expect.poll(() => parseFloat(thrown.style.translate)).toBeGreaterThan(30);
+    for (const animation of thrown.getAnimations()) animation.finish();
+    await gone("Thrown");
+  });
+
+  it("brings a toast let go short of a swipe back at once after OuroProvider's motion changes to \"reduced\"", async () => {
+    const { root } = await render(
+      <OuroProvider motion="full">
+        <Toaster />
+      </OuroProvider>,
+    );
+    const item = await show("Held", { duration: 0 });
+    await act(async () =>
+      root.render(
+        <OuroProvider motion="reduced">
+          <Toaster />
+        </OuroProvider>,
+      ),
+    );
+    const send = pointerOn(item);
+    send("pointerdown", 0, 0);
+    send("pointermove", 10, 100);
+    send("pointermove", 20, 400);
+    await act(async () => send("pointerup", 20, 800));
+    expect(item.style.translate).toBe("");
   });
 
   it("shows a toast sent again with the id of one just swiped away, where a toast belongs, and it can be swiped again", async () => {
@@ -1544,5 +1786,92 @@ describe("motion", () => {
     expect(getComputedStyle(item).transitionProperty).toBe("opacity");
     const fresh = await show("Still", { duration: 0 });
     expect(getComputedStyle(fresh).transitionProperty).toBe("opacity");
+  });
+});
+
+describe("Toaster avoid", () => {
+  /** A control fixed in a corner of the window, such as a call's Join button, inside a part of the page. */
+  function corner(side: "left" | "right", place: "bottom" | "top" = "bottom", css = "") {
+    const part = document.createElement("section");
+    const button = document.createElement("button");
+    button.textContent = "Join";
+    button.setAttribute("data-keep-clear", "");
+    button.style.cssText = `position: fixed; ${place}: 16px; ${side}: 16px; width: 140px; height: 44px; z-index: 0; ${css}`;
+    part.append(button);
+    document.body.append(part);
+    mounted.push(part);
+    return button;
+  }
+  const overlaps = (a: DOMRect, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  const above = (item: HTMLElement, control: HTMLElement) => Math.round(control.getBoundingClientRect().top - item.getBoundingClientRect().bottom);
+
+  it("keeps the toasts clear of a control the selector matches under them, and comes back down when it goes", async () => {
+    await page.viewport(1280, 800);
+    await render(<Toaster avoid="[data-keep-clear]" />);
+    const item = await show("Recording saved", { duration: Infinity });
+    const resting = Math.round(item.getBoundingClientRect().bottom);
+    const join = corner("right");
+    await until(() => above(item, join), 8);
+    join.style.display = "none";
+    await until(() => Math.round(item.getBoundingClientRect().bottom), resting);
+    join.style.display = "";
+    await until(() => above(item, join), 8);
+    join.remove();
+    await until(() => Math.round(item.getBoundingClientRect().bottom), resting);
+  });
+
+  it("covers the same control without avoid, as it always has", async () => {
+    await page.viewport(1280, 800);
+    const join = corner("right");
+    await render(<Toaster />);
+    const item = await show("Recording saved", { duration: Infinity });
+    expect(overlaps(item.getBoundingClientRect(), join.getBoundingClientRect())).toBe(true);
+  });
+
+  it("stays where it is for a matched control away from its column or in the window's top half", async () => {
+    await page.viewport(1280, 800);
+    corner("left");
+    corner("right", "top");
+    await render(<Toaster avoid="[data-keep-clear]" />);
+    const item = await show("Recording saved", { duration: Infinity });
+    expect(Math.round(800 - item.getBoundingClientRect().bottom)).toBe(24);
+  });
+
+  it("measures again when the window resizes: a control beside the column on a wide screen is under it on a phone", async () => {
+    await page.viewport(1280, 800);
+    const join = corner("left");
+    await render(<Toaster avoid="[data-keep-clear]" />);
+    const item = await show("Recording saved", { duration: Infinity });
+    expect(overlaps(item.getBoundingClientRect(), join.getBoundingClientRect())).toBe(false);
+    await page.viewport(390, 844);
+    await until(() => above(item, join), 8);
+  });
+
+  it("keeps clear of what a new selector matches when avoid changes", async () => {
+    await page.viewport(1280, 800);
+    const join = corner("right");
+    join.removeAttribute("data-keep-clear");
+    join.setAttribute("data-call", "");
+    const { root } = await render(<Toaster avoid="[data-keep-clear]" />);
+    const item = await show("Recording saved", { duration: Infinity });
+    expect(overlaps(item.getBoundingClientRect(), join.getBoundingClientRect())).toBe(true);
+    await act(async () => root.render(<Toaster avoid="[data-call]" />));
+    await until(() => above(item, join), 8);
+  });
+
+  it("lets go of the page and the window when avoid goes", async () => {
+    await page.viewport(1280, 800);
+    const { root } = await render(<Toaster />);
+    await show("Recording saved", { duration: Infinity });
+    const added = vi.spyOn(window, "addEventListener");
+    const observed = vi.spyOn(MutationObserver.prototype, "observe");
+    await act(async () => root.render(<Toaster avoid="[data-keep-clear]" />));
+    const resize = added.mock.calls.find(([type]) => type === "resize")![1];
+    const watcher = observed.mock.contexts[observed.mock.calls.findIndex(([target]) => target === document.body)];
+    const removed = vi.spyOn(window, "removeEventListener");
+    const disconnected = vi.spyOn(MutationObserver.prototype, "disconnect");
+    await act(async () => root.render(<Toaster />));
+    expect(removed).toHaveBeenCalledWith("resize", resize);
+    expect(disconnected.mock.contexts).toContain(watcher);
   });
 });

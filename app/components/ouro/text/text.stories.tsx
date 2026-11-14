@@ -53,7 +53,7 @@ export const SizesAndTones: Story = {
         <Text tone="primary">Primary: 3 new comments</Text>
         <Text tone="success">Success: saved to Weeknight dinners</Text>
         <Text tone="warning">Warning: contains tree nuts</Text>
-        <Text tone="destructive">Destructive: could not save the recipe</Text>
+        <Text tone="destructive">Destructive: recipe not saved, the server is offline</Text>
       </div>
     </Surface>
   ),

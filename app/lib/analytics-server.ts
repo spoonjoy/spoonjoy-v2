@@ -145,7 +145,7 @@ const UNSAFE_PROPERTY_KEYS = new Set([
 function errorToProps(error: unknown): Record<string, unknown> {
   if (error instanceof Error) {
     return {
-      $exception_type: error.name || "Error",
+      $exception_type: error.name || Error.name,
       $exception_message: error.message,
       $exception_stack_trace_raw: error.stack ?? null,
     };

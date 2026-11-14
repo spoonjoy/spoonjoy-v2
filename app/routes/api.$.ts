@@ -514,7 +514,7 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
         );
       }
     }
-    const response = apiJson({ ok: false, error: { message: "Internal server error", status: 500 } }, 500);
+    const response = apiJson({ ok: false, error: { message: "Internal server error: Spoonjoy's server hit an unexpected fault", status: 500 } }, 500);
     return observeLegacyApiResponse({
       request,
       context,

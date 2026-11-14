@@ -3,9 +3,14 @@ import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
-import { Combobox, type ComboboxProps } from "~/components/ouro/combobox/combobox";
+import { Avatar } from "~/components/ouro/avatar/avatar";
+import { Badge } from "~/components/ouro/badge/badge";
+import { Button } from "~/components/ouro/button/button";
+import { Combobox, type ComboboxItem, type ComboboxProps } from "~/components/ouro/combobox/combobox";
+import { Dialog } from "~/components/ouro/dialog/dialog";
 import { Form } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
+import { pressDuringScroll } from "~/lib/ouro/testing/press";
 import { pressTab } from "~/lib/ouro/testing/tab";
 import { audit, axeExclude, describeFindings } from "~/lib/ouro/testing/axe";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
@@ -563,6 +568,7 @@ describe("Combobox development messages", () => {
     ["onChange", { onChange: () => {} }, "onChange is not a prop", "<Combobox onValueChange={(value) => …}>"],
     ["noOptionsMessage", { noOptionsMessage: "None" }, "noOptionsMessage is not a prop", '<Combobox emptyLabel="None">'],
     ["isClearable", { isClearable: true }, "isClearable is not a prop; the clear button shows whenever there is a value", "<Combobox>"],
+    ["inputValue", { inputValue: "Ba" }, "inputValue needs onInputChange, or the text can never change", "<Combobox inputValue={text} onInputChange={setText}>"],
   ])("warns for %s with the fix", async (name, extra, problem, fix) => {
     const props = { label: "Herb", items: herbs, ...extra } as unknown as ComboboxProps;
     const { host } = await render(<Combobox {...props} />);
@@ -682,5 +688,408 @@ describe("Combobox in a Form", () => {
     await userEvent.click(view.input);
     await userEvent.click(page.getByRole("option", { name: "Basil" }));
     for (const control of [view.input]) await expect.poll(() => control.getAttribute("aria-invalid")).toBeNull();
+  });
+});
+
+describe("Combobox and the page's scroll", () => {
+  // A long page with smooth scrolling and a scroll padding under its sticky header (a docs site's,
+  // say), scrolled to 2000px, with the trigger in that header. Opening focuses and scrolls to what
+  // the popup holds, which the browser did for the page too, as far as its end.
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  beforeEach(async () => {
+    await page.viewport(1280, 800);
+    await expect.poll(() => innerWidth).toBe(1280);
+  });
+  afterEach(() => {
+    document.documentElement.removeAttribute("style");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  });
+
+  for (const reduced of [false, true]) {
+    for (const input of ["pointer", "keyboard"] as const) {
+      it(`leaves the page where it is as it opens and closes, by ${input}${reduced ? ", with reduced motion" : ""}`, async () => {
+        if (reduced) await commands.emulateMedia({ reducedMotion: "reduce" });
+        await render(
+          <div style={{ height: 5000 }}>
+            <header style={{ position: "sticky", top: 0, height: 100 }}>
+              <Combobox label="Herb" items={herbs} />
+            </header>
+          </div>,
+        );
+        window.scrollTo({ top: 2000, behavior: "instant" });
+        Object.assign(document.documentElement.style, { scrollBehavior: "smooth", scrollPaddingTop: "120px" });
+        const painted: number[] = [];
+        let reading = true;
+        const read = () => {
+          painted.push(window.scrollY);
+          if (reading) requestAnimationFrame(read);
+        };
+        requestAnimationFrame(read);
+        const opener = document.querySelector<HTMLElement>('[data-ouro-control="combobox"][data-ouro-part="input"]')!;
+        if (input === "pointer") {
+          await commands.pointerPress({ selector: '[data-ouro-control="combobox"][data-ouro-part="input"]', action: "down" });
+          await commands.pointerPress({ action: "up" });
+        } else {
+          opener.focus({ preventScroll: true });
+          await userEvent.keyboard("{ArrowDown}");
+        }
+        await expect.poll(() => {
+          const open = popup();
+          return Boolean(open?.hasAttribute("data-open") && !open.hasAttribute("data-starting-style") && open.getAnimations().length === 0);
+        }).toBe(true);
+        await frame();
+        await frame();
+        await userEvent.keyboard("{Escape}");
+        await expect.poll(() => {
+          const open = popup();
+          return !open || (open.hasAttribute("data-closed") && open.getAnimations().length === 0);
+        }).toBe(true);
+        await frame();
+        await frame();
+        reading = false;
+        expect(painted.length).toBeGreaterThan(2);
+        expect(new Set(painted)).toEqual(new Set([2000]));
+      });
+    }
+  }
+
+  it("stays open and stops the page where it is, pressed as a smooth scroll begins", async () => {
+    // A smooth scroll begins as the press goes down, ahead of the trigger's own handlers: the press
+    // stops it where it is, holding the page from then on, not only once the popup opens, and the
+    // popup opens and stays open.
+    await render(
+      <div style={{ height: 5000 }}>
+        <header style={{ position: "sticky", top: 0, height: 100 }}>
+          <Combobox label="Herb" items={herbs} />
+        </header>
+      </div>,
+    );
+    const { behaviorAtPress } = await pressDuringScroll('[data-ouro-control="combobox"][data-ouro-part="input"]', { from: 2000, to: 4000, scroll: "begins" });
+    await expect.poll(() => {
+      const open = popup();
+      return Boolean(open?.hasAttribute("data-open") && !open.hasAttribute("data-starting-style") && open.getAnimations().length === 0);
+    }).toBe(true);
+    await frame();
+    await frame();
+    expect(popup()!.hasAttribute("data-open")).toBe(true);
+    expect(behaviorAtPress).toBe("auto");
+    expect(window.scrollY).toBe(2000);
+  });
+
+  it("stays open and stops the page where it is, pressed as a smooth scroll begins, with a value of its own", async () => {
+    // A smooth scroll begins as the press goes down, ahead of the trigger's own handlers: the press
+    // stops it where it is, holding the page from then on, not only once the popup opens, and the
+    // popup opens and stays open.
+    await render(
+      <div style={{ height: 5000 }}>
+        <header style={{ position: "sticky", top: 0, height: 100 }}>
+          <Combobox label="Herb" items={herbs} allowCustomValue />
+        </header>
+      </div>,
+    );
+    const { behaviorAtPress } = await pressDuringScroll('[data-ouro-control="combobox"][data-ouro-part="input"]', { from: 2000, to: 4000, scroll: "begins" });
+    await expect.poll(() => {
+      const open = popup();
+      return Boolean(open?.hasAttribute("data-open") && !open.hasAttribute("data-starting-style") && open.getAnimations().length === 0);
+    }).toBe(true);
+    await frame();
+    await frame();
+    expect(popup()!.hasAttribute("data-open")).toBe(true);
+    expect(behaviorAtPress).toBe("auto");
+    expect(window.scrollY).toBe(2000);
+  });
+
+  for (const custom of [false, true]) {
+    it(`leaves the page to the app at Enter in its closed input, which submits the form${custom ? ", with a value of its own" : ""}`, async () => {
+      // Enter in a closed combobox opens nothing; the form's submit may scroll the page (to its
+      // results, or to a field to fix), and that scroll is the app's.
+      await render(
+        <div style={{ height: 5000 }}>
+          <header style={{ position: "sticky", top: 0, height: 100 }}>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                window.scrollTo({ top: 1500, behavior: "instant" });
+              }}
+            >
+              {custom ? <Combobox label="Herb" items={herbs} allowCustomValue /> : <Combobox label="Herb" items={herbs} />}
+              <button type="submit" data-test-harness="">
+                Find
+              </button>
+            </form>
+          </header>
+        </div>,
+      );
+      window.scrollTo({ top: 2000, behavior: "instant" });
+      const html = document.documentElement;
+      html.style.scrollBehavior = "smooth";
+      let atPress = "";
+      window.addEventListener("keydown", () => (atPress = html.style.scrollBehavior), { once: true });
+      document.querySelector<HTMLElement>('[data-ouro-control="combobox"][data-ouro-part="input"]')!.focus({ preventScroll: true });
+      await userEvent.keyboard("{Enter}");
+      await frame();
+      await frame();
+      expect(atPress).toBe("smooth");
+      expect(html.style.scrollBehavior).toBe("smooth");
+      expect(window.scrollY).toBe(1500);
+      expect(popup()).toBeNull();
+    });
+  }
+});
+
+const people: ComboboxItem[] = [
+  {
+    value: "rowan",
+    label: "Rowan Vale",
+    description: "Principal Engineer, Platform Services and Developer Experience, North Harbor office",
+    media: <Avatar name="Rowan Vale" alt="" size="xs" />,
+    meta: <Badge>1:1</Badge>,
+  },
+  { value: "iris", label: "Iris Okafor", description: "Designer", media: <Avatar name="Iris Okafor" alt="" size="xs" presence="available" presenceLabel="Available" /> },
+  { value: "theo", label: "Theo Brandt" },
+];
+
+describe("Combobox rich items", () => {
+  it("shows media, a description and a mark on a row, and media on its chip", async () => {
+    const { input, host } = await render(<Combobox label="To" multiple items={people} defaultValue={["iris"]} />);
+    await userEvent.click(input);
+    await expect.poll(options).toHaveLength(3);
+    const [rowan, iris, theo] = [...document.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
+    // Read in order: the name, the second line, then the mark.
+    // The avatar's initials ("RV") are drawn, not text, and hidden from screen readers with alt="".
+    expect(rowan!.textContent).toBe("Rowan Vale" + "Principal Engineer, Platform Services and Developer Experience, North Harbor office" + "1:1");
+    const media = rowan!.querySelector<HTMLElement>("[data-ouro-combobox-media]")!;
+    const description = rowan!.querySelector<HTMLElement>("[data-ouro-combobox-description]")!;
+    const meta = rowan!.querySelector<HTMLElement>("[data-ouro-combobox-meta]")!;
+    expect(media.querySelector('[data-ouro="avatar"]')).not.toBeNull();
+    expect(meta.textContent).toBe("1:1");
+    // The picture comes first, the mark at the row's end; the second line is cut, whole in its title.
+    expect(media.getBoundingClientRect().right).toBeLessThanOrEqual(description.getBoundingClientRect().left);
+    expect(meta.getBoundingClientRect().left).toBeGreaterThanOrEqual(description.getBoundingClientRect().right);
+    expect(meta.getBoundingClientRect().right).toBeGreaterThan(rowan!.getBoundingClientRect().right - 16);
+    expect(description.getBoundingClientRect().top).toBeGreaterThan(rowan!.querySelector(".truncate")!.getBoundingClientRect().top);
+    expect(description.scrollWidth).toBeGreaterThan(description.clientWidth);
+    expect(getComputedStyle(description).textOverflow).toBe("ellipsis");
+    expect(description.title).toBe("Principal Engineer, Platform Services and Developer Experience, North Harbor office");
+    expect(rowan!.getBoundingClientRect().right).toBeLessThanOrEqual(popup()!.getBoundingClientRect().right);
+    // The picked row keeps its 16px check; the avatar's own presence glyph keeps its size inside its dot.
+    expect(iris!.querySelector("[data-ouro-combobox-media]")).not.toBeNull();
+    const check = iris!.firstElementChild!.querySelector("svg")!;
+    expect(check.getBoundingClientRect().width).toBe(16);
+    const dot = iris!.querySelector<HTMLElement>("[data-ouro-avatar-presence]")!;
+    expect(dot.querySelector("svg")!.getBoundingClientRect().width).toBeLessThan(dot.getBoundingClientRect().width);
+    // A plain item keeps its plain row.
+    expect(theo!.querySelector("[data-ouro-combobox-media], [data-ouro-combobox-description], [data-ouro-combobox-meta]")).toBeNull();
+    expect(theo!.textContent).toBe("Theo Brandt");
+    // The chip shows the picture before the name, inside the chip.
+    const chip = host.querySelector<HTMLElement>("[data-ouro-combobox-chip]")!;
+    const chipMedia = chip.querySelector<HTMLElement>("[data-ouro-combobox-chip-media]")!;
+    expect(chipMedia.querySelector('[data-ouro="avatar"]')).not.toBeNull();
+    expect(chip.querySelector(":scope > span")!.textContent).toBe("Iris Okafor");
+    expect(chipMedia.getBoundingClientRect().left).toBeGreaterThanOrEqual(chip.getBoundingClientRect().left);
+    expect(chipMedia.getBoundingClientRect().height).toBeLessThanOrEqual(chip.getBoundingClientRect().height);
+  });
+
+  it("lays out a row for whichever of media, description and meta it has, and keeps a plain row's long label whole", async () => {
+    const long = "Theo Brandt from the support team, who answers on weekends and holidays";
+    const { input } = await render(
+      <Combobox
+        label="To"
+        items={[
+          { value: "media", label: "Only a picture", media: <Avatar name="Only Picture" alt="" size="xs" /> },
+          { value: "description", label: "Only a line", description: "Designer" },
+          { value: "meta", label: "Only a mark", meta: <Badge>1:1</Badge> },
+          { value: "plain", label: long },
+        ]}
+      />,
+    );
+    await userEvent.click(input);
+    await expect.poll(options).toHaveLength(4);
+    const rows = [...document.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
+    const parts = (row: HTMLElement) =>
+      ["media", "description", "meta"].filter((part) => row.querySelector(`[data-ouro-combobox-${part}]`)).join(",");
+    expect(rows.map(parts)).toEqual(["media", "description", "meta", ""]);
+    // A rich row's label stays on one line; a plain row's label wraps, whole.
+    for (const row of rows.slice(0, 3)) expect(row.getBoundingClientRect().height).toBeLessThan(60);
+    const plain = rows[3]!.lastElementChild as HTMLElement;
+    expect(plain.textContent).toBe(long);
+    expect(plain.scrollWidth).toBeLessThanOrEqual(plain.clientWidth);
+    expect(plain.getBoundingClientRect().height).toBeGreaterThan(2 * parseFloat(getComputedStyle(plain).lineHeight) - 1);
+  });
+
+  it("shows rich suggestions with allowCustomValue too", async () => {
+    const { input } = await render(<Combobox label="To" allowCustomValue items={people} />);
+    await userEvent.click(input);
+    await expect.poll(options).toHaveLength(3);
+    expect(document.querySelector('[role="option"] [data-ouro-combobox-description]')!.textContent).toBe(
+      "Principal Engineer, Platform Services and Developer Experience, North Harbor office",
+    );
+  });
+});
+
+describe("Combobox keys", () => {
+  it("picks the first match on Enter with autoHighlight, and nothing without it", async () => {
+    const first = vi.fn();
+    const plain = vi.fn();
+    await render(
+      <>
+        <Combobox label="First herb" items={herbs} autoHighlight onValueChange={first} />
+        <Combobox label="Plain herb" items={herbs} onValueChange={plain} />
+      </>,
+    );
+    const field = (name: string) => page.getByRole("combobox", { name, exact: true }).element() as HTMLInputElement;
+    await userEvent.click(field("First herb"));
+    await userEvent.type(field("First herb"), "ma");
+    await expect.poll(options).toEqual(["Rosemary"]);
+    await userEvent.keyboard("{Enter}");
+    expect(first).toHaveBeenLastCalledWith("Rosemary");
+    expect(field("First herb").value).toBe("Rosemary");
+    await userEvent.click(field("Plain herb"));
+    await userEvent.type(field("Plain herb"), "ma");
+    await expect.poll(options).toEqual(["Rosemary"]);
+    await userEvent.keyboard("{Enter}");
+    expect(plain).not.toHaveBeenCalled();
+  });
+
+  it("hands the app each key first, and leaves a key the app prevents alone", async () => {
+    const seen: string[] = [];
+    const picked = vi.fn();
+    const { input } = await render(
+      <Combobox
+        label="Herbs"
+        multiple
+        items={herbs}
+        autoHighlight
+        onValueChange={picked}
+        onInputKeyDown={(event) => {
+          seen.push(`${event.key} after ${picked.mock.calls.length} picks`);
+          if (event.key === "ArrowDown" || (event.key === "Enter" && event.currentTarget.value === "ma")) event.preventDefault();
+        }}
+      />,
+    );
+    await act(async () => input.focus());
+    // A prevented arrow leaves the list closed.
+    await userEvent.keyboard("{ArrowDown}");
+    await act(async () => {});
+    expect(popup()).toBeNull();
+    await userEvent.type(input, "ma");
+    await expect.poll(options).toEqual(["Rosemary"]);
+    // A prevented Enter picks nothing, and the list stays open.
+    await userEvent.keyboard("{Enter}");
+    expect(picked).not.toHaveBeenCalled();
+    expect(popup()).not.toBeNull();
+    // An Enter the app lets through picks, after the app has seen it.
+    await userEvent.keyboard("{Backspace}{Backspace}thy");
+    await expect.poll(options).toEqual(["Thyme"]);
+    await userEvent.keyboard("{Enter}");
+    expect(picked).toHaveBeenLastCalledWith(["Thyme"]);
+    await pressTab();
+    expect(seen).toContain("ArrowDown after 0 picks");
+    expect(seen.filter((key) => key.startsWith("Enter"))).toEqual(["Enter after 0 picks", "Enter after 0 picks"]);
+    expect(seen).toContain("Tab after 1 picks");
+  });
+
+  it("takes its text from inputValue, and clears it after a pick when the app says so", async () => {
+    function People() {
+      const [text, setText] = useState("Ro");
+      const [picked, setPicked] = useState<string[]>([]);
+      return (
+        <Combobox
+          label="To"
+          multiple
+          autoHighlight
+          items={herbs.filter((herb) => picked.includes(herb) || herb.toLowerCase().includes(text.toLowerCase()))}
+          inputValue={text}
+          onInputChange={setText}
+          value={picked}
+          onValueChange={(next) => {
+            setPicked(next);
+            setText("");
+          }}
+        />
+      );
+    }
+    const { input, host } = await render(<People />);
+    expect(input.value).toBe("Ro");
+    await userEvent.click(input);
+    await userEvent.keyboard("{Backspace}{Backspace}thy");
+    expect(input.value).toBe("thy");
+    await expect.poll(options).toEqual(["Thyme"]);
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => [...host.querySelectorAll("[data-ouro-combobox-chip]")].map((chip) => chip.textContent)).toEqual(["ThymeRemove Thyme"]);
+    expect(input.value).toBe("");
+  });
+
+  it("shows a single pick's label in a controlled input once the list closes", async () => {
+    const changes: string[] = [];
+    function Herb() {
+      const [text, setText] = useState("");
+      return (
+        <Combobox
+          label="Herb"
+          items={herbs.filter((herb) => herb.toLowerCase().includes(text.toLowerCase()))}
+          inputValue={text}
+          onInputChange={(next) => {
+            changes.push(next);
+            setText(next);
+          }}
+        />
+      );
+    }
+    const { input } = await render(<Herb />);
+    await userEvent.click(input);
+    await userEvent.type(input, "thy");
+    await expect.poll(options).toEqual(["Thyme"]);
+    await userEvent.click(document.querySelector<HTMLElement>('[role="listbox"] [role="option"]')!);
+    await expect.poll(() => input.value).toBe("Thyme");
+    expect(changes.at(-1)).toBe("Thyme");
+  });
+
+  it("keeps a read-only field as it is", async () => {
+    const changed = vi.fn();
+    const { host } = await render(
+      <>
+        <Combobox label="Herbs" multiple readOnly items={herbs} defaultValue={["Basil"]} onValueChange={changed} />
+        <Combobox label="Herb" readOnly items={herbs} defaultValue="Dill" onValueChange={changed} />
+        <Combobox label="Cuisine" readOnly allowCustomValue items={["Thai"]} defaultValue="Thai" onValueChange={changed} />
+      </>,
+    );
+    const inputs = [...host.querySelectorAll<HTMLInputElement>('input[role="combobox"]')];
+    expect(inputs).toHaveLength(3);
+    for (const input of inputs) {
+      expect(input.readOnly).toBe(true);
+      // The list opens to browse, but a key or a press picks nothing.
+      await userEvent.click(input);
+      await expect.poll(popup).not.toBeNull();
+      await userEvent.keyboard("x{ArrowDown}{Enter}");
+      const option = document.querySelector<HTMLElement>('[role="listbox"] [role="option"]');
+      if (option) await userEvent.click(option);
+      await userEvent.keyboard("{Escape}");
+      await expect.poll(popup).toBeNull();
+    }
+    expect(inputs.map((input) => input.value)).toEqual(["", "Dill", "Thai"]);
+    expect(changed).not.toHaveBeenCalled();
+    expect([...host.querySelectorAll("[data-ouro-combobox-chip]")].map((chip) => chip.textContent)).toEqual(["Basil"]);
+    expect(host.querySelector("[data-ouro-combobox-chip-remove], [data-ouro-combobox-clear]")).toBeNull();
+    // A chip has no role that may carry aria-readonly; the input's readonly says it.
+    expect(host.querySelector("[data-ouro-combobox-chip][aria-readonly]")).toBeNull();
+  });
+});
+
+describe("Combobox in a Dialog", () => {
+  it("draws its list above the dialog it sits in", async () => {
+    await render(
+      <Dialog title="New chat" trigger={<Button>New chat</Button>}>
+        <Combobox label="To" items={herbs} />
+      </Dialog>,
+    );
+    await userEvent.click(page.getByRole("button", { name: "New chat" }));
+    await expect.element(page.getByRole("dialog", { name: "New chat" })).toBeVisible();
+    await userEvent.click(page.getByRole("combobox", { name: "To" }));
+    await expect.poll(options).toHaveLength(herbs.length);
+    const option = document.querySelector<HTMLElement>('[role="listbox"] [role="option"]')!;
+    const box = option.getBoundingClientRect();
+    // What is drawn at the option's middle is the option, not the dialog over it.
+    await expect.poll(() => option.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);
   });
 });

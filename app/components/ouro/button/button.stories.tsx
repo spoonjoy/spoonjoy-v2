@@ -67,7 +67,7 @@ const meta = {
   argTypes: {
     tone: { control: "inline-radio", options: tones },
     variant: { control: "inline-radio", options: variants },
-    size: { control: "inline-radio", options: ["sm", "md", "lg"] },
+    size: { control: "inline-radio", options: ["sm", "md", "lg", "inline"] },
     loading: { control: "boolean" },
     fullWidth: { control: "boolean" },
     disabled: { control: "boolean" },
@@ -127,6 +127,29 @@ export const Sizes: Story = {
           </Button>
         </div>
       ))}
+    </Surface>
+  ),
+};
+
+/**
+ * Actions inside a line of text take the text's size, sit on its baseline and leave the
+ * line's height as it was; hover one to see its target.
+ */
+export const Inline: Story = {
+  render: () => (
+    <Surface>
+      <p style={{ margin: 0, fontSize: 14, lineHeight: "20px", color: "var(--muted-foreground)" }}>
+        Sorted by what you open most; your folders stay as they were.{" "}
+        <Button size="inline" variant="plain">
+          Why
+        </Button>{" "}
+        <Button size="inline" variant="plain">
+          Undo
+        </Button>{" "}
+        <Button size="inline" variant="plain" tone="secondary">
+          Got it
+        </Button>
+      </p>
     </Surface>
   ),
 };

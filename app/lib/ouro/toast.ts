@@ -130,12 +130,12 @@ let missingCheck: ReturnType<typeof setTimeout> | undefined;
  * and `Dialog` when the user must answer before going on.
  *
  * @group Feedback
- * @see https://ui.ouro.bot/docs/toaster
+ * @see https://ui.ouroboros.bot/docs/toaster
  *
  * @example
  * toast("Recipe saved", { tone: "success" });
  * toast("Recipe deleted", { action: { label: "Undo", onClick: restore } });
- * toast("Couldn't save", { tone: "destructive", description: "Check your connection." });
+ * toast("Not saved: you're offline", { tone: "destructive", description: "Check your connection." });
  * @claim "Returns the toast's id; `toast.dismiss(id)` closes" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > closes one toast with toast.dismiss(id), and all with toast.dismiss())
  * @claim "Up to three show at once" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > closes one toast with toast.dismiss(id), and all with toast.dismiss())
  * @claim "Returns the toast's id; `toast.dismiss(id)` closes" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > queues: up to three show, and later ones wait, out of the page, until a slot frees)
@@ -241,7 +241,7 @@ function sonnerAlias(name: string, tone: ToneName) {
 // Sonner's shortcuts are type errors whose message names the call to use. At run time they
 // still show the toast and warn in development.
 toast.success = sonnerAlias("success", "success") as unknown as { 'Use toast("Saved", { tone: "success" })': never };
-toast.error = sonnerAlias("error", "destructive") as unknown as { 'Use toast("Failed", { tone: "destructive" })': never };
+toast.error = sonnerAlias("error", "destructive") as unknown as { 'Use toast("Not saved: you are offline", { tone: "destructive" })': never };
 toast.warning = sonnerAlias("warning", "warning") as unknown as { 'Use toast("Careful", { tone: "warning" })': never };
 toast.info = sonnerAlias("info", "primary") as unknown as { 'Use toast("Heads up", { tone: "primary" })': never };
 

@@ -143,7 +143,7 @@ describe("shopping list: the Item field clears after a successful add (R-M3-3, b
           calls += 1;
           if (calls === 1) {
             return {
-              errors: { parse: "Couldn't confidently parse one item. Review and correct before adding." },
+              errors: { parse: "Spoonjoy isn't sure how to read this item. Review and correct before adding." },
               parseDraft: { quantity: "", unitName: "", ingredientName: "salt", isAmbiguous: true, originalText: "salt" },
             };
           }
@@ -158,7 +158,7 @@ describe("shopping list: the Item field clears after a successful add (R-M3-3, b
     fireEvent.change(field, { target: { value: "salt" } });
     fireEvent.click(screen.getByRole("button", { name: "Add to list" }));
 
-    expect(await screen.findByText("Couldn't confidently parse one item. Review and correct before adding.")).toBeInTheDocument();
+    expect(await screen.findByText("Spoonjoy isn't sure how to read this item. Review and correct before adding.")).toBeInTheDocument();
     expect(field).toHaveValue("salt");
     // (Quantity stays empty: happy-dom misjudges "1" against the field's step="0.01".)
     fireEvent.change(screen.getByLabelText("Unit"), { target: { value: "pinch" } });

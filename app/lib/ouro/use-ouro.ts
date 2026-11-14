@@ -10,11 +10,21 @@ export type OuroLinkComponent = ComponentType<
   AnchorHTMLAttributes<HTMLAnchorElement> & { href: string; ref?: Ref<HTMLAnchorElement> }
 >;
 
+/**
+ * How much Ouro UI moves: `system` follows the device's reduced-motion setting, `reduced` moves
+ * as with that setting on, and `full` as with it off, whatever the device says.
+ */
+export type OuroMotion = "system" | "reduced" | "full";
+
 export interface OuroContextValue {
   /** Renders internal links. Defaults to a plain `<a>`. */
   linkComponent: OuroLinkComponent;
   /** Where floating popups render. Unset, they render where Base UI puts them: the end of `<body>`, or the portal they open from. */
   portalContainer?: HTMLElement | RefObject<HTMLElement | null> | undefined;
+  /** How much Ouro UI moves. Unset, it follows the device: `system`. */
+  motion?: OuroMotion | undefined;
+  /** Whether the person asked for less: words without art or celebrations. */
+  quiet?: boolean | undefined;
 }
 
 /**
