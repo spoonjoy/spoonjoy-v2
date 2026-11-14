@@ -301,6 +301,11 @@ jobs:
       - name: 🔐 Verify generated API contract
         run: pnpm run verify:clean:generated-contract
 
+      # Ouro UI's AX X-ray calls the stdio MCP server as an agent would, on the local test database as a synthetic chef,
+      # and fails unless every must claim holds and every declared tool is served.
+      - name: 🩻 MCP X-ray
+        run: DATABASE_URL="file:./test.db" node scripts/warning-gate.ts -- pnpm run mcp:xray
+
       # Runs on every pull request and ratchets: no fingerprint may rise against the base commit's baseline unless
       # the new baseline records why under allowedRegressions.
       - name: 🧭 HX source rule
