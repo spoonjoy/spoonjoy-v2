@@ -73,6 +73,9 @@ export default defineConfig({
         "**/*.test-d.ts",
         "**/*.d.ts",
         "app/lib/ouro/testing/**",
+        // Ouro AX (ax-xray) runs in Node, not a browser; HX covers it in its own Node tests, and
+        // leaves it out of its browser coverage the same way.
+        "app/lib/ouro/ax/**",
       ],
       thresholds: { lines: 100, branches: 100, functions: 100, statements: 100 },
     },
