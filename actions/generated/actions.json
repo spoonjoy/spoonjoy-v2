@@ -4,6 +4,625 @@
   "tool": "spoonjoy",
   "actions": [
     {
+      "id": "health",
+      "consent": "read",
+      "label": "Health check",
+      "description": "Check that Spoonjoy is up.",
+      "agent": "Check Spoonjoy API readiness and whether the caller can use owner-scoped write operations.",
+      "input": {},
+      "output": {}
+    },
+    {
+      "id": "auth_status",
+      "consent": "read",
+      "label": "Authentication status",
+      "description": "See whether this agent is connected to your Spoonjoy account.",
+      "agent": "Report the current Spoonjoy MCP authentication state and how an agent should obtain delegated access without asking for raw user credentials.",
+      "input": {},
+      "output": {}
+    },
+    {
+      "id": "start_agent_connection",
+      "consent": "write",
+      "label": "Start delegated connection",
+      "description": "Ask to connect this agent to your Spoonjoy account.",
+      "agent": "Start a browser-approved delegated Spoonjoy connection for this agent. Show the user authorizationUrl and, separately, userCode: they open the link, sign in and type the code to approve. Then poll with deviceCode. Grants kitchen and shopping-list scopes only, never account access.",
+      "input": {
+        "agentName": {
+          "label": "Agent",
+          "description": "The agent's name, shown to the person when they approve.",
+          "optional": true,
+          "kind": "string"
+        },
+        "baseUrl": {
+          "label": "Server",
+          "description": "The Spoonjoy server's URL, when it isn't the default.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "scopes": {
+          "label": "Scopes",
+          "description": "The scopes to ask for, separated by spaces or commas.",
+          "optional": true,
+          "kind": "string"
+        }
+      },
+      "output": {}
+    },
+    {
+      "id": "poll_agent_connection",
+      "consent": "write",
+      "label": "Poll delegated connection",
+      "description": "Check whether you approved this agent's connection.",
+      "agent": "Poll a pending delegated Spoonjoy connection. When approved, the Spoonjoy MCP bridge activates and caches access; never ask for a Spoonjoy password.",
+      "input": {
+        "deviceCode": {
+          "label": "Code",
+          "description": "The deviceCode from start_agent_connection.",
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "tokenName": {
+          "label": "Token name",
+          "description": "The name to give the token once approved.",
+          "optional": true,
+          "kind": "string"
+        },
+        "baseUrl": {
+          "label": "Server",
+          "description": "The Spoonjoy server's URL, when it isn't the default.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        }
+      },
+      "output": {}
+    },
+    {
+      "id": "create_api_token",
+      "consent": "write",
+      "label": "Create API token",
+      "description": "Make a token a program can use with your kitchen.",
+      "agent": "Create an owner-scoped Spoonjoy API token. The token is returned once and is stored hashed.",
+      "input": {
+        "ownerEmail": {
+          "label": "Owner",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "name": {
+          "label": "Name",
+          "description": "What the token is for.",
+          "optional": true,
+          "kind": "string"
+        },
+        "scopes": {
+          "label": "Scopes",
+          "description": "The token's scopes, as one string separated by spaces or commas, or as a list.",
+          "optional": true,
+          "protocolOnly": true,
+          "options": [
+            {
+              "label": "Scopes",
+              "description": "The scopes, separated by spaces or commas.",
+              "kind": "string"
+            },
+            {
+              "label": "Scopes",
+              "description": "The scopes, one per item.",
+              "of": {
+                "label": "Scope",
+                "description": "One scope, such as recipes:read.",
+                "kind": "string"
+              },
+              "kind": "list"
+            }
+          ],
+          "kind": "one-of"
+        },
+        "expiresInDays": {
+          "label": "Expires in",
+          "description": "Days until the token expires, 1 to 365. Defaults to 90. Pass null or \"never\" for a token that never expires.",
+          "optional": true,
+          "nullable": true,
+          "protocolOnly": true,
+          "options": [
+            {
+              "label": "Days",
+              "description": "Days until it expires, 1 to 365.",
+              "min": 1,
+              "max": 365,
+              "kind": "integer"
+            },
+            {
+              "label": "Never",
+              "description": "A token that never expires.",
+              "values": [
+                "never"
+              ],
+              "kind": "enum"
+            }
+          ],
+          "kind": "one-of"
+        }
+      },
+      "output": {}
+    },
+    {
+      "id": "list_api_tokens",
+      "consent": "read",
+      "label": "List API tokens",
+      "description": "See the tokens programs use with your kitchen.",
+      "agent": "List API token metadata for the configured owner. Token secrets are never returned.",
+      "input": {
+        "ownerEmail": {
+          "label": "Owner",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        }
+      },
+      "output": {}
+    },
+    {
+      "id": "revoke_api_token",
+      "consent": "consequential",
+      "label": "Revoke API token",
+      "description": "Stop a token from working.",
+      "agent": "Revoke one API token owned by the configured owner.",
+      "input": {
+        "ownerEmail": {
+          "label": "Owner",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "credentialId": {
+          "label": "Token",
+          "description": "The token's credentialId, from list_api_tokens.",
+          "kind": "string"
+        }
+      },
+      "output": {},
+      "idempotent": true
+    },
+    {
+      "id": "search_spoonjoy",
+      "consent": "read",
+      "label": "Search Spoonjoy",
+      "description": "Search recipes, cookbooks, chefs and your shopping list.",
+      "agent": "Full-text search Spoonjoy recipes, cookbooks, chefs, and the configured owner's private shopping list. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
+      "input": {
+        "query": {
+          "label": "Search",
+          "description": "The words to search for. Every word must match; commas separate alternatives, any of which may match.",
+          "optional": true,
+          "kind": "string"
+        },
+        "scope": {
+          "label": "Where",
+          "description": "What to search: all, or one kind of result.",
+          "optional": true,
+          "values": [
+            "all",
+            "recipes",
+            "cookbooks",
+            "chefs",
+            "shopping-list",
+            "shopping"
+          ],
+          "kind": "enum"
+        },
+        "ownerEmail": {
+          "label": "Owner",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "limit": {
+          "label": "Limit",
+          "description": "The most results to return, 1 to 25.",
+          "optional": true,
+          "min": 1,
+          "max": 25,
+          "kind": "number"
+        }
+      },
+      "output": {}
+    },
+    {
+      "id": "search_recipes",
+      "consent": "read",
+      "label": "Search recipes",
+      "description": "Find recipes.",
+      "agent": "Full-text search Spoonjoy recipes by title, description, source URL, steps and ingredients, optionally limited to one chef by username, or to your own recipes by your own chefEmail. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
+      "input": {
+        "query": {
+          "label": "Search",
+          "description": "The words to search for. Every word must match; commas separate alternatives, any of which may match.",
+          "optional": true,
+          "kind": "string"
+        },
+        "chefUsername": {
+          "label": "Chef",
+          "description": "Only recipes by the chef with this username.",
+          "optional": true,
+          "kind": "string"
+        },
+        "chefEmail": {
+          "label": "Your email",
+          "description": "Only your own recipes: must be your own email. Any other address returns no recipes.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "limit": {
+          "label": "Limit",
+          "description": "The most results to return, 1 to 25.",
+          "optional": true,
+          "min": 1,
+          "max": 25,
+          "kind": "number"
+        }
+      },
+      "output": {}
+    },
+    {
+      "id": "get_recipe",
+      "consent": "read",
+      "label": "Get recipe",
+      "description": "Open a recipe.",
+      "agent": "Fetch a Spoonjoy recipe by id or exact title with ordered steps and ingredients.",
+      "input": {
+        "id": {
+          "label": "Recipe",
+          "description": "The recipe's id. Give this or its title.",
+          "optional": true,
+          "kind": "string"
+        },
+        "title": {
+          "label": "Title",
+          "description": "The recipe's exact title, when you don't have its id.",
+          "optional": true,
+          "kind": "string"
+        }
+      },
+      "output": {}
+    },
+    {
+      "id": "create_recipe",
+      "consent": "write",
+      "label": "Create recipe",
+      "description": "Add a new recipe to your kitchen.",
+      "agent": "Create a Spoonjoy recipe for the configured owner, including steps and ingredients.",
+      "input": {
+        "ownerEmail": {
+          "label": "Owner",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "title": {
+          "label": "Title",
+          "description": "The recipe's title.",
+          "kind": "string"
+        },
+        "description": {
+          "label": "Description",
+          "description": "A short description of the recipe.",
+          "optional": true,
+          "kind": "string"
+        },
+        "servings": {
+          "label": "Servings",
+          "description": "How many it serves, such as 4 or 4-6.",
+          "optional": true,
+          "kind": "string"
+        },
+        "sourceUrl": {
+          "label": "Source",
+          "description": "Where the recipe came from, as a URL.",
+          "optional": true,
+          "kind": "string"
+        },
+        "imageUrl": {
+          "label": "Photo",
+          "description": "A Spoonjoy image URL from upload_recipe_image.",
+          "optional": true,
+          "kind": "string"
+        },
+        "steps": {
+          "label": "Steps",
+          "description": "The recipe's steps, in order, each with its ingredients.",
+          "optional": true,
+          "protocolOnly": true,
+          "of": {
+            "label": "Step",
+            "description": "One step.",
+            "fields": {
+              "title": {
+                "label": "Title",
+                "description": "The step's short title.",
+                "optional": true,
+                "kind": "string"
+              },
+              "description": {
+                "label": "Description",
+                "description": "What to do in this step.",
+                "kind": "string"
+              },
+              "duration": {
+                "label": "Duration",
+                "description": "How long the step takes, in minutes.",
+                "optional": true,
+                "kind": "number"
+              },
+              "ingredients": {
+                "label": "Ingredients",
+                "description": "The ingredients this step uses.",
+                "optional": true,
+                "of": {
+                  "label": "Ingredient",
+                  "description": "One ingredient of a step.",
+                  "fields": {
+                    "name": {
+                      "label": "Name",
+                      "description": "What it is, such as flour.",
+                      "kind": "string"
+                    },
+                    "quantity": {
+                      "label": "Quantity",
+                      "description": "How much, as a number.",
+                      "kind": "number"
+                    },
+                    "unit": {
+                      "label": "Unit",
+                      "description": "The unit for the quantity, such as grams or cups.",
+                      "kind": "string"
+                    }
+                  },
+                  "kind": "group"
+                },
+                "kind": "list"
+              }
+            },
+            "kind": "group"
+          },
+          "kind": "list"
+        }
+      },
+      "output": {}
+    },
+    {
+      "id": "update_recipe",
+      "consent": "write",
+      "label": "Update recipe",
+      "description": "Change one of your recipes.",
+      "agent": "Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: a step with an id updates that step, a step without one updates the step at its position or is added, and steps left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only.",
+      "input": {
+        "ownerEmail": {
+          "label": "Owner",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "id": {
+          "label": "Recipe",
+          "description": "The recipe's id.",
+          "kind": "string"
+        },
+        "title": {
+          "label": "Title",
+          "description": "The recipe's new title.",
+          "optional": true,
+          "kind": "string"
+        },
+        "description": {
+          "label": "Description",
+          "description": "A short description of the recipe, or null to clear it.",
+          "optional": true,
+          "nullable": true,
+          "kind": "string"
+        },
+        "servings": {
+          "label": "Servings",
+          "description": "How many it serves, or null to clear it.",
+          "optional": true,
+          "nullable": true,
+          "kind": "string"
+        },
+        "sourceUrl": {
+          "label": "Source",
+          "description": "Where the recipe came from, as a URL, or null to clear it.",
+          "optional": true,
+          "nullable": true,
+          "kind": "string"
+        },
+        "imageUrl": {
+          "label": "Photo",
+          "description": "A Spoonjoy image URL from upload_recipe_image, or null to clear it.",
+          "optional": true,
+          "nullable": true,
+          "kind": "string"
+        },
+        "steps": {
+          "label": "Steps",
+          "description": "The recipe's steps, in order; steps left out are removed.",
+          "optional": true,
+          "protocolOnly": true,
+          "of": {
+            "label": "Step",
+            "description": "One step.",
+            "fields": {
+              "id": {
+                "label": "Step",
+                "description": "The id of the step this one updates.",
+                "optional": true,
+                "kind": "string"
+              },
+              "title": {
+                "label": "Title",
+                "description": "The step's short title.",
+                "optional": true,
+                "kind": "string"
+              },
+              "description": {
+                "label": "Description",
+                "description": "What to do in this step.",
+                "kind": "string"
+              },
+              "duration": {
+                "label": "Duration",
+                "description": "How long the step takes, in minutes.",
+                "optional": true,
+                "kind": "number"
+              },
+              "ingredients": {
+                "label": "Ingredients",
+                "description": "The ingredients this step uses.",
+                "optional": true,
+                "of": {
+                  "label": "Ingredient",
+                  "description": "One ingredient of a step.",
+                  "fields": {
+                    "name": {
+                      "label": "Name",
+                      "description": "What it is, such as flour.",
+                      "kind": "string"
+                    },
+                    "quantity": {
+                      "label": "Quantity",
+                      "description": "How much, as a number.",
+                      "kind": "number"
+                    },
+                    "unit": {
+                      "label": "Unit",
+                      "description": "The unit for the quantity, such as grams or cups.",
+                      "kind": "string"
+                    }
+                  },
+                  "kind": "group"
+                },
+                "kind": "list"
+              },
+              "outputStepNums": {
+                "label": "Uses output of",
+                "description": "Earlier step numbers, in this list's order, whose output this step uses.",
+                "optional": true,
+                "of": {
+                  "label": "Step number",
+                  "description": "An earlier step's number, from 1.",
+                  "min": 1,
+                  "kind": "integer"
+                },
+                "kind": "list"
+              }
+            },
+            "kind": "group"
+          },
+          "kind": "list"
+        }
+      },
+      "output": {},
+      "destructive": true
+    },
+    {
+      "id": "delete_recipe",
+      "consent": "consequential",
+      "label": "Delete recipe",
+      "description": "Delete one of your recipes.",
+      "agent": "Soft-delete a recipe owned by the configured owner.",
+      "input": {
+        "ownerEmail": {
+          "label": "Owner",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "id": {
+          "label": "Recipe",
+          "description": "The recipe's id.",
+          "kind": "string"
+        }
+      },
+      "output": {},
+      "idempotent": true
+    },
+    {
+      "id": "upload_recipe_image",
+      "consent": "write",
+      "label": "Upload recipe image",
+      "description": "Add a photo for a recipe.",
+      "agent": "Upload a recipe photo from base64 bytes and return a Spoonjoy image URL for recipe cover assignment.",
+      "input": {
+        "ownerEmail": {
+          "label": "Owner",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "imageBase64": {
+          "label": "Image",
+          "description": "The photo's bytes, base64-encoded.",
+          "kind": "string"
+        },
+        "mimeType": {
+          "label": "Type",
+          "description": "The photo's type.",
+          "values": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
+          "kind": "enum"
+        },
+        "filename": {
+          "label": "File name",
+          "description": "The photo's file name, such as lasagna.jpg.",
+          "kind": "string"
+        }
+      },
+      "output": {}
+    },
+    {
+      "id": "fork_recipe",
+      "consent": "write",
+      "label": "Fork recipe",
+      "description": "Make your own copy of a recipe.",
+      "agent": "Fork an existing Spoonjoy recipe into the authenticated principal's kitchen. Clones title, description, servings, steps, ingredients, and step-output uses; snapshots the source's latest cover; sets sourceRecipeId on the new recipe. Retrying the same fork (the same idempotencyKey, or the same source and title without a key) within 24 hours returns the first fork instead of creating another, unless that fork was deleted.",
+      "input": {
+        "sourceRecipeId": {
+          "label": "Recipe",
+          "description": "The recipe to fork, by id.",
+          "kind": "string"
+        },
+        "title": {
+          "label": "Title",
+          "description": "Optional title override. Subject to the same `(chefId, title)` collision suffixing as the default title.",
+          "optional": true,
+          "kind": "string"
+        },
+        "idempotencyKey": {
+          "label": "Idempotency key",
+          "description": "Stable key for a replay-safe fork; reuse it when retrying.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        }
+      },
+      "output": {}
+    },
+    {
       "id": "add_shopping_list_item",
       "consent": "write",
       "label": "Add to list",

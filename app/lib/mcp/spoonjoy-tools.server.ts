@@ -47,7 +47,7 @@ export async function callSpoonjoyMcpTool(
   // uses for an unknown op, so an MCP client cannot reach a REST-only tool by
   // name even though the operation still exists in the API registry.
   if (MCP_EXCLUDED_TOOLS.has(name)) {
-    throw new Error(`Unknown Spoonjoy operation: ${name}`);
+    throw new Error(`Unknown Spoonjoy operation: ${name}. Fix: call tools/list for the tool names.`);
   }
   const result = await callSpoonjoyApiOperation(name, args, context);
   return JSON.stringify(result, null, 2);

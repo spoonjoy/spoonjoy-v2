@@ -31,6 +31,21 @@ public struct OuroActionNotBound: Error, Sendable, Equatable {
 /// The "spoonjoy" action set.
 public enum OuroActions {
     public static let consent: [String: OuroActionConsent] = [
+        "health": .read,
+        "auth_status": .read,
+        "start_agent_connection": .write,
+        "poll_agent_connection": .write,
+        "create_api_token": .write,
+        "list_api_tokens": .read,
+        "revoke_api_token": .consequential,
+        "search_spoonjoy": .read,
+        "search_recipes": .read,
+        "get_recipe": .read,
+        "create_recipe": .write,
+        "update_recipe": .write,
+        "delete_recipe": .consequential,
+        "upload_recipe_image": .write,
+        "fork_recipe": .write,
         "add_shopping_list_item": .write,
         "get_shopping_list": .read,
         "search_shopping_list": .read,
@@ -68,6 +83,1389 @@ public enum OuroActions {
         default:
             return nil
         }
+    }
+}
+
+// MARK: health (read)
+
+public struct HealthInput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+public struct HealthOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Health check: Check that Spoonjoy is up.
+@MainActor
+public enum HealthAction {
+    public static let id = "health"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (HealthInput) async throws -> HealthOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (HealthInput, Result<HealthOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: HealthInput) async throws -> HealthOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct HealthIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Health check"
+    public static let description = IntentDescription("Check Spoonjoy API readiness and whether the caller can use owner-scoped write operations.")
+
+    public init() {}
+
+    public init(_ input: HealthInput) {
+        self.init()
+    }
+
+    public var input: HealthInput {
+        HealthInput()
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<HealthOutput, any Error>
+        do { result = .success(try await HealthAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = HealthAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for health: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct HealthButton<Label: View>: View {
+    public let input: HealthInput
+    let label: Label
+
+    public init(_ input: HealthInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: HealthIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Check that Spoonjoy is up."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension HealthButton where Label == Text {
+    public init(_ input: HealthInput) {
+        self.init(input) { Text(verbatim: "Health check") }
+    }
+}
+
+// MARK: auth_status (read)
+
+public struct AuthStatusInput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+public struct AuthStatusOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Authentication status: See whether this agent is connected to your Spoonjoy account.
+@MainActor
+public enum AuthStatusAction {
+    public static let id = "auth_status"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (AuthStatusInput) async throws -> AuthStatusOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (AuthStatusInput, Result<AuthStatusOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: AuthStatusInput) async throws -> AuthStatusOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct AuthStatusIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Authentication status"
+    public static let description = IntentDescription("Report the current Spoonjoy MCP authentication state and how an agent should obtain delegated access without asking for raw user credentials.")
+
+    public init() {}
+
+    public init(_ input: AuthStatusInput) {
+        self.init()
+    }
+
+    public var input: AuthStatusInput {
+        AuthStatusInput()
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<AuthStatusOutput, any Error>
+        do { result = .success(try await AuthStatusAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = AuthStatusAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for auth_status: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct AuthStatusButton<Label: View>: View {
+    public let input: AuthStatusInput
+    let label: Label
+
+    public init(_ input: AuthStatusInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: AuthStatusIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "See whether this agent is connected to your Spoonjoy account."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension AuthStatusButton where Label == Text {
+    public init(_ input: AuthStatusInput) {
+        self.init(input) { Text(verbatim: "Authentication status") }
+    }
+}
+
+// MARK: start_agent_connection (write)
+
+public struct StartAgentConnectionInput: Codable, Sendable, Hashable {
+    public var agentName: String?
+    public var baseUrl: String?
+    public var scopes: String?
+    public init(agentName: String? = nil, baseUrl: String? = nil, scopes: String? = nil) {
+        self.agentName = agentName
+        self.baseUrl = baseUrl
+        self.scopes = scopes
+    }
+}
+
+public struct StartAgentConnectionOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Start delegated connection: Ask to connect this agent to your Spoonjoy account.
+@MainActor
+public enum StartAgentConnectionAction {
+    public static let id = "start_agent_connection"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (StartAgentConnectionInput) async throws -> StartAgentConnectionOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (StartAgentConnectionInput, Result<StartAgentConnectionOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: StartAgentConnectionInput) async throws -> StartAgentConnectionOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct StartAgentConnectionIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Start delegated connection"
+    public static let description = IntentDescription("Start a browser-approved delegated Spoonjoy connection for this agent. Show the user authorizationUrl and, separately, userCode: they open the link, sign in and type the code to approve. Then poll with deviceCode. Grants kitchen and shopping-list scopes only, never account access.")
+
+    @Parameter(title: "Agent", description: "The agent's name, shown to the person when they approve.")
+    public var agentName: String?
+    @Parameter(title: "Scopes", description: "The scopes to ask for, separated by spaces or commas.")
+    public var scopes: String?
+
+    public init() {}
+
+    public init(_ input: StartAgentConnectionInput) {
+        self.init()
+        self.agentName = input.agentName
+        self.scopes = input.scopes
+    }
+
+    public var input: StartAgentConnectionInput {
+        StartAgentConnectionInput(agentName: agentName, scopes: scopes)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<StartAgentConnectionOutput, any Error>
+        do { result = .success(try await StartAgentConnectionAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = StartAgentConnectionAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for start_agent_connection: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct StartAgentConnectionButton<Label: View>: View {
+    public let input: StartAgentConnectionInput
+    let label: Label
+
+    public init(_ input: StartAgentConnectionInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: StartAgentConnectionIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Ask to connect this agent to your Spoonjoy account."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension StartAgentConnectionButton where Label == Text {
+    public init(_ input: StartAgentConnectionInput) {
+        self.init(input) { Text(verbatim: "Start delegated connection") }
+    }
+}
+
+// MARK: poll_agent_connection (write)
+
+public struct PollAgentConnectionInput: Codable, Sendable, Hashable {
+    public var deviceCode: String?
+    public var tokenName: String?
+    public var baseUrl: String?
+    public init(deviceCode: String? = nil, tokenName: String? = nil, baseUrl: String? = nil) {
+        self.deviceCode = deviceCode
+        self.tokenName = tokenName
+        self.baseUrl = baseUrl
+    }
+}
+
+public struct PollAgentConnectionOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Poll delegated connection: Check whether you approved this agent's connection.
+@MainActor
+public enum PollAgentConnectionAction {
+    public static let id = "poll_agent_connection"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (PollAgentConnectionInput) async throws -> PollAgentConnectionOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (PollAgentConnectionInput, Result<PollAgentConnectionOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: PollAgentConnectionInput) async throws -> PollAgentConnectionOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct PollAgentConnectionIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Poll delegated connection"
+    public static let description = IntentDescription("Poll a pending delegated Spoonjoy connection. When approved, the Spoonjoy MCP bridge activates and caches access; never ask for a Spoonjoy password.")
+
+    @Parameter(title: "Token name", description: "The name to give the token once approved.")
+    public var tokenName: String?
+
+    public init() {}
+
+    public init(_ input: PollAgentConnectionInput) {
+        self.init()
+        self.tokenName = input.tokenName
+    }
+
+    public var input: PollAgentConnectionInput {
+        PollAgentConnectionInput(tokenName: tokenName)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<PollAgentConnectionOutput, any Error>
+        do { result = .success(try await PollAgentConnectionAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = PollAgentConnectionAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for poll_agent_connection: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct PollAgentConnectionButton<Label: View>: View {
+    public let input: PollAgentConnectionInput
+    let label: Label
+
+    public init(_ input: PollAgentConnectionInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: PollAgentConnectionIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Check whether you approved this agent's connection."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension PollAgentConnectionButton where Label == Text {
+    public init(_ input: PollAgentConnectionInput) {
+        self.init(input) { Text(verbatim: "Poll delegated connection") }
+    }
+}
+
+// MARK: create_api_token (write)
+
+public struct CreateApiTokenInput: Codable, Sendable, Hashable {
+    public var ownerEmail: String?
+    public var name: String?
+    public init(ownerEmail: String? = nil, name: String? = nil) {
+        self.ownerEmail = ownerEmail
+        self.name = name
+    }
+}
+
+public struct CreateApiTokenOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Create API token: Make a token a program can use with your kitchen.
+@MainActor
+public enum CreateApiTokenAction {
+    public static let id = "create_api_token"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (CreateApiTokenInput) async throws -> CreateApiTokenOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (CreateApiTokenInput, Result<CreateApiTokenOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: CreateApiTokenInput) async throws -> CreateApiTokenOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct CreateApiTokenIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Create API token"
+    public static let description = IntentDescription("Create an owner-scoped Spoonjoy API token. The token is returned once and is stored hashed.")
+
+    @Parameter(title: "Name", description: "What the token is for.")
+    public var name: String?
+
+    public init() {}
+
+    public init(_ input: CreateApiTokenInput) {
+        self.init()
+        self.name = input.name
+    }
+
+    public var input: CreateApiTokenInput {
+        CreateApiTokenInput(name: name)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<CreateApiTokenOutput, any Error>
+        do { result = .success(try await CreateApiTokenAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = CreateApiTokenAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for create_api_token: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct CreateApiTokenButton<Label: View>: View {
+    public let input: CreateApiTokenInput
+    let label: Label
+
+    public init(_ input: CreateApiTokenInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: CreateApiTokenIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Make a token a program can use with your kitchen."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension CreateApiTokenButton where Label == Text {
+    public init(_ input: CreateApiTokenInput) {
+        self.init(input) { Text(verbatim: "Create API token") }
+    }
+}
+
+// MARK: list_api_tokens (read)
+
+public struct ListApiTokensInput: Codable, Sendable, Hashable {
+    public var ownerEmail: String?
+    public init(ownerEmail: String? = nil) {
+        self.ownerEmail = ownerEmail
+    }
+}
+
+public struct ListApiTokensOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// List API tokens: See the tokens programs use with your kitchen.
+@MainActor
+public enum ListApiTokensAction {
+    public static let id = "list_api_tokens"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (ListApiTokensInput) async throws -> ListApiTokensOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (ListApiTokensInput, Result<ListApiTokensOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: ListApiTokensInput) async throws -> ListApiTokensOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct ListApiTokensIntent: AppIntent {
+    public static let title: LocalizedStringResource = "List API tokens"
+    public static let description = IntentDescription("List API token metadata for the configured owner. Token secrets are never returned.")
+
+    public init() {}
+
+    public init(_ input: ListApiTokensInput) {
+        self.init()
+    }
+
+    public var input: ListApiTokensInput {
+        ListApiTokensInput()
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<ListApiTokensOutput, any Error>
+        do { result = .success(try await ListApiTokensAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = ListApiTokensAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for list_api_tokens: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct ListApiTokensButton<Label: View>: View {
+    public let input: ListApiTokensInput
+    let label: Label
+
+    public init(_ input: ListApiTokensInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: ListApiTokensIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "See the tokens programs use with your kitchen."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension ListApiTokensButton where Label == Text {
+    public init(_ input: ListApiTokensInput) {
+        self.init(input) { Text(verbatim: "List API tokens") }
+    }
+}
+
+// MARK: revoke_api_token (consequential)
+
+public struct RevokeApiTokenInput: Codable, Sendable, Hashable {
+    public var ownerEmail: String?
+    public var credentialId: String
+    public init(ownerEmail: String? = nil, credentialId: String) {
+        self.ownerEmail = ownerEmail
+        self.credentialId = credentialId
+    }
+}
+
+public struct RevokeApiTokenOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Revoke API token: Stop a token from working.
+@MainActor
+public enum RevokeApiTokenAction {
+    public static let id = "revoke_api_token"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (RevokeApiTokenInput) async throws -> RevokeApiTokenOutput)?
+    /// How the intent asks the person before it acts. Unset, the system asks. A test sets it: return to
+    /// confirm, or throw to cancel, and the handler never runs. The app can also set it to ask in its own way.
+    public static var confirm: (@MainActor @Sendable (RevokeApiTokenInput) async throws -> Void)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (RevokeApiTokenInput, Result<RevokeApiTokenOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: RevokeApiTokenInput) async throws -> RevokeApiTokenOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct RevokeApiTokenIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Revoke API token"
+    public static let description = IntentDescription("Revoke one API token owned by the configured owner.")
+
+    @Parameter(title: "Token", description: "The token's credentialId, from list_api_tokens.")
+    public var credentialId: String
+
+    public init() {}
+
+    public init(_ input: RevokeApiTokenInput) {
+        self.init()
+        self.credentialId = input.credentialId
+    }
+
+    public var input: RevokeApiTokenInput {
+        RevokeApiTokenInput(credentialId: credentialId)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        // Consequential: the person says yes before it acts.
+        if let confirm = RevokeApiTokenAction.confirm { try await confirm(self.input) } else { try await requestConfirmation() }
+        let input = self.input
+        let result: Result<RevokeApiTokenOutput, any Error>
+        do { result = .success(try await RevokeApiTokenAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = RevokeApiTokenAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for revoke_api_token: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct RevokeApiTokenButton<Label: View>: View {
+    public let input: RevokeApiTokenInput
+    let label: Label
+
+    public init(_ input: RevokeApiTokenInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: RevokeApiTokenIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Stop a token from working."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension RevokeApiTokenButton where Label == Text {
+    public init(_ input: RevokeApiTokenInput) {
+        self.init(input) { Text(verbatim: "Revoke API token") }
+    }
+}
+
+// MARK: search_spoonjoy (read)
+
+public enum SearchSpoonjoyScopeValue: String, Codable, Sendable, Hashable, CaseIterable, AppEnum {
+    case all = "all"
+    case recipes = "recipes"
+    case cookbooks = "cookbooks"
+    case chefs = "chefs"
+    case shoppingList = "shopping-list"
+    case shopping = "shopping"
+    public static let typeDisplayRepresentation: TypeDisplayRepresentation = "Where"
+    public static let caseDisplayRepresentations: [SearchSpoonjoyScopeValue: DisplayRepresentation] = [
+        .all: "all",
+        .recipes: "recipes",
+        .cookbooks: "cookbooks",
+        .chefs: "chefs",
+        .shoppingList: "shopping-list",
+        .shopping: "shopping",
+    ]
+}
+
+public struct SearchSpoonjoyInput: Codable, Sendable, Hashable {
+    public var query: String?
+    public var scope: SearchSpoonjoyScopeValue?
+    public var ownerEmail: String?
+    public var limit: Double?
+    public init(query: String? = nil, scope: SearchSpoonjoyScopeValue? = nil, ownerEmail: String? = nil, limit: Double? = nil) {
+        self.query = query
+        self.scope = scope
+        self.ownerEmail = ownerEmail
+        self.limit = limit
+    }
+}
+
+public struct SearchSpoonjoyOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Search Spoonjoy: Search recipes, cookbooks, chefs and your shopping list.
+@MainActor
+public enum SearchSpoonjoyAction {
+    public static let id = "search_spoonjoy"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (SearchSpoonjoyInput) async throws -> SearchSpoonjoyOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (SearchSpoonjoyInput, Result<SearchSpoonjoyOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: SearchSpoonjoyInput) async throws -> SearchSpoonjoyOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct SearchSpoonjoyIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Search Spoonjoy"
+    public static let description = IntentDescription("Full-text search Spoonjoy recipes, cookbooks, chefs, and the configured owner's private shopping list. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.")
+
+    @Parameter(title: "Search", description: "The words to search for. Every word must match; commas separate alternatives, any of which may match.")
+    public var query: String?
+    @Parameter(title: "Where", description: "What to search: all, or one kind of result.")
+    public var scope: SearchSpoonjoyScopeValue?
+    @Parameter(title: "Limit", description: "The most results to return, 1 to 25.")
+    public var limit: Double?
+
+    public init() {}
+
+    public init(_ input: SearchSpoonjoyInput) {
+        self.init()
+        self.query = input.query
+        self.scope = input.scope
+        self.limit = input.limit
+    }
+
+    public var input: SearchSpoonjoyInput {
+        SearchSpoonjoyInput(query: query, scope: scope, limit: limit)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<SearchSpoonjoyOutput, any Error>
+        do { result = .success(try await SearchSpoonjoyAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = SearchSpoonjoyAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for search_spoonjoy: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct SearchSpoonjoyButton<Label: View>: View {
+    public let input: SearchSpoonjoyInput
+    let label: Label
+
+    public init(_ input: SearchSpoonjoyInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: SearchSpoonjoyIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Search recipes, cookbooks, chefs and your shopping list."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension SearchSpoonjoyButton where Label == Text {
+    public init(_ input: SearchSpoonjoyInput) {
+        self.init(input) { Text(verbatim: "Search Spoonjoy") }
+    }
+}
+
+// MARK: search_recipes (read)
+
+public struct SearchRecipesInput: Codable, Sendable, Hashable {
+    public var query: String?
+    public var chefUsername: String?
+    public var chefEmail: String?
+    public var limit: Double?
+    public init(query: String? = nil, chefUsername: String? = nil, chefEmail: String? = nil, limit: Double? = nil) {
+        self.query = query
+        self.chefUsername = chefUsername
+        self.chefEmail = chefEmail
+        self.limit = limit
+    }
+}
+
+public struct SearchRecipesOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Search recipes: Find recipes.
+@MainActor
+public enum SearchRecipesAction {
+    public static let id = "search_recipes"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (SearchRecipesInput) async throws -> SearchRecipesOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (SearchRecipesInput, Result<SearchRecipesOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: SearchRecipesInput) async throws -> SearchRecipesOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct SearchRecipesIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Search recipes"
+    public static let description = IntentDescription("Full-text search Spoonjoy recipes by title, description, source URL, steps and ingredients, optionally limited to one chef by username, or to your own recipes by your own chefEmail. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.")
+
+    @Parameter(title: "Search", description: "The words to search for. Every word must match; commas separate alternatives, any of which may match.")
+    public var query: String?
+    @Parameter(title: "Chef", description: "Only recipes by the chef with this username.")
+    public var chefUsername: String?
+    @Parameter(title: "Limit", description: "The most results to return, 1 to 25.")
+    public var limit: Double?
+
+    public init() {}
+
+    public init(_ input: SearchRecipesInput) {
+        self.init()
+        self.query = input.query
+        self.chefUsername = input.chefUsername
+        self.limit = input.limit
+    }
+
+    public var input: SearchRecipesInput {
+        SearchRecipesInput(query: query, chefUsername: chefUsername, limit: limit)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<SearchRecipesOutput, any Error>
+        do { result = .success(try await SearchRecipesAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = SearchRecipesAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for search_recipes: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct SearchRecipesButton<Label: View>: View {
+    public let input: SearchRecipesInput
+    let label: Label
+
+    public init(_ input: SearchRecipesInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: SearchRecipesIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Find recipes."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension SearchRecipesButton where Label == Text {
+    public init(_ input: SearchRecipesInput) {
+        self.init(input) { Text(verbatim: "Search recipes") }
+    }
+}
+
+// MARK: get_recipe (read)
+
+public struct GetRecipeInput: Codable, Sendable, Hashable {
+    public var id: String?
+    public var title: String?
+    public init(id: String? = nil, title: String? = nil) {
+        self.id = id
+        self.title = title
+    }
+}
+
+public struct GetRecipeOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Get recipe: Open a recipe.
+@MainActor
+public enum GetRecipeAction {
+    public static let id = "get_recipe"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (GetRecipeInput) async throws -> GetRecipeOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (GetRecipeInput, Result<GetRecipeOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: GetRecipeInput) async throws -> GetRecipeOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct GetRecipeIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Get recipe"
+    public static let description = IntentDescription("Fetch a Spoonjoy recipe by id or exact title with ordered steps and ingredients.")
+
+    @Parameter(title: "Recipe", description: "The recipe's id. Give this or its title.")
+    public var id: String?
+    @Parameter(title: "Title", description: "The recipe's exact title, when you don't have its id.")
+    public var title: String?
+
+    public init() {}
+
+    public init(_ input: GetRecipeInput) {
+        self.init()
+        self.id = input.id
+        self.title = input.title
+    }
+
+    public var input: GetRecipeInput {
+        GetRecipeInput(id: id, title: title)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<GetRecipeOutput, any Error>
+        do { result = .success(try await GetRecipeAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = GetRecipeAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for get_recipe: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct GetRecipeButton<Label: View>: View {
+    public let input: GetRecipeInput
+    let label: Label
+
+    public init(_ input: GetRecipeInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: GetRecipeIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Open a recipe."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension GetRecipeButton where Label == Text {
+    public init(_ input: GetRecipeInput) {
+        self.init(input) { Text(verbatim: "Get recipe") }
+    }
+}
+
+// MARK: create_recipe (write)
+
+public struct CreateRecipeInput: Codable, Sendable, Hashable {
+    public var ownerEmail: String?
+    public var title: String
+    public var description: String?
+    public var servings: String?
+    public var sourceUrl: String?
+    public var imageUrl: String?
+    public init(ownerEmail: String? = nil, title: String, description: String? = nil, servings: String? = nil, sourceUrl: String? = nil, imageUrl: String? = nil) {
+        self.ownerEmail = ownerEmail
+        self.title = title
+        self.description = description
+        self.servings = servings
+        self.sourceUrl = sourceUrl
+        self.imageUrl = imageUrl
+    }
+}
+
+public struct CreateRecipeOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Create recipe: Add a new recipe to your kitchen.
+@MainActor
+public enum CreateRecipeAction {
+    public static let id = "create_recipe"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (CreateRecipeInput) async throws -> CreateRecipeOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (CreateRecipeInput, Result<CreateRecipeOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: CreateRecipeInput) async throws -> CreateRecipeOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct CreateRecipeIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Create recipe"
+    public static let description = IntentDescription("Create a Spoonjoy recipe for the configured owner, including steps and ingredients.")
+
+    @Parameter(title: "Title", description: "The recipe's title.")
+    public var title: String
+    @Parameter(title: "Description", description: "A short description of the recipe.")
+    public var description: String?
+    @Parameter(title: "Servings", description: "How many it serves, such as 4 or 4-6.")
+    public var servings: String?
+    @Parameter(title: "Source", description: "Where the recipe came from, as a URL.")
+    public var sourceUrl: String?
+    @Parameter(title: "Photo", description: "A Spoonjoy image URL from upload_recipe_image.")
+    public var imageUrl: String?
+
+    public init() {}
+
+    public init(_ input: CreateRecipeInput) {
+        self.init()
+        self.title = input.title
+        self.description = input.description
+        self.servings = input.servings
+        self.sourceUrl = input.sourceUrl
+        self.imageUrl = input.imageUrl
+    }
+
+    public var input: CreateRecipeInput {
+        CreateRecipeInput(title: title, description: description, servings: servings, sourceUrl: sourceUrl, imageUrl: imageUrl)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<CreateRecipeOutput, any Error>
+        do { result = .success(try await CreateRecipeAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = CreateRecipeAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for create_recipe: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct CreateRecipeButton<Label: View>: View {
+    public let input: CreateRecipeInput
+    let label: Label
+
+    public init(_ input: CreateRecipeInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: CreateRecipeIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Add a new recipe to your kitchen."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension CreateRecipeButton where Label == Text {
+    public init(_ input: CreateRecipeInput) {
+        self.init(input) { Text(verbatim: "Create recipe") }
+    }
+}
+
+// MARK: update_recipe (write)
+
+public struct UpdateRecipeInput: Codable, Sendable, Hashable {
+    public var ownerEmail: String?
+    public var id: String
+    public var title: String?
+    public var description: String?
+    public var servings: String?
+    public var sourceUrl: String?
+    public var imageUrl: String?
+    public init(ownerEmail: String? = nil, id: String, title: String? = nil, description: String? = nil, servings: String? = nil, sourceUrl: String? = nil, imageUrl: String? = nil) {
+        self.ownerEmail = ownerEmail
+        self.id = id
+        self.title = title
+        self.description = description
+        self.servings = servings
+        self.sourceUrl = sourceUrl
+        self.imageUrl = imageUrl
+    }
+}
+
+public struct UpdateRecipeOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Update recipe: Change one of your recipes.
+@MainActor
+public enum UpdateRecipeAction {
+    public static let id = "update_recipe"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (UpdateRecipeInput) async throws -> UpdateRecipeOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (UpdateRecipeInput, Result<UpdateRecipeOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: UpdateRecipeInput) async throws -> UpdateRecipeOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct UpdateRecipeIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Update recipe"
+    public static let description = IntentDescription("Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: a step with an id updates that step, a step without one updates the step at its position or is added, and steps left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only.")
+
+    @Parameter(title: "Recipe", description: "The recipe's id.")
+    public var id: String
+    @Parameter(title: "Title", description: "The recipe's new title.")
+    public var title: String?
+    @Parameter(title: "Description", description: "A short description of the recipe, or null to clear it.")
+    public var description: String?
+    @Parameter(title: "Servings", description: "How many it serves, or null to clear it.")
+    public var servings: String?
+    @Parameter(title: "Source", description: "Where the recipe came from, as a URL, or null to clear it.")
+    public var sourceUrl: String?
+    @Parameter(title: "Photo", description: "A Spoonjoy image URL from upload_recipe_image, or null to clear it.")
+    public var imageUrl: String?
+
+    public init() {}
+
+    public init(_ input: UpdateRecipeInput) {
+        self.init()
+        self.id = input.id
+        self.title = input.title
+        self.description = input.description
+        self.servings = input.servings
+        self.sourceUrl = input.sourceUrl
+        self.imageUrl = input.imageUrl
+    }
+
+    public var input: UpdateRecipeInput {
+        UpdateRecipeInput(id: id, title: title, description: description, servings: servings, sourceUrl: sourceUrl, imageUrl: imageUrl)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<UpdateRecipeOutput, any Error>
+        do { result = .success(try await UpdateRecipeAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = UpdateRecipeAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for update_recipe: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct UpdateRecipeButton<Label: View>: View {
+    public let input: UpdateRecipeInput
+    let label: Label
+
+    public init(_ input: UpdateRecipeInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: UpdateRecipeIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Change one of your recipes."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension UpdateRecipeButton where Label == Text {
+    public init(_ input: UpdateRecipeInput) {
+        self.init(input) { Text(verbatim: "Update recipe") }
+    }
+}
+
+// MARK: delete_recipe (consequential)
+
+public struct DeleteRecipeInput: Codable, Sendable, Hashable {
+    public var ownerEmail: String?
+    public var id: String
+    public init(ownerEmail: String? = nil, id: String) {
+        self.ownerEmail = ownerEmail
+        self.id = id
+    }
+}
+
+public struct DeleteRecipeOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Delete recipe: Delete one of your recipes.
+@MainActor
+public enum DeleteRecipeAction {
+    public static let id = "delete_recipe"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (DeleteRecipeInput) async throws -> DeleteRecipeOutput)?
+    /// How the intent asks the person before it acts. Unset, the system asks. A test sets it: return to
+    /// confirm, or throw to cancel, and the handler never runs. The app can also set it to ask in its own way.
+    public static var confirm: (@MainActor @Sendable (DeleteRecipeInput) async throws -> Void)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (DeleteRecipeInput, Result<DeleteRecipeOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: DeleteRecipeInput) async throws -> DeleteRecipeOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct DeleteRecipeIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Delete recipe"
+    public static let description = IntentDescription("Soft-delete a recipe owned by the configured owner.")
+
+    @Parameter(title: "Recipe", description: "The recipe's id.")
+    public var id: String
+
+    public init() {}
+
+    public init(_ input: DeleteRecipeInput) {
+        self.init()
+        self.id = input.id
+    }
+
+    public var input: DeleteRecipeInput {
+        DeleteRecipeInput(id: id)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        // Consequential: the person says yes before it acts.
+        if let confirm = DeleteRecipeAction.confirm { try await confirm(self.input) } else { try await requestConfirmation() }
+        let input = self.input
+        let result: Result<DeleteRecipeOutput, any Error>
+        do { result = .success(try await DeleteRecipeAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = DeleteRecipeAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for delete_recipe: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct DeleteRecipeButton<Label: View>: View {
+    public let input: DeleteRecipeInput
+    let label: Label
+
+    public init(_ input: DeleteRecipeInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: DeleteRecipeIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Delete one of your recipes."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension DeleteRecipeButton where Label == Text {
+    public init(_ input: DeleteRecipeInput) {
+        self.init(input) { Text(verbatim: "Delete recipe") }
+    }
+}
+
+// MARK: upload_recipe_image (write)
+
+public enum UploadRecipeImageMimeTypeValue: String, Codable, Sendable, Hashable, CaseIterable, AppEnum {
+    case imageJpeg = "image/jpeg"
+    case imagePng = "image/png"
+    case imageWebp = "image/webp"
+    public static let typeDisplayRepresentation: TypeDisplayRepresentation = "Type"
+    public static let caseDisplayRepresentations: [UploadRecipeImageMimeTypeValue: DisplayRepresentation] = [
+        .imageJpeg: "image/jpeg",
+        .imagePng: "image/png",
+        .imageWebp: "image/webp",
+    ]
+}
+
+public struct UploadRecipeImageInput: Codable, Sendable, Hashable {
+    public var ownerEmail: String?
+    public var imageBase64: String
+    public var mimeType: UploadRecipeImageMimeTypeValue
+    public var filename: String
+    public init(ownerEmail: String? = nil, imageBase64: String, mimeType: UploadRecipeImageMimeTypeValue, filename: String) {
+        self.ownerEmail = ownerEmail
+        self.imageBase64 = imageBase64
+        self.mimeType = mimeType
+        self.filename = filename
+    }
+}
+
+public struct UploadRecipeImageOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Upload recipe image: Add a photo for a recipe.
+@MainActor
+public enum UploadRecipeImageAction {
+    public static let id = "upload_recipe_image"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (UploadRecipeImageInput) async throws -> UploadRecipeImageOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (UploadRecipeImageInput, Result<UploadRecipeImageOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: UploadRecipeImageInput) async throws -> UploadRecipeImageOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct UploadRecipeImageIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Upload recipe image"
+    public static let description = IntentDescription("Upload a recipe photo from base64 bytes and return a Spoonjoy image URL for recipe cover assignment.")
+
+    @Parameter(title: "Image", description: "The photo's bytes, base64-encoded.")
+    public var imageBase64: String
+    @Parameter(title: "Type", description: "The photo's type.")
+    public var mimeType: UploadRecipeImageMimeTypeValue
+    @Parameter(title: "File name", description: "The photo's file name, such as lasagna.jpg.")
+    public var filename: String
+
+    public init() {}
+
+    public init(_ input: UploadRecipeImageInput) {
+        self.init()
+        self.imageBase64 = input.imageBase64
+        self.mimeType = input.mimeType
+        self.filename = input.filename
+    }
+
+    public var input: UploadRecipeImageInput {
+        UploadRecipeImageInput(imageBase64: imageBase64, mimeType: mimeType, filename: filename)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<UploadRecipeImageOutput, any Error>
+        do { result = .success(try await UploadRecipeImageAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = UploadRecipeImageAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for upload_recipe_image: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct UploadRecipeImageButton<Label: View>: View {
+    public let input: UploadRecipeImageInput
+    let label: Label
+
+    public init(_ input: UploadRecipeImageInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: UploadRecipeImageIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Add a photo for a recipe."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension UploadRecipeImageButton where Label == Text {
+    public init(_ input: UploadRecipeImageInput) {
+        self.init(input) { Text(verbatim: "Upload recipe image") }
+    }
+}
+
+// MARK: fork_recipe (write)
+
+public struct ForkRecipeInput: Codable, Sendable, Hashable {
+    public var sourceRecipeId: String
+    public var title: String?
+    public var idempotencyKey: String?
+    public init(sourceRecipeId: String, title: String? = nil, idempotencyKey: String? = nil) {
+        self.sourceRecipeId = sourceRecipeId
+        self.title = title
+        self.idempotencyKey = idempotencyKey
+    }
+}
+
+public struct ForkRecipeOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Fork recipe: Make your own copy of a recipe.
+@MainActor
+public enum ForkRecipeAction {
+    public static let id = "fork_recipe"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (ForkRecipeInput) async throws -> ForkRecipeOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (ForkRecipeInput, Result<ForkRecipeOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: ForkRecipeInput) async throws -> ForkRecipeOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct ForkRecipeIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Fork recipe"
+    public static let description = IntentDescription("Fork an existing Spoonjoy recipe into the authenticated principal's kitchen. Clones title, description, servings, steps, ingredients, and step-output uses; snapshots the source's latest cover; sets sourceRecipeId on the new recipe. Retrying the same fork (the same idempotencyKey, or the same source and title without a key) within 24 hours returns the first fork instead of creating another, unless that fork was deleted.")
+
+    @Parameter(title: "Recipe", description: "The recipe to fork, by id.")
+    public var sourceRecipeId: String
+    @Parameter(title: "Title", description: "Optional title override. Subject to the same `(chefId, title)` collision suffixing as the default title.")
+    public var title: String?
+
+    public init() {}
+
+    public init(_ input: ForkRecipeInput) {
+        self.init()
+        self.sourceRecipeId = input.sourceRecipeId
+        self.title = input.title
+    }
+
+    public var input: ForkRecipeInput {
+        ForkRecipeInput(sourceRecipeId: sourceRecipeId, title: title)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<ForkRecipeOutput, any Error>
+        do { result = .success(try await ForkRecipeAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = ForkRecipeAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for fork_recipe: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct ForkRecipeButton<Label: View>: View {
+    public let input: ForkRecipeInput
+    let label: Label
+
+    public init(_ input: ForkRecipeInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: ForkRecipeIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Make your own copy of a recipe."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension ForkRecipeButton where Label == Text {
+    public init(_ input: ForkRecipeInput) {
+        self.init(input) { Text(verbatim: "Fork recipe") }
     }
 }
 
