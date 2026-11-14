@@ -4,6 +4,66 @@
 // test door that stands in for the person's finger, so person-only actions are here too.
 import OuroReins
 
+extension HealthInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: [:], required: []) }
+}
+
+extension AuthStatusInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: [:], required: []) }
+}
+
+extension StartAgentConnectionInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["agentName": .string, "scopes": .string], required: []) }
+}
+
+extension PollAgentConnectionInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["tokenName": .string], required: []) }
+}
+
+extension CreateApiTokenInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["name": .string], required: []) }
+}
+
+extension ListApiTokensInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: [:], required: []) }
+}
+
+extension RevokeApiTokenInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["credentialId": .string], required: ["credentialId"]) }
+}
+
+extension SearchSpoonjoyInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["query": .string, "scope": .oneOf(["all", "recipes", "cookbooks", "chefs", "shopping-list", "shopping"]), "limit": .number], required: []) }
+}
+
+extension SearchRecipesInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["query": .string, "chefUsername": .string, "limit": .number], required: []) }
+}
+
+extension GetRecipeInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["id": .string, "title": .string], required: []) }
+}
+
+extension CreateRecipeInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["title": .string, "description": .string, "servings": .string, "sourceUrl": .string, "imageUrl": .string], required: ["title"]) }
+}
+
+extension UpdateRecipeInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["id": .string, "title": .string, "description": .string, "servings": .string, "sourceUrl": .string, "imageUrl": .string], required: ["id"]) }
+}
+
+extension DeleteRecipeInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["id": .string], required: ["id"]) }
+}
+
+extension UploadRecipeImageInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["imageBase64": .string, "mimeType": .oneOf(["image/jpeg", "image/png", "image/webp"]), "filename": .string], required: ["imageBase64", "mimeType", "filename"]) }
+}
+
+extension ForkRecipeInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["sourceRecipeId": .string, "title": .string], required: ["sourceRecipeId"]) }
+}
+
 extension AddShoppingListItemInput: ReinsInput {
     public static var reinsSchema: ReinsSchema { .object(properties: ["name": .string, "quantity": .number, "unit": .string], required: ["name"]) }
 }
@@ -113,6 +173,81 @@ extension ApproveAgentConnectionInput: ReinsInput {
 }
 
 extension ReinsAction {
+    /// Health check: Check that Spoonjoy is up.
+    public static func health() -> ReinsAction {
+        ReinsAction("health", "Health check", input: HealthInput.self) { input in _ = try await HealthAction.run(input) }
+    }
+
+    /// Authentication status: See whether this agent is connected to your Spoonjoy account.
+    public static func authStatus() -> ReinsAction {
+        ReinsAction("authStatus", "Authentication status", input: AuthStatusInput.self) { input in _ = try await AuthStatusAction.run(input) }
+    }
+
+    /// Start delegated connection: Ask to connect this agent to your Spoonjoy account.
+    public static func startAgentConnection() -> ReinsAction {
+        ReinsAction("startAgentConnection", "Start delegated connection", input: StartAgentConnectionInput.self) { input in _ = try await StartAgentConnectionAction.run(input) }
+    }
+
+    /// Poll delegated connection: Check whether you approved this agent's connection.
+    public static func pollAgentConnection() -> ReinsAction {
+        ReinsAction("pollAgentConnection", "Poll delegated connection", input: PollAgentConnectionInput.self) { input in _ = try await PollAgentConnectionAction.run(input) }
+    }
+
+    /// Create API token: Make a token a program can use with your kitchen.
+    public static func createApiToken() -> ReinsAction {
+        ReinsAction("createApiToken", "Create API token", input: CreateApiTokenInput.self) { input in _ = try await CreateApiTokenAction.run(input) }
+    }
+
+    /// List API tokens: See the tokens programs use with your kitchen.
+    public static func listApiTokens() -> ReinsAction {
+        ReinsAction("listApiTokens", "List API tokens", input: ListApiTokensInput.self) { input in _ = try await ListApiTokensAction.run(input) }
+    }
+
+    /// Revoke API token: Stop a token from working.
+    public static func revokeApiToken() -> ReinsAction {
+        ReinsAction("revokeApiToken", "Revoke API token", input: RevokeApiTokenInput.self) { input in _ = try await RevokeApiTokenAction.run(input) }
+    }
+
+    /// Search Spoonjoy: Search recipes, cookbooks, chefs and your shopping list.
+    public static func searchSpoonjoy() -> ReinsAction {
+        ReinsAction("searchSpoonjoy", "Search Spoonjoy", input: SearchSpoonjoyInput.self) { input in _ = try await SearchSpoonjoyAction.run(input) }
+    }
+
+    /// Search recipes: Find recipes.
+    public static func searchRecipes() -> ReinsAction {
+        ReinsAction("searchRecipes", "Search recipes", input: SearchRecipesInput.self) { input in _ = try await SearchRecipesAction.run(input) }
+    }
+
+    /// Get recipe: Open a recipe.
+    public static func getRecipe() -> ReinsAction {
+        ReinsAction("getRecipe", "Get recipe", input: GetRecipeInput.self) { input in _ = try await GetRecipeAction.run(input) }
+    }
+
+    /// Create recipe: Add a new recipe to your kitchen.
+    public static func createRecipe() -> ReinsAction {
+        ReinsAction("createRecipe", "Create recipe", input: CreateRecipeInput.self) { input in _ = try await CreateRecipeAction.run(input) }
+    }
+
+    /// Update recipe: Change one of your recipes.
+    public static func updateRecipe() -> ReinsAction {
+        ReinsAction("updateRecipe", "Update recipe", input: UpdateRecipeInput.self) { input in _ = try await UpdateRecipeAction.run(input) }
+    }
+
+    /// Delete recipe: Delete one of your recipes.
+    public static func deleteRecipe() -> ReinsAction {
+        ReinsAction("deleteRecipe", "Delete recipe", input: DeleteRecipeInput.self) { input in _ = try await DeleteRecipeAction.run(input) }
+    }
+
+    /// Upload recipe image: Add a photo for a recipe.
+    public static func uploadRecipeImage() -> ReinsAction {
+        ReinsAction("uploadRecipeImage", "Upload recipe image", input: UploadRecipeImageInput.self) { input in _ = try await UploadRecipeImageAction.run(input) }
+    }
+
+    /// Fork recipe: Make your own copy of a recipe.
+    public static func forkRecipe() -> ReinsAction {
+        ReinsAction("forkRecipe", "Fork recipe", input: ForkRecipeInput.self) { input in _ = try await ForkRecipeAction.run(input) }
+    }
+
     /// Add to list: Add an item to your shopping list.
     public static func addShoppingListItem() -> ReinsAction {
         ReinsAction("addShoppingListItem", "Add to list", input: AddShoppingListItemInput.self) { input in _ = try await AddShoppingListItemAction.run(input) }

@@ -6,6 +6,21 @@ export const generated = {"generator":"ouro-actions 0.10.0","set":"spoonjoy"} as
 
 export const componentAx = {
   actions: [
+    { id: "health", summary: "Check that Spoonjoy is up.", effect: "private", agent: true },
+    { id: "auth-status", summary: "See whether this agent is connected to your Spoonjoy account.", effect: "private", agent: true },
+    { id: "start-agent-connection", summary: "Ask to connect this agent to your Spoonjoy account.", effect: "private", agent: true },
+    { id: "poll-agent-connection", summary: "Check whether you approved this agent's connection.", effect: "private", agent: true },
+    { id: "create-api-token", summary: "Make a token a program can use with your kitchen.", effect: "private", agent: true },
+    { id: "list-api-tokens", summary: "See the tokens programs use with your kitchen.", effect: "private", agent: true },
+    { id: "revoke-api-token", summary: "Stop a token from working.", effect: "others", agent: true },
+    { id: "search-spoonjoy", summary: "Search recipes, cookbooks, chefs and your shopping list.", effect: "private", agent: true },
+    { id: "search-recipes", summary: "Find recipes.", effect: "private", agent: true },
+    { id: "get-recipe", summary: "Open a recipe.", effect: "private", agent: true },
+    { id: "create-recipe", summary: "Add a new recipe to your kitchen.", effect: "private", agent: true },
+    { id: "update-recipe", summary: "Change one of your recipes.", effect: "private", agent: true },
+    { id: "delete-recipe", summary: "Delete one of your recipes.", effect: "others", agent: true },
+    { id: "upload-recipe-image", summary: "Add a photo for a recipe.", effect: "private", agent: true },
+    { id: "fork-recipe", summary: "Make your own copy of a recipe.", effect: "private", agent: true },
     { id: "add-shopping-list-item", summary: "Add an item to your shopping list.", effect: "private", agent: true },
     { id: "get-shopping-list", summary: "See your shopping list.", effect: "private", agent: true },
     { id: "search-shopping-list", summary: "Find items on your shopping list.", effect: "private", agent: true },
@@ -38,6 +53,21 @@ export const componentAx = {
 
 export const twins = {
   actions: {
+    "health": "spoonjoy health",
+    "auth-status": "spoonjoy auth-status",
+    "start-agent-connection": "spoonjoy start-agent-connection",
+    "poll-agent-connection": "spoonjoy poll-agent-connection",
+    "create-api-token": "spoonjoy create-api-token",
+    "list-api-tokens": "spoonjoy list-api-tokens",
+    "revoke-api-token": "spoonjoy revoke-api-token",
+    "search-spoonjoy": "spoonjoy search-spoonjoy",
+    "search-recipes": "spoonjoy search-recipes",
+    "get-recipe": "spoonjoy get-recipe",
+    "create-recipe": "spoonjoy create-recipe",
+    "update-recipe": "spoonjoy update-recipe",
+    "delete-recipe": "spoonjoy delete-recipe",
+    "upload-recipe-image": "spoonjoy upload-recipe-image",
+    "fork-recipe": "spoonjoy fork-recipe",
     "add-shopping-list-item": "spoonjoy list add <name>",
     "get-shopping-list": "spoonjoy get-shopping-list",
     "search-shopping-list": "spoonjoy search-shopping-list",
@@ -71,6 +101,21 @@ export const twins = {
 } as const;
 
 export const controls = {
+  "health": { label: "Health check", description: "Check that Spoonjoy is up.", consent: "read", props: { "data-ax-action": "health" } },
+  "auth-status": { label: "Authentication status", description: "See whether this agent is connected to your Spoonjoy account.", consent: "read", props: { "data-ax-action": "auth-status" } },
+  "start-agent-connection": { label: "Start delegated connection", description: "Ask to connect this agent to your Spoonjoy account.", consent: "write", props: { "data-ax-action": "start-agent-connection" } },
+  "poll-agent-connection": { label: "Poll delegated connection", description: "Check whether you approved this agent's connection.", consent: "write", props: { "data-ax-action": "poll-agent-connection" } },
+  "create-api-token": { label: "Create API token", description: "Make a token a program can use with your kitchen.", consent: "write", props: { "data-ax-action": "create-api-token" } },
+  "list-api-tokens": { label: "List API tokens", description: "See the tokens programs use with your kitchen.", consent: "read", props: { "data-ax-action": "list-api-tokens" } },
+  "revoke-api-token": { label: "Revoke API token", description: "Stop a token from working.", consent: "consequential", props: { "data-ax-action": "revoke-api-token" } },
+  "search-spoonjoy": { label: "Search Spoonjoy", description: "Search recipes, cookbooks, chefs and your shopping list.", consent: "read", props: { "data-ax-action": "search-spoonjoy" } },
+  "search-recipes": { label: "Search recipes", description: "Find recipes.", consent: "read", props: { "data-ax-action": "search-recipes" } },
+  "get-recipe": { label: "Get recipe", description: "Open a recipe.", consent: "read", props: { "data-ax-action": "get-recipe" } },
+  "create-recipe": { label: "Create recipe", description: "Add a new recipe to your kitchen.", consent: "write", props: { "data-ax-action": "create-recipe" } },
+  "update-recipe": { label: "Update recipe", description: "Change one of your recipes.", consent: "write", props: { "data-ax-action": "update-recipe" } },
+  "delete-recipe": { label: "Delete recipe", description: "Delete one of your recipes.", consent: "consequential", props: { "data-ax-action": "delete-recipe" } },
+  "upload-recipe-image": { label: "Upload recipe image", description: "Add a photo for a recipe.", consent: "write", props: { "data-ax-action": "upload-recipe-image" } },
+  "fork-recipe": { label: "Fork recipe", description: "Make your own copy of a recipe.", consent: "write", props: { "data-ax-action": "fork-recipe" } },
   "add-shopping-list-item": { label: "Add to list", description: "Add an item to your shopping list.", consent: "write", props: { "data-ax-action": "add-shopping-list-item" } },
   "get-shopping-list": { label: "Get shopping list", description: "See your shopping list.", consent: "read", props: { "data-ax-action": "get-shopping-list" } },
   "search-shopping-list": { label: "Search shopping list", description: "Find items on your shopping list.", consent: "read", props: { "data-ax-action": "search-shopping-list" } },
@@ -103,6 +148,18 @@ export const controls = {
 // Web's CLI hands run() its flags by name, which are kebab-case (--can-edit); every other door uses the field's
 // name (canEdit). fromCli renames them, so a command's run() calls the same handler as MCP, WebMCP and Apple.
 export const cliInput: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  "start-agent-connection": { "agent-name": "agentName", "base-url": "baseUrl" },
+  "poll-agent-connection": { "device-code": "deviceCode", "token-name": "tokenName", "base-url": "baseUrl" },
+  "create-api-token": { "owner-email": "ownerEmail", "expires-in-days": "expiresInDays" },
+  "list-api-tokens": { "owner-email": "ownerEmail" },
+  "revoke-api-token": { "owner-email": "ownerEmail", "credential-id": "credentialId" },
+  "search-spoonjoy": { "owner-email": "ownerEmail" },
+  "search-recipes": { "chef-username": "chefUsername", "chef-email": "chefEmail" },
+  "create-recipe": { "owner-email": "ownerEmail", "source-url": "sourceUrl", "image-url": "imageUrl" },
+  "update-recipe": { "owner-email": "ownerEmail", "source-url": "sourceUrl", "image-url": "imageUrl" },
+  "delete-recipe": { "owner-email": "ownerEmail" },
+  "upload-recipe-image": { "owner-email": "ownerEmail", "image-base64": "imageBase64", "mime-type": "mimeType" },
+  "fork-recipe": { "source-recipe-id": "sourceRecipeId", "idempotency-key": "idempotencyKey" },
   "add-shopping-list-item": { "category-key": "categoryKey", "icon-key": "iconKey", "idempotency-key": "idempotencyKey", "owner-email": "ownerEmail" },
   "get-shopping-list": { "owner-email": "ownerEmail" },
   "search-shopping-list": { "owner-email": "ownerEmail" },
@@ -133,6 +190,9 @@ export const cliInput: Readonly<Record<string, Readonly<Record<string, string>>>
 
 // A list, group or one-of field comes in on the CLI as one JSON string; fromCli parses it.
 export const cliJson: Readonly<Record<string, readonly string[]>> = {
+  "create-api-token": ["scopes", "expiresInDays"],
+  "create-recipe": ["steps"],
+  "update-recipe": ["steps"],
 };
 
 export function fromCli(action: keyof typeof twins.actions, input: Readonly<Record<string, unknown>>): Record<string, unknown> {

@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { checkGenerated, compareMcp, renderActions } from "../../../tools/ouro-actions/ouro-actions.mts";
 import spoonjoyActions from "../../../actions/spoonjoy.actions.mts";
-import undeclared from "../../../actions/undeclared-mcp-tools.json";
 import inputsBefore from "../../fixtures/mcp/tool-inputs-before-declarations.json";
 import { declaredMcpTool, personOnlyMcpResult } from "~/lib/mcp/declared-actions.server";
 import { listSpoonjoyMcpTools, refuseSpoonjoyMcpTool } from "~/lib/mcp/spoonjoy-tools.server";
@@ -58,14 +57,14 @@ describe("Spoonjoy's declared actions (Ouro UI's one action model)", () => {
     expect(served).toEqual(before);
   });
 
-  it("serves the declared MCP tools exactly, and every other tool is on the undeclared list, which only shrinks", () => {
-    expect(compareMcp(spoonjoyActions, { tools: listSpoonjoyMcpTools() }, { undeclared })).toEqual([]);
+  it("serves every MCP tool from its declaration, exactly", () => {
+    expect(compareMcp(spoonjoyActions, { tools: listSpoonjoyMcpTools() })).toEqual([]);
     const tool = listSpoonjoyMcpTools().find((candidate) => candidate.name === "add_shopping_list_item");
     expect(tool).toMatchObject({ title: "Add to list", requiredScopes: ["shopping_list:write"] });
     expect(tool?.annotations).toEqual({ title: "Add to list", readOnlyHint: false, destructiveHint: false, openWorldHint: false });
     // A tool that drifted from its declaration fails the comparison.
     const drifted = listSpoonjoyMcpTools().map((candidate) => candidate.name === "add_shopping_list_item" ? { ...candidate, description: "Adds an item." } : candidate);
-    expect(compareMcp(spoonjoyActions, { tools: drifted }, { undeclared })[0]).toMatch(/^add_shopping_list_item: description drifted/);
+    expect(compareMcp(spoonjoyActions, { tools: drifted })[0]).toMatch(/^add_shopping_list_item: description drifted/);
   });
 
   it("lists no person-only action, and refuses a call to one with the declared refusal", () => {
