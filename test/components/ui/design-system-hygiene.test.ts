@@ -81,9 +81,9 @@ describe("Spoonjoy UI design-system hygiene", () => {
   it("pins every file the HX CLI installed, in every folder and of every type, to the tag's bytes", () => {
     expect(installed.tag).toBe("v1.3.99");
     expect(installed.tagCommit).toBe("4cd281f96956d42fa5c8e31b791b0b1e682ee6a1");
-    expect(installedFiles).toHaveLength(617);
+    expect(installedFiles).toHaveLength(618);
     expect(sha256(JSON.stringify(installedFiles.map((file) => [file, installed.files[file]]))))
-      .toBe("fc97c87551ce85d60f043957de4cc394846a7a66dc14e2fc5a49fb54d086987e");
+      .toBe("b5f686532b1b4e49d33d99ca2a69fc2dc897d0323c78b5f5a7e6a78f37a730dc");
     const actual = Object.fromEntries(installedFiles.map((file) => [
       file,
       existsSync(resolve(process.cwd(), file)) ? sha256(normalizedRegistrySource(readSourceFile(file))) : null,
@@ -173,7 +173,7 @@ describe("Spoonjoy UI design-system hygiene", () => {
     const css = readSourceFile("app/styles/tailwind.css");
 
     expect(css).toContain("--radius: var(--sj-radius-control);");
-    expect(css).toContain("--radius-xl: calc(var(--radius) * 1.4);");
+    expect(css).toContain("--radius-xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 1.4);");
   });
 
   it("keeps page mastheads from stacking a top rule under the desktop nav", () => {

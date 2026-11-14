@@ -98,7 +98,7 @@ describe("primary button contrast", () => {
         .toBe(color(LIGHT, disabled ? "--sj-on-action-disabled" : "--sj-on-action"));
       expect(theme.getPropertyValue("--ouro-action-disabled-opacity").trim()).toBe("1");
       expect(getComputedStyle(button).getPropertyValue("--font-weight-medium").trim()).toBe("600");
-      expect(button).toHaveClass("bg-(--ouro-action,var(--primary))", "text-(--ouro-action-foreground,var(--primary-foreground))", "outline-ring", "outline-offset-2", "focus-visible:outline-2");
+      expect(button).toHaveClass("bg-(--ouro-bg)", "[--ouro-bg:var(--ouro-action,var(--primary))]", "text-(--ouro-action-foreground,var(--primary-foreground))", "outline-ring", "outline-offset-2", "focus-visible:outline-2");
     } finally {
       style.remove();
     }

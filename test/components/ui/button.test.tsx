@@ -7,10 +7,10 @@ import { createTestRoutesStub } from "../../utils";
 
 describe("Spoonjoy actions using released Button directly", () => {
   it.each([
-    [{}, "solid", "bg-(--ouro-action,var(--primary))"],
-    [{ variant: "solid" as const }, "solid", "bg-(--ouro-action,var(--primary))"],
-    [{ variant: "soft" as const, tone: "destructive" as const }, "soft", "bg-destructive/10"],
-    [{ variant: "outline" as const, tone: "secondary" as const }, "outline", "border-border"],
+    [{}, "solid", "[--ouro-bg:var(--ouro-action,var(--primary))]"],
+    [{ variant: "solid" as const }, "solid", "[--ouro-bg:var(--ouro-action,var(--primary))]"],
+    [{ variant: "soft" as const, tone: "destructive" as const }, "soft", "[--ouro-bg:color-mix(in_oklab,var(--destructive)_10%,transparent)]"],
+    [{ variant: "outline" as const, tone: "secondary" as const }, "outline", "[--ouro-bd:var(--border)]"],
   ])("keeps the action's explicit native appearance %j", (props, variant, colorClass) => {
     render(<Button {...props}>Action</Button>);
     const button = screen.getByRole("button", { name: "Action" });

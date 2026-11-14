@@ -56,7 +56,7 @@ describe("NotificationsSection", () => {
     renderWithToast({ initiallySubscribed: false });
     expect(screen.getByRole("button", { name: /enable notifications/i })).toBeInTheDocument();
     const section = screen.getByRole("heading", { name: "Notifications", level: 2 }).closest("section");
-    expect(section).toHaveClass("border", "border-border");
+    expect(section).toHaveClass("border", "border-(--ouro-bd)", "[--ouro-bd:var(--border)]");
     expect(section).not.toHaveClass("border-b", "border-t");
   });
 

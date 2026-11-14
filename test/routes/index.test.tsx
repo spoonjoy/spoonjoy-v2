@@ -627,8 +627,9 @@ describe("Kitchen Index Route", () => {
         }));
       });
 
-      // HX components set their own custom properties (Text's line clamp); the app sets none.
-      const styles = container.querySelectorAll("[style]:not([data-ouro])");
+      // HX components set their own inline styles (Text's line clamp, a squircle surface's layer);
+      // the app sets none.
+      const styles = container.querySelectorAll("[style]:not([data-ouro]):not([data-ouro-surface])");
       expect(styles.length).toBe(0);
     });
 
