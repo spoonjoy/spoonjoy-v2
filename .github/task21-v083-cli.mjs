@@ -5,15 +5,15 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-// Preserved adoption source after integrating recipe drafts and the qualified main prerequisite.
-const acceptedHead = "ac81a24de05c4540cbdc83bd8da20fced44add17";
-const tag = "v1.3.33";
-const tagCommit = "0023c1b6b5683a68d5e44f64404f1d0a3bf0c2d3";
+// The consumer source the v1.3.62 install starts from: main after the v1.3.33 adoption (#704).
+const acceptedHead = "5ff91f541a16fe9dae77f87523b138386cd90cd8";
+const tag = "v1.3.62";
+const tagCommit = "1732effe5ad16db10816ae866b16bf4ddf35f2d3";
 // Every installed registry item, plus the v1.2.0 items Spoonjoy's screens now compose (SkipLink,
 // TabBar, RouteProgress, ColorSchemeToggle, PageHeader, CopyButton, CodeBlock, Timer, TimerTray,
 // Celebrate, ChoiceCard, ImageCropper, ImageField, ShareButton, SyncStatus, LocalDate,
 // RelativeTime, InstallPrompt), lib-claims, the ouro-census and ouro-source-rules kits, the
-// ax-xray AX conformance checker (v1.3.33), and the dependencies they bring.
+// ax-xray AX conformance checker (v1.3.62), and the dependencies they bring.
 const items = [
   "alert", "alert-tests", "aspect-ratio", "aspect-ratio-tests", "auth-layout", "auth-layout-tests",
   "avatar", "avatar-tests", "badge", "badge-tests", "breadcrumb", "breadcrumb-tests", "button",
@@ -66,69 +66,14 @@ const installed = JSON.parse(readFileSync(".github/ouro-hx-installed.json", "utf
 assert.equal(installed.tag, tag);
 assert.equal(installed.tagCommit, tagCommit);
 const expected = installed.files;
-// Paths v1.3.33 adds to the v1.2.13 install (new items Emoji, Moment and Skeleton, new lib
-// modules and tests, and the ax-xray checker); every other path in this patch updates an existing
-// file.
+// Paths v1.3.62 adds to the v1.3.33 install (ax-xray's command, help and output modules, and
+// ToggleGroup's layout test); every other path in this patch updates an existing file.
 const expectedNew = [
-  "app/components/ouro/button/button.default.test.tsx",
-  "app/components/ouro/emoji/emoji-styles.ts",
-  "app/components/ouro/emoji/emoji.index.test.tsx",
-  "app/components/ouro/emoji/emoji.stories.tsx",
-  "app/components/ouro/emoji/emoji.test-d.ts",
-  "app/components/ouro/emoji/emoji.test.tsx",
-  "app/components/ouro/emoji/emoji.tsx",
-  "app/components/ouro/moment/moment-styles.ts",
-  "app/components/ouro/moment/moment.stories.tsx",
-  "app/components/ouro/moment/moment.test-d.ts",
-  "app/components/ouro/moment/moment.test.tsx",
-  "app/components/ouro/moment/moment.touch.test.tsx",
-  "app/components/ouro/moment/moment.tsx",
-  "app/components/ouro/navbar/navbar.transition.test.tsx",
-  "app/components/ouro/skeleton/skeleton.stories.tsx",
-  "app/components/ouro/skeleton/skeleton.test-d.ts",
-  "app/components/ouro/skeleton/skeleton.test.tsx",
-  "app/components/ouro/skeleton/skeleton.tsx",
-  "app/components/ouro/text-field/text-area.highlights.test.tsx",
-  "app/lib/ouro/ax/checks.ts",
-  "app/lib/ouro/ax/claims.ts",
-  "app/lib/ouro/ax/component.ts",
-  "app/lib/ouro/ax/dev-commands.ts",
-  "app/lib/ouro/ax/effects.ts",
-  "app/lib/ouro/ax/exit-codes.ts",
-  "app/lib/ouro/ax/outcome.ts",
-  "app/lib/ouro/ax/precise-copy.ts",
-  "app/lib/ouro/ax/problem.ts",
-  "app/lib/ouro/ax/terminal.ts",
-  "app/lib/ouro/ax/voice.ts",
-  "app/lib/ouro/ax/wait.ts",
-  "app/lib/ouro/ax/work-event.ts",
-  "app/lib/ouro/ax/xray.ts",
-  "app/lib/ouro/celebration-cap.test.ts",
-  "app/lib/ouro/celebration-cap.ts",
-  "app/lib/ouro/keep-clear.test.ts",
-  "app/lib/ouro/keep-clear.ts",
-  "app/lib/ouro/page-scroll-hold.test.ts",
-  "app/lib/ouro/page-scroll-hold.ts",
-  "app/lib/ouro/scroll-fade.test.tsx",
-  "app/lib/ouro/scroll-fade.ts",
-  "app/lib/ouro/testing/computed.test.ts",
-  "app/lib/ouro/testing/computed.ts",
-  "app/lib/ouro/testing/fonts.test.ts",
-  "app/lib/ouro/testing/fonts.ts",
-  "app/lib/ouro/testing/layout-reads.test.ts",
-  "app/lib/ouro/testing/layout-reads.ts",
-  "app/lib/ouro/testing/pointer-setup.ts",
-  "app/lib/ouro/testing/press.test.ts",
-  "app/lib/ouro/testing/settled.test.ts",
-  "app/lib/ouro/testing/settled.ts",
-  "app/lib/ouro/testing/setup.test.ts",
-  "app/lib/ouro/use-mounted-open.test.tsx",
-  "app/lib/ouro/use-mounted-open.ts",
-  "app/lib/ouro/use-reduced-motion.test.tsx",
-  "app/lib/ouro/use-reduced-motion.ts",
-  "e2e/ouro/emoji.spec.ts",
-  "e2e/ouro/moment.spec.ts",
-  "e2e/ouro/skeleton.spec.ts",
+  "app/components/ouro/toggle/toggle-group.layout.test.tsx",
+  "app/lib/ouro/ax/cli.ts",
+  "app/lib/ouro/ax/command.ts",
+  "app/lib/ouro/ax/help.ts",
+  "app/lib/ouro/ax/output.ts",
 ].filter((file) => !existsSync(file));
 const protectedPaths = [
   "app", "test", "e2e", "package.json", "pnpm-lock.yaml", "components.json",
