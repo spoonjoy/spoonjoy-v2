@@ -222,8 +222,8 @@ describe("spoonjoy MCP tools", () => {
       expect(tool.annotations.title, tool.name).toBe(tool.title);
       expect(typeof tool.annotations.readOnlyHint, tool.name).toBe("boolean");
       if (tool.annotations.readOnlyHint) {
-        // Read-only tools never carry a destructive hint.
-        expect(tool.annotations.destructiveHint, tool.name).toBeUndefined();
+        // Read-only tools never claim to be destructive. A declared tool says false outright.
+        expect(tool.annotations.destructiveHint, tool.name).not.toBe(true);
       } else {
         // Writes must declare destructiveness explicitly (no relying on defaults).
         expect(typeof tool.annotations.destructiveHint, tool.name).toBe("boolean");
