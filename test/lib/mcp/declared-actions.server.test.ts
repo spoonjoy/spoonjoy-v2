@@ -13,9 +13,9 @@ const root = process.cwd();
 const sha256 = async (path: string) => createHash("sha256").update(await readFile(join(root, path))).digest("hex");
 
 describe("Spoonjoy's declared actions (Ouro UI's one action model)", () => {
-  it("vendors the generator and its claims from ouro-ui-core v0.6.0, byte for byte", async () => {
-    // The release's dist-manifest.json: https://github.com/ourostack/ouro-ui-core/releases/tag/v0.6.0
-    expect(await sha256("tools/ouro-actions/ouro-actions.mts")).toBe("128a284d575a27f47d4e0ccfbe6c241eeaf2c0b0a4f09000564a2e8f8f9bc827");
+  it("vendors the generator and its claims from ouro-ui-core v0.10.0, byte for byte", async () => {
+    // The release's dist-manifest.json: https://github.com/ourostack/ouro-ui-core/releases/tag/v0.10.0
+    expect(await sha256("tools/ouro-actions/ouro-actions.mts")).toBe("e343d27993276dbd4bbd9a5351f1c3935eebd8db19039d37671a774d8dbefa84");
     expect(await sha256("tools/ouro-actions/actions.claims.json")).toBe("944f48be5f9409dd70e0774dfe4976fef9cc3ba3f4ab4b9231df428700523f1a");
   });
 

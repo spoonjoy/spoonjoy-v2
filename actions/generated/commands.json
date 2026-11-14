@@ -1,5 +1,5 @@
 {
-  "generator": "ouro-actions 0.6.0",
+  "generator": "ouro-actions 0.10.0",
   "set": "spoonjoy",
   "tool": "spoonjoy",
   "commands": [
@@ -39,6 +39,643 @@
         "owner-email": {
           "type": "string",
           "description": "Optional. Whose list, for a local server with no signed-in person; a signed-in caller always acts on their own list."
+        }
+      }
+    },
+    {
+      "name": "get-shopping-list",
+      "summary": "Fetch the configured owner shopping list.",
+      "effect": "private",
+      "readOnly": true,
+      "flags": {
+        "owner-email": {
+          "type": "string",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+        }
+      }
+    },
+    {
+      "name": "search-shopping-list",
+      "summary": "Full-text search the configured owner's private shopping list by ingredient, unit, category, icon, and checked state. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
+      "effect": "private",
+      "readOnly": true,
+      "flags": {
+        "owner-email": {
+          "type": "string",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+        },
+        "query": {
+          "type": "string",
+          "description": "The words to search for. Every word must match; commas separate alternatives, any of which may match."
+        },
+        "limit": {
+          "type": "number",
+          "description": "The most results to return, 1 to 25.",
+          "min": 1,
+          "max": 25
+        }
+      }
+    },
+    {
+      "name": "set-shopping-list-item-checked",
+      "summary": "Set checked state for one active item on the configured owner shopping list.",
+      "effect": "private",
+      "flags": {
+        "owner-email": {
+          "type": "string",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+        },
+        "item-id": {
+          "type": "string",
+          "description": "The item's id, from get_shopping_list.",
+          "required": true
+        },
+        "checked": {
+          "type": "boolean",
+          "description": "True to check the item off, false to uncheck it.",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "remove-shopping-list-item",
+      "summary": "Soft-remove one item from the configured owner shopping list.",
+      "effect": "private",
+      "flags": {
+        "owner-email": {
+          "type": "string",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+        },
+        "item-id": {
+          "type": "string",
+          "description": "The item's id, from get_shopping_list.",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "add-recipe-to-shopping-list",
+      "summary": "Add all ingredients from a recipe to the configured owner shopping list. Each ingredient adds to the quantity of a matching item still on the list (same ingredient and unit); a removed or cleared matching item comes back at the added quantity, not on top of its old one.",
+      "effect": "private",
+      "flags": {
+        "owner-email": {
+          "type": "string",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+        },
+        "recipe-id": {
+          "type": "string",
+          "description": "The recipe whose ingredients to add, by id.",
+          "required": true
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Optional. Send the same key again when retrying this exact call, such as after a timeout, and the items are added once."
+        }
+      }
+    },
+    {
+      "name": "list-cookbooks",
+      "summary": "List cookbooks owned by the configured owner, with active recipe counts and covers.",
+      "effect": "private",
+      "readOnly": true,
+      "flags": {
+        "owner-email": {
+          "type": "string",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+        },
+        "query": {
+          "type": "string",
+          "description": "Only cookbooks whose title has these words."
+        },
+        "limit": {
+          "type": "number",
+          "description": "The most results to return, 1 to 25.",
+          "min": 1,
+          "max": 25
+        }
+      }
+    },
+    {
+      "name": "get-cookbook",
+      "summary": "Fetch one cookbook owned by the configured owner by cookbookId or exact title.",
+      "effect": "private",
+      "readOnly": true,
+      "flags": {
+        "owner-email": {
+          "type": "string",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+        },
+        "cookbook-id": {
+          "type": "string",
+          "description": "The cookbook's id. Give this or its title."
+        },
+        "title": {
+          "type": "string",
+          "description": "The cookbook's exact title, when you don't have its id."
+        },
+        "cookbook-title": {
+          "type": "string",
+          "description": "The same as title; title wins when both are given."
+        }
+      }
+    },
+    {
+      "name": "create-cookbook",
+      "summary": "Create or return an existing cookbook for the configured owner by exact title.",
+      "effect": "private",
+      "flags": {
+        "owner-email": {
+          "type": "string",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+        },
+        "title": {
+          "type": "string",
+          "description": "The cookbook's title; an existing cookbook with this exact title is returned instead.",
+          "required": true
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Stable key (8-100 letters, digits, '_' or '-') for replay-safe creation: a repeat with the same key returns the cookbook the first call made, with created: true and mutation.replayed: true."
+        }
+      }
+    },
+    {
+      "name": "add-recipe-to-cookbook",
+      "summary": "Idempotently add an active recipe to a cookbook owned by the configured owner.",
+      "effect": "private",
+      "flags": {
+        "owner-email": {
+          "type": "string",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+        },
+        "cookbook-id": {
+          "type": "string",
+          "description": "The cookbook's id. Give this or its title."
+        },
+        "title": {
+          "type": "string",
+          "description": "The cookbook's exact title, when you don't have its id."
+        },
+        "cookbook-title": {
+          "type": "string",
+          "description": "The same as title; title wins when both are given."
+        },
+        "recipe-id": {
+          "type": "string",
+          "description": "The recipe's id.",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "remove-recipe-from-cookbook",
+      "summary": "Idempotently remove a recipe from a cookbook owned by the configured owner.",
+      "effect": "private",
+      "flags": {
+        "owner-email": {
+          "type": "string",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+        },
+        "cookbook-id": {
+          "type": "string",
+          "description": "The cookbook's id. Give this or its title."
+        },
+        "title": {
+          "type": "string",
+          "description": "The cookbook's exact title, when you don't have its id."
+        },
+        "cookbook-title": {
+          "type": "string",
+          "description": "The same as title; title wins when both are given."
+        },
+        "recipe-id": {
+          "type": "string",
+          "description": "The recipe's id.",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "create-spoon",
+      "summary": "Create a RecipeSpoon (cook event) authored by the authenticated principal.",
+      "effect": "private",
+      "flags": {
+        "recipe-id": {
+          "type": "string",
+          "description": "The recipe that was cooked, by id.",
+          "required": true
+        },
+        "photo-url": {
+          "type": "string",
+          "description": "A Spoonjoy image URL from upload_spoon_photo."
+        },
+        "note": {
+          "type": "string",
+          "description": "How the cook went."
+        },
+        "next-time": {
+          "type": "string",
+          "description": "What to do differently next time."
+        },
+        "cooked-at": {
+          "type": "string",
+          "description": "When it was cooked, as an ISO date-time; now when left out."
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Stable key (8-100 letters, digits, '_' or '-') for replay-safe creation: a repeat with the same key returns the spoon the first call made instead of logging a second cook."
+        }
+      }
+    },
+    {
+      "name": "update-spoon",
+      "summary": "Update note, nextTime, photoUrl, or cookedAt on a spoon owned by the authenticated principal.",
+      "effect": "private",
+      "flags": {
+        "spoon-id": {
+          "type": "string",
+          "description": "The spoon's id.",
+          "required": true
+        },
+        "note": {
+          "type": "string",
+          "description": "How the cook went."
+        },
+        "next-time": {
+          "type": "string",
+          "description": "What to do differently next time."
+        },
+        "photo-url": {
+          "type": "string",
+          "description": "A Spoonjoy image URL from upload_spoon_photo, or null to remove the photo."
+        },
+        "cooked-at": {
+          "type": "string",
+          "description": "When it was cooked, as an ISO date-time; now when left out."
+        }
+      }
+    },
+    {
+      "name": "delete-spoon",
+      "summary": "Soft-delete a spoon owned by the authenticated principal.",
+      "effect": "others",
+      "flags": {
+        "spoon-id": {
+          "type": "string",
+          "description": "The spoon's id.",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "list-spoons-for-recipe",
+      "summary": "List the most-recent non-deleted spoons for a recipe.",
+      "effect": "private",
+      "readOnly": true,
+      "flags": {
+        "recipe-id": {
+          "type": "string",
+          "description": "The recipe's id.",
+          "required": true
+        },
+        "limit": {
+          "type": "number",
+          "description": "The most spoons to return."
+        },
+        "offset": {
+          "type": "number",
+          "description": "Zero-based pagination offset."
+        }
+      }
+    },
+    {
+      "name": "list-spoons-by-chef",
+      "summary": "List the chef's most-recent non-deleted spoons across all recipes.",
+      "effect": "private",
+      "readOnly": true,
+      "flags": {
+        "chef-id-or-username": {
+          "type": "string",
+          "description": "The chef's id or username.",
+          "required": true
+        },
+        "limit": {
+          "type": "number",
+          "description": "The most spoons to return."
+        },
+        "offset": {
+          "type": "number",
+          "description": "Zero-based pagination offset."
+        }
+      }
+    },
+    {
+      "name": "upload-spoon-photo",
+      "summary": "Upload a spoon/cook photo from base64 bytes and return a Spoonjoy image URL for spoon assignment.",
+      "effect": "private",
+      "flags": {
+        "owner-email": {
+          "type": "string",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+        },
+        "image-base64": {
+          "type": "string",
+          "description": "The photo's bytes, base64-encoded.",
+          "required": true
+        },
+        "mime-type": {
+          "type": "enum",
+          "description": "The photo's type.",
+          "values": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
+          "required": true
+        },
+        "filename": {
+          "type": "string",
+          "description": "The photo's file name, such as dinner.jpg.",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "list-recipe-covers",
+      "summary": "List Recipe Photo Studio cover candidates. Owners with kitchen write access receive full cover history; other readers receive active public cover metadata only. May record that an abandoned generation failed: a cover still processing ten minutes after its generation started is reported, and stored, as failed.",
+      "effect": "private",
+      "readOnly": true,
+      "flags": {
+        "recipe-id": {
+          "type": "string",
+          "description": "Recipe whose cover candidates should be listed.",
+          "required": true
+        },
+        "include-archived": {
+          "type": "boolean",
+          "description": "Include archived cover candidates in the owner-only history."
+        },
+        "limit": {
+          "type": "number",
+          "description": "Maximum number of cover candidates to return.",
+          "min": 1,
+          "max": 25
+        },
+        "offset": {
+          "type": "number",
+          "description": "Zero-based pagination offset.",
+          "min": 0
+        }
+      }
+    },
+    {
+      "name": "list-recipe-spoon-images",
+      "summary": "List owner-only Spoon photos that can be used as Recipe Photo Studio cover sources.",
+      "effect": "private",
+      "readOnly": true,
+      "flags": {
+        "recipe-id": {
+          "type": "string",
+          "description": "Recipe whose Spoon photos should be listed.",
+          "required": true
+        },
+        "limit": {
+          "type": "number",
+          "description": "Maximum number of Spoon photos to return.",
+          "min": 1,
+          "max": 25
+        },
+        "offset": {
+          "type": "number",
+          "description": "Zero-based pagination offset.",
+          "min": 0
+        }
+      }
+    },
+    {
+      "name": "create-recipe-cover-from-upload",
+      "summary": "Create a Recipe Photo Studio cover candidate from an uploaded recipe or spoon photo URL.",
+      "effect": "private",
+      "flags": {
+        "recipe-id": {
+          "type": "string",
+          "description": "Recipe that will receive the cover candidate.",
+          "required": true
+        },
+        "image-url": {
+          "type": "string",
+          "description": "Spoonjoy uploaded recipe or spoon photo URL to use as the original cover source.",
+          "required": true
+        },
+        "activate-when-ready": {
+          "type": "boolean",
+          "description": "Make the cover active when the editorial image is ready."
+        },
+        "generate-editorial": {
+          "type": "boolean",
+          "description": "Generate an editorialized cover from the uploaded original photo."
+        },
+        "prompt-addition": {
+          "type": "string",
+          "description": "Optional bounded instruction to guide editorial cover generation."
+        },
+        "post-as-spoon": {
+          "type": "boolean",
+          "description": "Also create a Spoon entry to preserve the original photo with optional cook notes."
+        },
+        "note": {
+          "type": "string",
+          "description": "Spoon note used when postAsSpoon preserves the original photo."
+        },
+        "next-time": {
+          "type": "string",
+          "description": "Spoon next-time note used when postAsSpoon preserves the original photo."
+        },
+        "cooked-at": {
+          "type": "string",
+          "description": "ISO date-time for the Spoon cook when postAsSpoon preserves the original photo."
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Stable key for replay-safe cover creation."
+        },
+        "plan-only": {
+          "type": "boolean",
+          "description": "Validate inputs and return planned next actions without writing a cover."
+        }
+      }
+    },
+    {
+      "name": "generate-recipe-cover-placeholder",
+      "summary": "Generate an AI placeholder cover candidate for a recipe with an optional prompt addition.",
+      "effect": "private",
+      "flags": {
+        "recipe-id": {
+          "type": "string",
+          "description": "Recipe that will receive the generated AI placeholder cover.",
+          "required": true
+        },
+        "prompt-addition": {
+          "type": "string",
+          "description": "Optional bounded instruction to guide AI placeholder generation."
+        },
+        "activate-when-ready": {
+          "type": "boolean",
+          "description": "Make the generated cover active when the generated cover is ready."
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Stable key for replay-safe placeholder generation.",
+          "required": true
+        },
+        "plan-only": {
+          "type": "boolean",
+          "description": "Validate inputs and return planned next actions without writing a cover."
+        }
+      }
+    },
+    {
+      "name": "regenerate-recipe-cover",
+      "summary": "Regenerate the editorial image for a recipe cover candidate with an optional prompt addition.",
+      "effect": "private",
+      "flags": {
+        "recipe-id": {
+          "type": "string",
+          "description": "Recipe that owns the cover candidate.",
+          "required": true
+        },
+        "cover-id": {
+          "type": "string",
+          "description": "Existing cover candidate to regenerate.",
+          "required": true
+        },
+        "prompt-addition": {
+          "type": "string",
+          "description": "Optional bounded instruction to guide regenerated editorial output."
+        },
+        "activate-when-ready": {
+          "type": "boolean",
+          "description": "Make the regenerated cover active when the regenerated cover is ready."
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Stable key for replay-safe regeneration.",
+          "required": true
+        },
+        "plan-only": {
+          "type": "boolean",
+          "description": "Validate inputs and return planned next actions without writing a cover."
+        }
+      }
+    },
+    {
+      "name": "get-cover-generation-status",
+      "summary": "Fetch Recipe Photo Studio generation status and active-cover context. May record that an abandoned generation failed: a cover still processing ten minutes after its generation started is reported, and stored, as failed, so polling can stop.",
+      "effect": "private",
+      "readOnly": true,
+      "flags": {
+        "recipe-id": {
+          "type": "string",
+          "description": "Recipe that owns the cover candidate.",
+          "required": true
+        },
+        "cover-id": {
+          "type": "string",
+          "description": "Recipe cover candidate whose generation status should be fetched.",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "set-active-recipe-cover",
+      "summary": "Set one existing Recipe Photo Studio cover variant as the active recipe cover.",
+      "effect": "private",
+      "flags": {
+        "recipe-id": {
+          "type": "string",
+          "description": "Recipe that owns the cover candidate.",
+          "required": true
+        },
+        "cover-id": {
+          "type": "string",
+          "description": "Cover candidate to activate.",
+          "required": true
+        },
+        "variant": {
+          "type": "enum",
+          "description": "Cover variant to activate: image or stylized.",
+          "values": [
+            "image",
+            "stylized"
+          ],
+          "required": true
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Stable key for replay-safe activation."
+        }
+      }
+    },
+    {
+      "name": "set-recipe-no-cover",
+      "summary": "Set an explicit no-cover state for a recipe after destructive no-cover confirmation.",
+      "effect": "private",
+      "flags": {
+        "recipe-id": {
+          "type": "string",
+          "description": "Recipe that should intentionally display no cover.",
+          "required": true
+        },
+        "confirm-no-cover": {
+          "type": "boolean",
+          "description": "Required explicit confirmation before entering no-cover mode.",
+          "required": true
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Stable key for replay-safe no-cover changes.",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "archive-recipe-cover",
+      "summary": "Archive a Recipe Photo Studio cover. Archiving the active cover requires a replacement or explicit no-cover confirmation.",
+      "effect": "private",
+      "flags": {
+        "recipe-id": {
+          "type": "string",
+          "description": "Recipe that owns the cover candidate.",
+          "required": true
+        },
+        "cover-id": {
+          "type": "string",
+          "description": "Cover candidate to archive.",
+          "required": true
+        },
+        "replacement-cover-id": {
+          "type": "string",
+          "description": "Replacement cover candidate to activate when archiving the active cover."
+        },
+        "replacement-variant": {
+          "type": "enum",
+          "description": "Replacement variant to activate: image or stylized.",
+          "values": [
+            "image",
+            "stylized"
+          ]
+        },
+        "confirm-no-cover": {
+          "type": "boolean",
+          "description": "Use explicit no-cover mode when archiving the active cover without a replacement."
+        },
+        "delete-safe-objects": {
+          "type": "boolean",
+          "description": "Request deletion of safe owned image objects after archive when supported."
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Stable key for replay-safe archiving."
         }
       }
     }

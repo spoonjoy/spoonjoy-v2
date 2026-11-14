@@ -9,7 +9,7 @@ export interface DeclaredMcpTool {
   title: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  annotations: { readOnlyHint: boolean; destructiveHint: boolean; openWorldHint: boolean };
+  annotations: { readOnlyHint: boolean; destructiveHint: boolean; openWorldHint: boolean; idempotentHint?: true };
 }
 
 /** The refused outcome a person-only action answers on every agent door: web's AX outcome, state "refused". */
