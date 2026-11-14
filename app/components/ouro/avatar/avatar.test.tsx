@@ -433,7 +433,7 @@ describe("Avatar shapes and icons", () => {
     const corner = parseFloat(getComputedStyle(square!).borderTopLeftRadius);
     expect(corner).toBeGreaterThan(0);
     expect(corner).toBeLessThan(34);
-    expect(getComputedStyle(circle!).borderTopLeftRadius).toBe("34%");
+    expect(getComputedStyle(circle!).borderTopLeftRadius).toBe("44%");
     expect(getComputedStyle(square!).borderTopLeftRadius).toBe("24%");
     for (const plain of [circle!, square!]) {
       expect(getComputedStyle(plain, "::after").borderTopWidth).not.toBe("1px");
@@ -689,11 +689,48 @@ describe("Avatar presence", () => {
       expect(center.x).toBeGreaterThan(0);
       expect(center.y).toBeGreaterThan(0);
       expect(getComputedStyle(dots[index]!).backgroundColor).toBe("rgba(0, 0, 0, 0)");
-      // The glyph fills the dot inside the ring.
+      // The ring is the avatar cut away, so the glyph fills the whole dot.
       const glyph = dots[index]!.querySelector("svg")!.getBoundingClientRect();
-      expect(glyph.width).toBeLessThan(dot.width);
-      expect(glyph.width).toBeGreaterThanOrEqual(dot.width - 6);
+      expect(glyph.width).toBe(dot.width);
     }
+  });
+
+  it("draws a person much rounder than a team, and puts the dot on the person's edge at every size", async () => {
+    const { host } = await render(
+      <>
+        {sizes.map((size) => (
+          <Avatar key={size} name="Ana Lind" size={size} presence="available" presenceLabel="Available" />
+        ))}
+        <Avatar name="Design reviews" shape="square" />
+      </>,
+    );
+    const [team] = [...host.querySelectorAll<HTMLElement>('[data-shape="square"]')];
+    expect(getComputedStyle(team!).borderTopLeftRadius).toBe("24%");
+    for (const avatar of host.querySelectorAll<HTMLElement>('[data-shape="circle"]')) {
+      const box = avatar.getBoundingClientRect();
+      expect(getComputedStyle(avatar).borderTopLeftRadius).toBe("44%");
+      const dot = avatar.querySelector<HTMLElement>("[data-ouro-avatar-presence]")!.getBoundingClientRect();
+      // The dot's center is on the edge's diagonal point: a squircle's lies 8% of the size in from the corner.
+      expect(Math.abs(box.right - (dot.left + dot.width / 2) - box.width * 0.08)).toBeLessThan(0.6);
+      expect(Math.abs(box.bottom - (dot.top + dot.height / 2) - box.width * 0.08)).toBeLessThan(0.6);
+    }
+  });
+
+  it("shows a state's glyph from 40px up, and only its colour below", async () => {
+    const { host } = await render(
+      <>
+        {sizes.map((size) => (
+          <Avatar key={size} name="Ana Lind" size={size} presence="away" presenceLabel="Away" />
+        ))}
+      </>,
+    );
+    const drawn = [...host.querySelectorAll<HTMLElement>('[data-ouro="avatar"]')].map((avatar) => ({
+      size: avatar.getBoundingClientRect().width,
+      glyph: avatar.querySelector("[data-ouro-avatar-presence] path") !== null,
+    }));
+    expect(drawn.filter((one) => one.glyph).every((one) => one.size >= 40)).toBe(true);
+    expect(drawn.filter((one) => !one.glyph).every((one) => one.size < 40)).toBe(true);
+    expect(drawn.some((one) => one.glyph) && drawn.some((one) => !one.glyph)).toBe(true);
   });
 
   it("bites the dot out of the avatar's surface, so a non-plain background shows through the gap", async () => {
@@ -729,7 +766,8 @@ describe("Avatar presence", () => {
         const holeX = dir === "ltr" ? box.right - c : box.left + c;
         expect(Math.abs(holeX - (at.left + at.width / 2))).toBeLessThan(0.51);
         expect(Math.abs(box.bottom - c - (at.top + at.height / 2))).toBeLessThan(0.51);
-        expect(Math.abs(px("--ouro-bite-r") - at.width / 2)).toBeLessThan(0.51);
+        // The cut-away ring is the gap: 1.5px at least, 5% of the avatar above 30px.
+        expect(Math.abs(px("--ouro-bite-r") - at.width / 2 - Math.max(1.5, box.width * 0.05))).toBeLessThan(0.51);
       }
     }
   });

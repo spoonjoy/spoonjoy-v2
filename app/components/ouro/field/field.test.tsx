@@ -866,3 +866,108 @@ describe("Field under a parent's spacing", () => {
     expect(Math.abs(button.getBoundingClientRect().top - root.getBoundingClientRect().bottom - 16)).toBeLessThanOrEqual(1);
   });
 });
+
+describe("Field under a press", () => {
+  const form = (error: string | undefined) => (
+    <form>
+      <Field label="Name" name="name" error={error}>
+        <FieldControl />
+      </Field>
+      <Button type="button">Sign</Button>
+    </form>
+  );
+  const fieldOf = (host: Element) => host.querySelector<HTMLElement>('[data-ouro="field"]')!;
+  const buttonOf = (host: Element) => host.querySelector<HTMLElement>('[data-ouro="button"]')!;
+
+  it("keeps a leaving message's space while a press in its form lasts, so the button below stays under the press", async () => {
+    const { host, rerender } = await render(form("Write your name."));
+    const button = buttonOf(host);
+    const top = button.offsetTop;
+    await commands.pointerPress({ selector: '[data-ouro="button"]', action: "down" });
+    try {
+      await rerender(form(undefined));
+      // The message has left the page, unmounted once its fade ends, while the press goes on.
+      await expect.poll(() => host.querySelector("[data-ouro-text]")).toBeNull();
+      expect(button.offsetTop).toBe(top);
+    } finally {
+      await commands.pointerPress({ action: "up" });
+    }
+    // Released, the space the message held collapses.
+    await expect.poll(() => top - button.offsetTop).toBe(28);
+  });
+
+  it("holds nothing while no message shows", async () => {
+    const { host } = await render(form(undefined));
+    await commands.pointerPress({ selector: '[data-ouro="button"]', action: "down" });
+    expect(fieldOf(host).style.minHeight).toBe("");
+    await commands.pointerPress({ action: "up" });
+  });
+
+  it("holds nothing for a press outside its form", async () => {
+    const { host } = await render(
+      <>
+        <form>
+          <Field label="Name" name="name" error="Write your name.">
+            <FieldControl />
+          </Field>
+        </form>
+        <button type="button" data-outside="">
+          Outside
+        </button>
+      </>,
+    );
+    await commands.pointerPress({ selector: "button[data-outside]", action: "down" });
+    expect(fieldOf(host).style.minHeight).toBe("");
+    await commands.pointerPress({ action: "up" });
+  });
+
+  it("releases the height however the press ends, even where the button stops the event", async () => {
+    const { host } = await render(form("Write your name."));
+    const button = buttonOf(host);
+    const field = fieldOf(host);
+    button.addEventListener("pointerup", (event) => event.stopPropagation());
+    button.addEventListener("pointercancel", (event) => event.stopPropagation());
+    await commands.pointerPress({ selector: '[data-ouro="button"]', action: "down" });
+    expect(field.style.minHeight).not.toBe("");
+    await commands.pointerPress({ action: "up" });
+    expect(field.style.minHeight).toBe("");
+    button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    expect(field.style.minHeight).not.toBe("");
+    button.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true }));
+    expect(field.style.minHeight).toBe("");
+  });
+
+  it("keeps the first hold through a second press, and gives the field back the height it had", async () => {
+    const { host } = await render(form("Write your name."));
+    const button = buttonOf(host);
+    const field = fieldOf(host);
+    field.style.minHeight = "90px";
+    button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    const held = field.style.minHeight;
+    button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    expect(field.style.minHeight).toBe(held);
+    window.dispatchEvent(new PointerEvent("pointerup"));
+    expect(field.style.minHeight).toBe("90px");
+  });
+
+  it("removes its listeners when the press ends, and when its field leaves mid-press", async () => {
+    const { host, rerender } = await render(form("Write your name."));
+    const removed = vi.spyOn(window, "removeEventListener");
+    await commands.pointerPress({ selector: '[data-ouro="button"]', action: "down" });
+    await commands.pointerPress({ action: "up" });
+    expect(removed).toHaveBeenCalledWith("pointerup", expect.any(Function), true);
+    expect(removed).toHaveBeenCalledWith("pointercancel", expect.any(Function), true);
+    await commands.pointerPress({ selector: '[data-ouro="button"]', action: "down" });
+    const formElement = host.querySelector("form")!;
+    const removedFromForm = vi.spyOn(formElement, "removeEventListener");
+    removed.mockClear();
+    await rerender(
+      <form>
+        <Button type="button">Sign</Button>
+      </form>,
+    );
+    expect(removedFromForm).toHaveBeenCalledWith("pointerdown", expect.any(Function));
+    expect(removed).toHaveBeenCalledWith("pointerup", expect.any(Function), true);
+    await commands.pointerPress({ action: "up" });
+  });
+});

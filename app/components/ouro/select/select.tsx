@@ -8,6 +8,7 @@ import { SelectGroup, SelectItem, SelectListScope } from "~/components/ouro/sele
 import {
   backdropClass,
   flattenOptions,
+  focusOptionFromPopup,
   isGroup,
   popupClass,
   positionerClass,
@@ -233,7 +234,7 @@ function SelectControl({
             alignItemWithTrigger={!sheet}
             data-ouro-presentation={presentation}
           >
-            <BaseSelect.Popup className={popupClass} data-ouro="select-popup" data-ouro-presentation={presentation}>
+            <BaseSelect.Popup className={popupClass} data-ouro="select-popup" data-ouro-presentation={presentation} onFocus={focusOptionFromPopup}>
               {sheet && (
                 <div aria-hidden="true" className={sheetTitleClass}>
                   {label}

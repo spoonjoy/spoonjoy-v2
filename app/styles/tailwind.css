@@ -38,6 +38,8 @@
   --avatar-8: #c239b3;
   /* Every Ouro corner is a squircle (CSS corner-shape); Switch, radios, slider thumbs, presence dots and spinners stay round. */
   --ouro-corner-shape: squircle;
+  /* Scales every Ouro corner radius; 1 keeps the theme's radii. */
+  --ouro-radius-scale: 1;
   /* Liquid Glass, as the switch's lens wears it: the tint over what is behind, its blur, the inner rim and the outer hairline. */
   --ouro-glass: #ffffff;
   --ouro-glass-tint: 34%;
@@ -740,13 +742,13 @@ body:has(#cook) .sj-site-footer {
      UI uses none of these (test/components/ui/design-system-hygiene.test.ts), so only Ouro changes.
      --radius-md is what Ouro's text fields and selects use: 2px under the control radius, as shadcn
      has it, which is --sj-radius-small, the corner Spoonjoy's fields have always had. */
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-sm: calc(var(--radius) * var(--ouro-radius-scale, 1) * 0.6);
+  --radius-md: calc(var(--radius) * var(--ouro-radius-scale, 1) - 2px);
+  --radius-lg: calc(var(--radius) * var(--ouro-radius-scale, 1));
+  --radius-xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 1.4);
+  --radius-2xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 1.8);
+  --radius-3xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 2.2);
+  --radius-4xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 2.6);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
@@ -777,12 +779,13 @@ body:has(#cook) .sj-site-footer {
     translate: 300% 0;
     }
   }
-  @keyframes ouro-shimmer-band {
-  from {
-    translate: -100% 0;
+  @keyframes ouro-skeleton-breathe {
+  0%,
+  100% {
+    opacity: 1;
     }
-  to {
-    translate: 100% 0;
+  50% {
+    opacity: 0.55;
     }
   }
   @keyframes ouro-scroll-fade-left {
@@ -835,5 +838,44 @@ body:has(#cook) .sj-site-footer {
   [class*="rounded-full"] {
     --corner-shape: round;
     corner-shape: round;
+  }
+  [data-ouro-surface] {
+    display: none;
+  }
+}
+
+@supports not (corner-shape: squircle) {
+  [data-ouro-squircle] {
+    background-color: transparent;
+    border-color: transparent;
+    --tw-ring-color: transparent;
+  }
+  [data-ouro-squircle]::before {
+    display: none;
+  }
+  [data-ouro-surface] {
+    --ouro-sq-m: max(0px, calc(var(--ouro-sq-r) - var(--ouro-sq-w)));
+    --ouro-sq-o: 0 calc(var(--ouro-sq-r)*1), calc(var(--ouro-sq-r)*0.04) calc(var(--ouro-sq-r)*0.38), calc(var(--ouro-sq-r)*0.16) calc(var(--ouro-sq-r)*0.16), calc(var(--ouro-sq-r)*0.38) calc(var(--ouro-sq-r)*0.04), calc(var(--ouro-sq-r)*1) 0, calc(100% - var(--ouro-sq-r)*1) 0, calc(100% - var(--ouro-sq-r)*0.38) calc(var(--ouro-sq-r)*0.04), calc(100% - var(--ouro-sq-r)*0.16) calc(var(--ouro-sq-r)*0.16), calc(100% - var(--ouro-sq-r)*0.04) calc(var(--ouro-sq-r)*0.38), 100% calc(var(--ouro-sq-r)*1), 100% calc(100% - var(--ouro-sq-r)*1), calc(100% - var(--ouro-sq-r)*0.04) calc(100% - var(--ouro-sq-r)*0.38), calc(100% - var(--ouro-sq-r)*0.16) calc(100% - var(--ouro-sq-r)*0.16), calc(100% - var(--ouro-sq-r)*0.38) calc(100% - var(--ouro-sq-r)*0.04), calc(100% - var(--ouro-sq-r)*1) 100%, calc(var(--ouro-sq-r)*1) 100%, calc(var(--ouro-sq-r)*0.38) calc(100% - var(--ouro-sq-r)*0.04), calc(var(--ouro-sq-r)*0.16) calc(100% - var(--ouro-sq-r)*0.16), calc(var(--ouro-sq-r)*0.04) calc(100% - var(--ouro-sq-r)*0.38), 0 calc(100% - var(--ouro-sq-r)*1);
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: var(--ouro-bg, transparent);
+    clip-path: polygon(var(--ouro-sq-o));
+  }
+  [data-ouro-surface]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: currentColor;
+    opacity: var(--ouro-state, 0);
+  }
+  [data-ouro-surface]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--ouro-bd, transparent);
+    clip-path: polygon(evenodd, var(--ouro-sq-o), 0 calc(var(--ouro-sq-r)*1), var(--ouro-sq-w) calc(var(--ouro-sq-w) + var(--ouro-sq-m)*1), calc(var(--ouro-sq-w) + var(--ouro-sq-m)*0.04) calc(var(--ouro-sq-w) + var(--ouro-sq-m)*0.38), calc(var(--ouro-sq-w) + var(--ouro-sq-m)*0.16) calc(var(--ouro-sq-w) + var(--ouro-sq-m)*0.16), calc(var(--ouro-sq-w) + var(--ouro-sq-m)*0.38) calc(var(--ouro-sq-w) + var(--ouro-sq-m)*0.04), calc(var(--ouro-sq-w) + var(--ouro-sq-m)*1) var(--ouro-sq-w), calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*1) var(--ouro-sq-w), calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*0.38) calc(var(--ouro-sq-w) + var(--ouro-sq-m)*0.04), calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*0.16) calc(var(--ouro-sq-w) + var(--ouro-sq-m)*0.16), calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*0.04) calc(var(--ouro-sq-w) + var(--ouro-sq-m)*0.38), calc(100% - var(--ouro-sq-w)) calc(var(--ouro-sq-w) + var(--ouro-sq-m)*1), calc(100% - var(--ouro-sq-w)) calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*1), calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*0.04) calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*0.38), calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*0.16) calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*0.16), calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*0.38) calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*0.04), calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*1) calc(100% - var(--ouro-sq-w)), calc(var(--ouro-sq-w) + var(--ouro-sq-m)*1) calc(100% - var(--ouro-sq-w)), calc(var(--ouro-sq-w) + var(--ouro-sq-m)*0.38) calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*0.04), calc(var(--ouro-sq-w) + var(--ouro-sq-m)*0.16) calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*0.16), calc(var(--ouro-sq-w) + var(--ouro-sq-m)*0.04) calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*0.38), var(--ouro-sq-w) calc(100% - var(--ouro-sq-w) + var(--ouro-sq-m)*1), var(--ouro-sq-w) calc(var(--ouro-sq-w) + var(--ouro-sq-m)*1), 0 calc(var(--ouro-sq-r)*1));
   }
 }

@@ -131,23 +131,32 @@ async function restFinger(distance: number) {
 /**
  * Drags the sheet by (dx, dy), lets go with a finger at rest, and stops its way back to
  * rest part-way: the sheet stands off its rest position, as it does for a moment after any
- * release. The settle is made long first, so a slow machine still finds it under way.
+ * release. The settle is made long, and the page pauses it as its transition starts (`transitionrun`,
+ * in the frame that starts it), so it stands near where the finger let go: a pause from the test
+ * instead came after the lift's round trip and a poll, seconds into the settle on a busy runner,
+ * by when the drawer's ease-out curve had carried it most of the way home (#1231).
  * Base UI counts from the first move it sees, and the second takes the sheet the rest of the
  * way: each step is a round trip into the page, which takes a second or more on a busy runner.
  * Returns where the sheet stands.
  */
 async function releaseAndFreeze(sheet: HTMLElement, dx: number, dy: number, from = grip(sheet)) {
   document.documentElement.style.setProperty("--ouro-duration-sheet", "20s");
+  const pauseAtStart = (event: Event) => {
+    if (event.target !== sheet) return;
+    for (const animation of sheet.getAnimations()) animation.pause();
+  };
   const [x, y] = from;
   try {
     await commands.touchStep({ type: "touchStart", x, y });
     await commands.touchStep({ type: "touchMove", x: x + dx / 6, y: y + dy / 6 });
     await commands.touchStep({ type: "touchMove", x: x + dx, y: y + dy });
     await restFinger(Math.hypot(dx, dy));
+    sheet.addEventListener("transitionrun", pauseAtStart);
   } finally {
     await commands.touchStep({ type: "touchEnd" });
   }
   await expect.poll(() => sheet.getAnimations().length).toBeGreaterThan(0);
+  sheet.removeEventListener("transitionrun", pauseAtStart);
   await freeze(sheet);
   return translation(sheet);
 }

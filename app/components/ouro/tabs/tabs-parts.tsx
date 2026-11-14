@@ -1,7 +1,7 @@
 "use client";
 
 import { Tabs as BaseTabs } from "@base-ui/react/tabs";
-import { createContext, useContext, useEffect, useRef, type JSX, type ReactNode } from "react";
+import { createContext, memo, useContext, useEffect, useRef, type JSX, type ReactNode } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { devThrow } from "~/lib/ouro/dev";
@@ -196,10 +196,10 @@ export function TabsTab({ className, children, ...props }: TabsTabProps): JSX.El
 }
 
 /** Part: the line that slides to the selected tab. Put it last inside `TabsList`. */
-export function TabsIndicator(props: Omit<BaseTabs.Indicator.Props, "className">): JSX.Element {
+export const TabsIndicator = memo(function TabsIndicator(props: Omit<BaseTabs.Indicator.Props, "className">): JSX.Element {
   useTabsPart("TabsIndicator", "<TabsIndicator />");
   return <BaseTabs.Indicator {...props} data-ouro-tabs-indicator="" className={indicatorClass} />;
-}
+});
 
 /** Props for {@link TabsPanel}. */
 export type TabsPanelProps = Omit<BaseTabs.Panel.Props, "className"> & { className?: string | undefined };

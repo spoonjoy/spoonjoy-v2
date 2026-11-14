@@ -1,7 +1,7 @@
-import type { ReactElement, ReactNode } from "react";
+import type { FocusEvent, ReactElement, ReactNode } from "react";
 import { hasLazyType, serverNodes } from "~/lib/ouro/server-element";
 
-export { flattenOptions, groupLabelClass, itemClass, itemIndicatorClass, popupClass, positionerClass, sheetQuery, triggerClass, backdropClass, sheetTitleClass, isGroup };
+export { flattenOptions, focusOptionFromPopup, groupLabelClass, itemClass, itemIndicatorClass, popupClass, positionerClass, sheetQuery, triggerClass, backdropClass, sheetTitleClass, isGroup };
 export type { SelectOption, SelectOptionGroup, SelectOptions };
 
 // Class strings, option helpers and the sheet query for Select and its parts, apart from
@@ -36,6 +36,28 @@ type SelectOptions = ReadonlyArray<SelectOption | SelectOptionGroup>;
  */
 function isGroup(entry: SelectOption | SelectOptionGroup): entry is SelectOptionGroup {
   return "options" in entry;
+}
+
+/**
+ * Moves focus from the list's own frame onto an option. Base UI queues a focus move for the frame
+ * and another for an option on a keyboard open, and when the frame's lands last, focus stays on the frame, where a screen
+ * reader announces nothing and arrow keys highlight an option the user cannot hear. A pointer
+ * open keeps Base UI's choice, so only a keyboard focus (`:focus-visible`) is moved.
+ *
+ * @internal
+ */
+function focusOptionFromPopup(event: FocusEvent<HTMLElement>): void {
+  const popup = event.currentTarget;
+  // Stryker disable next-line ConditionalExpression: Base UI highlights an option as it takes focus, so a focus that lands on an option redirects to that same option.
+  if (event.target !== popup || !popup.matches(":focus-visible")) return;
+  const selectors = ["[data-highlighted]", '[aria-selected="true"]:not([data-disabled])', '[role="option"]:not([data-disabled])'];
+  for (const selector of selectors) {
+    const option = popup.querySelector<HTMLElement>(selector);
+    if (option) {
+      option.focus({ preventScroll: true });
+      return;
+    }
+  }
 }
 
 /**

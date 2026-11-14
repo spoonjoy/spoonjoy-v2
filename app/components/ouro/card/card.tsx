@@ -106,7 +106,9 @@ const elements = ["div", "article", "section", "li"] as const;
 const levels = [2, 3, 4, 5, 6] as const;
 
 const variants = {
-  outline: "rounded-xl border border-border bg-card text-card-foreground shadow-(--shadow-xs)",
+  // Where corner-shape is missing, the surface slot paints the background and border instead (see ouro-base.css).
+  outline:
+    "rounded-xl border border-border bg-(--ouro-bg) border-(--ouro-bd) [--ouro-bg:var(--card)] [--ouro-bd:var(--border)] [--ouro-sq-w:1px] [--ouro-sq-r:calc(var(--radius-xl)/var(--ouro-radius-scale,1))] text-card-foreground shadow-(--shadow-xs)",
   plain: "bg-transparent text-foreground",
 } as const;
 
@@ -243,6 +245,7 @@ export function Card(props: CardProps): JSX.Element {
     {
       ...rest,
       "data-ouro": "card",
+      "data-ouro-squircle": variant === "outline" ? "" : undefined,
       "data-linked": linked ? "" : undefined,
       className: cn(
         "relative isolate flex min-w-0 list-none flex-col overflow-hidden",
@@ -253,6 +256,7 @@ export function Card(props: CardProps): JSX.Element {
         className,
       ),
     },
+    variant === "outline" && <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />,
     media && <div className={cn("relative overflow-hidden", mediaPull[variant][size])}>{media}</div>,
     (heading || description || action) && (
       <div className={cn("flex items-start gap-4", stackBelow && headerStacked[stackBelow], pad)}>

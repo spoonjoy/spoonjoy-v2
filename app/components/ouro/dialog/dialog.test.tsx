@@ -409,6 +409,15 @@ describe("Dialog stacking above the app's fixed bars", () => {
 });
 
 describe("centered dialog", () => {
+  it("renders a hidden surface layer first in the popup, under the content", async () => {
+    const dialog = await openUncontrolled();
+    const surface = dialog.firstElementChild as HTMLElement;
+    expect(surface.hasAttribute("data-ouro-surface")).toBe(true);
+    expect(surface.getAttribute("aria-hidden")).toBe("true");
+    expect(surface.style.zIndex).toBe("-1");
+    expect(dialog.hasAttribute("data-ouro-squircle")).toBe(true);
+  });
+
   it("keeps the title clear of the close button in a right-to-left page", async () => {
     document.documentElement.dir = "rtl";
     try {

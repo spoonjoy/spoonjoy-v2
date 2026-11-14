@@ -872,12 +872,13 @@ describe("Combobox rich items", () => {
     expect(getComputedStyle(description).textOverflow).toBe("ellipsis");
     expect(description.title).toBe("Principal Engineer, Platform Services and Developer Experience, North Harbor office");
     expect(rowan!.getBoundingClientRect().right).toBeLessThanOrEqual(popup()!.getBoundingClientRect().right);
-    // The picked row keeps its 16px check; the avatar's own presence glyph keeps its size inside its dot.
+    // The picked row keeps its 16px check; the avatar's presence glyph fills its dot, drawing no mark at this size.
     expect(iris!.querySelector("[data-ouro-combobox-media]")).not.toBeNull();
     const check = iris!.firstElementChild!.querySelector("svg")!;
     expect(check.getBoundingClientRect().width).toBe(16);
     const dot = iris!.querySelector<HTMLElement>("[data-ouro-avatar-presence]")!;
-    expect(dot.querySelector("svg")!.getBoundingClientRect().width).toBeLessThan(dot.getBoundingClientRect().width);
+    expect(dot.querySelector("svg")!.getBoundingClientRect().width).toBe(dot.getBoundingClientRect().width);
+    expect(dot.querySelector("svg path")).toBeNull();
     // A plain item keeps its plain row.
     expect(theo!.querySelector("[data-ouro-combobox-media], [data-ouro-combobox-description], [data-ouro-combobox-meta]")).toBeNull();
     expect(theo!.textContent).toBe("Theo Brandt");

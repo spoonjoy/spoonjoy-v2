@@ -5,10 +5,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-// The consumer source the v1.3.62 install starts from: main after the v1.3.33 adoption (#704).
-const acceptedHead = "5ff91f541a16fe9dae77f87523b138386cd90cd8";
-const tag = "v1.3.62";
-const tagCommit = "1732effe5ad16db10816ae866b16bf4ddf35f2d3";
+// The consumer source the v1.3.99 install starts from: main after the v1.3.62 adoption (#708).
+const acceptedHead = "25903757accc52c0bfc96242c643a5ef1a18a6d7";
+const tag = "v1.3.99";
+const tagCommit = "4cd281f96956d42fa5c8e31b791b0b1e682ee6a1";
 // Every installed registry item, plus the v1.2.0 items Spoonjoy's screens now compose (SkipLink,
 // TabBar, RouteProgress, ColorSchemeToggle, PageHeader, CopyButton, CodeBlock, Timer, TimerTray,
 // Celebrate, ChoiceCard, ImageCropper, ImageField, ShareButton, SyncStatus, LocalDate,
@@ -66,14 +66,10 @@ const installed = JSON.parse(readFileSync(".github/ouro-hx-installed.json", "utf
 assert.equal(installed.tag, tag);
 assert.equal(installed.tagCommit, tagCommit);
 const expected = installed.files;
-// Paths v1.3.62 adds to the v1.3.33 install (ax-xray's command, help and output modules, and
-// ToggleGroup's layout test); every other path in this patch updates an existing file.
+// Paths v1.3.99 adds to the v1.3.62 install (Tabs' layout test); every other path in this
+// patch updates an existing file.
 const expectedNew = [
-  "app/components/ouro/toggle/toggle-group.layout.test.tsx",
-  "app/lib/ouro/ax/cli.ts",
-  "app/lib/ouro/ax/command.ts",
-  "app/lib/ouro/ax/help.ts",
-  "app/lib/ouro/ax/output.ts",
+  "app/components/ouro/tabs/tabs.layout.test.tsx",
 ].filter((file) => !existsSync(file));
 const protectedPaths = [
   "app", "test", "e2e", "package.json", "pnpm-lock.yaml", "components.json",

@@ -58,24 +58,6 @@ const RESERVED_PERSON_ONLY: Readonly<Record<string, string>> = Object.freeze({
   record: "You can't start recording or transcription for the person; only they can.",
 });
 
-// One-word compounds, split so their parts are matched.
-const COMPOUNDS: Readonly<Record<string, string>> = { sharescreen: "share screen", screenshare: "screen share", turnon: "turn on", turnoff: "turn off" };
-
-// An id's words, lower case: `shareScreen`, `share_screen`, `sharescreen` and `Share Screen` become `share screen`;
-// `turnon` becomes `turn on`; `un mute`, `pick up` and `let in` each become one word.
-const wordsOfId = (id: string) =>
-  id
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .toLowerCase()
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((word) => COMPOUNDS[word] ?? word)
-    .join(" ")
-    .replace(/\bun mute\b/g, "unmute")
-    .replace(/\bpick up\b/g, "pickup")
-    .replace(/\blet in\b/g, "letin")
-    .split(" ");
-
 // Reducing words: off, stop, end, disable and mute.
 const REDUCING = ["off", "stop", "end", "disable", "mute"];
 // Turn-on words, which keep a reducing word from freeing an id.
@@ -98,6 +80,49 @@ const CALL_VERBS: Readonly<Record<string, readonly string[]>> = {
 };
 const CALL_WORDS = ["call", "meeting", "ring", "lobby", "screen", "room", "video", "audio", "incoming", "from", "the"];
 const CALL_NOUNS = CALL_WORDS.filter((x) => x !== "incoming" && x !== "from" && x !== "the");
+
+// Every word the matcher reads, so a run-together word splits only into words it can match.
+const VOCABULARY: ReadonlySet<string> = new Set([
+  ...REDUCING,
+  ...TURN_ON,
+  ...ON,
+  ...Object.values(DEVICES).flat(),
+  ...Object.values(CALL_VERBS).flat(),
+  ...CALL_WORDS,
+  "un", "mute", "pick", "up", "let", "in", "letin", "admit", "all", "join", "turn", "share", "screen",
+]);
+
+// The fewest vocabulary words that `word` is made of, the first one the longest, or undefined when no split uses only them.
+function knownParts(word: string): string[] | undefined {
+  const n = word.length;
+  // `split.get(i)` holds the fewest vocabulary words that `word.slice(i)` is made of; it is absent when none is.
+  const split = new Map<number, string[]>([[n, []]]);
+  for (let start = n - 1; start >= 0; start--) {
+    for (let end = n; end > start; end--) {
+      const rest = split.get(end);
+      if (rest === undefined || !VOCABULARY.has(word.slice(start, end))) continue;
+      const best = split.get(start);
+      if (best === undefined || rest.length + 1 < best.length) split.set(start, [word.slice(start, end), ...rest]);
+    }
+  }
+  return split.get(0);
+}
+
+// An id's words, lower case: `shareScreen`, `share_screen`, `sharescreen` and `Share Screen` become `share screen`;
+// `startsharescreen` becomes `start share screen`, since each word it is made of is one the matcher knows. A word the
+// matcher knows, such as `screenshare`, is never split. `un mute`, `pick up` and `let in` each become one word.
+const wordsOfId = (id: string) =>
+  id
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .flatMap((word) => knownParts(word) ?? [word])
+    .join(" ")
+    .replace(/\bun mute\b/g, "unmute")
+    .replace(/\bpick up\b/g, "pickup")
+    .replace(/\blet in\b/g, "letin")
+    .split(" ");
 
 /** The canonical reserved id an action id means, or null: `share-screen` means `share`, `camera-off` nothing. */
 function reservedAs(id: string): string | null {
@@ -128,13 +153,16 @@ function reservedAs(id: string): string | null {
  * can turn it on. Admitting is the person's whoever it admits (`admit-all`, `let-in-guest`). A call verb (answer, accept,
  * decline, reject, share, record) is the person's alone or beside a call word (`accept-call`, `record-meeting`), and
  * join only beside one (`join-meeting`), so `answer-message`, `share-link`, `record-note` and `join-channel` stay an
- * agent's. One-word compounds such as `sharescreen` and `turnon` count as their parts. An id that only reduces what the person exposes (with off, stop, end, disable or mute in it and no on,
+ * agent's. A run-together word is split into the words the matcher knows, so `startsharescreen` reads as `start share screen`
+ * and is reserved, while a word it cannot split, such as `sharelink`, is read whole. An id that only reduces what the person exposes (with off, stop, end, disable or mute in it and no on,
  * toggle, resume, start, enable or unmute, such as `mute`, `camera-off` or `stop-share`) is not reserved, but
  * `mute-off` is, since it unmutes. Captions are not reserved: they are the person's own and private, and a component
  * declares its captions action person-only itself. The declaration and the X-ray both ask it.
  *
  * @claim "is not reserved, but `mute-off` is, since it unmutes" registry/ouro/ax/component.test.mts verify:testExists(registry/ouro/ax/component.test.mts::reserved ids are matched by meaning: every alias and case is the person's, and what reduces exposure stays an agent's)
  * @claim "by meaning rather than spelling" registry/ouro/ax/component.test.mts verify:testExists(registry/ouro/ax/component.test.mts::reserved ids are matched by meaning: every alias and case is the person's, and what reduces exposure stays an agent's)
+ * @claim "`startsharescreen` reads as `start share screen`" registry/ouro/ax/component.test.mts verify:testExists(registry/ouro/ax/component.test.mts::reserved ids are matched by meaning: every alias and case is the person's, and what reduces exposure stays an agent's)
+ * @claim "a word it cannot split, such as `sharelink`, is read whole" registry/ouro/ax/component.test.mts verify:testExists(registry/ouro/ax/component.test.mts::reserved ids are matched by meaning: every alias and case is the person's, and what reduces exposure stays an agent's)
  */
 function isReservedPersonOnly(id: string): boolean {
   return reservedAs(id) !== null;

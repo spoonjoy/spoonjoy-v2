@@ -1,4 +1,4 @@
-import { createRef, useState, type FormEvent, type ReactNode } from "react";
+import { createRef, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Select, type SelectProps } from "~/components/ouro/select/select";
 import { SelectGroup, SelectItem } from "~/components/ouro/select/select-parts";
+import { focusOptionFromPopup } from "~/components/ouro/select/select-styles";
 import { act } from "~/lib/ouro/testing/act";
 import { pressAndLetGo, pressDuringScroll } from "~/lib/ouro/testing/press";
 
@@ -64,6 +65,37 @@ const description = (element: Element) => describedBy(element).map((id) => eleme
 
 const popup = () => document.querySelector<HTMLElement>('[data-ouro="select-popup"]');
 const option = (name: string) => page.getByRole("option", { name });
+
+/**
+ * A bare list frame that the Enter key focuses, the way a keyboard open focuses a list, so the
+ * fallbacks in `focusOptionFromPopup` run with no option highlighted by Base UI.
+ */
+function FrameHarness({ children, style }: { children?: ReactNode; style?: CSSProperties }) {
+  const frame = useRef<HTMLDivElement>(null);
+  return (
+    <>
+      <button
+        type="button"
+        onKeyDown={(event) => {
+          // As Base UI focuses a popup's own frame: without scrolling, so WebKit has no scroll left to apply to the option
+          // the frame then hands focus to (#1285).
+          if (event.key === "Enter") frame.current?.focus({ preventScroll: true });
+        }}
+      >
+        Open
+      </button>
+      <div ref={frame} role="presentation" tabIndex={-1} onFocus={focusOptionFromPopup} style={style}>
+        {children}
+      </div>
+    </>
+  );
+}
+
+/** Presses Enter on the harness's button, as a keyboard user opens a list. */
+async function enterFrame(host: HTMLElement) {
+  host.querySelector<HTMLButtonElement>("button")!.focus();
+  await userEvent.keyboard("{Enter}");
+}
 
 /** Opens the list and waits for it. */
 async function open(trigger: HTMLElement) {
@@ -282,6 +314,98 @@ describe("Select", () => {
     await expect.poll(highlighted).toBe("Main");
     await userEvent.keyboard("{Enter}");
     await expect.poll(() => trigger.textContent).toBe("Main");
+  });
+
+  it("moves focus from the list's frame to the chosen option after a keyboard open, where Base UI's own move can lose", async () => {
+    const { trigger } = await render(<Select label="Course" options={courses} defaultValue="starter" />);
+    trigger.focus();
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => document.activeElement?.getAttribute("role")).toBe("option");
+    popup()!.focus();
+    await expect.poll(() => document.activeElement?.textContent).toBe("Starter");
+    expect(document.activeElement?.getAttribute("role")).toBe("option");
+  });
+
+  it("highlights the option that focus moves to from the list's frame, so the arrow keys go on from it", async () => {
+    const meals = [...courses.slice(0, 2), { value: "sweet", label: "Sweet" }];
+    const { trigger } = await render(<Select label="Course" options={meals} defaultValue="starter" />);
+    trigger.focus();
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => document.activeElement?.getAttribute("role")).toBe("option");
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Main");
+    popup()!.focus();
+    await expect.poll(() => document.activeElement?.textContent).toBe("Main");
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Sweet");
+    expect(popup()!.querySelector("[data-highlighted]")?.textContent).toBe("Sweet");
+  });
+
+  it("leaves focus on an option that is focused directly, rather than moving it to the highlighted one", async () => {
+    const { trigger } = await render(<Select label="Course" options={courses} defaultValue="starter" />);
+    trigger.focus();
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Starter");
+    (option("Main").element() as HTMLElement).focus();
+    expect(document.activeElement?.textContent).toBe("Main");
+  });
+
+  it("does not move a pointer open's focus off the list's frame", async () => {
+    const { trigger } = await render(<Select label="Course" options={courses} />);
+    await open(trigger);
+    await expect.poll(() => document.activeElement?.getAttribute("role")).toBe("option");
+    popup()!.focus();
+    expect(document.activeElement).toBe(popup());
+  });
+
+  it("moves focus from a list's frame to the option the list has chosen, when it highlights none", async () => {
+    const { host } = await render(
+      <FrameHarness>
+        <div role="option" tabIndex={-1} aria-selected="false">
+          Starter
+        </div>
+        <div role="option" tabIndex={-1} aria-selected="true">
+          Main
+        </div>
+      </FrameHarness>,
+    );
+    await enterFrame(host);
+    await expect.poll(() => document.activeElement?.textContent).toBe("Main");
+  });
+
+  it("moves focus from a list's frame to its first enabled option, when none is highlighted or chosen", async () => {
+    const { host } = await render(
+      <FrameHarness>
+        <div role="option" tabIndex={-1} data-disabled="">
+          Starter
+        </div>
+        <div role="option" tabIndex={-1} aria-selected="false">
+          Main
+        </div>
+      </FrameHarness>,
+    );
+    await enterFrame(host);
+    await expect.poll(() => document.activeElement?.textContent).toBe("Main");
+  });
+
+  it("moves focus from a list's frame to an option without scrolling the list, which Base UI scrolls itself", async () => {
+    const { host } = await render(
+      <FrameHarness style={{ height: 40, overflowY: "auto" }}>
+        <div style={{ height: 400 }} />
+        <div role="option" tabIndex={-1} aria-selected="false">
+          Dessert
+        </div>
+      </FrameHarness>,
+    );
+    await enterFrame(host);
+    await expect.poll(() => document.activeElement?.textContent).toBe("Dessert");
+    expect(host.querySelector('[role="presentation"]')!.scrollTop).toBe(0);
+  });
+
+  it("leaves focus on a list's frame that has no option to move to", async () => {
+    const { host } = await render(<FrameHarness />);
+    await enterFrame(host);
+    expect(document.activeElement).toBe(host.querySelector('[role="presentation"]'));
   });
 
   it("shows an error, linked and marked invalid, after the description", async () => {

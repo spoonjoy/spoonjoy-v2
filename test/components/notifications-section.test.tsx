@@ -55,9 +55,8 @@ describe("NotificationsSection", () => {
     (isPushSupported as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ supported: true });
     renderWithToast({ initiallySubscribed: false });
     expect(screen.getByRole("button", { name: /enable notifications/i })).toBeInTheDocument();
-    const section = screen.getByRole("heading", { name: "Notifications", level: 2 }).closest("section");
-    expect(section).toHaveClass("border", "border-border");
-    expect(section).not.toHaveClass("border-b", "border-t");
+    // The outline is painted by Ouro's surface, read from computed styles in test/ouro/spoonjoy-paint.test.tsx.
+    expect(screen.getByRole("heading", { name: "Notifications", level: 2 }).closest("section")).toBeInTheDocument();
   });
 
   it("renders 'Notifications enabled' label + Disable button when initiallySubscribed", () => {

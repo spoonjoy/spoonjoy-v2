@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { act } from "~/lib/ouro/testing/act";
@@ -44,7 +45,23 @@ const scroller = (host: HTMLElement) => host.querySelector<HTMLElement>("[data-s
 
 it("makes an overflowing scroll container a tab stop, so a keyboard can scroll it", async () => {
   const { host } = await render(<Scroller lines={10} />);
+  await frames();
   expect(scroller(host).getAttribute("tabindex")).toBe("0");
+});
+
+it("reads nothing while it attaches, so a commit forces no layout; the observer's first report reads", async () => {
+  const read = vi.spyOn(Element.prototype, "scrollHeight", "get");
+  const host = document.createElement("div");
+  document.body.append(host);
+  hosts.push(host);
+  const root = createRoot(host);
+  roots.push(root);
+  flushSync(() => root.render(<Scroller lines={10} />));
+  expect(read).not.toHaveBeenCalled();
+  await frames();
+  expect(read).toHaveBeenCalled();
+  expect(scroller(host).getAttribute("tabindex")).toBe("0");
+  read.mockRestore();
 });
 
 it("makes a container a tab stop when its content overflows across, unless it clips across", async () => {
@@ -58,9 +75,11 @@ it("makes a container a tab stop when its content overflows across, unless it cl
   };
   for (const overflowX of ["auto", "scroll"] as const) {
     const { host } = await render(<Across overflowX={overflowX} />);
+    await frames();
     expect(scroller(host).getAttribute("tabindex")).toBe("0");
   }
   const clipped = await render(<Across overflowX="hidden" />);
+  await frames();
   expect(scroller(clipped.host).hasAttribute("tabindex")).toBe(false);
 });
 
@@ -100,6 +119,7 @@ it("follows a lone text child as its text grows (React sets nodeValue)", async (
 it("reads the sizes after the browser's layout, not when the content changes", async () => {
   const { host } = await render(<Scroller lines={2} />);
   await frames();
+  await frames();
   const read = vi.spyOn(Element.prototype, "scrollHeight", "get");
   scroller(host).insertAdjacentHTML("beforeend", '<p style="height: 400px; margin: 0">Long</p>');
   // The mutation's callback has run (a microtask), and read nothing: a read there forces a layout.
@@ -113,6 +133,7 @@ it("reads the sizes after the browser's layout, not when the content changes", a
 
 it("keeps the tab stop while the body has focus, and drops it on blur once the content fits", async () => {
   const { host, rerender } = await render(<Scroller lines={10} />);
+  await frames();
   scroller(host).focus();
   expect(document.activeElement).toBe(scroller(host));
   await rerender(<Scroller lines={1} />);
@@ -137,6 +158,7 @@ it("follows the container as it resizes", async () => {
     );
   }
   const { host } = await render(<Resizable />);
+  await frames();
   expect(scroller(host).getAttribute("tabindex")).toBe("0");
   await act(async () => host.querySelector("button")!.click());
   await frames();

@@ -221,6 +221,42 @@ export function Field(props: FieldProps): JSX.Element {
   // registered its id with the label.
   const rootRef = useRef<HTMLDivElement>(null);
 
+  // A message can leave just after a press starts in its form (the change before it clears the
+  // message, and the message is unmounted once its fade ends), and then the controls below it, Sign
+  // among them, would move out from under the press. Until the press ends the field keeps its
+  // height, so the space stays; then it collapses.
+  useEffect(
+    () => {
+      const root = rootRef.current!;
+      const form = root.closest("form");
+      if (!form) return undefined;
+      const view = root.ownerDocument.defaultView!;
+      let minHeight: string | undefined;
+      const release = () => {
+        // Stryker disable next-line ConditionalExpression: with nothing held this runs only at unmount, and an undefined min-height assigned there changes nothing
+        if (minHeight === undefined) return;
+        root.style.minHeight = minHeight;
+        minHeight = undefined;
+        view.removeEventListener("pointerup", release, true);
+        view.removeEventListener("pointercancel", release, true);
+      };
+      const hold = () => {
+        if (minHeight !== undefined || !root.querySelector("[data-ouro-text]")) return;
+        minHeight = root.style.minHeight;
+        root.style.minHeight = `${root.getBoundingClientRect().height}px`;
+        view.addEventListener("pointerup", release, true);
+        view.addEventListener("pointercancel", release, true);
+      };
+      form.addEventListener("pointerdown", hold);
+      return () => {
+        form.removeEventListener("pointerdown", hold);
+        release();
+      };
+    },
+    // Stryker disable next-line ArrayDeclaration: the field's root and its form are the same elements for the field's whole life, so any constant list runs this effect once, on mount, as this one does.
+    [],
+  );
+
   const hint = useCallback((token: string) => fieldHint(token, owner.name), [owner.name]);
   useAppearanceClassNameCheck(
     owner.name,

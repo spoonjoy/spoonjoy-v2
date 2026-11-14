@@ -5,6 +5,7 @@ import type { HTMLAttributes, JSX, ReactNode, Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
+import { toneWarning } from "~/lib/ouro/tones";
 
 /** The props Separator adds to the `<div>` attributes it passes through. */
 export interface SeparatorOwnProps {
@@ -20,6 +21,18 @@ export interface SeparatorOwnProps {
    * two groups of content a reader should hear as separate.
    */
   decorative?: boolean | undefined;
+  /**
+   * Colors the lines and the label from the theme, for an accent line such as where unread
+   * messages start. Without it the lines are the border color and the label is muted.
+   * `secondary` is a surface, not a line color, so it is not a tone here.
+   */
+  tone?:
+    | "primary"
+    | "destructive"
+    | "success"
+    | "warning"
+    | (string & { 'danger is "destructive"; accent is "primary"; neutral is no tone': never })
+    | undefined;
   /**
    * A short word in the middle of a horizontal line, such as "or" between two ways to sign
    * in: `<Separator label="or" />`. The label is read as text in its place, and the lines on
@@ -47,13 +60,24 @@ const orientations = {
   vertical: "w-px self-stretch",
 } as const;
 
-const line = "h-px min-w-0 flex-1 shrink border-0 bg-border";
+const line = "h-px min-w-0 flex-1 shrink border-0";
+
+// Class strings are literal so the app's Tailwind finds them. A forced-colours line is drawn
+// in CanvasText, because forced colours would otherwise drop its background.
+const tones = {
+  primary: { line: "bg-primary forced-colors:bg-[CanvasText]", label: "text-primary" },
+  destructive: { line: "bg-destructive forced-colors:bg-[CanvasText]", label: "text-destructive" },
+  success: { line: "bg-success forced-colors:bg-[CanvasText]", label: "text-success" },
+  warning: { line: "bg-warning forced-colors:bg-[CanvasText]", label: "text-warning" },
+} as const;
 
 /**
  * A thin line in the theme's border color between groups of content, horizontal or
  * vertical. Built on Base UI's Separator, so it is a `role="separator"` with its
  * orientation for screen readers, unless `decorative`. With `label` it is a horizontal
- * line with a word in its middle, such as "or" between two ways to sign in.
+ * line with a word in its middle, such as "or" between two ways to sign in. With `tone`
+ * the lines and the label take the tone's color, such as an accent line where unread
+ * messages start.
  *
  * Use spacing (margins or a gap) instead when whitespace alone separates the groups,
  * and a `Heading` when the next group needs a name.
@@ -69,12 +93,14 @@ const line = "h-px min-w-0 flex-1 shrink border-0 bg-border";
  *   <Button variant="plain">Share</Button>
  * </div>
  * <Separator label="or" className="my-6" />
+ * <Separator tone="primary" label="New since you left · 2 messages" />
  * @claim "With `label` it is a horizontal" registry/ouro/components/ouro/separator/separator.test.tsx verify:testExists(registry/ouro/components/ouro/separator/separator.test.tsx::Separator > puts a label in the middle of a horizontal line, read as text while the lines are hidden)
  */
 export function Separator(props: SeparatorProps): JSX.Element {
   const {
     orientation: orientationProp = "horizontal",
     decorative,
+    tone: toneProp,
     label,
     className,
     // Guard props (hint types), dropped here so they never reach the DOM.
@@ -86,6 +112,10 @@ export function Separator(props: SeparatorProps): JSX.Element {
   // An orientation that is not one of Ouro UI's (a type error) warns and renders horizontal.
   const orientation = Object.hasOwn(orientations, orientationProp) ? (orientationProp as keyof typeof orientations) : "horizontal";
   const labelled = label != null && label !== false;
+  // A tone that is not one of Ouro UI's (a type error) warns and renders the default.
+  const tone = Object.hasOwn(tones, String(toneProp)) ? (toneProp as keyof typeof tones) : undefined;
+  const lineColor = tone ? tones[tone].line : "bg-border";
+  const labelColor = tone ? tones[tone].label : "text-muted-foreground";
   useAppearanceClassNameCheck(
     "Separator",
     className,
@@ -102,6 +132,10 @@ export function Separator(props: SeparatorProps): JSX.Element {
             `orientation="${String(orientationProp)}" is not an orientation; use "horizontal", "vertical"`,
             /col|vert|^y$/i.test(String(orientationProp)) ? '<Separator orientation="vertical" />' : '<Separator orientation="horizontal" />',
           ],
+          tone !== toneProp &&
+            (toneProp === "neutral"
+              ? ['tone="neutral" is not a tone; a line without a tone is the default', "<Separator>"]
+              : toneWarning("Separator", String(toneProp), Object.keys(tones))),
           children !== undefined && ["Separator takes no children; its text is label", `<Separator label="${typeof children === "string" ? children : "or"}" />`],
           text !== undefined && ["text is not a prop", `<Separator label="${typeof text === "string" ? text : "or"}" />`],
           labelled && orientation === "vertical" && ["label works on a horizontal line only, so the line renders horizontal", `<Separator label="or" />`],
@@ -117,11 +151,11 @@ export function Separator(props: SeparatorProps): JSX.Element {
         data-orientation="horizontal"
         className={cn("flex w-full min-w-0 items-center gap-3", className)}
       >
-        <BaseSeparator role="none" aria-orientation={undefined} data-slot="separator-line" className={line} />
-        <span data-slot="separator-label" className="max-w-full shrink-0 text-center text-sm leading-5 text-muted-foreground">
+        <BaseSeparator role="none" aria-orientation={undefined} data-slot="separator-line" className={cn(line, lineColor)} />
+        <span data-slot="separator-label" className={cn("max-w-full shrink-0 text-center text-sm leading-5", labelColor)}>
           {label}
         </span>
-        <BaseSeparator role="none" aria-orientation={undefined} data-slot="separator-line" className={line} />
+        <BaseSeparator role="none" aria-orientation={undefined} data-slot="separator-line" className={cn(line, lineColor)} />
       </div>
     );
   }
@@ -131,7 +165,7 @@ export function Separator(props: SeparatorProps): JSX.Element {
       orientation={orientation}
       {...(decorative ? { role: "none", "aria-orientation": undefined } : {})}
       data-ouro="separator"
-      className={cn("shrink-0 border-0 bg-border", orientations[orientation], className)}
+      className={cn("shrink-0 border-0", lineColor, orientations[orientation], className)}
     />
   );
 }

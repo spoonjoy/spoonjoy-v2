@@ -220,6 +220,10 @@ export function CodeBlock(props: CodeBlockProps): JSX.Element {
           className="col-start-2 row-start-1 self-center me-1.5"
         />
       ) : null}
+      {bar ? (
+        // The code's fade would fade a hairline drawn on the code, so it sits beside the code, under its transparent top border (#530).
+        <span aria-hidden="true" data-slot="rule" className="pointer-events-none col-span-2 col-start-1 row-start-2 h-px self-start border-0 border-t border-solid border-border" />
+      ) : null}
       <pre
         ref={scrollable}
         data-ouro-control="code-block"
@@ -227,7 +231,7 @@ export function CodeBlock(props: CodeBlockProps): JSX.Element {
         className={cn(
           "col-span-2 col-start-1 m-0 min-h-0 overflow-auto p-4 font-mono text-sm leading-6 outline-none",
           scrollFadeClass,
-          bar ? "row-start-2 border-0 border-t border-solid border-border" : "row-start-1",
+          bar ? "row-start-2 border-0 border-t border-solid border-transparent" : "row-start-1",
           wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
         )}
       >
