@@ -1,7 +1,7 @@
 name: Real Ouro HX CLI and strict consumer proof
 on:
   push:
-    branches: [feat/test-kitchen, feat/hx-v120-items]
+    branches: [feat/test-kitchen, feat/hx-v120-items, all-actions/hx-bump]
 permissions:
   contents: read
 concurrency:
