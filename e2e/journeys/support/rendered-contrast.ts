@@ -137,7 +137,7 @@ function installHelpers(): void {
         // Transparent glyphs with no shadow or stroke paint nothing: a mirror of a field's text,
         // drawn only to place marks under its words, has no contrast to keep.
         painted: !(
-          transparent(style.getPropertyValue("-webkit-text-fill-color") || style.color) &&
+          noAlpha(style.getPropertyValue("-webkit-text-fill-color") || style.color) &&
           style.textShadow === "none" &&
           !(parseFloat(style.getPropertyValue("-webkit-text-stroke-width")) > 0)
         ),
@@ -215,7 +215,7 @@ function installHelpers(): void {
     // what the text sits on. Its tints keep painting.
     for (const node of Array.from(document.querySelectorAll('[aria-hidden="true"], [aria-hidden="true"] *'))) {
       const style = getComputedStyle(node);
-      if (transparent(style.getPropertyValue("-webkit-text-fill-color") || style.color)) override(node, "text-decoration-color", "transparent");
+      if (noAlpha(style.getPropertyValue("-webkit-text-fill-color") || style.color)) override(node, "text-decoration-color", "transparent");
     }
     for (const node of [element, ...Array.from(element.querySelectorAll("*"))]) {
       override(node, "-webkit-text-fill-color", "transparent");
@@ -229,6 +229,8 @@ function installHelpers(): void {
   // backdrop filter, replaced content (an image, video, canvas, svg or frame), or text at the point,
   // its own or in its ::before or ::after. A transparent layer, such as a link stretched over a
   // card to make it one target, hides nothing.
+  // A colour with zero alpha. Stricter than transparent(), which also takes opaque black, rgb(0, 0, 0).
+  const noAlpha = (color: string) => /^rgba\([^,]+,[^,]+,[^,]+,\s*0(?:\.0+)?\)$|^transparent$|\/\s*0\)$/.test(color.trim());
   const transparent = (color: string) => /^rgba?\(.*,\s*0\)$|^transparent$|\/\s*0\)$/.test(color.trim());
   const paintsAt = (layer: Element, x: number, y: number) => {
     if (layer instanceof HTMLImageElement || layer instanceof HTMLVideoElement || layer instanceof HTMLCanvasElement || layer instanceof SVGElement || layer instanceof HTMLIFrameElement) return true;
