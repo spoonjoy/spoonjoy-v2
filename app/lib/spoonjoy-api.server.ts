@@ -3791,7 +3791,7 @@ export async function callSpoonjoyApiOperation(
   context: SpoonjoyApiContext
 ): Promise<unknown> {
   const tool = tools.find((candidate) => candidate.name === name);
-  if (!tool) throw new Error(`Unknown Spoonjoy operation: ${name}`);
+  if (!tool) throw new Error(`Unknown Spoonjoy operation: ${name}. Fix: call tools/list for the tool names.`);
   assertToolScopes(tool, context);
   assertNoUnknownArguments(tool.inputSchema, args, name);
   return tool.handle(args, context);
