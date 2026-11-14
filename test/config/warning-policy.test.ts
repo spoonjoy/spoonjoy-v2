@@ -1107,7 +1107,7 @@ describe("Playwright warning policy", () => {
     fakeContext.pages = () => [page];
     const runFixture = exported.runBrowserDiagnosticFixture as (
       context: typeof fakeContext,
-      use: (diagnostics: { expect(pattern: RegExp): void }) => Promise<void>,
+      use: (diagnostics: { expect(pattern: RegExp): void; allow(pattern: RegExp): void }) => Promise<void>,
     ) => Promise<void>;
 
     expect(hasAutomaticDiagnosticFixture(fixture)).toBe(true);
@@ -1122,6 +1122,13 @@ describe("Playwright warning policy", () => {
     await expect(runFixture(fakeContext, async (diagnostics) => {
       diagnostics.expect(/fixture-owned warning/);
       page.emit("console", { type: () => "warning", text: () => "fixture-owned warning" });
+    })).resolves.toBeUndefined();
+    await expect(runFixture(fakeContext, async (diagnostics) => {
+      diagnostics.allow(/fixture-tolerated warning/);
+      page.emit("console", { type: () => "warning", text: () => "fixture-tolerated warning" });
+    })).resolves.toBeUndefined();
+    await expect(runFixture(fakeContext, async (diagnostics) => {
+      diagnostics.allow(/fixture-tolerated warning/);
     })).resolves.toBeUndefined();
 
     const automaticContext = new FakeEmitter() as FakeEmitter & { pages(): FakeEmitter[] };
