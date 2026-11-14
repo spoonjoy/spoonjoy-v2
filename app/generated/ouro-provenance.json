@@ -927,6 +927,7 @@
       "file": "app/routes/agent.connect.$requestId.tsx",
       "sources": [
         "app/routes/agent.connect.$requestId.tsx",
+        "actions/generated/web.ts",
         "app/lib/agent-connection-route.server.ts",
         "app/lib/agent-connection-scopes.ts",
         "app/lib/agent-connection.server.ts",
@@ -3075,6 +3076,7 @@
       "file": "app/routes/shopping-list.tsx",
       "sources": [
         "app/routes/shopping-list.tsx",
+        "actions/generated/web.ts",
         "app/components/cookbook/page.tsx",
         "app/hooks/use-write-token.ts",
         "app/lib/analytics-server.ts",
@@ -3108,7 +3110,8 @@
         "app/lib/shopping-list-parser.ts",
         "app/lib/shopping-list-reads.server.ts",
         "app/lib/shopping-list.server.ts",
-        "app/lib/slow-call.server.ts"
+        "app/lib/slow-call.server.ts",
+        "app/lib/webmcp-actions.ts"
       ],
       "components": [
         "button",
