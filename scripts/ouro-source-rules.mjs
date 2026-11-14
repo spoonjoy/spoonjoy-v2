@@ -102,9 +102,15 @@ import ts from "typescript";
 //   of ==, !=, === and !== and `case` labels, the value of an attribute or object property named
 //   in NOT_COPY_ATTRIBUTE (className and the like, data-*, id, key, type, href, src, to, name, role,
 //   htmlFor, as), and a string that is one lowercase token ("error", "load-failed": a status, not
-//   copy). A template with a substitution, or JSX text beside other children (`{count} failed`), is
-//   never bare. `failureCopyAllow` lets a precise text through, each entry with its reason. It
-//   counts where the text is written and never makes the component around it a hand-rolled control.
+//   copy). Also not copy: the first argument of includes, startsWith, endsWith, has and test (a
+//   string matched against, not shown), a string in a `new Set([...])` that is only used for
+//   `.has(…)` membership, and the class name in `x.name || "Error"`. A heading or label that names
+//   the topic ("Errors", "Machine errors", "Common failures": at most two words before a plural,
+//   none an action) is not a bare failure either. A template with a substitution, or JSX text
+//   beside other children (`{count} failed`), is never bare. `failureCopyAllow` lets a precise text
+//   through, each entry with its reason, and is where a protocol's own wording ("Parse error")
+//   goes. It counts where the text is written and never makes the component around it a
+//   hand-rolled control.
 // - uses-hand-rolled-control: a JSX use of an imported app component that is offending, counted at
 //   the call site. A component is offending when an offender sits inside it, or it renders an
 //   offending component (same file or imported), to a fixed point across modules: a wrapper
@@ -227,6 +233,11 @@ export const LEAD_FAILURE = /^[^\p{L}\p{N}]*(?:\p{L}[\p{L}'’-]*\s+){0,2}(?:err
 // Words before "error" or "failed" that make the text other than a failure: a negation ("No errors",
 // "Nothing failed") or an action ("Show errors", "Retry failed").
 export const NOT_BARE_LEADS = ["no", "nothing", "zero", "none", "show", "hide", "retry", "clear"];
+// A heading or label that names a topic: a plural "errors" or "failures" with at most two words
+// before it, none of them an action (TOPIC_VERBS), so "Errors" and "Machine errors" pass and
+// "Fix errors" does not.
+const TOPIC_LABEL = /^[^\p{L}\p{N}]*((?:\p{L}[\p{L}'’-]*\s+){0,2})(?:errors|failures)[^\p{L}\p{N}]*$/iu;
+const TOPIC_VERBS = ["fix", "view", "see", "check", "handle", "resolve", "dismiss", "ignore", "skip", "report", "review", "reset", "copy", "send", "catch", "log", "get", "got", "had", "has", "have", "is", "are", "was", "were", "be", "found", "make", "made"];
 const SENTENCE_END = /[.!?](?=\s|$)/u;
 const WORD = /\p{L}[\p{L}\p{N}'’-]*/gu;
 
@@ -245,6 +256,12 @@ export function statesCause(rest) {
 }
 
 const leadWords = (text) => [...text.toLowerCase().matchAll(WORD)].map((match) => match[0]);
+
+// Whether a whole text is a heading or label that names a topic ("Machine errors"), not a failure.
+const isTopicLabel = (text) => {
+  const match = TOPIC_LABEL.exec(text.trim());
+  return match !== null && !leadWords(match[1]).some((word) => TOPIC_VERBS.includes(word));
+};
 
 /**
  * The vague failure phrase in `text`, by its canonical name, or undefined. Every occurrence of a
@@ -265,7 +282,7 @@ export function vagueFailurePhrase(text, { whole = true } = {}) {
   const word = (failure) => (/\berrors?\b/i.test(failure) ? "bare error" : "bare failed");
   const lead = LEAD_FAILURE.exec(trimmed);
   if (lead && !leadWords(lead[0]).some((w) => NOT_BARE_LEADS.includes(w))) return statesCause(trimmed.slice(lead[0].length - lead[1].length)) ? undefined : word(lead[0]);
-  if (!whole || !BARE_FAILURE.test(trimmed)) return undefined;
+  if (!whole || !BARE_FAILURE.test(trimmed) || isTopicLabel(trimmed)) return undefined;
   if (leadWords(trimmed).slice(0, -1).some((w) => NOT_BARE_LEADS.includes(w))) return undefined;
   return word(trimmed);
 }
@@ -305,7 +322,7 @@ export const HAND_DRAWN_HERO_FIX =
   "Use Hero from the registry (`<Hero title=\"...\" picture={{ light, dark }} />`), so its light and dark art, squircle frame and layout, and any change to heroes, reach this one too.";
 /** What the hand-drawn-corner rule tells an app to do. */
 export const HAND_DRAWN_CORNER_FIX =
-  "Take the radius from the theme: a scale class (rounded-md, rounded-lg, rounded-xl) or var(--radius), so it takes the squircle corner shape (--ouro-corner-shape) and the raised radius with every other corner. A circle stays rounded-full, and a deliberate round corner is [corner-shape:round].";
+  "Take the radius from the theme: a scale class (rounded-md, rounded-lg, rounded-xl) or var(--radius), in a class, an inline style or a stylesheet, so it takes the squircle corner shape (--ouro-corner-shape) and the raised radius with every other corner. A circle, dot, thumb, ring or pill stays rounded-full; rounded-full on a large box that is not one takes the scale instead. A deliberate round corner is [corner-shape:round].";
 /** What the hand-drawn-switch rule tells an app to do. */
 export const HAND_DRAWN_SWITCH_FIX =
   "Use Switch from the registry (`<Switch label=\"...\" checked={on} onCheckedChange={setOn} />`), so it gets the Quiet glass look (the --ouro-glass tokens), focus, touch target and any change to switches.";
@@ -1009,6 +1026,41 @@ const fixedRadius = (token) => {
   return value !== undefined && !CIRCLE_RADIUS.test(value.replace(/_/g, " "));
 };
 
+const RADIUS_PROPERTY = /^border(?:(?:Top|Bottom)(?:Left|Right)|(?:Start|End)(?:Start|End))?Radius$/;
+const RADIUS_DECLARATION = /^border(?:-(?:top|bottom)-(?:left|right)|-(?:start|end)-(?:start|end))?-radius$/i;
+// A radius value that follows the theme, is a circle or is zero; anything else is a hand-set corner.
+const themedRadius = (value) => {
+  const text = value.trim().replace(/\s+/g, " ");
+  return /^(?:inherit|initial|unset|revert)$/i.test(text) || /var\(|^calc\(var/.test(text) || text.split(/[\s/]+/).every((part) => CIRCLE_RADIUS.test(part));
+};
+// Whether an inline style object sets a corner radius by hand (`style={{ borderRadius: 12 }}`).
+function inlineRadius(initializer) {
+  const expression = initializer && ts.isJsxExpression(initializer) ? initializer.expression : initializer;
+  return [...objectAttributes(expression && ts.isObjectLiteralExpression(expression) ? expression : undefined)].some(([name, value]) => {
+    if (!RADIUS_PROPERTY.test(name)) return false;
+    if (ts.isNumericLiteral(value)) return Number(value.text) !== 0;
+    if (ts.isStringLiteralLike(value)) return !themedRadius(value.text);
+    return false;
+  });
+}
+// `rounded-full` on a box that is not a dot, pill, thumb or ring: a block that is wide and tall (both
+// sides over 48px, and not alike), or a structural element. Squares, small pills and pictures are round parts.
+const ROUND_PART_MARKER = /(?:^|[-_:\s])(?:dot|thumb|ring|pill|badge|avatar|spinner|circle|chip|tag|knob|handle|track|bar)(?:$|[-_\s])/i;
+const STRUCTURAL_TAG = /^(?:section|article|main|aside|header|footer|nav|form|table|ul|ol|li|p|h[1-6])$/;
+function roundedBlock(tokens, tag, classStrings) {
+  if (!tokens.includes("rounded-full") || tokens.some((token) => SPIN_CLASS.test(token))) return false;
+  if (tag === "img" || tokens.some((token) => ROUND_PART_MARKER.test(token)) || classStrings.some((text) => ROUND_PART_MARKER.test(text))) return false;
+  if (STRUCTURAL_TAG.test(tag) && tokens.some((token) => /^(?:p|px|py|min-h|min-w|w|h)-/.test(token))) return true;
+  const sizes = new Map();
+  for (const token of tokens) {
+    const match = SIZE_STEP.exec(token);
+    if (match) sizes.set(token.split("-")[0], Number(match[1]));
+  }
+  const h = sizes.get("size") ?? sizes.get("h");
+  const w = sizes.get("size") ?? sizes.get("w");
+  return h !== undefined && w !== undefined && h !== w && Math.min(h, w) > 12;
+}
+
 const BUTTON_MODULE = /(?:^|\/)button\/button(?:\.[cm]?[jt]sx?)?$/;
 
 // Failure copy: the attributes and object properties whose values are not copy, a string that is
@@ -1024,6 +1076,61 @@ const EQUALITY = new Set([
   ts.SyntaxKind.ExclamationEqualsEqualsToken,
 ]);
 const copySpace = (text) => text.replace(APOSTROPHE_ENTITY, "'").replace(/\s+/g, " ").trim();
+// A string that is the first argument of a membership test is matched against, not shown.
+const MEMBERSHIP_METHODS = new Set(["includes", "startsWith", "endsWith", "has", "test"]);
+const isMembershipArgument = (call, node) =>
+  call.arguments[0] === node && ts.isPropertyAccessExpression(call.expression) && MEMBERSHIP_METHODS.has(call.expression.name.text);
+// `error.name || "Error"`: a class name for a missing name, not a message.
+const ERROR_CLASS_NAME = /^(?:[A-Z][a-z]*)*(?:Error|Exception)$/;
+const isNameFallback = (binary, node) =>
+  (binary.operatorToken.kind === ts.SyntaxKind.BarBarToken || binary.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) &&
+  binary.right === node &&
+  ts.isPropertyAccessExpression(binary.left) &&
+  binary.left.name.text === "name" &&
+  ts.isStringLiteral(node) &&
+  ERROR_CLASS_NAME.test(node.text);
+
+const membershipArraysByFile = new WeakMap();
+const isSetOf = (node) =>
+  ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Set" && node.arguments?.length === 1 && ts.isArrayLiteralExpression(node.arguments[0]);
+// The `.has(…)` receiver: `x.has(…)` with x the node.
+const isMembershipReceiver = (node) =>
+  ts.isPropertyAccessExpression(node.parent) &&
+  node.parent.expression === node &&
+  node.parent.name.text === "has" &&
+  ts.isCallExpression(node.parent.parent) &&
+  node.parent.parent.expression === node.parent;
+
+// The array literals of the Sets a file only tests membership in: `new Set([...]).has(x)` inline, and a
+// `const` Set that is not exported and whose every use in the file is `Name.has(…)`. The walk is by name,
+// not by scope, so another binding of the same name that is used some other way keeps the Set read.
+function membershipArraysOf(sourceFile) {
+  if (membershipArraysByFile.has(sourceFile)) return membershipArraysByFile.get(sourceFile);
+  const arrays = new Set();
+  const candidates = [];
+  const used = new Set();
+  const visit = (node) => {
+    if (isSetOf(node) && isMembershipReceiver(node)) arrays.add(node.arguments[0]);
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      isSetOf(node.initializer) &&
+      node.parent.flags & ts.NodeFlags.Const &&
+      !(ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Export)
+    ) {
+      candidates.push({ name: node.name.text, array: node.initializer.arguments[0] });
+    }
+    if (ts.isIdentifier(node) && !(ts.isVariableDeclaration(node.parent) && node.parent.name === node) && !isMembershipReceiver(node)) {
+      used.add(node.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  for (const { name, array } of candidates) if (!used.has(name)) arrays.add(array);
+  membershipArraysByFile.set(sourceFile, arrays);
+  return arrays;
+}
 
 // Whether a string or template stands where copy would: not a module specifier, a type, a key, a
 // tagged template, a compared value, or the value of an attribute or property in NOT_COPY_ATTRIBUTE.
@@ -1040,7 +1147,9 @@ function isCopyPosition(node) {
     parent.name === node ||
     (ts.isElementAccessExpression(parent) && parent.argumentExpression === node) ||
     (ts.isCallExpression(parent) && (parent.expression.kind === ts.SyntaxKind.ImportKeyword || parent.expression.getText() === "require")) ||
-    (ts.isBinaryExpression(parent) && EQUALITY.has(parent.operatorToken.kind))
+    (ts.isCallExpression(parent) && isMembershipArgument(parent, node)) ||
+    (ts.isBinaryExpression(parent) && (EQUALITY.has(parent.operatorToken.kind) || isNameFallback(parent, node))) ||
+    (ts.isArrayLiteralExpression(parent) && membershipArraysOf(node.getSourceFile()).has(parent))
   ) {
     return false;
   }
@@ -1588,7 +1697,10 @@ function scanScript(module, resolver, failureCopyAllow) {
       if (drawn) offenders.push({ category: drawn, fingerprint: [file, componentName(node), drawn, control.display, props].join("::"), file, line: lineOf(node) });
     }
     // Counted where it is written, like a spinner. Only an intrinsic element counts, so a registry component and its className never do.
-    if (control.tags.length === 1 && fixedRadiusIn(classStrings)) {
+    if (
+      control.tags.length === 1 &&
+      (fixedRadiusIn(classStrings) || inlineRadius(attributes.get("style")) || roundedBlock(baseTokens(classStrings), control.tags[0], classStrings))
+    ) {
       offenders.push({ category: "hand-drawn-corner", fingerprint: [file, componentName(node), "hand-drawn-corner", control.display, props].join("::"), file, line: lineOf(node) });
     }
   };
@@ -1751,6 +1863,15 @@ function scanStylesheet(file, source, hook = ANY_HOOK) {
         const found = token && layoutAnimationClass(token);
         if (found) addLayout(node, scope, `@apply ${token}`);
       }
+    }
+    if (node.type === "decl" && RADIUS_DECLARATION.test(node.prop) && !themedRadius(node.value) && !ROUND_PART_MARKER.test(rules.join(" "))) {
+      const scope = rules.join(" ");
+      offenders.push({
+        category: "hand-drawn-corner",
+        fingerprint: [file, "(stylesheet)", "hand-drawn-corner", scope, node.prop].join("::"),
+        file,
+        line: node.source.start.line,
+      });
     }
     if (node.type === "decl" && /^(?:-webkit-)?transition(?:-property)?$/i.test(node.prop)) {
       const found = layoutTransitionProperty(node.value, { list: /property$/i.test(node.prop) });

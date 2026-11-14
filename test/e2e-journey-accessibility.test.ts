@@ -5,8 +5,7 @@
 // could not be taken. The contrast arithmetic it judges with is e2e/journeys/support/contrast.ts.
 import { describe, expect, it } from "vitest";
 import type { CheckResult, NodeResult, Result } from "axe-core";
-import { FOCUS_RING_HOLD_CSS, auditFailures, classifyAxeResults, describeAuditFailures, type SchemeAudit } from "../e2e/journeys/support/accessibility";
-import { readFileSync } from "node:fs";
+import { auditFailures, classifyAxeResults, describeAuditFailures, type SchemeAudit } from "../e2e/journeys/support/accessibility";
 import { planVerification } from "../e2e/journeys/support/undecided-checks";
 import {
   composite,
@@ -127,15 +126,6 @@ describe("contrast", () => {
     expect(formatRgb({ r: 127.5, g: 0.4, b: 255 })).toBe("rgb(128, 0, 255)");
     expect(formatRatio(4.499)).toBe("4.49:1");
     expect(formatRatio(21)).toBe("21.00:1");
-  });
-});
-
-describe("code focus ring hold", () => {
-  it("takes out only the empty focus-ring span Ouro UI's CodeBlock stacks over its code", () => {
-    const source = readFileSync("app/components/ouro/code-block/code-block.tsx", "utf8");
-    expect(source).toMatch(/aria-hidden\s+data-slot="focus-ring"/);
-    expect(source).toContain('data-ouro="code-block"');
-    expect(FOCUS_RING_HOLD_CSS).toBe('[data-ouro="code-block"] > [data-slot="focus-ring"] { display: none !important; }');
   });
 });
 

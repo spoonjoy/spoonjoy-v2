@@ -1191,6 +1191,60 @@ describe("ShowMore as its app renders again", () => {
     }
   });
 
+  it("measures only the ones that changed size, not every one that was measured before", async () => {
+    const { host } = await render(
+      <>
+        <div data-testid="still"><ShowMore lines={2}>{longText}</ShowMore></div>
+        <div data-testid="moving" style={{ width: 300 }}><ShowMore lines={2}>{longText}</ShowMore></div>
+      </>,
+    );
+    await settle();
+    const own = Object.getOwnPropertyDescriptor(Element.prototype, "scrollHeight")!;
+    const read: Element[] = [];
+    Object.defineProperty(Element.prototype, "scrollHeight", {
+      configurable: true,
+      get(this: Element) {
+        read.push(this);
+        return own.get!.call(this);
+      },
+    });
+    try {
+      host.querySelector<HTMLElement>("[data-testid=moving]")!.style.width = "200px";
+      await settle();
+      const text = (id: string) => host.querySelector(`[data-testid=${id}] [data-ouro-show-more-text]`);
+      expect(read).toContain(text("moving"));
+      expect(read).not.toContain(text("still"));
+    } finally {
+      Object.defineProperty(Element.prototype, "scrollHeight", own);
+    }
+  });
+
+  it("does not measure one that unmounted before its first frame", async () => {
+    const host = document.createElement("div");
+    host.style.width = "360px";
+    document.body.append(host);
+    mounted.push(host);
+    const root = createRoot(host);
+    roots.push(root);
+    const own = Object.getOwnPropertyDescriptor(Element.prototype, "scrollHeight")!;
+    let reads = 0;
+    Object.defineProperty(Element.prototype, "scrollHeight", {
+      configurable: true,
+      get(this: Element) {
+        reads++;
+        return own.get!.call(this);
+      },
+    });
+    try {
+      flushSync(() => root.render(<ShowMore lines={2}>{longText}</ShowMore>));
+      flushSync(() => root.render(null));
+      await settle();
+      expect(reads).toBe(0);
+    } finally {
+      Object.defineProperty(Element.prototype, "scrollHeight", own);
+    }
+  });
+
   it("starts watching again only when it opens or closes or its lines change", async () => {
     // Every ShowMore shares one observer: what counts is how often this one asks it to watch.
     const observe = vi.spyOn(ResizeObserver.prototype, "observe");

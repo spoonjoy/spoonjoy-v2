@@ -51,7 +51,10 @@ test("a screen reader finds every toast and its buttons in the collapsed stack, 
 });
 
 test("F6 moves focus to the toasts, and Escape closes the focused one", async ({ page }) => {
+  await page.clock.install();
   await openStory(page, "feedback-toast--stack");
+  // The timed toasts wait for the clock, which stands still from here, so none runs out while the keys are pressed.
+  await holdClock(page);
   // The front toast is destructive: an alertdialog.
   const toasts = page.locator('[data-ouro="toast"]');
   await expect(toasts).toHaveCount(3);
@@ -60,5 +63,7 @@ test("F6 moves focus to the toasts, and Escape closes the focused one", async ({
   const focused = page.locator('[data-ouro="toast"]:focus');
   await expect(focused).toHaveCount(1);
   await page.keyboard.press("Escape");
+  // Base UI removes a closed toast on the clock; focus stays in the stack, which keeps the others' countdowns paused.
+  await page.clock.resume();
   await expect(toasts).toHaveCount(2);
 });

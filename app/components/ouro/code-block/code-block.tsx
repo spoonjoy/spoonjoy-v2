@@ -137,7 +137,7 @@ function CodeWithEmoji({ code, catalogue }: { code: string; catalogue: EmojiCata
  * @group Display
  * @see https://ui.ouroboros.bot/docs/code-block
  *
- * @claim "fading out at the side where a long line goes on" registry/ouro/components/ouro/code-block/code-block.test.tsx verify:testExists(registry/ouro/components/ouro/code-block/code-block.test.tsx::CodeBlock > fades out at the side where a long line goes on, with its focus ring over the fade)
+ * @claim "fading out at the side where a long line goes on" registry/ouro/components/ouro/code-block/code-block.test.tsx verify:testExists(registry/ouro/components/ouro/code-block/code-block.test.tsx::CodeBlock > fades out at the side where a long line goes on, with its focus ring outside the fade)
  * @example
  * <CodeBlock language="bash" code="npx shadcn@latest add button" />
  * <CodeBlock title="vite.config.ts" code={config} className="max-h-80" />
@@ -183,6 +183,9 @@ export function CodeBlock(props: CodeBlockProps): JSX.Element {
   const scrollable = useMergedRef(useScrollableCode(), fadeRef);
   const caption = title ?? language;
   const bar = caption != null || copy;
+  // The focus ring is the figure's outline, not an element over the code: axe reads an element over
+  // a line of text as hiding its background, so it could not judge the text's contrast and measured each
+  // line from a screenshot. The code's mask would also hide an outline on the code itself.
   // The caption and the copy button share the bar above the code as siblings in the grid: a
   // <figcaption> names the figure, so the button stays out of it.
   return (
@@ -192,7 +195,7 @@ export function CodeBlock(props: CodeBlockProps): JSX.Element {
       data-ouro="code-block"
       data-language={language}
       className={cn(
-        "group/code-block [@layer_ouro-reset]:m-0 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-solid border-border bg-muted text-foreground",
+        "[@layer_ouro-reset]:m-0 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-solid border-border bg-muted text-foreground outline-ring outline-offset-2 has-[>[data-ouro-part=code]:focus-visible]:outline-2 has-[>[data-ouro-part=code]:focus-visible]:outline-solid",
         bar ? "grid-rows-[minmax(calc(var(--spacing)*11),auto)_minmax(0,1fr)]" : "grid-rows-[minmax(0,1fr)]",
         className,
       )}
@@ -217,17 +220,6 @@ export function CodeBlock(props: CodeBlockProps): JSX.Element {
           className="col-start-2 row-start-1 self-center me-1.5"
         />
       ) : null}
-      {/* The code's focus ring, over it in the same cell, so the code's edge fade never hides it. It comes before the
-          code, so a selection that runs to the code's end in WebKit gains no line break from a block after it. */}
-      <span
-        aria-hidden
-        data-slot="focus-ring"
-        className={cn(
-          "pointer-events-none relative z-1 col-span-2 col-start-1 outline-ring -outline-offset-2",
-          "group-has-[>[data-ouro-part=code]:focus-visible]/code-block:outline-2 group-has-[>[data-ouro-part=code]:focus-visible]/code-block:outline-solid",
-          bar ? "row-start-2" : "row-start-1",
-        )}
-      />
       <pre
         ref={scrollable}
         data-ouro-control="code-block"

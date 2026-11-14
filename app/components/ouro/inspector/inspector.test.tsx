@@ -95,6 +95,15 @@ function onTarget(outline: HTMLElement, target: Element) {
   return [a.left - b.left, a.top - b.top, a.width - b.width, a.height - b.height].every((delta) => Math.abs(delta) <= 1);
 }
 
+/** The middle of the scrollport, where scrollIntoView({ block: "center" }) centres: the screen less the root's scroll-padding. */
+function scrollportMiddle() {
+  const style = getComputedStyle(document.documentElement);
+  // The initial scroll-padding is auto, which counts as 0 but computes to "auto".
+  const top = Number.parseFloat(style.scrollPaddingTop) || 0;
+  const bottom = Number.parseFloat(style.scrollPaddingBottom) || 0;
+  return top + (innerHeight - top - bottom) / 2;
+}
+
 /** The tag of the outline on a component, once the outline is on it. */
 const tagOn = (target: Element) => outlines().find((outline) => onTarget(outline, target))?.querySelector<HTMLElement>('[data-ouro-part="tag"]');
 
@@ -1194,8 +1203,8 @@ describe("Inspector", () => {
     expect(into.mock.contexts[0]).toBe(first);
     expect(spotlit()[0]!.getAttribute("data-spotlight")).toBe("");
     expect(into.mock.calls[0]).toEqual([{ block: "center", inline: "nearest", behavior: "smooth" }]);
-    // The first badge comes to the middle of the screen.
-    await expect.poll(() => Math.abs(first!.getBoundingClientRect().top + first!.getBoundingClientRect().height / 2 - innerHeight / 2) < 2).toBe(true);
+    // The first badge comes to the middle of the scrollport, which scroll-padding can shorten.
+    await expect.poll(() => Math.abs(first!.getBoundingClientRect().top + first!.getBoundingClientRect().height / 2 - scrollportMiddle()) < 2).toBe(true);
     await expect.element(status()).toHaveTextContent("Showing badge");
     // The spotlit frame is the primary color in full, two pixels wide; the others stay as they were.
     const stroke = (outline: HTMLElement) => getComputedStyle(outline.querySelector("[data-ouro-inspector-frame]")!);
@@ -1219,6 +1228,19 @@ describe("Inspector", () => {
     await drawn(4);
     expect(into).toHaveBeenCalledTimes(1);
     expect(first!.getBoundingClientRect().top).toBeGreaterThan(innerHeight);
+  });
+
+  it("centres the spotlit item in the scrollport its root's scroll-padding leaves, as a phone's tab bar does", async () => {
+    document.documentElement.style.scrollPaddingBottom = "96px";
+    try {
+      const { host } = await render(<Far spotlight="badge" />);
+      await drawn(3);
+      const [, first] = pageRoots(host);
+      await expect.poll(() => spotlit().length === 1 && onTarget(spotlit()[0]!, first!)).toBe(true);
+      await expect.poll(() => Math.abs(first!.getBoundingClientRect().top + first!.getBoundingClientRect().height / 2 - (innerHeight - 96) / 2) < 2).toBe(true);
+    } finally {
+      document.documentElement.style.removeProperty("scroll-padding-bottom");
+    }
   });
 
   it("prefers the first spotlit item in the page's main content to one in its header", async () => {

@@ -202,13 +202,20 @@ function CloseIcon(): JSX.Element {
 const FOCUSABLE =
   "a[href], button:not(:disabled), input:not(:disabled):not([type='hidden']), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])";
 
+/** The fields a person types into or picks from. A footer's buttons are left out, so first focus is not on one that Return would press. */
+const TEXT_ENTRY =
+  "input:not(:disabled):not([type='hidden'], [type='button'], [type='submit'], [type='reset'], [type='image'], [type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file']), select:not(:disabled), textarea:not(:disabled)";
+
 /**
- * The element a dialog gives first focus: the first control in its body that can be seen, else its
- * close button, else the popup itself. The body is skipped: while it scrolls it is a tab stop, and
- * Base UI would focus it first.
+ * The element a dialog gives first focus: the first control in its body that can be seen, else a
+ * field in its footer, else its close button, else the popup itself. The body is skipped: while it
+ * scrolls it is a tab stop, and Base UI would focus it first.
  */
 function firstFocus(popup: HTMLElement): HTMLElement {
-  const candidates = [...popup.querySelectorAll<HTMLElement>(`[data-ouro-dialog-content] :is(${FOCUSABLE}), [data-ouro-dialog-close]`), popup];
+  const candidates = [
+    ...popup.querySelectorAll<HTMLElement>(`[data-ouro-dialog-content] :is(${FOCUSABLE}), [data-ouro-footer] :is(${TEXT_ENTRY}), [data-ouro-dialog-close]`),
+    popup,
+  ];
   return candidates.find((element) => element.getClientRects().length > 0)!;
 }
 
