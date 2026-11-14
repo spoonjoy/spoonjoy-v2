@@ -828,8 +828,12 @@ body:has(#cook) .sj-site-footer {
 
 /* Every rounded Ouro element takes the corner shape (only those: setting it on every element slowed paint). */
 @layer base {
-  :where([data-ouro], [data-ouro] *)[class*="rounded"] {
+  :where([data-ouro], [data-ouro] *)[class*="rounded"]:not([class*="rounded-full"]) {
     --corner-shape: var(--ouro-corner-shape);
     corner-shape: var(--ouro-corner-shape);
+  }
+  [class*="rounded-full"] {
+    --corner-shape: round;
+    corner-shape: round;
   }
 }

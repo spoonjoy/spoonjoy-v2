@@ -1593,6 +1593,48 @@ describe("first focus with a scrolling body", () => {
   });
 });
 
+describe("first focus with a field in the footer", () => {
+  const empty = <p style={{ margin: 0 }}>No cookbooks yet.</p>;
+  const newName = () => document.querySelector<HTMLElement>('input[aria-label="New cookbook"]');
+  async function openByKeyboard(children: ReactNode, footer: ReactNode) {
+    await render(
+      <Dialog title="Save to cookbook" trigger={<Button>Save</Button>} footer={footer}>
+        {children}
+      </Dialog>,
+    );
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+  }
+
+  it("puts first focus on a footer field, not on Close, when the body has no control", async () => {
+    await openByKeyboard(
+      empty,
+      <>
+        <input aria-label="New cookbook" />
+        <Button>Create</Button>
+      </>,
+    );
+    await expect.poll(() => document.activeElement).toBe(newName());
+  });
+
+  it("leaves the footer's buttons and checkboxes to Tab, and puts first focus on Close", async () => {
+    await openByKeyboard(
+      empty,
+      <>
+        <input type="checkbox" aria-label="Pin it" />
+        <Button>Create</Button>
+      </>,
+    );
+    await expect.poll(() => document.activeElement).toBe(document.querySelector("[data-ouro-dialog-close]"));
+  });
+
+  it("still puts first focus on the body's control before a footer field", async () => {
+    await openByKeyboard(<button>Pick a cookbook</button>, <input aria-label="New cookbook" />);
+    await expect.poll(() => document.activeElement?.textContent).toBe("Pick a cookbook");
+  });
+});
+
 describe("first focus after the last press, with and without a trigger", () => {
   const tall = <p style={{ margin: 0, height: 2000 }}>A long note.</p>;
   const name = () => document.querySelector<HTMLElement>('input[aria-label="Name"]');

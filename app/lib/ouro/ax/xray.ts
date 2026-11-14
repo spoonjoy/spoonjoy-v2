@@ -19,6 +19,10 @@ import { isGenericAudience, isOutcome, validateOutcome } from "./outcome.ts";
 import { hasAnsi, stripAnsi } from "./terminal.ts";
 import { isWait, validateWait } from "./wait.ts";
 import { checkWorkEvent } from "./work-event.ts";
+import { quietPipes, runCli } from "./cli.ts";
+import { defineCli, defineCommand, parse, type FlagSpec, type Input } from "./command.ts";
+import { defineExitCodes } from "./exit-codes.ts";
+import { AxError, isAxError } from "./problem.ts";
 
 /**
  * The Ouro AX conformance checker: it calls a CLI, an HTTP API or an MCP server the way an agent would, and reports
@@ -1634,93 +1638,158 @@ ${Object.entries(bySurface(report)).map(([k, rs]) => `<tr><th scope="row"><code>
 `;
 }
 
-const USAGE = `ax-xray ${XRAY_VERSION}: checks an agent-facing interface against the Ouro AX claims, from outside.
+/**
+ * The exit codes of the command line: 0 ok, 1 error (a must claim fails, or it does not conform), 2 usage.
+ *
+ * @claim "0 ok, 1 error (a must claim fails, or it does not conform), 2 usage" registry/ouro/ax/xray.test.mts verify:testExists(registry/ouro/ax/xray.test.mts::the command: claims, help, usage errors with the fix, exit codes, written reports)
+ */
+const exits = defineExitCodes();
 
-  node xray.ts --cli "<command>" [options]
-  node xray.ts --http <url> --routes <manifest.json> [options]
-  node xray.ts --mcp "<command>" [options]
-  node xray.ts claims [--json]        the standard: every claim, its tier, rule and check
-
-Options:
-  --inventory <file>     the surfaces your interface registers, generated from its own registration:
-                         { "cli": [names], "http": ["GET /api/x"], "mcp": [names], "ui": [bindAx entries] }
-  --conformance          exit 1 unless it conforms: every applicable must claim holds, none skipped, inventory given
-  --mock "<url> k=v"     prove the target is a mock: a loopback URL whose JSON has k=v (such as mock=true)
-  --guard "<command>"    run this first; refuse to check unless it exits 0 (it also proves a mock)
-  --home <dir>           the isolated home every checked program runs with
-  --env K=V              set an environment variable for every call (repeat); nothing else is passed on but PATH
-  --state "<args>"       CLI args whose output is the state that must not change (repeat)
-  --events "<args>"      CLI args that list the interface's work events, to validate
-  --commit <sha>         the commit checked, recorded in the report
-  --failure-copy-allow <file>
-                         failure copy that is precise but holds a vague phrase, each with its reason:
-                         [{ "match": "<part of the text>", "reason": "<why it is precise>" }]
-  --name <name>          the CLI's name in its messages (default: the command's file name)
-  --volatile k,k         JSON keys to ignore when comparing state
-  --sample k=v           a ref for <k> placeholders (repeat); others are harvested from reads
-  --width N              help width limit (default 100)
-  --timeout <ms>         per call (default 20000)
-  --json                 print the report as JSON
-  --md <file>            also write the report as Markdown
-  --html <file>          also write the report as a static HTML page
-Exit codes: 0 no must claim fails (with --conformance: it conforms), 1 a must claim fails or it does not conform, 2 usage or the guard refused.
-`;
-
-const FLAGS: Readonly<Record<string, boolean>> = Object.freeze({
-  "--cli": true, "--http": true, "--routes": true, "--mcp": true, "--name": true, "--env": true, "--guard": true, "--mock": true, "--home": true, "--inventory": true, "--events": true, "--commit": true, "--failure-copy-allow": true,
-  "--state": true, "--volatile": true, "--sample": true, "--width": true, "--timeout": true, "--json": false, "--conformance": false, "--md": true, "--html": true, "--help": false,
+/** The check's flags, as the kit parses them and `--help` lists them. */
+const CHECK_FLAGS: Readonly<Record<string, FlagSpec>> = Object.freeze({
+  cli: { type: "string", placeholder: '"<command>"', description: 'The CLI to check, run as a command line, such as "notes".' },
+  http: { type: "string", placeholder: "<url>", description: "The HTTP API to check, at its address. Needs --routes." },
+  routes: { type: "string", placeholder: "<manifest.json>", description: "The routes to check, with --http." },
+  mcp: { type: "string", placeholder: '"<command>"', description: "The MCP server to check, run over stdio as a command line." },
+  inventory: { type: "string", placeholder: "<file>", description: 'The surfaces your interface registers, generated from its own registration: { "cli": [names], "http": ["GET /api/x"], "mcp": [names], "ui": [bindAx entries] }.' },
+  conformance: { type: "boolean", description: "Exit 1 unless it conforms: every applicable must claim holds, none skipped, inventory given." },
+  mock: { type: "string", placeholder: '"<url> k=v"', description: "Prove the target is a mock: a loopback URL whose JSON has k=v, such as mock=true." },
+  guard: { type: "string", placeholder: '"<command>"', description: "Run this first; refuse to check unless it exits 0 (it also proves a mock)." },
+  home: { type: "string", placeholder: "<dir>", description: "The isolated home every checked program runs with." },
+  env: { type: "string", repeat: true, placeholder: "K=V", description: "An environment variable for every call; nothing else is passed on but PATH." },
+  state: { type: "string", repeat: true, placeholder: '"<args>"', description: "CLI args whose output is the state that must not change." },
+  events: { type: "string", placeholder: '"<args>"', description: "CLI args that list the interface's work events, to validate." },
+  commit: { type: "string", placeholder: "<sha>", description: "The commit checked, recorded in the report." },
+  "failure-copy-allow": { type: "string", placeholder: "<file>", description: 'Failure copy that is precise but holds a vague phrase, each with its reason: [{ "match": "<part of the text>", "reason": "<why it is precise>" }].' },
+  name: { type: "string", placeholder: "<name>", description: "The CLI's name in its messages (default: the command's file name)." },
+  volatile: { type: "list", placeholder: "<k,k>", description: "JSON keys to ignore when comparing state." },
+  sample: { type: "string", repeat: true, placeholder: "K=V", description: "A ref for <k> placeholders; others are harvested from reads." },
+  width: { type: "string", placeholder: "<N>", description: "Help width limit, a positive number (default 100)." },
+  timeout: { type: "string", placeholder: "<ms>", description: "Per call, a positive number of milliseconds (default 20000)." },
+  md: { type: "string", placeholder: "<file>", description: "Also write the report as Markdown." },
+  html: { type: "string", placeholder: "<file>", description: "Also write the report as a static HTML page." },
 });
 
-class UsageError extends Error {}
-
-function distance(a: string, b: string): number {
-  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array<number>(b.length).fill(0)]);
-  for (let j = 1; j <= b.length; j++) d[0]![j] = j;
-  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i]![j] = Math.min(d[i - 1]![j]! + 1, d[i]![j - 1]! + 1, d[i - 1]![j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
-  return d[a.length]![b.length]!;
+/** Whether a report fails the run: a must claim fails, or with --conformance, the interface does not conform. */
+function failsRun(report: Report, input: Input): boolean {
+  return input["conformance"] === true ? !report.conformant : report.claims.some((c) => c.tier === "must" && c.fail > 0);
 }
 
-function parseArgs(argv: readonly string[]): XrayOptions {
-  const o: XrayOptions = { env: {}, state: [], volatile: [], samples: {}, width: 100, timeoutMs: 20_000, json: false, conformance: false, command: null };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]!;
-    if (!a.startsWith("--")) {
-      if (o.command === null && (a === "claims" || a === "help")) {
-        o.command = a;
-        continue;
-      }
-      throw new UsageError(`unexpected "${a}". Fix: node xray.ts --help.`);
-    }
-    if (!(a in FLAGS)) {
-      const near = Object.keys(FLAGS).sort((x, y) => distance(a, x) - distance(a, y))[0];
-      throw new UsageError(`there is no ${a}. Fix: ${near}.`);
-    }
-    const v = FLAGS[a] ? argv[++i] : "";
-    if (v === undefined) throw new UsageError(`${a} needs a value. Fix: node xray.ts --help.`);
-    if (a === "--env" || a === "--sample") {
-      const eq = v.indexOf("=");
-      if (eq < 1) throw new UsageError(`${a} takes K=V, not "${v}". Fix: ${a} NAME=value.`);
-      (a === "--env" ? o.env : o.samples)[v.slice(0, eq)] = v.slice(eq + 1);
-    } else if (a === "--state") o.state.push(v);
-    else if (a === "--volatile") o.volatile = v.split(",").filter(Boolean);
-    else if (a === "--failure-copy-allow") o.failureCopyAllow = v;
-    else if (a === "--width" || a === "--timeout") {
-      const n = Number(v);
-      if (!Number.isFinite(n) || n <= 0) throw new UsageError(`${a} takes a positive number, not "${v}". Fix: ${a} ${a === "--width" ? 100 : 20000}.`);
-      if (a === "--width") o.width = n;
-      else o.timeoutMs = n;
-    } else if (a === "--json") o.json = true;
-    else if (a === "--conformance") o.conformance = true;
-    else if (a === "--help") o.command = "help";
-    else {
-      const key = a.slice(2) as "cli" | "http" | "routes" | "mcp" | "name" | "guard" | "mock" | "home" | "inventory" | "events" | "commit" | "md" | "html";
-      o[key] = v;
-    }
+/** The check: its options, then the report, with its --md and --html files written first. The kit prints the report. */
+async function checkRun(input: Input, json: boolean): Promise<Report> {
+  const o = optionsOf(input, json);
+  try {
+    const report = await xray(o);
+    if (o.md) writeFileSync(o.md, renderMarkdown(report));
+    if (o.html) writeFileSync(o.html, renderHtml(report));
+    return report;
+  } catch (e) {
+    if (isAxError(e)) throw e;
+    throw new AxError({ code: "check-stopped", exit: exits.code("error"), thing: "check", problem: `stopped before it finished: ${(e as Error).message}`, fix: null });
   }
-  if (o.http && !o.routes) throw new UsageError("--http needs --routes <manifest.json>, the routes to check. Fix: --routes routes.json.");
-  if (!o.command && !o.cli && !o.http && !o.mcp) throw new UsageError("nothing to check. Fix: give --cli, --http or --mcp; node xray.ts --help.");
-  if (o.conformance && !o.inventory) throw new UsageError("--conformance needs --inventory <file>, the surfaces your interface registers. Fix: --inventory inventory.json.");
+}
+
+const checkCommand = defineCommand<Report>({
+  name: "check",
+  summary: "Checks an interface against the Ouro AX claims, from outside, and reports which hold.",
+  effect: "private",
+  examples: ['ax-xray --cli "notes" --home .xray-home --mock "http://127.0.0.1:5999/api/state mock=true"'],
+  flags: CHECK_FLAGS,
+  output: "the report: the claims that hold, each surface's checks, and the fix for each claim that fails",
+  run: (input, ctx) => checkRun(input, ctx.json),
+  exit: (report, input) => (failsRun(report, input) ? "error" : "ok"),
+  text: (report) => renderText(report),
+});
+
+const claimsCommand = defineCommand<unknown>({
+  name: "claims",
+  summary: "Every claim, its tier, rule and check; --json gives the claim set as data, with its hash.",
+  effect: "private",
+  readOnly: true,
+  examples: ["ax-xray claims"],
+  output: "the claim set as data, with its hash",
+  run: () => ({ ...CLAIM_SET, hash: claimSetHash() }),
+  text: () => `${CLAIMS.map((c) => `${c.id} [${c.tier}] ${c.rule}\n    check: ${c.check}`).join("\n")}\n`,
+});
+
+const tool = defineCli({
+  name: "ax-xray",
+  about: [`ax-xray ${XRAY_VERSION}: checks an agent-facing interface against the Ouro AX claims, from outside.`],
+  exits,
+  command: checkCommand,
+  commands: [claimsCommand],
+});
+
+/** A refusal of the command line, or of a file it reads: one line with its fix, and the usage exit. */
+function refusal(code: string, thing: string, problem: string, fix: string | null): AxError {
+  return new AxError({ code, exit: exits.code("usage"), thing, problem, fix });
+}
+
+/**
+ * The K=V pairs in the order given; the last of a name wins, and a pair with no name or no equals sign is refused.
+ *
+ * @claim "a pair with no name or no equals sign is refused" registry/ouro/ax/xray.test.mts verify:testExists(registry/ouro/ax/xray.test.mts::the command: claims, help, usage errors with the fix, exit codes, written reports)
+ */
+function pairsOf(name: string, values: readonly string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const v of values) {
+    const eq = v.indexOf("=");
+    if (eq < 1) throw refusal("bad-value", `--${name}`, `takes K=V, not "${v}"`, `ax-xray --${name} NAME=value`);
+    out[v.slice(0, eq)] = v.slice(eq + 1);
+  }
+  return out;
+}
+
+/** A positive number, or the default when the flag is not given. */
+function positiveOf(name: string, raw: string | undefined, fallback: number): number {
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) throw refusal("bad-value", `--${name}`, `takes a positive number, not "${raw}"`, `ax-xray --${name} ${fallback}`);
+  return n;
+}
+
+/** The options the check takes from its parsed input, with the defaults; a missing or contradictory flag is refused. */
+function optionsOf(input: Input, json: boolean): XrayOptions {
+  const text = (name: string) => input[name] as string | undefined;
+  const repeated = (name: string) => (input[name] as readonly string[] | undefined) ?? [];
+  const o: XrayOptions = {
+    cli: text("cli"),
+    http: text("http"),
+    routes: text("routes"),
+    mcp: text("mcp"),
+    name: text("name"),
+    guard: text("guard"),
+    mock: text("mock"),
+    home: text("home"),
+    inventory: text("inventory"),
+    events: text("events"),
+    commit: text("commit"),
+    failureCopyAllow: text("failure-copy-allow"),
+    md: text("md"),
+    html: text("html"),
+    env: pairsOf("env", repeated("env")),
+    state: [...repeated("state")],
+    volatile: [...((input["volatile"] as readonly string[] | undefined) ?? [])],
+    samples: pairsOf("sample", repeated("sample")),
+    width: positiveOf("width", text("width"), 100),
+    timeoutMs: positiveOf("timeout", text("timeout"), 20_000),
+    json,
+    conformance: input["conformance"] === true,
+    command: null,
+  };
+  if (o.http && !o.routes) throw refusal("needs-routes", "--http", "needs --routes <manifest.json>, the routes to check", "ax-xray --http <url> --routes routes.json");
+  if (!o.cli && !o.http && !o.mcp) throw refusal("nothing-to-check", "check", "nothing to check", "give --cli, --http or --mcp; ax-xray --help");
+  if (o.conformance && !o.inventory) throw refusal("needs-inventory", "--conformance", "needs --inventory <file>, the surfaces your interface registers", "ax-xray --inventory inventory.json --conformance");
   return o;
+}
+
+/** The options a command line gives: `help`, `claims`, or the check's options. A refused flag or value throws an AxError. */
+function parseArgs(argv: readonly string[]): XrayOptions {
+  const parsed = parse(tool, argv);
+  const base = (json: boolean, command: XrayOptions["command"]): XrayOptions => ({ env: {}, state: [], volatile: [], samples: {}, width: 100, timeoutMs: 20_000, json, conformance: false, command });
+  if (parsed.kind === "help") return base(parsed.json, "help");
+  if (parsed.command.name === "claims") return base(parsed.json, "claims");
+  return optionsOf(parsed.input, parsed.json);
 }
 
 /** The allow-list of precise failure copy, checked; a usage error names the file and its bad entries. */
@@ -1728,7 +1797,7 @@ function readAllow(file: string): FailureCopyAllow[] {
   try {
     return checkFailureCopyAllow(JSON.parse(readFileSync(file, "utf8")));
   } catch (e) {
-    throw new UsageError(`--failure-copy-allow ${file}: ${(e as Error).message}`);
+    throw refusal("bad-allow-file", "--failure-copy-allow", `${file}: ${(e as Error).message}`, null);
   }
 }
 
@@ -1738,7 +1807,7 @@ async function xray(opts: XrayOptions): Promise<Report> {
   let guardPassed = false;
   if (opts.guard) {
     const g = await run(splitCommand(opts.guard), env, opts.timeoutMs);
-    if (g.code !== 0) throw new UsageError(`refusing: the guard failed: ${firstLine(g.stderr) || firstLine(g.stdout) || `exit ${String(g.code)}`}. Fix: point it at the mock.`);
+    if (g.code !== 0) throw refusal("guard-failed", "--guard", `refusing: the guard failed: ${firstLine(g.stderr) || firstLine(g.stdout) || `exit ${String(g.code)}`}`, "point it at the mock");
     guardPassed = true;
   }
   const inventory = opts.inventory ? (JSON.parse(readFileSync(opts.inventory, "utf8")) as Inventory) : null;
@@ -1757,33 +1826,15 @@ interface Io {
   stderr: { write(s: string): unknown };
 }
 
-/** The command: parses argv, runs, writes the reports; resolves the exit code. */
+/** The command: the kit parses argv, runs the check or `claims`, prints the report or the one error line, and resolves the exit code. */
 async function main(argv: readonly string[], io: Io = { stdout: process.stdout, stderr: process.stderr }): Promise<number> {
-  try {
-    const o = parseArgs(argv);
-    if (o.command === "help") {
-      io.stdout.write(USAGE);
-      return 0;
-    }
-    if (o.command === "claims") {
-      io.stdout.write(o.json ? `${JSON.stringify({ ...CLAIM_SET, hash: claimSetHash() }, null, 2)}\n` : `${CLAIMS.map((c) => `${c.id} [${c.tier}] ${c.rule}\n    check: ${c.check}`).join("\n")}\n`);
-      return 0;
-    }
-    const report = await xray(o);
-    if (o.md) writeFileSync(o.md, renderMarkdown(report));
-    if (o.html) writeFileSync(o.html, renderHtml(report));
-    io.stdout.write(o.json ? `${JSON.stringify(report, null, 2)}\n` : renderText(report));
-    if (o.conformance) return report.conformant ? 0 : 1;
-    return report.claims.some((c) => c.tier === "must" && c.fail > 0) ? 1 : 0;
-  } catch (e) {
-    io.stderr.write(`ax-xray: ${(e as Error).message}\n`);
-    return e instanceof UsageError ? 2 : 1;
-  }
+  return runCli(tool, argv, io);
 }
 
 // Run as a program (`node xray.ts ...`); the tests import it instead.
 /* node:coverage disable */
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href && fileURLToPath(import.meta.url)) {
+  quietPipes(process);
   process.exitCode = await main(process.argv.slice(2));
 }
 /* node:coverage enable */

@@ -1,8 +1,7 @@
 "use client";
 
 import { Toggle as BaseToggle } from "@base-ui/react/toggle";
-import { ToggleGroup as BaseToggleGroup } from "@base-ui/react/toggle-group";
-import { useId, type JSX, type Ref } from "react";
+import { useId, useState, type JSX, type KeyboardEvent, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { devThrow } from "~/lib/ouro/dev";
@@ -259,23 +258,51 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
   const labelId = useId();
+  // Stryker disable next-line ArrayDeclaration: an empty list and a stray entry press no item
+  const [inner, setInner] = useState<readonly string[]>(() => asList(defaultValue) ?? []);
+  const pressed = asList(value) ?? inner;
+  const [focused, setFocused] = useState<string | null>(null);
+  const enabled = items.filter((item) => !disabled && !item.disabled);
+  const stop = enabled.find((item) => item.value === focused) ?? enabled.find((item) => pressed.includes(item.value)) ?? enabled[0];
+
+  const press = (itemValue: string, next: boolean): void => {
+    const list = multiple
+      ? items.filter((item) => (item.value === itemValue ? next : pressed.includes(item.value))).map((item) => item.value)
+      : next
+        ? [itemValue]
+        : [];
+    // Stryker disable next-line ConditionalExpression: a controlled group reads value, so the extra state is never shown
+    if (value === undefined) setInner(list);
+    if (multiple) (onValueChange as ToggleGroupMultipleProps["onValueChange"])?.(list);
+    else (onValueChange as ToggleGroupSingleProps["onValueChange"])?.(list[0] ?? null);
+  };
+
+  // Roving focus is the group's own, not Base UI's composite, whose mount reads computed style once per group.
+  const move = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("[data-ouro-toggle]:not(:disabled)"));
+    const at = buttons.indexOf(event.target as HTMLElement);
+    if (at === -1 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const rtl = (event.currentTarget.closest("[dir]")?.getAttribute("dir") ?? document.documentElement.dir) === "rtl";
+    const step =
+      event.key === "ArrowRight" ? (rtl ? -1 : 1) : event.key === "ArrowLeft" ? (rtl ? 1 : -1) : event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+    const target =
+      event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : step ? (at + step + buttons.length) % buttons.length : -1;
+    if (target === -1) return;
+    event.preventDefault();
+    // Stryker disable next-line OptionalChaining: target is always inside buttons
+    buttons[target]?.focus();
+  };
 
   return (
     <div data-ouro="toggle-group" className={cn("box-border grid min-w-0 content-start justify-items-start gap-2", className)}>
       <span id={labelId} className={cn("m-0 text-sm leading-5 font-medium text-foreground select-none", hideLabel && "sr-only")}>
         {label}
       </span>
-      <BaseToggleGroup
+      <div
         ref={ref}
+        role="group"
         aria-labelledby={labelId}
-        multiple={Boolean(multiple)}
-        value={asList(value)}
-        defaultValue={asList(defaultValue)}
-        onValueChange={(next) => {
-          if (multiple) (onValueChange as ToggleGroupMultipleProps["onValueChange"])?.(next);
-          else (onValueChange as ToggleGroupSingleProps["onValueChange"])?.(next[0] ?? null);
-        }}
-        disabled={disabled}
+        onKeyDown={move}
         className="m-0 box-border inline-flex max-w-full flex-wrap items-center gap-1"
       >
         {items.map(({ value: itemValue, label: itemLabel, icon: Icon, hideLabel: iconOnlyItem, disabled: itemDisabled }) => {
@@ -283,8 +310,11 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
           return (
             <BaseToggle
               key={itemValue}
-              value={itemValue}
-              disabled={itemDisabled}
+              pressed={pressed.includes(itemValue)}
+              onPressedChange={(next) => press(itemValue, next)}
+              disabled={disabled || itemDisabled}
+              tabIndex={stop?.value === itemValue ? 0 : -1}
+              onFocus={() => setFocused(itemValue)}
               aria-label={iconOnlyItem ? itemLabel : undefined}
               data-ouro-toggle=""
               data-ouro-control="toggle-group"
@@ -299,7 +329,7 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
             </BaseToggle>
           );
         })}
-      </BaseToggleGroup>
+      </div>
     </div>
   );
 }

@@ -30,3 +30,22 @@ test("show more unfolds a long post, and show less folds it again", async ({ pag
   await page.getByRole("button", { name: "Show less" }).click();
   await expect(fold).toHaveAttribute("data-folded", "");
 });
+
+// The browser's own notice that an observer's callback changed what it watches. WebKit raises it as a window error, so a
+// zero-diagnostics fixture (one that fails on any page error) fails on a ShowMore that commits inside the callback.
+for (const id of ["lists-showmore--playground", "lists-showmore--in-context", "lists-showmore--long-post"]) {
+  test(`show more raises no ResizeObserver notice while it measures (${id})`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    await openStory(page, id);
+    await page.getByRole("button", { name: "Show more" }).first().waitFor();
+    // Measure again, as a resized window does.
+    await page.setViewportSize({ width: 360, height: 700 });
+    await page.setViewportSize({ width: 900, height: 700 });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    expect(errors).toEqual([]);
+  });
+}

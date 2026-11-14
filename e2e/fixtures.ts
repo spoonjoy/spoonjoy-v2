@@ -7,7 +7,6 @@ import {
 
 export interface BrowserWarningDiagnostics {
   expect(pattern: RegExp): void;
-  allow(pattern: RegExp): void;
 }
 
 export async function runBrowserDiagnosticFixture(
@@ -16,10 +15,7 @@ export async function runBrowserDiagnosticFixture(
 ) {
   const collector = createBrowserDiagnosticCollector();
   observeBrowserContext(context as BrowserContextLike, collector);
-  await use({
-    expect: (pattern) => collector.expectDiagnostic(pattern),
-    allow: (pattern) => collector.allowDiagnostic(pattern),
-  });
+  await use({ expect: (pattern) => collector.expectDiagnostic(pattern) });
   collector.assertClean("Browser emitted warning/error diagnostics");
 }
 

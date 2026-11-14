@@ -95,7 +95,7 @@ export interface AvatarOwnProps {
    * the presence dot grow with it. Inside an `AvatarGroup`, the group's size applies.
    * @default "md"
    * @claim "24, 32, 40, 48, 64, 72" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar > shows initials from the name, and the name to screen readers)
-   * @claim "the presence dot grow with it" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar presence > sits on the lower end corner at every size, with a ring in the surface's color)
+   * @claim "the presence dot grow with it" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar presence > sits on the lower end corner at every size, with the avatar cut away round it)
    * @claim "24, 32, 40, 48, 64, 72" registry/ouro/components/ouro/avatar/avatar.tsx verify:fileLine(registry/ouro/components/ouro/avatar/avatar.tsx, /"3xl": "size-28/)
    */
   size?: AvatarSize | (string & { 'Use "xs", "sm", "md", "lg", "xl", "2xl" or "3xl"': never }) | undefined;
@@ -114,9 +114,9 @@ export interface AvatarPresenceProps {
   /**
    * The person's presence, as a dot on the lower end corner. Each state has its own shape
    * and a named tone (available: success; busy and do not disturb: destructive; away:
-   * warning; offline: muted; out of office: primary). The dot's ring takes the surface's
-   * color, `--ouro-avatar-ring` (default `--background`): set it on a card,
-   * `[--ouro-avatar-ring:var(--card)]`. The dot lies over the corner and takes no room, so
+   * warning; offline: muted; out of office: primary). The avatar is cut away in a
+   * circle round the dot (a bite), so whatever lies behind the avatar, a photo or a gradient
+   * too, shows through the gap. The dot lies over the corner and takes no room, so
    * the initials, icon or picture stay in the middle with or without it, and the dot stays
    * below the letters at every size.
    * @claim "The dot lies over the corner" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar presence > keeps the initials in the middle with or without a dot, and the dot off them (%s))
@@ -180,13 +180,13 @@ export type AvatarGroupProps = Omit<HTMLAttributes<HTMLDivElement>, keyof Avatar
 
 // Each size sets the box and the initials' type size together.
 const sizes = {
-  xs: "size-6 text-[0.625rem]",
-  sm: "size-8 text-xs",
-  md: "size-10 text-sm",
-  lg: "size-12 text-base",
-  xl: "size-16 text-xl",
-  "2xl": "size-18 text-2xl",
-  "3xl": "size-28 text-4xl",
+  xs: "size-6 [--ouro-edge:0.105rem] text-[0.625rem]",
+  sm: "size-8 [--ouro-edge:0.14rem] text-xs",
+  md: "size-10 [--ouro-edge:0.175rem] text-sm",
+  lg: "size-12 [--ouro-edge:0.21rem] text-base",
+  xl: "size-16 [--ouro-edge:0.28rem] text-xl",
+  "2xl": "size-18 [--ouro-edge:0.315rem] text-2xl",
+  "3xl": "size-28 [--ouro-edge:0.49rem] text-4xl",
 } as const;
 
 const sizeNames = Object.keys(sizes).map((name) => `"${name}"`).join(", ");
@@ -195,7 +195,7 @@ const sizeNames = Object.keys(sizes).map((name) => `"${name}"`).join(", ");
 // surface's color. An agent's tile is white in light mode and a slightly lighter surface in
 // dark, with a hairline over its art.
 const squareEdgeClass =
-  "isolate shadow-[0_0_0_1.4px_var(--ouro-avatar-ring,var(--background))] before:absolute before:-top-[7%] before:bottom-[7%] before:start-[7%] before:-end-[7%] before:-z-10 before:rounded-[inherit] before:bg-foreground/20 before:content-[''] dark:before:bg-foreground/30";
+  "[--ouro-edge-color:color-mix(in_oklab,var(--foreground)_20%,transparent)] dark:[--ouro-edge-color:color-mix(in_oklab,var(--foreground)_30%,transparent)] shadow-[0_0_0_1.4px_var(--ouro-avatar-ring,var(--background)),var(--ouro-edge-x,var(--ouro-edge))_calc(var(--ouro-edge)*-1)_0_0_var(--ouro-edge-color)] rtl:[--ouro-edge-x:calc(var(--ouro-edge)*-1)]";
 const agentTileClass =
   "bg-white dark:bg-[color-mix(in_oklab,white_14%,var(--background))] after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-black/7 after:content-[''] dark:after:border-white/12 forced-colors:after:border-[CanvasText]";
 
@@ -210,6 +210,22 @@ const presenceSizes = {
   "2xl": "size-5.5 p-0.5 end-0 bottom-0",
   "3xl": "size-7 p-0.75 end-0.5 bottom-0.5",
 } as const;
+
+// Where the dot's center falls (--ouro-bite-c, from the lower end corner) and the radius of
+// its ring (--ouro-bite-r): the avatar's surface is cut away there, so what lies behind the
+// avatar shows through the gap, as a ring in the surface's color could not.
+const biteSizes = {
+  xs: "[--ouro-bite-c:0.1875rem] [--ouro-bite-r:0.3125rem]",
+  sm: "[--ouro-bite-c:calc(0.375rem-1px)] [--ouro-bite-r:0.375rem]",
+  md: "[--ouro-bite-c:calc(0.4375rem-1px)] [--ouro-bite-r:0.4375rem]",
+  lg: "[--ouro-bite-c:calc(0.5rem-1px)] [--ouro-bite-r:0.5rem]",
+  xl: "[--ouro-bite-c:0.625rem] [--ouro-bite-r:0.625rem]",
+  "2xl": "[--ouro-bite-c:0.6875rem] [--ouro-bite-r:0.6875rem]",
+  "3xl": "[--ouro-bite-c:1rem] [--ouro-bite-r:0.875rem]",
+} as const;
+const biteClass =
+  "[mask-image:radial-gradient(circle_at_calc(100%_-_var(--ouro-bite-c))_calc(100%_-_var(--ouro-bite-c)),transparent_var(--ouro-bite-r),#000_calc(var(--ouro-bite-r)+0.5px))] " + // fade-ok: a bite cut out of the avatar for its presence dot, not a fade
+  "rtl:[mask-image:radial-gradient(circle_at_var(--ouro-bite-c)_calc(100%_-_var(--ouro-bite-c)),transparent_var(--ouro-bite-r),#000_calc(var(--ouro-bite-r)+0.5px))]"; // fade-ok: the same bite, mirrored for right to left
 
 // Each hue tints the surface and colors the initials, mixed toward the theme's background and
 // foreground so the pair keeps at least 4.5:1 in light and dark.
@@ -235,6 +251,16 @@ const presences = ["available", "busy", "away", "do-not-disturb", "offline", "ou
 const GroupSize = createContext<AvatarSize | undefined>(undefined);
 
 /** The first letters of the first and last words, by code point so emoji stay whole. */
+// An agent with no icon or picture shows this sparkle in its hue, not an initial.
+function AgentGlyph(): ReactNode {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" data-ouro-avatar-glyph="">
+      <path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z" />
+      <path d="M19 16l.9 2.1L22 19l-2.1.9L19 22l-.9-2.1L16 19l2.1-.9z" />
+    </svg>
+  );
+}
+
 function initialsOf(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
   const first = (word: string | undefined) => (word ? Array.from(word)[0]!.toUpperCase() : "");
@@ -428,9 +454,10 @@ export function Avatar(props: AvatarProps): JSX.Element {
   // alt="" (the name written beside it) only the presence is read.
   const spoken = presence ? presenceLabel || presence.replaceAll("-", " ") : "";
   const label = [alt ?? (nameLoading ? nameLoadingLabel : name), spoken].filter(Boolean).join(", ");
-  const iconShown = icon !== undefined && icon !== null;
+  const glyph = icon !== undefined && icon !== null ? icon : shape === "agent" ? <AgentGlyph /> : undefined;
+  const iconShown = glyph !== undefined;
   const tint = color === "neutral" ? neutral : color === "brand" ? brand : hueOf(idForColor ?? name);
-  const ink = tint.split(" ")[1];
+  const [fill, ink] = tint.split(" ") as [string, string];
   return (
     <BaseAvatar.Root
       {...rest}
@@ -445,12 +472,20 @@ export function Avatar(props: AvatarProps): JSX.Element {
         "font-medium leading-none select-none",
         shape === "circle" ? "rounded-[34%]" : "rounded-[24%]",
         shape === "square" && squareEdgeClass,
-        shape === "agent" && agentTileClass,
-        !nameLoading && (shape === "agent" ? ink : tint),
+        !nameLoading && ink,
+        presence && biteSizes[size],
         sizes[size],
         className,
       )}
     >
+      <span
+        data-ouro-avatar-surface=""
+        className={cn(
+          "absolute inset-0 flex items-center justify-center rounded-[inherit]",
+          shape === "agent" ? agentTileClass : !nameLoading && fill,
+          presence && biteClass,
+        )}
+      >
       {src !== undefined && (
         <BaseAvatar.Image
           src={src}
@@ -460,13 +495,13 @@ export function Avatar(props: AvatarProps): JSX.Element {
         />
       )}
       <BaseAvatar.Fallback
-        className={cn("box-border flex size-full items-center justify-center", iconShown && "*:size-[55%]", nameLoading && "overflow-hidden rounded-[inherit]")}
+        className={cn("box-border flex size-full items-center justify-center", iconShown && !nameLoading && "*:size-[55%]", nameLoading && "overflow-hidden rounded-[inherit]")}
       >
         {nameLoading ? (
           // The avatar's own box and corners, so it is the avatar's exact shape; the presence dot stays whole outside it.
           <Skeleton className="size-full [border-radius:inherit]" />
         ) : iconShown ? (
-          icon
+          glyph
         ) : (
           // Drawn from the attribute, not written as text, so a control that wraps the avatar has no
           // visible text its name must contain (WCAG 2.5.3); the avatar's name is its aria-label.
@@ -478,10 +513,11 @@ export function Avatar(props: AvatarProps): JSX.Element {
           />
         )}
       </BaseAvatar.Fallback>
+      </span>
       {presence && (
         <span
           data-ouro-avatar-presence=""
-          className={cn("pointer-events-none absolute box-border flex [--corner-shape:round] [corner-shape:round] rounded-full bg-(--ouro-avatar-ring,var(--background))", presenceSizes[size])}
+          className={cn("pointer-events-none absolute box-border flex [--corner-shape:round] [corner-shape:round] rounded-full", presenceSizes[size])}
         >
           <PresenceGlyph presence={presence} />
         </span>

@@ -47,7 +47,7 @@ it("keeps the transitions of an Ouro UI root and everything inside it", async ()
   await openDialog();
   // The backdrop is an Ouro root; the Close button sits inside the dialog root.
   expect(style('[data-ouro="dialog-backdrop"]').transitionProperty).toBe("opacity");
-  // Which properties it eases is Ouro UI's call (v1.3.33's press: scale and opacity); the reset must not switch them off.
+  // Which properties it eases is Ouro UI's call (v1.3.62's press: scale and opacity); the reset must not switch them off.
   expect(style("[data-ouro-dialog-close]").transitionProperty).not.toBe("none");
 });
 

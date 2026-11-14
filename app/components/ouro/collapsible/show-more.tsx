@@ -449,9 +449,13 @@ const remember = (key: string | undefined, value: boolean): void => {
 };
 
 /**
- * One ResizeObserver for every ShowMore: its callback runs after the browser lays the page out and before it paints, reads
- * each instance's size while the layout is still clean, and then commits every answer in one render. So the button and
- * the fade are in the first frame the browser paints, a list of many folds costs one layout, and no read is forced.
+ * One ResizeObserver for every ShowMore, and one animation-frame callback that measures them all. The observer only says
+ * which ones changed size; the answers are read and committed in the next animation frame's callback, which the browser
+ * runs before it lays the page out for that frame's observers and before it paints. So the button and the fade are in the
+ * first frame the browser paints, a list of many folds costs one layout, and no read is forced while React commits.
+ * Committing inside the observer's callback instead resizes elements the app watches above this one (its body, its shell),
+ * and WebKit answers with the window error "ResizeObserver loop completed with undelivered notifications", which an
+ * app's end-to-end fixture that fails on page errors counts as a failure.
  *
  * @claim "One ResizeObserver for every ShowMore" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore in its first frame > measures many folds with one observer, every one's button in the same first painted frame)
  * @claim "So the button and the fade are in the first frame the browser paints" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore in its first frame > has its button and fade in the first frame the browser paints, and nothing for what fits)
@@ -459,16 +463,33 @@ const remember = (key: string | undefined, value: boolean): void => {
 type Fit = () => () => void;
 // Weak, so an element that is gone needs no clean-up: the observer delivers only the elements it watches.
 const fitReaders = new WeakMap<Element, Fit>();
+const pendingFits = new Set<Element>();
+let fitFrame = 0;
 let fitObserver: ResizeObserver | undefined;
-function observeFit(element: Element, fit: Fit): () => void {
-  fitObserver ??= new ResizeObserver((entries) => {
+function scheduleFit(): void {
+  fitFrame ||= requestAnimationFrame(() => {
+    fitFrame = 0;
+    const targets = [...pendingFits];
+    pendingFits.clear();
     // Every read first, then every write, so no read lays the page out again.
-    const answers = entries.map((entry) => fitReaders.get(entry.target)!());
+    const answers = targets.map((target) => fitReaders.get(target)!());
     flushSync(() => answers.forEach((answer) => answer()));
   });
+}
+function observeFit(element: Element, fit: Fit): () => void {
+  fitObserver ??= new ResizeObserver((entries) => {
+    for (const entry of entries) pendingFits.add(entry.target);
+    scheduleFit();
+  });
   fitReaders.set(element, fit);
+  // Measured in the next frame's callback, ahead of the observer's own first delivery, so the first painted frame has it.
+  pendingFits.add(element);
+  scheduleFit();
   fitObserver.observe(element);
-  return () => fitObserver!.unobserve(element);
+  return () => {
+    pendingFits.delete(element);
+    fitObserver!.unobserve(element);
+  };
 }
 
 const clampClass = "line-clamp-(--ouro-show-more-lines)";

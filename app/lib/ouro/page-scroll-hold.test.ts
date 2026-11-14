@@ -36,6 +36,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   releases.splice(0).forEach((release) => release());
   // A press's hold ends on its own clock: end it, so the next test starts with nothing holding the page.
   vi.runOnlyPendingTimers();
