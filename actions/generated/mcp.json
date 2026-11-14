@@ -11,7 +11,7 @@
         "properties": {
           "name": {
             "type": "string",
-            "description": "What to buy, such as eggs or flour."
+            "description": "What to buy, such as eggs or flour (hand-edited)."
           },
           "quantity": {
             "type": "number",
