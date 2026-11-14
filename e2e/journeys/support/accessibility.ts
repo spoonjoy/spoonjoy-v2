@@ -245,7 +245,40 @@ function recorder(audit: SchemeAudit): Recorder {
  * Everything but the tab-order walk, in the theme the page shows now. The walk moves focus, and Tab
  * can close a popup, so it runs after every other measurement (walkFocus).
  */
+/**
+ * Ouro UI's scroll fade (`data-ouro-scroll-fade`, a CodeBlock or table row whose content runs past
+ * its side) masks the last 2rem at each side that hides more, as a sign that the line goes on. It
+ * is a cue over text a person reads by scrolling, as clipped overflow is, so the audit judges that
+ * text without it. With the mask on, axe cannot decide the contrast of any text in the box, and
+ * measuring each line from screenshots instead took /developers past the test timeout.
+ */
+export const SCROLL_FADE_HOLD_CSS = "[data-ouro-scroll-fade] { mask-image: none !important; -webkit-mask-image: none !important; }";
+const SCROLL_FADE_HOLD_ID = "sj-audit-scroll-fade-hold";
+
+async function holdScrollFades(page: Page): Promise<void> {
+  await page.evaluate(({ id, css }) => {
+    if (document.getElementById(id)) return;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent = css;
+    document.head.append(style);
+  }, { id: SCROLL_FADE_HOLD_ID, css: SCROLL_FADE_HOLD_CSS });
+}
+
+async function releaseScrollFades(page: Page): Promise<void> {
+  await page.evaluate((id) => document.getElementById(id)?.remove(), SCROLL_FADE_HOLD_ID);
+}
+
 async function measureShownScheme(page: Page, options: AuditOptions): Promise<{ audit: SchemeAudit; walks: FocusWalk[] }> {
+  await holdScrollFades(page);
+  try {
+    return await measureShownSchemeHeld(page, options);
+  } finally {
+    await releaseScrollFades(page);
+  }
+}
+
+async function measureShownSchemeHeld(page: Page, options: AuditOptions): Promise<{ audit: SchemeAudit; walks: FocusWalk[] }> {
   await settle(page);
   const scheme = await shownScheme(page);
   const results = await runAxe(page, options.target);

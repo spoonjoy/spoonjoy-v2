@@ -5,7 +5,8 @@
 // could not be taken. The contrast arithmetic it judges with is e2e/journeys/support/contrast.ts.
 import { describe, expect, it } from "vitest";
 import type { CheckResult, NodeResult, Result } from "axe-core";
-import { auditFailures, classifyAxeResults, describeAuditFailures, type SchemeAudit } from "../e2e/journeys/support/accessibility";
+import { SCROLL_FADE_HOLD_CSS, auditFailures, classifyAxeResults, describeAuditFailures, type SchemeAudit } from "../e2e/journeys/support/accessibility";
+import { scrollFadeClass } from "~/lib/ouro/scroll-fade";
 import { planVerification } from "../e2e/journeys/support/undecided-checks";
 import {
   composite,
@@ -126,6 +127,13 @@ describe("contrast", () => {
     expect(formatRgb({ r: 127.5, g: 0.4, b: 255 })).toBe("rgb(128, 0, 255)");
     expect(formatRatio(4.499)).toBe("4.49:1");
     expect(formatRatio(21)).toBe("21.00:1");
+  });
+});
+
+describe("scroll fade hold", () => {
+  it("turns off the mask Ouro UI's scroll fade puts on the box it marks", () => {
+    expect(scrollFadeClass).toMatch(/^data-ouro-scroll-fade:\[mask-image:/);
+    expect(SCROLL_FADE_HOLD_CSS).toBe("[data-ouro-scroll-fade] { mask-image: none !important; -webkit-mask-image: none !important; }");
   });
 });
 
