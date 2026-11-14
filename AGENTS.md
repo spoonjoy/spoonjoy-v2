@@ -154,7 +154,7 @@ pnpm run build        # Production build, to check the app compiles
 
 ### Declared actions
 - `actions/spoonjoy.actions.mts` declares Spoonjoy's actions once with Ouro UI's one action model (`defineAction`, vendored under `tools/ouro-actions/`). `actions/generated/` holds what it generates: the MCP and WebMCP tools, the web control's props, and the App Intent and Reins Swift that spoonjoy-apple vendors. Change the declaration, run `pnpm actions:generate`, and commit the folder; never edit a generated file. CI's generated-contract check (`pnpm run verify:clean:generated-contract`) runs `pnpm actions:check`, and a unit test fails when the MCP server's tools differ from the declarations.[^actions]
-- Every MCP tool is declared, in its area's file beside `actions/spoonjoy.actions.mts` (`shopping.mts`, `recipes.mts`, `access.mts` and so on), and its operation in `app/lib/spoonjoy-api.server.ts` spreads `declaredOperation("<id>")`. A new tool is declared first; the unit test fails on any tool the declarations don't serve.[^actions]
+- Every MCP tool is declared, in its area's file beside `actions/spoonjoy.actions.mts` (`shopping.mts`, `recipes.mts`, `access.mts` and so on), and its operation in `app/lib/spoonjoy-api.server.ts` spreads `declaredOperation("<id>")`.[^actions] A new tool is declared first; the unit test fails on any tool the declarations don't serve.[^actions]
 - A person-only action such as `approve_agent_connection` has no agent door: MCP doesn't list it, and a call to it gets its typed refusal.[^actions-refusal]
 
 ### The HX source rule
