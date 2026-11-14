@@ -56,7 +56,6 @@ export function useKeyboardScrollable<T extends HTMLElement>(enabled: boolean): 
       observe();
       children.observe(element, { childList: true, subtree: true, characterData: true });
       element.addEventListener("blur", update);
-      update();
       return () => {
         resize.disconnect();
         children.disconnect();

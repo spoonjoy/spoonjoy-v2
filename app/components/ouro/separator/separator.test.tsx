@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { commands } from "vitest/browser";
 import { Separator } from "~/components/ouro/separator/separator";
 import { act } from "~/lib/ouro/testing/act";
 
@@ -21,6 +22,15 @@ async function render(node: ReactNode) {
       return host.querySelector<HTMLElement>('[data-ouro="separator"]')!;
     },
   };
+}
+
+/** A color as the browser computes it for a theme variable (`--primary`) or a system color keyword. */
+function colorOf(value: string, property: "backgroundColor" | "color" = "backgroundColor"): string {
+  const probe = document.createElement("span");
+  probe.style[property] = value.startsWith("--") ? `var(${value})` : value;
+  document.body.append(probe);
+  mounted.push(probe);
+  return getComputedStyle(probe)[property];
 }
 
 let warn: ReturnType<typeof vi.spyOn>;
@@ -119,6 +129,55 @@ describe("Separator", () => {
     expect(element).toBe(separator);
     expect(getComputedStyle(separator).marginTop).toBe("16px");
   });
+
+  it.each([
+    ["primary", "--primary"],
+    ["destructive", "--destructive"],
+    ["success", "--success"],
+    ["warning", "--warning"],
+  ] as const)("colors both lines and the label with the %s tone", async (tone, variable) => {
+    const { separator } = await render(
+      <div style={{ width: 300 }}>
+        <Separator tone={tone} label="New since you left · 2 messages" />
+      </div>,
+    );
+    const lines = [...separator.querySelectorAll<HTMLElement>('[data-slot="separator-line"]')];
+    expect(lines).toHaveLength(2);
+    for (const line of lines) expect(getComputedStyle(line).backgroundColor).toBe(colorOf(variable));
+    expect(getComputedStyle(separator.querySelector<HTMLElement>('[data-slot="separator-label"]')!).color).toBe(colorOf(variable, "color"));
+  });
+
+  it("colors a plain line with its tone, horizontal or vertical", async () => {
+    const { separator } = await render(
+      <div style={{ width: 200 }}>
+        <Separator tone="warning" />
+      </div>,
+    );
+    expect(getComputedStyle(separator).backgroundColor).toBe(colorOf("--warning"));
+    expect(separator.getBoundingClientRect().height).toBe(1);
+    const vertical = await render(
+      <div style={{ display: "flex", height: 40 }}>
+        <Separator orientation="vertical" tone="success" />
+      </div>,
+    );
+    expect(getComputedStyle(vertical.separator).backgroundColor).toBe(colorOf("--success"));
+  });
+
+  it("draws a toned line in CanvasText under forced colours, where its background would drop", async () => {
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      const { separator } = await render(
+        <div style={{ width: 300 }}>
+          <Separator tone="primary" label="New" />
+        </div>,
+      );
+      for (const line of separator.querySelectorAll<HTMLElement>('[data-slot="separator-line"]')) {
+        expect(getComputedStyle(line).backgroundColor).toBe(colorOf("CanvasText"));
+      }
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
 });
 
 describe("Separator development messages", () => {
@@ -150,6 +209,25 @@ describe("Separator development messages", () => {
     const props = { orientation: "diagonal" } as unknown as Parameters<typeof Separator>[0];
     const { separator } = await render(<Separator {...props} />);
     expect(separator.getAttribute("aria-orientation")).toBe("horizontal");
+  });
+
+  it.each([
+    ["danger", 'tone="danger" is not a tone. Fix: <Separator tone="destructive">.'],
+    ["accent", 'tone="accent" is not a tone. Fix: <Separator tone="primary">.'],
+    ["neutral", 'tone="neutral" is not a tone; a line without a tone is the default. Fix: <Separator>.'],
+    ["secondary", 'tone="secondary" is not a tone; use "primary", "destructive", "success", "warning". Fix: <Separator tone="primary">.'],
+  ])("renders the default colors for tone=%j and warns with the fix", async (tone, message) => {
+    const props = { tone, label: "or" } as unknown as Parameters<typeof Separator>[0];
+    const { separator } = await render(
+      <div style={{ width: 300 }}>
+        <Separator {...props} />
+      </div>,
+    );
+    expect(warn).toHaveBeenCalledWith(`[ouro-ui] Separator: ${message}`);
+    for (const line of separator.querySelectorAll<HTMLElement>('[data-slot="separator-line"]')) {
+      expect(getComputedStyle(line).backgroundColor).toBe(colorOf("--border"));
+    }
+    expect(getComputedStyle(separator.querySelector<HTMLElement>('[data-slot="separator-label"]')!).color).toBe(colorOf("--muted-foreground", "color"));
   });
 
   it.each([

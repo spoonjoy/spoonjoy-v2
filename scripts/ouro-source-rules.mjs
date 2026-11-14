@@ -33,6 +33,7 @@ import ts from "typescript";
 //   selector puts that state on a class or a data-* hook (only the app's own hooks, `.<prefix>-`
 //   and `[data-<prefix>-`, when `hookPrefix` is set). Hover-only decoration and page motion are
 //   not control state.
+// - hand-drawn-unread-dot: a plain accent-colored round dot in a row, which is an unread mark; UnreadDot draws it. (A dot on an avatar's corner stays hand-drawn-presence-dot.)
 // - hand-drawn-avatar, hand-drawn-presence-dot: an intrinsic element drawn as what Ouro UI's Avatar
 //   draws: a round picture (`img`, or `overflow-hidden`/`object-cover`, `rounded-full`, at least
 //   24px square), or an empty round dot (at most 12px, `bg-*`). Counted where written; use
@@ -181,6 +182,7 @@ export const CATEGORIES = [
   "vague-failure-copy",
   "hand-drawn-avatar",
   "hand-drawn-presence-dot",
+  "hand-drawn-unread-dot",
   "uses-hand-rolled-control",
 ];
 
@@ -317,6 +319,9 @@ export const HAND_DRAWN_AVATAR_FIX =
 /** What the hand-drawn-presence-dot rule tells an app to do. */
 export const HAND_DRAWN_PRESENCE_DOT_FIX =
   'Show presence as <Avatar presence="available" presenceLabel="Ana Lind, Available" ...>, which draws each state in its own shape and tone on the avatar\'s corner and says it aloud. For an unread or status marker that is not presence, use <Badge>.';
+/** What the hand-drawn-unread-dot rule tells an app to do. */
+export const HAND_DRAWN_UNREAD_DOT_FIX =
+  'Draw an unread mark with Ouro UI\'s <UnreadDot label="Unread" />, the dot ConversationList and Command draw, so it has the same size, tone and spoken label everywhere. For a count or a word use <Badge>, and for whether a person is online use <Avatar presence="available" ...>.';
 /** What the hand-drawn-hero rule tells an app to do. */
 export const HAND_DRAWN_HERO_FIX =
   "Use Hero from the registry (`<Hero title=\"...\" picture={{ light, dark }} />`), so its light and dark art, squircle frame and layout, and any change to heroes, reach this one too.";
@@ -331,6 +336,7 @@ export const HAND_DRAWN_SWITCH_FIX =
 const CATEGORY_MESSAGES = {
   "hand-drawn-avatar": { headline: "New hand-drawn avatar", fix: HAND_DRAWN_AVATAR_FIX },
   "hand-drawn-presence-dot": { headline: "New hand-drawn presence dot", fix: HAND_DRAWN_PRESENCE_DOT_FIX },
+  "hand-drawn-unread-dot": { headline: "New hand-drawn unread dot", fix: HAND_DRAWN_UNREAD_DOT_FIX },
   "content-spinner": { headline: "New spinner standing in for content", fix: CONTENT_SPINNER_FIX },
   "render-index": { headline: "New index built in render", fix: RENDER_INDEX_FIX },
   "layout-animation": { headline: "New animation of a layout property", fix: LAYOUT_ANIMATION_FIX },
@@ -1010,7 +1016,12 @@ function drawnShape(tokens, tag, empty) {
   if (side === undefined) return tag === "img" && tokens.includes("rounded-full") ? "hand-drawn-avatar" : undefined;
   const round = tokens.filter((token) => ROUND_CLASS.test(token));
   if (round.length === 0) return undefined;
-  if (side <= 3 && round.includes("rounded-full") && empty && tokens.some((token) => /^bg-/.test(token))) return "hand-drawn-presence-dot";
+  if (side <= 3 && round.includes("rounded-full") && empty && tokens.some((token) => /^bg-/.test(token))) {
+    // A dot placed on a corner, or in a status color, is presence; a plain dot in the accent color in a row is an unread mark.
+    const placed = tokens.some((token) => token === "absolute" || /^(?:top|bottom|start|end|left|right)-/.test(token));
+    const accent = tokens.some((token) => /^bg-(?:primary|accent|blue-|sky-|indigo-)/.test(token));
+    return accent && !placed ? "hand-drawn-unread-dot" : "hand-drawn-presence-dot";
+  }
   const picture = tag === "img" || tokens.some((token) => AVATAR_PICTURE_CLASS.test(token));
   const rounded = round.includes("rounded-full") || (tag === "img" && round.some((token) => token !== "rounded" && token !== "rounded-sm"));
   return side >= 6 && picture && rounded ? "hand-drawn-avatar" : undefined;

@@ -32,6 +32,7 @@ const meta = {
   argTypes: {
     orientation: { control: "inline-radio", options: ["horizontal", "vertical"] },
     decorative: { control: "boolean" },
+    tone: { control: "select", options: [undefined, "primary", "destructive", "success", "warning"] },
   },
   render: (args) => (
     <Surface>
@@ -80,6 +81,17 @@ export const Labelled: Story = {
       </Button>
       <Separator label="or" />
       <Button fullWidth>Continue with email</Button>
+    </Surface>
+  ),
+};
+
+/** An accent line where the messages someone has not read start. */
+export const Toned: Story = {
+  render: () => (
+    <Surface>
+      <Text>Can we move the tasting to Saturday?</Text>
+      <Separator tone="primary" label="New since you left · 2 messages" />
+      <Text>Saturday works. I will book the room.</Text>
     </Surface>
   ),
 };

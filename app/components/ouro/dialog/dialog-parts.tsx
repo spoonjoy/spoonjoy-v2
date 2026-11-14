@@ -41,9 +41,10 @@ const viewportClass =
   "pb-[max(1rem,env(safe-area-inset-bottom,0px))] pl-[max(1rem,env(safe-area-inset-left,0px))]";
 
 const popupClass =
-  "relative box-border flex max-h-full min-h-0 flex-col outline-none " +
-  "rounded-xl bg-popover text-popover-foreground " +
-  "ring-1 ring-border/60 shadow-(--shadow-xl) " +
+  "relative isolate box-border flex max-h-full min-h-0 flex-col outline-none " +
+  "rounded-xl bg-(--ouro-bg) text-popover-foreground ring-1 ring-border/60 " +
+  "[--ouro-bg:var(--popover)] [--ouro-bd:color-mix(in_oklab,var(--border)_60%,transparent)] [--ouro-sq-w:1px] " +
+  "[--ouro-sq-r:calc(var(--radius-xl)/var(--ouro-radius-scale,1))] shadow-(--shadow-xl) " +
   "[transition:transform_var(--ouro-duration-slow)_var(--ouro-ease-out),opacity_var(--ouro-duration-slow)_var(--ouro-ease-out)] " +
   "data-starting-style:[transform:scale(0.96)] data-starting-style:opacity-0 " +
   "data-ending-style:[transform:scale(0.96)] data-ending-style:opacity-0 " +
@@ -242,6 +243,7 @@ export function DialogPopupUnchecked({
   className,
   size,
   ref,
+  children,
   ...props
 }: Omit<DialogPopupProps, "size"> & { size: DialogSize }): JSX.Element {
   useDialogPart("DialogPopup", "…");
@@ -253,8 +255,12 @@ export function DialogPopupUnchecked({
       className={cn(popupClass, popupSizes[size], className)}
       data-ouro="dialog"
       data-ouro-presentation="dialog"
+      data-ouro-squircle=""
       data-size={size}
-    />
+    >
+      <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />
+      {children}
+    </BaseDialog.Popup>
   );
 }
 

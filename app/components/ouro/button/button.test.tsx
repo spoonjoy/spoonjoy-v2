@@ -104,6 +104,23 @@ describe("button branch", () => {
     ]);
   });
 
+  it("names its tone in data-tone, on buttons and links, so one tone's look is compared with itself", async () => {
+    const { host } = await render(
+      <>
+        <Button>Primary</Button>
+        <Button tone="destructive">Destructive</Button>
+        <Button tone="secondary" href="/recipes">
+          Secondary link
+        </Button>
+      </>,
+    );
+    expect([...host.querySelectorAll('[data-ouro="button"]')].map((button) => button.getAttribute("data-tone"))).toEqual([
+      "primary",
+      "destructive",
+      "secondary",
+    ]);
+  });
+
   it("passes type, onClick and other button attributes through", async () => {
     const onClick = vi.fn();
     const { button } = await render(

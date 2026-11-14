@@ -188,19 +188,101 @@ describe("Skeleton", () => {
     }
   });
 
-  it("shimmers a band that moves by translate only, and holds it still in the middle with reduced motion", async () => {
+  it("holds still for a second, then breathes by opacity only, and holds still with reduced motion", async () => {
     const skeleton = await render(<Skeleton />);
-    expect(getComputedStyle(skeleton, "::before").animationName).toBe("ouro-shimmer-band");
-    expect(getComputedStyle(skeleton, "::before").backgroundImage).toContain("gradient");
+    const style = getComputedStyle(skeleton);
+    expect(style.animationName).toBe("ouro-skeleton-breathe");
+    expect(style.animationDelay).toBe("1s");
+    expect(style.animationTimingFunction).toBe("ease-in-out");
+    expect(style.animationIterationCount).toBe("infinite");
+    const effect = skeleton.getAnimations()[0]!.effect as KeyframeEffect;
+    const frames = effect.getKeyframes();
+    expect([...new Set(frames.flatMap((frame) => Object.keys(frame)))].filter((key) => !["offset", "computedOffset", "easing", "composite"].includes(key))).toEqual(["opacity"]);
+    // Ends where it starts, so the loop has no seam.
+    expect(frames.at(0)!["opacity"]).toBe(frames.at(-1)!["opacity"]);
     await commands.emulateMedia({ reducedMotion: "reduce" });
-    expect(getComputedStyle(skeleton, "::before").animationName).toBe("none");
-    // The band stays, still, in the middle.
-    expect(getComputedStyle(skeleton, "::before").translate).toBe("none");
-    expect(getComputedStyle(skeleton, "::before").backgroundImage).toContain("gradient");
+    expect(getComputedStyle(skeleton).animationName).toBe("none");
     expect(skeleton.getAnimations({ subtree: true })).toEqual([]);
   });
 
-  it("animates only translate on each band, never the background, so a page with skeletons rests between frames", async () => {
+  it("breathes only the first 24 of a long list, and a later list finds the places taken", async () => {
+    const list = (count: number) => (
+      <div>
+        {Array.from({ length: count }, (_, index) => (
+          <Skeleton key={index} />
+        ))}
+      </div>
+    );
+    const host = (await render(list(131))).parentElement!;
+    const animated = () => [...host.querySelectorAll("[data-ouro=skeleton]")].filter((el) => getComputedStyle(el).animationName === "ouro-skeleton-breathe").length;
+    expect(animated()).toBe(24);
+    const again = (await render(list(5))).parentElement!;
+    expect(animated()).toBe(24);
+    expect([...again.querySelectorAll("[data-ouro=skeleton]")].filter((el) => getComputedStyle(el).animationName === "ouro-skeleton-breathe")).toHaveLength(0);
+  });
+
+  it("takes no place for a still placeholder, and claims one when it starts to breathe", async () => {
+    const breathes = (el: Element) => getComputedStyle(el).animationName === "ouro-skeleton-breathe";
+    const still = await render(
+      <div>
+        {Array.from({ length: 30 }, (_, index) => (
+          <Skeleton key={index} shimmer={false} />
+        ))}
+      </div>,
+    );
+    const stillHost = still.parentElement!;
+    const stillRoot = roots.at(-1)!;
+    const first = await render(
+      <div>
+        {Array.from({ length: 24 }, (_, index) => (
+          <Skeleton key={index} />
+        ))}
+      </div>,
+    );
+    expect([...first.parentElement!.querySelectorAll("[data-ouro=skeleton]")].every(breathes)).toBe(true);
+    await act(async () => stillRoot.render(<Skeleton shimmer />));
+    expect(breathes(stillHost.querySelector("[data-ouro=skeleton]")!)).toBe(false);
+  });
+
+  it("hands its place on when a breathing placeholder turns still", async () => {
+    const breathes = (el: Element) => getComputedStyle(el).animationName === "ouro-skeleton-breathe";
+    const list = (stillFirst: boolean) => (
+      <div>
+        {Array.from({ length: 24 }, (_, index) => (
+          <Skeleton key={index} shimmer={index === 0 ? !stillFirst : true} />
+        ))}
+      </div>
+    );
+    const first = await render(list(false));
+    const root = roots.at(-1)!;
+    await act(async () => root.render(list(true)));
+    const late = await render(<Skeleton />);
+    expect(breathes(late)).toBe(true);
+    expect(first).toBeTruthy();
+  });
+
+  it("renders the first pass breathing, so the server's HTML and the client's agree", () => {
+    expect(renderToString(<Skeleton />)).toContain("ouro-skeleton-breathe");
+  });
+
+  it("draws every shape still with shimmer={false}: no animation on the placeholder or anything inside it", async () => {
+    await render(
+      <>
+        <Skeleton shimmer={false} />
+        <Skeleton shape="text" lines={2} shimmer={false} />
+        <Skeleton shape="circle" shimmer={false} />
+        <Skeleton shape="row" count={2} shimmer={false} />
+        <Skeleton shape="card" shimmer={false} />
+      </>,
+    );
+    const host = mounted.at(-1)!;
+    expect(host.getAnimations({ subtree: true })).toEqual([]);
+    const nodes = [...host.querySelectorAll<HTMLElement>('[data-ouro="skeleton"], [data-ouro="skeleton"] *')];
+    expect(nodes.length).toBeGreaterThan(5);
+    for (const node of [...nodes, host]) expect(getComputedStyle(node).animationName).toBe("none");
+  });
+
+  it("breathes every shape, each loop one animation on the placeholder itself", async () => {
     await render(
       <>
         <Skeleton />
@@ -210,18 +292,14 @@ describe("Skeleton", () => {
         <Skeleton shape="card" />
       </>,
     );
-    const host = mounted.at(-1)!;
-    const animations = host.getAnimations({ subtree: true });
-    expect(animations.length).toBeGreaterThan(0);
+    const animations = mounted.at(-1)!.getAnimations({ subtree: true });
+    expect(animations.length).toBeGreaterThan(5);
     for (const animation of animations) {
       const effect = animation.effect as KeyframeEffect;
-      const properties = [...new Set(effect.getKeyframes().flatMap((frame) => Object.keys(frame)))].filter((key) => !["offset", "computedOffset", "easing", "composite"].includes(key));
-      expect(properties).toEqual(["translate"]);
-      expect(effect.pseudoElement).toBe("::before");
+      expect(effect.pseudoElement).toBeNull();
       expect(effect.getTiming().iterations).toBe(Infinity);
     }
   });
-
 
   it("passes attributes through and renders on the server", async () => {
     const skeleton = await render(<Skeleton id="avatar" data-testid="avatar" />);
@@ -237,7 +315,7 @@ describe("Skeleton", () => {
       '[ouro-ui] Skeleton: "rounded-full" sets appearance, and className is for layout only. Fix: shape="circle".',
       '[ouro-ui] Skeleton: shape="square" is not a shape; use "rect", "text", "circle", "row", "card". Fix: <Skeleton shape="rect">.',
       '[ouro-ui] Skeleton: variant is not a prop. Fix: <Skeleton shape="circle">.',
-      "[ouro-ui] Skeleton: animation is not a prop; Skeleton shimmers, and holds still with reduced motion. Fix: <Skeleton>.",
+      "[ouro-ui] Skeleton: animation is not a prop; Skeleton breathes, and holds still with reduced motion. Fix: <Skeleton>.",
       '[ouro-ui] Skeleton: width is not a prop. Fix: <Skeleton className="w-[120px]">.',
       '[ouro-ui] Skeleton: height is not a prop. Fix: <Skeleton className="h-[20px]">.',
     ]);

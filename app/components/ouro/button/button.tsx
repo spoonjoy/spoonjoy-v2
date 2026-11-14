@@ -212,6 +212,10 @@ const base =
   "before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:[corner-shape:inherit] before:bg-current " +
   "before:opacity-0 before:transition-opacity before:duration-(--ouro-duration-fast) before:ease-[ease] " +
   "not-data-disabled:not-active:pointer-fine:hover:before:opacity-8 not-data-disabled:active:before:opacity-14 " +
+  // Where corner-shape is missing, the surface slot paints the background, border and state layer instead (see ouro-base.css).
+  "bg-(--ouro-bg) border-(--ouro-bd) [--ouro-sq-w:1px] [--ouro-sq-r:calc(var(--radius-lg)/var(--ouro-radius-scale,1))] " +
+  // Stryker disable next-line StringLiteral: a class string in a class position, which no test reads
+  "not-data-disabled:not-active:pointer-fine:hover:[--ouro-state:0.08] not-data-disabled:active:[--ouro-state:0.14] " +
   // Press feedback: scale only when motion is allowed and the button is enabled.
   "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
   "disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress";
@@ -248,37 +252,37 @@ const sizes = {
 const looks = {
   solid: {
     primary:
-      "border-transparent bg-(--ouro-action,var(--primary)) text-(--ouro-action-foreground,var(--primary-foreground)) " +
-      "not-data-disabled:not-active:pointer-fine:hover:bg-(--ouro-action-hover,var(--ouro-action,var(--primary))) " +
-      "not-data-disabled:active:bg-(--ouro-action-active,var(--ouro-action,var(--primary))) " +
-      "data-disabled:bg-(--ouro-action-disabled,var(--ouro-action,var(--primary))) " +
+      "[--ouro-bd:transparent] [--ouro-bg:var(--ouro-action,var(--primary))] text-(--ouro-action-foreground,var(--primary-foreground)) " +
+      "not-data-disabled:not-active:pointer-fine:hover:[--ouro-bg:var(--ouro-action-hover,var(--ouro-action,var(--primary)))] " +
+      "not-data-disabled:active:[--ouro-bg:var(--ouro-action-active,var(--ouro-action,var(--primary)))] " +
+      "data-disabled:[--ouro-bg:var(--ouro-action-disabled,var(--ouro-action,var(--primary)))] " +
       "data-disabled:text-(--ouro-action-disabled-foreground,var(--ouro-action-foreground,var(--primary-foreground))) " +
       "disabled:opacity-(--ouro-action-disabled-opacity,0.5)",
-    secondary: "border-transparent bg-secondary text-secondary-foreground",
-    destructive: "border-transparent bg-destructive text-destructive-foreground",
-    success: "border-transparent bg-success text-success-foreground",
-    warning: "border-transparent bg-warning text-warning-foreground",
+    secondary: "[--ouro-bd:transparent] [--ouro-bg:var(--secondary)] text-secondary-foreground",
+    destructive: "[--ouro-bd:transparent] [--ouro-bg:var(--destructive)] text-destructive-foreground",
+    success: "[--ouro-bd:transparent] [--ouro-bg:var(--success)] text-success-foreground",
+    warning: "[--ouro-bd:transparent] [--ouro-bg:var(--warning)] text-warning-foreground",
   },
   soft: {
-    primary: "border-transparent bg-primary/10 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))] contrast-more:border-current",
-    secondary: "border-transparent bg-secondary/50 text-secondary-foreground contrast-more:border-current",
-    destructive: "border-transparent bg-destructive/10 text-[color-mix(in_oklab,var(--destructive)_80%,var(--foreground))] contrast-more:border-current",
-    success: "border-transparent bg-success/10 text-[color-mix(in_oklab,var(--success)_80%,var(--foreground))] contrast-more:border-current",
-    warning: "border-transparent bg-warning/10 text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))] contrast-more:border-current",
+    primary: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--primary)_10%,transparent)] text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))] contrast-more:[--ouro-bd:currentColor]",
+    secondary: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--secondary)_50%,transparent)] text-secondary-foreground contrast-more:[--ouro-bd:currentColor]",
+    destructive: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--destructive)_10%,transparent)] text-[color-mix(in_oklab,var(--destructive)_80%,var(--foreground))] contrast-more:[--ouro-bd:currentColor]",
+    success: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--success)_10%,transparent)] text-[color-mix(in_oklab,var(--success)_80%,var(--foreground))] contrast-more:[--ouro-bd:currentColor]",
+    warning: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--warning)_10%,transparent)] text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))] contrast-more:[--ouro-bd:currentColor]",
   },
   outline: {
-    primary: "border-primary/45 bg-transparent text-foreground",
-    secondary: "border-border bg-transparent text-foreground",
-    destructive: "border-destructive/45 bg-transparent text-destructive",
-    success: "border-success/45 bg-transparent text-success",
-    warning: "border-warning/45 bg-transparent text-warning",
+    primary: "[--ouro-bd:color-mix(in_oklab,var(--primary)_45%,transparent)] [--ouro-bg:transparent] text-foreground",
+    secondary: "[--ouro-bd:var(--border)] [--ouro-bg:transparent] text-foreground",
+    destructive: "[--ouro-bd:color-mix(in_oklab,var(--destructive)_45%,transparent)] [--ouro-bg:transparent] text-destructive",
+    success: "[--ouro-bd:color-mix(in_oklab,var(--success)_45%,transparent)] [--ouro-bg:transparent] text-success",
+    warning: "[--ouro-bd:color-mix(in_oklab,var(--warning)_45%,transparent)] [--ouro-bg:transparent] text-warning",
   },
   plain: {
-    primary: "border-transparent bg-transparent text-primary",
-    secondary: "border-transparent bg-transparent text-foreground",
-    destructive: "border-transparent bg-transparent text-destructive",
-    success: "border-transparent bg-transparent text-success",
-    warning: "border-transparent bg-transparent text-warning",
+    primary: "[--ouro-bd:transparent] [--ouro-bg:transparent] text-primary",
+    secondary: "[--ouro-bd:transparent] [--ouro-bg:transparent] text-foreground",
+    destructive: "[--ouro-bd:transparent] [--ouro-bg:transparent] text-destructive",
+    success: "[--ouro-bd:transparent] [--ouro-bg:transparent] text-success",
+    warning: "[--ouro-bd:transparent] [--ouro-bg:transparent] text-warning",
   },
 } as const;
 
@@ -487,6 +491,7 @@ export function Button(props: ButtonProps): JSX.Element {
   const content = (
     <>
       <TouchTarget />
+      <span data-ouro-surface="" aria-hidden="true" />
       <span
         data-ouro-label=""
         className={cn(
@@ -515,7 +520,9 @@ export function Button(props: ButtonProps): JSX.Element {
         onAuxClick={loading ? preventDefault : anchorProps.onAuxClick}
         className={classes}
         data-ouro="button"
+        data-ouro-squircle=""
         data-variant={variant}
+        data-tone={tone}
         data-loading={loading ? "" : undefined}
         data-disabled={loading ? "" : undefined}
         aria-busy={loading || anchorProps["aria-busy"]}
@@ -557,7 +564,9 @@ export function Button(props: ButtonProps): JSX.Element {
       focusableWhenDisabled={Boolean(loading && !disabled)}
       className={classes}
       data-ouro="button"
+      data-ouro-squircle=""
       data-variant={variant}
+      data-tone={tone}
       data-loading={loading ? "" : undefined}
       data-default={isDefault ? "" : undefined}
       aria-keyshortcuts={isDefault ? "Enter" : buttonProps["aria-keyshortcuts"]}

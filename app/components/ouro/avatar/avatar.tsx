@@ -202,27 +202,29 @@ const agentTileClass =
 // The presence dot: its whole size, the ring (padding in the surface's color) and where its
 // center falls, near the circle's edge at the lower end corner.
 const presenceSizes = {
-  xs: "size-2.5 p-px -end-0.5 -bottom-0.5",
-  sm: "size-3 p-px -end-px -bottom-px",
-  md: "size-3.5 p-0.5 -end-px -bottom-px",
-  lg: "size-4 p-0.5 -end-px -bottom-px",
-  xl: "size-5 p-0.5 end-0 bottom-0",
-  "2xl": "size-5.5 p-0.5 end-0 bottom-0",
-  "3xl": "size-7 p-0.75 end-0.5 bottom-0.5",
+  xs: "size-[8px] -end-[2.1px] -bottom-[2.1px]",
+  sm: "size-[9px] -end-[2px] -bottom-[2px]",
+  md: "size-[11px] -end-[2.3px] -bottom-[2.3px]",
+  lg: "size-[13px] -end-[2.7px] -bottom-[2.7px]",
+  xl: "size-[18px] -end-[3.9px] -bottom-[3.9px]",
+  "2xl": "size-[20px] -end-[4.3px] -bottom-[4.3px]",
+  "3xl": "size-[31px] -end-[6.6px] -bottom-[6.6px]",
 } as const;
 
 // Where the dot's center falls (--ouro-bite-c, from the lower end corner) and the radius of
 // its ring (--ouro-bite-r): the avatar's surface is cut away there, so what lies behind the
 // avatar shows through the gap, as a ring in the surface's color could not.
 const biteSizes = {
-  xs: "[--ouro-bite-c:0.1875rem] [--ouro-bite-r:0.3125rem]",
-  sm: "[--ouro-bite-c:calc(0.375rem-1px)] [--ouro-bite-r:0.375rem]",
-  md: "[--ouro-bite-c:calc(0.4375rem-1px)] [--ouro-bite-r:0.4375rem]",
-  lg: "[--ouro-bite-c:calc(0.5rem-1px)] [--ouro-bite-r:0.5rem]",
-  xl: "[--ouro-bite-c:0.625rem] [--ouro-bite-r:0.625rem]",
-  "2xl": "[--ouro-bite-c:0.6875rem] [--ouro-bite-r:0.6875rem]",
-  "3xl": "[--ouro-bite-c:1rem] [--ouro-bite-r:0.875rem]",
+  xs: "[--ouro-bite-c:1.9px] [--ouro-bite-r:5.5px]",
+  sm: "[--ouro-bite-c:2.5px] [--ouro-bite-r:6.1px]",
+  md: "[--ouro-bite-c:3.2px] [--ouro-bite-r:7.5px]",
+  lg: "[--ouro-bite-c:3.8px] [--ouro-bite-r:8.9px]",
+  xl: "[--ouro-bite-c:5.1px] [--ouro-bite-r:12.2px]",
+  "2xl": "[--ouro-bite-c:5.7px] [--ouro-bite-r:13.6px]",
+  "3xl": "[--ouro-bite-c:8.9px] [--ouro-bite-r:21.1px]",
 } as const;
+// Below 40px a glyph cannot be read, so the dot is a plain colour; from 40px up it carries its glyph.
+const plainSizes: readonly AvatarSize[] = ["xs", "sm"];
 const biteClass =
   "[mask-image:radial-gradient(circle_at_calc(100%_-_var(--ouro-bite-c))_calc(100%_-_var(--ouro-bite-c)),transparent_var(--ouro-bite-r),#000_calc(var(--ouro-bite-r)+0.5px))] " + // fade-ok: a bite cut out of the avatar for its presence dot, not a fade
   "rtl:[mask-image:radial-gradient(circle_at_var(--ouro-bite-c)_calc(100%_-_var(--ouro-bite-c)),transparent_var(--ouro-bite-r),#000_calc(var(--ouro-bite-r)+0.5px))]"; // fade-ok: the same bite, mirrored for right to left
@@ -311,39 +313,39 @@ function avatarHint(token: string): string {
 }
 
 /** The presence dot's glyph: a shape per state, so color is not the only cue. */
-function PresenceGlyph({ presence }: { presence: AvatarPresence }): JSX.Element {
+function PresenceGlyph({ presence, plain }: { presence: AvatarPresence; plain: boolean }): JSX.Element {
   const line = { fill: "none", strokeWidth: 1.75, strokeLinecap: "round", strokeLinejoin: "round" } as const;
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" className="block size-full">
       {presence === "available" && (
         <>
           <circle cx="8" cy="8" r="8" className="fill-success" />
-          <path d="M4.75 8.25 7 10.5l4.25-4.5" {...line} className="stroke-success-foreground" />
+          {!plain && <path d="M4.75 8.25 7 10.5l4.25-4.5" {...line} className="stroke-success-foreground" />}
         </>
       )}
       {presence === "busy" && <circle cx="8" cy="8" r="8" className="fill-destructive" />}
       {presence === "do-not-disturb" && (
         <>
           <circle cx="8" cy="8" r="8" className="fill-destructive" />
-          <path d="M4.5 8h7" {...line} className="stroke-destructive-foreground" />
+          {!plain && <path d="M4.5 8h7" {...line} className="stroke-destructive-foreground" />}
         </>
       )}
       {presence === "away" && (
         <>
           <circle cx="8" cy="8" r="8" className="fill-warning" />
-          <path d="M8 4.5v3.75l2.5 1.5" {...line} className="stroke-warning-foreground" />
+          {!plain && <path d="M8 4.5v3.75l2.5 1.5" {...line} className="stroke-warning-foreground" />}
         </>
       )}
       {presence === "offline" && (
         <>
           <circle cx="8" cy="8" r="7" {...line} strokeWidth={2} className="stroke-muted-foreground" />
-          <path d="m5.75 5.75 4.5 4.5m0-4.5-4.5 4.5" {...line} className="stroke-muted-foreground" />
+          {!plain && <path d="m5.75 5.75 4.5 4.5m0-4.5-4.5 4.5" {...line} className="stroke-muted-foreground" />}
         </>
       )}
       {presence === "out-of-office" && (
         <>
           <circle cx="8" cy="8" r="7" {...line} strokeWidth={2} className="stroke-primary" />
-          <path d="M11 8H5.25M7.5 5.5 5 8l2.5 2.5" {...line} className="stroke-primary" />
+          {!plain && <path d="M11 8H5.25M7.5 5.5 5 8l2.5 2.5" {...line} className="stroke-primary" />}
         </>
       )}
     </svg>
@@ -470,7 +472,7 @@ export function Avatar(props: AvatarProps): JSX.Element {
       className={cn(
         "relative box-border inline-flex shrink-0 items-center justify-center align-middle",
         "font-medium leading-none select-none",
-        shape === "circle" ? "rounded-[34%]" : "rounded-[24%]",
+        shape === "circle" ? "rounded-[44%]" : "rounded-[24%]",
         shape === "square" && squareEdgeClass,
         !nameLoading && ink,
         presence && biteSizes[size],
@@ -519,7 +521,7 @@ export function Avatar(props: AvatarProps): JSX.Element {
           data-ouro-avatar-presence=""
           className={cn("pointer-events-none absolute box-border flex [--corner-shape:round] [corner-shape:round] rounded-full", presenceSizes[size])}
         >
-          <PresenceGlyph presence={presence} />
+          <PresenceGlyph presence={presence} plain={plainSizes.includes(size)} />
         </span>
       )}
     </BaseAvatar.Root>
@@ -591,7 +593,7 @@ export function AvatarGroup(props: AvatarGroupProps): JSX.Element {
         <span
           data-ouro-avatar-more=""
           className={cn(
-            "relative box-border inline-flex shrink-0 items-center justify-center rounded-[34%] bg-muted font-medium leading-none text-foreground",
+            "relative box-border inline-flex shrink-0 items-center justify-center rounded-[44%] bg-muted font-medium leading-none text-foreground",
             sizes[size],
           )}
         >

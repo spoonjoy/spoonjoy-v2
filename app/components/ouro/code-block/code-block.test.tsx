@@ -74,6 +74,11 @@ describe("CodeBlock", () => {
     const style = getComputedStyle(block);
     expect(style.backgroundColor).toBe(probe("backgroundColor", "var(--muted)"));
     expect(style.borderTopColor).toBe(probe("borderColor", "var(--border)"));
+    const rule = block.querySelector<HTMLElement>('[data-slot="rule"]')!;
+    expect(getComputedStyle(rule).borderTopColor).toBe(probe("borderColor", "var(--border)"));
+    // The code's own top border stays, transparent, so the code keeps its place under the rule.
+    expect(getComputedStyle(pre).borderTopWidth).toBe("1px");
+    expect(getComputedStyle(pre).borderTopColor).toBe(probe("borderColor", "transparent"));
     expect(getComputedStyle(pre).color).toBe(probe("color", "var(--foreground)"));
     expect(getComputedStyle(pre).whiteSpace).toBe("pre");
     const mono = document.createElement("span");
@@ -217,6 +222,31 @@ describe("CodeBlock", () => {
       expect(plain.hasAttribute("data-ouro-scroll-fade")).toBe(false);
       expect(getComputedStyle(plain).maskImage).toBe("none");
     }
+  });
+
+  it("draws the hairline under its bar from border to border, outside the fade, when a line overflows", async () => {
+    const { block, pre } = await render(
+      <div style={{ width: 320 }}>
+        <CodeBlock code={long} language="ts" />
+      </div>,
+    );
+    await expect.poll(() => pre.hasAttribute("data-ouro-scroll-fade")).toBe(true);
+    const rule = block.querySelector<HTMLElement>('[data-slot="rule"]')!;
+    expect(pre.contains(rule)).toBe(false);
+    expect(getComputedStyle(rule).maskImage).toBe("none");
+    const figure = block.getBoundingClientRect();
+    const style = getComputedStyle(block);
+    const box = rule.getBoundingClientRect();
+    const near = (actual: number, expected: number) => expect(Math.abs(actual - expected)).toBeLessThanOrEqual(0.5);
+    near(box.left, figure.left + parseFloat(style.borderLeftWidth));
+    near(box.right, figure.right - parseFloat(style.borderRightWidth));
+    near(box.top, pre.getBoundingClientRect().top);
+    near(box.height, 1);
+  });
+
+  it("draws no hairline without a bar", async () => {
+    const { block } = await render(<CodeBlock code="ok" copy={false} />);
+    expect(block.querySelector('[data-slot="rule"]')).toBeNull();
   });
 
   it("audits a page of many overflowing code blocks without screenshotting their code, within a time budget", async () => {

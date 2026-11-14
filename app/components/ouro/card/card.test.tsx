@@ -50,6 +50,16 @@ function center(element: Element) {
 }
 
 describe("Card", () => {
+  it("renders a hidden surface layer behind the content of an outline card only", async () => {
+    const { card } = await render(<Card title="Outlined">x</Card>);
+    const surface = card.querySelector<HTMLElement>(":scope > [data-ouro-surface]")!;
+    expect(surface.getAttribute("aria-hidden")).toBe("true");
+    expect(surface.style.zIndex).toBe("-1");
+    expect(card.getAttribute("data-ouro-squircle")).toBe("");
+    const { card: bare } = await render(<Card title="Bare" variant="plain">x</Card>);
+    expect(bare.querySelector("[data-ouro-surface]")).toBeNull();
+    expect(bare.hasAttribute("data-ouro-squircle")).toBe(false);
+  });
   it("renders its slots in order: media, title as <h3>, description, action, body, footer", async () => {
     const { card } = await render(
       <Card
@@ -174,7 +184,7 @@ describe("Card", () => {
   it("renders only the body without a title, description or action", async () => {
     const { card } = await render(<Card>Just a body</Card>);
     expect(card.querySelector("h3")).toBeNull();
-    expect(card.children).toHaveLength(1);
+    expect(card.querySelectorAll(":scope > :not([data-ouro-surface])")).toHaveLength(1);
   });
 
   it("passes attributes and a ref through, and lets layout classes win", async () => {
@@ -205,7 +215,7 @@ describe("Card with href", () => {
     expect(link.getAttribute("href")).toBe("/cookbooks/1");
     await expect.element(page.getByRole("link", { name: "Weeknight dinners" })).toBeVisible();
     // The link's hit area covers the description, the body and the footer.
-    for (const selector of ["[data-body]", "span"]) {
+    for (const selector of ["[data-body]", "span:not([data-ouro-surface])"]) {
       const [x, y] = center(card.querySelector(selector)!);
       expect(document.elementFromPoint(x, y)).toBe(link);
     }
