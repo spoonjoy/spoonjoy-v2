@@ -14,17 +14,31 @@ function row(page: Page, name: string) {
   return page.getByRole("checkbox", { name, exact: true });
 }
 
+// The e2e chef's list is shared with other specs, so each test removes what it added.
+async function removeFromList(page: Page, name: string) {
+  const read = await page.request.get("/api/v1/shopping-list");
+  expect(read.ok()).toBe(true);
+  const { data } = (await read.json()) as { data: { shoppingList: { items: Array<{ id: string; name: string }> } } };
+  for (const item of data.shoppingList.items.filter((candidate) => candidate.name === name)) {
+    const removed = await page.request.delete(`/api/v1/shopping-list/items/${item.id}`, {
+      data: { clientMutationId: `declared-actions-cleanup-${item.id}` },
+    });
+    expect(removed.ok()).toBe(true);
+  }
+}
+
 test.describe("add_shopping_list_item, declared once", () => {
   test("the person adds with the generated Add to list control", async ({ page }) => {
     await page.goto("/shopping-list");
     const add = page.locator("#add-item").getByRole("button", { name: "Add to list", exact: true });
     await expect(add).toHaveAttribute("data-ax-action", "add-shopping-list-item");
 
-    await page.getByLabel(requiredLabel("Item"), { exact: true }).fill("3 tins chickpeas");
+    await page.getByLabel(requiredLabel("Item"), { exact: true }).fill("2 kumquats");
     await add.click();
 
-    await expect(row(page, "chickpeas")).toBeVisible();
+    await expect(row(page, "kumquats")).toBeVisible();
     await page.screenshot({ path: `${OUT}/declared-action-add-to-list-button.png`, fullPage: true, animations: "disabled" });
+    await removeFromList(page, "kumquats");
   });
 
   test("an agent in the person's browser adds with the declared WebMCP tool", async ({ page }) => {
@@ -54,5 +68,6 @@ test.describe("add_shopping_list_item, declared once", () => {
 
     await expect(row(page, "oat milk")).toBeVisible();
     await page.screenshot({ path: `${OUT}/declared-action-webmcp-add.png`, fullPage: true, animations: "disabled" });
+    await removeFromList(page, "oat milk");
   });
 });

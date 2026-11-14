@@ -47,8 +47,8 @@ test.describe('Shopping List Flow', () => {
 
     // If there are items with checkboxes
     if (await checkbox.isVisible({ timeout: 3000 }).catch(() => false)) {
-      const itemName = await checkbox.getAttribute('aria-label');
-      expect(itemName).toBeTruthy();
+      // The row's checkbox is named by its label element (aria-labelledby), not aria-label.
+      await expect(checkbox).toHaveAccessibleName(/\S/);
 
       const checkboxElement = await checkbox.elementHandle();
       expect(checkboxElement).toBeTruthy();
