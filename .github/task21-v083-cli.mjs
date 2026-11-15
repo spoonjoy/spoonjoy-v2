@@ -5,10 +5,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-// The consumer source the v1.3.113 install starts from: main after the Ouro UI core pin bump (#712).
-const acceptedHead = "dbaa4745bf7110ec3bbd4579c46c70ca0ce16a0e";
-const tag = "v1.3.113";
-const tagCommit = "e0c70905c15055a45d8e07bfe7d7cb7555a7fd19";
+// The consumer source the v1.3.117 install starts from: the PR branch after the v1.3.113 adoption (#713).
+const acceptedHead = "20b430782d4d3b907bc40b6e9ed784f1c8d52604";
+const tag = "v1.3.117";
+const tagCommit = "9a9bbfd21a8908e8d121b063271e8a486ebafd80";
 // Every installed registry item, plus the v1.2.0 items Spoonjoy's screens now compose (SkipLink,
 // TabBar, RouteProgress, ColorSchemeToggle, PageHeader, CopyButton, CodeBlock, Timer, TimerTray,
 // Celebrate, ChoiceCard, ImageCropper, ImageField, ShareButton, SyncStatus, LocalDate,
@@ -66,8 +66,13 @@ const installed = JSON.parse(readFileSync(".github/ouro-hx-installed.json", "utf
 assert.equal(installed.tag, tag);
 assert.equal(installed.tagCommit, tagCommit);
 const expected = installed.files;
-// Paths v1.3.113 adds to the v1.3.99 install: none. Every path in this patch updates an existing file.
-const expectedNew = [];
+// Paths v1.3.117 adds to the v1.3.113 install (Collapsible's panel and the until-found hook it now
+// imports); every other path in this patch updates an existing file.
+const expectedNew = [
+  "app/lib/ouro/css-panel.tsx",
+  "app/lib/ouro/use-until-found.test.tsx",
+  "app/lib/ouro/use-until-found.ts",
+].filter((file) => !existsSync(file));
 const protectedPaths = [
   "app", "test", "e2e", "package.json", "pnpm-lock.yaml", "components.json",
   "vitest.config.ts", "vitest.ouro.config.ts", "playwright.ouro.config.ts",
