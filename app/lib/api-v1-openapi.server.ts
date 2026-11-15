@@ -305,7 +305,7 @@ const schemas = {
     pendingAppleLinkToken: { type: ["string", "null"], maxLength: 128, description: "The pendingAppleLinkToken from an Apple sign-in on this device that found no Spoonjoy account (error providerCode apple_email_unavailable). After this sign-in succeeds, Apple is linked to the account, once, within thirty minutes of that Apple sign-in." },
   }),
   NativeTelemetryRequest: objectSchema(["event"], {
-    event: { type: "string", enum: ["bootstrap_failed", "bootstrap_offline", "app_intent_completed", "app_intent_failed", "auth_flow_started", "auth_flow_completed", "auth_flow_failed", "search_started", "search_completed", "search_failed", "settings_refresh_failed", "sync_failed"], description: "Constrained native diagnostic event name. Raw search text, error messages, and response bodies are not accepted." },
+    event: { type: "string", enum: ["bootstrap_failed", "bootstrap_offline", "app_intent_completed", "app_intent_failed", "auth_flow_started", "auth_flow_completed", "auth_flow_failed", "search_started", "search_completed", "search_failed", "settings_refresh_failed", "sync_failed", "launch_completed"], description: "Constrained native diagnostic event name. Raw search text, error messages, and response bodies are not accepted." },
     stage: { type: ["string", "null"], maxLength: 80 },
     environment: { type: ["string", "null"], enum: ["local", "preview", "production", null] },
     platform: { type: ["string", "null"], enum: ["ios", "macos", null] },
@@ -347,6 +347,35 @@ const schemas = {
     searchQueryLength: { type: ["integer", "null"], minimum: 0, maximum: 100000, description: "Search query length only. The raw query is never accepted." },
     searchResultCount: { type: ["integer", "null"], minimum: 0, maximum: 100000 },
     durationMilliseconds: { type: ["integer", "null"], minimum: 0, maximum: 86400000 },
+    installId: { type: ["string", "null"], pattern: "^[A-Za-z0-9-]{8,64}$", description: "Random per-install id, used as the anonymous analytics id before sign-in." },
+  }),
+  NativeDiagnosticsRequest: objectSchema(["kind", "diagnosticId"], {
+    kind: { type: "string", enum: ["crash", "hang"], description: "MetricKit diagnostic kind." },
+    diagnosticId: { type: "string", minLength: 1, maxLength: 80, description: "Client id for the diagnostic, stable across retries." },
+    installId: { type: ["string", "null"], pattern: "^[A-Za-z0-9-]{8,64}$" },
+    environment: { type: ["string", "null"], enum: ["local", "preview", "production", null] },
+    platform: { type: ["string", "null"], enum: ["ios", "macos", null] },
+    appVersion: { type: ["string", "null"], maxLength: 40 },
+    buildNumber: { type: ["string", "null"], maxLength: 40 },
+    osVersion: { type: ["string", "null"], maxLength: 80 },
+    deviceModel: { type: ["string", "null"], maxLength: 80 },
+    timestampBegin: { type: ["string", "null"], maxLength: 40, format: "date-time" },
+    timestampEnd: { type: ["string", "null"], maxLength: 40, format: "date-time" },
+    exceptionType: { type: ["integer", "null"], minimum: 0, maximum: 1000000 },
+    exceptionCode: { type: ["string", "null"], maxLength: 40 },
+    signal: { type: ["integer", "null"], minimum: 0, maximum: 1000 },
+    terminationReason: { type: ["string", "null"], maxLength: 300 },
+    hangDurationMilliseconds: { type: ["integer", "null"], minimum: 0, maximum: 86400000 },
+    frames: {
+      type: ["array", "null"],
+      maxItems: 24,
+      description: "Top frames of the crashed (or first) thread, unsymbolicated. No symbol text or user content.",
+      items: objectSchema(["binaryName", "offsetIntoBinaryTextSegment"], {
+        binaryName: { type: "string", minLength: 1, maxLength: 120 },
+        binaryUUID: { type: ["string", "null"], maxLength: 40 },
+        offsetIntoBinaryTextSegment: { type: "integer", minimum: 0 },
+      }),
+    },
   }),
   NativeTelemetryData: objectSchema(["accepted"], {
     accepted: { type: "boolean" },
@@ -1771,6 +1800,9 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   "/api/v1/native/telemetry": {
     POST: { operationId: "postApiV1NativeTelemetry", tags: ["Native"], summary: "Capture redacted first-party native app diagnostics", auth: "optional", scopes: [], success: { 202: "NativeTelemetryEnvelope" }, errors: ["invalid_json", "validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "NativeTelemetryRequest" },
   },
+  "/api/v1/native/diagnostics": {
+    POST: { operationId: "postApiV1NativeDiagnostics", tags: ["Native"], summary: "Capture MetricKit crash and hang summaries from the first-party native apps", auth: "optional", scopes: [], success: { 202: "NativeTelemetryEnvelope" }, errors: ["invalid_json", "validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "NativeDiagnosticsRequest" },
+  },
   "/api/v1/search": {
     GET: { operationId: "getApiV1Search", tags: ["Search"], summary: "Search recipes, cookbooks, chefs, and authorized private shopping-list items", auth: "optional", scopes: [], success: { 200: "SearchEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.searchQuery, queryParameters.searchQ, queryParameters.scope, queryParameters.limit] },
   },
@@ -3038,6 +3070,20 @@ const requestExamples: Record<string, unknown> = {
   NativePasswordSignInRequest: {
     emailOrUsername: "ari@spoonjoy.app",
     password: "correct horse battery staple",
+  },
+  NativeDiagnosticsRequest: {
+    kind: "crash",
+    diagnosticId: "5B0D3C1E-1F7A-4C2E-9D7B-3A1E2F4C5D6E",
+    platform: "ios",
+    appVersion: "1.2.2",
+    buildNumber: "176",
+    osVersion: "iPhone OS 27.1 (25B74)",
+    deviceModel: "iPhone17,1",
+    exceptionType: 1,
+    exceptionCode: "0",
+    signal: 11,
+    terminationReason: "Namespace SIGNAL, Code 11 Segmentation fault: 11",
+    frames: [{ binaryName: "Spoonjoy", binaryUUID: "70B89F27-1634-3580-A695-57CDB41D7743", offsetIntoBinaryTextSegment: 123456 }],
   },
   NativeTelemetryRequest: {
     event: "search_completed",
