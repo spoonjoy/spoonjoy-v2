@@ -273,6 +273,7 @@
         "app/lib/analytics.ts",
         "app/lib/api-auth.server.ts",
         "app/lib/api-idempotency.server.ts",
+        "app/lib/auth-telemetry.server.ts",
         "app/lib/auth.server.ts",
         "app/lib/canonical-host.server.ts",
         "app/lib/d1-read.server.ts",
@@ -287,6 +288,7 @@
         "app/lib/llm-telemetry.server.ts",
         "app/lib/oauth-client-metadata.ts",
         "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-provider-call.server.ts",
         "app/lib/oauth-route.server.ts",
         "app/lib/oauth-server.server.ts",
         "app/lib/oauth-user.server.ts",
@@ -300,6 +302,7 @@
         "app/lib/route-platform.server.ts",
         "app/lib/session-version-fence.server.ts",
         "app/lib/session.server.ts",
+        "app/lib/sign-in-outcome.server.ts",
         "app/lib/slow-call.server.ts",
         "app/lib/transactional-email.server.ts",
         "app/lib/username.ts",
@@ -693,6 +696,7 @@
         "app/lib/route-platform.server.ts",
         "app/lib/session-version-fence.server.ts",
         "app/lib/session.server.ts",
+        "app/lib/sign-in-outcome.server.ts",
         "app/lib/slow-call.server.ts",
         "app/lib/username.ts"
       ],
@@ -779,6 +783,7 @@
         "app/lib/route-platform.server.ts",
         "app/lib/session-version-fence.server.ts",
         "app/lib/session.server.ts",
+        "app/lib/sign-in-outcome.server.ts",
         "app/lib/slow-call.server.ts",
         "app/lib/username.ts"
       ],
@@ -865,6 +870,7 @@
         "app/lib/route-platform.server.ts",
         "app/lib/session-version-fence.server.ts",
         "app/lib/session.server.ts",
+        "app/lib/sign-in-outcome.server.ts",
         "app/lib/slow-call.server.ts",
         "app/lib/username.ts"
       ],
@@ -1080,6 +1086,7 @@
         "app/lib/route-platform.server.ts",
         "app/lib/session-version-fence.server.ts",
         "app/lib/session.server.ts",
+        "app/lib/sign-in-outcome.server.ts",
         "app/lib/slow-call.server.ts",
         "app/lib/username.ts"
       ],
