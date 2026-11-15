@@ -321,9 +321,11 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
               data-ouro-part="item"
               data-variant={variant}
               data-shape={shape}
+              data-ouro-squircle={shape === "rect" ? "" : undefined}
               className={cn(toggleBase, shapes[shape], sizes[size], looks[variant], iconOnly && squareClass)}
             >
               <TouchTarget />
+              {shape === "rect" && <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />}
               {Icon && <Icon aria-hidden="true" className={cn(iconClass, "relative", !iconOnlyItem && "-ms-0.5")} />}
               {!iconOnly && <span className={cn("relative", iconOnlyItem && "sr-only")}>{itemLabel}</span>}
             </BaseToggle>

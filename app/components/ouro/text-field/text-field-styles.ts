@@ -90,9 +90,11 @@ const groupBaseClass =
  */
 const groupVariants = {
   outline:
-    "px-3 border border-solid border-input bg-transparent " +
-    "transition-[border-color] duration-(--ouro-duration-fast) ease-[ease] " +
-    "has-[input[aria-invalid=true]]:border-destructive dark:bg-input/30",
+    "isolate px-3 border border-solid border-(--ouro-bd) bg-(--ouro-bg) " +
+    "[--ouro-bg:transparent] dark:[--ouro-bg:color-mix(in_oklab,var(--input)_30%,transparent)] [--ouro-bd:var(--input)] " +
+    "has-[input[aria-invalid=true]]:[--ouro-bd:var(--destructive)] [--ouro-sq-w:1px] " +
+    "[--ouro-sq-r:calc(var(--radius-md)/var(--ouro-corner-fallback,1))] " +
+    "transition-[border-color] duration-(--ouro-duration-fast) ease-[ease] ",
   plain: "px-0 border-0 bg-transparent",
 } as const;
 

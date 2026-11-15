@@ -1,11 +1,11 @@
 "use client";
 
-import { Collapsible as BaseCollapsible } from "@base-ui/react/collapsible";
-import { useSyncExternalStore, type JSX, type ReactNode, type Ref } from "react";
+import { useId, useState, type JSX, type ReactNode, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
+import { CssPanel } from "~/lib/ouro/css-panel";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
-import { iconClass, ownLook, panelClass, rootClass, triggerClass } from "~/components/ouro/collapsible/collapsible-styles";
+import { iconClass, ownLook, rootClass, triggerClass } from "~/components/ouro/collapsible/collapsible-styles";
 
 /** Props for {@link Collapsible}. */
 export interface CollapsibleProps {
@@ -33,21 +33,6 @@ export interface CollapsibleProps {
   onChange?: { 'Use <Collapsible onOpenChange={(open) => ...}>': never };
   /** Not a prop. Ouro UI uses `open`: `<Collapsible open>`. */
   isOpen?: { 'Use <Collapsible open>': never };
-}
-
-const noSubscribe = () => () => {};
-
-/**
- * Whether the browser reveals `hidden="until-found"` content for its page search
- * (Chromium does; WebKit does not, and would show the content). False on the server, so
- * hydration matches, and closed content stays in the server HTML either way.
- */
-function useUntilFound(): boolean {
-  return useSyncExternalStore(
-    noSubscribe,
-    () => "onbeforematch" in document.body,
-    () => false,
-  );
 }
 
 /**
@@ -106,18 +91,30 @@ export function Collapsible(props: CollapsibleProps): JSX.Element {
         }
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
-  const untilFound = useUntilFound();
+  const panelId = useId();
+  const [own, setOwn] = useState(defaultOpen === true);
+  const expanded = open ?? own;
+  const change = (next: boolean) => {
+    // Stryker disable next-line ConditionalExpression: a controlled component ignores its own state, so setting it too changes nothing visible.
+    if (open === undefined) setOwn(next);
+    onOpenChange?.(next);
+  };
   return (
-    <BaseCollapsible.Root
-      ref={ref}
-      open={open}
-      defaultOpen={defaultOpen}
-      onOpenChange={onOpenChange ? (next: boolean) => onOpenChange(next) : undefined}
-      disabled={disabled}
-      data-ouro="collapsible"
-      className={cn(rootClass, className)}
-    >
-      <BaseCollapsible.Trigger data-ouro-control="collapsible" data-ouro-part="trigger" className={triggerClass}>
+    <div ref={ref} data-ouro="collapsible" className={cn(rootClass, className)}>
+      <button
+        type="button"
+        disabled={disabled}
+        aria-expanded={expanded}
+        aria-controls={expanded ? panelId : undefined}
+        // Stryker disable next-line StringLiteral: any value of a presence attribute styles the same.
+        data-disabled={disabled ? "" : undefined}
+        // Stryker disable next-line StringLiteral: any value of a presence attribute styles the same.
+        data-panel-open={expanded ? "" : undefined}
+        data-ouro-control="collapsible"
+        data-ouro-part="trigger"
+        className={triggerClass}
+        onClick={() => change(!expanded)}
+      >
         {title}
         <svg
           aria-hidden="true"
@@ -131,10 +128,10 @@ export function Collapsible(props: CollapsibleProps): JSX.Element {
         >
           <path d="m4 6 4 4 4-4" />
         </svg>
-      </BaseCollapsible.Trigger>
-      <BaseCollapsible.Panel keepMounted hiddenUntilFound={untilFound} data-ouro-collapsible-panel="" className={panelClass}>
-        <div className="pt-1 pb-2">{children}</div>
-      </BaseCollapsible.Panel>
-    </BaseCollapsible.Root>
+      </button>
+      <CssPanel id={panelId} open={expanded} onFound={() => change(true)} contentClassName="pt-1 pb-2" data-ouro-collapsible-panel="">
+        {children}
+      </CssPanel>
+    </div>
   );
 }

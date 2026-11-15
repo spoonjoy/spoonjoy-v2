@@ -484,6 +484,7 @@ export function Avatar(props: AvatarProps): JSX.Element {
         data-ouro-avatar-surface=""
         className={cn(
           "absolute inset-0 flex items-center justify-center rounded-[inherit]",
+          shape === "circle" ? "[--ouro-sq-r:44%]" : "[--ouro-sq-r:24%]",
           shape === "agent" ? agentTileClass : !nameLoading && fill,
           presence && biteClass,
         )}

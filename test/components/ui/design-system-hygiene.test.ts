@@ -35,8 +35,8 @@ function listTextFiles(dirs: string[]): string[] {
   return found;
 }
 
-// Every file the HX CLI installs from v1.3.99 (tag commit
-// 4cd281f96956d42fa5c8e31b791b0b1e682ee6a1), whatever its extension or folder: components, lib
+// Every file the HX CLI installs from v1.3.117 (tag commit
+// 9a9bbfd21a8908e8d121b063271e8a486ebafd80), whatever its extension or folder: components, lib
 // modules, specs, the census and source-rule kits and the claims checker. The CLI's binding
 // (.github/task21-v083-cli.mjs) checks the CLI's output against this same map, and the digest
 // below pins the map itself, including the CLI's omission of the checker's leading docs comment.
@@ -79,11 +79,11 @@ describe("Spoonjoy UI design-system hygiene", () => {
     expect(existsSync(resolve(process.cwd(), "app/components/button.tsx"))).toBe(false);
   });
   it("pins every file the HX CLI installed, in every folder and of every type, to the tag's bytes", () => {
-    expect(installed.tag).toBe("v1.3.99");
-    expect(installed.tagCommit).toBe("4cd281f96956d42fa5c8e31b791b0b1e682ee6a1");
-    expect(installedFiles).toHaveLength(618);
+    expect(installed.tag).toBe("v1.3.117");
+    expect(installed.tagCommit).toBe("9a9bbfd21a8908e8d121b063271e8a486ebafd80");
+    expect(installedFiles).toHaveLength(621);
     expect(sha256(JSON.stringify(installedFiles.map((file) => [file, installed.files[file]]))))
-      .toBe("b5f686532b1b4e49d33d99ca2a69fc2dc897d0323c78b5f5a7e6a78f37a730dc");
+      .toBe("15aae448156bc5d4b07299262871a33e3106cd391ead8dffcea08a18d5ecbe62");
     const actual = Object.fromEntries(installedFiles.map((file) => [
       file,
       existsSync(resolve(process.cwd(), file)) ? sha256(normalizedRegistrySource(readSourceFile(file))) : null,
@@ -173,7 +173,8 @@ describe("Spoonjoy UI design-system hygiene", () => {
     const css = readSourceFile("app/styles/tailwind.css");
 
     expect(css).toContain("--radius: var(--sj-radius-control);");
-    expect(css).toContain("--radius-xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 1.4);");
+    expect(css).toContain("--radius-xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 1.4);");
+    expect(css).toMatch(/@supports not \(corner-shape: squircle\) \{\s*:root \{\s*--ouro-corner-fallback: 0\.7;/);
   });
 
   it("keeps page mastheads from stacking a top rule under the desktop nav", () => {

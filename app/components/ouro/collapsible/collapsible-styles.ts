@@ -4,7 +4,6 @@ export {
   itemClass,
   listClass,
   ownLook,
-  panelClass,
   rootClass,
   showMoreHint,
   showMoreRootClass,
@@ -62,21 +61,6 @@ const triggerClass =
 const iconClass =
   "size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--ouro-duration-base) ease-(--ouro-ease-out) " +
   "group-data-panel-open/trigger:rotate-180 motion-reduce:transition-none";
-
-/**
- * The panel: it grows from 0 to its measured height (Base UI's
- * `--collapsible-panel-height`) and shrinks back; with reduced motion it opens and closes at
- * once. Closed, it stays mounted and hidden; where the browser supports `hidden="until-found"`,
- * its page search finds and opens it.
- *
- * @internal
- * @claim "Closed, it stays mounted and hidden" registry/ouro/components/ouro/collapsible/collapsible.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/collapsible.test.tsx::Collapsible > lets the browser's page search find and open it, and hides it plainly where until-found is unsupported)
- * @claim "The panel: it grows from 0" registry/ouro/components/ouro/collapsible/collapsible.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/collapsible.test.tsx::Collapsible > animates the panel to its measured height, and not with reduced motion)
- */
-const panelClass =
-  "w-full h-(--collapsible-panel-height) overflow-hidden " +
-  "transition-[height] duration-(--ouro-duration-base) ease-(--ouro-ease-out) motion-reduce:transition-none " +
-  "data-starting-style:h-0 data-ending-style:h-0 [&[hidden]:not([hidden=until-found])]:hidden";
 
 /** @internal */
 const showMoreRootClass = "box-border grid min-w-0 justify-items-start gap-2";

@@ -77,6 +77,15 @@ afterEach(async () => {
 });
 
 describe("Avatar", () => {
+  it("sets the squircle corner size of its surface by shape", async () => {
+    const circle = await render(<Avatar name="Ada Lovelace" />);
+    const square = await render(<Avatar name="Ada Lovelace" shape="square" />);
+    expect(surface(circle.avatar).className).toContain("[--ouro-sq-r:44%]");
+    expect(surface(circle.avatar).className).not.toContain("24%");
+    expect(surface(square.avatar).className).toContain("[--ouro-sq-r:24%]");
+    expect(surface(square.avatar).className).not.toContain("44%");
+  });
+
   it("shows initials from the name, and the name to screen readers", async () => {
     const { avatar } = await render(<Avatar name="Ana Rae Lind" />);
     expect(avatar.getAttribute("role")).toBe("img");

@@ -1,11 +1,7 @@
 {
   "https://github.com/ourostack/ouro-ui-core/blob/d9de146f03df8e7f9c8d2bbbb872f323ebae1f64/LICENSE": {
     "status": 200,
-    "checked": "2026-11-14"
-  },
-  "https://github.com/ourostack/ouro-ui/blob/4cd281f96956d42fa5c8e31b791b0b1e682ee6a1/LICENSE": {
-    "status": 200,
-    "checked": "2026-11-14"
+    "checked": "2026-11-15"
   },
   "https://github.com/ourostack/ouro-ui/blob/96542d72b60b436dd6a60447d888a4c9e9d5edf7/docs/guides/claims.md": {
     "status": 200,
@@ -21,7 +17,7 @@
   },
   "https://github.com/ourostack/ouro-ui/blob/96542d72b60b436dd6a60447d888a4c9e9d5edf7/scripts/kits/census-update.test.mjs#L162": {
     "status": 200,
-    "checked": "2026-11-14"
+    "checked": "2026-11-15"
   },
   "https://github.com/ourostack/ouro-ui/blob/96542d72b60b436dd6a60447d888a4c9e9d5edf7/scripts/kits/census-update.test.mjs#L297": {
     "status": 200,
@@ -33,7 +29,7 @@
   },
   "https://github.com/ourostack/ouro-ui/blob/96542d72b60b436dd6a60447d888a4c9e9d5edf7/scripts/kits/census-update.test.mjs#L331": {
     "status": 200,
-    "checked": "2026-11-14"
+    "checked": "2026-11-15"
   },
   "https://github.com/ourostack/ouro-ui/blob/96542d72b60b436dd6a60447d888a4c9e9d5edf7/scripts/kits/census-update.test.mjs#L365": {
     "status": 200,
@@ -69,7 +65,7 @@
   },
   "https://github.com/ourostack/ouro-ui/blob/96542d72b60b436dd6a60447d888a4c9e9d5edf7/scripts/kits/source-rules.test.mjs#L1401": {
     "status": 200,
-    "checked": "2026-11-14"
+    "checked": "2026-11-15"
   },
   "https://github.com/ourostack/ouro-ui/blob/96542d72b60b436dd6a60447d888a4c9e9d5edf7/scripts/kits/source-rules.test.mjs#L1408": {
     "status": 200,
@@ -89,10 +85,14 @@
   },
   "https://github.com/ourostack/ouro-ui/blob/96542d72b60b436dd6a60447d888a4c9e9d5edf7/scripts/kits/source-rules.test.mjs#L737": {
     "status": 200,
-    "checked": "2026-11-14"
+    "checked": "2026-11-15"
+  },
+  "https://github.com/ourostack/ouro-ui/blob/9a9bbfd21a8908e8d121b063271e8a486ebafd80/LICENSE": {
+    "status": 200,
+    "checked": "2026-11-15"
   },
   "https://github.com/ourostack/ouro-ui/pull/122": {
     "status": 200,
-    "checked": "2026-11-14"
+    "checked": "2026-11-15"
   }
 }
