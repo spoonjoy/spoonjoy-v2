@@ -207,6 +207,32 @@ describe("audit", () => {
     expect(await measureTextContrast(document.querySelector("#far")!, 4.5)).toEqual({ pass: true });
   });
 
+  it("measures a long list's rows from pictures of the box that scrolls them, not one picture per row", async () => {
+    // The rows sit in a group taller than the screen, inside a list that scrolls and fits on it, as a
+    // command palette's long list does. Each row measured alone took a screenshot of its own: Command's
+    // test took nine and ran out of time on a loaded runner (ourostack/ouro-ui#1520).
+    const rows = Array.from({ length: 40 }, (_, index) => `<div role="option" aria-selected="false" style="height:40px;color:#111">Row ${index + 1}</div>`).join("");
+    mountPage(
+      `<div id="list" role="listbox" aria-label="Rows" tabindex="0" style="height:300px;overflow:auto;background:linear-gradient(#fff,#fff)"><div role="group" aria-label="All">${rows}</div></div>`,
+    );
+    const take = page.screenshot.bind(page);
+    const pictures: Element[] = [];
+    const shots = vi.spyOn(page, "screenshot").mockImplementation((options) =>
+      take(options).then((data) => {
+        pictures.push((options as { element: Element }).element);
+        return data;
+      }),
+    );
+    try {
+      expect(describeFindings(await scanPage())).toBe("");
+    } finally {
+      shots.mockRestore();
+    }
+    const list = document.querySelector("#list")!;
+    expect(pictures.length).toBeGreaterThan(0);
+    expect(pictures.filter((element) => !element.contains(list))).toEqual([]);
+  });
+
   it("measures every label in one SVG from one screenshot of it, and fails the faint one once it is measured alone too", async () => {
     mountPage(
       '<svg role="img" aria-label="Plan" width="300" height="80"><defs><linearGradient id="paper"><stop offset="0" stop-color="#fff" /><stop offset="1" stop-color="#eee" /></linearGradient></defs>' +

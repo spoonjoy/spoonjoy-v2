@@ -73,3 +73,27 @@ export const States: Story = {
     </Surface>
   ),
 };
+
+/** A switch on a slide that keeps out of the way: with a mouse it shows while the pointer rests on it or focus is in it. */
+export const RevealOnHover: Story = {
+  render: function Render(args) {
+    const [show, setShow] = useState("teaser");
+    return (
+      <Surface>
+        <Text>The braising guide is {show === "teaser" ? "coming soon" : "ready to try"}.</Text>
+        <SegmentedControl
+          {...args}
+          label="Show the guide as"
+          hideLabel
+          revealOnHover
+          items={[
+            { value: "teaser", label: "Coming soon" },
+            { value: "invitation", label: "Ready to try" },
+          ]}
+          value={show}
+          onValueChange={setShow}
+        />
+      </Surface>
+    );
+  },
+};

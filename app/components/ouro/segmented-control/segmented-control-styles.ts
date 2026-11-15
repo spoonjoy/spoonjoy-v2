@@ -1,4 +1,4 @@
-export { groupClass, labelClass, ownLook, rootClass, segmentClass, thumbClass };
+export { groupClass, labelClass, ownLook, revealClass, rootClass, segmentClass, thumbClass };
 
 // Class strings for SegmentedControl, apart from the component so its file exports only
 // components (React Fast Refresh). Class strings are literal so the app's Tailwind finds
@@ -20,6 +20,9 @@ function ownLook(component: string): (token: string) => string {
  */
 const rootClass = "box-border grid min-w-0 content-start justify-items-start gap-2";
 
+// revealOnHover: with a mouse, transparent until the pointer rests on the control or focus is in it.
+const revealClass = "transition-opacity duration-(--ouro-duration-fast) ease-[ease] pointer-fine:[&:not(:hover,:focus-within)]:opacity-0";
+
 /**
  * The label, as Field draws it.
  *
@@ -28,33 +31,38 @@ const rootClass = "box-border grid min-w-0 content-start justify-items-start gap
 const labelClass = "m-0 block text-sm leading-5 font-medium text-foreground select-none";
 
 /**
- * The track: equal columns, one per segment, as wide as the longest label needs. 44px tall on
- * a coarse pointer, stepping down to 36px from `sm` with a fine pointer.
+ * The track: one column per segment, each at least as wide as its label, so no label is cut. The
+ * columns are equal when every label fits an equal share, as Apple's segmented control does; when
+ * one doesn't, it keeps its width and the others share the rest equally. 44px tall on a coarse pointer, stepping down to
+ * 36px from `sm` with a fine pointer.
+ * @claim "so no label is cut" registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx verify:testExists(registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx::SegmentedControl > shows every label whole: equal segments when they fit, and a long label keeps its width when they don't)
+ * @claim "The columns are equal when every label fits" registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx verify:testExists(registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx::SegmentedControl > shows every label whole: equal segments when they fit, and a long label keeps its width when they don't)
  *
  * @internal
  * @claim "44px tall on a coarse pointer" registry/ouro/components/ouro/segmented-control/segmented-control.touch.test.tsx verify:testExists(registry/ouro/components/ouro/segmented-control/segmented-control.touch.test.tsx::keeps 44px segments with 16px text on a phone, also in landscape)
  */
 const groupClass =
-  "relative isolate m-0 box-border inline-grid max-w-full grid-flow-col auto-cols-[minmax(0,1fr)] p-0.5 " +
+  "relative isolate m-0 box-border inline-grid max-w-full grid-flow-col auto-cols-[minmax(max-content,1fr)] p-0.5 [anchor-scope:--ouro-segment] " +
   "h-(--ouro-segmented-h) [--ouro-segmented-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-segmented-h:calc(var(--spacing)*9)] " +
   "rounded-lg bg-muted forced-colors:border forced-colors:border-solid";
 
 /**
- * The raised thumb behind the pressed segment. Segments are equal, so its place is the
- * pressed index times its own width: no measuring, and server HTML already has it right.
+ * The raised thumb behind the pressed segment, whose edges it takes by CSS anchor positioning
+ * (the pressed segment is the anchor, Baseline since January 2026): no measuring, and server
+ * HTML already has it right.
  * It slides on the ease-in-out token; with reduced motion, or on an arrow key, it moves at once.
  *
  * @internal
- * @claim "Segments are equal, so its place" registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx verify:testExists(registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx::SegmentedControl > slides the thumb under the pressed segment with a transition)
- * @claim "Segments are equal, so its place" registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx verify:testExists(registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx::SegmentedControl > keeps the label id and pressed state in server HTML and hydrates without a mismatch)
+ * @claim "no measuring, and server HTML already has it right" registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx verify:testExists(registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx::SegmentedControl > slides the thumb under the pressed segment with a transition)
+ * @claim "no measuring, and server HTML already has it right" registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx verify:testExists(registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx::SegmentedControl > keeps the label id and pressed state in server HTML and hydrates without a mismatch)
  */
 const thumbClass =
-  "pointer-events-none absolute top-0.5 bottom-0.5 start-0.5 -z-1 rounded-md " +
-  "w-[calc((100%-var(--spacing)*1)/var(--ouro-segment-count))] translate-x-[calc(var(--ouro-segment-index)*100%)] rtl:translate-x-[calc(var(--ouro-segment-index)*-100%)] " +
+  "pointer-events-none absolute top-0.5 bottom-0.5 -z-1 rounded-md " +
+  "[position-anchor:--ouro-segment] start-[anchor(start)] end-[anchor(end)] " +
   "forced-colors:bg-[Highlight] " +
   "bg-background dark:bg-[color-mix(in_oklab,var(--foreground)_16%,var(--muted))] " +
   "shadow-(--shadow-sm) " +
-  "[transition:translate_var(--ouro-duration-base)_var(--ouro-ease-in-out),opacity_var(--ouro-duration-fast)_ease] " +
+  "[transition:inset-inline-start_var(--ouro-duration-base)_var(--ouro-ease-in-out),inset-inline-end_var(--ouro-duration-base)_var(--ouro-ease-in-out),opacity_var(--ouro-duration-fast)_ease] " +
   "motion-reduce:[transition:opacity_var(--ouro-duration-fast)_ease] in-data-ouro-keyboard:[transition:none]";
 
 /**
@@ -69,10 +77,10 @@ const thumbClass =
  * @claim "The muted text is mixed 20%" registry/ouro/components/ouro/segmented-control/segmented-control-styles.ts verify:fileLine(registry/ouro/components/ouro/segmented-control/segmented-control-styles.ts, /text-\[color-mix\(in_oklab,var\(--muted-foreground\)_80%,var\(--foreground\)\)\]/)
  */
 const segmentClass =
-  "press relative m-0 box-border flex min-w-0 cursor-pointer items-center justify-center px-3 pointer-coarse:min-w-11 " +
+  "press relative m-0 box-border flex cursor-pointer items-center justify-center px-3 pointer-coarse:min-w-11 " +
   "rounded-md border-0 bg-transparent text-base font-medium whitespace-nowrap text-[color-mix(in_oklab,var(--muted-foreground)_80%,var(--foreground))] sm:pointer-fine:text-sm " +
   "select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "not-data-disabled:not-data-pressed:pointer-fine:hover:text-foreground data-pressed:text-foreground forced-colors:data-pressed:text-[HighlightText] " +
-  "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
+  "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) data-pressed:[anchor-name:--ouro-segment] " +
   "outline-ring outline-offset-1 focus-visible:outline-2 focus-visible:outline-solid " +
   "data-disabled:cursor-not-allowed data-disabled:opacity-50";

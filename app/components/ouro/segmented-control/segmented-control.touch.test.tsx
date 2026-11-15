@@ -69,3 +69,8 @@ it("presses a segment on tap", async () => {
   await commands.tap("[data-ouro-segment]:nth-of-type(2)");
   expect(host.querySelectorAll("[data-ouro-segment]")[1]!.getAttribute("aria-checked")).toBe("true");
 });
+
+it("shows a revealOnHover control from the start on a touch screen", async () => {
+  const host = await render(<SegmentedControl label="Show as" items={[{ value: "a", label: "A" }, { value: "b", label: "B" }]} revealOnHover />);
+  expect(getComputedStyle(host.querySelector('[data-ouro="segmented-control"]')!).opacity).toBe("1");
+});

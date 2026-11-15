@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { CheckboxGroup, type CheckboxGroupProps } from "~/components/ouro/checkbox/checkbox-group";
-import { Switch } from "~/components/ouro/switch/switch";
 import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
 
@@ -311,20 +310,6 @@ describe("CheckboxGroup development messages", () => {
     expect(messages()).toEqual([
       "[ouro-ui] CheckboxGroup: value without onValueChange never changes. Fix: <CheckboxGroup value={values} onValueChange={setValues}>, or defaultValue.",
     ]);
-  });
-
-  it("throws with the fix for a Switch inside the group", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    await expect(
-      render(
-        <CheckboxGroup legend="Notify me">
-          <Switch label="Comments" />
-        </CheckboxGroup>,
-      ),
-    ).rejects.toThrow(
-      '[ouro-ui] Switch: a CheckboxGroup takes Checkbox choices. Fix: <Checkbox value="comments" label="Comments" />, or put the Switch outside the group.',
-    );
-    error.mockRestore();
   });
 
   it("has no messages for valid props", async () => {

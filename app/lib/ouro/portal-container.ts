@@ -1,6 +1,6 @@
 "use client";
 
-export { PortalScope, TooltipsHidden, usePortalContainer };
+export { PortalScope, TooltipsGrouped, TooltipsHidden, usePortalContainer };
 export type { PortalContainerProps };
 
 import { createContext, createElement, useContext, useRef, useState, useSyncExternalStore, type JSX, type ReactNode, type RefObject } from "react";
@@ -22,6 +22,9 @@ const InsidePortal = createContext(false);
  * names, and opens again as usual after.
  */
 const TooltipsHidden = createContext(false);
+
+/** True inside OuroProvider, which groups tooltips: once one shows, a neighbour opens at once. @internal */
+const TooltipsGrouped = createContext(false);
 
 /**
  * Wraps what renders inside an Ouro UI portal, so a popup opened from it portals into it

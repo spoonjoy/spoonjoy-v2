@@ -1,7 +1,9 @@
 "use client";
 
+import { CSPProvider } from "@base-ui/react/csp-provider";
 import { Tooltip } from "@base-ui/react/tooltip";
-import { useEffect, useMemo, type JSX, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, type JSX, type ReactNode, type RefObject } from "react";
+import { TooltipsGrouped } from "~/lib/ouro/portal-container";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { DefaultLink, OuroContext, useOuro, type OuroContextValue, type OuroLinkComponent, type OuroMotion } from "~/lib/ouro/use-ouro";
 
@@ -48,7 +50,7 @@ export interface OuroProviderProps {
    * the `prefers-reduced-motion` media query: `[data-motion="reduced"] .wave { animation: none }`.
    * While a provider with `reduced` is on the page, Ouro UI's CSS animations and transitions,
    * and your own, end at once everywhere but inside a provider set to `full`. It does this with a
-   * `<style>` of its own, the one stylesheet an Ouro UI component brings: an app's own setting must
+   * `<style>` of its own (a constructed stylesheet under `strictCsp`), the one stylesheet an Ouro UI component brings: an app's own setting must
    * still the dialogs, sheets and toasts that render outside the provider's element too, and Ouro
    * UI's classes follow only the device's media query. With `full`, a transition Ouro UI keeps
    * for `prefers-reduced-motion: no-preference` still follows the device.
@@ -73,6 +75,23 @@ export interface OuroProviderProps {
    * @claim "A provider inside another keeps the" registry/ouro/lib/ouro/ouro-provider.test.tsx verify:testExists(registry/ouro/lib/ouro/ouro-provider.test.tsx::OuroProvider quiet > keeps an outer provider's quiet inside one that sets none, and lets an inner one turn it off)
    */
   quiet?: boolean | undefined;
+  /**
+   * For a page whose Content Security Policy refuses inline styles: `style-src 'self'`, without
+   * `'unsafe-inline'` or a nonce. Ouro UI then adds no `<style>` element: the Base UI parts it is
+   * built on render none (Base UI's `CSPProvider` with `disableStyleElements`, which this sets for
+   * you), and `motion="reduced"` stills the page with a constructed stylesheet
+   * (`document.adoptedStyleSheets`), which the policy allows, from the first render in the
+   * browser. Styles that components set from script still apply. Wrap the app in it
+   * once, at the root; a provider inside another keeps the outer one's setting when it sets none.
+   * @claim "For a page whose Content Security" test/strict-csp.test.tsx verify:testExists(test/strict-csp.test.tsx::under style-src 'self' > OuroProvider strictCsp adds no <style> element, and the page breaks no rule of its policy, in every part that would add one)
+   * @claim "Ouro UI then adds no `<style>`" test/strict-csp.test.tsx verify:testExists(test/strict-csp.test.tsx::under style-src 'self' > OuroProvider strictCsp adds no <style> element, and the page breaks no rule of its policy, in every part that would add one)
+   * @claim "a provider inside another keeps the" registry/ouro/lib/ouro/ouro-provider.test.tsx verify:testExists(registry/ouro/lib/ouro/ouro-provider.test.tsx::OuroProvider strictCsp > keeps an outer provider's strictCsp inside one that sets none, and lets an inner one turn it off)
+   * @default false
+   */
+  strictCsp?: boolean | undefined;
+
+  /** Not a prop. Ouro UI sets Base UI's `disableStyleElements` for you: `<OuroProvider strictCsp>`. */
+  disableStyleElements?: { "Use <OuroProvider strictCsp>": never };
 }
 
 const motions = ["system", "reduced", "full"] as const;
@@ -109,6 +128,9 @@ let quietProviders = 0;
  * internal `href` (a path) renders through `linkComponent`; an absolute URL (`https:`,
  * `mailto:`) always renders a plain `<a>`. Without a provider, or without `linkComponent`,
  * internal links are plain `<a>` elements too, so they work but load the page.
+ *
+ * Under a Content Security Policy that refuses inline styles (`style-src 'self'`), pass
+ * `strictCsp`, in place of Base UI's `CSPProvider`, and no Ouro UI part adds a `<style>`.
  *
  * React Router's `Link` takes `to`, so it needs the adapter in the example, which maps
  * `href` to `to`. Wrap the app once, in the root route.
@@ -167,6 +189,7 @@ let quietProviders = 0;
  *     </html>
  *   );
  * }
+ * @claim "Under a Content Security Policy that" test/strict-csp.test.tsx verify:testExists(test/strict-csp.test.tsx::under style-src 'self' > OuroProvider strictCsp adds no <style> element, and the page breaks no rule of its policy, in every part that would add one)
  * @claim "An app with none of those" scripts/registry.mts verify:fileLine(scripts/registry.mts, /entry\.name === "lib-router-link" \|\| entry\.name === "tooltip"\) registryDeps\.add\("lib-ouro-provider"\)/)
  * @claim "Optional app-level provider that routes internal" registry/ouro/components/ouro/link/link.test-d.ts verify:fileLine(registry/ouro/components/ouro/link/link.test-d.ts, /expectTypeOf<\{\shref:\s"\/recipes";\schildren:\s"Recipes"\s\}>\(\)\.toExtend<LinkProps>/)
  * @claim "Every Ouro UI link takes `href`" registry/ouro/components/ouro/link/link.test-d.ts verify:fileLine(registry/ouro/components/ouro/link/link.test-d.ts, /expectTypeOf<\{\shref:\s"\/recipes";\schildren:\s"Recipes"\s\}>\(\)\.toExtend<LinkProps>/)
@@ -176,23 +199,46 @@ let quietProviders = 0;
  * @claim "Ouro UI components work without it" scripts/registry.test.mjs verify:testExists(scripts/registry.test.mjs::npm dependencies are pinned to the ranges this repository tests)
  * @claim "It installs with every component that" scripts/registry.test.mjs verify:testExists(scripts/registry.test.mjs::registryDependencies are the same-repo items each item imports, as full unpinned addresses)
  */
-export function OuroProvider({ children, linkComponent, portalContainer, motion: motionProp, quiet: quietProp }: OuroProviderProps): JSX.Element {
+export function OuroProvider({
+  children,
+  linkComponent,
+  portalContainer,
+  motion: motionProp,
+  quiet: quietProp,
+  strictCsp: strictCspProp,
+  disableStyleElements,
+}: OuroProviderProps): JSX.Element {
   const outer = useOuro();
   const container = portalContainer === undefined ? outer.portalContainer : (portalContainer ?? undefined);
   // A setting that is not one (a type error) warns and follows the device.
   const own = motionProp === undefined ? undefined : (motions as readonly string[]).includes(motionProp) ? (motionProp as OuroMotion) : "system";
   const motion = own ?? outer.motion;
   const quiet = quietProp ?? outer.quiet === true;
+  const strictCsp = strictCspProp ?? outer.strictCsp === true;
   useDevWarnings(
     "OuroProvider",
     process.env.NODE_ENV !== "production"
-      ? () => [own !== motionProp && [`motion="${String(motionProp)}" is not a setting; use "system", "reduced" or "full"`, '<OuroProvider motion="reduced">']]
+      ? () => [
+          own !== motionProp && [`motion="${String(motionProp)}" is not a setting; use "system", "reduced" or "full"`, '<OuroProvider motion="reduced">'],
+          disableStyleElements !== undefined && ["disableStyleElements is not a prop", "<OuroProvider strictCsp>"],
+        ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
   const value = useMemo<OuroContextValue>(
-    () => ({ linkComponent: linkComponent ?? DefaultLink, ...(container ? { portalContainer: container } : {}), ...(motion ? { motion } : {}), quiet }),
-    [linkComponent, container, motion, quiet],
+    () => ({ linkComponent: linkComponent ?? DefaultLink, ...(container ? { portalContainer: container } : {}), ...(motion ? { motion } : {}), quiet, strictCsp }),
+    [linkComponent, container, motion, quiet, strictCsp],
   );
+  // Under strictCsp the still stylesheet is a constructed one, which a policy without 'unsafe-inline' allows.
+  const stillSheet = own === "reduced" && strictCsp;
+  useLayoutEffect(() => {
+    if (!stillSheet) return;
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(stillCss);
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    return () => {
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((adopted) => adopted !== sheet);
+    };
+  }, [stillSheet]);
   useEffect(() => {
     if (!quiet) return;
     quietProviders += 1;
@@ -202,14 +248,19 @@ export function OuroProvider({ children, linkComponent, portalContainer, motion:
       if (quietProviders === 0) document.documentElement.removeAttribute("data-ouro-quiet");
     };
   }, [quiet]);
-  const content = <Tooltip.Provider>{children}</Tooltip.Provider>;
+  const tooltips = (
+    <Tooltip.Provider>
+      <TooltipsGrouped value>{children}</TooltipsGrouped>
+    </Tooltip.Provider>
+  );
+  const content = strictCspProp === undefined ? tooltips : <CSPProvider disableStyleElements={strictCspProp}>{tooltips}</CSPProvider>;
   return (
     <OuroContext.Provider value={value}>
       {own === undefined ? (
         content
       ) : (
         <div data-motion={own} style={{ display: "contents" }}>
-          {own === "reduced" && (
+          {own === "reduced" && !strictCsp && (
             // In place, not hoisted: React keeps a hoisted style after its provider goes, and this one must go with it.
             <style>
               {stillCss}

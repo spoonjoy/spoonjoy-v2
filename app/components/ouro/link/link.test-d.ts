@@ -24,5 +24,12 @@ expectTypeOf<{ href: "/mcp"; reloadDocument: true; children: "MCP" }>().toExtend
 expectTypeOf<{ href: "/export.csv"; download: true; children: "Export" }>().toExtend<LinkProps>();
 expectTypeOf<{ href: "/mcp"; reloadDocument: "yes"; children: "MCP" }>().not.toExtend<LinkProps>();
 
+// current marks the link you are on: true is the page, or an aria-current value; active is the habit.
+expectTypeOf<{ href: "/guide/2"; current: true; children: "Chapter 2" }>().toExtend<LinkProps>();
+expectTypeOf<{ href: "/guide/2"; current: "step"; children: "Step 2" }>().toExtend<LinkProps>();
+expectTypeOf<{ href: "/guide/2"; current: 1; children: "Chapter 2" }>().not.toExtend<LinkProps>();
+expectTypeOf<{ href: "/guide/2"; active: true; children: "Chapter 2" }>().not.toExtend<LinkProps>();
+expectTypeOf<{ href: "/guide/2"; isActive: true; children: "Chapter 2" }>().not.toExtend<LinkProps>();
+
 // @ts-expect-error href is required.
 createElement(Link, { to: "/recipes", children: "Recipes" });

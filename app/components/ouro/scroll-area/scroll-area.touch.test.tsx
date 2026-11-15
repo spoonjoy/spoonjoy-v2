@@ -12,7 +12,7 @@ afterEach(async () => {
   for (const node of nodes.splice(0)) node.remove();
 });
 
-it("leaves touch scrolling to the browser: the scrollbar never takes a touch", async () => {
+it("leaves touch scrolling to the browser: the viewport is a native scroll container", async () => {
   expect(matchMedia("(pointer: coarse)").matches).toBe(true);
   const host = document.createElement("div");
   host.style.width = "300px";
@@ -34,20 +34,9 @@ it("leaves touch scrolling to the browser: the scrollbar never takes a touch", a
   );
   const area = host.querySelector<HTMLElement>('[data-ouro="scroll-area"]')!;
   const viewport = area.firstElementChild as HTMLElement;
-  await expect.poll(() => area.querySelector('[data-orientation="vertical"]')).not.toBeNull();
-  const scrollbar = area.querySelector<HTMLElement>('[data-orientation="vertical"]')!;
-
   // The viewport is a native scroll container that pans with the finger.
-  expect(getComputedStyle(viewport).overflowY).toBe("scroll");
+  expect(getComputedStyle(viewport).overflowY).toBe("auto");
   expect(getComputedStyle(viewport).touchAction).toBe("auto");
   // It hands the scroll on to the page at its end, so it never traps a finger.
   expect(getComputedStyle(viewport).overscrollBehaviorY).toBe("auto");
-
-  // The custom scrollbar (touch-action: none, for mouse drags) lets touches through, so a
-  // finger on the right edge still pans the viewport, and it is a thin indicator.
-  expect(getComputedStyle(scrollbar).pointerEvents).toBe("none");
-  const bar = scrollbar.getBoundingClientRect();
-  expect(bar.width).toBe(6);
-  const hit = document.elementFromPoint(bar.left + bar.width / 2, bar.top + 20);
-  expect(viewport.contains(hit)).toBe(true);
 });

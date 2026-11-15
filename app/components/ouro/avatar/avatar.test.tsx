@@ -1,8 +1,9 @@
-import { type ReactNode } from "react";
+import { Profiler, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import axe from "axe-core";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page } from "vitest/browser";
 import { Avatar, AvatarGroup } from "~/components/ouro/avatar/avatar";
 import { act } from "~/lib/ouro/testing/act";
@@ -26,6 +27,50 @@ async function render(node: ReactNode) {
     },
     get group() {
       return host.querySelector<HTMLElement>('[data-ouro="avatar-group"]')!;
+    },
+  };
+}
+
+// The pictures a test has loaded, kept until it ends: the browser keeps a picture ready only while an image holds it.
+const held: HTMLImageElement[] = [];
+
+/** Resolves once the browser has loaded the picture, so it is ready for the next image of it. */
+function loaded(src: string): Promise<void> {
+  const image = new Image();
+  held.push(image);
+  onTestFinished(() => void held.splice(0));
+  const done = new Promise<void>((resolve) => (image.onload = () => resolve()));
+  image.src = src;
+  return done;
+}
+
+/** Resolves once the browser has failed to load the picture. */
+function failed(src: string): Promise<void> {
+  const image = new Image();
+  const done = new Promise<void>((resolve) => (image.onerror = () => resolve()));
+  image.src = src;
+  return done;
+}
+
+/** An address for the photo the browser has never loaded, so it loads after the avatar mounts. */
+async function freshPicture(): Promise<string> {
+  const url = URL.createObjectURL(await (await fetch(photo)).blob());
+  onTestFinished(() => URL.revokeObjectURL(url));
+  return url;
+}
+
+/** Renders in one synchronous commit, layout effects and the updates they make included, so a test reads what the first paint shows. */
+async function renderSync(node: ReactNode) {
+  const host = document.createElement("div");
+  document.body.append(host);
+  mounted.push(host);
+  const root = createRoot(host);
+  roots.push(root);
+  flushSync(() => root.render(node));
+  return {
+    rerender: (next: ReactNode) => act(async () => root.render(next)),
+    get avatar() {
+      return host.querySelector<HTMLElement>('[data-ouro="avatar"]')!;
     },
   };
 }
@@ -159,6 +204,156 @@ describe("Avatar", () => {
     const { avatar } = await render(<Avatar name="Ana Lind" src={broken} />);
     await expect.poll(() => avatar.getAttribute("data-image")).toBe("error");
     expect(avatar.querySelector("img")).toBeNull();
+    expect(drawn(avatar)).toBe("AL");
+  });
+
+  it("draws a cached picture in the commit that mounts it, and nothing more when its load event comes", async () => {
+    await loaded(photo);
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    const root = createRoot(host);
+    roots.push(root);
+    let commits = 0;
+    flushSync(() =>
+      root.render(
+        <Profiler id="avatar" onRender={() => (commits += 1)}>
+          <Avatar name="Ana Lind" src={photo} />
+        </Profiler>,
+      ),
+    );
+    expect(host.querySelector("img")?.getAttribute("src")).toBe(photo);
+    const drawnOnMount = commits;
+    // A second image of the same picture loads after the avatar's own, so its load event has come by then.
+    await loaded(photo);
+    await act(async () => {});
+    expect(commits).toBe(drawnOnMount);
+  });
+
+  /** Mounts an avatar of the picture in one commit, and says how many commits it took and what it showed then. */
+  async function mountCounted(src: string) {
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    const root = createRoot(host);
+    roots.push(root);
+    let commits = 0;
+    flushSync(() =>
+      root.render(
+        <Profiler id="avatar" onRender={() => (commits += 1)}>
+          <Avatar name="Ana Lind" src={src} />
+        </Profiler>,
+      ),
+    );
+    return { commits, image: host.querySelector('[data-ouro="avatar"]')!.getAttribute("data-image") };
+  }
+
+  it("draws a picture another avatar has loaded in its first render, with no second", async () => {
+    const fresh = await freshPicture();
+    const { avatar } = await render(<Avatar name="Ana Lind" src={fresh} />);
+    await expect.poll(() => avatar.getAttribute("data-image")).toBe("loaded");
+    expect(await mountCounted(fresh)).toEqual({ commits: 1, image: "loaded" });
+  });
+
+  it("keeps the last few hundred pictures ready, letting the oldest go", async () => {
+    const pictures = await Promise.all(Array.from({ length: 257 }, () => freshPicture()));
+    const { rerender, avatar } = await render(<Avatar name="Ana Lind" src={pictures[0]} />);
+    for (const picture of pictures) {
+      await rerender(<Avatar name="Ana Lind" src={picture} />);
+      await expect.poll(() => avatar.getAttribute("data-image")).toBe("loaded");
+    }
+    // The first is no longer held, so an avatar of it takes a second render; the second still is.
+    expect((await mountCounted(pictures[0]!)).commits).toBe(2);
+    expect(await mountCounted(pictures[1]!)).toEqual({ commits: 1, image: "loaded" });
+  });
+
+  it("hydrates a picture another avatar has loaded from the server's initials, then shows it", async () => {
+    const fresh = await freshPicture();
+    const first = await render(<Avatar name="Ana Lind" src={fresh} />);
+    await expect.poll(() => first.avatar.getAttribute("data-image")).toBe("loaded");
+    const host = document.createElement("div");
+    host.innerHTML = renderToString(<Avatar name="Ana Lind" src={fresh} />);
+    document.body.append(host);
+    mounted.push(host);
+    expect(host.querySelector("img")).toBeNull();
+    const recoverable = vi.fn();
+    await act(async () => void roots.push(hydrateRoot(host, <Avatar name="Ana Lind" src={fresh} />, { onRecoverableError: recoverable })));
+    await expect.poll(() => host.querySelector("img")?.getAttribute("src")).toBe(fresh);
+    expect(recoverable).not.toHaveBeenCalled();
+  });
+
+  it("draws an avatar without a picture in one commit, fetching nothing", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    const root = createRoot(host);
+    roots.push(root);
+    let commits = 0;
+    const fetches = vi.spyOn(window, "Image");
+    await act(async () =>
+      root.render(
+        <Profiler id="avatar" onRender={() => (commits += 1)}>
+          <Avatar name="Ana Lind" />
+          <Avatar name="Ana Lind" src="" />
+        </Profiler>,
+      ),
+    );
+    expect(commits).toBe(1);
+    expect(fetches).not.toHaveBeenCalled();
+  });
+
+  it("draws no picture in the first commit for one that failed before, and says loading until it fails again", async () => {
+    await failed(broken);
+    const { avatar } = await renderSync(<Avatar name="Ana Lind" src={broken} />);
+    expect(avatar.querySelector("img")).toBeNull();
+    expect(avatar.getAttribute("data-image")).toBe("loading");
+    await expect.poll(() => avatar.getAttribute("data-image")).toBe("error");
+  });
+
+  it("says loading while a picture the browser has not seen loads, then shows it", async () => {
+    const fresh = await freshPicture();
+    const { avatar } = await renderSync(<Avatar name="Ana Lind" src={fresh} />);
+    expect(avatar.getAttribute("data-image")).toBe("loading");
+    expect(avatar.querySelector("img")).toBeNull();
+    await expect.poll(() => avatar.querySelector("img")?.getAttribute("src")).toBe(fresh);
+    expect(avatar.getAttribute("data-image")).toBe("loaded");
+  });
+
+  it("keeps the new picture when the one it replaced finishes loading after it", async () => {
+    await loaded(photo);
+    const fresh = await freshPicture();
+    const { avatar, rerender } = await renderSync(<Avatar name="Ana Lind" src={fresh} />);
+    await rerender(<Avatar name="Ana Lind" src={photo} />);
+    await expect.poll(() => avatar.querySelector("img")?.getAttribute("src")).toBe(photo);
+    await loaded(fresh);
+    await act(async () => {});
+    expect(avatar.getAttribute("data-image")).toBe("loaded");
+    expect(avatar.querySelector("img")?.getAttribute("src")).toBe(photo);
+  });
+
+  it("is idle in server HTML, with the initials, until the browser has the picture", () => {
+    const html = renderToString(<Avatar name="Ana Lind" src={photo} />);
+    expect(html).toContain('data-image="idle"');
+    expect(html).not.toContain("<img");
+    expect(html).toContain('data-ouro-avatar-initials="AL"');
+  });
+
+  it("shows the initials for an empty picture address, as for one that failed", async () => {
+    const { avatar } = await render(<Avatar name="Ana Lind" src="" />);
+    expect(avatar.getAttribute("data-image")).toBe("error");
+    expect(avatar.querySelector("img")).toBeNull();
+    expect(drawn(avatar)).toBe("AL");
+  });
+
+  it("shows the initials while a new picture loads, then the new picture", async () => {
+    const { avatar, rerender } = await render(<Avatar name="Ana Lind" src={photo} />);
+    await expect.poll(() => avatar.querySelector("img")?.getAttribute("src")).toBe(photo);
+    await rerender(<Avatar name="Ana Lind" src={broken} />);
+    await expect.poll(() => avatar.getAttribute("data-image")).toBe("error");
+    expect(avatar.querySelector("img")).toBeNull();
+    expect(drawn(avatar)).toBe("AL");
+    await rerender(<Avatar name="Ana Lind" />);
+    expect(avatar.getAttribute("data-image")).toBe("idle");
     expect(drawn(avatar)).toBe("AL");
   });
 

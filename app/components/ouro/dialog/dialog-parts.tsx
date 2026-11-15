@@ -253,6 +253,7 @@ export function DialogPopupUnchecked({
       {...props}
       ref={holdRef}
       className={cn(popupClass, popupSizes[size], className)}
+      aria-modal="true"
       data-ouro="dialog"
       data-ouro-presentation="dialog"
       data-ouro-squircle=""
@@ -352,6 +353,8 @@ export type DialogContentProps = Omit<JSX.IntrinsicElements["div"], "className">
 /**
  * Part: the dialog's body. It scrolls when the dialog is taller than the
  * screen, and while it overflows it is a tab stop, so a keyboard can scroll it.
+ * Its focus ring is drawn over the content, so a header that sticks to the top never hides an edge of it.
+ * @claim "Its focus ring is drawn over the content" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::DialogContent > draws its focus ring whole over content that sticks to an edge, and leaves the pointer to the content)
  */
 export function DialogContent({ className, ref, ...props }: DialogContentProps): JSX.Element {
   const scrollRef = useMergedRef(ref, useKeyboardScrollable<HTMLDivElement>(props.tabIndex === undefined));
@@ -363,22 +366,29 @@ export function DialogContent({ className, ref, ...props }: DialogContentProps):
       ? sheetHint("<DialogContent>", "</DialogContent>")
       : /* istanbul ignore next @preserve -- production only */ "",
   );
+  // The wrapper takes the body's place in the dialog's column; the scroller fills it. Its focus ring is a sibling drawn
+  // over the scroller, so content that sticks to an edge inside the body never covers it.
   return (
-    <div
-      data-ouro-control="dialog"
-      data-ouro-part="content"
-      {...props}
-      ref={scrollRef}
-      data-ouro-dialog-content=""
-      className={cn(
-        "box-border min-h-0 flex-auto overflow-y-auto overscroll-contain px-5 pt-2 pb-5",
-        // A body that overflows is a tab stop (useKeyboardScrollable); show where focus is.
-        "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid",
-        // Under forced colours, where the body ends while it is one.
-        "forced-colors:[&[tabindex='0']]:outline-1 forced-colors:[&[tabindex='0']]:outline-solid forced-colors:[&[tabindex='0']]:-outline-offset-1",
-        className,
-      )}
-    />
+    <div className="relative box-border flex min-h-0 flex-auto flex-col">
+      <div
+        data-ouro-control="dialog"
+        data-ouro-part="content"
+        {...props}
+        ref={scrollRef}
+        data-ouro-dialog-content=""
+        className={cn(
+          "peer box-border min-h-0 flex-auto overflow-y-auto overscroll-contain px-5 pt-2 pb-5 outline-none focus-visible:isolate",
+          // Under forced colours, where the body ends while it is one.
+          "forced-colors:[&[tabindex='0']]:outline-1 forced-colors:[&[tabindex='0']]:outline-solid forced-colors:[&[tabindex='0']]:-outline-offset-1",
+          className,
+        )}
+      />
+      <span
+        aria-hidden="true"
+        data-dialog-focus-ring=""
+        className="pointer-events-none absolute inset-0 hidden rounded-[inherit] outline-ring -outline-offset-2 peer-focus-visible:block peer-focus-visible:outline-2 peer-focus-visible:outline-solid"
+      />
+    </div>
   );
 }
 

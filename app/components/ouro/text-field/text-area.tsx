@@ -310,7 +310,27 @@ export function TextArea(props: TextAreaProps): JSX.Element {
     grew.current = autoGrow;
   };
   const watched = native ? undefined : rest.value;
-  useLayoutEffect(fit, [autoGrow, native, rows, maxRows, size, variant, watched]);
+  // The browser sizes a native field itself; the fit only sets its floor and cap from the padding,
+  // which can wait for the frame after the first paint. Measuring does not fit before the paint.
+  // Stryker disable next-line BooleanLiteral: the first fit's timing shows only in test/mount-reads.test.tsx.
+  const placed = useRef(false);
+  /* eslint-disable react-hooks/exhaustive-deps -- fit is rebuilt each render; the lists name what it reads that should trigger a fit */
+  useLayoutEffect(() => {
+    // Stryker disable next-line ConditionalExpression,LogicalOperator: as above; a later fit follows in the frame.
+    if (!native || placed.current) fit();
+  }, [autoGrow, native, rows, maxRows, size, variant, watched]);
+  useEffect(() => {
+    // Stryker disable next-line ConditionalExpression: a refit in the frame gives a non-native field the height the layout effect already gave it.
+    if (!native) return;
+    const frame = requestAnimationFrame(() => {
+      // Stryker disable next-line BooleanLiteral: as above.
+      placed.current = true;
+      fit();
+    });
+    return () => cancelAnimationFrame(frame);
+    // Stryker disable next-line ArrayDeclaration: the frame refits with the same inputs the layout effect did.
+  }, [autoGrow, native, rows, maxRows, size, variant]);
+  /* eslint-enable react-hooks/exhaustive-deps */
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     // A controlled field fits once its value arrives, in the effect above.
     if (autoGrow && !native && !controlled) fitHeight(event.currentTarget, rows, maxRows);

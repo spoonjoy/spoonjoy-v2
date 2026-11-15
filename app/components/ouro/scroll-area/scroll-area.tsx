@@ -1,6 +1,5 @@
 "use client";
 
-import { ScrollArea as BaseScrollArea } from "@base-ui/react/scroll-area";
 import { type HTMLAttributes, type JSX, type ReactNode, type Ref, useEffect, useRef } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
@@ -41,11 +40,9 @@ export interface ScrollAreaOwnProps {
   ref?: Ref<HTMLDivElement> | undefined;
 
   /**
-   * Not a prop. The scrollbar shows while the pointer is over the area or it scrolls, on every device.
-   *
-   * @claim "The scrollbar shows while the pointer" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > shows the scrollbar while hovered or scrolled, and keeps it in the corner)
+   * Not a prop. The scrollbar is the browser's own, thin and in the theme's color, with a mouse or a finger.
    */
-  type?: { "Use <ScrollArea>; the scrollbar shows on hover and scroll": never };
+  type?: { "Use <ScrollArea>; the scrollbar is the browser's own": never };
   /** Not a prop. Set the height with a class: `<ScrollArea className="max-h-80">`. */
   maxHeight?: { 'Use <ScrollArea className="max-h-80">': never };
   /** Not a prop. Set the height with a class: `<ScrollArea className="h-72">`. */
@@ -58,26 +55,68 @@ export type ScrollAreaProps = Omit<HTMLAttributes<HTMLDivElement>, keyof ScrollA
 const orientations = ["vertical", "horizontal", "both"] as const;
 
 /**
- * The custom scrollbar is for a mouse: it fades in on hover, scroll or keyboard focus. On a
- * coarse pointer it lets touches through to the native scroll container under it, so a
- * finger anywhere pans the content with the platform's momentum, and it is a thin indicator.
- * Keyboard focus reaches it from the viewport before it (peer), not from the root (:has): a :has
- * rule over the root's descendants restyles the whole page on every change of focus anywhere.
- * @claim "Keyboard focus reaches it from the viewport" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > is a keyboard-scrollable region named by label)
+ * The browser's own scrollbar, thin and in the theme's muted color, so nothing measures the page to draw one:
+ * a custom scrollbar needs a layout read at mount. A mouse drags it, a finger pans past it and the keyboard scrolls the viewport.
  */
 const scrollbar =
-  "flex p-0.5 opacity-0 transition-opacity duration-(--ouro-duration-base) ease-(--ouro-ease-out) " +
-  "data-hovering:opacity-100 data-scrolling:opacity-100 data-scrolling:duration-0 peer-focus-visible/scroll-viewport:opacity-100 " +
-  "pointer-coarse:pointer-events-none";
-const scrollbars = {
-  vertical: "w-2.5 pointer-coarse:w-1.5",
-  horizontal: "h-2.5 flex-col pointer-coarse:h-1.5",
+  "[scrollbar-width:thin] [scrollbar-color:color-mix(in_oklab,var(--muted-foreground)_40%,transparent)_transparent] " +
+  // Stryker disable next-line StringLiteral: a pointer-hover-only colour, which no test pointer state reaches
+  "pointer-fine:hover:[scrollbar-color:color-mix(in_oklab,var(--muted-foreground)_60%,transparent)_transparent]";
+const viewports = {
+  vertical: "overflow-x-hidden overflow-y-auto",
+  horizontal: "overflow-x-auto overflow-y-hidden",
+  both: "overflow-auto",
 } as const;
+
+/** The mask for the top and bottom fade, set only while the viewport scrolls. */
+const verticalFade =
+  "data-ouro-scroll-fade-y:[mask-image:linear-gradient(to_bottom,transparent,#000_min(var(--scroll-area-overflow-y-start),2rem),#000_calc(100%-min(var(--scroll-area-overflow-y-end),2rem)),transparent)]"; // fade-ok: fades a scrolling list of rows, not a picture
 
 const focusable = "a[href],button,input,select,textarea,summary,[tabindex]:not([tabindex='-1']),[contenteditable='true']";
 
 /**
- * Warns when the viewport takes keyboard focus to scroll (Base UI makes it a tab stop once
+ * Makes the viewport a tab stop while its content overflows, so a keyboard user can scroll it, and
+ * says how far it hides content above and below: `data-overflow-y-start` and `data-overflow-y-end`
+ * while that side hides more, with `--scroll-area-overflow-y-start` and `--scroll-area-overflow-y-end`
+ * in pixels. Reads sizes when the browser reports a resize or a scroll, after layout, not while React commits.
+ */
+function useScrollTabStop(viewportRef: { current: HTMLDivElement | null }): void {
+  useEffect(() => {
+    const viewport = viewportRef.current!;
+    const update = () => {
+      viewport.tabIndex = viewport.scrollHeight > viewport.clientHeight || viewport.scrollWidth > viewport.clientWidth ? 0 : -1;
+      const hidden = viewport.scrollHeight - viewport.clientHeight;
+      const start = Math.max(0, viewport.scrollTop);
+      const end = Math.max(0, hidden - start);
+      // Stryker disable next-line EqualityOperator: a one pixel threshold only absorbs rounding; no test can make content exactly one pixel taller
+      const scrolls = hidden > 1 && getComputedStyle(viewport).overflowY !== "hidden";
+      viewport.toggleAttribute("data-ouro-scroll-fade-y", scrolls);
+      // Stryker disable next-line EqualityOperator: a one pixel threshold only absorbs rounding; no test can place a scroll offset at exactly one pixel
+      viewport.toggleAttribute("data-overflow-y-start", scrolls && start > 1);
+      // Stryker disable next-line EqualityOperator: a one pixel threshold only absorbs rounding; no test can place a scroll offset at exactly one pixel
+      viewport.toggleAttribute("data-overflow-y-end", scrolls && end > 1);
+      viewport.style.setProperty("--scroll-area-overflow-y-start", `${scrolls ? start : 0}px`);
+      viewport.style.setProperty("--scroll-area-overflow-y-end", `${scrolls ? end : 0}px`);
+    };
+    const observer = new ResizeObserver(update);
+    // Stryker disable next-line CallExpression: the observer fires for the first child's resize too, so a height change reaches update either way
+    observer.observe(viewport);
+    observer.observe(viewport.firstElementChild!);
+    viewport.addEventListener("scroll", update);
+    // Stryker disable next-line BlockStatement,CallExpression,StringLiteral: cleanup only releases listeners on an element that is going away, which nothing can observe
+    return () => {
+      // Stryker disable next-line CallExpression: cleanup only releases an observer on an element that is going away, which nothing can observe
+      observer.disconnect();
+      // Stryker disable next-line CallExpression,StringLiteral: cleanup only releases a listener on an element that is going away, which nothing can observe
+      viewport.removeEventListener("scroll", update);
+    };
+  },
+  // Stryker disable next-line ArrayDeclaration: the ref object never changes, so the effect runs once either way
+  [viewportRef]);
+}
+
+/**
+ * Warns when the viewport takes keyboard focus to scroll (it is a tab stop once
  * the content overflows) but has no name and nothing inside that could take focus instead.
  * Development only.
  * @claim "Warns when the viewport takes keyboard" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea development messages > warns when the area takes keyboard focus to scroll but has no name)
@@ -103,11 +142,15 @@ function useUnnamedRegionCheck(viewportRef: { current: HTMLDivElement | null }, 
 }
 
 /**
- * A scrolling region with a slim scrollbar that matches the theme, inside a height you set.
+ * A scrolling region with a thin scrollbar in the theme's color, inside a height you set.
  * It keeps the browser's own scrolling, so touch, the mouse wheel, the keyboard and
- * momentum all work; the custom scrollbar is for a mouse and never takes a touch. Content
- * wider than the area fades out at the side where it goes on, so at rest it reads as more
- * to scroll to, not as cut off.
+ * momentum all work; Content
+ * wider than the area fades out at the side where it goes on, and a vertical area fades at the
+ * top and bottom edge that hides more, so at rest it reads as more to scroll to, not as cut off.
+ * A vertical area also marks the viewport with `data-overflow-y-start` and `data-overflow-y-end`
+ * while that edge hides content, and sets `--scroll-area-overflow-y-start` and `--scroll-area-overflow-y-end`
+ * (pixels hidden), so a parent can draw a hairline once it is scrolled from the start. Its focus ring
+ * is drawn over the content, so a header that sticks to the top never hides an edge of it.
  *
  * Use plain page scrolling instead for a page's main content, and `Dialog` or `Sheet`,
  * which scroll their own bodies, for long content in an overlay.
@@ -123,14 +166,16 @@ function useUnnamedRegionCheck(viewportRef: { current: HTMLDivElement | null }, 
  *   <Row gap="sm">{tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}</Row>
  * </ScrollArea>
  * @claim "Content wider than the area fades out" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > fades out at the side that hides more, drawing its focus ring over the fade, and keeps keyboard scrolling)
- * @claim "It keeps the browser's own scrolling" registry/ouro/components/ouro/scroll-area/scroll-area.touch.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.touch.test.tsx::leaves touch scrolling to the browser: the scrollbar never takes a touch)
- * @claim "It keeps the browser's own scrolling" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > shows the scrollbar while hovered or scrolled, and keeps it in the corner)
+ * @claim "Its focus ring is drawn over the content" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > draws its focus ring whole over content that sticks to an edge, and leaves the pointer to the content)
+ * @claim "It keeps the browser's own scrolling" registry/ouro/components/ouro/scroll-area/scroll-area.touch.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.touch.test.tsx::leaves touch scrolling to the browser: the viewport is a native scroll container)
+ * @claim "It keeps the browser's own scrolling" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > draws a thin native scrollbar in the theme's muted color, and scrolls only the way it is asked to)
  */
 export function ScrollArea(props: ScrollAreaProps): JSX.Element {
   const { children, orientation: orientationProp = "vertical", label, contain, className, type, maxHeight, height, ...rest } = props;
   const viewportRef = useRef<HTMLDivElement>(null);
   useUnnamedRegionCheck(viewportRef, label);
   useScrollFade(viewportRef);
+  useScrollTabStop(viewportRef);
   const orientation = (orientations as readonly string[]).includes(orientationProp) ? (orientationProp as ScrollAreaOrientation) : "vertical";
   useAppearanceClassNameCheck(
     "ScrollArea",
@@ -145,46 +190,45 @@ export function ScrollArea(props: ScrollAreaProps): JSX.Element {
             `orientation="${String(orientationProp)}" is not an orientation; use "vertical", "horizontal", "both"`,
             `<ScrollArea orientation="${String(orientationProp).toLowerCase().startsWith("x") ? "horizontal" : "vertical"}">`,
           ],
-          type !== undefined && ["type is not a prop; the scrollbar shows while you hover or scroll", "<ScrollArea>"],
+          type !== undefined && ["type is not a prop; the scrollbar is the browser's own", "<ScrollArea>"],
           maxHeight !== undefined && ["maxHeight is not a prop", '<ScrollArea className="max-h-80">'],
           height !== undefined && ["height is not a prop", '<ScrollArea className="h-72">'],
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
+  // Stryker disable next-line ConditionalExpression: the mask needs the data attribute, which only a vertical area gets
+  const fadeY = orientation === "vertical" && verticalFade;
   return (
-    <BaseScrollArea.Root
+    <div
       {...rest}
       data-ouro="scroll-area"
       className={cn(
         "group/scroll-area relative flex min-h-0 min-w-0 flex-col overflow-hidden",
-        // The focus ring is the root's, drawn over the viewport, so the viewport's edge fade never hides it.
-        "outline-ring -outline-offset-2 has-[>[data-scroll-viewport]:focus-visible]:outline-2 has-[>[data-scroll-viewport]:focus-visible]:outline-solid",
         className,
       )}
     >
-      <BaseScrollArea.Viewport
+      <div
         ref={viewportRef}
         data-scroll-viewport=""
+        // Stryker disable next-line UnaryOperator: the observer sets the real value as soon as it starts, before any read
+        tabIndex={-1}
         data-ouro-control="scroll-area"
         data-ouro-part="viewport"
         role={label ? "region" : undefined}
         aria-label={label}
-        className={cn("peer/scroll-viewport min-h-0 flex-1 rounded-[inherit] outline-none", scrollFadeClass, contain && "overscroll-contain")}
+        // While focused, isolate keeps the content's own stacking (a sticky header's z-index) inside the viewport, under the
+        // focus ring. Only then: at rest the content stacks with the page, as it always has.
+        className={cn("peer min-h-0 focus-visible:isolate flex-1 rounded-[inherit] outline-none", viewports[orientation], scrollbar, scrollFadeClass, fadeY, contain && "overscroll-contain")}
       >
-        {/* Base UI sets min-width: fit-content inline; the important class lets a vertical area keep the viewport's width. */}
-        <BaseScrollArea.Content className={orientation === "vertical" ? "min-w-0!" : undefined}>{children}</BaseScrollArea.Content>
-      </BaseScrollArea.Viewport>
-      {orientation !== "horizontal" && (
-        <BaseScrollArea.Scrollbar orientation="vertical" className={cn(scrollbar, scrollbars.vertical)}>
-          <BaseScrollArea.Thumb className="w-full rounded-full bg-muted-foreground/40 active:bg-muted-foreground/60 forced-colors:bg-[CanvasText]" />
-        </BaseScrollArea.Scrollbar>
-      )}
-      {orientation !== "vertical" && (
-        <BaseScrollArea.Scrollbar orientation="horizontal" className={cn(scrollbar, scrollbars.horizontal)}>
-          <BaseScrollArea.Thumb className="h-full rounded-full bg-muted-foreground/40 active:bg-muted-foreground/60 forced-colors:bg-[CanvasText]" />
-        </BaseScrollArea.Scrollbar>
-      )}
-      {orientation === "both" && <BaseScrollArea.Corner />}
-    </BaseScrollArea.Root>
+        <div className={orientation === "vertical" ? "min-w-0" : "min-w-fit"}>{children}</div>
+      </div>
+      {/* The viewport's focus ring, drawn over it, so neither the edge fade nor content that sticks to an edge covers it. It is
+          there only while the viewport has focus: at rest nothing lies over the content, so a contrast check sees the text's own background. */}
+      <span
+        aria-hidden="true"
+        data-scroll-focus-ring=""
+        className="pointer-events-none absolute inset-0 hidden rounded-[inherit] outline-ring -outline-offset-2 peer-focus-visible:block peer-focus-visible:outline-2 peer-focus-visible:outline-solid"
+      />
+    </div>
   );
 }

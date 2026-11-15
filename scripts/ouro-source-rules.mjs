@@ -26,13 +26,16 @@ import ts from "typescript";
 // - third-party-control: a JSX element from a UI-control library other than Ouro UI
 //   (THIRD_PARTY_CONTROL_PACKAGES), by named, default or namespace import or a same-file alias of
 //   one; app code reaches those libraries only through Ouro UI. Type-only imports and hooks are
-//   not elements, so they never count.
+//   not elements, so they never count. Base UI's CSPProvider counts too, and its message names
+//   the fix: <OuroProvider strictCsp>.
 // - control-state-style: class utilities for focus, press, selection, open/close or gesture state
 //   (focus:, active:, aria-pressed:, data-[state=open]:, group-data-[checked]: ...) in a className,
 //   followed through same-file constants and helpers; and stylesheet rules (or @apply) whose
 //   selector puts that state on a class or a data-* hook (only the app's own hooks, `.<prefix>-`
 //   and `[data-<prefix>-`, when `hookPrefix` is set). Hover-only decoration and page motion are
-//   not control state.
+//   not control state. ouro-base's own classes for plain markup (OURO_BASE_CLASSES), which land in
+//   the app's stylesheet, are Ouro's (an app's own .ouro- class is not), and the message for a focus or press state written by
+//   hand names them.
 // - hand-drawn-unread-dot: a plain accent-colored round dot in a row, which is an unread mark; UnreadDot draws it. (A dot on an avatar's corner stays hand-drawn-presence-dot.)
 // - hand-drawn-avatar, hand-drawn-presence-dot: an intrinsic element drawn as what Ouro UI's Avatar
 //   draws: a round picture (`img`, or `overflow-hidden`/`object-cover`, `rounded-full`, at least
@@ -331,6 +334,13 @@ export const HAND_DRAWN_CORNER_FIX =
 /** What the hand-drawn-switch rule tells an app to do. */
 export const HAND_DRAWN_SWITCH_FIX =
   "Use Switch from the registry (`<Switch label=\"...\" checked={on} onCheckedChange={setOn} />`), so it gets the Quiet glass look (the --ouro-glass tokens), focus, touch target and any change to switches.";
+/** What the control-state-style rule tells an app that draws focus or a pressed row by hand in a stylesheet. */
+export const FOCUS_RING_FIX =
+  "Give the element Ouro's classes from ouro-base instead of writing the state: class=\"ouro-focus-ring\" draws the ring Ouro's controls draw on keyboard focus (ouro-focus-ring-inset keeps it inside a row or cell a scroller would clip), and class=\"ouro-row\" tints a row that opens something while a mouse rests on it and while it is pressed. For a control with its own behaviour, use the Ouro component.";
+
+/** What the third-party-control rule tells an app that wraps itself in Base UI's CSPProvider. */
+export const CSP_PROVIDER_FIX =
+  "Wrap the app in <OuroProvider strictCsp> (lib/ouro/ouro-provider) instead: it sets Base UI's disableStyleElements for you, and Ouro UI's own parts add no <style> under it either, so a page whose policy refuses inline styles (style-src 'self') breaks none of its rules.";
 
 // What each category's message says, for the categories whose fix is not an Ouro component.
 const CATEGORY_MESSAGES = {
@@ -344,6 +354,10 @@ const CATEGORY_MESSAGES = {
   "hand-drawn-corner": { headline: "New fixed corner radius", fix: HAND_DRAWN_CORNER_FIX },
   "hand-drawn-switch": { headline: "New switch drawn by hand", fix: HAND_DRAWN_SWITCH_FIX },
   "gated-load": { headline: "New load that waits for focus, visibility, idle or scrolling", fix: GATED_LOAD_FIX },
+  // A focus or press state written in a stylesheet has Ouro classes; a class-variant one names the element only.
+  "control-state-style": (tag) => (/:(?:focus|active)/.test(tag) ? { headline: "New focus or press style written by hand", fix: FOCUS_RING_FIX } : undefined),
+  // Base UI's CSPProvider has an Ouro form; any other library's control takes the general message.
+  "third-party-control": (tag) => (/\.CSPProvider$/.test(tag) ? { headline: "New Base UI CSPProvider", fix: CSP_PROVIDER_FIX } : undefined),
   // Names the phrase it found, the fingerprint's tag.
   "vague-failure-copy": (phrase) => ({
     headline: `New vague failure copy ("${phrase}")`,
@@ -427,6 +441,9 @@ const STATE_SELECTOR = new RegExp(
 // A stylesheet selector that names something the app styles by hand: any class or data-* hook, or
 // only the app's own (`.app-`, `[data-app-`) with a `hookPrefix`.
 const ANY_HOOK = /\.[\w-]|\[data-/;
+/** The classes ouro-base defines for markup that is not an Ouro component; a stylesheet rule on them is Ouro's. Any other `.ouro-` name is the app's own. */
+export const OURO_BASE_CLASSES = ["ouro-focus-ring", "ouro-focus-ring-inset", "ouro-row"];
+const OURO_CLASS = new RegExp(`\\.(?:${OURO_BASE_CLASSES.join("|")})(?![\\w-])`, "g");
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
@@ -1859,12 +1876,22 @@ function scanStylesheet(file, source, hook = ANY_HOOK) {
   };
 
   const root = postcss.parse(source, { from: file });
+  const ALLOW = /ouro-allow hand-drawn-corner:\s*\S/;
+  const allowComment = (node) => node && node.type === "comment" && ALLOW.test(node.text);
+  // A deliberate corner: a rule that sets corner-shape: round, or one a comment with a reason precedes (or the stylesheet's first comment).
+  const cornerAllowed = (decl) => {
+    const rule = decl.parent;
+    if (rule.nodes.some((sibling) => sibling.type === "decl" && sibling.prop.toLowerCase() === "corner-shape" && /^round\b/i.test(sibling.value))) return true;
+    for (let block = rule; block && block.type !== "root"; block = block.parent) if (allowComment(block.prev())) return true;
+    return allowComment(root.first);
+  };
   root.walk((node) => {
     const { rules, atRules } = ancestors(node);
     if (node.type === "rule") {
       for (const selector of node.selectors) {
         const scope = [...rules, selector.replace(/\s+/g, " ")].join(" ");
-        if (hook.test(scope) && STATE_SELECTOR.test(selector)) add(node, scope, atRules);
+        // Ouro's own classes (.ouro-focus-ring, .ouro-row), which ouro-base puts in the app's stylesheet, are Ouro's.
+        if (hook.test(scope.replace(OURO_CLASS, "")) && STATE_SELECTOR.test(selector)) add(node, scope, atRules);
       }
     }
     if (node.type === "atrule" && node.name === "apply") {
@@ -1875,7 +1902,7 @@ function scanStylesheet(file, source, hook = ANY_HOOK) {
         if (found) addLayout(node, scope, `@apply ${token}`);
       }
     }
-    if (node.type === "decl" && RADIUS_DECLARATION.test(node.prop) && !themedRadius(node.value) && !ROUND_PART_MARKER.test(rules.join(" "))) {
+    if (node.type === "decl" && RADIUS_DECLARATION.test(node.prop) && !themedRadius(node.value) && !ROUND_PART_MARKER.test(rules.join(" ")) && !cornerAllowed(node)) {
       const scope = rules.join(" ");
       offenders.push({
         category: "hand-drawn-corner",

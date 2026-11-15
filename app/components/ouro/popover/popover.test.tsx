@@ -175,6 +175,59 @@ describe("Popover", () => {
     expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
   });
 
+  it("draws its focus ring whole over content that sticks to an edge, and leaves the pointer to the content", async () => {
+    // Opened by keyboard, so that focus on the body is shown as keyboard focus (the ring shows only then).
+    await render(
+      <Popover title="Share recipe" trigger={<Button>Share</Button>}>
+        <div style={{ position: "sticky", top: 0, zIndex: 10, height: 40, background: "var(--background)" }}>Chats</div>
+        <div style={{ height: 2000 }} />
+      </Popover>,
+    );
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    const element = popup()!;
+    const body = element.querySelector<HTMLElement>("[data-ouro-popover-content]")!;
+    const overlay = element.querySelector<HTMLElement>("[data-popover-focus-ring]")!;
+    await expect.poll(() => body.tabIndex).toBe(0);
+    // Scrolled, the header sticks to the body's top edge, over the ring's place.
+    body.scrollTop = 200;
+    const header = body.querySelector<HTMLElement>("[style*='sticky']")!;
+    await expect.poll(() => header.getBoundingClientRect().top).toBe(body.getBoundingClientRect().top);
+    // At rest nothing lies over the content, so a contrast check sees the text's own background.
+    expect(getComputedStyle(overlay).display).toBe("none");
+    body.focus();
+    expect(getComputedStyle(overlay).display).toBe("block");
+    await act(async () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    // The ring's colour as pixels, and the body's pixels as the screen shows them.
+    const probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
+    probe.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ring");
+    probe.fillRect(0, 0, 1, 1);
+    const ring = [...probe.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+    const image = new Image();
+    image.src = `data:image/png;base64,${await page.screenshot({ save: false, element: body, animations: "disabled" })}`;
+    await image.decode();
+    const shot = document.createElement("canvas");
+    shot.width = image.naturalWidth;
+    shot.height = image.naturalHeight;
+    const context = shot.getContext("2d", { willReadFrequently: true })!;
+    context.drawImage(image, 0, 0);
+    const scale = image.naturalWidth / body.getBoundingClientRect().width;
+    const { width, height } = body.getBoundingClientRect();
+    // One pixel in from the middle of each edge, inside the 2px ring.
+    const edges = { top: [width / 2, 1], bottom: [width / 2, height - 1], start: [1, height / 2], end: [width - 1, height / 2] };
+    const shown = Object.fromEntries(
+      Object.entries(edges).map(([edge, [x, y]]) => {
+        const pixel = [...context.getImageData(Math.floor(x! * scale), Math.floor(y! * scale), 1, 1).data.slice(0, 3)];
+        return [edge, pixel.every((value, index) => Math.abs(value - ring[index]!) <= 24)];
+      }),
+    );
+    expect(shown).toEqual({ top: true, bottom: true, start: true, end: true });
+    // The ring takes no pointer: a press on the sticky header lands on the header.
+    const box = header.getBoundingClientRect();
+    expect(document.elementFromPoint(box.left + box.width / 2, box.top + 1)).toBe(header);
+  });
+
   it("keeps the trigger's own ref and onClick", async () => {
     const ref = createRef<HTMLButtonElement>();
     const onClick = vi.fn();

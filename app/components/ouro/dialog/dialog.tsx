@@ -61,11 +61,10 @@ export interface DialogBaseProps {
   /** Hides the title visually. It still names the dialog for screen readers. */
   hideTitle?: boolean | undefined;
   /**
-   * The label of the close button. A centered dialog shows it as an icon button
-   * in the top corner; as a sheet it is hidden until it has keyboard focus.
+   * The label of the close button, an icon button in the top corner, centered or as a sheet.
    * Screen-reader users on phones (who have no Escape key) can always reach it.
    * @default "Close"
-   * @claim "Screen-reader users on phones (who have" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > keeps the sheet's hidden-until-focused close control in sheet presentation)
+   * @claim "Screen-reader users on phones (who have" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > shows the sheet's close icon button in the top corner in sheet presentation too)
    */
   closeLabel?: string | undefined;
   /** A short line under the title, read out when the dialog opens. */

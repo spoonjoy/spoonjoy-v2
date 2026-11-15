@@ -114,6 +114,25 @@ describe("automatic presentation", () => {
     expect(Math.abs(rect.top + rect.height / 2 - innerHeight / 2)).toBeLessThanOrEqual(1);
   });
 
+  it("is modal to assistive technology, centered and as a sheet: aria-modal, with the page behind hidden", async () => {
+    const outside = document.createElement("button");
+    outside.textContent = "Behind";
+    document.body.append(outside);
+    try {
+      for (const width of [1280, 390]) {
+        await page.viewport(width, 844);
+        const element = await openUncontrolled();
+        expect(element.getAttribute("aria-modal")).toBe("true");
+        expect(outside.closest('[aria-hidden="true"]')).not.toBeNull();
+        await userEvent.keyboard("{Escape}");
+        await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
+        await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+      }
+    } finally {
+      outside.remove();
+    }
+  });
+
   it("renders the bottom sheet at 390px", async () => {
     await page.viewport(390, 844);
     const element = await openUncontrolled();
@@ -466,12 +485,13 @@ describe("centered dialog", () => {
     await expect.element(page.getByRole("dialog").getByRole("button", { name: "Close" })).toBeVisible();
   });
 
-  it("keeps the sheet's hidden-until-focused close control in sheet presentation", async () => {
+  it("shows the sheet's close icon button in the top corner in sheet presentation too", async () => {
     await page.viewport(390, 844);
     await openUncontrolled({ closeLabel: "Dismiss" });
     const close = page.getByRole("dialog").getByRole("button", { name: "Dismiss" }).element();
     expect(close.hasAttribute("data-ouro-sheet-close")).toBe(true);
-    expect(close.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+    expect(close.getBoundingClientRect().width).toBeGreaterThanOrEqual(32);
+    expect(close.querySelector("svg")).not.toBeNull();
   });
 
   it.each([
@@ -1730,3 +1750,59 @@ describe("first focus after the last press, with and without a trigger", () => {
   });
 });
 
+
+describe("DialogContent", () => {
+  it("draws its focus ring whole over content that sticks to an edge, and leaves the pointer to the content", async () => {
+    // Opened by keyboard, so that focus on the body is shown as keyboard focus (the ring shows only then).
+    await render(
+      <Dialog title="Chats" trigger={<Button>Open</Button>}>
+        {/* Sticky offsets count from the body's content box, below its 8px top padding, so top: -8px sticks the header to the edge. */}
+        <div style={{ position: "sticky", top: -8, zIndex: 10, height: 40, background: "var(--background)" }}>Chats</div>
+        <div style={{ height: 2000 }} />
+      </Dialog>,
+    );
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    const element = popup()!;
+    const body = element.querySelector<HTMLElement>("[data-ouro-dialog-content]")!;
+    const overlay = element.querySelector<HTMLElement>("[data-dialog-focus-ring]")!;
+    await expect.poll(() => body.tabIndex).toBe(0);
+    // Scrolled, the header sticks to the body's top edge, over the ring's place.
+    body.scrollTop = 200;
+    const header = body.querySelector<HTMLElement>("[style*='sticky']")!;
+    await expect.poll(() => header.getBoundingClientRect().top).toBe(body.getBoundingClientRect().top);
+    // At rest nothing lies over the content, so a contrast check sees the text's own background.
+    expect(getComputedStyle(overlay).display).toBe("none");
+    body.focus();
+    expect(getComputedStyle(overlay).display).toBe("block");
+    await act(async () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    // The ring's colour as pixels, and the body's pixels as the screen shows them.
+    const probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
+    probe.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ring");
+    probe.fillRect(0, 0, 1, 1);
+    const ring = [...probe.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+    const image = new Image();
+    image.src = `data:image/png;base64,${await page.screenshot({ save: false, element: body, animations: "disabled" })}`;
+    await image.decode();
+    const shot = document.createElement("canvas");
+    shot.width = image.naturalWidth;
+    shot.height = image.naturalHeight;
+    const context = shot.getContext("2d", { willReadFrequently: true })!;
+    context.drawImage(image, 0, 0);
+    const scale = image.naturalWidth / body.getBoundingClientRect().width;
+    const { width, height } = body.getBoundingClientRect();
+    // One pixel in from the middle of each edge, inside the 2px ring.
+    const edges = { top: [width / 2, 1], bottom: [width / 2, height - 1], start: [1, height / 2], end: [width - 1, height / 2] };
+    const shown = Object.fromEntries(
+      Object.entries(edges).map(([edge, [x, y]]) => {
+        const pixel = [...context.getImageData(Math.floor(x! * scale), Math.floor(y! * scale), 1, 1).data.slice(0, 3)];
+        return [edge, pixel.every((value, index) => Math.abs(value - ring[index]!) <= 24)];
+      }),
+    );
+    expect(shown).toEqual({ top: true, bottom: true, start: true, end: true });
+    // The ring takes no pointer: a press on the sticky header lands on the header.
+    const box = header.getBoundingClientRect();
+    expect(document.elementFromPoint(box.left + box.width / 2, box.top + 1)).toBe(header);
+  });
+});

@@ -274,12 +274,23 @@ describe("Collapsible", () => {
       </Collapsible>,
     );
     await settled(r.panel);
-    await r.rerender(
-      <Collapsible title="Nutrition facts" open={false} onOpenChange={second}>
-        {facts}
-      </Collapsible>,
-    );
-    expect(r.panel.hasAttribute("hidden")).toBe(false);
+    // Read as the close starts, not after the rerender: on a loaded runner the rerender can outlast the transition.
+    const closing = r.panel;
+    let hiddenAsItCloses: boolean | undefined;
+    const record = (event: TransitionEvent) => {
+      if (event.target === closing && event.propertyName === "grid-template-rows" && hiddenAsItCloses === undefined) hiddenAsItCloses = closing.hasAttribute("hidden");
+    };
+    closing.addEventListener("transitionrun", record);
+    try {
+      await r.rerender(
+        <Collapsible title="Nutrition facts" open={false} onOpenChange={second}>
+          {facts}
+        </Collapsible>,
+      );
+      await expect.poll(() => hiddenAsItCloses).toBe(false);
+    } finally {
+      closing.removeEventListener("transitionrun", record);
+    }
     await expect.poll(() => r.panel.hasAttribute("hidden")).toBe(true);
     second.mockClear();
     await act(async () => roots.splice(0).forEach((root) => root.unmount()));

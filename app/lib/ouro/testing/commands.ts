@@ -47,8 +47,10 @@ export interface DragOptions {
  * utility's) then eases to its new value, so this also returns once those transitions have finished:
  * a test reads where each colour lands, not a colour between the two. The kit keeps the value it
  * set, so `mediaState` and `restoreMedia` can put them back.
+ * The 10 s wait for the frame to match leaves out Node's own stalls, up to 20 s in real time.
  *
  * @claim "This returns once the test frame's `matchMedia` matches every preference passed" registry/ouro/lib/ouro/testing/commands.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.test.ts::emulateMedia returns once the frame matches the preference, so the next line reads its styles)
+ * @claim "The 10 s wait for the frame to match leaves out Node's own stalls, up to 20 s in real time" scripts/media-kit-clock.test.mjs verify:testExists(scripts/media-kit-clock.test.mjs::emulateMedia waits out Node's own stalls, which do not count against its 10 s wait) verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /const MEDIA_WAIT_MS = 10_000;/) verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /const CEILING_FACTOR = 2;/)
  * @claim "this also returns once those transitions have finished" registry/ouro/lib/ouro/testing/commands.test.ts verify:fileLine(registry/ouro/lib/ouro/testing/commands.test.ts, /emulateMedia returns once forced colours have settled, past any transition the switch started/)
  */
 export const emulateMedia: BrowserCommand<[EmulateMediaOptions]> = async (ctx, options) => {
@@ -110,32 +112,42 @@ const MEDIA_ANSWER_MS = 3000;
 /**
  * Polls the frame's `matchMedia` from Node until the queries match. The poll runs here, not in the
  * frame, because a test's fake timers in the frame would stall a wait that the frame's own timers drive.
+ * The 10 s wait is counted on the kit's clock (`kitNow`), which leaves out Node's own stalls, up to 20 s in real time: a stall of this process holds the poll, not the frame, so it must not use up the wait.
  * @claim "Polls the frame's `matchMedia` from Node until the queries match" registry/ouro/lib/ouro/testing/commands.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.test.ts::emulateMedia returns while the test's fake timers are on)
+ * @claim "The 10 s wait is counted on the kit's clock (`kitNow`), which leaves out Node's own stalls, up to 20 s in real time" scripts/media-kit-clock.test.mjs verify:testExists(scripts/media-kit-clock.test.mjs::emulateMedia waits out Node's own stalls, which do not count against its 10 s wait) verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /const MEDIA_WAIT_MS = 10_000;/) verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /const CEILING_FACTOR = 2;/)
  */
 async function awaitMedia(frame: Frame, queries: string[]): Promise<void> {
-  // As long as a poll waits (the projects' 10 s), since a loaded runner can be slow to answer.
-  const deadline = performance.now() + MEDIA_WAIT_MS;
-  const unmatched = `${JSON.stringify(queries)}.find((query) => !matchMedia(query).matches)`;
-  // The query the frame last said it does not match.
-  let unmatchedBefore: string | undefined;
-  for (;;) {
-    // Each read gets at least MEDIA_ANSWER_MS, so a read begun just before the deadline can still answer
-    // and the failure names the query that does not match, not a frame that did not answer.
-    const limit = Math.max(deadline - performance.now(), MEDIA_ANSWER_MS);
-    let missing: string | undefined;
-    try {
-      missing = await within(frame.evaluate<string | undefined>(unmatched), limit, `the test frame did not answer for ${queries.join(" and ")} within ${Math.round(limit)}ms`);
-    } catch (problem) {
-      // A frame that said what it does not match, then stalled on the last read (a loaded runner), still does not match it.
-      if (unmatchedBefore !== undefined && performance.now() > deadline) {
-        throw new Error(`the test frame does not match ${unmatchedBefore} within ${MEDIA_WAIT_MS / 1000}s (and its last read did not answer within ${Math.round(limit)}ms)`, { cause: problem });
+  const stopCounting = countStalls();
+  try {
+    // As long as a poll waits (the projects' 10 s), since a loaded runner can be slow to answer.
+    const wait = limitOf(MEDIA_WAIT_MS);
+    const waitOver = () => kitNow() > wait.kit || performance.now() > wait.real;
+    const unmatched = `${JSON.stringify(queries)}.find((query) => !matchMedia(query).matches)`;
+    // The query the frame last said it does not match.
+    let unmatchedBefore: string | undefined;
+    for (;;) {
+      // Each read gets at least MEDIA_ANSWER_MS on the kit's clock, so a read begun just before the deadline can
+      // still answer and the failure names the query that does not match, not a frame that did not answer. No
+      // read outlasts the wait's ceiling in real time.
+      const ms = Math.max(wait.kit - kitNow(), MEDIA_ANSWER_MS);
+      const read: Limit = { kit: kitNow() + ms, real: wait.real };
+      let missing: string | undefined;
+      try {
+        missing = await within(frame.evaluate<string | undefined>(unmatched), read, `the test frame did not answer for ${queries.join(" and ")} within ${Math.round(ms)}ms`);
+      } catch (problem) {
+        // A frame that said what it does not match, then stalled on the last read (a loaded runner), still does not match it.
+        if (unmatchedBefore !== undefined && waitOver()) {
+          throw new Error(`the test frame does not match ${unmatchedBefore} within ${MEDIA_WAIT_MS / 1000}s (and its last read did not answer within ${Math.round(ms)}ms)`, { cause: problem });
+        }
+        throw problem;
       }
-      throw problem;
+      if (missing === undefined) return;
+      unmatchedBefore = missing;
+      if (waitOver()) throw new Error(`the test frame does not match ${missing} within ${MEDIA_WAIT_MS / 1000}s`);
+      await sleep(10);
     }
-    if (missing === undefined) return;
-    unmatchedBefore = missing;
-    if (performance.now() > deadline) throw new Error(`the test frame does not match ${missing} within ${MEDIA_WAIT_MS / 1000}s`);
-    await sleep(10);
+  } finally {
+    stopCounting();
   }
 }
 
@@ -274,7 +286,9 @@ const TOUCH_CEILING_MS = 2 * TOUCH_HANDLED_TIMEOUT_MS;
  * passive listeners that record the touch events the frame handles, and at most one expected
  * event. The listeners capture on `window` and, from touchstart on, also sit on the touch's
  * target, because a touch's later events go to that target even after it has left the
- * document, where they no longer reach `window`.
+ * document, where they no longer reach `window`. A settle from an earlier command, which arrives
+ * late, leaves the event that a later command expects in place.
+ * @claim "A settle from an earlier command" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a lift's late tidying of a frame never clears the watch the next gesture armed there)
  * @claim "Runs in every frame of the" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::on a page zoomed and panned by touch, the kit waits for the frame where the touch lands)
  * @claim "The listeners capture on `window` and" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::on a page zoomed and panned by touch, the kit waits for the frame where the touch lands)
  */
@@ -343,6 +357,7 @@ const TOUCH_WATCH = `(action, expected) => {
   }
   if (action === "expect") {
     state.expected = expected;
+    state.seq = expected.seq;
     state.seen = false;
     state.saw = [];
     return { children: view.length };
@@ -360,7 +375,9 @@ const TOUCH_WATCH = `(action, expected) => {
       };
     });
   }
-  // "settle": stop waiting in this frame, and stop watching once the finger is up.
+  // "settle": stop waiting in this frame, and stop watching once the finger is up. A settle from an
+  // earlier command than the watch armed here is late: that watch is a later command's, so it stays.
+  if (state.seq !== undefined && expected.seq !== undefined && expected.seq < state.seq) return null;
   state.expected = null;
   if (state.resolve) state.resolve();
   if (expected.type === "touchend") state.remove();
@@ -512,6 +529,22 @@ function within<T>(promise: Promise<T>, limit: number | Limit, message: string):
 }
 
 /**
+ * Each command's expectation is numbered when its first watch starts, in order, so that TOUCH_WATCH
+ * can tell a settle from an earlier command, one that is late, from the watch a later command armed.
+ * @claim "Each command's expectation is numbered" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a lift's late tidying of a frame never clears the watch the next gesture armed there)
+ */
+let watchSeq = 0;
+const watchSeqs = new WeakMap<TouchPoint, number>();
+function seqOf(point: TouchPoint): number {
+  let seq = watchSeqs.get(point);
+  if (seq === undefined) {
+    seq = ++watchSeq;
+    watchSeqs.set(point, seq);
+  }
+  return seq;
+}
+
+/**
  * Calls `TOUCH_WATCH` in one frame. A failed call is kept, with its reason, and so is a call
  * still unanswered after `limit` (`ms`, or a command's `Limit`, so the call ends by the command's
  * ceiling): Playwright waits for a frame's document before it evaluates there, and a frame whose
@@ -519,7 +552,7 @@ function within<T>(promise: Promise<T>, limit: number | Limit, message: string):
  * @claim "A failed call is kept, with" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::a touch into an iframe that never loads does not hang)
  */
 function callWatch<T>(frame: Frame, action: TouchWatchAction, point: TouchPoint, limit: number | Limit): Promise<FrameAnswer<T>> {
-  const call = `(${TOUCH_WATCH})(${JSON.stringify(action)}, ${JSON.stringify({ ...point, type: point.type.toLowerCase() })})`;
+  const call = `(${TOUCH_WATCH})(${JSON.stringify(action)}, ${JSON.stringify({ ...point, type: point.type.toLowerCase(), seq: seqOf(point) })})`;
   const url = () => frame.url() || "a frame with no URL yet";
   const ms = typeof limit === "number" ? limit : limit.kit - kitNow();
   return within(frame.evaluate<T>(call), limit, `did not answer within ${Math.round(ms)}ms`).then(
@@ -998,12 +1031,13 @@ async function sendTraced(
   const now = <T>(call: Promise<T>) => within(call, 0, "").catch(() => undefined);
   // Tidies every frame whose watch started; a frame whose call is still out is tidied when it answers, without waiting.
   // Once a frame has handled the event, only its tidying is waited for: a busy frame elsewhere, as a
-  // cross-origin page still running its scripts, would hold the command up to TOUCH_TIDY_MS. Calls
-  // into one frame run in order, so that frame is still tidied before the next command watches it,
-  // and the next touchstart waits for a watcher armed for itself (frameAtPoint). The frame that
-  // handled a touchstart or touchmove has nothing to tidy: seeing the event ended its wait and
-  // cleared what it expected (TOUCH_WATCH), so it is not asked, which saves a round trip into the
-  // page on each step of a gesture. A lift is tidied and waited for: it ends the frame's watch.
+  // cross-origin page still running its scripts, would hold the command up to TOUCH_TIDY_MS. A tidying
+  // that a frame answers late, after a later command has armed it, does nothing: TOUCH_WATCH ignores a
+  // settle older than the watch it would clear, and the next touchstart waits for a watcher armed for
+  // itself (frameAtPoint). The frame that handled a touchstart or touchmove has nothing to tidy: seeing
+  // the event ended its wait and cleared what it expected (TOUCH_WATCH), so it is not asked, which saves
+  // a round trip into the page on each step of a gesture. A lift is tidied and waited for: it ends the
+  // frame's watch.
   const tidy = async (handled?: Frame) => {
     const answered = (await Promise.all([...calls.values()].map(now))).flatMap((answer) => (answer && answer.error === undefined ? [answer.frame] : []));
     for (const [frame, call] of calls) if (!answered.includes(frame)) void call.then(() => callWatch(frame, "settle", expected, TOUCH_TIDY_MS));

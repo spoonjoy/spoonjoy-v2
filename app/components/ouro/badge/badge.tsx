@@ -251,12 +251,8 @@ export function Badge(props: BadgeProps): JSX.Element {
   );
 
   const look = looks[variant][tone];
-  const content = (
-    <>
-      {Icon && <Icon aria-hidden="true" className="relative -ms-0.5 size-3.5 shrink-0" />}
-      {children}
-    </>
-  );
+  // The icon and the label go in as siblings of the surface, not in a fragment, which would be a component of its own.
+  const icon = Icon && <Icon aria-hidden="true" className="relative -ms-0.5 size-3.5 shrink-0" />;
 
   if (rest.href !== undefined) {
     const { type: _type, disabled: _disabled, ...anchorProps } = rest as Omit<BadgeLinkProps, keyof BadgeBaseProps>;
@@ -264,7 +260,8 @@ export function Badge(props: BadgeProps): JSX.Element {
       <RouterLink data-ouro-control="badge" data-ouro-part="root" {...anchorProps} onClick={onClick} data-ouro="badge" data-ouro-squircle="" className={cn(base, interactive, look, className)}>
         <TouchTarget />
         <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />
-        {content}
+        {icon}
+        {children}
       </RouterLink>
     );
   }
@@ -274,7 +271,8 @@ export function Badge(props: BadgeProps): JSX.Element {
       <BaseButton data-ouro-control="badge" data-ouro-part="root" {...buttonProps} onClick={onClick} disabled={disabled} ref={ref as Ref<HTMLElement> | undefined} type={type} data-ouro="badge" data-ouro-squircle="" className={cn(base, interactive, look, className)}>
         <TouchTarget />
         <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />
-        {content}
+        {icon}
+        {children}
       </BaseButton>
     );
   }
@@ -283,7 +281,8 @@ export function Badge(props: BadgeProps): JSX.Element {
   return (
     <span {...(spanProps as HTMLAttributes<HTMLSpanElement>)} ref={ref} data-ouro="badge" data-ouro-squircle="" className={cn(base, look, className)}>
       <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />
-      {content}
+      {icon}
+      {children}
     </span>
   );
 }

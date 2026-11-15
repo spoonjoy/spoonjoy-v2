@@ -32,5 +32,9 @@ expectTypeOf<{ label: "View"; items: Array<{ value: "a"; label: "A"; href: "/a" 
 // One value, never a list.
 expectTypeOf<{ label: "View"; items: typeof items; value: ["list"] }>().not.toExtend<SegmentedControlProps>();
 
+// revealOnHover keeps a control over content out of the way until it is hovered or focused.
+expectTypeOf<{ label: "View"; items: typeof items; revealOnHover: true }>().toExtend<SegmentedControlProps>();
+expectTypeOf<{ label: "View"; items: typeof items; revealOnHover: "hover" }>().not.toExtend<SegmentedControlProps>();
+
 // @ts-expect-error label is required.
 createElement(SegmentedControl, { items });

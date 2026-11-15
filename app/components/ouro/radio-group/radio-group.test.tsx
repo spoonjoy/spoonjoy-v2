@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Radio, RadioGroup, type RadioGroupProps, type RadioProps } from "~/components/ouro/radio-group/radio-group";
-import { Switch } from "~/components/ouro/switch/switch";
 import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
 import { pressTab } from "~/lib/ouro/testing/tab";
@@ -414,18 +413,6 @@ describe("RadioGroup development messages", () => {
     expect(messages()).toEqual([
       "[ouro-ui] RadioGroup: value without onValueChange never changes. Fix: <RadioGroup value={value} onValueChange={setValue}>, or defaultValue.",
     ]);
-  });
-
-  it("throws with the fix for a Switch inside the group", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    await expect(
-      render(
-        <RadioGroup legend="Size">
-          <Switch label="Small" />
-        </RadioGroup>,
-      ),
-    ).rejects.toThrow('[ouro-ui] Switch: a RadioGroup takes Radio choices. Fix: <Radio value="small" label="Small" />, or put the Switch outside the group.');
-    error.mockRestore();
   });
 
   it("does not add required words to its legend; the radiogroup carries aria-required", async () => {

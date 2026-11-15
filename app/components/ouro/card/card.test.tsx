@@ -402,6 +402,108 @@ describe("Card with href", () => {
   });
 });
 
+describe("Card with href, zoomMedia and revealDescription", () => {
+  function settled(element: Element, read: () => string) {
+    let last = "";
+    return expect
+      .poll(() => {
+        const value = read();
+        const still = value === last && element.getAnimations().length === 0;
+        last = value;
+        return still ? value : undefined;
+      }, { interval: 50 });
+  }
+  const tile = (props: { zoomMedia?: boolean; revealDescription?: boolean }) => (
+    <Card
+      href="#braising"
+      title="Braising"
+      description="Low heat, a lid, and time"
+      media={
+        <>
+          <AspectRatio ratio={4 / 3}>
+            <img src={pixel} alt="" data-picture="" />
+          </AspectRatio>
+          <Button variant="soft" size="sm" className="absolute end-2 top-2" data-share="">
+            Share
+          </Button>
+        </>
+      }
+      {...props}
+    />
+  );
+
+  it("grows the media's picture 3% inside its frame while the pointer rests on the card or keyboard focus is in it, and not with reduced motion", async () => {
+    const { card } = await render(tile({ zoomMedia: true }));
+    const picture = card.querySelector<HTMLImageElement>("[data-picture]")!;
+    const share = card.querySelector<HTMLElement>("[data-share]")!;
+    const frame = picture.parentElement!.parentElement!;
+    const before = card.getBoundingClientRect();
+    expect(warn).not.toHaveBeenCalled();
+    expect(getComputedStyle(picture).scale).toBe("none");
+    await userEvent.hover(card.querySelector("h3")!);
+    await settled(picture, () => getComputedStyle(picture).scale).toBe("1.03");
+    expect(card.getBoundingClientRect().height).toBe(before.height);
+    expect(getComputedStyle(frame).overflow).toBe("hidden");
+    expect(getComputedStyle(share).scale).toBe("none");
+    const [x, y] = center(share);
+    expect(document.elementFromPoint(x, y)?.closest("[data-share]")).toBe(share);
+    await commands.parkPointer();
+    await settled(picture, () => getComputedStyle(picture).scale).toBe("none");
+    const start = document.createElement("button");
+    card.parentElement!.prepend(start);
+    start.focus();
+    await pressTab();
+    await settled(picture, () => getComputedStyle(picture).scale).toBe("1.03");
+    start.focus();
+    await commands.emulateMedia({ reducedMotion: "reduce" });
+    await userEvent.hover(card.querySelector("h3")!);
+    await settled(picture, () => getComputedStyle(picture).scale).toBe("none");
+  });
+
+  it("shows the description on hover or keyboard focus, keeping its room, and names it as the link's description", async () => {
+    const { card } = await render(tile({ revealDescription: true }));
+    const reveal = card.querySelector<HTMLElement>("[data-card-reveal]")!;
+    const link = card.querySelector<HTMLAnchorElement>("[data-card-link]")!;
+    const height = card.getBoundingClientRect().height;
+    expect(reveal.getAttribute("data-card-reveal")).toBe("");
+    expect(warn).not.toHaveBeenCalled();
+    expect(link.getAttribute("aria-describedby")).toBe(reveal.id);
+    expect(getComputedStyle(reveal).opacity).toBe("0");
+    expect(reveal.getBoundingClientRect().height).toBeGreaterThan(0);
+    await expect.element(page.getByRole("link", { name: "Braising" })).toHaveAccessibleDescription("Low heat, a lid, and time");
+    await userEvent.hover(card.querySelector("h3")!);
+    await settled(reveal, () => getComputedStyle(reveal).opacity).toBe("1");
+    expect(card.getBoundingClientRect().height).toBe(height);
+    await commands.parkPointer();
+    await settled(reveal, () => getComputedStyle(reveal).opacity).toBe("0");
+    const start = document.createElement("button");
+    card.parentElement!.prepend(start);
+    start.focus();
+    await pressTab();
+    await pressTab();
+    expect(document.activeElement).toBe(link);
+    await settled(reveal, () => getComputedStyle(reveal).opacity).toBe("1");
+  });
+
+  it.each([
+    ["no href", { title: "Static", description: "Here", media: <img src={pixel} alt="" />, zoomMedia: true, revealDescription: true }, ["zoomMedia", "revealDescription"]],
+    ["no media", { href: "#x", title: "No media", description: "Here", zoomMedia: true }, ["zoomMedia"]],
+    ["no description", { href: "#x", title: "No description", media: <img src={pixel} alt="" />, revealDescription: true }, ["revealDescription"]],
+    ["neither prop", { href: "#x", title: "Plain", description: "Here", media: <img src={pixel} alt="" /> }, []],
+  ] as const)("leaves a card with %s as it is, and says what each prop needs", async (_name, props, warned) => {
+    const { card } = await render(<Card {...(props as Parameters<typeof Card>[0])} />);
+    expect(card.classList.contains("group/card")).toBe(false);
+    expect(card.querySelector("[data-card-reveal]")).toBeNull();
+    expect(card.querySelector("[aria-describedby]")).toBeNull();
+    const messages = {
+      zoomMedia: '[ouro-ui] Card: zoomMedia needs href, a title and media. Fix: <Card href="/path" title="…" media={…} zoomMedia>.',
+      revealDescription:
+        '[ouro-ui] Card: revealDescription needs href, a title and a description. Fix: <Card href="/path" title="…" description="…" revealDescription>.',
+    };
+    expect(warn.mock.calls.map((call: unknown[]) => call[0])).toEqual(warned.map((name) => messages[name]));
+  });
+});
+
 describe("Card development messages", () => {
   it.each([
     ["href without title", { href: "/x" }, "href needs a title, which is the link's text", '<Card href="/x" title="Weeknight dinners">'],
@@ -412,6 +514,7 @@ describe("Card development messages", () => {
     ["to", { title: "x", to: "/x" }, "to is not a prop", '<Card href="/x" title="…">'],
     ["to object", { title: "x", to: { pathname: "/x" } }, "to is not a prop", '<Card href="/path" title="…">'],
     ["asChild", { title: "x", asChild: true }, "asChild is not a prop", '<Card href="/path" title="…">'],
+    ["interactive", { title: "x", interactive: true }, "interactive is not a prop; a card with href is a link", '<Card href="/path" title="…" zoomMedia revealDescription>'],
     ["variant", { title: "x", variant: "elevated" }, 'variant="elevated" is not a variant; use "outline", "plain"', '<Card variant="outline">'],
     ["size", { title: "x", size: "lg" }, 'size="lg" is not a size; use "md", "sm"', '<Card size="md">'],
     ["as", { title: "x", as: "a" }, 'as="a" is not an element Card renders; use "div", "article", "section", "li"', '<Card href="/path" title="…">'],
@@ -421,7 +524,7 @@ describe("Card development messages", () => {
   ])("warns for %s with the fix", async (_name, props, problem, fix) => {
     const { card } = await render(<Card {...(props as unknown as Parameters<typeof Card>[0])} />);
     expect(warn).toHaveBeenCalledWith(`[ouro-ui] Card: ${problem}. Fix: ${fix}.`);
-    for (const attribute of ["subtitle", "image", "header", "actions", "to", "aschild"]) expect(card.hasAttribute(attribute)).toBe(false);
+    for (const attribute of ["subtitle", "image", "header", "actions", "to", "aschild", "interactive"]) expect(card.hasAttribute(attribute)).toBe(false);
   });
 
   it("renders the defaults for unknown values", async () => {

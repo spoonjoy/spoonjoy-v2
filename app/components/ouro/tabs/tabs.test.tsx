@@ -369,7 +369,7 @@ describe("Tabs", () => {
     expect(getComputedStyle(thumb).transitionProperty).toBe("none");
     await userEvent.click(page.getByRole("radio", { name: "Y" }));
     expect(r.root.hasAttribute("data-ouro-keyboard")).toBe(false);
-    expect(getComputedStyle(thumb).transitionProperty).toBe("translate, opacity");
+    expect(getComputedStyle(thumb).transitionProperty).toBe("inset-inline-start, inset-inline-end, opacity");
   });
 
   it("still calls the key and pointer handlers a list is given", async () => {
