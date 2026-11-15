@@ -32,6 +32,16 @@ import { createUser } from "~/lib/auth.server";
 import { getLocalDb } from "~/lib/db.server";
 import { SIGN_IN_FAILED_EVENT, SIGN_IN_SUCCEEDED_EVENT } from "~/lib/sign-in-outcome.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { expectConsoleError } from "../warning-policy";
+
+function expectInternalError(path: string, failure: Error) {
+  expectConsoleError("[api-v1] internal_error", {
+    requestId: "req_native_sign_in",
+    method: "POST",
+    path: `/api/v1/${path}`,
+    error: { name: failure.name, message: failure.message, stack: failure.stack },
+  });
+}
 
 const INSTALL_ID = "0b1c2d3e-4f50-4617-8293-a4b5c6d7e8f9";
 const RATE_LIMITED = { limit: async () => ({ success: false }) };
@@ -146,11 +156,10 @@ describe("native sign-in outcomes", () => {
     await action(nativeArgs("auth/apple/native", { identityToken: "jwt", rawNonce: "nonce" }, { env: { AUTH_IP_RATE_LIMITER: RATE_LIMITED } }));
     await action(nativeArgs("auth/apple/native", { identityToken: "jwt" }));
     await action(nativeArgs("auth/password/native", { emailOrUsername: "chef", password: "pw", installId: "bad id" }));
-    vi.mocked(handleNativePasswordSignIn).mockRejectedValue(new Error("boom"));
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const boom = new Error("boom");
+    vi.mocked(handleNativePasswordSignIn).mockRejectedValue(boom);
+    expectInternalError("auth/password/native", boom);
     const fault = await action(nativeArgs("auth/password/native", { emailOrUsername: "chef", password: "pw" }));
-    expect(consoleError).toHaveBeenCalled();
-    consoleError.mockRestore();
 
     expect(fault.status).toBe(500);
     expect(signInEvents().map((event) => [event.properties.method, event.properties.failure_reason])).toEqual([
@@ -177,13 +186,13 @@ describe("native sign-in outcomes", () => {
 
   it("does not turn a fault after a successful sign-in into a failed sign-in", async () => {
     vi.mocked(handleNativePasswordSignIn).mockResolvedValue({ action: "user_logged_in", userId: "user_pw", clientId: "client", tokens } as never);
-    vi.mocked(claimPendingAppleLink).mockRejectedValueOnce(new Error("link store down"));
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const linkFailure = new Error("link store down");
+    vi.mocked(claimPendingAppleLink).mockRejectedValueOnce(linkFailure);
+    expectInternalError("auth/password/native", linkFailure);
 
     const response = await action(nativeArgs("auth/password/native", { emailOrUsername: "chef", password: "pw", pendingAppleLinkToken: "pending" }));
 
     expect(response.status).toBe(500);
-    consoleError.mockRestore();
     expect(signInEvents().map((event) => event.event)).toEqual([SIGN_IN_SUCCEEDED_EVENT]);
   });
 });
