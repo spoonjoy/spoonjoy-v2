@@ -2,7 +2,9 @@ import type { Route } from "./+types/login";
 import { useRef } from "react";
 import { Form as RouterForm, redirect, data, useActionData, useLoaderData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { authenticateUserByEmailOrUsername, authenticateUserByEmailOrUsernameOnD1 } from "~/lib/auth.server";
+import { authenticateUserByEmailOrUsername, authenticateUserByEmailOrUsernameOnD1, lookupUserIdByEmailOrUsername } from "~/lib/auth.server";
+import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
+import { recordSignInFailed, recordSignInSucceeded } from "~/lib/sign-in-outcome.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { createUserSession, getUserId, sanitizeSessionRedirect } from "~/lib/session.server";
 import { claimPendingAppleLinkFromCookie } from "~/lib/pending-apple-link.server";
@@ -70,9 +72,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 // Action - handle login form submission
 export async function action({ request, context }: Route.ActionArgs) {
+  const telemetry = authTelemetryFromContext(context);
+  const capture = telemetry.captureEvent.bind(telemetry);
   // Throttle before any password work so brute-force can't burn bcrypt cycles.
   const rateLimit = await enforceAuthRateLimit(request, context.cloudflare?.env?.AUTH_IP_RATE_LIMITER);
   if (!rateLimit.allowed) {
+    recordSignInFailed(capture, { method: "password", platform: "web", failureReason: "rate_limited" });
     return data(
       { errors: { general: "Too many attempts. Please wait a moment and try again." } },
       { status: 429 },
@@ -98,6 +103,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   if (Object.keys(errors).length > 0) {
+    recordSignInFailed(capture, { method: "password", platform: "web", failureReason: "missing_fields" });
     return data({ errors }, { status: 400 });
   }
 
@@ -109,6 +115,12 @@ export async function action({ request, context }: Route.ActionArgs) {
     : await authenticateUserByEmailOrUsername(await getRequestDb(context), identifier, password);
 
   if (!user) {
+    recordSignInFailed(capture, {
+      method: "password",
+      platform: "web",
+      failureReason: "invalid_credentials",
+      matchedUserId: telemetry.enabled ? await lookupUserIdByEmailOrUsername(await getRequestDb(context), identifier) : null,
+    });
     return data(
       { errors: { general: "Invalid username, email, or password" } },
       { status: 401 }
@@ -120,6 +132,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     sessionVersion: user.sessionVersion,
     signInMethod: "password",
   });
+  recordSignInSucceeded(capture, { method: "password", platform: "web", userId: user.id });
   // An Apple sign-in in this browser that found no account left a pending link: connect it now.
   const clearedPendingAppleLink = await claimPendingAppleLinkFromCookie(() => getRequestDb(context), request, context.cloudflare?.env, user.id);
   if (clearedPendingAppleLink) response.headers.append("Set-Cookie", clearedPendingAppleLink);

@@ -200,6 +200,23 @@ export async function authenticateUserByEmailOrUsername(
   return authenticatePasswordUser(user, password, prismaPasswordUpgrade(db));
 }
 
+/**
+ * The id of the account an email (any case) or exact username names, or null. Used to tie a
+ * failed sign-in to its account in telemetry without sending the identifier itself.
+ */
+export async function lookupUserIdByEmailOrUsername(
+  db: Pick<PrismaClient, "user">,
+  emailOrUsername: string,
+): Promise<string | null> {
+  const identifier = emailOrUsername.trim();
+  if (!identifier) return null;
+  const user = await db.user.findUnique({
+    where: identifier.includes("@") ? { email: identifier.toLowerCase() } : { username: identifier },
+    select: { id: true },
+  });
+  return user?.id ?? null;
+}
+
 const LOGIN_USER_COLUMNS = '"id", "email", "username", "hashedPassword", "salt", "sessionVersion"';
 
 /**

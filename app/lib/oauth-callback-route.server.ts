@@ -3,6 +3,7 @@ import { createUserSession, getSessionSignIn, getUserId, isSessionIdentityCurren
 import { getAppleOAuthConfig, getGitHubOAuthConfig, getGoogleOAuthConfig } from "~/lib/env.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
+import { recordSignInFailed, recordSignInSucceeded } from "~/lib/sign-in-outcome.server";
 import { D1_WRITE_UNAVAILABLE_CODE, isD1Unavailable } from "~/lib/d1-write-retry.server";
 import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
 import {
@@ -120,6 +121,36 @@ function oauthFailureTelemetry(
  * outcome is observable. `error_code` is the machine code already surfaced to
  * the client; `phase` distinguishes a provider/infra failure from user error.
  */
+/**
+ * Callback requests that link a provider to the already signed-in account. Their failures are
+ * not failed sign-ins, so they are left out of `spoonjoy.auth.sign_in_failed`.
+ */
+const linkingCallbackRequests = new WeakSet<Request>();
+
+function rememberLinkingCallback(request: Request, stored: { linking?: boolean } | null) {
+  if (stored?.linking) linkingCallbackRequests.add(request);
+}
+
+/**
+ * Report a social sign-in that reached a session. Linking a provider to the account that is
+ * already signed in is not a sign-in, so it is not reported.
+ */
+async function recordOAuthSignInSucceeded(
+  telemetry: AuthTelemetry,
+  provider: AuthProvider,
+  callbackResult: { action?: string; userId: string },
+  request: Request,
+  env: SessionEnv | null | undefined,
+) {
+  if (callbackResult.action === "account_linked" && (await getUserId(request, env)) === callbackResult.userId) return;
+  recordSignInSucceeded(telemetry.captureEvent.bind(telemetry), {
+    method: provider,
+    platform: "web",
+    userId: callbackResult.userId,
+    newAccount: callbackResult.action === "user_created",
+  });
+}
+
 function redirectWithCapturedOAuthError(
   telemetry: AuthTelemetry,
   request: Request,
@@ -139,6 +170,13 @@ function redirectWithCapturedOAuthError(
       ? { failure_kind: failure.failureKind, retryable: failure.retryable }
       : {}),
   });
+  if (!linkingCallbackRequests.has(request)) {
+    recordSignInFailed(telemetry.captureEvent.bind(telemetry), {
+      method: provider,
+      platform: "web",
+      failureReason: errorCode ?? "oauth_error",
+    });
+  }
   return redirectWithOAuthError(request, provider, failureRedirect, errorCode, env);
 }
 
@@ -215,6 +253,7 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
   const telemetry = authTelemetryFromContext(context);
   const formData = await readFormPostParams(request);
   const stored = await readOAuthStartSession(request, "apple", env);
+  rememberLinkingCallback(request, stored);
   const failureRedirect = stored?.failureRedirect ?? "/login";
   const providerError = formData.get("error") ?? undefined;
 
@@ -305,6 +344,7 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
   }
 
   const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor("apple", callbackResult, request, env));
+  await recordOAuthSignInSucceeded(telemetry, "apple", { action: callbackResult.action, userId: callbackResult.userId }, request, env);
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }
@@ -320,6 +360,7 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
   const telemetry = authTelemetryFromContext(context);
   const url = new URL(request.url);
   const stored = await readOAuthStartSession(request, "github", env);
+  rememberLinkingCallback(request, stored);
   const failureRedirect = stored?.failureRedirect ?? "/login";
   const providerError = url.searchParams.get("error");
   const callbackState = url.searchParams.get("state");
@@ -412,6 +453,7 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
   }
 
   const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor("github", callbackResult, request, env));
+  await recordOAuthSignInSucceeded(telemetry, "github", { action: callbackResult.action, userId: callbackResult.userId }, request, env);
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   await appendPendingAppleLinkClaim(response, request, context, callbackResult.userId);
   return response;
@@ -422,6 +464,7 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
   const telemetry = authTelemetryFromContext(context);
   const url = new URL(request.url);
   const stored = await readOAuthStartSession(request, "google", env);
+  rememberLinkingCallback(request, stored);
   const failureRedirect = stored?.failureRedirect ?? "/login";
   const providerError = url.searchParams.get("error");
   const callbackState = url.searchParams.get("state");
@@ -519,6 +562,7 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
   }
 
   const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor("google", callbackResult, request, env));
+  await recordOAuthSignInSucceeded(telemetry, "google", { action: callbackResult.action, userId: callbackResult.userId }, request, env);
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   await appendPendingAppleLinkClaim(response, request, context, callbackResult.userId);
   return response;
