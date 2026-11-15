@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../fixtures";
 
 // Ouro's corner radii, read from the computed style of Spoonjoy's own stylesheet and components in
 // the built Storybook. A corner is the theme's base radius (--radius times --ouro-radius-scale)
