@@ -1,17 +1,17 @@
 "use client";
 
 import { Toggle } from "@base-ui/react/toggle";
-import { ToggleGroup } from "@base-ui/react/toggle-group";
-import { useId, useRef, useState, type CSSProperties, type JSX, type Ref } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { TouchTarget } from "~/lib/ouro/touch-target";
-import { devThrow } from "~/lib/ouro/dev";
+import { devThrow, devWarn } from "~/lib/ouro/dev";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import {
   groupClass,
   labelClass,
   ownLook,
+  revealClass,
   rootClass,
   segmentClass,
   thumbClass,
@@ -55,6 +55,16 @@ export interface SegmentedControlProps {
   disabled?: boolean | undefined;
   /** Stretches the control to the width of its container, with the segments sharing it equally. */
   fullWidth?: boolean | undefined;
+  /**
+   * For a secondary control laid over content, such as a switch on a slide: on a screen with a
+   * mouse the control stays transparent, keeping its room, until the pointer rests on it or focus
+   * is in it, then fades in. On a touch screen it shows from the start. Screen readers reach it
+   * while it is transparent too, and keyboard focus shows it. Pass `false` to show it again, as
+   * when the page's controls are turned on.
+   * @claim "on a screen with a mouse the" registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx verify:testExists(registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx::SegmentedControl revealOnHover > stays transparent, keeping its room, until the pointer rests on it or focus is in it)
+   * @claim "On a touch screen it shows" registry/ouro/components/ouro/segmented-control/segmented-control.touch.test.tsx verify:testExists(registry/ouro/components/ouro/segmented-control/segmented-control.touch.test.tsx::shows a revealOnHover control from the start on a touch screen)
+   */
+  revealOnHover?: boolean | undefined;
   /** Submits the checked segment's value under this name with the form it sits in, unless the control is `disabled`. */
   name?: string | undefined;
   /** Layout only: margins, grid placement (`mt-4`). Appearance classes warn in development. */
@@ -83,7 +93,12 @@ function duplicateValue(items: readonly SegmentedControlItem[]): string | undefi
  * to the checked one, for switching how one view shows its content in place, such as list
  * or grid. Exactly one segment is checked. Screen readers hear a radio group, and the arrow
  * keys check the next segment as they do for radio buttons. Segments are 44px tall on touch
- * screens, and `name` submits the value with a form.
+ * screens, and `name` submits the value with a form. Keyboard focus stays on the checked
+ * segment: when the app checks another one while a segment has focus, focus moves to it, so
+ * the ring and the thumb never mark two segments.
+ *
+ * A switch laid over content can keep out of the way with `revealOnHover`: with a mouse it shows
+ * only while the pointer rests on it or focus is in it.
  *
  * Use `Tabs` instead when each choice shows different content with its own panel. Use links
  * in a `<nav>` instead when each choice is its own page. Use a `RadioGroup` instead for a
@@ -103,6 +118,7 @@ function duplicateValue(items: readonly SegmentedControlItem[]): string | undefi
  *   value={view}
  *   onValueChange={setView}
  * />
+ * @claim "Keyboard focus stays on the checked" registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx verify:testExists(registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx::SegmentedControl > moves focus to the segment the app checks, so the ring and the thumb mark one segment)
  * @claim "Segments are 44px tall on touch" registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx verify:testExists(registry/ouro/components/ouro/segmented-control/segmented-control.test.tsx::SegmentedControl > submits the checked value with a form when given a name)
  * @claim "Segments are 44px tall on touch" registry/ouro/components/ouro/segmented-control/segmented-control.touch.test.tsx verify:testExists(registry/ouro/components/ouro/segmented-control/segmented-control.touch.test.tsx::keeps 44px segments with 16px text on a phone, also in landscape)
  */
@@ -116,6 +132,7 @@ export function SegmentedControl(props: SegmentedControlProps): JSX.Element {
     onValueChange,
     disabled,
     fullWidth,
+    revealOnHover,
     name,
     className,
     ref,
@@ -166,32 +183,81 @@ export function SegmentedControl(props: SegmentedControlProps): JSX.Element {
   // Set while an arrow, Home or End key moves focus, so the segment it lands on gets checked,
   // as a radio button does. Tab and pointer focus leave the value alone.
   const arrowed = useRef(false);
+  // The values this control asked for since focus came in, so one the app checks late, after a
+  // quicker key, still counts as the person's own and does not pull focus back.
+  const asked = useRef(new Set<string | undefined>());
   const choose = (pressed: string) => {
     // Never report the value that is already checked.
     if (pressed === selected) return;
+    asked.current.add(pressed);
     setOwn(pressed);
     onValueChange?.(pressed);
   };
+  useEffect(() => {
+    // The app checked another segment (a setting changed elsewhere) while a segment has focus:
+    // focus follows the check, so the ring is never on a segment beside the thumb's.
+    const group = document.activeElement!.closest(`[aria-labelledby="${labelId}"]`);
+    if (!group || asked.current.has(selected)) return;
+    const checked = group.querySelector<HTMLElement>('[data-ouro-segment][aria-checked="true"]');
+    if (checked) checked.focus();
+  }, [selected, labelId]);
+  // Each label shows whole; when the control has less room than its labels need, they spill out of it, and development says so.
+  const spillKey = useRef({});
+  useEffect(() => {
+    /* istanbul ignore else @preserve -- the else path exists only in production bundles; scripts/dev-strip.test.mjs covers it */
+    if (process.env.NODE_ENV !== "production") {
+      const group = document.querySelector<HTMLElement>(`[aria-labelledby="${labelId}"]`)!;
+      const observer = new ResizeObserver(() => {
+        // The group grows to its labels' width; the component's root is the room it has.
+        const [need, room] = [group.offsetWidth, group.parentElement!.clientWidth];
+        if (need <= room) return;
+        // Stryker disable next-line EqualityOperator: of two labels as long as each other, either makes the example
+        const longest = items.reduce((a, b) => (b.label.length > a.label.length ? b : a));
+        devWarn(
+          "SegmentedControl",
+          `its labels need ${need}px and it has ${room}px, so they spill out of it`,
+          `{ value: "${longest.value}", label: "${longest.label.split(" ")[0]}" }`,
+          spillKey.current,
+        );
+      });
+      // The room is the root's width; new labels run this effect again.
+      observer.observe(group.parentElement!);
+      // Stryker disable next-line ArrowFunction: an observer left on a root that is gone reports nothing more
+      return () => observer.disconnect();
+    }
+  }, [labelId, items]);
+  // Roving focus is the control's own, not Base UI's composite, whose mount reads computed style.
+  // The arrow keys wrap and follow the way the text runs; Home and End go to the ends.
+  const move = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const segments = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("[data-ouro-segment]:not(:disabled)"));
+    const at = segments.indexOf(event.target as HTMLElement);
+    // A key from a segment disabled while it had focus moves nothing.
+    if (at === -1) return;
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const rtl = (event.currentTarget.closest("[dir]")?.getAttribute("dir") ?? document.documentElement.dir) === "rtl";
+    const step = event.key === "ArrowRight" ? (rtl ? -1 : 1) : event.key === "ArrowLeft" ? (rtl ? 1 : -1) : 0;
+    const target =
+      event.key === "Home" ? 0 : event.key === "End" ? segments.length - 1 : step ? (at + step + segments.length) % segments.length : -1;
+    if (target === -1) return;
+    event.preventDefault();
+    // Stryker disable next-line OptionalChaining: target is always inside segments
+    segments[target]?.focus();
+  };
   const thumbStyle = {
-    "--ouro-segment-count": items.length,
-    "--ouro-segment-index": Math.max(index, 0),
     opacity: index === -1 ? 0 : undefined,
   } as CSSProperties;
   return (
-    <div data-ouro="segmented-control" className={cn(rootClass, fullWidth && "justify-items-stretch", className)}>
+    <div data-ouro="segmented-control" className={cn(rootClass, fullWidth && "justify-items-stretch", revealOnHover && revealClass, className)}>
       <span id={labelId} className={cn(labelClass, hideLabel && "sr-only")}>
         {label}
       </span>
-      <ToggleGroup
+      <div
         ref={ref}
         role="radiogroup"
         aria-labelledby={labelId}
-        value={selected === undefined ? [] : [selected]}
-        onValueChange={(next) => {
-          // Pressing the checked segment would leave none checked. Keep it.
-          const [pressed] = next;
-          if (pressed !== undefined) choose(pressed);
-        }}
+        data-orientation="horizontal"
+        data-disabled={disabled ? "" : undefined}
+        onKeyDown={move}
         onKeyDownCapture={(event) => {
           arrowed.current = /^(Arrow|Home$|End$)/.test(event.key);
           // A key moves the thumb at once; only a pointer slides it.
@@ -205,16 +271,22 @@ export function SegmentedControl(props: SegmentedControlProps): JSX.Element {
         onBlurCapture={(event) => {
           // Focus leaving the group (by pointer, say) ends the arrow key's move.
           if (!event.currentTarget.contains(event.relatedTarget)) arrowed.current = false;
+          // It also ends what the person asked for here: a check the app makes after this is its own.
+          if (!event.currentTarget.contains(event.relatedTarget)) asked.current.clear();
         }}
-        disabled={disabled}
         className={cn(groupClass, fullWidth && "grid w-full")}
       >
         <span aria-hidden="true" data-ouro-segment-thumb="" className={thumbClass} style={thumbStyle} />
         {items.map((item) => (
           <Toggle
             key={item.value}
-            value={item.value}
-            disabled={item.disabled}
+            pressed={item.value === selected}
+            // Pressing the checked segment would leave none checked. Keep it.
+            onPressedChange={(next) => {
+              // Stryker disable next-line ConditionalExpression: only the checked segment reports false, and choose ignores the checked value
+              if (next) choose(item.value);
+            }}
+            disabled={disabled || item.disabled}
             data-ouro-segment=""
             data-ouro-control="segmented-control"
             data-ouro-part="segment"
@@ -233,7 +305,7 @@ export function SegmentedControl(props: SegmentedControlProps): JSX.Element {
             <span className="relative min-w-0 truncate">{item.label}</span>
           </Toggle>
         ))}
-      </ToggleGroup>
+      </div>
       {name !== undefined && <input type="hidden" name={name} value={selected ?? ""} disabled={disabled} />}
     </div>
   );

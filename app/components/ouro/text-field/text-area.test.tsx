@@ -12,6 +12,9 @@ import { watchLayoutReads } from "~/lib/ouro/testing/layout-reads";
 const roots: Root[] = [];
 let mounted: HTMLElement[] = [];
 
+/** Waits for the frame after a render, where the native fit runs. */
+const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
 async function render(node: ReactNode) {
   const host = document.createElement("div");
   host.style.padding = "24px";
@@ -21,9 +24,13 @@ async function render(node: ReactNode) {
   const root = createRoot(host);
   roots.push(root);
   await act(async () => root.render(node));
+  await frame();
   return {
     host,
-    rerender: (next: ReactNode) => act(async () => root.render(next)),
+    rerender: async (next: ReactNode) => {
+      await act(async () => root.render(next));
+      await frame();
+    },
     get root() {
       return host.querySelector<HTMLElement>('[data-ouro="text-area"]')!;
     },

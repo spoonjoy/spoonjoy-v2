@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { commands } from "vitest/browser";
+import { ScrollArea } from "@base-ui/react/scroll-area";
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { useOuro } from "~/lib/ouro/use-ouro";
 import { useReducedMotion } from "~/lib/ouro/use-reduced-motion";
@@ -221,6 +222,116 @@ describe("OuroProvider motion", () => {
     );
     expect(html).toContain('data-motion="reduced"');
     expect(html).toContain("transition-duration: 0s !important");
+  });
+});
+
+describe("OuroProvider strictCsp", () => {
+  const moving = () => {
+    const element = document.body.appendChild(document.createElement("p"));
+    element.style.transition = "opacity 1s";
+    return element;
+  };
+
+  it("stills the page under reduced with a constructed stylesheet, not a <style>, and takes only its own away when motion changes or the provider goes", async () => {
+    const theirs = new CSSStyleSheet();
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, theirs];
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    roots.push(root);
+    const at = (motion: "reduced" | "full") => (
+      <OuroProvider strictCsp motion={motion}>
+        <Link />
+      </OuroProvider>
+    );
+    await act(async () => root.render(at("reduced")));
+    const elsewhere = moving();
+    expect(container.querySelector("style")).toBeNull();
+    expect(document.adoptedStyleSheets).toHaveLength(2);
+    expect(getComputedStyle(elsewhere).transitionDuration).toBe("0s");
+    await act(async () => root.render(at("full")));
+    expect(document.adoptedStyleSheets).toEqual([theirs]);
+    expect(getComputedStyle(elsewhere).transitionDuration).toBe("1s");
+    await act(async () => root.render(at("reduced")));
+    expect(document.adoptedStyleSheets).toHaveLength(2);
+    await act(async () => roots.splice(0).forEach((each) => each.unmount()));
+    expect(document.adoptedStyleSheets).toEqual([theirs]);
+    expect(getComputedStyle(elsewhere).transitionDuration).toBe("1s");
+    document.adoptedStyleSheets = [];
+  });
+
+  it("brings a <style> only for reduced motion without strictCsp", async () => {
+    const container = await mount(
+      <>
+        <OuroProvider motion="system">
+          <Link />
+        </OuroProvider>
+        <OuroProvider motion="full">
+          <Link />
+        </OuroProvider>
+      </>,
+    );
+    expect(container.querySelector("style")).toBeNull();
+  });
+
+  const scrollStyles = () => [...document.querySelectorAll("style")].filter((style) => style.textContent.includes("base-ui-disable-scrollbar")).length;
+  const area = (
+    <ScrollArea.Root>
+      <ScrollArea.Viewport>Notes</ScrollArea.Viewport>
+    </ScrollArea.Root>
+  );
+
+  it("keeps an outer provider's strictCsp inside one that sets none, and lets an inner one turn it off", async () => {
+    const sheets = document.adoptedStyleSheets.length;
+    const scroll = scrollStyles();
+    const container = await mount(
+      <OuroProvider strictCsp>
+        {area}
+        <OuroProvider motion="reduced">
+          {area}
+          <span id="inherited" />
+        </OuroProvider>
+      </OuroProvider>,
+    );
+    expect(container.querySelector("style")).toBeNull();
+    expect(scrollStyles()).toBe(scroll);
+    expect(document.adoptedStyleSheets).toHaveLength(sheets + 1);
+    const off = await mount(
+      <OuroProvider strictCsp>
+        <OuroProvider strictCsp={false} motion="reduced">
+          {area}
+        </OuroProvider>
+      </OuroProvider>,
+    );
+    expect(off.querySelector("style")).not.toBeNull();
+    expect(document.adoptedStyleSheets).toHaveLength(sheets + 1);
+    expect(scrollStyles()).toBeGreaterThan(scroll);
+  });
+
+  it("tells the Base UI parts it wraps to add no <style>, and adds no stylesheet without reduced motion", async () => {
+    const sheets = document.adoptedStyleSheets.length;
+    const scroll = scrollStyles();
+    await mount(<OuroProvider strictCsp>{area}</OuroProvider>);
+    expect(scrollStyles()).toBe(scroll);
+    expect(document.adoptedStyleSheets).toHaveLength(sheets);
+    await mount(<OuroProvider motion="reduced">{area}</OuroProvider>);
+    expect(document.adoptedStyleSheets).toHaveLength(sheets);
+  });
+
+  it("renders no <style> on the server", () => {
+    const html = renderToString(
+      <OuroProvider strictCsp motion="reduced">
+        <Link />
+      </OuroProvider>,
+    );
+    expect(html).toContain('data-motion="reduced"');
+    expect(html).not.toContain("<style");
+  });
+
+  it("points Base UI's disableStyleElements to strictCsp", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const props = { disableStyleElements: true, children: <Link /> } as unknown as Parameters<typeof OuroProvider>[0];
+    await mount(<OuroProvider {...props} />);
+    expect(warn).toHaveBeenCalledWith("[ouro-ui] OuroProvider: disableStyleElements is not a prop. Fix: <OuroProvider strictCsp>.");
   });
 });
 

@@ -89,7 +89,6 @@ function useScrollableCode(): RefCallback<HTMLPreElement> {
     observer.observe(element);
     observer.observe(element.firstElementChild!);
     element.addEventListener("blur", update);
-    update();
     return () => {
       observer.disconnect();
       element.removeEventListener("blur", update);

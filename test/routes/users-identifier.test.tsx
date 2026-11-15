@@ -10,6 +10,7 @@ import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { loader, meta } from "~/routes/users.$identifier";
 import UserProfile from "~/routes/users.$identifier";
+import { DEFAULT_CHEF_AVATAR_URL } from "~/lib/chef-avatar";
 
 async function createSessionCookie(userId: string) {
   const session = await sessionStorage.getSession();
@@ -572,8 +573,9 @@ describe("Users $identifier Route", () => {
       render(<Stub initialEntries={["/users/chef-empty"]} />);
 
       expect(await screen.findByRole("heading", { name: "chef-empty" })).toBeInTheDocument();
-      // HX draws the initials from an attribute (CSS generated content), not as text.
-      expect(screen.getByRole("img", { name: "chef-empty" }).querySelector("[data-ouro-avatar-initials]")).toHaveAttribute("data-ouro-avatar-initials", "C");
+      // A chef with no photo gets the default picture. HX draws a picture the browser already holds on its first frame,
+      // and happy-dom holds every picture, so the default picture shows rather than the initials.
+      expect(screen.getByRole("img", { name: "chef-empty" }).querySelector("img")).toHaveAttribute("src", DEFAULT_CHEF_AVATAR_URL);
       expect(profileLine("Joined May 2026 • 0 recipes • 0 cookbooks")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open settings" })).toHaveAttribute("href", "/account/settings");
       expect(screen.getByRole("button", { name: "Log out" })).toBeInTheDocument();

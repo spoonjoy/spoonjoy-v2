@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, type HTMLAttributes, type JSX, type ReactNode, type Ref } from "react";
+import { createElement, useId, type HTMLAttributes, type JSX, type ReactNode, type Ref } from "react";
 import { radiusFor } from "~/lib/ouro/appearance-hints";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
@@ -31,6 +31,25 @@ export interface CardOwnProps {
   linkRef?: Ref<HTMLAnchorElement> | undefined;
   /** A sentence or a count under the title: "12 recipes". */
   description?: ReactNode;
+  /**
+   * With `href` and `media`: the media's pictures (`img` and `video`) grow by 3% while the pointer
+   * rests on the card or keyboard focus is in it, over `--ouro-duration-base` on
+   * `--ouro-ease-out`, inside the media's frame, so the card's shape and size never change. With
+   * reduced motion they hold still. Nothing fades.
+   * @claim "the media's pictures (`img` and `video`)" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > grows the media's picture 3% inside its frame while the pointer rests on the card or keyboard focus is in it, and not with reduced motion)
+   */
+  zoomMedia?: boolean | undefined;
+  /**
+   * With `href` and `description`: on a screen with a mouse the description waits, transparent
+   * and keeping its room, until the pointer rests on the card or keyboard focus is in it, then
+   * fades in. On a touch screen it shows from the start. Screen readers read it while it is
+   * transparent too, and the link names it as its description, so a person who tabs to the card
+   * hears it.
+   * @claim "Screen readers read it while it" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > shows the description on hover or keyboard focus, keeping its room, and names it as the link's description)
+   * @claim "On a touch screen it shows" registry/ouro/components/ouro/card/card.touch.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.touch.test.tsx::shows a revealDescription card's description on a touch screen)
+   * @claim "on a screen with a mouse" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > shows the description on hover or keyboard focus, keeping its room, and names it as the link's description)
+   */
+  revealDescription?: boolean | undefined;
   /**
    * One control beside the title, at the end: a menu or a share button. With `href` it
    * stays its own tab stop, above the link.
@@ -92,6 +111,8 @@ export interface CardOwnProps {
   to?: { 'Use <Card href="/recipes/1" title="...">': never };
   /** Not a prop. With `href` the whole card is a link: `<Card href="/recipes/1" title="…">`. */
   asChild?: { 'Use <Card href="/recipes/1" title="...">': never };
+  /** Not a prop. A card with `href` is interactive; `zoomMedia` and `revealDescription` add hover and focus effects. */
+  interactive?: { "Use <Card href=... zoomMedia revealDescription>": never };
 }
 
 /**
@@ -128,6 +149,15 @@ const linkRoot =
   "press cursor-pointer outline-ring -outline-offset-2 has-[[data-card-link]:focus-visible]:outline-2 has-[[data-card-link]:focus-visible]:outline-solid " +
   "motion-safe:has-[[data-card-link]:active]:scale-(--ouro-press-scale)";
 
+// zoomMedia and revealDescription follow the card's hover with a mouse and keyboard focus anywhere in it.
+// Only pictures grow: a control over the media keeps its place above the card's link.
+const zoomMediaClass =
+  "motion-safe:[&_:is(img,video)]:transition-transform motion-safe:[&_:is(img,video)]:duration-(--ouro-duration-base) motion-safe:[&_:is(img,video)]:ease-(--ouro-ease-out) " +
+  "motion-safe:pointer-fine:group-hover/card:[&_:is(img,video)]:scale-[1.03] motion-safe:group-has-[:focus-visible]/card:[&_:is(img,video)]:scale-[1.03]";
+const revealClass =
+  "transition-opacity duration-(--ouro-duration-base) ease-(--ouro-ease-out) motion-reduce:duration-(--ouro-duration-fast) " +
+  "pointer-fine:not-group-hover/card:not-group-has-[:focus-visible]/card:opacity-0";
+
 // Below the breakpoint the header's action drops under the title, at the start.
 const headerStacked = { sm: "max-sm:flex-col max-sm:gap-3", md: "max-md:flex-col max-md:gap-3" } as const;
 
@@ -140,6 +170,10 @@ function cardHint(token: string): string {
  * A surface that groups one thing's content: a media slot across the top, a title with a
  * description and an action, a body, and a footer. With `href` the whole card is one link,
  * named by its title, with one tab stop, and its action and footer controls stay their own.
+ *
+ * A linked card can answer the pointer and the keyboard: `zoomMedia` grows its pictures a little
+ * inside their frame, and `revealDescription` keeps its description back until the card is
+ * hovered or focused, on a screen with a mouse. Both honour reduced motion.
  *
  * Use `Item` instead for a compact row in a list (media, title, description and actions
  * side by side), and `Stack` when the group needs no surface.
@@ -157,6 +191,14 @@ function cardHint(token: string): string {
  *   title="Weeknight dinners"
  *   description="12 recipes"
  * />
+ * <Card
+ *   href="/guides/braising"
+ *   media={<AspectRatio ratio={4 / 3}><img src={cover} alt="" /></AspectRatio>}
+ *   title="Braising"
+ *   description="Low heat, a lid, and time"
+ *   zoomMedia
+ *   revealDescription
+ * />
  */
 export function Card(props: CardProps): JSX.Element {
   const {
@@ -165,6 +207,8 @@ export function Card(props: CardProps): JSX.Element {
     external,
     linkRef,
     description,
+    zoomMedia,
+    revealDescription,
     action,
     media,
     children,
@@ -181,14 +225,18 @@ export function Card(props: CardProps): JSX.Element {
     actions,
     to,
     asChild,
+    interactive,
     ...rest
   } = props;
+  const descriptionId = useId();
   const variant = Object.hasOwn(variants, variantProp) ? (variantProp as keyof typeof variants) : "outline";
   const size: "md" | "sm" = sizeProp === "sm" ? "sm" : "md";
   const element = (elements as readonly string[]).includes(asProp) ? (asProp as (typeof elements)[number]) : "div";
   const level = (levels as readonly unknown[]).includes(headingLevel) ? (headingLevel as (typeof levels)[number]) : 3;
   const stackBelow: "sm" | "md" | undefined = stackBelowProp === "sm" ? "sm" : stackBelowProp === "md" ? "md" : undefined;
   const linked = href !== undefined && Boolean(title);
+  const zoom = linked && zoomMedia === true && Boolean(media);
+  const reveal = linked && revealDescription === true && Boolean(description);
   useAppearanceClassNameCheck(
     "Card",
     className,
@@ -214,6 +262,10 @@ export function Card(props: CardProps): JSX.Element {
           actions !== undefined && ["actions is not a prop", "<Card action={<Button>…</Button>}> beside the title, or footer={…} below"],
           to !== undefined && ["to is not a prop", `<Card href="${typeof to === "string" ? to : "/path"}" title="…">`],
           asChild !== undefined && ["asChild is not a prop", '<Card href="/path" title="…">'],
+          interactive !== undefined && ["interactive is not a prop; a card with href is a link", '<Card href="/path" title="…" zoomMedia revealDescription>'],
+          zoomMedia === true && !zoom && ["zoomMedia needs href, a title and media", '<Card href="/path" title="…" media={…} zoomMedia>'],
+          revealDescription === true &&
+            !reveal && ["revealDescription needs href, a title and a description", '<Card href="/path" title="…" description="…" revealDescription>'],
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
@@ -230,6 +282,7 @@ export function Card(props: CardProps): JSX.Element {
           data-stretched-link=""
           data-ouro-control="card"
           data-ouro-part="link"
+          aria-describedby={reveal ? descriptionId : undefined}
           className={stretchedLinkClass}
         >
           {title}
@@ -252,21 +305,29 @@ export function Card(props: CardProps): JSX.Element {
         variants[variant],
         rootSizes[variant][size],
         linked && linkRoot,
+        (zoom || reveal) && "group/card",
         linked && raiseControlsClass,
         className,
       ),
     },
     variant === "outline" && <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />,
-    media && <div className={cn("relative overflow-hidden", mediaPull[variant][size])}>{media}</div>,
+    media && <div className={cn("relative overflow-hidden", mediaPull[variant][size], zoom && zoomMediaClass)}>{media}</div>,
     (heading || description || action) && (
       <div className={cn("flex items-start gap-4", stackBelow && headerStacked[stackBelow], pad)}>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           {heading}
-          {description && (
-            <Text as="div" size="sm" tone="muted">
-              {description}
-            </Text>
-          )}
+          {description &&
+            (reveal ? (
+              <div id={descriptionId} data-card-reveal="" className={revealClass}>
+                <Text as="div" size="sm" tone="muted">
+                  {description}
+                </Text>
+              </div>
+            ) : (
+              <Text as="div" size="sm" tone="muted">
+                {description}
+              </Text>
+            ))}
         </div>
         {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
       </div>

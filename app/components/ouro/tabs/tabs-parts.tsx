@@ -105,7 +105,8 @@ function useEdgeFade(list: { current: HTMLElement | null }): void {
       const scrolled = Math.abs(element.scrollLeft);
       const before = horizontal && scrolled > 1;
       const after = horizontal && scrolled + element.clientWidth < element.scrollWidth - 1;
-      const rtl = getComputedStyle(element).direction === "rtl";
+      // The direction matters only when a side hides tabs, so a row that fits reads no style.
+      const rtl = (before || after) && getComputedStyle(element).direction === "rtl";
       const [left, right] = rtl ? [after, before] : [before, after];
       const fade = left && right ? "both" : left ? "left" : right ? "right" : null;
       if (fade) element.setAttribute("data-fade", fade);

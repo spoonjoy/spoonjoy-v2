@@ -86,6 +86,32 @@ export const Tones: Story = {
 /** Stands in for an app's router link, and marks the links it renders. */
 const StandInRouterLink: OuroLinkComponent = (props) => <a data-router-link="" {...props} />;
 
+/** A list of chapters with the one you are on marked `current`, drawn as Navbar draws its current link. */
+export const Current: Story = {
+  render: () => (
+    <Surface>
+      <nav aria-label="Chapters" style={{ display: "flex", gap: 16 }}>
+        <Link href="#prep" tone="secondary">
+          Prep
+        </Link>
+        <Link href="#braise" tone="secondary" current>
+          Braise
+        </Link>
+        <Link href="#serve" tone="secondary">
+          Serve
+        </Link>
+      </nav>
+      <nav aria-label="Steps" style={{ display: "flex", gap: 16 }}>
+        <Link href="#one">Step 1</Link>
+        <Link href="#two" current="step">
+          Step 2
+        </Link>
+        <Link href="#three">Step 3</Link>
+      </nav>
+    </Surface>
+  ),
+};
+
 /**
  * A link to a path the router has no page for (a resource route, a download, a sign-in that
  * starts on the server) takes `reloadDocument`: a plain `<a>`, in the same look, that the

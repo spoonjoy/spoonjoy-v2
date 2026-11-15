@@ -392,6 +392,7 @@ export function SheetPopupUnchecked({ className, ...props }: SheetPopupProps): J
         !modal && "pointer-events-auto",
         className,
       )}
+      aria-modal={modal ? "true" : undefined}
       data-ouro="sheet"
       data-side={side}
       data-snap-points={snap ? "" : undefined}
@@ -460,6 +461,8 @@ export type SheetContentProps = Omit<Drawer.Content.Props, "className"> & { clas
  * Part: the scrollable body. A mouse can select text in it without dragging the
  * sheet; touch still drags from anywhere once the body is scrolled to the top.
  * While it overflows it is a tab stop, so a keyboard can scroll it.
+ * Its focus ring is drawn over the content, so a header that sticks to the top never hides an edge of it.
+ * @claim "Its focus ring is drawn over the content" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::SheetContent > draws its focus ring whole over content that sticks to an edge, and leaves the pointer to the content)
  */
 export function SheetContent({ className, ref, ...props }: SheetContentProps): JSX.Element {
   const scrollRef = useMergedRef(ref, useKeyboardScrollable<HTMLDivElement>(props.tabIndex === undefined));
@@ -471,24 +474,32 @@ export function SheetContent({ className, ref, ...props }: SheetContentProps): J
       ? sheetHint("<SheetContent>", "</SheetContent>")
       : /* istanbul ignore next @preserve -- production only */ "",
   );
+  // The wrapper takes the body's place in the sheet's column; the scroller fills it. Its focus ring is a sibling drawn
+  // over the scroller, so content that sticks to an edge inside the body never covers it.
   return (
-    <Drawer.Content
-      data-ouro-control="sheet"
-      data-ouro-part="content"
-      {...props}
-      ref={scrollRef}
-      data-ouro-sheet-content=""
-      className={cn(
-        "box-border min-h-0 flex-1 overflow-y-auto overscroll-contain touch-auto px-5 pt-2 pb-5",
-        // A body that overflows is a tab stop (useKeyboardScrollable); show where focus is.
-        "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid",
-        // Under forced colours, where the body ends while it is one.
-        "forced-colors:[&[tabindex='0']]:outline-1 forced-colors:[&[tabindex='0']]:outline-solid forced-colors:[&[tabindex='0']]:-outline-offset-1",
-        className,
-      )}
-    />
+    <div className="relative box-border flex min-h-0 flex-1 flex-col">
+      <Drawer.Content
+        data-ouro-control="sheet"
+        data-ouro-part="content"
+        {...props}
+        ref={scrollRef}
+        data-ouro-sheet-content=""
+        className={cn(
+          "peer box-border min-h-0 flex-1 overflow-y-auto overscroll-contain touch-auto px-5 pt-2 pb-5 outline-none focus-visible:isolate",
+          // Under forced colours, where the body ends while it is one.
+          "forced-colors:[&[tabindex='0']]:outline-1 forced-colors:[&[tabindex='0']]:outline-solid forced-colors:[&[tabindex='0']]:-outline-offset-1",
+          className,
+        )}
+      />
+      <span
+        aria-hidden="true"
+        data-sheet-focus-ring=""
+        className="pointer-events-none absolute inset-0 hidden rounded-[inherit] outline-ring -outline-offset-2 peer-focus-visible:block peer-focus-visible:outline-2 peer-focus-visible:outline-solid"
+      />
+    </div>
   );
 }
+
 
 /** Part: closes the sheet. Pass your button as `render={<Button>Done</Button>}`. */
 export function SheetClose(props: Drawer.Close.Props): JSX.Element {

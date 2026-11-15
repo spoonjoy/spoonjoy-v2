@@ -35,10 +35,12 @@ export interface SheetBaseProps {
   /** Hides the title visually. It still names the dialog for screen readers. */
   hideTitle?: boolean | undefined;
   /**
-   * The label of the sheet's close button. The button is the last control in the
-   * sheet, hidden until it has keyboard focus, so screen-reader users on phones
-   * (who have no Escape key) can always close the sheet. @default "Close"
-   * @claim "The button is the last control" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::close control > renders a Close button last in the sheet, hidden until keyboard focus, that closes it)
+   * The label of the sheet's close button: an icon button in the top corner, in view, with a
+   * 44px target on a touch screen, as Dialog's is, so a mouse user sees how to close the sheet
+   * and a phone's screen reader (which has no Escape key) can always close it. It is the last
+   * control in the sheet. Escape and a press on the backdrop close it too. With `hideTitle`
+   * the button sits over the body's top corner, so leave that corner clear. @default "Close"
+   * @claim "an icon button in the top corner, in view" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::close control > shows a Close icon button in the top corner without focus, last in the sheet, that closes it)
    */
   closeLabel?: string | undefined;
   /** A short line under the title, read out when the sheet opens. */
@@ -224,23 +226,10 @@ export function Sheet(props: SheetProps): JSX.Element {
 }
 
 /**
- * The close button: always present for screen readers (a phone has no Escape key),
- * hidden from view until it has keyboard focus, then shown at the top corner.
- * @claim "The close button: always present for" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::close control > renders a Close button last in the sheet, hidden until keyboard focus, that closes it)
+ * The close button: in view at the top corner, as Dialog's is, with `TouchTarget` for a coarse pointer.
  */
 const closeClass =
-  "sr-only focus-visible:top-3 focus-visible:end-3 focus-visible:z-1 focus-visible:m-0 focus-visible:size-auto " +
-  "focus-visible:overflow-visible focus-visible:[clip-path:none] focus-visible:px-3 focus-visible:py-1.5 " +
-  "focus-visible:rounded-lg focus-visible:bg-muted focus-visible:text-foreground focus-visible:text-sm focus-visible:leading-5 focus-visible:font-medium " +
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid " +
-  "disabled:cursor-not-allowed disabled:opacity-50";
-
-/**
- * A non-modal sheet's close button: in view at its top corner, since a press on the page leaves
- * the sheet open, with `TouchTarget` for a coarse pointer.
- */
-const shownCloseClass =
-  "press absolute top-3 end-3 z-1 m-0 box-border inline-flex size-8 cursor-default items-center justify-center rounded-lg border-0 bg-transparent p-0 " +
+  "press absolute end-3 z-1 m-0 box-border inline-flex size-8 cursor-default items-center justify-center rounded-lg border-0 bg-transparent p-0 " +
   "text-muted-foreground outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "pointer-fine:hover:bg-muted pointer-fine:hover:text-foreground motion-safe:active:scale-(--ouro-press-scale) " +
   "forced-colors:border forced-colors:border-solid disabled:cursor-not-allowed disabled:opacity-50";
@@ -327,7 +316,8 @@ export function SheetFrame({
           >
             {side === "bottom" && <SheetHandle />}
             {showHeader ? (
-              <div data-ouro-sheet-header="" className={modal ? "grid shrink-0 gap-1 px-5 pt-3 pb-2" : "grid min-h-12 shrink-0 gap-1 ps-5 pe-14 pt-3 pb-2"}>
+              // The end padding keeps the title clear of the close button in the corner.
+              <div data-ouro-sheet-header="" className="grid min-h-12 shrink-0 gap-1 ps-5 pe-14 pt-3 pb-2">
                 {titleNode}
                 {description !== undefined && <SheetDescription>{description}</SheetDescription>}
               </div>
@@ -341,19 +331,18 @@ export function SheetFrame({
               </div>
             )}
             {side === "top" && <SheetHandle />}
-            {modal ? (
-              <SheetClose data-ouro-sheet-close="" disabled={closeDisabled} className={closeClass}>
-                {closeLabel}
-              </SheetClose>
-            ) : (
-              <SheetClose data-ouro-sheet-close="" disabled={closeDisabled} className={shownCloseClass}>
-                <TouchTarget />
-                <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" className="size-4">
-                  <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                <span className="sr-only">{closeLabel}</span>
-              </SheetClose>
-            )}
+            <SheetClose
+              data-ouro-sheet-close=""
+              disabled={closeDisabled}
+              // Level with the title, which a bottom sheet's handle puts 21px lower; at the top corner when there is no title row.
+              className={`${closeClass} ${side === "bottom" && showHeader ? "top-8.25" : "top-3"}`}
+            >
+              <TouchTarget />
+              <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" className="size-4">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <span className="sr-only">{closeLabel}</span>
+            </SheetClose>
           </SheetPopupUnchecked>
         </SheetViewport>
       </SheetPortal>

@@ -25,6 +25,7 @@ export interface OuroContextValue {
   motion?: OuroMotion | undefined;
   /** Whether the person asked for less: words without art or celebrations. */
   quiet?: boolean | undefined;
+  strictCsp?: boolean | undefined;
 }
 
 /**

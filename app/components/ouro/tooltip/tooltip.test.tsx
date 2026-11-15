@@ -86,6 +86,92 @@ describe("Tooltip", () => {
     await expect.poll(() => tooltip()).toBeNull();
   });
 
+  it("takes the first Escape itself, so what holds the trigger sees only the next", async () => {
+    const onKeyDown = vi.fn();
+    await render(
+      <div onKeyDown={(event) => onKeyDown(event.key)}>
+        <Tooltip content="Add to cookbook">
+          <Button>Save</Button>
+        </Tooltip>
+      </div>,
+    );
+    await pressTab();
+    await shown();
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => tooltip()).toBeNull();
+    expect(onKeyDown).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    expect(onKeyDown).toHaveBeenCalledExactlyOnceWith("Escape");
+  });
+
+  it("stays open while the pointer crosses onto it, and closes once the pointer leaves it", async () => {
+    await renderTooltip();
+    await userEvent.hover(trigger());
+    const element = await shown();
+    // The clock is held, so the trigger's pending close can only be what the tooltip's own hover clears.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await userEvent.hover(element);
+      await act(async () => vi.advanceTimersByTime(1000));
+      expect(element.hasAttribute("data-open")).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+    await userEvent.unhover(element);
+    await expect.poll(() => tooltip()).toBeNull();
+  });
+
+  it("opens no tooltip once the pointer has left, or a press came, before the delay ran out", async () => {
+    await renderTooltip();
+    // The clock is held, so only a pending open the leave or the press failed to cancel could show it.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await userEvent.hover(trigger());
+      await userEvent.unhover(trigger());
+      await act(async () => vi.advanceTimersByTime(1000));
+      expect(tooltip()).toBeNull();
+      await userEvent.hover(trigger());
+      await act(async () => trigger().dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" })));
+      await act(async () => vi.advanceTimersByTime(1000));
+      expect(tooltip()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows at once, with no entrance, on keyboard focus", async () => {
+    await renderTooltip();
+    await pressTab();
+    expect((await shown()).getAttribute("data-instant")).toBe("focus");
+  });
+
+  it("keeps the same trigger element, focused, as it first shows", async () => {
+    await renderTooltip();
+    const before = trigger();
+    await pressTab();
+    expect(document.activeElement).toBe(before);
+    await shown();
+    expect(trigger()).toBe(before);
+    expect(document.activeElement).toBe(before);
+    expect(before.hasAttribute("data-popup-open")).toBe(true);
+  });
+
+  it("lets the child's own props win over a parent trigger's, as Base UI's render does", async () => {
+    const onClick = vi.fn();
+    const parentClick = vi.fn();
+    await render(
+      <Tooltip content="Add to cookbook" {...({ tabIndex: 0, onClick: parentClick } as object)}>
+        <Button tabIndex={-1} onClick={onClick}>
+          Save
+        </Button>
+      </Tooltip>,
+    );
+    expect(trigger().tabIndex).toBe(-1);
+    await userEvent.click(trigger());
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(parentClick).toHaveBeenCalledOnce();
+  });
+
   it("closes as the container it is in hides, and opens again as usual after", async () => {
     const inside = (hidden: boolean) => (
       <>
@@ -232,6 +318,33 @@ describe("Tooltip", () => {
 });
 
 describe("Tooltip delay group", () => {
+  it("opens a neighbour instantly only while one shows, and with the usual delay once they have all closed", async () => {
+    await render(
+      <OuroProvider>
+        <Tooltip content="First">
+          <Button>One</Button>
+        </Tooltip>
+        <Tooltip content="Second">
+          <Button>Two</Button>
+        </Tooltip>
+      </OuroProvider>,
+    );
+    const [one, two] = [...document.querySelectorAll<HTMLElement>('[data-ouro="button"]')];
+    await userEvent.hover(one!);
+    await shown();
+    // The first closes as if long ago, so only a tooltip still counted as showing could open the next at once.
+    const now = performance.now.bind(performance);
+    const ago = vi.spyOn(performance, "now").mockImplementation(() => now() - 10_000);
+    await userEvent.unhover(one!);
+    await expect.poll(() => tooltip()).toBeNull();
+    ago.mockRestore();
+    await userEvent.hover(two!);
+    expect((await shown()).getAttribute("data-instant")).toBeNull();
+    await userEvent.hover(one!);
+    await expect.poll(() => tooltip()?.textContent).toBe("First");
+    expect(tooltip()!.getAttribute("data-instant")).toBe("delay");
+  });
+
   it("opens a neighbour instantly once one tooltip is showing, inside OuroProvider", async () => {
     await render(
       <OuroProvider>

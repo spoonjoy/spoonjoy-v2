@@ -409,6 +409,74 @@ describe("Reorderable", () => {
       expect(element.hasAttribute("data-ouro-settling")).toBe(false);
     });
 
+    it("leaves focus with the menu in the move's own commit, and gives it to the handle once the move has painted, while the menu closes", async () => {
+      const element = await render(list());
+      const grip = handle("Soften");
+      await userEvent.click(grip);
+      await menuOpen();
+      await menuSettled();
+      const item = move("Move to bottom").element() as HTMLElement;
+      item.focus();
+      // Where focus is as the rows move, read straight after the move's commit, before any frame.
+      let atMove: Element | null = null;
+      const watch = new MutationObserver(() => (atMove ??= document.activeElement));
+      watch.observe(element, { childList: true });
+      let closing: boolean | undefined;
+      grip.addEventListener("focus", () => (closing ??= document.querySelector('[role="menu"]') !== null));
+      await userEvent.click(item);
+      watch.disconnect();
+      expect(order(element)).toEqual(["Sear", "Deglaze", "Braise", "Soften"]);
+      // The move's commit takes no focus, so it lays nothing out.
+      expect(atMove).toBe(item);
+      await expect.poll(() => document.activeElement).toBe(grip);
+      // Back before the menu has gone, so a press on another handle meanwhile finds focus on this one.
+      expect(closing).toBe(true);
+      await menuClosed();
+    });
+
+    it("leaves focus where a press has moved it before the move painted: another row's menu, or a button", async () => {
+      const element = await render(
+        <>
+          {list()}
+          <button type="button" data-test-harness="">
+            Elsewhere
+          </button>
+        </>,
+      );
+      const choose = async (name: string, moveName: string) => {
+        await userEvent.click(handle(name));
+        await menuOpen();
+        await menuSettled();
+        const item = move(moveName).element() as HTMLElement;
+        item.focus();
+        // The press that follows comes before the move has painted.
+        const pressed = new Promise<void>((resolve) => {
+          new MutationObserver((_, watch) => {
+            watch.disconnect();
+            resolve();
+          }).observe(element, { childList: true });
+        });
+        item.click();
+        await pressed;
+      };
+      await choose("Soften", "Move to bottom");
+      // Another row's menu opened at once stays open, with focus in it.
+      const sear = handle("Sear");
+      sear.click();
+      await expect.poll(() => document.querySelectorAll('[role="menu"]').length).toBe(1);
+      expect(sear.getAttribute("aria-expanded")).toBe("true");
+      await expect.poll(() => document.activeElement?.closest('[role="menu"]') ?? null).not.toBeNull();
+      expect(sear.getAttribute("aria-expanded")).toBe("true");
+      await press("{Escape}");
+      await menuClosed();
+      await choose("Sear", "Move down");
+      // A button focused at once keeps focus.
+      const elsewhere = page.getByRole("button", { name: "Elsewhere" }).element() as HTMLElement;
+      elsewhere.focus();
+      await menuClosed();
+      expect(document.activeElement).toBe(elsewhere);
+    });
+
     it("leaves the page's scroll alone while the menu is open: its menu does not hold the page", async () => {
       // A dropdown: below 640px the menu is a phone sheet, which holds the page (Menu's own tests).
       await page.viewport(1024, 768);

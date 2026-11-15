@@ -91,9 +91,13 @@ function FrameHarness({ children, style }: { children?: ReactNode; style?: CSSPr
   );
 }
 
-/** Presses Enter on the harness's button, as a keyboard user opens a list. */
+/**
+ * Presses Enter on the harness's button, as a keyboard user opens a list. The button is focused without scrolling:
+ * WebKit defers a plain focus's scroll to the next layout and then reveals whatever has focus, so on a loaded runner,
+ * where Enter arrives before that layout, it scrolled the option the frame had handed focus to (#1438).
+ */
 async function enterFrame(host: HTMLElement) {
-  host.querySelector<HTMLButtonElement>("button")!.focus();
+  host.querySelector<HTMLButtonElement>("button")!.focus({ preventScroll: true });
   await userEvent.keyboard("{Enter}");
 }
 

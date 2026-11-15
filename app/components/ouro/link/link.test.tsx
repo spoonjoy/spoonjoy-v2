@@ -246,6 +246,110 @@ describe("Link", () => {
   });
 });
 
+describe("Link current", () => {
+  it('marks the current link aria-current="page", or the value passed, and nothing for false', async () => {
+    const { host } = await render(
+      <>
+        <Link href="/a" current>
+          A
+        </Link>
+        <Link href="/b" current="step">
+          B
+        </Link>
+        <Link href="/c" current={false}>
+          C
+        </Link>
+        <Link href="/d">D</Link>
+      </>,
+    );
+    const [a, b, c, d] = [...host.querySelectorAll("a")];
+    expect(a!.getAttribute("aria-current")).toBe("page");
+    expect(a!.getAttribute("data-current")).toBe("");
+    expect(b!.getAttribute("aria-current")).toBe("step");
+    expect(warn).not.toHaveBeenCalled();
+    for (const link of [c!, d!]) {
+      expect(link.hasAttribute("aria-current")).toBe(false);
+      expect(link.hasAttribute("data-current")).toBe(false);
+    }
+    await expect.element(page.getByRole("link", { name: "A" })).toHaveAccessibleName("A");
+  });
+
+  it.each(["page", "step", "location", "date", "time", "true"] as const)('passes current="%s" through as aria-current', async (value) => {
+    const { link } = await render(
+      <Link href="/a" current={value}>
+        A
+      </Link>,
+    );
+    expect(link.getAttribute("aria-current")).toBe(value);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("draws the current link as Navbar draws its current link: semibold, the page's text colour, a 2px primary underline", async () => {
+    const { host } = await render(
+      <>
+        <Link href="/a" current>
+          Chapter 1
+        </Link>
+        <Link href="/b">Chapter 2</Link>
+      </>,
+    );
+    const [current, other] = [...host.querySelectorAll("a")].map((a) => getComputedStyle(a));
+    const probe = (value: string) => {
+      const span = document.createElement("span");
+      span.style.color = value;
+      document.body.append(span);
+      mounted.push(span);
+      return getComputedStyle(span).color;
+    };
+    expect(current!.fontWeight).toBe("600");
+    expect(current!.color).toBe(probe("var(--foreground)"));
+    expect(current!.textDecorationLine).toBe("underline");
+    expect(current!.textDecorationColor).toBe(probe("var(--primary)"));
+    expect(current!.textDecorationThickness).toBe("2px");
+    expect(other!.fontWeight).not.toBe("600");
+    expect(other!.textDecorationThickness).not.toBe("2px");
+  });
+
+  it.each([
+    ["page", true],
+    [true, true],
+    ["false", false],
+    [false, false],
+  ] as const)("gives aria-current=%s passed straight through the current look: %s", async (value, look) => {
+    const { link } = await render(
+      <Link href="/a" aria-current={value}>
+        A
+      </Link>,
+    );
+    expect(link.hasAttribute("data-current")).toBe(look);
+  });
+
+  it("takes the selection's colours under forced colours, where every other link looks alike", async () => {
+    const { host } = await render(
+      <>
+        <Link href="/a" current>
+          Chapter 1
+        </Link>
+        <Link href="/b">Chapter 2</Link>
+      </>,
+    );
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      const [current, other] = [...host.querySelectorAll("a")].map((a) => getComputedStyle(a));
+      expect(current!.backgroundColor).not.toBe(other!.backgroundColor);
+      expect(current!.color).not.toBe(other!.color);
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
+  it("marks the page for a current that is not an aria-current value", async () => {
+    const props = { href: "/a", current: "yes", children: "A" } as unknown as Parameters<typeof Link>[0];
+    const { link } = await render(<Link {...props} />);
+    expect(link.getAttribute("aria-current")).toBe("page");
+  });
+});
+
 describe("Link with a mouse", () => {
   it("is as tall as its text with a fine pointer, standing alone or in a sentence", async () => {
     expect(matchMedia("(pointer: fine)").matches).toBe(true);
@@ -275,6 +379,9 @@ describe("Link development messages", () => {
     ["tone", { tone: "danger" }, 'tone="danger" is not a tone', '<Link tone="destructive">'],
     ["tone", { tone: "blue" }, 'tone="blue" is not a tone; use "primary", "secondary", "destructive", "success", "warning"', '<Link tone="primary">'],
     ["target", { target: "_blank" }, 'target="_blank" opens a new tab without saying so', '<Link href="https://…" external>'],
+    ["active", { active: true }, "active is not a prop", "<Link current>"],
+    ["isActive", { isActive: true }, "isActive is not a prop", "<Link current>"],
+    ["current", { current: "yes" }, 'current="yes" is not an aria-current value', '<Link current> or <Link current="step">'],
   ])("warns for %s with the fix", async (_name, extra, problem, fix) => {
     const props = { href: "/x", children: "Go", ...extra } as unknown as Parameters<typeof Link>[0];
     const { link } = await render(<Link {...props} />);
@@ -282,6 +389,8 @@ describe("Link development messages", () => {
     expect(link.hasAttribute("to")).toBe(false);
     expect(link.hasAttribute("isexternal")).toBe(false);
     expect(link.hasAttribute("color")).toBe(false);
+    expect(link.hasAttribute("active")).toBe(false);
+    expect(link.hasAttribute("isactive")).toBe(false);
   });
 
   it("points a to that is not a string to href", async () => {

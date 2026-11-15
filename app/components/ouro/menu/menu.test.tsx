@@ -939,6 +939,70 @@ describe("Menu modal", () => {
     await expect.element(page.getByRole("menuitem", { name: "Paint", exact: true })).toBeVisible();
   });
 
+  it("gives focus back to its trigger when a press on the page's blank space closes it, and leaves focus that moved on", async () => {
+    await render(
+      <>
+        <Menu modal={false} trigger={<Button>Actions</Button>}>
+          {basicItems}
+        </Menu>
+        <div data-testid="blank" style={{ height: 80 }} />
+        <input aria-label="Elsewhere" data-test-harness="" />
+      </>,
+    );
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    await userEvent.click(page.getByTestId("blank"));
+    await expect.poll(menu).toBeNull();
+    expect(document.activeElement).toBe(trigger());
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    // A text field takes focus from a press in every engine, where Safari leaves a button unfocused.
+    const elsewhere = page.getByRole("textbox", { name: "Elsewhere" });
+    await userEvent.click(elsewhere);
+    await expect.poll(menu).toBeNull();
+    expect(document.activeElement).toBe(elsewhere.element());
+  });
+
+  it("leaves a menu that opened while another closed open, when the closing one would give focus back to its trigger", async () => {
+    await render(
+      <>
+        <Menu modal={false} trigger={<Button>Edit</Button>}>
+          <MenuItem onClick={() => {}}>Copy</MenuItem>
+        </Menu>
+        <Menu modal={false} trigger={<Button>View</Button>}>
+          <MenuItem onClick={() => {}}>Zoom</MenuItem>
+        </Menu>
+      </>,
+    );
+    const edit = page.getByRole("button", { name: "Edit", exact: true }).element() as HTMLElement;
+    const view = page.getByRole("button", { name: "View", exact: true }).element() as HTMLElement;
+    await userEvent.click(edit);
+    await settled();
+    const copy = page.getByRole("menuitem", { name: "Copy", exact: true }).element() as HTMLElement;
+    const closing = copy.closest('[data-ouro="menu"]')!;
+    copy.focus();
+    // A busy page: the menu that opens next takes focus only once the closing one has left the page,
+    // as on a loaded runner, where the closing menu's exit can end first.
+    const focus = HTMLElement.prototype.focus;
+    const held: HTMLElement[] = [];
+    vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (this: HTMLElement, options?: FocusOptions) {
+      const popup = this.closest('[data-ouro="menu"]');
+      if (closing.isConnected && popup !== null && popup !== closing) held.push(this);
+      else focus.call(this, options);
+    });
+    // Choosing an item closes the menu with focus still on the item; the next press takes no focus.
+    copy.click();
+    view.click();
+    await expect.poll(() => closing.isConnected).toBe(false);
+    vi.mocked(HTMLElement.prototype.focus).mockRestore();
+    for (const element of held) if (element.isConnected) element.focus();
+    expect(view.getAttribute("aria-expanded")).toBe("true");
+    await expect.element(page.getByRole("menuitem", { name: "Zoom", exact: true })).toBeVisible();
+    expect(view.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).not.toBe(edit);
+  });
+
   it("with modal={false}, leaves the page's controls live: a click outside reaches them and closes the menu", async () => {
     const outside = vi.fn();
     await render(

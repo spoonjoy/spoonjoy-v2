@@ -19,6 +19,10 @@ expectTypeOf<{ title: "x"; actions: "y" }>().not.toExtend<CardProps>();
 expectTypeOf<{ title: "x"; to: "/x" }>().not.toExtend<CardProps>();
 expectTypeOf<{ title: "x"; asChild: true }>().not.toExtend<CardProps>();
 expectTypeOf<{ title: "x"; variant: "elevated" }>().not.toExtend<CardProps>();
+expectTypeOf<{ title: "x"; interactive: true }>().not.toExtend<CardProps>();
+// A linked card's hover and focus effects.
+expectTypeOf<{ href: "/x"; title: "x"; zoomMedia: true; revealDescription: true }>().toExtend<CardProps>();
+expectTypeOf<{ href: "/x"; title: "x"; zoomMedia: "yes" }>().not.toExtend<CardProps>();
 expectTypeOf<{ title: "x"; headingLevel: 1 }>().not.toExtend<CardProps>();
 
 // @ts-expect-error an unknown variant names the options.

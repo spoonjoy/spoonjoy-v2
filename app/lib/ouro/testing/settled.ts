@@ -4,7 +4,8 @@ export { settled };
 
 /**
  * Waits until an element has stopped moving. It waits while the element has a starting or an ending
- * style, or while a finite animation or transition runs in its subtree, and then until its box holds
+ * style, or while a finite animation or transition runs in its subtree or is still listed there once it
+ * has ended, as WebKit lists one for a moment, and then until its box holds
  * still from one poll read to the next. Use it after a popup or sheet opens and before a press goes to
  * one of its items: a press on an item that is still rising can go down on one item and come up on the
  * next, which drops the click. A function target waits for an element that mounts later; an infinite
@@ -35,7 +36,10 @@ function restingBox(element: Element | null): string | undefined {
   return [top, left, width, height].join(" ");
 }
 
-/** Whether an animation is running and will end, so a spinner that repeats forever does not count. */
+/**
+ * Whether an animation is running and will end, or has just ended and is still listed (WebKit lists a finished
+ * transition for a moment after it ends), so a spinner that repeats forever does not count.
+ */
 function isMoving(animation: Animation): boolean {
-  return animation.playState === "running" && animation.effect?.getTiming().iterations !== Infinity;
+  return (animation.playState === "running" || animation.playState === "finished") && animation.effect?.getTiming().iterations !== Infinity;
 }

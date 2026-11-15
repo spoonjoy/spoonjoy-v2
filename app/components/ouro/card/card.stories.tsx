@@ -130,6 +130,41 @@ export const ShareOverCover: Story = {
   ),
 };
 
+/**
+ * Linked tiles that answer the pointer and the keyboard: with a mouse, a tile's description
+ * waits until the tile is hovered or focused, and its picture grows 3% inside its frame.
+ */
+export const ZoomAndReveal: Story = {
+  parameters: { mode: "link" },
+  render: () => (
+    <Page>
+      <Heading level={2}>Guides</Heading>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 16, maxWidth: 720 }}>
+        {[
+          { slug: "braising", title: "Braising", line: "Low heat, a lid, and time", from: "#f59e0b", to: "#b45309" },
+          { slug: "searing", title: "Searing", line: "A dry pan and patience", from: "#ef4444", to: "#991b1b" },
+          { slug: "proofing", title: "Proofing", line: "Warm, covered, doubled", from: "#22c55e", to: "#15803d" },
+        ].map((guide) => (
+          <Card
+            key={guide.slug}
+            href={`#${guide.slug}`}
+            media={
+              <AspectRatio ratio={4 / 3}>
+                <img src={cover(guide.from, guide.to)} alt="" />
+              </AspectRatio>
+            }
+            title={guide.title}
+            description={guide.line}
+            size="sm"
+            zoomMedia
+            revealDescription
+          />
+        ))}
+      </div>
+    </Page>
+  ),
+};
+
 /** A settings panel whose action drops under the title on a phone. */
 export const SettingsPanel: Story = {
   render: () => (

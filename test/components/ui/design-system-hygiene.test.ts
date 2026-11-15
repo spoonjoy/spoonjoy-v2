@@ -35,11 +35,8 @@ function listTextFiles(dirs: string[]): string[] {
   return found;
 }
 
-// Every file the HX CLI installs from v1.3.117 (tag commit
-// 9a9bbfd21a8908e8d121b063271e8a486ebafd80), whatever its extension or folder: components, lib
-// modules, specs, the census and source-rule kits and the claims checker. The CLI's binding
-// (.github/task21-v083-cli.mjs) checks the CLI's output against this same map, and the digest
-// below pins the map itself, including the CLI's omission of the checker's leading docs comment.
+// Every file the HX CLI installs from the release the record names, whatever its extension or folder:
+// components, lib modules, specs, the census and source-rule kits and the claims checker.
 const installed = JSON.parse(readSourceFile(".github/ouro-hx-installed.json")) as {
   tag: string;
   tagCommit: string;
@@ -79,11 +76,11 @@ describe("Spoonjoy UI design-system hygiene", () => {
     expect(existsSync(resolve(process.cwd(), "app/components/button.tsx"))).toBe(false);
   });
   it("pins every file the HX CLI installed, in every folder and of every type, to the tag's bytes", () => {
-    expect(installed.tag).toBe("v1.3.117");
-    expect(installed.tagCommit).toBe("9a9bbfd21a8908e8d121b063271e8a486ebafd80");
-    expect(installedFiles).toHaveLength(621);
-    expect(sha256(JSON.stringify(installedFiles.map((file) => [file, installed.files[file]]))))
-      .toBe("15aae448156bc5d4b07299262871a33e3106cd391ead8dffcea08a18d5ecbe62");
+    // Any release: Ouro Current moves the record and the files together, so the test checks the record's shape and
+    // that every file still has the bytes the record names, not one tag.
+    expect(installed.tag).toMatch(/^v\d+\.\d+\.\d+$/);
+    expect(installed.tagCommit).toMatch(/^[0-9a-f]{40}$/);
+    expect(installedFiles.length).toBeGreaterThan(0);
     const actual = Object.fromEntries(installedFiles.map((file) => [
       file,
       existsSync(resolve(process.cwd(), file)) ? sha256(normalizedRegistrySource(readSourceFile(file))) : null,

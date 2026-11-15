@@ -33,6 +33,22 @@ it("waits for a transition to end, and for the box to hold still before it resol
   expect(card.getBoundingClientRect().top).toBe(300);
 });
 
+it("waits while a finished transition is still listed, as WebKit lists one for a moment after it ends", async () => {
+  const card = mount();
+  const finished = { playState: "finished", effect: { getTiming: () => ({ iterations: 1 }) } } as unknown as Animation;
+  let listed = true;
+  card.getAnimations = () => (listed ? [finished] : []);
+  let resolved = false;
+  const done = settled(card).then(() => {
+    resolved = true;
+  });
+  await frames(10);
+  expect(resolved).toBe(false);
+  listed = false;
+  await done;
+  expect(resolved).toBe(true);
+});
+
 it("waits for an element that mounts later, found by a function", async () => {
   let resolved = false;
   const done = settled(() => document.querySelector<HTMLElement>(".mounts-later")).then(() => {

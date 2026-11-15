@@ -60,6 +60,17 @@ export interface LinkOwnProps {
    * @claim "On a touch screen a link" registry/ouro/components/ouro/link/link.touch.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.touch.test.tsx::a link in running text keeps to its line)
    */
   inline?: boolean | undefined;
+  /**
+   * Marks this link as the current one: the page you are on in a list of chapters, steps or
+   * sections. `true` sets `aria-current="page"`; pass another value (`"step"`, `"location"`,
+   * `"true"`) for a link that is not a page of its own. The link is then drawn as `Navbar` and
+   * `NavigationMenu` draw their current link: semibold, in the page's text colour, with a 2px
+   * underline in the primary colour, so a reader tells it from the others at a glance. Under
+   * forced colours it takes the selection's colours. `false` or unset marks nothing.
+   * @claim "Marks this link as the current" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link current > marks the current link aria-current="page", or the value passed, and nothing for false)
+   * @claim "The link is then drawn as" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link current > draws the current link as Navbar draws its current link: semibold, the page's text colour, a 2px primary underline)
+   */
+  current?: boolean | "page" | "step" | "location" | "date" | "time" | "true" | (string & { 'Use current or current="step"': never }) | undefined;
   /** The link text. Make it say where the link goes: "Browse recipes", not "click here". */
   children: ReactNode;
   /** Layout only: margins, display, grid placement (`ms-2`). Appearance classes warn in development; use `tone`. */
@@ -72,6 +83,10 @@ export interface LinkOwnProps {
   isExternal?: { 'Use <Link href="https://..." external>': never };
   /** Not a prop. Ouro UI uses `tone`: `<Link tone="destructive">`. */
   color?: { 'Use <Link tone="destructive">': never };
+  /** Not a prop. Ouro UI uses `current`: `<Link href="/chapter-2" current>`. */
+  active?: { 'Use <Link current>': never };
+  /** Not a prop. Ouro UI uses `current`: `<Link href="/chapter-2" current>`. */
+  isActive?: { 'Use <Link current>': never };
 }
 
 /** Props for {@link Link}: its own props and the anchor attributes it passes through. */
@@ -109,6 +124,16 @@ const tones = {
   warning: "text-warning",
 } as const;
 
+// The current link, drawn as Navbar and NavigationMenu draw theirs: semibold, the page's text
+// colour, a 2px underline in the primary colour that hover keeps. Forced colours paint every link
+// alike, so there it takes the selection's colours.
+const currentClass =
+  "data-current:font-semibold data-current:text-foreground data-current:decoration-primary data-current:decoration-2 " +
+  "data-current:underline-offset-5 data-current:[text-decoration-skip-ink:none] data-current:pointer-fine:hover:decoration-primary " +
+  "forced-colors:data-current:bg-[Highlight] forced-colors:data-current:text-[HighlightText]";
+
+const ariaCurrents: readonly string[] = ["page", "step", "location", "date", "time", "true"];
+
 function linkHint(token: string): string {
   if (token.startsWith("font-")) return fontFor("Link", token);
   return `tone="${toneFor(token)}"`;
@@ -136,6 +161,9 @@ function linkHint(token: string): string {
  * `<p>`, a `<label>`, a `Text`, a field's description or error) stays as tall as its line;
  * `inline` says the same anywhere else. With a mouse every link is as tall as its text.
  *
+ * In a list of chapters, steps or sections, `current` marks the one you are on
+ * (`aria-current="page"`) with the same look as `Navbar`'s current link.
+ *
  * Keyboard focus draws an outline around a link that stands alone. In running text it thickens
  * the underline in the ring's colour instead, since an outline would cover the next character.
  *
@@ -148,6 +176,7 @@ function linkHint(token: string): string {
  * <Link href="/mcp" reloadDocument>MCP server metadata</Link>
  * <Text>Read the <Link href="/terms">terms</Link> first.</Text>
  * <Text size="sm"><Link href="/forgot" inline={false}>Forgot password?</Link></Text>
+ * <Link href="/guide/2" current>Chapter 2</Link>
  * @claim "On a touch screen a link" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link with a mouse > is as tall as its text with a fine pointer, standing alone or in a sentence)
  * @claim "On a touch screen a link" registry/ouro/components/ouro/link/link.touch.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.touch.test.tsx::gives a link on its own line a 44px box, centred on its text)
  * @claim "Keyboard focus draws an outline" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link > marks keyboard focus in running text with a thick underline in the ring's colour, not an outline drawn over the next character)
@@ -160,6 +189,7 @@ export function Link(props: LinkProps): JSX.Element {
     reloadDocument,
     tone: toneProp = "primary",
     inline: inlineProp,
+    current: currentProp,
     children,
     className,
     target,
@@ -168,8 +198,20 @@ export function Link(props: LinkProps): JSX.Element {
     to,
     isExternal,
     color,
+    active,
+    isActive,
     ...rest
   } = props;
+  // `true` is the page; a value that is not one of aria-current's (a type error) warns and marks the page.
+  const current: AnchorHTMLAttributes<HTMLAnchorElement>["aria-current"] =
+    currentProp === undefined || currentProp === false
+      ? undefined
+      : ariaCurrents.includes(currentProp as string)
+        ? (currentProp as AnchorHTMLAttributes<HTMLAnchorElement>["aria-current"])
+        : "page";
+  // An `aria-current` passed straight through (a NavLink habit) gets the same look.
+  const passed = rest["aria-current"];
+  const marked = current !== undefined || (passed !== undefined && passed !== false && passed !== "false");
   // A tone that is not one of Ouro UI's (a type error) warns and renders the default.
   const tone = Object.hasOwn(tones, toneProp) ? (toneProp as keyof typeof tones) : "primary";
   useAppearanceClassNameCheck(
@@ -185,6 +227,11 @@ export function Link(props: LinkProps): JSX.Element {
           to !== undefined && ["to is not a prop", `<Link href="${typeof to === "string" ? to : "/path"}">`],
           isExternal !== undefined && ["isExternal is not a prop", '<Link href="https://…" external>'],
           color !== undefined && ["color is not a prop", `<Link tone="${toneFor(`text-${String(color)}`)}">`],
+          active !== undefined && ["active is not a prop", "<Link current>"],
+          isActive !== undefined && ["isActive is not a prop", "<Link current>"],
+          currentProp !== undefined &&
+            typeof currentProp !== "boolean" &&
+            !ariaCurrents.includes(currentProp) && [`current="${currentProp}" is not an aria-current value`, '<Link current> or <Link current="step">'],
           !external &&
             target === "_blank" && ['target="_blank" opens a new tab without saying so', '<Link href="https://…" external>'],
         ]
@@ -201,7 +248,9 @@ export function Link(props: LinkProps): JSX.Element {
       rel={external ? safeRel(rel) : rel}
       data-ouro="link"
       data-inline={inlineProp ? "" : undefined}
-      className={cn(base, inlineProp === undefined ? [standalone, inTextFocus] : inlineProp ? inlineFocus : alwaysStandalone, tones[tone], className)}
+      {...(current ? { "aria-current": current } : {})}
+      data-current={marked ? "" : undefined}
+      className={cn(base, inlineProp === undefined ? [standalone, inTextFocus] : inlineProp ? inlineFocus : alwaysStandalone, tones[tone], currentClass, className)}
     >
       {children}
       {external && (

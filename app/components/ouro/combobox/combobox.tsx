@@ -642,46 +642,50 @@ function ListBody({
   );
 }
 
-const openDialogs = () => document.querySelectorAll('[role="dialog"], [role="alertdialog"]').length;
-
 /**
  * Keeps the page exposed to assistive technology while the list is open. Base UI hides the
  * page around the input and the list with aria-hidden on the children of their ancestors,
  * which leaves the page's links and fields focusable yet hidden and takes its heading away. A
  * combobox list leaves the page as it is, so such a child that gains aria-hidden while the list
- * is open loses it at once, unless a dialog has opened since, which hides the page itself.
- * What the app hid before, and what it hides deeper in the page, stays hidden. It renders in
- * the portal, which holds the list only while it is open.
+ * is open loses it at once, unless the same change hid what holds the input or the list, as a
+ * dialog opened over the list hides the page around itself. What the app hid before, and what
+ * it hides deeper in the page, stays hidden. It reads only the input and the list, never the
+ * whole page, so opening the list costs no search of the page. It renders in the portal, which
+ * holds the list only while it is open.
+ *
+ * @claim "It reads only the input and the list, never the whole page, so opening the list costs no search of the page." registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox > opens its list without searching the whole page, while it keeps the page exposed)
  */
-function KeepPageExposed(): null {
+function KeepPageExposed({ input, list }: { input: RefObject<HTMLElement | null>; list: RefObject<HTMLElement | null> }): null {
   useLayoutEffect(
     () => {
-      const dialogs = openDialogs();
       const observer = new MutationObserver((records) => {
-        if (openDialogs() > dialogs) return;
-        const kept = [...document.querySelectorAll('[role="combobox"][aria-expanded="true"], [data-ouro="combobox-portal"]')];
-        for (const { target } of records) if (kept.some((element) => target.parentNode!.contains(element))) (target as Element).removeAttribute("aria-hidden");
+        const kept = [input.current, list.current];
+        const targets = records.map(({ target }) => target as Element);
+        if (targets.some((target) => kept.some((element) => target.contains(element)))) return;
+        for (const target of targets) if (kept.some((element) => target.parentNode!.contains(element))) target.removeAttribute("aria-hidden");
       });
       observer.observe(document.body, { attributes: true, attributeFilter: ["aria-hidden"], subtree: true });
       // Stryker disable next-line ArrowFunction: once the list closes nothing is around it to unhide, so an observer left connected changes nothing.
       return () => observer.disconnect();
     },
-    // Stryker disable next-line ArrayDeclaration: the effect reads nothing from render, so it runs once whatever its dependencies.
-    [],
+    // Stryker disable next-line ArrayDeclaration: the refs are the same objects for the popup's life, so the effect runs once whatever its dependencies.
+    [input, list],
   );
   return null;
 }
 
 /** The popup under (or over) the input, on wider screens and with a mouse. */
-function Popup({ loading, children }: { loading: boolean | undefined; children: ReactNode }): JSX.Element {
+function Popup({ input, loading, children }: { input: RefObject<HTMLElement | null>; loading: boolean | undefined; children: ReactNode }): JSX.Element {
   const portal = usePortalContainer("Combobox", true);
+  const list = useRef<HTMLDivElement>(null);
+  const positionerRef = useMergedRef(markPopupDismiss, list);
   // Inside a Dialog its own layers sit at z-1000; 1000 above --ouro-layer clears them there and
   // on the page, as Select's list does.
   return (
     <BaseCombobox.Portal {...portal} data-ouro="combobox-portal" className="relative isolate z-[calc(var(--ouro-layer)+1000)]">
       <PortalScope>
-        <KeepPageExposed />
-        <BaseCombobox.Positioner ref={markPopupDismiss} sideOffset={4} className="outline-none">
+        <KeepPageExposed input={input} list={list} />
+        <BaseCombobox.Positioner ref={positionerRef} sideOffset={4} className="outline-none">
           <BaseCombobox.Popup data-ouro="combobox-popup" aria-busy={loading || undefined} className={popupClass}>
             {children}
           </BaseCombobox.Popup>
@@ -954,7 +958,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
             )}
             <EndButtons clearLabel={clearLabel} readOnly={readOnly} />
           </BaseCombobox.InputGroup>
-          <Popup loading={loading}>{body(listClass)}</Popup>
+          <Popup input={resetInputRef} loading={loading}>{body(listClass)}</Popup>
         </>
       )}
     </BaseCombobox.Root>
@@ -1005,7 +1009,7 @@ function AutocompleteControl(props: ControlProps): JSX.Element {
         />
         <EndButtons clearLabel={clearLabel} readOnly={readOnly} />
       </BaseAutocomplete.InputGroup>
-      <Popup loading={loading}>
+      <Popup input={resetInputRef} loading={loading}>
         <ListBody
           loading={loading}
           loadingLabel={loadingLabel}

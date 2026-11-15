@@ -319,13 +319,34 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
   const dragged = useRef(false);
   /** The rows a press stopped on their way to rest: they go on if the press is only a tap. */
   const caught = useRef<Array<{ row: HTMLElement; value: number; dropped: boolean }>>([]);
-  /** The row whose handle takes focus back after React moves its element, which drops focus. */
+  /**
+   * The row whose handle takes focus back after a move, once the move has painted: focusing it in
+   * the move's own commit would lay out the page there, and set a closing menu checking what in it
+   * can still take focus. It comes back from the handle's menu while the menu closes, or from the
+   * page when the move dropped it, and only while no other menu of the list has opened since, so a
+   * press that has moved on keeps its focus.
+   *
+   * @claim "It comes back from the handle's menu while the menu closes, or from the page when the move dropped it, and only while no other menu of the list has opened since, so a press that has moved on keeps its focus." registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the handle's menu, with no drag > leaves focus where a press has moved it before the move painted: another row's menu, or a button)
+   */
   const refocus = useRef<string | null>(null);
+  /** The row whose menu is open now, for a hand-back that waits for paint. */
+  const openMenu = useRef(menu);
+  useLayoutEffect(() => {
+    openMenu.current = menu;
+  });
   useLayoutEffect(() => {
     const id = refocus.current;
     if (id === null) return;
     refocus.current = null;
-    listRef.current!.children[order.indexOf(id)]!.querySelector("button")!.focus();
+    const handle = listRef.current!.children[order.indexOf(id)]!.querySelector("button")!;
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const active = document.activeElement as Element;
+        // Stryker disable next-line ConditionalExpression,EqualityOperator: focus is on the page here only in a browser that blurs a row React moves (Firefox); Chromium and WebKit, which the tests run in, keep it on the handle.
+        const dropped = active === document.body;
+        if (openMenu.current === null && (dropped || active.closest('[data-ouro="menu"]') !== null)) handle.focus();
+      });
+    });
   });
 
   /**
@@ -420,7 +441,7 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
   const moveTo = (id: string, to: number) => {
     const from = order.indexOf(id);
     const next = moveItem(order, from, to);
-    // The row's element moves, which drops focus when the handle has it back from the menu.
+    // Focus goes back to the handle from the closing menu once the move has painted.
     refocus.current = id;
     setState({ key, order: next });
     say(movedLabel, id, to);

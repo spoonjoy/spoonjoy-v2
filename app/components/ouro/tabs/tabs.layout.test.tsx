@@ -28,6 +28,27 @@ function Screen({ count }: { count: number }) {
 }
 
 describe("Tabs layout reads", () => {
+  it("reads no computed style while mounting a row that fits", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    hosts.push(host);
+    const root = createRoot(host);
+    roots.push(root);
+    await act(async () => root.render(<div />));
+    const watch = watchLayoutReads();
+    await act(async () => root.render(
+      <TabsRoot defaultValue="a">
+        <TabsList aria-label="Sections">
+          <TabsTab value="a">A</TabsTab>
+          <TabsTab value="b">B</TabsTab>
+        </TabsList>
+      </TabsRoot>,
+    ));
+    watch.stop();
+    expect(watch.names().filter((name) => name === "getComputedStyle")).toEqual([]);
+  });
+
+
   it("measures the indicator again only when something it follows changes, not on a commit that moves nothing", async () => {
     const host = document.createElement("div");
     document.body.append(host);

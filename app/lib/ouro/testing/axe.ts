@@ -836,13 +836,36 @@ function overlappingText(measured: Element[]): Set<Element> {
 // popup layer it is in, if any, since the measuring tells a layer's pixels by hiding it.
 function screenRoot(element: Element): Element {
   let root = element;
-  for (let parent = element.parentElement; parent && parent !== document.body && !root.hasAttribute("data-base-ui-portal"); parent = parent.parentElement) {
-    const box = parent.getBoundingClientRect();
-    // A box with no size, such as a popup's container around its fixed popup, cannot be screenshotted.
-    if (box.width > window.innerWidth || box.height > window.innerHeight || box.width === 0 || box.height === 0) break;
+  for (let parent: HTMLElement | null = element.parentElement; parent && parent !== document.body && !root.hasAttribute("data-base-ui-portal"); parent = parent.parentElement) {
+    // A box larger than the screen inside a box that scrolls it and fits, such as a long list's
+    // group: the box that scrolls holds its text, which is scrolled to there, so its rows share
+    // pictures of it instead of one picture each (ourostack/ouro-ui#1520).
+    if (!fits(parent)) {
+      const scroller = scrollerAround(parent);
+      if (!scroller || !fits(scroller)) break;
+      parent = scroller;
+    }
     root = parent;
   }
   return root;
+}
+
+// Whether a box fits on the screen and has a size: a box with no size, such as a popup's container
+// around its fixed popup, cannot be screenshotted.
+function fits(element: Element): boolean {
+  const box = element.getBoundingClientRect();
+  return box.width <= window.innerWidth && box.height <= window.innerHeight && box.width > 0 && box.height > 0;
+}
+
+// The nearest box around an element that clips it by scrolling, below <body>, within its popup layer.
+function scrollerAround(element: Element): HTMLElement | undefined {
+  if (element.hasAttribute("data-base-ui-portal")) return undefined;
+  for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
+    const { overflowX, overflowY } = getComputedStyle(node);
+    if ([overflowX, overflowY].some((overflow) => overflow === "auto" || overflow === "scroll")) return node;
+    if (node.hasAttribute("data-base-ui-portal")) return undefined;
+  }
+  return undefined;
 }
 
 // Whether all of an element's text shows: inside every box that clips it up to `root`, and the screen.
@@ -872,7 +895,13 @@ async function measureTexts(root: Element, items: Measured[], last: boolean): Pr
   let pending = [...items];
   while (pending.length > 0) {
     const first = pending[0]!;
-    if (first.element.isConnected && !inView(first.element, root)) first.element.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+    if (first.element.isConnected && !inView(first.element, root)) {
+      first.element.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+      // In a box inside the root that scrolls, the text goes to its top, so the text after it in a
+      // long list shows too and shares the picture (ourostack/ouro-ui#1520).
+      const scroller = scrollerAround(first.element);
+      if (scroller && root.contains(scroller)) scroller.scrollTop += first.element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    }
     const batch = [first, ...pending.slice(1).filter(({ element }) => element.isConnected && inView(element, root))];
     const results = await shoot(root, batch, last);
     for (const [index, item] of batch.entries()) verdicts.set(item, results[index]!);

@@ -41,6 +41,8 @@ function CookbookList() {
             variant={on ? "soft" : "plain"}
             tone={on ? "primary" : "secondary"}
             fullWidth
+            // A list's rows start at the leading edge; a button centres its label by default.
+            className="justify-start"
             aria-pressed={on}
             onClick={() => setSaved(on ? saved.filter((item) => item !== name) : [...saved, name])}
           >

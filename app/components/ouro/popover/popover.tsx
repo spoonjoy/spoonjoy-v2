@@ -74,7 +74,11 @@ export interface PopoverBaseProps {
    * @claim "`sheet` is always a bottom sheet" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover presentation > is always a sheet with presentation sheet)
    */
   presentation?: PopoverPresentation | (string & { 'Use "auto", "popover" or "sheet"': never }) | undefined;
-  /** The body. It scrolls when the popover is taller than the space beside the trigger. */
+  /**
+   * The body. It scrolls when the popover is taller than the space beside the trigger. Its focus ring is drawn over
+   * the content, so a header that sticks to the top never hides an edge of it.
+   * @claim "Its focus ring is drawn over the content" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > draws its focus ring whole over content that sticks to an edge, and leaves the pointer to the content)
+   */
   children: ReactNode;
   /**
    * Layout only, applied to the popover panel: width (18rem, `w-72`, by default) and
@@ -286,14 +290,21 @@ export function Popover(props: PopoverProps): JSX.Element {
             ) : (
               <PopoverTitle visuallyHidden>{title}</PopoverTitle>
             )}
-            <div
-              ref={bodyRef}
-              data-ouro-popover-content=""
-              data-ouro-control="popover"
-              data-ouro-part="content"
-              className="box-border min-h-0 flex-auto overflow-y-auto overscroll-contain text-sm leading-5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid"
-            >
-              {children}
+            <div className="relative box-border flex min-h-0 flex-auto flex-col">
+              <div
+                ref={bodyRef}
+                data-ouro-popover-content=""
+                data-ouro-control="popover"
+                data-ouro-part="content"
+                className="peer box-border min-h-0 flex-auto overflow-y-auto overscroll-contain text-sm leading-5 outline-none focus-visible:isolate"
+              >
+                {children}
+              </div>
+              <span
+                aria-hidden="true"
+                data-popover-focus-ring=""
+                className="pointer-events-none absolute inset-0 hidden rounded-[inherit] outline-ring -outline-offset-2 peer-focus-visible:block peer-focus-visible:outline-2 peer-focus-visible:outline-solid"
+              />
             </div>
             <PopoverClose data-ouro-popover-close="">{closeLabel}</PopoverClose>
           </PopoverPopupUnchecked>
