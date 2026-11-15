@@ -15,6 +15,7 @@ import {
 import { createContext, useContext, useEffect, useRef, type RefObject } from "react";
 import { usePostHog } from "~/lib/use-posthog";
 import { getUserId } from "~/lib/session.server";
+import { touchLastSeen } from "~/lib/account-activity.server";
 import { NonceContext } from "~/lib/nonce";
 import { FOLD_BOOTSTRAP } from "~/lib/fold";
 import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
@@ -92,6 +93,9 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await getUserId(request, context.cloudflare?.env);
+  const ctx = context.cloudflare?.ctx;
+  const lastSeen = userId && ctx?.waitUntil ? touchLastSeen(context.cloudflare?.env, userId) : null;
+  if (lastSeen) ctx?.waitUntil(lastSeen);
   const oauthProviders = getConfiguredOAuthProviders(getOAuthEnv(context));
   // X-ray's Source links point at the commit that is running (main in a local build without git).
   const built = buildSourceSha();

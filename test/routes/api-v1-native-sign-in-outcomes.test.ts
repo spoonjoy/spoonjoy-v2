@@ -103,6 +103,17 @@ describe("native sign-in outcomes", () => {
     expect(captureIdentify).toHaveBeenCalledWith(expect.anything(), { distinctId: "user_apple", anonDistinctId: `native_install:${INSTALL_ID}` });
   });
 
+  it("records the account's last sign-in and method", async () => {
+    const user = await createUser(db, "activity.test@example.com", "activity_test_chef", "testPassword123");
+    vi.mocked(handleNativeAppleSignIn).mockResolvedValue({ action: "user_logged_in", userId: user.id, clientId: "client", tokens } as never);
+
+    await action(nativeArgs("auth/apple/native", { identityToken: "jwt", rawNonce: "nonce", platform: "ios" }));
+
+    const activity = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { lastSignInAt: true, lastSignInMethod: true } });
+    expect(activity.lastSignInMethod).toBe("apple");
+    expect(activity.lastSignInAt).not.toBeNull();
+  });
+
   it("reports a rejected Apple credential under the install with Apple's code", async () => {
     vi.mocked(handleNativeAppleSignIn).mockRejectedValue(new NativeAppleAuthError("apple_identity_token_invalid", "Invalid", 401));
 

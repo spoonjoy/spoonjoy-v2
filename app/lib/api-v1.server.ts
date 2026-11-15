@@ -1,4 +1,5 @@
 import { authenticateUserByEmailOrUsername, lookupUserIdByEmailOrUsername } from "~/lib/auth.server";
+import { recordAccountSignIn, touchLastSeen, type AccountActivityEnv } from "~/lib/account-activity.server";
 import {
   recordSignInFailed,
   recordSignInSucceeded,
@@ -814,6 +815,8 @@ function observeApiV1Response(
   const ctx = cloudflare?.ctx;
   const waitUntil = ctx?.waitUntil ? ctx.waitUntil.bind(ctx) : undefined;
   if (!env || !waitUntil) return input.response;
+  const lastSeen = input.principal ? touchLastSeen(env as AccountActivityEnv, input.principal.id) : null;
+  if (lastSeen) waitUntil(lastSeen);
 
   const postHogConfig = resolvePostHogServerConfig(env);
   if (!postHogConfig.enabled) return input.response;
@@ -7366,6 +7369,7 @@ async function withNativeSignInOutcome(
   handle: (outcome: NativeSignInOutcome) => Promise<Response>,
 ): Promise<Response> {
   const { capture, identify } = nativeSignInSinks(args);
+  const accountSignIns: Promise<void>[] = [];
   let reported = false;
   const outcome: NativeSignInOutcome = {
     client: { platform: "native" },
@@ -7373,6 +7377,7 @@ async function withNativeSignInOutcome(
     succeeded(userId, newAccount) {
       reported = true;
       recordSignInSucceeded(capture, { method, ...outcome.client, userId, newAccount }, identify);
+      accountSignIns.push(recordAccountSignIn(apiV1CloudflareFor(args)?.env as AccountActivityEnv | undefined, userId, method));
     },
     failed(reason) {
       reported = true;
@@ -7384,6 +7389,8 @@ async function withNativeSignInOutcome(
   } catch (error) {
     if (!reported) outcome.failed(nativeSignInFailureReason(error));
     throw error;
+  } finally {
+    await Promise.all(accountSignIns);
   }
 }
 

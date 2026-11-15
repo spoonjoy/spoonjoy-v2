@@ -9,6 +9,7 @@ import { requestD1 } from "~/lib/d1-read.server";
 import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
 import { extractIdentifierFromBody, lookupUserIdByEmailOrUsername, resolveIdentifierToEmail } from "~/lib/auth.server";
 import { recordSignInFailed, recordSignInSucceeded } from "~/lib/sign-in-outcome.server";
+import { recordAccountSignIn } from "~/lib/account-activity.server";
 import { isD1Unavailable } from "~/lib/d1-write-retry.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -70,6 +71,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const clearedPendingAppleLink = await claimPendingAppleLinkFromCookie(async () => requestDb, request, env, result.userId);
     if (clearedPendingAppleLink) headers.append("Set-Cookie", clearedPendingAppleLink);
     recordSignInSucceeded(capture, { method: "passkey", platform: "web", userId: result.userId });
+    await recordAccountSignIn(env, result.userId, "passkey");
     return new Response(JSON.stringify({ verified: true, redirectTo }), { status: 200, headers });
   } catch (error) {
     const databaseUnavailable = isD1Unavailable(error);

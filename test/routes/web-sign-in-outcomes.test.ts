@@ -83,6 +83,9 @@ describe("web sign-in outcomes", () => {
           properties: expect.objectContaining({ method: "password", platform: "web", new_account: false }),
         },
       ]);
+      const activity = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { lastSignInAt: true, lastSignInMethod: true } });
+      expect(activity.lastSignInMethod).toBe("password");
+      expect(activity.lastSignInAt).not.toBeNull();
     });
 
     it("reports a wrong password under the account the identifier matched, never the identifier", async () => {
@@ -137,6 +140,8 @@ describe("web sign-in outcomes", () => {
       expect(signInEvents()).toEqual([
         { event: SIGN_IN_SUCCEEDED_EVENT, distinctId: user.id, properties: expect.objectContaining({ method: "passkey", platform: "web" }) },
       ]);
+      const activity = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { lastSignInMethod: true } });
+      expect(activity.lastSignInMethod).toBe("passkey");
     });
 
     it("reports a failed verification under the matched account", async () => {
