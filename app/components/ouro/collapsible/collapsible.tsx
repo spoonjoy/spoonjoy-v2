@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useId, useRef, useState, useSyncExternalStore, type JSX, type ReactNode, type Ref } from "react";
+import { useId, useState, type JSX, type ReactNode, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
+import { CssPanel } from "~/lib/ouro/css-panel";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
-import { iconClass, ownLook, panelClass, rootClass, triggerClass } from "~/components/ouro/collapsible/collapsible-styles";
+import { iconClass, ownLook, rootClass, triggerClass } from "~/components/ouro/collapsible/collapsible-styles";
 
 /** Props for {@link Collapsible}. */
 export interface CollapsibleProps {
@@ -32,21 +33,6 @@ export interface CollapsibleProps {
   onChange?: { 'Use <Collapsible onOpenChange={(open) => ...}>': never };
   /** Not a prop. Ouro UI uses `open`: `<Collapsible open>`. */
   isOpen?: { 'Use <Collapsible open>': never };
-}
-
-const noSubscribe = () => () => {};
-
-/**
- * Whether the browser reveals `hidden="until-found"` content for its page search
- * (Chromium does; WebKit does not, and would show the content). False on the server, so
- * hydration matches, and closed content stays in the server HTML either way.
- */
-function useUntilFound(): boolean {
-  return useSyncExternalStore(
-    noSubscribe,
-    () => "onbeforematch" in document.body,
-    () => false,
-  );
 }
 
 /**
@@ -105,9 +91,7 @@ export function Collapsible(props: CollapsibleProps): JSX.Element {
         }
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
-  const untilFound = useUntilFound();
   const panelId = useId();
-  const panelRef = useRef<HTMLDivElement>(null);
   const [own, setOwn] = useState(defaultOpen === true);
   const expanded = open ?? own;
   const change = (next: boolean) => {
@@ -115,62 +99,6 @@ export function Collapsible(props: CollapsibleProps): JSX.Element {
     if (open === undefined) setOwn(next);
     onOpenChange?.(next);
   };
-  const changeRef = useRef(change);
-  useLayoutEffect(() => {
-    changeRef.current = change;
-  });
-  // The panel stays shown through its closing transition, then hides.
-  const [seen, setSeen] = useState(expanded);
-  // Stryker disable next-line BooleanLiteral: the first closing state is overwritten by the render-phase sync before any effect reads it.
-  const [closing, setClosing] = useState(false);
-  const [moved, setMoved] = useState(false);
-  if (seen !== expanded) {
-    setSeen(expanded);
-    setMoved(true);
-    setClosing(!expanded);
-  }
-  const listenForFound = () => {
-    const panel = panelRef.current;
-    // Stryker disable next-line ConditionalExpression: the panel always exists once effects run; the guard only satisfies the type.
-    /* istanbul ignore next @preserve -- the panel always exists once effects run */
-    if (!panel) return;
-    const found = () => changeRef.current(true);
-    panel.addEventListener("beforematch", found);
-    return () => panel.removeEventListener("beforematch", found);
-  };
-  // Stryker disable next-line ArrayDeclaration: the effect reads only refs, so re-running it adds the same listener again.
-  useEffect(listenForFound, []);
-  useEffect(() => {
-    const panel = panelRef.current;
-    // Stryker disable next-line ConditionalExpression,LogicalOperator: the panel always exists once effects run, and an open panel has nothing to close.
-    if (!closing || !panel) return;
-    if (panel.getAnimations().length === 0) {
-      setClosing(false);
-      return;
-    }
-    const done = (event: Event) => {
-      // Stryker disable next-line ConditionalExpression: transition events from the panel's descendants do not occur in this markup.
-      /* istanbul ignore else @preserve -- descendants of the panel send no transition events */
-      if (event.target === panel) setClosing(false);
-    };
-    // Stryker disable next-line StringLiteral: the cancel and end listeners are interchangeable for the same transition.
-    panel.addEventListener("transitionend", done);
-    // Stryker disable next-line StringLiteral,CallExpression: the cancel and end listeners are interchangeable for the same transition.
-    panel.addEventListener("transitioncancel", done);
-    // Stryker disable next-line BlockStatement: the panel is kept for the component's life, so an unreleased listener is unobservable.
-    return () => {
-      // Stryker disable next-line StringLiteral,CallExpression: removal only releases a listener on a node that is being kept.
-      panel.removeEventListener("transitionend", done);
-      // Stryker disable next-line StringLiteral,CallExpression: removal only releases a listener on a node that is being kept.
-      panel.removeEventListener("transitioncancel", done);
-    };
-  }, [closing]);
-  const shown = expanded || closing;
-  // React writes a plain `hidden`; the until-found value is set by hand.
-  useLayoutEffect(() => {
-    // Stryker disable next-line OptionalChaining: the ref is set before layout effects run.
-    if (!shown && untilFound) panelRef.current?.setAttribute("hidden", "until-found");
-  }, [shown, untilFound]);
   return (
     <div ref={ref} data-ouro="collapsible" className={cn(rootClass, className)}>
       <button
@@ -201,22 +129,9 @@ export function Collapsible(props: CollapsibleProps): JSX.Element {
           <path d="m4 6 4 4 4-4" />
         </svg>
       </button>
-      <div
-        ref={panelRef}
-        id={panelId}
-        // Stryker disable next-line BooleanLiteral: hidden="false" would still hide in the same way for the browser engines under test.
-        hidden={shown ? undefined : true}
-        // Stryker disable next-line StringLiteral: any value of a presence attribute styles the same.
-        data-open={expanded ? "" : undefined}
-        // Stryker disable next-line StringLiteral: any value of a presence attribute styles the same.
-        data-moved={moved ? "" : undefined}
-        data-ouro-collapsible-panel=""
-        className={panelClass}
-      >
-        <div className="min-h-0 overflow-hidden">
-          <div className="pt-1 pb-2">{children}</div>
-        </div>
-      </div>
+      <CssPanel id={panelId} open={expanded} onFound={() => change(true)} contentClassName="pt-1 pb-2" data-ouro-collapsible-panel="">
+        {children}
+      </CssPanel>
     </div>
   );
 }
