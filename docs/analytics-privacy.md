@@ -48,7 +48,15 @@ Current analytics events are intentionally limited to controlled product, API, O
 | OAuth revocation | `spoonjoy.oauth.revoke` | Status/error code, token type hint class when present, client id when safely known, and latency. |
 | Developer docs | `spoonjoy.developer.docs.viewed` | Page id and generated API surface counts. |
 | Developer playground | `spoonjoy.developer.playground.viewed`, `spoonjoy.developer.playground.surface_selected`, `spoonjoy.developer.playground.operation_selected`, `spoonjoy.developer.playground.auth_mode_selected`, `spoonjoy.developer.playground.sign_in_clicked`, `spoonjoy.developer.playground.request_submitted`, `spoonjoy.developer.playground.response_received` | Generated operation id/tag/kind/risk/auth/method, selected surface, auth mode/status, status class, latency bucket, and coarse outcome. |
+| Sign-in outcomes | `spoonjoy.auth.sign_in_succeeded`, `spoonjoy.auth.sign_in_failed`, `$identify` | Method (password, passkey, apple, google, github), platform, app version, native install id, new-account flag, and on failure a controlled failure code and whether the identifier matched an account. Success uses the account id; failure uses the matched account id, else `native_install:<id>`, else an anonymous id. The typed email or username is not sent. |
+| Native diagnostics | `spoonjoy.native.crash`, `spoonjoy.native.hang`, `spoonjoy.native.launch_completed` | MetricKit summaries: app version, build, OS, device model, exception type/code, signal, termination reason, hang length, and unsymbolicated frames (binary name, UUID, offset). Account id when signed in, else the install id. |
 | Recipe image generation | `spoonjoy.image_generation.skipped`, `spoonjoy.image_generation.provider_fallback`, `$exception` with `feature: "recipe_image_generation"` | User id, recipe id, cover id, operation (`placeholder_generate` or `cover_stylize`), source type (`ai-placeholder`, `chef-upload`, or `spoon`), quota kind, provider, model, controlled skip reason, normalized provider error status/code/type/request id, retryability, fallback metadata, and primary-provider metadata when fallback was attempted. |
+
+## Account Activity
+
+`User.lastSeenAt` records the last authenticated use (a current web session or an authenticated API v1 request), moved at most once an hour per account. `User.lastSignInAt` and `User.lastSignInMethod` record the last successful sign-in (`app/lib/account-activity.server.ts`, migration `0038_account_activity.sql`). They live in D1, not PostHog, and the writes leave `updatedAt` alone so native sync does not see a change.
+
+To answer "has this person signed in again?", run the read-only `pnpm exec tsx scripts/account-activity.ts <username or user id>`, or `--recent` for the latest sign-ins. It prints username, id, created, last sign-in with method, and last seen, without the email.
 
 ## Payload Review
 

@@ -5,6 +5,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { authenticateUserByEmailOrUsername, authenticateUserByEmailOrUsernameOnD1, lookupUserIdByEmailOrUsername } from "~/lib/auth.server";
 import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 import { recordSignInFailed, recordSignInSucceeded } from "~/lib/sign-in-outcome.server";
+import { recordAccountSignIn } from "~/lib/account-activity.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { createUserSession, getUserId, sanitizeSessionRedirect } from "~/lib/session.server";
 import { claimPendingAppleLinkFromCookie } from "~/lib/pending-apple-link.server";
@@ -133,6 +134,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     signInMethod: "password",
   });
   recordSignInSucceeded(capture, { method: "password", platform: "web", userId: user.id });
+  await recordAccountSignIn(context.cloudflare?.env, user.id, "password");
   // An Apple sign-in in this browser that found no account left a pending link: connect it now.
   const clearedPendingAppleLink = await claimPendingAppleLinkFromCookie(() => getRequestDb(context), request, context.cloudflare?.env, user.id);
   if (clearedPendingAppleLink) response.headers.append("Set-Cookie", clearedPendingAppleLink);

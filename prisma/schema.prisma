@@ -27,6 +27,11 @@ model User {
   // Set when the user proves they own `email` (a verification link, a confirmed email change, a
   // password reset, or a provider that vouches for the address). Null means unverified.
   emailVerifiedAt          DateTime?
+  // Account activity (app/lib/account-activity.server.ts): last authenticated use, moved at most
+  // hourly, and the last successful sign-in with its method (password, passkey, apple, google, github).
+  lastSeenAt               DateTime?
+  lastSignInAt             DateTime?
+  lastSignInMethod         String?
   emailTokens              AccountEmailToken[]
   credentials              UserCredential[]
   OAuth                    OAuth[]

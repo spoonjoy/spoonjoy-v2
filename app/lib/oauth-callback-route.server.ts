@@ -4,6 +4,7 @@ import { getAppleOAuthConfig, getGitHubOAuthConfig, getGoogleOAuthConfig } from 
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { recordSignInFailed, recordSignInSucceeded } from "~/lib/sign-in-outcome.server";
+import { recordAccountSignIn } from "~/lib/account-activity.server";
 import { D1_WRITE_UNAVAILABLE_CODE, isD1Unavailable } from "~/lib/d1-write-retry.server";
 import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
 import {
@@ -149,6 +150,7 @@ async function recordOAuthSignInSucceeded(
     userId: callbackResult.userId,
     newAccount: callbackResult.action === "user_created",
   });
+  await recordAccountSignIn(env, callbackResult.userId, provider);
 }
 
 function redirectWithCapturedOAuthError(

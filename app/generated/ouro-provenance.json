@@ -25,6 +25,7 @@
       "app/hooks/use-cooking-now.ts",
       "app/hooks/use-hydrated-mark.ts",
       "app/hooks/use-unsaved-form-guard.ts",
+      "app/lib/account-activity.server.ts",
       "app/lib/analytics-server.ts",
       "app/lib/analytics.ts",
       "app/lib/api-auth.server.ts",
@@ -267,6 +268,7 @@
         "app/components/spoonjoy-logo.tsx",
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-redirect-hash.ts",
+        "app/lib/account-activity.server.ts",
         "app/lib/account-identity.server.ts",
         "app/lib/account-revocation.server.ts",
         "app/lib/analytics-server.ts",
@@ -659,6 +661,7 @@
       "file": "app/routes/auth.google.callback.tsx",
       "sources": [
         "app/routes/auth.google.callback.tsx",
+        "app/lib/account-activity.server.ts",
         "app/lib/account-identity.server.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -746,6 +749,7 @@
       "file": "app/routes/auth.github.callback.tsx",
       "sources": [
         "app/routes/auth.github.callback.tsx",
+        "app/lib/account-activity.server.ts",
         "app/lib/account-identity.server.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -833,6 +837,7 @@
       "file": "app/routes/auth.apple.callback.tsx",
       "sources": [
         "app/routes/auth.apple.callback.tsx",
+        "app/lib/account-activity.server.ts",
         "app/lib/account-identity.server.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -1049,6 +1054,7 @@
       "file": "app/routes/redwood-functions-auth-oauth.tsx",
       "sources": [
         "app/routes/redwood-functions-auth-oauth.tsx",
+        "app/lib/account-activity.server.ts",
         "app/lib/account-identity.server.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
