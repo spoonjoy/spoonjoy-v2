@@ -1,4 +1,12 @@
-import { authenticateUserByEmailOrUsername } from "~/lib/auth.server";
+import { authenticateUserByEmailOrUsername, lookupUserIdByEmailOrUsername } from "~/lib/auth.server";
+import {
+  recordSignInFailed,
+  recordSignInSucceeded,
+  type SignInClient,
+  type SignInEventCapture,
+  type SignInIdentifyCapture,
+  type SignInOutcomeMethod,
+} from "~/lib/sign-in-outcome.server";
 import { listCookingNow } from "~/lib/cooking-now.server";
 import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 import {
@@ -54,6 +62,7 @@ import { normalizeUsername, usernameFormatError } from "~/lib/username";
 import {
   captureEvent,
   captureException,
+  captureIdentify,
   requestContentBytes,
   resolvePostHogServerConfig,
   safeHeaderHost,
@@ -7306,9 +7315,82 @@ function revokedDuringSignIn(error: unknown): boolean {
   return error instanceof OAuthError && error.reason === "revoked_by_user";
 }
 
-async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: string) {
+/** Optional client fields the native sign-in exchanges accept, for sign-in telemetry only. */
+const NATIVE_SIGN_IN_CLIENT_FIELDS = ["platform", "appVersion", "installId"] as const;
+
+function nativeSignInClient(body: Record<string, unknown>): SignInClient {
+  const platform = optionalNativeTelemetryEnum(body.platform, "platform", NATIVE_TELEMETRY_PLATFORMS);
+  return {
+    platform: platform === "ios" || platform === "macos" ? platform : "native",
+    appVersion: optionalNullableString(body.appVersion, "appVersion", 40),
+    installId: optionalNativeInstallId(body.installId),
+  };
+}
+
+/**
+ * One native sign-in attempt's outcome. The handler fills in the client and, for a password
+ * attempt, the account the identifier matched; it reports success itself, and anything that
+ * escapes it (a validation error, a bad credential, a fault) is reported as a failure once.
+ */
+interface NativeSignInOutcome {
+  client: SignInClient;
+  matchedUserId: string | null;
+  succeeded(userId: string, newAccount: boolean): void;
+  failed(reason: string): void;
+}
+
+function nativeSignInSinks(args: ApiV1RouteArgs): { capture: SignInEventCapture; identify: SignInIdentifyCapture } {
+  const env = apiV1CloudflareFor(args)?.env as PostHogServerEnv | undefined;
+  const ignore = () => undefined;
+  if (!env) return { capture: ignore, identify: ignore };
+  const config = resolvePostHogServerConfig(env);
+  const waitUntil = apiV1WaitUntilFor(args);
+  const schedule = (task: Promise<void>) => waitUntil?.(task);
+  return {
+    capture: (event, distinctId, properties) => schedule(captureEvent(config, { event, distinctId, properties })),
+    identify: (distinctId, anonDistinctId) => schedule(captureIdentify(config, { distinctId, anonDistinctId })),
+  };
+}
+
+function nativeSignInFailureReason(error: unknown): string {
+  if (error instanceof ApiV1Error) {
+    const details = error.details as { providerCode?: unknown } | undefined;
+    return typeof details?.providerCode === "string" ? details.providerCode : error.code;
+  }
+  return "unexpected_error";
+}
+
+async function withNativeSignInOutcome(
+  args: ApiV1RouteArgs,
+  method: SignInOutcomeMethod,
+  handle: (outcome: NativeSignInOutcome) => Promise<Response>,
+): Promise<Response> {
+  const { capture, identify } = nativeSignInSinks(args);
+  let reported = false;
+  const outcome: NativeSignInOutcome = {
+    client: { platform: "native" },
+    matchedUserId: null,
+    succeeded(userId, newAccount) {
+      reported = true;
+      recordSignInSucceeded(capture, { method, ...outcome.client, userId, newAccount }, identify);
+    },
+    failed(reason) {
+      reported = true;
+      recordSignInFailed(capture, { method, ...outcome.client, failureReason: reason, matchedUserId: outcome.matchedUserId });
+    },
+  };
+  try {
+    return await handle(outcome);
+  } catch (error) {
+    if (!reported) outcome.failed(nativeSignInFailureReason(error));
+    throw error;
+  }
+}
+
+async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: string, outcome: NativeSignInOutcome) {
   const authRateLimit = await enforceAuthRateLimit(args.request, args.context.cloudflare?.env?.AUTH_IP_RATE_LIMITER);
   if (!authRateLimit.allowed) {
+    outcome.failed("rate_limited");
     const response = apiV1SamePartyErrorResponse(
       requestId,
       new ApiV1Error("rate_limited", "Too many requests. Try again later.", {
@@ -7323,7 +7405,8 @@ async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: s
   }
 
   const body = await parseApiV1JsonBody(args.request);
-  assertKnownFields(body, ["identityToken", "rawNonce", "email", "fullName"]);
+  assertKnownFields(body, ["identityToken", "rawNonce", "email", "fullName", ...NATIVE_SIGN_IN_CLIENT_FIELDS]);
+  outcome.client = nativeSignInClient(body);
   const identityToken = nonblankString(body.identityToken, "identityToken", 8192);
   const rawNonce = nonblankString(body.rawNonce, "rawNonce", 256);
   const email = optionalNativeAppleText(body, "email", 320);
@@ -7340,6 +7423,7 @@ async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: s
         d1: requestD1(args.context),
       },
     );
+    outcome.succeeded(result.userId, result.action === "user_created");
     return withApiV1Telemetry(
       apiV1SamePartyPrivateSuccess(requestId, {
         action: result.action,
@@ -7374,9 +7458,10 @@ async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: s
   }
 }
 
-async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId: string) {
+async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId: string, outcome: NativeSignInOutcome) {
   const authRateLimit = await enforceAuthRateLimit(args.request, args.context.cloudflare?.env?.AUTH_IP_RATE_LIMITER);
   if (!authRateLimit.allowed) {
+    outcome.failed("rate_limited");
     const response = apiV1SamePartyErrorResponse(
       requestId,
       new ApiV1Error("rate_limited", "Too many requests. Try again later.", {
@@ -7391,7 +7476,8 @@ async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId
   }
 
   const body = await parseApiV1JsonBody(args.request);
-  assertKnownFields(body, ["emailOrUsername", "password", "pendingAppleLinkToken"]);
+  assertKnownFields(body, ["emailOrUsername", "password", "pendingAppleLinkToken", ...NATIVE_SIGN_IN_CLIENT_FIELDS]);
+  outcome.client = nativeSignInClient(body);
   const emailOrUsername = nonblankString(body.emailOrUsername, "emailOrUsername", 320);
   const password = nonblankString(body.password, "password", 1024);
   const pendingAppleLinkToken = optionalNativeAppleText(body, "pendingAppleLinkToken", 128);
@@ -7403,6 +7489,7 @@ async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId
       { emailOrUsername, password },
       { issuer: resolveIssuerOrigin(args.request.url, args.context.cloudflare?.env?.SPOONJOY_BASE_URL) },
     );
+    outcome.succeeded(result.userId, false);
     // An Apple sign-in on this device that found no account left a pending link: connect it now.
     const appleLink = pendingAppleLinkToken
       ? await claimPendingAppleLink(db, pendingAppleLinkToken, result.userId)
@@ -7418,6 +7505,7 @@ async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId
     );
   } catch (error) {
     if (error instanceof NativePasswordAuthError) {
+      outcome.matchedUserId = await lookupUserIdByEmailOrUsername(db, emailOrUsername);
       const code = error.status === 401 ? "invalid_token" : "validation_error";
       throw new ApiV1Error(code, error.message, { providerCode: error.code });
     }
@@ -7894,7 +7982,7 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     }
 
     if (args.request.method === "POST" && path === "auth/apple/native") {
-      const response = await handleNativeAppleSignInRequest(args, requestId);
+      const response = await withNativeSignInOutcome(args, "apple", (outcome) => handleNativeAppleSignInRequest(args, requestId, outcome));
       return observeApiV1Response(args, { requestId, path, response, startedAt });
     }
 
@@ -7903,7 +7991,7 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     }
 
     if (args.request.method === "POST" && path === "auth/password/native") {
-      const response = await handleNativePasswordSignInRequest(args, requestId);
+      const response = await withNativeSignInOutcome(args, "password", (outcome) => handleNativePasswordSignInRequest(args, requestId, outcome));
       return observeApiV1Response(args, { requestId, path, response, startedAt });
     }
 

@@ -310,6 +310,27 @@ export async function captureEvent(
   }
 }
 
+/**
+ * Link an anonymous id's earlier events to an account (PostHog `$identify` with
+ * `$anon_distinct_id`). Like `captureEvent`, it never throws.
+ */
+export async function captureIdentify(
+  config: PostHogServerConfig,
+  input: { distinctId: string; anonDistinctId: string },
+  fetchImpl: typeof fetch = fetch,
+  now: () => Date = () => new Date(),
+): Promise<void> {
+  if (!config.enabled) return;
+
+  await postCapturePayload(config.host, {
+    api_key: config.key,
+    event: "$identify",
+    distinct_id: input.distinctId,
+    timestamp: now().toISOString(),
+    properties: { $anon_distinct_id: input.anonDistinctId, $lib: "spoonjoy-server" },
+  }, fetchImpl);
+}
+
 async function postCapturePayload(
   host: string,
   payload: CapturePayload,

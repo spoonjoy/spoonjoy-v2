@@ -7,13 +7,18 @@ import { configFromRequest, finishAuthentication, webAuthnErrorResponse } from "
 import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
-import { extractIdentifierFromBody, resolveIdentifierToEmail } from "~/lib/auth.server";
+import { extractIdentifierFromBody, lookupUserIdByEmailOrUsername, resolveIdentifierToEmail } from "~/lib/auth.server";
+import { recordSignInFailed, recordSignInSucceeded } from "~/lib/sign-in-outcome.server";
+import { isD1Unavailable } from "~/lib/d1-write-retry.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
   const env = context.cloudflare?.env;
+  const telemetry = authTelemetryFromContext(context);
+  const capture = telemetry.captureEvent.bind(telemetry);
 
   const rateLimit = await enforceAuthRateLimit(request, env?.AUTH_IP_RATE_LIMITER);
   if (!rateLimit.allowed) {
+    recordSignInFailed(capture, { method: "passkey", platform: "web", failureReason: "rate_limited" });
     return rateLimitedResponse(rateLimit.retryAfterSeconds);
   }
 
@@ -21,25 +26,29 @@ export async function action({ request, context }: Route.ActionArgs) {
   try {
     body = (await request.json()) as typeof body;
   } catch {
+    recordSignInFailed(capture, { method: "passkey", platform: "web", failureReason: "invalid_request" });
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   const identifier = extractIdentifierFromBody(body);
   if (!identifier || !body.response) {
+    recordSignInFailed(capture, { method: "passkey", platform: "web", failureReason: "missing_fields" });
     return Response.json({ error: "Username or email and authentication response are required" }, { status: 400 });
   }
 
+  let db: Awaited<ReturnType<typeof getRequestDb>> | undefined;
   try {
-    const db = await getRequestDb(context);
+    const requestDb = await getRequestDb(context);
+    db = requestDb;
     // Same identifier resolution as the options route, so a chef who typed
     // a username there can complete verification with that same username.
-    const email = await resolveIdentifierToEmail(db, identifier);
+    const email = await resolveIdentifierToEmail(requestDb, identifier);
     const result = await finishAuthentication(
-      db,
+      requestDb,
       email,
       configFromRequest(request),
       body.response,
-      authTelemetryFromContext(context),
+      telemetry,
       // The counter rotation and challenge clear run as one D1 batch when there is a binding.
       requestD1(context),
     );
@@ -58,10 +67,18 @@ export async function action({ request, context }: Route.ActionArgs) {
     const headers = new Headers({ "Content-Type": "application/json" });
     headers.append("Set-Cookie", cookie);
     // An Apple sign-in in this browser that found no account left a pending link: connect it now.
-    const clearedPendingAppleLink = await claimPendingAppleLinkFromCookie(async () => db, request, env, result.userId);
+    const clearedPendingAppleLink = await claimPendingAppleLinkFromCookie(async () => requestDb, request, env, result.userId);
     if (clearedPendingAppleLink) headers.append("Set-Cookie", clearedPendingAppleLink);
+    recordSignInSucceeded(capture, { method: "passkey", platform: "web", userId: result.userId });
     return new Response(JSON.stringify({ verified: true, redirectTo }), { status: 200, headers });
   } catch (error) {
+    const databaseUnavailable = isD1Unavailable(error);
+    recordSignInFailed(capture, {
+      method: "passkey",
+      platform: "web",
+      failureReason: databaseUnavailable ? "database_unavailable" : "verification_failed",
+      matchedUserId: telemetry.enabled && db && !databaseUnavailable ? await lookupUserIdByEmailOrUsername(db, identifier) : null,
+    });
     return webAuthnErrorResponse(error, "Passkey sign-in didn't finish: the server hit an unexpected fault");
   }
 }
