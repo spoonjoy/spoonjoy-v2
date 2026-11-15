@@ -105,6 +105,7 @@
     "test:ouro": "vitest run --config vitest.ouro.config.ts --coverage",
     "test:e2e:ouro": "playwright test -c playwright.ouro.config.ts",
     "test:e2e:storybook-a11y": "playwright test -c playwright.storybook.config.ts",
+    "test:e2e:corner-radius": "playwright test -c playwright.corner-radius.config.ts",
     "test:mcp-sdk-python": "node scripts/mcp-python-sdk-conformance.mjs",
     "verify:clean:typecheck": "node scripts/run-with-warning-policy.mjs -- pnpm run typecheck",
     "verify:clean:build": "node scripts/run-with-warning-policy.mjs -- pnpm run build",
