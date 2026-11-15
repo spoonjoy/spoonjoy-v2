@@ -1973,6 +1973,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"Capture MetricKit crash and hang summaries from the first-party native apps\" [choice-card/input] in group \"Native\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Capture redacted first-party native app diagnostics\" [choice-card/input] in group \"Native\"",
           "count": 1
         },
@@ -9240,6 +9244,10 @@
         },
         {
           "identity": "radio \"Call the remote Spoonjoy MCP endpoint\" [choice-card/input] in group \"MCP\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Capture MetricKit crash and hang summaries from the first-party native apps\" [choice-card/input] in group \"Native\"",
           "count": 1
         },
         {

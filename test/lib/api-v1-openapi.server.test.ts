@@ -28,6 +28,7 @@ const OPERATION_SCOPES = {
   "POST /api/v1/auth/apple/native": [],
   "POST /api/v1/auth/password/native": [],
   "POST /api/v1/native/telemetry": [],
+  "POST /api/v1/native/diagnostics": [],
   "GET /api/v1/search": [],
   "GET /api/v1/recipes": ["recipes:read"],
   "POST /api/v1/recipes": ["kitchen:write"],
@@ -1081,6 +1082,12 @@ describe("API v1 OpenAPI document", () => {
         searchResultCount: { type: ["integer", "null"], minimum: 0, maximum: 100_000 },
         durationMilliseconds: { type: ["integer", "null"], minimum: 0, maximum: 86_400_000 },
       },
+    });
+    expect(components.schemas.NativeDiagnosticsRequest.required).toEqual(["kind", "diagnosticId"]);
+    expect(components.schemas.NativeDiagnosticsRequest.properties).not.toHaveProperty("exceptionMessage");
+    expect(requestExample(buildApiV1OpenApiDocument(), "/api/v1/native/diagnostics", "POST")).toMatchObject({
+      kind: "crash",
+      signal: 11,
     });
     expect(components.schemas.NativeTelemetryRequest.properties).not.toHaveProperty("query");
     expect(components.schemas.NativeTelemetryRequest.properties).not.toHaveProperty("searchQuery");
