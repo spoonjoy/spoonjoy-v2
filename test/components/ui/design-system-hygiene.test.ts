@@ -83,7 +83,7 @@ describe("Spoonjoy UI design-system hygiene", () => {
     expect(installed.tagCommit).toBe("e0c70905c15055a45d8e07bfe7d7cb7555a7fd19");
     expect(installedFiles).toHaveLength(618);
     expect(sha256(JSON.stringify(installedFiles.map((file) => [file, installed.files[file]]))))
-      .toBe("b5f686532b1b4e49d33d99ca2a69fc2dc897d0323c78b5f5a7e6a78f37a730dc");
+      .toBe("1b9097325647c0b8db7fba8c7e3099d896f17af3d19a8401c43e3db085c15f74");
     const actual = Object.fromEntries(installedFiles.map((file) => [
       file,
       existsSync(resolve(process.cwd(), file)) ? sha256(normalizedRegistrySource(readSourceFile(file))) : null,
@@ -173,7 +173,8 @@ describe("Spoonjoy UI design-system hygiene", () => {
     const css = readSourceFile("app/styles/tailwind.css");
 
     expect(css).toContain("--radius: var(--sj-radius-control);");
-    expect(css).toContain("--radius-xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 1.4);");
+    expect(css).toContain("--radius-xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 1.4);");
+    expect(css).toMatch(/@supports not \(corner-shape: squircle\) \{\s*:root \{\s*--ouro-corner-fallback: 0\.7;/);
   });
 
   it("keeps page mastheads from stacking a top rule under the desktop nav", () => {
