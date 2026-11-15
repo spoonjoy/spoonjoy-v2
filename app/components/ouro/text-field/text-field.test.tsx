@@ -540,6 +540,18 @@ describe("TextField variant and size", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it("marks the outline box for the squircle surface, and a plain one has none", async () => {
+    const outline = await render(<TextField label="Name" />);
+    expect(outline.group.getAttribute("data-ouro-squircle")).toBe("");
+    const surface = outline.group.querySelector<HTMLElement>("[data-ouro-surface]")!;
+    expect(surface.getAttribute("aria-hidden")).toBe("true");
+    expect(surface.style.zIndex).toBe("-1");
+    expect(outline.group.firstElementChild).toBe(surface);
+    const plain = await render(<TextField label="Plain" variant="plain" />);
+    expect(plain.group.hasAttribute("data-ouro-squircle")).toBe(false);
+    expect(plain.group.querySelector("[data-ouro-surface]")).toBeNull();
+  });
+
   it("keeps a plain field's buttons inside its box", async () => {
     const { group, button } = await render(<TextField label="Search" type="search" variant="plain" clearable defaultValue="basil" />);
     expect(button("Clear")!.getBoundingClientRect().right).toBeLessThanOrEqual(group.getBoundingClientRect().right + 0.5);

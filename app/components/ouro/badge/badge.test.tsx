@@ -115,6 +115,19 @@ describe("Badge", () => {
     expect(getComputedStyle(badge, "::before").getPropertyValue("corner-shape")).toBe(own);
   });
 
+  it("marks every kind of badge for the squircle surface, behind its label", async () => {
+    for (const node of [<Badge key="s">A</Badge>, <Badge key="b" onClick={() => {}}>B</Badge>, <Badge key="l" href="/x">C</Badge>]) {
+      const { badge } = await render(node);
+      expect(badge.getAttribute("data-ouro-squircle")).toBe("");
+      expect(getComputedStyle(badge).getPropertyValue("--ouro-sq-w").trim()).toBe("1px");
+      expect(getComputedStyle(badge).height).toBe("24px");
+      const surface = badge.querySelector<HTMLElement>("[data-ouro-surface]")!;
+      expect(surface.getAttribute("aria-hidden")).toBe("true");
+      expect(surface.style.zIndex).toBe("-1");
+      expect(getComputedStyle(badge).isolation).toBe("isolate");
+    }
+  });
+
   it("renders a button with onClick, with a touch target and press feedback", async () => {
     const onClick = vi.fn();
     const { badge } = await render(<Badge onClick={onClick}>Vegetarian</Badge>);
@@ -186,7 +199,7 @@ describe("Badge", () => {
     const { badge } = await render(<Badge icon={Icon}>Spicy</Badge>);
     const icon = badge.querySelector("[data-icon]")!;
     expect(icon.getAttribute("aria-hidden")).toBe("true");
-    expect(badge.firstElementChild).toBe(icon);
+    expect(icon.previousElementSibling?.hasAttribute("data-ouro-surface")).toBe(true);
   });
 
   it("forwards a ref and lets app layout classes win", async () => {

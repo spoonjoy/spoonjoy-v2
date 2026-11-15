@@ -23,20 +23,23 @@ type ToggleIcon = ComponentType<SVGProps<SVGSVGElement>>;
  * @internal
  */
 const toggleBase =
-  "press relative box-border inline-flex shrink-0 items-center justify-center align-middle " +
+  "press relative isolate box-border inline-flex shrink-0 items-center justify-center align-middle " +
   "border border-solid whitespace-nowrap " +
   "no-underline select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:[corner-shape:inherit] before:bg-current " +
   "before:opacity-0 before:transition-opacity before:duration-(--ouro-duration-fast) before:ease-[ease] " +
   "not-data-disabled:not-active:pointer-fine:hover:before:opacity-8 not-data-disabled:active:before:opacity-14 " +
+  // Where corner-shape is missing, the surface slot paints the background, border and state layer instead (see ouro-base.css).
+  "bg-(--ouro-bg) border-(--ouro-bd) [--ouro-sq-w:1px] " +
+  "not-data-disabled:not-active:pointer-fine:hover:[--ouro-state:0.08] not-data-disabled:active:[--ouro-state:0.14] " +
   "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
   "disabled:cursor-not-allowed disabled:opacity-50 " +
   // Pressed: the primary tone at 10% behind text mixed 20% toward the foreground, as Button's soft look.
   // Forced colours drop the tint, so a pressed toggle fills with the system highlight there. It opts
   // out of forcing, or the label's backplate would hide HighlightText; its focus ring stays a system colour.
-  "data-pressed:bg-primary/10 data-pressed:text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))] contrast-more:data-pressed:border-current " +
-  "forced-colors:data-pressed:forced-color-adjust-none forced-colors:data-pressed:border-[Highlight] forced-colors:data-pressed:bg-[Highlight] " +
+  "data-pressed:[--ouro-bg:color-mix(in_oklab,var(--primary)_10%,transparent)] data-pressed:text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))] contrast-more:data-pressed:[--ouro-bd:currentColor] " +
+  "forced-colors:data-pressed:forced-color-adjust-none forced-colors:data-pressed:[--ouro-bd:Highlight] forced-colors:data-pressed:[--ouro-bg:Highlight] " +
   "forced-colors:data-pressed:text-[HighlightText] forced-colors:data-pressed:outline-[CanvasText]";
 
 /**
@@ -81,7 +84,7 @@ type ToggleSize = keyof typeof sizes;
  * @claim "`pill` is fully rounded with regular-weight" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle looks > rounds fully with regular-weight text with shape pill)
  */
 const shapes = {
-  rect: "rounded-lg font-medium",
+  rect: "rounded-lg font-medium [--ouro-sq-r:calc(var(--radius-lg)/var(--ouro-radius-scale,1))]",
   pill: "rounded-full font-normal",
 } as const;
 
@@ -106,8 +109,8 @@ const squareClass = "aspect-square px-0";
  * @claim "`plain` has no border until it" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle looks > draws a border with variant outline)
  */
 const looks = {
-  plain: "border-transparent bg-transparent text-foreground",
-  outline: "border-border bg-transparent text-foreground data-pressed:border-primary/45",
+  plain: "[--ouro-bd:transparent] [--ouro-bg:transparent] text-foreground",
+  outline: "[--ouro-bd:var(--border)] [--ouro-bg:transparent] text-foreground data-pressed:[--ouro-bd:color-mix(in_oklab,var(--primary)_45%,transparent)]",
 } as const;
 
 /**

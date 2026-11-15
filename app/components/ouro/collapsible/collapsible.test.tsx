@@ -4,6 +4,7 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, server, userEvent } from "vitest/browser";
 import { Collapsible, type CollapsibleProps } from "~/components/ouro/collapsible/collapsible";
+import { watchLayoutReads } from "~/lib/ouro/testing/layout-reads";
 import { act } from "~/lib/ouro/testing/act";
 import { pressTab } from "~/lib/ouro/testing/tab";
 
@@ -53,6 +54,26 @@ async function settled(element: Element) {
 const facts = <p>Calories 420, protein 18g</p>;
 
 describe("Collapsible", () => {
+  it("reads no style or layout when it mounts closed, however many there are", async () => {
+    // The development theme check reads once per page; let it happen first.
+    await render(<Collapsible title="Warm up">{facts}</Collapsible>);
+    const watch = watchLayoutReads();
+    try {
+      await render(
+        <>
+          {Array.from({ length: 20 }, (_, i) => (
+            <Collapsible key={i} title={`Section ${i}`}>
+              {facts}
+            </Collapsible>
+          ))}
+        </>,
+      );
+    } finally {
+      watch.stop();
+    }
+    expect(watch.names()).toEqual([]);
+  });
+
   it("keeps the trigger's edge under forced colours, which drop its fill", async () => {
     await commands.emulateMedia({ forcedColors: "active" });
     try {
@@ -113,12 +134,12 @@ describe("Collapsible", () => {
     expect(second.host.querySelector("output")!.textContent).toBe("true");
   });
 
-  it("animates the panel to its measured height, and not with reduced motion", async () => {
+  it("animates the panel open with a grid row, and not with reduced motion", async () => {
     const r = await render(<Collapsible title="Nutrition facts">{facts}</Collapsible>);
     const panel = r.panel;
     let heightStarted = false;
     const record = (event: TransitionEvent) => {
-      if (event.target === panel && event.propertyName === "height") heightStarted = true;
+      if (event.target === panel && event.propertyName === "grid-template-rows") heightStarted = true;
     };
     panel.addEventListener("transitionrun", record);
     try {
@@ -128,9 +149,14 @@ describe("Collapsible", () => {
       panel.removeEventListener("transitionrun", record);
     }
     await settled(r.panel);
-    expect(r.panel.getBoundingClientRect().height).toBeCloseTo(r.panel.scrollHeight, 0);
+    expect(r.panel.getBoundingClientRect().height).toBeGreaterThan(20);
+    await userEvent.click(r.trigger);
+    await expect.poll(() => r.panel.hasAttribute("hidden")).toBe(true);
     await commands.emulateMedia({ reducedMotion: "reduce" });
-    expect(getComputedStyle(r.panel).transitionProperty).not.toMatch(/height/);
+    expect(getComputedStyle(r.panel).transitionProperty).not.toMatch(/grid-template-rows/);
+    await userEvent.click(r.trigger);
+    await userEvent.click(r.trigger);
+    await expect.poll(() => r.panel.hasAttribute("hidden")).toBe(true);
   });
 
   it("rotates the chevron while open", async () => {
@@ -199,6 +225,77 @@ describe("Collapsible", () => {
       expect(r.panel.getAttribute("hidden")).toBe("");
       expect(r.panel.getBoundingClientRect().height).toBe(0);
     }
+  });
+
+  it("marks its state on the trigger and panel, hides again once closed, and ignores a page search after unmount", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const r = await render(
+      <Collapsible title="Nutrition facts" open={false} onOpenChange={first}>
+        {facts}
+      </Collapsible>,
+    );
+    expect(r.trigger.hasAttribute("data-panel-open")).toBe(false);
+    expect(r.trigger.hasAttribute("aria-controls")).toBe(false);
+    expect(r.panel.hasAttribute("data-open")).toBe(false);
+    expect(r.panel.hasAttribute("data-moved")).toBe(false);
+    expect(r.panel.getAttribute("hidden")).not.toBeNull();
+    // A later render's handler is the one a page search reaches.
+    await r.rerender(
+      <Collapsible title="Nutrition facts" open={false} onOpenChange={second}>
+        {facts}
+      </Collapsible>,
+    );
+    const panel = r.panel;
+    await act(async () => panel.dispatchEvent(new Event("beforematch")));
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledWith(true);
+    await r.rerender(
+      <Collapsible title="Nutrition facts" open onOpenChange={second}>
+        {facts}
+      </Collapsible>,
+    );
+    expect(r.trigger.hasAttribute("data-panel-open")).toBe(true);
+    expect(r.trigger.getAttribute("aria-controls")).toBe(r.panel.id);
+    expect(r.panel.hasAttribute("data-open")).toBe(true);
+    expect(r.panel.hasAttribute("data-moved")).toBe(true);
+    expect(r.panel.hasAttribute("hidden")).toBe(false);
+    await r.rerender(
+      <Collapsible title="Nutrition facts" open={false} onOpenChange={second}>
+        {facts}
+      </Collapsible>,
+    );
+    await expect.poll(() => r.panel.hasAttribute("hidden")).toBe(true);
+    if ("onbeforematch" in document.body) expect(r.panel.getAttribute("hidden")).toBe("until-found");
+    // The panel stays shown while it closes, so the transition can run.
+    await r.rerender(
+      <Collapsible title="Nutrition facts" open onOpenChange={second}>
+        {facts}
+      </Collapsible>,
+    );
+    await settled(r.panel);
+    await r.rerender(
+      <Collapsible title="Nutrition facts" open={false} onOpenChange={second}>
+        {facts}
+      </Collapsible>,
+    );
+    expect(r.panel.hasAttribute("hidden")).toBe(false);
+    await expect.poll(() => r.panel.hasAttribute("hidden")).toBe(true);
+    second.mockClear();
+    await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    panel.dispatchEvent(new Event("beforematch"));
+    expect(second).not.toHaveBeenCalled();
+  });
+
+  it("marks a disabled trigger", async () => {
+    const r = await render(
+      <Collapsible title="Nutrition facts" disabled>
+        {facts}
+      </Collapsible>,
+    );
+    expect(r.trigger.hasAttribute("data-disabled")).toBe(true);
+    const plain = await render(<Collapsible title="Other">{facts}</Collapsible>);
+    expect(plain.trigger.hasAttribute("data-disabled")).toBe(false);
   });
 
   it("links the title and panel in server HTML and hydrates without a mismatch", async () => {

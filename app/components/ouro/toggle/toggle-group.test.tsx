@@ -347,7 +347,7 @@ describe("ToggleGroup development messages", () => {
     expect(warn).toHaveBeenCalledWith('[ouro-ui] ToggleGroup: variant="default" is not a variant. Fix: <ToggleGroup>.');
     expect(warn).toHaveBeenCalledWith('[ouro-ui] ToggleGroup: size="lg2" is not a size. Fix: <ToggleGroup size="md">.');
     expect(warn).toHaveBeenCalledWith('[ouro-ui] ToggleGroup: shape="round" is not a shape. Fix: <ToggleGroup shape="pill">.');
-    expect(toggles[0]!.className).toContain("border-transparent");
+    expect(toggles[0]!.className).toContain("[--ouro-bd:transparent]");
     expect(toggles[0]!.getAttribute("data-shape")).toBe("rect");
   });
 
@@ -396,5 +396,23 @@ describe("ToggleGroup server rendering", () => {
     expect(error).not.toHaveBeenCalled();
     await userEvent.click(host.querySelector("button")!);
     expect(host.querySelector("button")!.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("gives a rect toggle the squircle marker and a hidden surface, and a pill neither", async () => {
+    const { host } = await render(
+      <>
+        <ToggleGroup label="Rect" items={align} />
+        <ToggleGroup label="Pill" items={align} shape="pill" />
+      </>,
+    );
+    const [rectGroup, pillGroup] = [...host.querySelectorAll<HTMLElement>('[data-ouro="toggle-group"]')];
+    const rect = rectGroup!.querySelector<HTMLElement>("[data-shape]");
+    const pill = pillGroup!.querySelector<HTMLElement>("[data-shape]");
+    const surface = rect!.querySelector<HTMLElement>("[data-ouro-surface]")!;
+    expect(rect!.getAttribute("data-ouro-squircle")).toBe("");
+    expect(surface.getAttribute("aria-hidden")).toBe("true");
+    expect(surface.style.zIndex).toBe("-1");
+    expect(pill!.hasAttribute("data-ouro-squircle")).toBe(false);
+    expect(pill!.querySelector("[data-ouro-surface]")).toBeNull();
   });
 });

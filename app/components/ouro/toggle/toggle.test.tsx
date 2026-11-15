@@ -328,7 +328,7 @@ describe("Toggle development messages", () => {
     const props = { label: "Bold", [prop]: value } as unknown as ToggleProps;
     const { toggle } = await render(<Toggle {...props} />);
     expect(warn).toHaveBeenCalledWith(`[ouro-ui] Toggle: ${problem}. Fix: ${fix}.`);
-    expect(toggle.className).toContain("border-transparent");
+    expect(toggle.className).toContain("[--ouro-bd:transparent]");
     expect(toggle.getAttribute("data-shape")).toBe("rect");
   });
 
@@ -462,5 +462,25 @@ describe("Toggle under forced colours", () => {
     } finally {
       await commands.emulateMedia({ forcedColors: "none" });
     }
+  });
+
+  it("carries the squircle marker and a hidden surface behind the label on a rect, and neither on a pill", async () => {
+    const { host } = await render(
+      <>
+        <Toggle label="Rect" />
+        <Toggle label="Pill" shape="pill" />
+      </>,
+    );
+    const [rect, pill] = [...host.querySelectorAll<HTMLElement>('[data-ouro="toggle"]')];
+    const surface = rect!.querySelector<HTMLElement>("[data-ouro-surface]")!;
+    expect(rect!.getAttribute("data-ouro-squircle")).toBe("");
+    expect(rect!.className).toContain("press relative isolate");
+    expect(rect!.className).toContain("[--ouro-state:0.08]");
+    expect(surface.getAttribute("aria-hidden")).toBe("true");
+    expect(surface.style.zIndex).toBe("-1");
+    expect(surface.previousElementSibling?.className).toContain("pointer-coarse:block");
+    expect(getComputedStyle(rect!).getPropertyValue("--ouro-sq-w").trim()).toBe("1px");
+    expect(pill!.hasAttribute("data-ouro-squircle")).toBe(false);
+    expect(pill!.querySelector("[data-ouro-surface]")).toBeNull();
   });
 });

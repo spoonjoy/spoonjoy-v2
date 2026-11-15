@@ -117,8 +117,11 @@ export type BadgeProps = BadgeCommonProps & (BadgeLinkModeProps | BadgeButtonMod
 
 // Class strings are literal so the app's Tailwind finds them when it compiles.
 const base =
-  "relative box-border inline-flex shrink-0 items-center gap-1 align-middle " +
-  "h-6 rounded-md border border-solid px-2 text-xs/none font-medium whitespace-nowrap no-underline";
+  "relative isolate box-border inline-flex shrink-0 items-center gap-1 align-middle " +
+  // Stryker disable next-line StringLiteral: a class string in a class position, unchanged but for the joining plus
+  "h-6 rounded-md border border-solid px-2 text-xs/none font-medium whitespace-nowrap no-underline " +
+  // Where corner-shape is missing, the surface slot paints the background, border and state layer instead (see ouro-base.css).
+  "bg-(--ouro-bg) border-(--ouro-bd) [--ouro-sq-w:1px] [--ouro-sq-r:calc(var(--radius-md)/var(--ouro-corner-fallback,1))]";
 
 // Only for the link and button kinds: press feedback, a state layer and the focus ring,
 // as on Button.
@@ -128,6 +131,8 @@ const interactive =
   "before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:[corner-shape:inherit] before:bg-current " +
   "before:opacity-0 before:transition-opacity before:duration-(--ouro-duration-fast) before:ease-[ease] " +
   "not-data-disabled:not-active:pointer-fine:hover:before:opacity-8 not-data-disabled:active:before:opacity-14 " +
+  // Stryker disable next-line StringLiteral: a class string in a class position, which no test reads
+  "not-data-disabled:not-active:pointer-fine:hover:[--ouro-state:0.08] not-data-disabled:active:[--ouro-state:0.14] " +
   "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -135,25 +140,25 @@ const interactive =
 // 4.5:1 on the tint under shadcn's stock values too. `secondary` is shadcn's quiet surface.
 const looks = {
   solid: {
-    primary: "border-transparent bg-primary text-primary-foreground",
-    secondary: "border-transparent bg-secondary text-secondary-foreground",
-    destructive: "border-transparent bg-destructive text-destructive-foreground",
-    success: "border-transparent bg-success text-success-foreground",
-    warning: "border-transparent bg-warning text-warning-foreground",
+    primary: "[--ouro-bd:transparent] [--ouro-bg:var(--primary)] text-primary-foreground",
+    secondary: "[--ouro-bd:transparent] [--ouro-bg:var(--secondary)] text-secondary-foreground",
+    destructive: "[--ouro-bd:transparent] [--ouro-bg:var(--destructive)] text-destructive-foreground",
+    success: "[--ouro-bd:transparent] [--ouro-bg:var(--success)] text-success-foreground",
+    warning: "[--ouro-bd:transparent] [--ouro-bg:var(--warning)] text-warning-foreground",
   },
   soft: {
-    primary: "border-transparent bg-primary/10 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))] contrast-more:border-current",
-    secondary: "border-transparent bg-muted text-foreground contrast-more:border-current",
-    destructive: "border-transparent bg-destructive/10 text-[color-mix(in_oklab,var(--destructive)_80%,var(--foreground))] contrast-more:border-current",
-    success: "border-transparent bg-success/10 text-[color-mix(in_oklab,var(--success)_80%,var(--foreground))] contrast-more:border-current",
-    warning: "border-transparent bg-warning/10 text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))] contrast-more:border-current",
+    primary: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--primary)_10%,transparent)] text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))] contrast-more:[--ouro-bd:currentColor]",
+    secondary: "[--ouro-bd:transparent] [--ouro-bg:var(--muted)] text-foreground contrast-more:[--ouro-bd:currentColor]",
+    destructive: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--destructive)_10%,transparent)] text-[color-mix(in_oklab,var(--destructive)_80%,var(--foreground))] contrast-more:[--ouro-bd:currentColor]",
+    success: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--success)_10%,transparent)] text-[color-mix(in_oklab,var(--success)_80%,var(--foreground))] contrast-more:[--ouro-bd:currentColor]",
+    warning: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--warning)_10%,transparent)] text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))] contrast-more:[--ouro-bd:currentColor]",
   },
   outline: {
-    primary: "border-primary/45 bg-transparent text-primary",
-    secondary: "border-border bg-transparent text-foreground",
-    destructive: "border-destructive/45 bg-transparent text-destructive",
-    success: "border-success/45 bg-transparent text-success",
-    warning: "border-warning/45 bg-transparent text-warning",
+    primary: "[--ouro-bd:color-mix(in_oklab,var(--primary)_45%,transparent)] [--ouro-bg:transparent] text-primary",
+    secondary: "[--ouro-bd:var(--border)] [--ouro-bg:transparent] text-foreground",
+    destructive: "[--ouro-bd:color-mix(in_oklab,var(--destructive)_45%,transparent)] [--ouro-bg:transparent] text-destructive",
+    success: "[--ouro-bd:color-mix(in_oklab,var(--success)_45%,transparent)] [--ouro-bg:transparent] text-success",
+    warning: "[--ouro-bd:color-mix(in_oklab,var(--warning)_45%,transparent)] [--ouro-bg:transparent] text-warning",
   },
 } as const;
 
@@ -256,8 +261,9 @@ export function Badge(props: BadgeProps): JSX.Element {
   if (rest.href !== undefined) {
     const { type: _type, disabled: _disabled, ...anchorProps } = rest as Omit<BadgeLinkProps, keyof BadgeBaseProps>;
     return (
-      <RouterLink data-ouro-control="badge" data-ouro-part="root" {...anchorProps} onClick={onClick} data-ouro="badge" className={cn(base, interactive, look, className)}>
+      <RouterLink data-ouro-control="badge" data-ouro-part="root" {...anchorProps} onClick={onClick} data-ouro="badge" data-ouro-squircle="" className={cn(base, interactive, look, className)}>
         <TouchTarget />
+        <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />
         {content}
       </RouterLink>
     );
@@ -265,8 +271,9 @@ export function Badge(props: BadgeProps): JSX.Element {
   const { ref, type = "button", disabled, ...buttonProps } = rest as Omit<BadgeButtonProps, keyof BadgeBaseProps>;
   if (onClick !== undefined) {
     return (
-      <BaseButton data-ouro-control="badge" data-ouro-part="root" {...buttonProps} onClick={onClick} disabled={disabled} ref={ref as Ref<HTMLElement> | undefined} type={type} data-ouro="badge" className={cn(base, interactive, look, className)}>
+      <BaseButton data-ouro-control="badge" data-ouro-part="root" {...buttonProps} onClick={onClick} disabled={disabled} ref={ref as Ref<HTMLElement> | undefined} type={type} data-ouro="badge" data-ouro-squircle="" className={cn(base, interactive, look, className)}>
         <TouchTarget />
+        <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />
         {content}
       </BaseButton>
     );
@@ -274,7 +281,8 @@ export function Badge(props: BadgeProps): JSX.Element {
   // A static Badge is a <span>, not a button: the button's own attributes are dropped.
   const { name: _name, value: _value, form: _form, ...spanProps } = buttonProps;
   return (
-    <span {...(spanProps as HTMLAttributes<HTMLSpanElement>)} ref={ref} data-ouro="badge" className={cn(base, look, className)}>
+    <span {...(spanProps as HTMLAttributes<HTMLSpanElement>)} ref={ref} data-ouro="badge" data-ouro-squircle="" className={cn(base, look, className)}>
+      <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />
       {content}
     </span>
   );
