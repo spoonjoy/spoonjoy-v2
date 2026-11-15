@@ -5,10 +5,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-// The consumer source the v1.3.99 install starts from: main after the v1.3.62 adoption (#708).
-const acceptedHead = "25903757accc52c0bfc96242c643a5ef1a18a6d7";
-const tag = "v1.3.99";
-const tagCommit = "4cd281f96956d42fa5c8e31b791b0b1e682ee6a1";
+// The consumer source the v1.3.113 install starts from: main after the Ouro UI core pin bump (#712).
+const acceptedHead = "dbaa4745bf7110ec3bbd4579c46c70ca0ce16a0e";
+const tag = "v1.3.113";
+const tagCommit = "e0c70905c15055a45d8e07bfe7d7cb7555a7fd19";
 // Every installed registry item, plus the v1.2.0 items Spoonjoy's screens now compose (SkipLink,
 // TabBar, RouteProgress, ColorSchemeToggle, PageHeader, CopyButton, CodeBlock, Timer, TimerTray,
 // Celebrate, ChoiceCard, ImageCropper, ImageField, ShareButton, SyncStatus, LocalDate,
@@ -66,11 +66,8 @@ const installed = JSON.parse(readFileSync(".github/ouro-hx-installed.json", "utf
 assert.equal(installed.tag, tag);
 assert.equal(installed.tagCommit, tagCommit);
 const expected = installed.files;
-// Paths v1.3.99 adds to the v1.3.62 install (Tabs' layout test); every other path in this
-// patch updates an existing file.
-const expectedNew = [
-  "app/components/ouro/tabs/tabs.layout.test.tsx",
-].filter((file) => !existsSync(file));
+// Paths v1.3.113 adds to the v1.3.99 install: none. Every path in this patch updates an existing file.
+const expectedNew = [];
 const protectedPaths = [
   "app", "test", "e2e", "package.json", "pnpm-lock.yaml", "components.json",
   "vitest.config.ts", "vitest.ouro.config.ts", "playwright.ouro.config.ts",
