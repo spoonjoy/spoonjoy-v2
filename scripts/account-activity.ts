@@ -5,6 +5,7 @@
 //   pnpm exec tsx scripts/account-activity.ts --recent   (the 20 most recent sign-ins)
 //
 // Uses CLOUDFLARE_D1_API_TOKEN and CLOUDFLARE_ACCOUNT_ID when set, else Wrangler's own login.
+// Without either, run it in CI: gh workflow run account-activity.yml -R spoonjoy/spoonjoy-v2 --ref main -f account=<ref>
 import { createWranglerRunner, wranglerEnv, type WranglerRunner } from "./production-image-key";
 
 const ACCOUNT_REF = /^[A-Za-z0-9_.-]{1,64}$/;
