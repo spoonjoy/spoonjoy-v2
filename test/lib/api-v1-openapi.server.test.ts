@@ -29,6 +29,7 @@ const OPERATION_SCOPES = {
   "POST /api/v1/auth/password/native": [],
   "POST /api/v1/native/telemetry": [],
   "POST /api/v1/native/diagnostics": [],
+  "GET /api/v1/native/config": [],
   "GET /api/v1/search": [],
   "GET /api/v1/recipes": ["recipes:read"],
   "POST /api/v1/recipes": ["kitchen:write"],

@@ -157,6 +157,37 @@ Notes:
 - Optional ingredient parsing runtime knobs are `INGREDIENT_PARSE_PROVIDER`, `INGREDIENT_PARSE_MODEL`, `INGREDIENT_PARSE_TIMEOUT_MS`, and `INGREDIENT_PARSE_MAX_RETRIES`. The safe default is OpenAI with `gpt-4o-mini`, an 8000ms timeout, and 1 retry.
 - Optional recipe-image provider runtime knobs are `IMAGE_PROVIDER_PRIMARY`, `IMAGE_PROVIDER_FALLBACKS`, `GEMINI_IMAGE_MODEL`, and `GEMINI_IMAGE_TIMEOUT_MS`. The safe default is configured providers in `openai,gemini` order with a 30000ms Gemini request timeout; set `IMAGE_PROVIDER_PRIMARY=gemini`, `IMAGE_PROVIDER_FALLBACKS=openai`, and `GEMINI_IMAGE_MODEL=gemini-3.1-flash-image` to route image stylization through Gemini first.
 
+### Native kill switches
+
+The Spoonjoy Apple app reads `GET /api/v1/native/config` and leaves alone each feature path the server switches off, so a misbehaving feature can be stopped without a new app build or App Review ([`api.md`](api.md#native-kill-switches)). The switches live in the Worker secret `SPOONJOY_NATIVE_KILL_SWITCHES`, read on every request:
+
+- `none` (or unset): every feature is on.
+- A comma-separated list: `cook-session-sync,spotlight-indexing`.
+- JSON, to record why: `{"cook-session-sync":"Cook sessions are being repaired"}`.
+
+The features are `cook-session-sync` (cross-device cook progress) and `spotlight-indexing` (the app's Spotlight and App Entity index refresh), listed in `app/lib/native-kill-switches.server.ts` and in spoonjoy-apple's `NativeFeature`. A value the Worker cannot read switches nothing off.
+
+To flip a switch in production, run the `Native Kill Switches` workflow from main. It refuses an unknown feature before changing anything, stores the value in one new Worker version tagged with the source commit production already runs (a plain `wrangler secret put` would deploy an untagged version, which the next Production Deploy refuses), deploys it, and checks that production answers the new switches:
+
+```bash
+gh workflow run native-kill-switches.yml --ref main -f mode=set -f switches=cook-session-sync
+gh workflow run native-kill-switches.yml --ref main -f mode=set -f switches='{"spotlight-indexing":"Indexing crash in 1.3 (1234)"}'
+gh workflow run native-kill-switches.yml --ref main -f mode=set -f switches=none   # everything back on
+gh workflow run native-kill-switches.yml --ref main -f mode=report               # read only
+curl -s https://spoonjoy.app/api/v1/native/config                               # or read it yourself
+```
+
+On QA, set the secret directly: `pnpm exec wrangler secret put SPOONJOY_NATIVE_KILL_SWITCHES -c wrangler.json --env qa --name spoonjoy-v2-qa`.
+
+The answer carries `Cache-Control: public, max-age=60`. The app fetches it in the background at launch and when it comes to the foreground, at most once every 15 minutes. A switch turned off stops the feature in a running app from the next time the feature starts, so it reaches an active device within about 15 minutes of the deploy; a switch turned back on waits for the app's next launch. Saved switches older than 7 days are dropped on the device, so a device that cannot reach the server never keeps a feature off for good.
+
+Every Worker version carries its own secrets, so a rollback to an older version also restores the switches that version was deployed with. After any rollback, in a Production Deploy or by hand, check the switches and set them again if they changed:
+
+```bash
+gh workflow run native-kill-switches.yml --ref main -f mode=report   # compare with what you expect
+gh workflow run native-kill-switches.yml --ref main -f mode=set -f switches='<the switches you want>'
+```
+
 ### CSP Enforcement And Rollback
 
 `SPOONJOY_CSP_MODE=enforce` emits the blocking `Content-Security-Policy` header. QA and production source config intentionally set that value so release owners can prove the exact SHA in QA first, then release the same SHA to production. The policy keeps required runtime sources for fonts, the configured HTTPS `VITE_POSTHOG_HOST` ingestion origin and matching PostHog assets origin, legacy/imported HTTPS images, `data:`/`blob:` images, and the `/csp-report` violation sink.

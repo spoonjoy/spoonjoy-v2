@@ -9,6 +9,7 @@ import {
 import { OAUTH_ACCESS_TOKEN_TTL_SECONDS, OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS } from "~/lib/oauth-server.server";
 import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN_SOURCE } from "~/lib/username";
 import { SEARCH_SCOPES } from "~/lib/search.server";
+import { NATIVE_FEATURES, NATIVE_KILL_SWITCH_REASON_MAX_LENGTH } from "~/lib/native-kill-switches.server";
 import { PRODUCT_ACTIVATION_PENDING_MESSAGE } from "~/lib/saved-recipe-cutover.server";
 
 // UpdateAccountProfileRequest. A JSON Schema pattern/minLength/maxLength on username would reject
@@ -385,6 +386,19 @@ const schemas = {
   }),
   NativeTelemetryData: objectSchema(["accepted"], {
     accepted: { type: "boolean" },
+  }),
+  NativeKillSwitch: objectSchema(["off", "reason"], {
+    off: { const: true, description: "Always true: a feature that is on is left out of killSwitches." },
+    reason: { type: ["string", "null"], maxLength: NATIVE_KILL_SWITCH_REASON_MAX_LENGTH, description: "Why the operator switched the feature off, for diagnostics. Never shown as an error." },
+  }),
+  NativeConfigData: objectSchema(["killSwitches", "features"], {
+    killSwitches: {
+      type: "object",
+      description: "The native feature paths the server has switched off, by feature name. A feature that is not listed is on. Clients ignore names they do not know and keep every feature on when they cannot read this.",
+      propertyNames: { enum: [...NATIVE_FEATURES] },
+      additionalProperties: ref("NativeKillSwitch"),
+    },
+    features: { type: "array", items: { type: "string", enum: [...NATIVE_FEATURES] }, description: "Every feature name this server can switch off." },
   }),
   NativeAppleSignInTokenData: objectSchema(["action", "userId", "client_id", "access_token", "refresh_token", "token_type", "expires_in", "scope"], {
     action: { type: "string", enum: ["user_created", "user_logged_in"] },
@@ -1718,6 +1732,7 @@ const schemas = {
   CreateTokenEnvelope: successEnvelope(ref("CreateTokenData")),
   RevokeTokenEnvelope: successEnvelope(ref("RevokeTokenData")),
   NativeTelemetryEnvelope: successEnvelope(ref("NativeTelemetryData")),
+  NativeConfigEnvelope: successEnvelope(ref("NativeConfigData")),
   NativeAccountSyncEnvelope: successEnvelope(ref("NativeAccountSyncData")),
   ShoppingListEnvelope: successEnvelope(ref("ShoppingListData")),
   ShoppingListSyncEnvelope: successEnvelope(ref("ShoppingListSyncData")),
@@ -1808,6 +1823,9 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/native/diagnostics": {
     POST: { operationId: "postApiV1NativeDiagnostics", tags: ["Native"], summary: "Capture MetricKit crash and hang summaries from the first-party native apps", auth: "optional", scopes: [], success: { 202: "NativeTelemetryEnvelope" }, errors: ["invalid_json", "validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "NativeDiagnosticsRequest" },
+  },
+  "/api/v1/native/config": {
+    GET: { operationId: "getApiV1NativeConfig", tags: ["Native"], summary: "Read which Spoonjoy Apple app features the server has switched off", auth: "optional", scopes: [], success: { 200: "NativeConfigEnvelope" }, errors: ["method_not_allowed", "rate_limited", "internal_error"] },
   },
   "/api/v1/search": {
     GET: { operationId: "getApiV1Search", tags: ["Search"], summary: "Search recipes, cookbooks, chefs, and authorized private shopping-list items", auth: "optional", scopes: [], success: { 200: "SearchEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.searchQuery, queryParameters.searchQ, queryParameters.scope, queryParameters.limit] },
@@ -2866,6 +2884,11 @@ const responseExamples: Record<string, unknown> = {
     },
   },
   NativeTelemetryEnvelope: { ok: true, requestId: "req_example", data: { accepted: true } },
+  NativeConfigEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { killSwitches: { "cook-session-sync": { off: true, reason: "Cook sessions are being repaired" } }, features: [...NATIVE_FEATURES] },
+  },
   TokenListEnvelope: { ok: true, requestId: "req_example", data: { tokens: [exampleCredential] } },
   CreateTokenEnvelope: { ok: true, requestId: "req_example", data: { token: "sj_secret", credential: exampleCredential } },
   RevokeTokenEnvelope: { ok: true, requestId: "req_example", data: { revoked: true, credential: { ...exampleCredential, revokedAt: exampleTimestamp } } },

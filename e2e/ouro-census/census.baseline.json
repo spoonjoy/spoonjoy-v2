@@ -2157,6 +2157,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"Read which Spoonjoy Apple app features the server has switched off\" [choice-card/input] in group \"Native\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Redirect the chef through OAuth consent\" [choice-card/input] in group \"OAuth\"",
           "count": 1
         },
@@ -9428,6 +9432,10 @@
         },
         {
           "identity": "radio \"Read the signed-in chef's fellow chefs, kitchen visitors, and recent chef activity\" [choice-card/input] in group \"Account\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Read which Spoonjoy Apple app features the server has switched off\" [choice-card/input] in group \"Native\"",
           "count": 1
         },
         {

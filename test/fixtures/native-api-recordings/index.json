@@ -380,6 +380,11 @@
     "status": 200
   },
   {
+    "name": "native-config",
+    "endpoint": "GET /api/v1/native/config",
+    "status": 200
+  },
+  {
     "name": "cook-session-patch",
     "endpoint": "PATCH /api/cook-sessions/{recipeId}",
     "status": 200

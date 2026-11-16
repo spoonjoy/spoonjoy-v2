@@ -111,6 +111,8 @@ declare global {
     GOOGLE_API_KEY?: string;
     GEMINI_API_KEY?: string;
     GEMINI_IMAGE_MODEL?: string;
+    /** Native app feature paths switched off without an app build: none, a comma list of features, or JSON (native-kill-switches.server.ts). */
+    SPOONJOY_NATIVE_KILL_SWITCHES?: string;
     /** "off" stops every AI generation (kill switch). */
     SPOONJOY_AI_IMAGE_GENERATION?: string;
     /** Global AI generations per UTC day across all users; default 200. */

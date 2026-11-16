@@ -505,6 +505,13 @@ describe("API v1 public telemetry", () => {
     }
     expect(JSON.stringify(captureInputs())).not.toContain(user.username);
   });
+
+  it("names the native config read operation", async () => {
+    const response = await loader(routeArgs(publicRequest("http://localhost/api/v1/native/config", "req_native_config"), "native/config").args);
+    expect(response.status).toBe(200);
+    expectSafeApiV1Event("/api/v1/native/config", "req_native_config");
+    expect(apiV1Event("/api/v1/native/config", "req_native_config")?.properties).toMatchObject({ operation: "native.config.read" });
+  });
 });
 
 describe("API v1 mutation and validation telemetry", () => {

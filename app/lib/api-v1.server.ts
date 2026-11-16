@@ -153,6 +153,7 @@ import {
 } from "~/lib/native-password-auth.server";
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { buildSourceSha, deploymentMetadataFromEnv } from "~/lib/build-info.server";
+import { nativeConfigData } from "~/lib/native-kill-switches.server";
 import { DEFAULT_RETRY_AFTER_SECONDS, enforceAuthRateLimit, enforceRateLimit } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
@@ -420,6 +421,9 @@ function apiV1SamePartyPrivateSuccess(
   return Response.json({ ok: true, requestId, data }, { status, headers });
 }
 
+/** Kill switches are the same for everyone; a minute's cache bounds how long a flip takes to reach a device. */
+const NATIVE_CONFIG_CACHE_CONTROL = "public, max-age=60";
+
 const TOKEN_RESPONSE_HEADERS = {
   "Cache-Control": "no-store",
   Pragma: "no-cache",
@@ -618,6 +622,8 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "auth.apple.native.sign-in";
     case "POST auth-password-native":
       return "auth.password.native.sign-in";
+    case "GET native-config":
+      return "native.config.read";
     case "POST native-telemetry":
       return "native.telemetry.capture";
     case "GET search":
@@ -7999,6 +8005,15 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
 
     if (args.request.method === "POST" && path === "auth/password/native") {
       const response = await withNativeSignInOutcome(args, "password", (outcome) => handleNativePasswordSignInRequest(args, requestId, outcome));
+      return observeApiV1Response(args, { requestId, path, response, startedAt });
+    }
+
+    if (args.request.method === "GET" && path === "native/config") {
+      // Public and credential-free: the app asks before it may have a working session, and an expired
+      // token must never stop it learning which features are switched off.
+      const response = apiV1Success(requestId, nativeConfigData(args.context.cloudflare?.env, apiV1WaitUntilFor(args)), 200, {
+        "Cache-Control": NATIVE_CONFIG_CACHE_CONTROL,
+      });
       return observeApiV1Response(args, { requestId, path, response, startedAt });
     }
 
