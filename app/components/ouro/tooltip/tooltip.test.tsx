@@ -286,13 +286,29 @@ describe("Tooltip", () => {
     await renderTooltip();
     await userEvent.hover(trigger());
     await shown();
-    const rest = JSON.stringify(document.querySelector<HTMLElement>('[data-ouro="tooltip-positioner"]')!.getBoundingClientRect());
+    const place = () => JSON.stringify(document.querySelector<HTMLElement>('[data-ouro="tooltip-positioner"]')!.getBoundingClientRect());
+    // The positioner settles over a frame or two after the fade; read its rest place once two reads agree.
+    let rest = place();
+    await expect
+      .poll(async () => {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const now = place();
+        const same = now === rest;
+        rest = now;
+        return same;
+      })
+      .toBe(true);
     await commands.pointerPress({ selector: '[data-ouro="button"]', action: "down" });
     try {
       await expect.poll(() => getComputedStyle(trigger()).scale).toBe("0.97");
       // Base UI closes a tooltip on pointer-down; if it were kept, it must not have moved.
-      const kept = document.querySelector<HTMLElement>('[data-ouro="tooltip-positioner"]');
-      expect(kept === null || JSON.stringify(kept.getBoundingClientRect()) === rest).toBe(true);
+      // A closing tooltip is read while it leaves, so wait for it to be gone or at rest.
+      await expect
+        .poll(() => {
+          const kept = document.querySelector<HTMLElement>('[data-ouro="tooltip-positioner"]');
+          return kept === null || JSON.stringify(kept.getBoundingClientRect()) === rest;
+        })
+        .toBe(true);
     } finally {
       await commands.pointerPress({ selector: '[data-ouro="button"]', action: "up" });
     }

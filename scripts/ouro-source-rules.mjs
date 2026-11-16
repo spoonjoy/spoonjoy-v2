@@ -17,7 +17,8 @@ import ts from "typescript";
 // with PostCSS, and reports each offender by category:
 //
 // - raw-button, raw-anchor, raw-input, raw-select, raw-textarea, details-summary: the intrinsic
-//   element, and React Router's Link/NavLink as raw anchors. `<input type="hidden">` is exempt,
+//   element, and React Router's Link/NavLink as raw anchors. A <details class="ouro-disclosure"> and
+//   its <summary class="ouro-disclosure-summary"> are ouro-base's disclosure, not raw. `<input type="hidden">` is exempt,
 //   and so is the anchor Ouro's Link renders through OuroProvider's linkComponent (a function typed
 //   with OuroLinkComponent).
 // - contenteditable, positive-tabindex, interactive-role (any element, Ouro calls included).
@@ -34,8 +35,9 @@ import ts from "typescript";
 //   selector puts that state on a class or a data-* hook (only the app's own hooks, `.<prefix>-`
 //   and `[data-<prefix>-`, when `hookPrefix` is set). Hover-only decoration and page motion are
 //   not control state. ouro-base's own classes for plain markup (OURO_BASE_CLASSES), which land in
-//   the app's stylesheet, are Ouro's (an app's own .ouro- class is not), and the message for a focus or press state written by
-//   hand names them.
+//   the app's stylesheet, are Ouro's (an app's own .ouro- class is not), and so is a rule that lays out an ancestor of an
+//   open .ouro-disclosure (:has(.ouro-disclosure[open])); the message for a focus, press or open
+//   state written by hand names them.
 // - hand-drawn-unread-dot: a plain accent-colored round dot in a row, which is an unread mark; UnreadDot draws it. (A dot on an avatar's corner stays hand-drawn-presence-dot.)
 // - hand-drawn-avatar, hand-drawn-presence-dot: an intrinsic element drawn as what Ouro UI's Avatar
 //   draws: a round picture (`img`, or `overflow-hidden`/`object-cover`, `rounded-full`, at least
@@ -336,7 +338,11 @@ export const HAND_DRAWN_SWITCH_FIX =
   "Use Switch from the registry (`<Switch label=\"...\" checked={on} onCheckedChange={setOn} />`), so it gets the Quiet glass look (the --ouro-glass tokens), focus, touch target and any change to switches.";
 /** What the control-state-style rule tells an app that draws focus or a pressed row by hand in a stylesheet. */
 export const FOCUS_RING_FIX =
-  "Give the element Ouro's classes from ouro-base instead of writing the state: class=\"ouro-focus-ring\" draws the ring Ouro's controls draw on keyboard focus (ouro-focus-ring-inset keeps it inside a row or cell a scroller would clip), and class=\"ouro-row\" tints a row that opens something while a mouse rests on it and while it is pressed. For a control with its own behaviour, use the Ouro component.";
+  "Give the element Ouro's classes from ouro-base instead of writing the state: class=\"ouro-focus-ring\" draws the ring Ouro's controls draw on keyboard focus (ouro-focus-ring-inset keeps it inside a row or cell a scroller would clip, and ouro-focus-ring-within draws it on a label or box whose control inside has it), class=\"ouro-row\" tints a row that opens something while a mouse rests on it and while it is pressed, class=\"ouro-reveal\" shows row actions or a card only while the mouse rests on it or its ouro-reveal-host or focus is in them, class=\"ouro-skip-link\" is a skip link, and class=\"ouro-focus-target\" with tabindex=\"-1\" takes a skip link's focus with no outline. For a control with its own behaviour, use the Ouro component.";
+
+/** What the details-summary and control-state-style rules tell an app that draws a disclosure, or its open state, by hand. */
+export const DISCLOSURE_FIX =
+  "Use Collapsible from the registry, or, where the page runs no script or builds its markup as strings, ouro-base's disclosure: <details class=\"ouro-disclosure\"><summary class=\"ouro-disclosure-summary\">Title</summary><div class=\"ouro-disclosure-panel\">...</div></details>, which draws the title, chevron and focus ring and opens with no script. To lay out a row around it, select it as :has(.ouro-disclosure[open]).";
 
 /** What the third-party-control rule tells an app that wraps itself in Base UI's CSPProvider. */
 export const CSP_PROVIDER_FIX =
@@ -355,7 +361,13 @@ const CATEGORY_MESSAGES = {
   "hand-drawn-switch": { headline: "New switch drawn by hand", fix: HAND_DRAWN_SWITCH_FIX },
   "gated-load": { headline: "New load that waits for focus, visibility, idle or scrolling", fix: GATED_LOAD_FIX },
   // A focus or press state written in a stylesheet has Ouro classes; a class-variant one names the element only.
-  "control-state-style": (tag) => (/:(?:focus|active)/.test(tag) ? { headline: "New focus or press style written by hand", fix: FOCUS_RING_FIX } : undefined),
+  "control-state-style": (tag) =>
+    /\[open\]|:open(?![\w-])/.test(tag)
+      ? { headline: "New open state written by hand", fix: DISCLOSURE_FIX }
+      : /:(?:focus|active)/.test(tag)
+        ? { headline: "New focus or press style written by hand", fix: FOCUS_RING_FIX }
+        : undefined,
+  "details-summary": { headline: "New <details> or <summary> drawn by hand", fix: DISCLOSURE_FIX },
   // Base UI's CSPProvider has an Ouro form; any other library's control takes the general message.
   "third-party-control": (tag) => (/\.CSPProvider$/.test(tag) ? { headline: "New Base UI CSPProvider", fix: CSP_PROVIDER_FIX } : undefined),
   // Names the phrase it found, the fingerprint's tag.
@@ -442,8 +454,13 @@ const STATE_SELECTOR = new RegExp(
 // only the app's own (`.app-`, `[data-app-`) with a `hookPrefix`.
 const ANY_HOOK = /\.[\w-]|\[data-/;
 /** The classes ouro-base defines for markup that is not an Ouro component; a stylesheet rule on them is Ouro's. Any other `.ouro-` name is the app's own. */
-export const OURO_BASE_CLASSES = ["ouro-focus-ring", "ouro-focus-ring-inset", "ouro-row"];
+export const OURO_BASE_CLASSES = ["ouro-focus-ring", "ouro-focus-ring-inset", "ouro-focus-ring-within", "ouro-focus-target", "ouro-skip-link", "ouro-row", "ouro-reveal", "ouro-reveal-host", "ouro-disclosure", "ouro-disclosure-summary", "ouro-disclosure-panel"];
 const OURO_CLASS = new RegExp(`\\.(?:${OURO_BASE_CLASSES.join("|")})(?![\\w-])`, "g");
+// An ancestor that lays itself out by whether an Ouro disclosure inside it is open (`tr:has(.ouro-disclosure[open])`):
+// the open state is Ouro's, and the layout around it is the app's.
+const OURO_DISCLOSURE_OPEN = /(:has\([^()]*?)\.ouro-disclosure(?:\[open\]|:open)(?![\w-])/g;
+// The intrinsic elements an ouro-base class makes Ouro's: <details class="ouro-disclosure">, <summary class="ouro-disclosure-summary">.
+const OURO_INTRINSIC_CLASS = { details: "ouro-disclosure", summary: "ouro-disclosure-summary" };
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
@@ -1671,7 +1688,13 @@ function scanScript(module, resolver, failureCopyAllow) {
     if (control.tags.length === 1 && control.tags[0] === "input" && literalValue(attributes.get("type")) === "hidden") return;
     if ((control.tags.includes("a") || control.router) && insideLinkAdapter(node)) return;
 
+    const classTokens = () =>
+      [...attributes]
+        .filter(([name, initializer]) => CLASS_ATTRIBUTE.test(name) && initializer)
+        .flatMap(([, initializer]) => collectStrings(initializer, declarations))
+        .flatMap((text) => text.split(/\s+/));
     for (const tag of [...control.tags, ...control.asTags]) {
+      if (OURO_INTRINSIC_CLASS[tag] && classTokens().includes(OURO_INTRINSIC_CLASS[tag])) continue;
       if (RAW_TAGS[tag]) add(RAW_TAGS[tag], node, tag, props);
     }
     if (control.router) add("raw-anchor", node, control.display, props);
@@ -1891,7 +1914,8 @@ function scanStylesheet(file, source, hook = ANY_HOOK) {
       for (const selector of node.selectors) {
         const scope = [...rules, selector.replace(/\s+/g, " ")].join(" ");
         // Ouro's own classes (.ouro-focus-ring, .ouro-row), which ouro-base puts in the app's stylesheet, are Ouro's.
-        if (hook.test(scope.replace(OURO_CLASS, "")) && STATE_SELECTOR.test(selector)) add(node, scope, atRules);
+        const own = (text) => text.replace(OURO_DISCLOSURE_OPEN, "$1");
+        if (hook.test(own(scope).replace(OURO_CLASS, "")) && STATE_SELECTOR.test(own(selector))) add(node, scope, atRules);
       }
     }
     if (node.type === "atrule" && node.name === "apply") {
