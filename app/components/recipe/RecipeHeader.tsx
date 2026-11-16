@@ -98,7 +98,8 @@ export function RecipeHeader({
   // Scale the servings text based on the scale factor
   const scaledServings = servings ? scaleServingsText(servings, scaleFactor) : undefined
   // Under the scale it reads as a phrase: a bare "4" says "Serves 4", as the recipe lists do.
-  const scaledServingsLabel = scaledServings ? formatServingsLabel(scaledServings) : undefined
+  // Labelled before it is scaled, so a number that scales to a fraction ("4 ½") keeps its word too.
+  const scaledServingsLabel = servings ? scaleServingsText(formatServingsLabel(servings), scaleFactor) : undefined
   const displayImageUrl = coverImageUrl && coverImageUrl.length > 0 ? coverImageUrl : undefined
   const resolvedChefHref = chefProfileHref ?? (chefId ? `/users/${chefId}` : undefined)
   const resolvedChefPhotoUrl = resolveChefAvatarUrl(chefPhotoUrl)
