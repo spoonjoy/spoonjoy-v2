@@ -279,6 +279,16 @@ describe('RecipeHeader', () => {
       expect(screen.getByRole('textbox', { name: 'Scale' })).toHaveAccessibleDescription('Serves 8')
     })
 
+    it('says what a bare servings number counts under the scale, as the recipe lists do', () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} servings="2" scaleFactor={1.5} />)
+      expect(screen.getByRole('textbox', { name: 'Scale' })).toHaveAccessibleDescription('Serves 3')
+    })
+
+    it('keeps the word when a bare servings number scales to a fraction', () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} servings="3" scaleFactor={1.5} />)
+      expect(screen.getByRole('textbox', { name: 'Scale' })).toHaveAccessibleDescription('Serves 4 ½')
+    })
+
     it('does not display original servings note when scale factor is not 1', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} servings="Serves 4" scaleFactor={2} />)
       expect(screen.queryByText(/originally: Serves 4/)).toBeNull()

@@ -5,7 +5,7 @@ import { Link } from '~/components/ouro/link/link'
 import { Avatar } from '../ouro/avatar/avatar'
 import { NumberField } from '~/components/ouro/number-field/number-field'
 import { SCALE_RANGE } from '~/components/cook/cook-controller'
-import { scaleServingsText } from '~/lib/quantity'
+import { formatServingsLabel, scaleServingsText } from '~/lib/quantity'
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 import { CoverProvenanceBadge } from './CoverProvenanceBadge'
 import { CoverPlaceholder } from './CoverPlaceholder'
@@ -97,6 +97,9 @@ export function RecipeHeader({
 }: RecipeHeaderProps) {
   // Scale the servings text based on the scale factor
   const scaledServings = servings ? scaleServingsText(servings, scaleFactor) : undefined
+  // Under the scale it reads as a phrase: a bare "4" says "Serves 4", as the recipe lists do.
+  // Labelled before it is scaled, so a number that scales to a fraction ("4 ½") keeps its word too.
+  const scaledServingsLabel = servings ? scaleServingsText(formatServingsLabel(servings), scaleFactor) : undefined
   const displayImageUrl = coverImageUrl && coverImageUrl.length > 0 ? coverImageUrl : undefined
   const resolvedChefHref = chefProfileHref ?? (chefId ? `/users/${chefId}` : undefined)
   const resolvedChefPhotoUrl = resolveChefAvatarUrl(chefPhotoUrl)
@@ -202,7 +205,7 @@ export function RecipeHeader({
             <div className="sm:max-w-[26rem]">
               <NumberField
                 label="Scale"
-                description={scaledServings}
+                description={scaledServingsLabel}
                 value={scaleFactor}
                 {...SCALE_RANGE}
                 format={{ maximumFractionDigits: 2 }}
