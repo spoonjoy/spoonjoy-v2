@@ -10,7 +10,7 @@ Follow ourostack's shared [PR merge rule](https://github.com/ourostack/.github/b
 
 ## Interfaces follow Ouro UI
 
-**[Interfaces follow Ouro UI](https://github.com/ourostack/.github/blob/main/agents/interfaces-follow-ouro-ui.md).** Every screen a person uses is built from Ouro HX, every door an agent uses is declared once with `ouro-actions` and checked by the Ouro AX X-ray in CI, Ouro is taken from its release tags (never copied by hand) and kept within a day of them, and what Ouro lacks is fixed in Ouro first.
+**[Interfaces follow Ouro UI](https://github.com/ourostack/.github/blob/main/agents/interfaces-follow-ouro-ui.md).** Build screens from Ouro HX, declare agent doors once with `ouro-actions` and check them with the Ouro AX X-ray in CI, take Ouro from its release tags (never copied by hand) and stay within a day of them, and fix what Ouro lacks in Ouro first.
 
 ## Backlog
 
