@@ -1,5 +1,5 @@
 {
-  "generator": "ouro-actions 0.10.0",
+  "generator": "ouro-actions 0.15.0",
   "set": "spoonjoy",
   "tools": [
     {
@@ -1516,7 +1516,7 @@
       },
       "target": null,
       "state": "refused",
-      "summary": "connection approve: You can't approve access to the person's Spoonjoy account; only they can. Ask the person, who does it with Approve access on the connection page, after typing the code you showed them.",
+      "summary": "Approve access: You can't approve access to the person's Spoonjoy account; only they can. Ask the person, who does it with Approve access on the connection page, after typing the code you showed them.",
       "postcondition": {
         "checked": false,
         "holds": null,
@@ -1530,7 +1530,7 @@
         "thing": "connection approve",
         "problem": "You can't approve access to the person's Spoonjoy account; only they can. Ask the person, who does it with Approve access on the connection page, after typing the code you showed them",
         "fix": null,
-        "message": "connection approve: You can't approve access to the person's Spoonjoy account; only they can. Ask the person, who does it with Approve access on the connection page, after typing the code you showed them."
+        "message": "Approve access: You can't approve access to the person's Spoonjoy account; only they can. Ask the person, who does it with Approve access on the connection page, after typing the code you showed them."
       }
     }
   }

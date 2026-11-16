@@ -390,7 +390,7 @@ describe("handleMcpHttpRequest", () => {
     expect(body.result.structuredContent.state).toBe("refused");
     expect(body.result.structuredContent.error).toMatchObject({ code: "person-only", exit: 2 });
     expect(body.result.content[0].text).toBe(
-      "connection approve: You can't approve access to the person's Spoonjoy account; only they can. Ask the person, who does it with Approve access on the connection page, after typing the code you showed them.",
+      "Approve access: You can't approve access to the person's Spoonjoy account; only they can. Ask the person, who does it with Approve access on the connection page, after typing the code you showed them.",
     );
     expect(callTool).not.toHaveBeenCalled();
     callTool.mockRestore();
