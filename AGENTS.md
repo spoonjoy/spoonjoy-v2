@@ -8,6 +8,10 @@ Spoonjoy is Ari's recipe app, built with React Router 7 on Cloudflare.[^stack]
 
 Follow ourostack's shared [PR merge rule](https://github.com/ourostack/.github/blob/main/agents/prs-merge-within-30-minutes.md). Finish, review and validate on your branch first, then publish with `gh ouro-pr`, which turns auto-merge on so green means merged. When a PR here shows on the [PR clock](https://github.com/ourostack/.github/issues?q=is%3Aissue+is%3Aopen+label%3Apr-clock), act on it now: merge it if green, fix the cause if red (file an issue before any rerun), rebase it if conflicted, or close it with a reason if it isn't going anywhere.
 
+## Interfaces follow Ouro UI
+
+**[Interfaces follow Ouro UI](https://github.com/ourostack/.github/blob/main/agents/interfaces-follow-ouro-ui.md).** Build screens from Ouro HX, declare agent doors once with `ouro-actions` and check them with the Ouro AX X-ray in CI, take Ouro from its release tags (never copied by hand) and stay within a day of them, and fix what Ouro lacks in Ouro first.
+
 ## Backlog
 
 Check [`BACKLOG.md`](BACKLOG.md) for known issues and planned work before making changes.
