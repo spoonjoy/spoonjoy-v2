@@ -226,6 +226,14 @@ export default function RecipeDetail() {
   const { scaleFactor, setScale: handleScaleChange, enterCookMode, resumeStepNum } = cookController;
   const isCookMode = cookController.cookMode;
   useResumeStepScroll(resumeStepNum, isCookMode);
+  // Leaving cook mode puts the page back without the panel that held focus: focus returns to the
+  // Cook mode button, where the cook left from, without moving the page from the step it shows.
+  const cookActionRef = useRef<HTMLAnchorElement>(null);
+  const wasCookMode = useRef(isCookMode);
+  useEffect(() => {
+    if (wasCookMode.current && !isCookMode) cookActionRef.current?.focus({ preventScroll: true });
+    wasCookMode.current = isCookMode;
+  }, [isCookMode]);
 
   const [availableCookbooks, setAvailableCookbooks] = useState(() => cookbooks);
 
@@ -416,7 +424,7 @@ export default function RecipeDetail() {
         Recipes
       </Link>
       <div className="flex flex-wrap items-center gap-2" data-testid="recipe-header-actions">
-        <Button href="#cook" onClick={handleEnterCookMode} data-testid="recipe-header-cook-action">
+        <Button ref={cookActionRef} href="#cook" onClick={handleEnterCookMode} data-testid="recipe-header-cook-action">
           Cook mode
         </Button>
         <Button variant="outline" tone="secondary" onClick={handleOpenSaveModal} data-testid="recipe-header-save-action">

@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { NumberField } from "~/components/ouro/number-field/number-field";
 import { Pagination } from "~/components/ouro/pagination/pagination";
@@ -163,6 +163,12 @@ function CookModePanel({
   // where the pager starts.
   const pagerRef = useRef<HTMLDivElement>(null);
   useViewportTopVar(pagerRef, "--sj-cook-pager-top");
+  // Cook mode replaces the page, and the control that opened it goes with it: focus moves to the
+  // recipe's name at the top, so a screen reader says where the cook is and Tab starts from there.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus({ preventScroll: true });
+  }, []);
 
   return (
     <section
@@ -178,7 +184,11 @@ function CookModePanel({
             {/* Cook mode replaces the whole page (see the early return above), so this
                 promotes the recipe title to the page's `h1` instead of adding a second,
                 visually redundant one. */}
-            <h1 className="font-sj-ui mt-1 truncate text-sm font-semibold text-[var(--sj-ink-soft)]">
+            <h1
+              ref={headingRef}
+              tabIndex={-1}
+              className="font-sj-ui mt-1 truncate text-sm font-semibold text-[var(--sj-ink-soft)] outline-none"
+            >
               {recipeTitle}
             </h1>
             <p className="font-sj-ui mt-1 text-xs uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
