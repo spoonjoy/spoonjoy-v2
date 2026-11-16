@@ -1,6 +1,6 @@
 import type { Route } from "./+types/test-kitchen";
 import { useState } from "react";
-import { RecipeCookView } from "~/components/cook/RecipeCookView";
+import { RecipeCookView, useCookModeReturnFocus } from "~/components/cook/RecipeCookView";
 import { CookTimerTray } from "~/components/recipe/CookTimers";
 import { SCALE_RANGE } from "~/components/cook/cook-controller";
 import { CookbookPage } from "~/components/cookbook/page";
@@ -78,6 +78,7 @@ function TestKitchenRecipe({ xray, onXrayChange, onReset }: {
 }) {
   const controller = useLocalCookController(TEST_KITCHEN.recipe, testKitchenProgressStorage);
   const { recipe, cover } = TEST_KITCHEN;
+  const startRef = useCookModeReturnFocus<HTMLButtonElement>(controller.cookMode);
 
   // Cook mode is the whole page, as on a recipe of your own.
   if (controller.cookMode) {
@@ -132,7 +133,7 @@ function TestKitchenRecipe({ xray, onXrayChange, onReset }: {
               if (next !== null) controller.setScale(next);
             }}
           />
-          <Button onClick={controller.enterCookMode}>Start cooking</Button>
+          <Button ref={startRef} onClick={controller.enterCookMode}>Start cooking</Button>
         </div>
       </section>
 

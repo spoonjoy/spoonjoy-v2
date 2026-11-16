@@ -3301,6 +3301,9 @@ describe("Recipes $id Route", () => {
       // Cook mode replaces the whole page, so it needs its own h1 (page-has-heading-one):
       // the recipe title, promoted from a plain <p> in the "Now cooking" masthead.
       expect(within(cookMode).getByRole("heading", { level: 1, name: "Cookable Recipe" })).toBeInTheDocument();
+      // The control that opened cook mode is gone with the page: focus is on the recipe's name, so a
+      // screen reader says where the cook is, not on the page itself.
+      expect(within(cookMode).getByRole("heading", { level: 1, name: "Cookable Recipe" })).toHaveFocus();
       // The ingredient checklist/scale panel is core cook-mode UI, not a complementary
       // landmark nested inside root.tsx's <main> (landmark-complementary-is-top-level).
       expect(within(cookMode).queryByRole("complementary")).not.toBeInTheDocument();
@@ -3328,6 +3331,8 @@ describe("Recipes $id Route", () => {
       await user.click(within(cookMode).getByRole("button", { name: "Exit cook mode" }));
       expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument();
       expect(await screen.findByTestId("recipe-masthead")).toBeInTheDocument();
+      // Leaving puts focus back where the cook left from.
+      await waitFor(() => expect(screen.getByTestId("recipe-header-cook-action")).toHaveFocus());
     });
 
     it("persists focused cook-mode progress across reloads", async () => {
