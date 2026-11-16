@@ -1,18 +1,16 @@
 name: MCP X-ray
 
-# Ouro UI's AX X-ray against Spoonjoy's stdio MCP server (scripts/mcp-xray.ts), on main, with its JSON report uploaded as
-# the `mcp-xray` artifact (report.json). Ouro UI's adoption ledger reads that report for Spoonjoy web's "AX must claims
-# pass in CI" condition (https://ui.ouroboros.bot/adoption/). CI's unit-changed job runs the same X-ray on each pull
-# request as a gate; this workflow only publishes main's report. It runs on the local SQLite test database as a
+# Ouro UI's AX X-ray against Spoonjoy's stdio MCP server (scripts/mcp-xray.ts), with its JSON report uploaded as the
+# `mcp-xray` artifact (report.json). Ouro UI's adoption ledger reads main's report for Spoonjoy web's "AX must claims
+# pass in CI" condition (https://ui.ouroboros.bot/adoption/). It runs on every pull request and merge group, as a
+# required check, so a change that breaks a must claim can't merge. It runs on the local SQLite test database as a
 # synthetic chef, never against Spoonjoy itself, and the weekly run keeps a report from expiring.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-    paths:
-      - .github/workflows/mcp-xray.yml
-      - scripts/mcp-xray.ts
+  merge_group:
   schedule:
     - cron: "23 6 * * 1"
   workflow_dispatch:
