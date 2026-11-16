@@ -18,6 +18,21 @@ import {
   type CookModeStep,
 } from "~/components/cook/cook-controller";
 
+/**
+ * The control that opens cook mode, given focus back when cook mode closes. Cook mode replaces the
+ * page, so the panel that held focus goes with it; without this, focus falls to the page itself.
+ * The page keeps its scroll, so the step the cook was on stays in view.
+ */
+export function useCookModeReturnFocus<T extends HTMLElement>(cookMode: boolean) {
+  const ref = useRef<T>(null);
+  const wasCookMode = useRef(cookMode);
+  useEffect(() => {
+    if (wasCookMode.current && !cookMode) ref.current?.focus({ preventScroll: true });
+    wasCookMode.current = cookMode;
+  }, [cookMode]);
+  return ref;
+}
+
 export interface RecipeCookViewProps {
   controller: CookController;
   /** Shown under "No steps added yet" for a recipe without steps, such as the owner's "Add steps". */

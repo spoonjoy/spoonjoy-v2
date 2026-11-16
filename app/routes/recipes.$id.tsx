@@ -43,7 +43,7 @@ import { RecipeCoverHistory } from "~/components/recipe/RecipeCoverHistory";
 import { RecipePhotoStudio } from "~/components/recipe/RecipePhotoStudio";
 import { SpoonDialog } from "~/components/recipe/SpoonDialog";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
-import { RecipeCookView } from "~/components/cook/RecipeCookView";
+import { RecipeCookView, useCookModeReturnFocus } from "~/components/cook/RecipeCookView";
 import { useDockSuppressed } from "~/components/navigation";
 import { ShareButton } from "~/components/ouro/share-button/share-button";
 import type { ShareResult } from "~/lib/ouro/share";
@@ -226,14 +226,7 @@ export default function RecipeDetail() {
   const { scaleFactor, setScale: handleScaleChange, enterCookMode, resumeStepNum } = cookController;
   const isCookMode = cookController.cookMode;
   useResumeStepScroll(resumeStepNum, isCookMode);
-  // Leaving cook mode puts the page back without the panel that held focus: focus returns to the
-  // Cook mode button, where the cook left from, without moving the page from the step it shows.
-  const cookActionRef = useRef<HTMLAnchorElement>(null);
-  const wasCookMode = useRef(isCookMode);
-  useEffect(() => {
-    if (wasCookMode.current && !isCookMode) cookActionRef.current?.focus({ preventScroll: true });
-    wasCookMode.current = isCookMode;
-  }, [isCookMode]);
+  const cookActionRef = useCookModeReturnFocus<HTMLAnchorElement>(isCookMode);
 
   const [availableCookbooks, setAvailableCookbooks] = useState(() => cookbooks);
 

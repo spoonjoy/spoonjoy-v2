@@ -146,9 +146,12 @@ describe("Test Kitchen", () => {
     const cookMode = await screen.findByTestId("cook-mode-panel");
     expect(within(cookMode).getByRole("heading", { level: 2, name: "Roast the chickpeas" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Spoonjoy Test Kitchen" })).not.toBeInTheDocument();
+    // Focus goes with the cook, never to the page: to cook mode's heading, then back to Start cooking.
+    expect(within(cookMode).getByRole("heading", { level: 1 })).toHaveFocus();
 
     await user.click(within(cookMode).getByRole("button", { name: "Exit cook mode" }));
     expect(await screen.findByRole("heading", { name: "Spoonjoy Test Kitchen" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Start cooking" })).toHaveFocus());
   });
 
   it("keeps a started timer running and sounding after leaving cook mode", async () => {
