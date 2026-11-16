@@ -226,7 +226,9 @@ export default function RecipeDetail() {
   const { scaleFactor, setScale: handleScaleChange, enterCookMode, resumeStepNum } = cookController;
   const isCookMode = cookController.cookMode;
   useResumeStepScroll(resumeStepNum, isCookMode);
-  const cookActionRef = useCookModeReturnFocus<HTMLAnchorElement>(isCookMode);
+  // Leaving cook mode returns the page to the step the cook was on, so focus goes back to Cook mode
+  // without scrolling away from it.
+  const cookActionRef = useCookModeReturnFocus<HTMLAnchorElement>(isCookMode, { preventScroll: true });
 
   const [availableCookbooks, setAvailableCookbooks] = useState(() => cookbooks);
 

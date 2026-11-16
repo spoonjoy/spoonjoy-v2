@@ -21,15 +21,16 @@ import {
 /**
  * The control that opens cook mode, given focus back when cook mode closes. Cook mode replaces the
  * page, so the panel that held focus goes with it; without this, focus falls to the page itself.
- * The page keeps its scroll, so the step the cook was on stays in view.
+ * Focus brings the control into view, unless `preventScroll` says the page puts its own scroll back
+ * (the recipe page returns to the step the cook was on).
  */
-export function useCookModeReturnFocus<T extends HTMLElement>(cookMode: boolean) {
+export function useCookModeReturnFocus<T extends HTMLElement>(cookMode: boolean, { preventScroll = false } = {}) {
   const ref = useRef<T>(null);
   const wasCookMode = useRef(cookMode);
   useEffect(() => {
-    if (wasCookMode.current && !cookMode) ref.current?.focus({ preventScroll: true });
+    if (wasCookMode.current && !cookMode) ref.current?.focus({ preventScroll });
     wasCookMode.current = cookMode;
-  }, [cookMode]);
+  }, [cookMode, preventScroll]);
   return ref;
 }
 
