@@ -477,6 +477,7 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `POST` | `/api/v1/auth/password/native` | Spoonjoy Apple app only | none |
 | `POST` | `/api/v1/native/telemetry` | Authenticated chef | `account:read` |
 | `POST` | `/api/v1/native/diagnostics` | Optional (Spoonjoy Apple app) | none |
+| `GET` | `/api/v1/native/config` | None (public) | none |
 | `GET` | `/api/v1/search` | Optional | `shopping_list:read` only for private shopping-list results |
 | `GET` | `/api/v1/recipes` | Optional | `recipes:read` when authenticated |
 | `POST` | `/api/v1/recipes` | Authenticated chef | `kitchen:write` |
@@ -545,6 +546,29 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `GET` | `/api/v1/tokens` | Authenticated chef | `tokens:read` |
 | `POST` | `/api/v1/tokens` | Authenticated chef | `tokens:write` |
 | `DELETE` | `/api/v1/tokens/{credentialId}` | Authenticated chef | `tokens:write` |
+
+## Native kill switches
+
+`GET /api/v1/native/config` tells the Spoonjoy Apple app which of its feature paths the server has switched off, so an operator can stop a misbehaving feature without a new app build or App Review. It is public: it ignores credentials, so an expired token never hides a switch, and answers with `Cache-Control: public, max-age=60`.
+
+```json
+{
+  "ok": true,
+  "requestId": "req_...",
+  "data": {
+    "killSwitches": { "cook-session-sync": { "off": true, "reason": "Cook sessions are being repaired" } },
+    "features": ["cook-session-sync", "spotlight-indexing"]
+  }
+}
+```
+
+- A feature named in `killSwitches` is off; every other feature is on. `features` lists every name the server knows.
+- The feature names are shared with spoonjoy-apple's `NativeFeature` and kept in `app/lib/native-kill-switches.server.ts`:
+  - `cook-session-sync`: cross-device cook progress, the app's calls to `/api/cook-sessions/{recipeId}`. Off, cook progress stays on the device.
+  - `spotlight-indexing`: the app's Spotlight and App Entity index refresh. Off, the index keeps what it already holds.
+- The app reads the switches it saved last time when it launches, and refreshes them in the background at launch and whenever it comes to the foreground, at most once every 15 minutes, giving each refresh 5 seconds in all. It never waits for this call before showing the kitchen. A feature switched off stops from the next time it starts; a feature switched back on waits for the next launch.
+- A failed refresh keeps the saved switches. Saved switches older than 7 days are dropped, so a device that cannot reach the server never keeps a feature off for good. A value the server cannot read switches nothing off.
+- Operators set the switches with the Worker secret `SPOONJOY_NATIVE_KILL_SWITCHES`; see "Native kill switches" in [`deployment.md`](deployment.md).
 
 ## Cooking now
 

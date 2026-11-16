@@ -1,0 +1,21 @@
+{
+  "name": "native-config",
+  "endpoint": "GET /api/v1/native/config",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_130",
+    "data": {
+      "killSwitches": {
+        "cook-session-sync": {
+          "off": true,
+          "reason": "Cook sessions are being repaired"
+        }
+      },
+      "features": [
+        "cook-session-sync",
+        "spotlight-indexing"
+      ]
+    }
+  }
+}

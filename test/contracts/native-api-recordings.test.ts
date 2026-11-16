@@ -754,6 +754,12 @@ async function recordNativeSession() {
     body: { confirmUsername: "contract_friend", password: FRIEND_PASSWORD },
     endpoint: "DELETE /api/v1/me",
   });
+  // Public: the app reads it without a token, so it runs last, after the accounts are gone. Recorded with a
+  // switch off so the app decodes a reason.
+  await api("native-config", "GET", "native/config", {
+    endpoint: "GET /api/v1/native/config",
+    env: { SPOONJOY_NATIVE_KILL_SWITCHES: "{\"cook-session-sync\":\"Cook sessions are being repaired\"}" },
+  });
 }
 
 describe("native API recordings", () => {

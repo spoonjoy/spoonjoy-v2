@@ -241,6 +241,10 @@ VITE_POSTHOG_DISABLED=
 
 Use `POSTHOG_DISABLED=true` or `VITE_POSTHOG_DISABLED=true` to force a telemetry kill switch without removing configured keys. Never paste or print the key value in deploy logs, docs, or committed files.
 
+### Native kill switches
+
+The Worker secret `SPOONJOY_NATIVE_KILL_SWITCHES` switches named Spoonjoy Apple app features off without an app build. Set it in production only through the `Native Kill Switches` workflow (`gh workflow run native-kill-switches.yml --ref main -f mode=set -f switches=cook-session-sync`; `-f switches=none` turns everything back on), never with `wrangler secret put`, which would deploy an untagged version. A rollback restores the switches stored in the version it returns to, so run the workflow with `mode=report` after any rollback and set them again if they changed. See [docs/deployment.md](docs/deployment.md#native-kill-switches).
+
 ### Web Push (VAPID) Secrets
 
 Required for the in-app web push notification system (D-006). Without these the
@@ -368,6 +372,7 @@ The deploy output will show your Worker URL: `https://spoonjoy-v2.<account>.work
 | `VAPID_PRIVATE_KEY` | ✅ Yes | Web push private key |
 | `VAPID_SUBJECT` | ✅ Yes | Web push contact subject |
 | `POSTHOG_KEY` | Optional | Server lifecycle telemetry and error capture |
+| `SPOONJOY_NATIVE_KILL_SWITCHES` | Optional | Native app feature kill switches; set through the `Native Kill Switches` workflow |
 
 ### Optional Worker telemetry variables
 

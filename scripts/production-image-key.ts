@@ -140,12 +140,30 @@ export async function report({ run, workersEnv, d1Env, log }: ImageKeyDeps): Pro
   return { names, covers };
 }
 
-export async function setImageKey(
-  { run, workersEnv, log, sleep }: ImageKeyDeps,
-  openAiKey: string | undefined,
-): Promise<string> {
+export async function setImageKey(deps: ImageKeyDeps, openAiKey: string | undefined): Promise<string> {
   const key = openAiKey?.trim() ?? "";
   if (key === "") throw new Error("OPENAI_API_KEY is empty: set the GitHub production environment secret first.");
+  // One version holds all three values, so production never runs with only some of them.
+  const values: Record<(typeof IMAGE_KEY_SECRETS)[number], string> = {
+    OPENAI_API_KEY: key,
+    IMAGE_PROVIDER_PRIMARY: "openai",
+    IMAGE_PROVIDER_FALLBACKS: "gemini",
+  };
+  return storeProductionSecrets(deps, values);
+}
+
+export type SecretVersionDeps = Pick<ImageKeyDeps, "run" | "workersEnv" | "log" | "sleep">;
+
+/**
+ * Stores `values` as Worker secrets in one new version of the code production runs, tagged with
+ * production's source commit, deploys it, and returns its id. Production Deploy refuses to release
+ * over an untagged version, which a plain `wrangler secret put` would make.
+ */
+export async function storeProductionSecrets(
+  { run, workersEnv, log, sleep }: SecretVersionDeps,
+  values: Readonly<Record<string, string>>,
+): Promise<string> {
+  const names = Object.keys(values);
   const env = { env: workersEnv };
 
   const activeId = selectCurrentProductionVersion(await run(["deployments", "list", "--json"], env));
@@ -160,16 +178,10 @@ export async function setImageKey(
   const sourceSha = selectExactVersionSourceSha(await run(["versions", "view", activeId, "--json"], env), activeId);
   log(`Production runs version ${activeId}, built from ${sourceSha}.`);
 
-  // One version holds all three values, so production never runs with only some of them.
-  const values: Record<(typeof IMAGE_KEY_SECRETS)[number], string> = {
-    OPENAI_API_KEY: key,
-    IMAGE_PROVIDER_PRIMARY: "openai",
-    IMAGE_PROVIDER_FALLBACKS: "gemini",
-  };
   const versionId = createdVersionId(
     await run(["versions", "secret", "bulk", "--tag", sourceSha], { env: workersEnv, input: JSON.stringify(values) }),
   );
-  log(`Stored ${IMAGE_KEY_SECRETS.join(", ")} in new version ${versionId}.`);
+  log(`Stored ${names.join(", ")} in new version ${versionId}.`);
 
   // Deploy only if the new version is the only one made since production's, so it copied
   // production's code and no release started meanwhile. The list can lag a just-made version.
@@ -191,10 +203,10 @@ export async function setImageKey(
   if (selectExactVersionSourceSha(await run(["versions", "view", versionId, "--json"], env), versionId) !== sourceSha) {
     throw new Error(`Version ${versionId} does not carry production's source tag ${sourceSha}.`);
   }
-  const names = secretNames(await run(["secret", "list", "--format", "json"], env));
-  const missing = IMAGE_KEY_SECRETS.filter((name) => !names.includes(name));
+  const stored = secretNames(await run(["secret", "list", "--format", "json"], env));
+  const missing = names.filter((name) => !stored.includes(name));
   if (missing.length > 0) throw new Error(`Production runs ${versionId} but lacks ${missing.join(", ")}.`);
-  log(`Production now runs ${versionId}, built from ${sourceSha}, with ${IMAGE_KEY_SECRETS.join(", ")}.`);
+  log(`Production now runs ${versionId}, built from ${sourceSha}, with ${names.join(", ")}.`);
   return versionId;
 }
 
