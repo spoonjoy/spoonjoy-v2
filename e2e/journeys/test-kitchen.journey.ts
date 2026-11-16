@@ -67,6 +67,25 @@ test.describe("Test Kitchen", () => {
     });
   });
 
+  test("cook mode takes focus to the recipe's name, and Exit gives it back to Start cooking, in view", async ({ page }) => {
+    const panel = page.getByTestId("cook-mode-panel");
+    const start = page.getByRole("button", { name: "Start cooking", exact: true });
+
+    await page.goto("/test-kitchen");
+    await waitForHydration(page);
+    await start.focus();
+    await page.keyboard.press("Enter");
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole("heading", { level: 1 })).toBeFocused();
+
+    await panel.getByRole("button", { name: "Exit cook mode", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await expect(panel).toBeHidden();
+    // The page comes back near its top, and Start cooking sits below the fold on a phone: focus brings it into view.
+    await expect(start).toBeFocused();
+    await expect(start).toBeInViewport();
+  });
+
   test("?xray opens X-ray on arrival", async ({ page }) => {
     await page.goto("/test-kitchen?xray");
     await waitForHydration(page);

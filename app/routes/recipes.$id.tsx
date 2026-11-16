@@ -43,7 +43,7 @@ import { RecipeCoverHistory } from "~/components/recipe/RecipeCoverHistory";
 import { RecipePhotoStudio } from "~/components/recipe/RecipePhotoStudio";
 import { SpoonDialog } from "~/components/recipe/SpoonDialog";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
-import { RecipeCookView } from "~/components/cook/RecipeCookView";
+import { RecipeCookView, useCookModeReturnFocus } from "~/components/cook/RecipeCookView";
 import { useDockSuppressed } from "~/components/navigation";
 import { ShareButton } from "~/components/ouro/share-button/share-button";
 import type { ShareResult } from "~/lib/ouro/share";
@@ -226,6 +226,9 @@ export default function RecipeDetail() {
   const { scaleFactor, setScale: handleScaleChange, enterCookMode, resumeStepNum } = cookController;
   const isCookMode = cookController.cookMode;
   useResumeStepScroll(resumeStepNum, isCookMode);
+  // Leaving cook mode returns the page to the step the cook was on, so focus goes back to Cook mode
+  // without scrolling away from it.
+  const cookActionRef = useCookModeReturnFocus<HTMLAnchorElement>(isCookMode, { preventScroll: true });
 
   const [availableCookbooks, setAvailableCookbooks] = useState(() => cookbooks);
 
@@ -416,7 +419,7 @@ export default function RecipeDetail() {
         Recipes
       </Link>
       <div className="flex flex-wrap items-center gap-2" data-testid="recipe-header-actions">
-        <Button href="#cook" onClick={handleEnterCookMode} data-testid="recipe-header-cook-action">
+        <Button ref={cookActionRef} href="#cook" onClick={handleEnterCookMode} data-testid="recipe-header-cook-action">
           Cook mode
         </Button>
         <Button variant="outline" tone="secondary" onClick={handleOpenSaveModal} data-testid="recipe-header-save-action">

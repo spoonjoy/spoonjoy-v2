@@ -525,6 +525,24 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expectAccessible();
     });
 
+    test("cook mode takes focus to the recipe's name, and Exit gives it back to Cook mode", async ({ page, expectAccessible }) => {
+      const panel = page.getByTestId("cook-mode-panel");
+      const cookMode = page.getByRole("link", { name: "Cook mode", exact: true });
+
+      await openLemonRiceFromHome(page);
+      await cookMode.focus();
+      await page.keyboard.press("Enter");
+      await expect(panel).toBeVisible();
+      // The page that held focus is gone: a screen reader hears where the cook is, not nothing.
+      await expect(panel.getByRole("heading", { level: 1, name: "Lemon Herb Rice", exact: true })).toBeFocused();
+
+      await panel.getByRole("button", { name: "Exit cook mode", exact: true }).focus();
+      await page.keyboard.press("Enter");
+      await expect(panel).toBeHidden();
+      await expect(cookMode).toBeFocused();
+      await expectAccessible();
+    });
+
     test("browser Back closes cook mode, and a second Back leaves the recipe", async ({ page, expectAccessible }) => {
       const panel = page.getByTestId("cook-mode-panel");
 
