@@ -4152,7 +4152,7 @@ describe("Recipes $id Route", () => {
       expect(screen.getByText("A delicious test dish")).toBeInTheDocument();
       expect(screen.getByText("Editorial photo")).toBeInTheDocument();
       // Servings display with new component format
-      expect(screen.getByText("4")).toBeInTheDocument();
+      expect(screen.getByText("Serves 4")).toBeInTheDocument();
       expect(screen.getByText("No steps added yet")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Add steps" })).toHaveAttribute("href", "/recipes/recipe-1/edit");
       expect(screen.getByTestId("recipe-masthead")).toBeInTheDocument();
@@ -4670,7 +4670,7 @@ describe("Recipes $id Route", () => {
 
       expect(await screen.findByText("No Desc Recipe")).toBeInTheDocument();
       // Servings should be rendered (new format without "Servings:" label)
-      expect(screen.getByText("2")).toBeInTheDocument();
+      expect(screen.getByText("Serves 2")).toBeInTheDocument();
     });
 
     it("should not render servings when null", async () => {
@@ -5489,17 +5489,17 @@ describe("Recipes $id Route", () => {
       // The scale is Ouro HX's NumberField, described by the scaled servings.
       const scale = screen.getByRole("textbox", { name: "Scale" });
       expect(scale).toHaveValue("1");
-      expect(scale).toHaveAccessibleDescription("4");
+      expect(scale).toHaveAccessibleDescription("Serves 4");
 
       // Increase scale a quarter at a time.
       await user.click(screen.getByRole("button", { name: "Increase scale" }));
       expect(scale).toHaveValue("1.25");
-      expect(scale).toHaveAccessibleDescription("5");
+      expect(scale).toHaveAccessibleDescription("Serves 5");
 
       // Decrease scale back to the recipe as written.
       await user.click(screen.getByRole("button", { name: "Decrease scale" }));
       expect(scale).toHaveValue("1");
-      expect(scale).toHaveAccessibleDescription("4");
+      expect(scale).toHaveAccessibleDescription("Serves 4");
     });
 
     it("should clear ingredient and step-output progress when clicking Clear progress", async () => {
