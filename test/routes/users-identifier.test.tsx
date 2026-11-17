@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { withTimeZone } from "../helpers/timezone";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
@@ -27,10 +27,17 @@ async function createProfileUser() {
   );
 }
 
-// The profile's "Joined … • N recipes • N cookbooks" line. The month is its own <time> element,
-// so the line is matched on the whole paragraph's text.
+// The profile's "Joined …" line. The month is its own <time> element, so the line is matched on
+// the whole paragraph's text.
 function profileLine(text: string) {
   return screen.getByText((_, element) => element?.tagName === "P" && element.textContent === text);
+}
+
+// The stats row under it, as the Apple app sets it ("2 recipes", "7 fellow chefs", "3 kitchen
+// visitors"), and the count in the Cookbooks section's header.
+function expectCounts(recipes: string, cookbooks: string) {
+  expect(screen.getByRole("navigation", { name: /kitchen relationships$/ })).toHaveTextContent(recipes);
+  expect(within(screen.getByRole("region", { name: "Cookbooks" })).getByText(cookbooks)).toBeInTheDocument();
 }
 
 describe("Users $identifier Route", () => {
@@ -384,7 +391,8 @@ describe("Users $identifier Route", () => {
       await withTimeZone("America/Los_Angeles", async () => {
         render(<Stub initialEntries={["/users/chef-june"]} />);
         expect(await screen.findByText("May 2026")).toHaveAttribute("datetime", "2026-06-01T03:00:00.000Z");
-        expect(profileLine("Joined May 2026 • 0 recipes • 0 cookbooks")).toBeInTheDocument();
+        expect(profileLine("Joined May 2026")).toBeInTheDocument();
+        expectCounts("0 recipes", "0 cookbooks");
       });
     });
 
@@ -442,7 +450,8 @@ describe("Users $identifier Route", () => {
 
       expect(await screen.findByRole("heading", { name: "chef-rowan" })).toBeInTheDocument();
       expect(screen.getAllByText("Original photo").length).toBeGreaterThan(0);
-      expect(profileLine("Joined May 2026 • 2 recipes • 1 cookbook")).toBeInTheDocument();
+      expect(profileLine("Joined May 2026")).toBeInTheDocument();
+      expectCounts("2 recipes", "1 cookbook");
       expect(screen.getByRole("link", { name: "Open kitchen view" })).toHaveAttribute("href", "/?chef=chef-rowan");
       expect(screen.queryByText("Canonical profile: /users/chef-rowan")).toBeNull();
       expect(screen.getAllByRole("link", { name: /\bMiso Soup\b/ })[0]).toHaveAttribute("href", "/recipes/recipe-1");
@@ -483,8 +492,9 @@ describe("Users $identifier Route", () => {
       render(<Stub initialEntries={["/users/chef-rowan"]} />);
 
       expect(await screen.findByRole("heading", { name: "chef-rowan" })).toBeInTheDocument();
-      expect(profileLine("Joined May 2026 • 30 recipes • 0 cookbooks")).toBeInTheDocument();
-      expect(screen.getByText("30 total")).toBeInTheDocument();
+      expect(profileLine("Joined May 2026")).toBeInTheDocument();
+      expectCounts("30 recipes", "0 cookbooks");
+      expect(screen.getByText("30 recipes")).toBeInTheDocument();
       const more = screen.getByRole("link", { name: "Show more recipes" });
       expect(more).toHaveAttribute("href", "/users/chef-rowan?after=recipe-1");
 
@@ -576,7 +586,8 @@ describe("Users $identifier Route", () => {
       // A chef with no photo gets the default picture. HX draws a picture the browser already holds on its first frame,
       // and happy-dom holds every picture, so the default picture shows rather than the initials.
       expect(screen.getByRole("img", { name: "chef-empty" }).querySelector("img")).toHaveAttribute("src", DEFAULT_CHEF_AVATAR_URL);
-      expect(profileLine("Joined May 2026 • 0 recipes • 0 cookbooks")).toBeInTheDocument();
+      expect(profileLine("Joined May 2026")).toBeInTheDocument();
+      expectCounts("0 recipes", "0 cookbooks");
       expect(screen.getByRole("link", { name: "Open settings" })).toHaveAttribute("href", "/account/settings");
       expect(screen.getByRole("button", { name: "Log out" })).toBeInTheDocument();
       expect(screen.getByText("No recipes yet")).toBeInTheDocument();
@@ -614,7 +625,8 @@ describe("Users $identifier Route", () => {
       render(<Stub initialEntries={["/users/chef-one"]} />);
 
       expect(await screen.findByText("May 2026")).toBeInTheDocument();
-      expect(profileLine("Joined May 2026 • 1 recipe • 0 cookbooks")).toBeInTheDocument();
+      expect(profileLine("Joined May 2026")).toBeInTheDocument();
+      expectCounts("1 recipe", "0 cookbooks");
       expect(screen.getByRole("link", { name: /\bSolo Stew\b/ })).toHaveAttribute("href", "/recipes/recipe-3");
     });
 
@@ -647,8 +659,8 @@ describe("Users $identifier Route", () => {
       expect(
         screen.getByRole("link", { name: /kitchen visitors/i }),
       ).toHaveAttribute("href", "/users/chef-rowan/kitchen-visitors");
-      expect(screen.getByText(/fellow chefs.*7/i)).toBeInTheDocument();
-      expect(screen.getByText(/kitchen visitors.*3/i)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "7 fellow chefs" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "3 kitchen visitors" })).toBeInTheDocument();
     });
 
     it("renders Fellow chefs and Kitchen visitors entry-point links with counts (visitor view)", async () => {
