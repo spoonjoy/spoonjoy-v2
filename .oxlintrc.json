@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": [
+      "warn",
+      {
+        "allowConstantExport": true,
+        "allowExportNames": ["meta", "links", "headers", "loader", "clientLoader", "action", "clientAction", "shouldRevalidate", "handle", "middleware"]
+      }
+    ],
+    "typescript/no-explicit-any": "error"
+  },
+  "overrides": [
+    {
+      "files": ["e2e/**"],
+      "rules": { "react/rules-of-hooks": "off" }
+    }
+  ]
+}

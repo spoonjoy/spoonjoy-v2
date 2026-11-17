@@ -312,9 +312,7 @@ describe("sendPush", () => {
       { title: "x", body: "y", url: "/" },
       vapid,
       {
-        // eslint-disable-next-line @typescript-eslint/no-throw-literal
         fetch: vi.fn(async () => {
-          // eslint-disable-next-line @typescript-eslint/no-throw-literal
           throw "string error";
         }),
       },
@@ -347,7 +345,6 @@ describe("sendPush — buildPushPayload non-Error rejection (mocked)", () => {
     vi.resetModules();
     vi.doMock("@block65/webcrypto-web-push", () => ({
       buildPushPayload: async () => {
-        // eslint-disable-next-line @typescript-eslint/no-throw-literal
         throw 42;
       },
     }));
