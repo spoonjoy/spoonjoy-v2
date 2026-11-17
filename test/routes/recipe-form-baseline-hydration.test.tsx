@@ -69,5 +69,5 @@ it("server-renders a progressive-post refusal without initial focus and accepts 
   await user.click(screen.getByRole("button", { name: "Create recipe", exact: true }));
   await waitFor(() => expect(title).toHaveAccessibleDescription("Taken"));
   expect(title).toHaveFocus();
-  expect(screen.getByRole("alert")).not.toBe(baselineAlert);
+  await waitFor(() => expect(screen.getByRole("alert")).not.toBe(baselineAlert));
 });
