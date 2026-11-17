@@ -231,6 +231,27 @@ test.describe("text axe cannot judge", () => {
     expect(measured.ratio).toBeGreaterThanOrEqual(20);
   });
 
+  test("moves a tall line clear of a sticky bar over its top edge before it measures", async ({ page }) => {
+    // The bar is painted in the text's own colour, so measuring it as the background reads 1:1.
+    await show(
+      page,
+      `<header style="position:sticky;top:0;z-index:1;height:56px;background:#123"></header><div style="height:400px"></div>` +
+        `<p style="margin:0;background:#fff"><span id="t" style="color:#123;font-size:200px;line-height:1">L</span></p><div style="height:1200px"></div>`,
+    );
+    await page.evaluate(() => {
+      const top = document.createRange();
+      top.selectNodeContents(document.querySelector("#t")!);
+      window.scrollBy(0, top.getBoundingClientRect().top - 10);
+    });
+    const measured = await measureTextContrast(page, "#t", "fixture");
+    expect(measured.error).toBeUndefined();
+    expect(measured.ratio).toBeGreaterThan(15);
+
+    // A bar too tall for the centred line to clear fails, rather than measuring the bar.
+    await page.evaluate(() => document.querySelector<HTMLElement>("header")!.style.setProperty("height", "300px"));
+    expect((await measureTextContrast(page, "#t", "fixture")).error).toBe("line 1 is under header at its edge, and centring it does not move it clear");
+  });
+
   test("fails covered text hidden from assistive technology when no dialog is open", async ({ page }) => {
     await show(page, `<p id="t" aria-hidden="true" style="color:#000;background:#fff">Hidden</p><div style="position:fixed;inset:0;background:#fff"></div>`);
     const measured = await measureTextContrast(page, "#t", "fixture");
