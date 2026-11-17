@@ -1,6 +1,7 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SOURCE_REPOSITORY, sourceHrefFor, type PageProvenance } from "~/lib/ouro-provenance";
-import { OURO_PROVENANCE, pageProvenance } from "~/lib/ouro-provenance.server";
+import { OURO_PROVENANCE, pageProvenance, readOuroTag } from "~/lib/ouro-provenance.server";
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 
@@ -50,5 +51,12 @@ describe("pageProvenance", () => {
 
   it("names the installed Ouro HX release", () => {
     expect(OURO_PROVENANCE.ouroTag).toMatch(/^v\d+\.\d+\.\d+$/);
+  });
+
+  it("reads the installed release from HX's own source, the release the pin record names", () => {
+    expect(readOuroTag(`const fix = "npx shadcn@latest add ourostack/ouro-ui/ouro-base#v1.1.0";`)).toBe("v1.1.0");
+    expect(() => readOuroTag("nothing here")).toThrow("Expected the Ouro HX release (ouro-base#vX.Y.Z) in app/lib/ouro/dev.ts");
+    const installed = JSON.parse(readFileSync(".github/ouro-hx-installed.json", "utf8")) as { tag: string };
+    expect(OURO_PROVENANCE.ouroTag).toBe(installed.tag);
   });
 });

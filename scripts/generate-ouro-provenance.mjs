@@ -2,6 +2,8 @@
 // files it imports (followed through the TypeScript import graph, stopping at the installed HX
 // under app/components/ouro and app/lib/ouro) and the HX items they render. X-ray's Source links,
 // /ouro-provenance.json and /llms.txt read it. `--check` fails when the committed file is stale.
+// It names no HX release: app/lib/ouro-provenance.server.ts reads that from HX's own source at build
+// time, so an Ouro update, which changes only HX's files, leaves this file as it is.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -12,8 +14,6 @@ export const OUTPUT_PATH = "app/generated/ouro-provenance.json";
 export const GUIDE_URL = "https://github.com/spoonjoy/spoonjoy-v2/blob/main/docs/building-with-ouro-hx.md";
 export const ROUTES_PATH = "app/routes.ts";
 export const ROOT_PATH = "app/root.tsx";
-/** Where the installed HX names its own release: the theme's install command in its dev messages. */
-export const TAG_SOURCE_PATH = "app/lib/ouro/dev.ts";
 const OURO_COMPONENTS = "app/components/ouro/";
 const OURO_LIB = "app/lib/ouro/";
 const EXTENSIONS = [".tsx", ".ts", "/index.tsx", "/index.ts"];
@@ -28,13 +28,6 @@ export const defaultDeps = {
   exists: (file) => existsSync(file),
   writeFile: (file, contents) => writeFileSync(file, contents),
 };
-
-/** The installed HX release tag (`v1.1.0`), read from the installed source itself. */
-export function readOuroTag(source) {
-  const match = /ouro-base#(v\d+\.\d+\.\d+)/.exec(source);
-  if (!match) throw new Error(`${TAG_SOURCE_PATH} names no Ouro HX release (ouro-base#vX.Y.Z)`);
-  return match[1];
-}
 
 function stringArg(node, file) {
   if (!ts.isStringLiteralLike(node)) throw new Error(`${ROUTES_PATH}: write each route's path and file as a string, not ${node.getText(file)}`);
@@ -176,8 +169,8 @@ function entryFor(file, deps, known) {
 }
 
 /**
- * The provenance manifest: the HX release, the root layout around every page, and each page route
- * with the files it is built from and the HX items they render.
+ * The provenance manifest: the root layout around every page, and each page route with the files it
+ * is built from and the HX items they render.
  */
 export function buildProvenance({ readFile, exists, ouroFiles }) {
   const known = installedItems(ouroFiles);
@@ -189,7 +182,6 @@ export function buildProvenance({ readFile, exists, ouroFiles }) {
   }
   return {
     guide: GUIDE_URL,
-    ouroTag: readOuroTag(readFile(TAG_SOURCE_PATH)),
     root: entryFor(ROOT_PATH, { readFile, exists }, known),
     routes,
   };
