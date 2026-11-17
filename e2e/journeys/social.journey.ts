@@ -233,7 +233,7 @@ test.describe("Social, in a British locale in Kiritimati", () => {
     await chefLink.click();
     await expect(page).toHaveURL(pathUrl(profilePath));
     await expect(page.getByRole("heading", { level: 1, name: profilePath.replace("/users/", ""), exact: true })).toBeVisible();
-    await page.getByRole("link", { name: "1 fellow chefs", exact: true }).click();
+    await page.getByRole("link", { name: "1 fellow chef", exact: true }).click();
     await expect(page).toHaveURL(pathUrl(`${profilePath}/fellow-chefs`));
     const friendRow = page.getByRole("link", { name: new RegExp(FRIEND) }).and(page.locator(`[href="/users/${FRIEND}"]`));
     await expect(friendRow).toBeVisible();
