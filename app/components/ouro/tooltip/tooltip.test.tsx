@@ -10,10 +10,18 @@ import { Popover } from "~/components/ouro/popover/popover";
 import { Tooltip, type TooltipProps } from "~/components/ouro/tooltip/tooltip";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { TooltipsHidden } from "~/lib/ouro/portal-container";
+import { Dialog } from "~/components/ouro/dialog/dialog";
+import { Sheet } from "~/components/ouro/sheet/sheet";
 import { act } from "~/lib/ouro/testing/act";
 import { drawn, expectFirstFramesInPlace, placeFarBelow, recordPopupFrames } from "~/lib/ouro/testing/popup-frames";
 import { settled as settledBox } from "~/lib/ouro/testing/settled";
 import { pressTab } from "~/lib/ouro/testing/tab";
+
+/** Whether the element is what a press at its centre would reach. */
+const onTop = (element: HTMLElement) => {
+  const box = element.getBoundingClientRect();
+  return element.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
+};
 // Runs in Chromium and WebKit.
 
 const roots: Root[] = [];
@@ -313,6 +321,28 @@ describe("Tooltip", () => {
     expect(style.position).toBe("relative");
     expect(style.isolation).toBe("isolate");
     expect(style.zIndex).toBe(getComputedStyle(document.documentElement).getPropertyValue("--ouro-layer").trim());
+  });
+
+  it.each(["Sheet", "Dialog"] as const)("shows above a %s it is opened from", async (layer) => {
+    await page.viewport(1280, 800);
+    const tip = (
+      <Tooltip content="Add to cookbook">
+        <Button>Save</Button>
+      </Tooltip>
+    );
+    await render(
+      layer === "Sheet" ? (
+        <Sheet title="Look" side="right" modal={false} open onOpenChange={() => {}}>
+          {tip}
+        </Sheet>
+      ) : (
+        <Dialog title="Look" open onOpenChange={() => {}}>
+          {tip}
+        </Dialog>
+      ),
+    );
+    await userEvent.hover(page.getByRole("button", { name: "Save" }));
+    await expect.poll(() => tooltip() !== null && onTop(tooltip()!)).toBe(true);
   });
 
   it("grows from its trigger in 150ms on the ease-out token", async () => {
@@ -668,6 +698,6 @@ describe("Tooltip first frame", () => {
     const recording = recordPopupFrames(positioner);
     await userEvent.hover(trigger());
     await settledBox(drawn(positioner));
-    expectFirstFramesInPlace(recording.stop());
+    expectFirstFramesInPlace(await recording.stop());
   });
 });

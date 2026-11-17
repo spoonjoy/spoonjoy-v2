@@ -531,7 +531,8 @@ function MenuSurface({
  * text, and `Command` for a searchable list of every action in the app.
  *
  * It stacks above the page at `--ouro-layer`, a z-index of 50 by default (from
- * ouro-base.css), like Dialog and Sheet.
+ * ouro-base.css), like Dialog and Sheet. Opened from inside a Dialog or a Sheet, it shows
+ * above it.
  *
  * A dropdown closes when focus moves anywhere outside it, as it does on a click outside, so Tab
  * goes on from wherever focus went.
@@ -555,6 +556,7 @@ function MenuSurface({
  * @claim "a context menu opens at the pointer at every width" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu context trigger > stays a menu at the pointer on a phone, not a sheet)
  * @claim "A dropdown closes when focus moves" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu focus > closes when focus moves outside it, so a forward Tab from before its trigger goes on to the trigger)
  * @claim "It stacks above the page at" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu stacking > puts the portal on the --ouro-layer level, as its own stacking context)
+ * @claim "Opened from inside a Dialog or a Sheet" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu stacking > shows above a %s it is opened from)
  * @claim "It stacks above the page at" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
  * @claim "A list of actions that opens" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu dropdown > opens a menu below its trigger, aligned to its start, named by the trigger)
  * @claim "A list of actions that opens" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu context trigger > opens at the pointer on right-click)

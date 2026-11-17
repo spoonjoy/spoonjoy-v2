@@ -489,6 +489,6 @@ describe("NavigationMenu first frame", () => {
     const recording = recordPopupFrames(positioner);
     await userEvent.click(page.getByRole("button", { name: "Recipes" }));
     await settledBox(drawn(positioner));
-    expectFirstFramesInPlace(recording.stop());
+    expectFirstFramesInPlace(await recording.stop());
   });
 });

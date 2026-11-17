@@ -21,6 +21,8 @@ import {
   type MenuProps,
 } from "~/components/ouro/menu/menu";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
+import { Dialog } from "~/components/ouro/dialog/dialog";
+import { Sheet } from "~/components/ouro/sheet/sheet";
 import { act } from "~/lib/ouro/testing/act";
 import { drawn, expectFirstFramesInPlace, placeFarBelow, recordPopupFrames } from "~/lib/ouro/testing/popup-frames";
 import { settled as settledBox } from "~/lib/ouro/testing/settled";
@@ -28,6 +30,12 @@ import { pressTab } from "~/lib/ouro/testing/tab";
 import { pressDuringScroll } from "~/lib/ouro/testing/press";
 import { isTransparent } from "~/lib/ouro/testing/color";
 import { audit, axeExclude, describeFindings } from "~/lib/ouro/testing/axe";
+
+/** Whether the element is what a press at its centre would reach. */
+const onTop = (element: HTMLElement) => {
+  const box = element.getBoundingClientRect();
+  return element.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
+};
 
 /** The colour behind an element: the nearest background around it that is not transparent. */
 function behind(element: Element): string {
@@ -1566,6 +1574,30 @@ describe("Menu stacking", () => {
     expect(style.isolation).toBe("isolate");
     expect(style.zIndex).toBe(String(layer));
   });
+
+  it.each(["Sheet", "Dialog"] as const)("shows above a %s it is opened from", async (layer) => {
+    await page.viewport(1280, 800);
+    const menu = (
+      <Menu trigger={<Button>Sort</Button>}>
+        <MenuItem>Newest first</MenuItem>
+      </Menu>
+    );
+    await render(
+      layer === "Sheet" ? (
+        <Sheet title="Look" side="right" modal={false} open onOpenChange={() => {}}>
+          {menu}
+        </Sheet>
+      ) : (
+        <Dialog title="Look" open onOpenChange={() => {}}>
+          {menu}
+        </Dialog>
+      ),
+    );
+    await userEvent.click(page.getByRole("button", { name: "Sort" }));
+    const item = page.getByRole("menuitem", { name: "Newest first" });
+    await expect.element(item).toBeVisible();
+    await expect.poll(() => onTop(item.element() as HTMLElement)).toBe(true);
+  });
 });
 
 describe("Menu server rendering", () => {
@@ -2009,7 +2041,7 @@ describe("Menu first frame", () => {
     const recording = recordPopupFrames(positioner);
     await userEvent.click(trigger());
     await settledBox(drawn(positioner));
-    expectFirstFramesInPlace(recording.stop());
+    expectFirstFramesInPlace(await recording.stop());
   });
 
   it("is in place from its first visible frame when a right click opens it", async () => {
@@ -2020,7 +2052,7 @@ describe("Menu first frame", () => {
     const recording = recordPopupFrames(positioner);
     await userEvent.click(document.querySelector<HTMLElement>('[data-testid="area"]')!, { button: "right", position: { x: 40, y: 30 } });
     await settledBox(drawn(positioner));
-    expectFirstFramesInPlace(recording.stop());
+    expectFirstFramesInPlace(await recording.stop());
   });
 
   it("is in place from its first visible frame when the app opens it with open and anchor", async () => {
@@ -2045,6 +2077,6 @@ describe("Menu first frame", () => {
     const recording = recordPopupFrames(positioner);
     await userEvent.click(trigger());
     await settledBox(drawn(positioner));
-    expectFirstFramesInPlace(recording.stop());
+    expectFirstFramesInPlace(await recording.stop());
   });
 });

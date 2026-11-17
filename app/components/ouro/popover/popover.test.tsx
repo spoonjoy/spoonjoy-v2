@@ -17,10 +17,17 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "~/components/ouro/popover/popover-parts";
+import { Sheet } from "~/components/ouro/sheet/sheet";
 import { act } from "~/lib/ouro/testing/act";
 import { pressDuringScroll } from "~/lib/ouro/testing/press";
 import { pressTab } from "~/lib/ouro/testing/tab";
 import { expectFirstFramesInPlace, placeFarBelow, recordPopupFrames } from "~/lib/ouro/testing/popup-frames";
+
+/** Whether the element is what a press at its centre would reach. */
+const onTop = (element: HTMLElement) => {
+  const box = element.getBoundingClientRect();
+  return element.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
+};
 
 // Runs in Chromium and WebKit.
 
@@ -543,6 +550,28 @@ describe("Popover stacking", () => {
     expect(style.zIndex).toBe(String(layer()));
     expect(document.body.lastElementChild).toBe(portal);
   });
+
+  it.each(["Sheet", "Dialog"] as const)("shows above a %s it is opened from", async (layer) => {
+    await page.viewport(1280, 800);
+    const popover = (
+      <Popover title="Share recipe" trigger={<Button>Share</Button>}>
+        <input aria-label="Link" />
+      </Popover>
+    );
+    await render(
+      layer === "Sheet" ? (
+        <Sheet title="Look" side="right" modal={false} open onOpenChange={() => {}}>
+          {popover}
+        </Sheet>
+      ) : (
+        <Dialog title="Look" open onOpenChange={() => {}}>
+          {popover}
+        </Dialog>
+      ),
+    );
+    await userEvent.click(page.getByRole("button", { name: "Share" }));
+    await expect.poll(() => popoverPopup() !== null && onTop(popoverPopup()!)).toBe(true);
+  });
 });
 
 describe("Popover motion", () => {
@@ -1016,7 +1045,7 @@ describe("Popover first frame", () => {
     const recording = recordPopupFrames(positioner);
     await userEvent.click(trigger());
     await settled();
-    expectFirstFramesInPlace(recording.stop());
+    expectFirstFramesInPlace(await recording.stop());
   });
 
   it("is in place from its first visible frame when the app opens it with open and anchor", async () => {
@@ -1039,6 +1068,6 @@ describe("Popover first frame", () => {
     const recording = recordPopupFrames(positioner);
     await userEvent.click(trigger());
     await settled();
-    expectFirstFramesInPlace(recording.stop());
+    expectFirstFramesInPlace(await recording.stop());
   });
 });

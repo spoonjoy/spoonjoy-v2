@@ -16,10 +16,11 @@ interface PopupFrame {
 /** A recording started by {@link recordPopupFrames}. */
 interface PopupRecording {
   /**
-   * Stops recording. Returns the frames drawn, in order, and where the positioner is now, read
-   * at the moment of the stop: once the popup has settled, that is where it belongs.
+   * Stops recording once the next frames have been sampled, so the frames hold the popup as it is when the test
+   * stops waiting, however a poll's reads fell between frames. Returns the frames drawn, in order, and where the positioner is
+   * then: once the popup has settled, that is where it belongs.
    */
-  stop(): { frames: PopupFrame[]; settled: { top: number; left: number } };
+  stop(): Promise<{ frames: PopupFrame[]; settled: { top: number; left: number } }>;
 }
 
 /**
@@ -44,7 +45,9 @@ function recordPopupFrames(positioner: () => Element | null): PopupRecording {
   };
   handle = requestAnimationFrame(sample);
   return {
-    stop() {
+    async stop() {
+      // A settle the test polled for can be seen between two animation frames, before any frame sampled the popup.
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       running = false;
       cancelAnimationFrame(handle);
       const box = positioner()!.getBoundingClientRect();
@@ -82,7 +85,7 @@ function placeFarBelow(px = 3000): void {
 /**
  * Asserts that the frames drawn sat where the positioner settled, to within a pixel, and were placed fixed.
  */
-function expectFirstFramesInPlace({ frames, settled }: ReturnType<PopupRecording["stop"]>): void {
+function expectFirstFramesInPlace({ frames, settled }: Awaited<ReturnType<PopupRecording["stop"]>>): void {
   const visible = frames.filter((frame) => frame.opacity > 0);
   expect(visible.length, "the popup was never visible").toBeGreaterThan(0);
   const misplaced = visible.filter((frame) => Math.abs(frame.top - settled.top) > 1 || Math.abs(frame.left - settled.left) > 1);

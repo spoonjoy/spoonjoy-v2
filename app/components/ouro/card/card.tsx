@@ -50,11 +50,16 @@ export interface CardOwnProps {
    * description stays folded away until the pointer rests on the card or keyboard focus is in it,
    * then rises over the media, while the card's box stays the same. On a touch screen a rising
    * description shows from the start. With reduced motion a rising description fades in place.
+   * The title and description lie on a glass band, the card's surface with the picture blurred
+   * through it, which turns solid where the browser cannot blur, with reduced transparency, more
+   * contrast or forced colors; its text holds 4.5:1 over a bright picture and a dark one.
    * @claim "Screen readers read it while it" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > shows the description on hover or keyboard focus, keeping its room, and names it as the link's description)
    * @claim "On a touch screen it shows" registry/ouro/components/ouro/card/card.touch.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.touch.test.tsx::shows a revealDescription card's description on a touch screen)
    * @claim "on a screen with a mouse" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > shows the description on hover or keyboard focus, keeping its room, and names it as the link's description)
    * @claim "the title sits on the bottom of the media" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > rises the description over the media with revealDescription="rise", taking no room before, and the card's box never changes)
    * @claim "On a touch screen a rising" registry/ouro/components/ouro/card/card.touch.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.touch.test.tsx::shows a rising card's description on a touch screen)
+   * @claim "The title and description lie on" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > lays a rising title on glass over the picture, solid without a blur, with less transparency or more contrast, and the page's background under a theme with no card color)
+   * @claim "The title and description lie on" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > keeps a rising title and description at 4.5:1 on its glass over a bright picture and a dark one, in light and dark)
    * @claim "With reduced motion a rising" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > with reduced motion, a rising description only fades, and nothing moves)
    */
   revealDescription?: boolean | "rise" | (string & { 'Use revealDescription, or revealDescription="rise"': never }) | undefined;
@@ -169,6 +174,21 @@ const riseClass =
   "motion-reduce:transition-opacity motion-reduce:duration-(--ouro-duration-fast) " +
   "pointer-fine:[@media(hover:hover)]:not-group-hover/card:not-group-has-[:focus-visible]/card:grid-rows-[0fr] " +
   "pointer-fine:[@media(hover:hover)]:not-group-hover/card:not-group-has-[:focus-visible]/card:opacity-0";
+// The band a rising title lies on: the card's surface as glass over the media, so the picture reads through it, and
+// solid where the browser cannot blur behind it, the person asks for less transparency or more contrast, or forced
+// colours paint it. A theme with no card color gets the page's background, as the card itself shows. The glass is a
+// layer of its own beside the title, never around it: a backdrop filter on the link's ancestor would hold the link's
+// layer to the band. The wrapper is no stacking context, so the glass blurs the picture, not an empty layer of its own.
+const riseBandClass =
+  "grid self-end [grid-area:1/1] text-(--card-foreground,var(--foreground)) " +
+  // Muted text halfway to the foreground, which holds 4.5:1 on the glass over any picture.
+  "[&_[data-card-reveal]>[data-ouro=text]]:text-[color-mix(in_oklab,var(--muted-foreground)_50%,var(--foreground))]";
+const riseGlassClass =
+  "z-1 [grid-area:1/1] bg-[color-mix(in_oklab,var(--card,var(--background))_78%,transparent)] backdrop-blur-md backdrop-saturate-150 " +
+  "supports-[not(backdrop-filter:blur(1px))]:bg-(--card,var(--background)) " +
+  "[@media(prefers-reduced-transparency:reduce)]:bg-(--card,var(--background)) [@media(prefers-reduced-transparency:reduce)]:backdrop-filter-none " +
+  "contrast-more:bg-(--card,var(--background)) contrast-more:backdrop-filter-none contrast-more:border-t contrast-more:border-solid contrast-more:border-foreground " +
+  "forced-colors:bg-[Canvas] forced-colors:backdrop-filter-none forced-colors:border-t forced-colors:border-solid";
 const revealClass =
   "transition-opacity duration-(--ouro-duration-base) ease-(--ouro-ease-out) motion-reduce:duration-(--ouro-duration-fast) " +
   "pointer-fine:[@media(hover:hover)]:not-group-hover/card:not-group-has-[:focus-visible]/card:opacity-0";
@@ -377,7 +397,10 @@ export function Card(props: CardProps): JSX.Element {
     rise && (
       <div className={cn("grid overflow-hidden", mediaPull[variant][size])}>
         <div className={cn("relative overflow-hidden [grid-area:1/1]", zoom && zoomMediaClass)}>{media}</div>
-        {titleBlock("z-1 self-end [grid-area:1/1] bg-(--card,var(--background)) py-3 text-(--card-foreground,var(--foreground))")}
+        <div className={riseBandClass}>
+          <div aria-hidden="true" data-card-glass="" className={riseGlassClass} />
+          {titleBlock("z-2 py-3 [grid-area:1/1]")}
+        </div>
       </div>
     ),
     !rise && titleBlock(),
