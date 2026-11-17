@@ -2171,6 +2171,7 @@
         "item",
         "item-group",
         "link",
+        "menu",
         "number-field",
         "page-header",
         "pagination",
@@ -2264,6 +2265,9 @@
           "app/components/recipe/RecipeHeader.tsx",
           "app/components/recipe/RecipeProvenance.tsx",
           "app/components/recipe/SpoonsStrip.tsx",
+          "app/routes/recipes.$id.tsx"
+        ],
+        "menu": [
           "app/routes/recipes.$id.tsx"
         ],
         "number-field": [

@@ -55,6 +55,8 @@ export interface RecipeHeaderProps {
   progressSyncStatus?: CookSyncStatus | null
   /** Contextual recipe navigation and primary actions */
   masthead?: ReactNode
+  /** The page's main actions (Cook, Save, Add to list), as one row under the description. */
+  actions?: ReactNode
   /** Source/import/fork attribution when this recipe has one */
   provenance?: ReactNode
 }
@@ -93,6 +95,7 @@ export function RecipeHeader({
   onScaleChange,
   progressSyncStatus,
   masthead,
+  actions,
   provenance,
 }: RecipeHeaderProps) {
   // Scale the servings text based on the scale factor
@@ -194,6 +197,8 @@ export function RecipeHeader({
               </p>
             )}
           </div>
+
+          {actions ? <div className="mt-8 max-w-[43rem] print:hidden">{actions}</div> : null}
 
           {printYield ? (
             <p className="hidden font-sj-ui text-sm font-semibold text-[var(--sj-ink)] print:mt-4 print:block" data-testid="recipe-print-yield">

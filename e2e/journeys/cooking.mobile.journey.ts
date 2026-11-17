@@ -49,7 +49,9 @@ test.describe("Recipe list action on iPhone", () => {
     await expect(page).not.toHaveURL(pathUrl(LEMON_RICE));
     await expect(page).toHaveURL(/\/recipes\/[^/?#]+$/);
     await expect(page.getByRole("heading", { level: 1, name: "Lemon Herb Rice", exact: true })).toBeVisible();
-    await expect(page.getByTestId("recipe-header-edit-action")).toBeVisible();
+    await page.getByTestId("recipe-header-more-action").click();
+    await expect(page.getByRole("menuitem", { name: "Edit", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
 
     // 1.25×, one press of 0.25, so the list gets fractional amounts to write out.
     await increaseScale.click();

@@ -22,6 +22,12 @@ import { cleanupDatabase } from "../helpers/cleanup";
 import { oversizedMultipartUpload } from "../helpers/oversized-upload";
 import { FOOD_IMAGE_SIZE_MESSAGE } from "~/lib/recipe-image";
 
+/** Log cook and Edit live in the recipe's ⋯ menu: open it and return the item. */
+async function recipeMenuItem(name: string | RegExp) {
+  await userEvent.click(await screen.findByRole("button", { name: "Recipe actions" }));
+  return screen.findByRole("menuitem", { name });
+}
+
 function extractResponseData(response: any): { data: any; status: number } {
   if (response && typeof response === "object" && response.type === "DataWithResponseInit") {
     return { data: response.data, status: response.init?.status || 200 };
@@ -342,7 +348,7 @@ describe("Recipes $id route — spoons + provenance", () => {
       },
     ]);
     render(<Stub initialEntries={["/recipes/r1"]} />);
-    const open = await screen.findByRole("button", { name: /log cook/i });
+    const open = await recipeMenuItem(/log cook/i);
     await userEvent.click(open);
     expect(await screen.findByRole("heading", { name: /log a cook/i })).toBeInTheDocument();
     const cancel = screen.getByRole("button", { name: /cancel/i });
@@ -383,7 +389,7 @@ describe("Recipes $id route — spoons + provenance", () => {
       },
     ]);
     render(<Stub initialEntries={["/recipes/r1"]} />);
-    const open = await screen.findByRole("button", { name: /log cook/i });
+    const open = await recipeMenuItem(/log cook/i);
     await userEvent.click(open);
     expect(await screen.findByRole("heading", { name: /log a cook/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/^note/i)).toBeInTheDocument();
@@ -427,7 +433,7 @@ describe("Recipes $id route — spoons + provenance", () => {
     ]);
 
     render(<Stub initialEntries={["/recipes/r1"]} />);
-    await userEvent.click(await screen.findByRole("button", { name: /log cook/i }));
+    await userEvent.click(await recipeMenuItem(/log cook/i));
     await userEvent.type(await screen.findByLabelText(/^note/i), "saved once");
     await userEvent.click(screen.getByRole("button", { name: /^log cook$/i }));
 
@@ -478,7 +484,7 @@ describe("Recipes $id route — spoons + provenance", () => {
     ]);
 
     render(<Stub initialEntries={["/recipes/r1"]} />);
-    await userEvent.click(await screen.findByRole("button", { name: /log cook/i }));
+    await userEvent.click(await recipeMenuItem(/log cook/i));
     await userEvent.type(await screen.findByLabelText(/^note/i), "saved once");
     await userEvent.click(screen.getByRole("button", { name: /^log cook$/i }));
 
@@ -503,7 +509,7 @@ describe("Recipes $id route — spoons + provenance", () => {
     // coverage run.
     await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
     await waitFor(() => expect(screen.queryByRole("heading", { name: /log a cook/i })).toBeNull(), { timeout: 5000 });
-    await userEvent.click(screen.getByRole("button", { name: /log cook/i }));
+    await userEvent.click(await recipeMenuItem(/log cook/i));
     await screen.findByRole("heading", { name: /log a cook/i });
     expect(queryShownAlert()).toBeNull();
   });

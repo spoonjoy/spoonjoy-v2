@@ -105,6 +105,16 @@ describe('RecipeHeader', () => {
       expect(screen.getByTestId('recipe-header-provenance')).toHaveTextContent('originally from example.com')
     })
 
+    it('sets the action row under the description, as the one-book recipe page reads', () => {
+      renderWithRouter(
+        <RecipeHeader {...defaultProps} description="Bright and quick." actions={<button type="button">Cook</button>} />
+      )
+      const cook = screen.getByRole('button', { name: 'Cook' })
+      const description = screen.getByText('Bright and quick.')
+      expect(description.compareDocumentPosition(cook) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(cook.parentElement).toHaveClass('print:hidden')
+    })
+
     it('closes the masthead with its own rule and no gap on a phone', () => {
       // On a phone the action row draws only its top rule and sits flush on the masthead's
       // bottom rule; a gap there drew two rules a few pixels apart.
