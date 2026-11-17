@@ -2112,6 +2112,7 @@
         "app/lib/quantity.ts",
         "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cook-time.ts",
         "app/lib/recipe-cover-jobs-d1.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover-stuck.server.ts",
@@ -2171,6 +2172,7 @@
         "number-field",
         "page-header",
         "pagination",
+        "popover",
         "radio-group",
         "relative-time",
         "separator",
@@ -2202,6 +2204,7 @@
           "app/components/moderation/ReportOrBlockButton.tsx",
           "app/components/recipe/ForkRecipeButton.tsx",
           "app/components/recipe/RecipeCoverHistory.tsx",
+          "app/components/recipe/RecipeHeader.tsx",
           "app/components/recipe/RecipeNotFound.tsx",
           "app/components/recipe/RecipePhotoStudio.tsx",
           "app/components/recipe/SpoonDialog.tsx",
@@ -2276,6 +2279,9 @@
         ],
         "pagination": [
           "app/components/cook/RecipeCookView.tsx"
+        ],
+        "popover": [
+          "app/components/recipe/RecipeHeader.tsx"
         ],
         "radio-group": [
           "app/components/moderation/ReportOrBlockButton.tsx"

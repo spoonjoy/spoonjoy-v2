@@ -19,6 +19,7 @@ import { cookProgressSaved, resetCookProgress } from "./support/cook-progress";
 import { expectNoHydrationErrors } from "./support/hydration";
 import { pathUrl, recipeLink, seededRecipeLink, waitForHydration } from "./support/navigation";
 import { personaStorageStatePath, scratchForProject, scratchStorageStateForProject } from "./support/personas";
+import { openScale } from "./support/recipe-scale";
 
 const LEMON_RICE_ID = "qa-kitchen-recipe-lemon-rice";
 const LEMON_RICE = `/recipes/${LEMON_RICE_ID}`;
@@ -120,9 +121,13 @@ async function savePageScreenshot(page: Page, testInfo: TestInfo, name: string) 
 async function scaleToOneAndAHalf(page: Page) {
   const increase = page.getByRole("button", { name: "Increase scale" });
   const display = page.getByRole("textbox", { name: "Scale", exact: true });
+  await openScale(page);
   await increase.click();
+  await openScale(page);
   await expect(display).toHaveValue("1.25");
+  await openScale(page);
   await increase.click();
+  await openScale(page);
   await expect(display).toHaveValue("1.5");
 }
 
@@ -153,6 +158,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await saved;
 
       await verifyAfterReload(async () => {
+        await openScale(page);
         await expect(scaleDisplay).toHaveValue("1.5");
         await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
         await expect(jasmineRice).toHaveAccessibleDescription(amount("1 ½ cups"));
@@ -160,6 +166,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
 
       // Somewhere else and back to the recipe through the app: the progress is still there.
       await openLemonRiceFromSearch(page);
+      await openScale(page);
       await expect(scaleDisplay).toHaveValue("1.5");
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
       await expect(jasmineRice).toHaveAccessibleDescription(amount("1 ½ cups"));
@@ -260,12 +267,14 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(panel).toBeHidden();
       await expect(page).toHaveURL(LEMON_RICE_URL);
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
+      await openScale(page);
       await expect(page.getByRole("textbox", { name: "Scale", exact: true })).toHaveValue("1.5");
       // The account keeps the current step by its id, so it survives the steps being reordered.
       expect((await saved).activeStepId).toBe(`${LEMON_RICE_ID}-step-3`);
 
       await verifyAfterReload(async () => {
         await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
+        await openScale(page);
         await expect(page.getByRole("textbox", { name: "Scale", exact: true })).toHaveValue("1.5");
       });
 
@@ -341,7 +350,9 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await cookedRice.click();
       await expect(cookedRice).toHaveAttribute("aria-checked", "true");
       // Clear progress keeps the scale; 1.25× after the reload shows the saved progress was read.
+      await openScale(page);
       await page.getByRole("button", { name: "Increase scale" }).click();
+      await openScale(page);
       await expect(scaleDisplay).toHaveValue("1.25");
 
       await page.getByTestId("clear-progress-button").click();
@@ -351,6 +362,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await saved;
 
       await verifyAfterReload(async () => {
+        await openScale(page);
         await expect(scaleDisplay).toHaveValue("1.25");
         await expect(jasmineRice).toHaveAttribute("aria-checked", "false");
         await expect(cookedRice).toHaveAttribute("aria-checked", "false");

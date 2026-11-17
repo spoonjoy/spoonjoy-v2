@@ -33,6 +33,7 @@ import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/ouro/link/link";
 import { Menu, MenuItem } from "~/components/ouro/menu/menu";
+import { cookTimeLabel } from "~/lib/recipe-cook-time";
 import { Text } from "~/components/ouro/text/text";
 import { Toggle } from "~/components/ouro/toggle/toggle";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
@@ -638,6 +639,7 @@ export default function RecipeDetail() {
         progressSyncStatus={cookController.syncStatus}
         masthead={headerMasthead}
         actions={headerActions}
+        cookTime={cookTimeLabel(recipe.steps.map((step) => step.duration))}
         provenance={headerProvenance}
       />
 

@@ -4,6 +4,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { BrowserRouter } from 'react-router'
 import { RecipeHeader } from '../../../app/components/recipe/RecipeHeader'
 
+/** The scale lives in the 'Serves' capsule's popover (one-book meta row): open it unless it is open. */
+async function openScale() {
+  if (!screen.queryByRole('textbox', { name: 'Scale' })) await userEvent.click(await screen.findByTestId('recipe-serves-trigger'));
+  await screen.findByRole('textbox', { name: 'Scale' });
+}
+
 function renderWithRouter(ui: React.ReactElement) {
   return render(<BrowserRouter>{ui}</BrowserRouter>)
 }
@@ -264,8 +270,22 @@ describe('RecipeHeader', () => {
   })
 
   describe('scaling', () => {
-    it('shows the scale as Ouro HX NumberField at the current scale factor', () => {
+    it('leads the meta row with the cook time, then a Serves capsule that says the scaled servings', async () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} cookTime="15 min" servings="4" scaleFactor={1.5} />)
+      const row = screen.getByTestId('recipe-header-controls')
+      expect(row).toHaveTextContent(/^15 min·Serves 6$/)
+      expect(screen.getByRole('button', { name: 'Serves 6' })).toHaveAttribute('data-ouro', 'button')
+      expect(screen.queryByRole('textbox', { name: 'Scale' })).not.toBeInTheDocument()
+    })
+
+    it('names the capsule by the scale when the recipe states no servings, and leaves the time out when no step is timed', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} scaleFactor={2} />)
+      expect(screen.getByTestId('recipe-header-controls')).toHaveTextContent(/^Scale 2×$/)
+    })
+
+    it('opens the scale, as Ouro HX NumberField at the current scale factor, from the Serves capsule', async () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} scaleFactor={2} />)
+      await openScale();
       const scale = screen.getByRole('textbox', { name: 'Scale' })
       expect(scale).toHaveValue('2')
       expect(scale).toHaveAttribute('data-ouro-control', 'number-field')
@@ -274,6 +294,7 @@ describe('RecipeHeader', () => {
     it('calls onScaleChange a quarter at a time, and never with an empty scale', async () => {
       const onScaleChange = vi.fn()
       renderWithRouter(<RecipeHeader {...defaultProps} onScaleChange={onScaleChange} />)
+      await openScale();
       await userEvent.click(screen.getByRole('button', { name: 'Increase scale' }))
       expect(onScaleChange).toHaveBeenLastCalledWith(1.25)
       await userEvent.click(screen.getByRole('button', { name: 'Decrease scale' }))
@@ -284,18 +305,21 @@ describe('RecipeHeader', () => {
       expect(onScaleChange).not.toHaveBeenCalled()
     })
 
-    it('describes the scale with the scaled servings when servings text is provided', () => {
+    it('describes the scale with the scaled servings when servings text is provided', async () => {
       renderWithRouter(<RecipeHeader {...defaultProps} servings="Serves 4" scaleFactor={2} />)
+      await openScale();
       expect(screen.getByRole('textbox', { name: 'Scale' })).toHaveAccessibleDescription('Serves 8')
     })
 
-    it('says what a bare servings number counts under the scale, as the recipe lists do', () => {
+    it('says what a bare servings number counts under the scale, as the recipe lists do', async () => {
       renderWithRouter(<RecipeHeader {...defaultProps} servings="2" scaleFactor={1.5} />)
+      await openScale();
       expect(screen.getByRole('textbox', { name: 'Scale' })).toHaveAccessibleDescription('Serves 3')
     })
 
-    it('keeps the word when a bare servings number scales to a fraction', () => {
+    it('keeps the word when a bare servings number scales to a fraction', async () => {
       renderWithRouter(<RecipeHeader {...defaultProps} servings="3" scaleFactor={1.5} />)
+      await openScale();
       expect(screen.getByRole('textbox', { name: 'Scale' })).toHaveAccessibleDescription('Serves 4 ½')
     })
 

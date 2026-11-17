@@ -17,6 +17,7 @@ import type { Page, Response } from "@playwright/test";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStateForProject } from "./support/personas";
 import { requiredLabel } from "./support/forms";
+import { openScale } from "./support/recipe-scale";
 
 const SHOPPING_LIST = "/shopping-list";
 const SHOPPING_LIST_ACTION = "/shopping-list.data";
@@ -277,13 +278,21 @@ test.describe("Shopping list", () => {
     await expect(listAction).toHaveAccessibleName("Add to list");
 
     // 2x, four presses of 0.25.
+    await openScale(page);
     await increaseScale.click();
+    await openScale(page);
     await expect(scaleDisplay).toHaveValue("1.25");
+    await openScale(page);
     await increaseScale.click();
+    await openScale(page);
     await expect(scaleDisplay).toHaveValue("1.5");
+    await openScale(page);
     await increaseScale.click();
+    await openScale(page);
     await expect(scaleDisplay).toHaveValue("1.75");
+    await openScale(page);
     await increaseScale.click();
+    await openScale(page);
     await expect(scaleDisplay).toHaveValue("2");
 
     await listAction.click();

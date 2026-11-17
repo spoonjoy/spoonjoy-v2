@@ -43,6 +43,12 @@ import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 
+/** The scale lives in the "Serves" capsule's popover (one-book meta row): open it unless it is open. */
+async function openScale() {
+  if (!screen.queryByRole("textbox", { name: "Scale" })) await userEvent.click(await screen.findByTestId("recipe-serves-trigger"));
+  await screen.findByRole("textbox", { name: "Scale" });
+}
+
 /** Log cook and Edit live in the recipe's ⋯ menu: open it and return the item. */
 async function recipeMenuItem(name: string | RegExp) {
   await userEvent.click(await screen.findByRole("button", { name: "Recipe actions" }));
@@ -3105,6 +3111,7 @@ describe("Recipes $id Route", () => {
         <Toaster /></>
       );
       await screen.findByRole("heading", { name: "Dock Add Recipe" });
+      await openScale();
       await user.click(screen.getByRole("button", { name: "Increase scale" }));
       await user.click(screen.getByTestId("recipe-header-list-action"));
 
@@ -3465,6 +3472,7 @@ describe("Recipes $id Route", () => {
       try {
         render(<Stub initialEntries={["/recipes/recipe-1"]} />);
         await screen.findByRole("heading", { name: "Synced Cook Recipe" });
+        await openScale();
         expect(screen.getByRole("textbox", { name: "Scale" })).toHaveValue("1.5");
 
         // Another device checked the tomatoes: the server's progress replaces this page's.
@@ -3537,15 +3545,15 @@ describe("Recipes $id Route", () => {
         // The delete dialog is open; then the page gets a change it has not sent yet (its save waits
         // 300 ms) and the cook confirms at once. The server answers 404 for a deleted recipe's
         // session, so nothing may be sent from the confirm on: no save, no session start.
-        const increaseScale = screen.getByRole("button", { name: "Increase scale" });
+        const tomatoes = screen.getAllByRole("checkbox", { name: /tomatoes/ })[0]!;
         await user.click(screen.getByRole("button", { name: "Manage recipe" }));
         await user.click(screen.getByRole("button", { name: "Delete" }));
         const confirm = await screen.findByRole("button", { name: "Delete" });
         // The released modal removes background controls from the accessibility tree.
         // Keep the pre-modal reference: this deliberately injects an unsent state change,
         // rather than claiming a person can activate an inert background control.
-        expect(increaseScale.closest('[aria-hidden="true"]')).not.toBeNull();
-        fireEvent.click(increaseScale);
+        expect(tomatoes.closest('[aria-hidden="true"]')).not.toBeNull();
+        fireEvent.click(tomatoes);
         const requestsBeforeConfirm = fetchMock.mock.calls.length;
         expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"))).not.toBeNull();
         fireEvent.click(confirm);
@@ -4708,6 +4716,7 @@ describe("Recipes $id Route", () => {
       expect(await screen.findByText("No Servings Recipe")).toBeInTheDocument();
       expect(screen.getByText("Has a description")).toBeInTheDocument();
       // The scale is still there (for ingredient scaling), with no servings to describe it
+      await openScale();
       expect(screen.getByRole("textbox", { name: "Scale" })).not.toHaveAttribute("aria-describedby");
     });
 
@@ -5495,6 +5504,7 @@ describe("Recipes $id Route", () => {
       // Wait for recipe to render
       await screen.findByRole("heading", { name: "Scalable Recipe" });
       // The scale is Ouro HX's NumberField, described by the scaled servings.
+      await openScale();
       const scale = screen.getByRole("textbox", { name: "Scale" });
       expect(scale).toHaveValue("1");
       expect(scale).toHaveAccessibleDescription("Serves 4");
