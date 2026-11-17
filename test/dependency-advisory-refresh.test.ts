@@ -37,11 +37,14 @@ describe("dependency advisory refresh contract", () => {
     });
   });
 
-  it("locks the patched Vitest mocker, and allows no advisory", () => {
+  it("locks the patched Vitest mocker, and allows only picomatch's unfixed, tooling-only ReDoS", () => {
     const lock = readFileSync(join(projectRoot, "pnpm-lock.yaml"), "utf8");
     const mockers = [...new Set(lock.match(/^  '?@vitest\/mocker@[^:(']+/gm) ?? [])];
     expect(mockers.map((entry) => entry.replace(/^  '?/, ""))).toEqual(["@vitest/mocker@4.1.12"]);
-    expect(allowlist.allowedVulnerabilities).toEqual([]);
+    // GHSA-fc5q-39xc-vjpf has no fixed picomatch yet (spoonjoy-v2#747); drop the entry when one ships.
+    expect(allowlist.allowedVulnerabilities.map((entry) => `${entry.id} ${entry.packageName}@${entry.version}`)).toEqual([
+      "GHSA-fc5q-39xc-vjpf picomatch@4.0.4",
+    ]);
   });
 
   it("keeps every locked Zod outside GHSA-mrhx-c7xc-m3w5", () => {

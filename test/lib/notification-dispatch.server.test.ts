@@ -796,7 +796,6 @@ describe("enqueueNotification — telemetry capture", () => {
 
     const origDelete = db.pushSubscription.delete;
     db.pushSubscription.delete = vi.fn(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-throw-literal
       throw { code: "P2999", message: "delete failed" };
     }) as unknown as typeof db.pushSubscription.delete;
 
@@ -836,7 +835,6 @@ describe("enqueueNotification — telemetry capture", () => {
 
     const origDelete = db.pushSubscription.delete;
     db.pushSubscription.delete = vi.fn(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-throw-literal
       throw { code: "P2025", message: "record not found" };
     }) as unknown as typeof db.pushSubscription.delete;
 
@@ -978,7 +976,6 @@ describe("enqueueNotification — telemetry capture", () => {
 
     const origDelete = db.pushSubscription.delete;
     db.pushSubscription.delete = vi.fn(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-throw-literal
       throw "plain string delete failure";
     }) as unknown as typeof db.pushSubscription.delete;
 

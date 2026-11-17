@@ -1,0 +1,886 @@
+{
+  ".storybook/preview.tsx": {
+    "react(only-export-components)": 1
+  },
+  "app/components/auth/AddPasskeyButton.tsx": {
+    "react(set-state-in-effect)": 1
+  },
+  "app/components/auth/PasskeySignInButton.tsx": {
+    "react(set-state-in-effect)": 1
+  },
+  "app/components/cook/RecipeCookView.tsx": {
+    "react(only-export-components)": 1
+  },
+  "app/components/cookbook/CookbookCoverArt.tsx": {
+    "react(only-export-components)": 1
+  },
+  "app/components/cookbook/KitchenHome.tsx": {
+    "react(only-export-components)": 1
+  },
+  "app/components/errors/route-error.tsx": {
+    "react(only-export-components)": 1
+  },
+  "app/components/moderation/ReportOrBlockButton.tsx": {
+    "react(only-export-components)": 1,
+    "react(set-state-in-effect)": 1
+  },
+  "app/components/motion/lazy-motion.tsx": {
+    "react(only-export-components)": 1
+  },
+  "app/components/navigation/dock-context.tsx": {
+    "react(only-export-components)": 3
+  },
+  "app/components/navigation/mobile-nav.tsx": {
+    "react(only-export-components)": 1
+  },
+  "app/components/notifications-section.tsx": {
+    "react(set-state-in-effect)": 1
+  },
+  "app/components/ouro/aspect-ratio/aspect-ratio.test-d.ts": {
+    "react(no-children-prop)": 1
+  },
+  "app/components/ouro/auth-layout/auth-layout.test-d.ts": {
+    "react(no-children-prop)": 1
+  },
+  "app/components/ouro/button/button.test-d.ts": {
+    "react(no-children-prop)": 3
+  },
+  "app/components/ouro/checkbox/checkbox-group.test-d.ts": {
+    "react(no-children-prop)": 1
+  },
+  "app/components/ouro/collapsible/collapsible.test-d.ts": {
+    "react(no-children-prop)": 1
+  },
+  "app/components/ouro/collapsible/show-more.test.tsx": {
+    "react(jsx-key)": 14
+  },
+  "app/components/ouro/dialog/confirm-dialog.test.tsx": {
+    "react(globals)": 1
+  },
+  "app/components/ouro/dialog/dialog.test-d.ts": {
+    "react(no-children-prop)": 2
+  },
+  "app/components/ouro/emoji/emoji.test-d.ts": {
+    "react(no-children-prop)": 1
+  },
+  "app/components/ouro/field/field.test-d.ts": {
+    "react(no-children-prop)": 2
+  },
+  "app/components/ouro/field/fieldset.test-d.ts": {
+    "react(no-children-prop)": 1
+  },
+  "app/components/ouro/form/form.test-d.ts": {
+    "react(no-children-prop)": 5
+  },
+  "app/components/ouro/form/form.test.tsx": {
+    "react(jsx-key)": 15
+  },
+  "app/components/ouro/link/link.test-d.ts": {
+    "react(no-children-prop)": 1
+  },
+  "app/components/ouro/menu/menu.test-d.ts": {
+    "react(no-children-prop)": 3
+  },
+  "app/components/ouro/menu/menu.test.tsx": {
+    "react(globals)": 1
+  },
+  "app/components/ouro/popover/popover.test-d.ts": {
+    "react(no-children-prop)": 2
+  },
+  "app/components/ouro/radio-group/radio-group.test-d.ts": {
+    "react(no-children-prop)": 1
+  },
+  "app/components/ouro/scroll-area/scroll-area.test.tsx": {
+    "react(jsx-key)": 3
+  },
+  "app/components/ouro/select/select.test-d.ts": {
+    "react(no-children-prop)": 3
+  },
+  "app/components/ouro/sheet/sheet.test-d.ts": {
+    "react(no-children-prop)": 2
+  },
+  "app/components/ouro/swipe-actions/swipe-actions.test-d.ts": {
+    "react(no-children-prop)": 1
+  },
+  "app/components/ouro/tooltip/tooltip.test-d.ts": {
+    "react(no-children-prop)": 2
+  },
+  "app/components/recipe/CookTimers.tsx": {
+    "react(only-export-components)": 1
+  },
+  "app/components/recipe/CoverProvenanceBadge.tsx": {
+    "react(only-export-components)": 2
+  },
+  "app/components/recipe/IngredientList.tsx": {
+    "react(only-export-components)": 3
+  },
+  "app/components/recipe/RecipeBuilder.tsx": {
+    "react-hooks(exhaustive-deps)": 1
+  },
+  "app/components/recipe/RecipeHeader.tsx": {
+    "react(only-export-components)": 1
+  },
+  "app/components/recipe/RecipeImportPanel.tsx": {
+    "react(set-state-in-effect)": 1
+  },
+  "app/components/recipe/RecipePhotoStudio.tsx": {
+    "eslint(no-unused-vars)": 1,
+    "react(set-state-in-effect)": 2
+  },
+  "app/components/recipe/SpoonDialog.tsx": {
+    "eslint(no-unused-vars)": 1,
+    "react(set-state-in-effect)": 4
+  },
+  "app/components/xray/xray-provider.tsx": {
+    "react(only-export-components)": 1
+  },
+  "app/hooks/use-appending-list.ts": {
+    "react(refs)": 1,
+    "react(set-state-in-effect)": 1
+  },
+  "app/hooks/use-cook-session-sync.ts": {
+    "react(refs)": 1,
+    "react(set-state-in-effect)": 1
+  },
+  "app/hooks/use-route-cook-controller.ts": {
+    "react(set-state-in-effect)": 3,
+    "react-hooks(exhaustive-deps)": 1
+  },
+  "app/hooks/use-write-token.ts": {
+    "react(set-state-in-effect)": 1
+  },
+  "app/hooks/useIngredientParser.ts": {
+    "react(set-state-in-effect)": 1
+  },
+  "app/lib/agent-connection.server.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "app/lib/api-v1-openapi.server.ts": {
+    "typescript(no-explicit-any)": 3
+  },
+  "app/lib/api-v1.server.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "app/lib/cook/local-cook-controller.ts": {
+    "react(set-state-in-effect)": 1
+  },
+  "app/lib/image-storage.server.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "app/lib/oauth-metadata.server.ts": {
+    "eslint(no-control-regex)": 1
+  },
+  "app/lib/og-image.server.tsx": {
+    "react(only-export-components)": 14
+  },
+  "app/lib/ouro/env.d.ts": {
+    "unused-disable-directive": 1
+  },
+  "app/lib/ouro/focus-handoff.test.tsx": {
+    "react(globals)": 1
+  },
+  "app/lib/ouro/use-install-prompt.test.tsx": {
+    "react(globals)": 1,
+    "react(immutability)": 1
+  },
+  "app/lib/security-headers.server.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "app/lib/session.server.ts": {
+    "eslint(no-control-regex)": 1
+  },
+  "app/lib/spoonjoy-api.server.ts": {
+    "eslint(no-unused-vars)": 5
+  },
+  "app/routes/$.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/_index.tsx": {
+    "eslint(no-empty-pattern)": 1,
+    "react(only-export-components)": 2
+  },
+  "app/routes/account.deleted.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/account.settings.tsx": {
+    "eslint(no-empty-pattern)": 1,
+    "react(set-state-in-effect)": 2
+  },
+  "app/routes/agent.connect.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/chefs.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/cookbooks.$id.tsx": {
+    "react(set-state-in-effect)": 1,
+    "typescript(no-explicit-any)": 1
+  },
+  "app/routes/cookbooks._index.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/cookbooks.new.tsx": {
+    "eslint(no-empty-pattern)": 1,
+    "typescript(no-explicit-any)": 1
+  },
+  "app/routes/developers.playground.tsx": {
+    "react(only-export-components)": 13
+  },
+  "app/routes/forgot-password.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/login.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/logout.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/mcp.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/moderation.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/my-recipes.tsx": {
+    "eslint(no-empty-pattern)": 1,
+    "react(only-export-components)": 1
+  },
+  "app/routes/oauth.callback.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/privacy.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/recipes.$id.edit.tsx": {
+    "react(set-state-in-effect)": 1
+  },
+  "app/routes/recipes.$id.steps.$stepId.edit.tsx": {
+    "react(set-state-in-effect)": 1
+  },
+  "app/routes/recipes.$id.steps.new.tsx": {
+    "eslint(no-unused-vars)": 2
+  },
+  "app/routes/recipes.$id.tsx": {
+    "react(only-export-components)": 1,
+    "react(purity)": 1,
+    "react(set-state-in-effect)": 5,
+    "react-hooks(exhaustive-deps)": 1
+  },
+  "app/routes/recipes._index.tsx": {
+    "eslint(no-unused-vars)": 1,
+    "react(only-export-components)": 2
+  },
+  "app/routes/recipes.new.tsx": {
+    "eslint(no-empty-pattern)": 1,
+    "react(set-state-in-effect)": 1
+  },
+  "app/routes/reset-password.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/saved-recipes.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/search.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/shopping-list.tsx": {
+    "eslint(no-empty-pattern)": 1,
+    "react(only-export-components)": 6,
+    "react(refs)": 1,
+    "react(set-state-in-effect)": 2
+  },
+  "app/routes/signup.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/support.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/terms.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "app/routes/test-kitchen.tsx": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "e2e/journeys/support/journey.ts": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "e2e/journeys/support/personas.ts": {
+    "eslint(no-empty-pattern)": 1
+  },
+  "prisma/seed.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "public/sw.js": {
+    "eslint(no-unused-vars)": 1
+  },
+  "scripts/build-output-hygiene.ts": {
+    "eslint(no-control-regex)": 1
+  },
+  "scripts/deploy-production-canary.ts": {
+    "eslint(no-control-regex)": 1
+  },
+  "scripts/deployment-preflight.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "scripts/e2e-run-cleanup.mjs": {
+    "eslint(no-control-regex)": 1
+  },
+  "scripts/qa-run-scope.mjs": {
+    "eslint(no-unused-vars)": 1
+  },
+  "scripts/script-environment.mjs": {
+    "eslint(no-unused-vars)": 1
+  },
+  "scripts/seed-qa.mjs": {
+    "eslint(no-unsafe-finally)": 2
+  },
+  "scripts/smoke-image-cover-live.mjs": {
+    "eslint(no-unused-vars)": 1
+  },
+  "scripts/smoke-live-oauth.mjs": {
+    "eslint(no-unused-vars)": 1
+  },
+  "scripts/warning-gate.ts": {
+    "eslint(no-control-regex)": 5,
+    "eslint(no-useless-escape)": 3
+  },
+  "test/build-output-hygiene.test.ts": {
+    "eslint(no-useless-escape)": 2
+  },
+  "test/components/cook/recipe-cook-view.contract.tsx": {
+    "react(globals)": 1
+  },
+  "test/components/cook/route-cook-controller.test.tsx": {
+    "eslint(no-unused-vars)": 1,
+    "react(globals)": 1
+  },
+  "test/components/navigation/quick-actions.test.tsx": {
+    "eslint(no-unused-vars)": 3
+  },
+  "test/components/recipe/IngredientParseInput.test.tsx": {
+    "eslint(no-unused-vars)": 2
+  },
+  "test/components/recipe/SpoonDialog.test.tsx": {
+    "react(set-state-in-effect)": 1
+  },
+  "test/components/recipe/SpoonsStrip.test.tsx": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/components/recipe/StepList-draft-sync.test.tsx": {
+    "react(globals)": 2
+  },
+  "test/components/recipe/StepList.test.tsx": {
+    "react(globals)": 1
+  },
+  "test/components/ui/button.test.tsx": {
+    "eslint(no-unused-vars)": 3
+  },
+  "test/components/ui/design-system-hygiene.test.ts": {
+    "react(no-children-prop)": 1
+  },
+  "test/components/ui/show-more.test.tsx": {
+    "react(globals)": 1
+  },
+  "test/config/warning-policy.test.ts": {
+    "eslint(no-unsafe-finally)": 1,
+    "eslint(no-useless-escape)": 1
+  },
+  "test/contracts/native-api-recordings.test.ts": {
+    "typescript(no-explicit-any)": 3
+  },
+  "test/docs/developer-platform-guide.test.ts": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/docs/native-dogfood-docs.test.tsx": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/hooks/use-back-navigation.test.tsx": {
+    "react(globals)": 1
+  },
+  "test/hooks/use-unsaved-form-guard.test.tsx": {
+    "react(jsx-key)": 3
+  },
+  "test/hooks/useIngredientParser.test.tsx": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/lib/agent-connection.server.test.ts": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/lib/api-auth.server.test.ts": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/lib/api-idempotency.server.test.ts": {
+    "typescript(no-explicit-any)": 4
+  },
+  "test/lib/api-v1-openapi.server.test.ts": {
+    "typescript(no-explicit-any)": 9
+  },
+  "test/lib/api-v1-recipe-list-query.test.ts": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/lib/api-v1-recipe-steps.server.test.ts": {
+    "eslint(no-unused-expressions)": 2
+  },
+  "test/lib/apple-native-auth-callback-failure.server.test.ts": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/lib/apple-native-auth.server.test.ts": {
+    "typescript(no-explicit-any)": 23
+  },
+  "test/lib/apple-oauth-callback.server.test.ts": {
+    "eslint(no-unused-vars)": 3
+  },
+  "test/lib/apple-oauth.server.test.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/lib/github-oauth.server.test.ts": {
+    "eslint(no-unsafe-optional-chaining)": 2
+  },
+  "test/lib/google-oauth-callback.server.test.ts": {
+    "eslint(no-unused-vars)": 2
+  },
+  "test/lib/google-oauth.server.test.ts": {
+    "eslint(no-unsafe-optional-chaining)": 1,
+    "eslint(no-unused-vars)": 2
+  },
+  "test/lib/image-gen.server.test.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/lib/image-storage.server.test.ts": {
+    "eslint(no-unsafe-optional-chaining)": 3
+  },
+  "test/lib/ingredient-parse.server.test.ts": {
+    "eslint(no-unused-vars)": 1,
+    "typescript(no-explicit-any)": 5
+  },
+  "test/lib/mcp-writes-transient.server.test.ts": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/lib/mcp/spoonjoy-tools.server.test.ts": {
+    "typescript(no-explicit-any)": 5
+  },
+  "test/lib/moderation.server.test.ts": {
+    "typescript(no-explicit-any)": 6
+  },
+  "test/lib/native-password-auth.server.test.ts": {
+    "typescript(no-explicit-any)": 20
+  },
+  "test/lib/notification-dispatch.server.test.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/lib/oauth-callback-sign-in-outcomes.server.test.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/lib/oauth-server.server.test.ts": {
+    "typescript(no-explicit-any)": 11
+  },
+  "test/lib/pending-apple-link.server.test.ts": {
+    "typescript(no-explicit-any)": 10
+  },
+  "test/lib/push-client.test.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/lib/recipe-detail.server.test.ts": {
+    "typescript(no-explicit-any)": 20
+  },
+  "test/lib/recipe-import-fetch.test.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/lib/recipe-import.test.ts": {
+    "eslint(no-unused-vars)": 2
+  },
+  "test/lib/session-version-fence.test.ts": {
+    "typescript(no-explicit-any)": 13
+  },
+  "test/lib/session.server.test.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/lib/spoonjoy-api-fork.test.ts": {
+    "eslint(no-unsafe-optional-chaining)": 1
+  },
+  "test/lib/spoonjoy-api-import.test.ts": {
+    "eslint(no-unsafe-optional-chaining)": 2
+  },
+  "test/lib/webmcp-actions.test.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/routes/account-settings-deletion.test.tsx": {
+    "typescript(no-explicit-any)": 5
+  },
+  "test/routes/account-settings-email-reauth.test.tsx": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/routes/account-settings-identity.test.tsx": {
+    "typescript(no-explicit-any)": 6
+  },
+  "test/routes/account-settings-perry-route.test.ts": {
+    "typescript(no-explicit-any)": 3
+  },
+  "test/routes/account-settings-remove-password.test.tsx": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/routes/account-settings-sessions.test.tsx": {
+    "typescript(no-explicit-any)": 3
+  },
+  "test/routes/account-settings.test.tsx": {
+    "eslint(no-unused-vars)": 1,
+    "typescript(no-explicit-any)": 146
+  },
+  "test/routes/agent-connect-cookie.test.ts": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/routes/agent-connect.test.tsx": {
+    "typescript(no-explicit-any)": 26
+  },
+  "test/routes/api-v1-account-lifecycle.test.ts": {
+    "typescript(no-explicit-any)": 3
+  },
+  "test/routes/api-v1-account-settings.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/api-v1-cookbooks.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/api-v1-cooking-now.test.ts": {
+    "typescript(no-explicit-any)": 8
+  },
+  "test/routes/api-v1-moderation.test.ts": {
+    "typescript(no-explicit-any)": 7
+  },
+  "test/routes/api-v1-native-chefs.test.ts": {
+    "typescript(no-explicit-any)": 5
+  },
+  "test/routes/api-v1-native-config.test.ts": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/routes/api-v1-native-diagnostics.test.ts": {
+    "typescript(no-explicit-any)": 3
+  },
+  "test/routes/api-v1-native-sync.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/api-v1-native-telemetry.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/api-v1-openapi.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/api-v1-recipe-covers.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/api-v1-recipe-import.test.ts": {
+    "typescript(no-explicit-any)": 3
+  },
+  "test/routes/api-v1-recipe-spoons-multipart.test.ts": {
+    "typescript(no-explicit-any)": 6
+  },
+  "test/routes/api-v1-recipe-spoons.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/api-v1-recipe-steps.test.ts": {
+    "typescript(no-explicit-any)": 6
+  },
+  "test/routes/api-v1-recipe-update-precondition.test.ts": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/routes/api-v1-recipe-writes.test.ts": {
+    "typescript(no-explicit-any)": 5
+  },
+  "test/routes/api-v1-recipes.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/api-v1-rest-writes-transient.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/api-v1-scopes-public-tokens.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/api-v1-scopes.test.ts": {
+    "typescript(no-explicit-any)": 3
+  },
+  "test/routes/api-v1-search.test.ts": {
+    "typescript(no-explicit-any)": 11
+  },
+  "test/routes/api-v1-shell.test.ts": {
+    "typescript(no-explicit-any)": 4
+  },
+  "test/routes/api-v1-shopping-conflicts.test.ts": {
+    "typescript(no-explicit-any)": 4
+  },
+  "test/routes/api-v1-shopping-d1.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/api-v1-shopping-item-create-transient.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/api-v1-shopping-mutations.test.ts": {
+    "eslint(no-unused-vars)": 1,
+    "typescript(no-explicit-any)": 10
+  },
+  "test/routes/api-v1-shopping-sync.test.ts": {
+    "typescript(no-explicit-any)": 9
+  },
+  "test/routes/api-v1-tokens.test.ts": {
+    "typescript(no-explicit-any)": 3
+  },
+  "test/routes/api-v1-upload-writes-transient.test.ts": {
+    "typescript(no-explicit-any)": 3
+  },
+  "test/routes/api-v1-user-profiles.test.ts": {
+    "typescript(no-explicit-any)": 7
+  },
+  "test/routes/api.test.ts": {
+    "typescript(no-explicit-any)": 6
+  },
+  "test/routes/auth-apple.test.ts": {
+    "typescript(no-explicit-any)": 36
+  },
+  "test/routes/auth-github.test.ts": {
+    "typescript(no-explicit-any)": 25
+  },
+  "test/routes/auth-google.test.ts": {
+    "typescript(no-explicit-any)": 25
+  },
+  "test/routes/catch-all.test.tsx": {
+    "typescript(no-explicit-any)": 3
+  },
+  "test/routes/chefs.test.tsx": {
+    "typescript(no-explicit-any)": 5
+  },
+  "test/routes/cookbooks-id-notification.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/cookbooks-id.test.tsx": {
+    "typescript(no-explicit-any)": 48
+  },
+  "test/routes/cookbooks-index.test.tsx": {
+    "typescript(no-explicit-any)": 7
+  },
+  "test/routes/cookbooks-new.test.tsx": {
+    "typescript(no-explicit-any)": 14
+  },
+  "test/routes/cookbooks.test.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/routes/developer-docs-redirects.test.ts": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/routes/developers-playground.test.tsx": {
+    "react(globals)": 1,
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/developers.test.tsx": {
+    "typescript(no-explicit-any)": 7
+  },
+  "test/routes/devtools-well-known.test.tsx": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/routes/edit-dependencies-e2e.test.tsx": {
+    "eslint(no-unused-vars)": 1,
+    "typescript(no-explicit-any)": 7
+  },
+  "test/routes/focused-step-editor-flow-e2e.test.tsx": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/routes/forgot-password.test.tsx": {
+    "typescript(no-explicit-any)": 6
+  },
+  "test/routes/index.test.tsx": {
+    "typescript(no-explicit-any)": 13
+  },
+  "test/routes/login-session-version.test.ts": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/routes/login.test.tsx": {
+    "typescript(no-explicit-any)": 19
+  },
+  "test/routes/logout-origin.test.ts": {
+    "typescript(no-explicit-any)": 6
+  },
+  "test/routes/logout.test.tsx": {
+    "typescript(no-explicit-any)": 9
+  },
+  "test/routes/moderation-hides.test.tsx": {
+    "typescript(no-explicit-any)": 5
+  },
+  "test/routes/my-recipes-query-boundary.test.ts": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/routes/my-recipes.test.tsx": {
+    "typescript(no-explicit-any)": 7
+  },
+  "test/routes/oauth-authorize.test.tsx": {
+    "typescript(no-explicit-any)": 13
+  },
+  "test/routes/oauth-token-telemetry.test.ts": {
+    "eslint(no-unsafe-optional-chaining)": 1
+  },
+  "test/routes/og-routes.test.ts": {
+    "typescript(no-explicit-any)": 12
+  },
+  "test/routes/password-sign-in-method.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/photos.test.ts": {
+    "typescript(no-explicit-any)": 17
+  },
+  "test/routes/privacy.test.tsx": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/routes/recipe-creation-flow-e2e.test.tsx": {
+    "typescript(no-explicit-any)": 12
+  },
+  "test/routes/recipe-with-dependencies-e2e.test.tsx": {
+    "typescript(no-explicit-any)": 3
+  },
+  "test/routes/recipes-form-integration.test.tsx": {
+    "eslint(no-unused-vars)": 9,
+    "typescript(no-explicit-any)": 4
+  },
+  "test/routes/recipes-id-edit.test.tsx": {
+    "eslint(no-unused-vars)": 2,
+    "typescript(no-explicit-any)": 76
+  },
+  "test/routes/recipes-id-fanout-notification.test.ts": {
+    "typescript(no-explicit-any)": 5
+  },
+  "test/routes/recipes-id-fork-notification.test.ts": {
+    "typescript(no-explicit-any)": 7
+  },
+  "test/routes/recipes-id-scaling.test.tsx": {
+    "eslint(no-unused-vars)": 5
+  },
+  "test/routes/recipes-id-spoon-notification.test.ts": {
+    "eslint(no-unused-vars)": 1,
+    "typescript(no-explicit-any)": 7
+  },
+  "test/routes/recipes-id-spoons.test.tsx": {
+    "typescript(no-explicit-any)": 25
+  },
+  "test/routes/recipes-id-steps-id-edit-ingredient-integration.test.tsx": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/routes/recipes-id-steps-id-edit.test.tsx": {
+    "eslint(no-unused-vars)": 2,
+    "typescript(no-explicit-any)": 87
+  },
+  "test/routes/recipes-id-steps-new.test.tsx": {
+    "typescript(no-explicit-any)": 54
+  },
+  "test/routes/recipes-id.test.tsx": {
+    "eslint(no-unused-vars)": 2,
+    "typescript(no-explicit-any)": 99
+  },
+  "test/routes/recipes-index.test.tsx": {
+    "typescript(no-explicit-any)": 12
+  },
+  "test/routes/recipes-new-import.test.tsx": {
+    "typescript(no-explicit-any)": 10
+  },
+  "test/routes/recipes-new.test.tsx": {
+    "typescript(no-explicit-any)": 59
+  },
+  "test/routes/recipes-step-edit-parse-action.test.ts": {
+    "typescript(no-explicit-any)": 25
+  },
+  "test/routes/recipes.test.ts": {
+    "eslint(no-unused-vars)": 4,
+    "typescript(no-explicit-any)": 1
+  },
+  "test/routes/redwood-functions-auth-oauth.test.ts": {
+    "typescript(no-explicit-any)": 6
+  },
+  "test/routes/reset-password.test.tsx": {
+    "typescript(no-explicit-any)": 5
+  },
+  "test/routes/robots-txt.test.ts": {
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/route-action-telemetry-backfill.test.ts": {
+    "typescript(no-explicit-any)": 13
+  },
+  "test/routes/route-shell-coverage.test.ts": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/routes/saved-recipes.test.tsx": {
+    "typescript(no-explicit-any)": 5
+  },
+  "test/routes/search.test.tsx": {
+    "eslint(no-unused-vars)": 1,
+    "typescript(no-explicit-any)": 5
+  },
+  "test/routes/shopping-list-openai-coverage.test.ts": {
+    "typescript(no-explicit-any)": 8
+  },
+  "test/routes/shopping-list-route.test.ts": {
+    "typescript(no-explicit-any)": 66
+  },
+  "test/routes/shopping-list-ux.test.tsx": {
+    "react(globals)": 2
+  },
+  "test/routes/shopping-list.test.tsx": {
+    "eslint(no-unused-vars)": 1,
+    "typescript(no-explicit-any)": 2
+  },
+  "test/routes/signup.test.tsx": {
+    "typescript(no-explicit-any)": 24
+  },
+  "test/routes/sitemap-xml.test.ts": {
+    "typescript(no-explicit-any)": 3
+  },
+  "test/routes/step-deletion-protection-e2e.test.tsx": {
+    "typescript(no-explicit-any)": 7
+  },
+  "test/routes/step-reorder-protection-e2e.test.tsx": {
+    "typescript(no-explicit-any)": 7
+  },
+  "test/routes/terms.test.tsx": {
+    "typescript(no-explicit-any)": 1
+  },
+  "test/routes/users-identifier-fellow-chefs.test.tsx": {
+    "typescript(no-explicit-any)": 13
+  },
+  "test/routes/users-identifier-kitchen-visitors.test.tsx": {
+    "typescript(no-explicit-any)": 13
+  },
+  "test/routes/users-identifier-spoons.test.tsx": {
+    "typescript(no-explicit-any)": 4
+  },
+  "test/routes/users-identifier.test.tsx": {
+    "typescript(no-explicit-any)": 11
+  },
+  "test/scripts/deploy-production-canary.test.ts": {
+    "eslint(no-unsafe-optional-chaining)": 2,
+    "eslint(no-unused-vars)": 1,
+    "eslint(no-useless-escape)": 4
+  },
+  "test/scripts/deployment-preflight.test.ts": {
+    "eslint(no-unused-vars)": 1
+  },
+  "test/scripts/migration-0024-remove-legacy-demo-identities.test.ts": {
+    "eslint(no-useless-escape)": 2
+  },
+  "test/scripts/seed-qa-kitchen.test.ts": {
+    "typescript(no-explicit-any)": 9
+  },
+  "test/scripts/smoke-image-cover-live.test.ts": {
+    "eslint(no-unsafe-optional-chaining)": 1
+  },
+  "test/scripts/smoke-live-helpers.test.ts": {
+    "typescript(no-explicit-any)": 4
+  },
+  "test/setup.ts": {
+    "eslint(no-unused-vars)": 1,
+    "typescript(no-explicit-any)": 5
+  },
+  "test/styles/primary-button-contrast.test.ts": {
+    "react(no-children-prop)": 1
+  },
+  "test/utils.ts": {
+    "react(no-children-prop)": 1,
+    "typescript(no-explicit-any)": 2
+  },
+  "test/workers/saved-recipe-cutover-d1.test.ts": {
+    "typescript(no-explicit-any)": 14
+  }
+}

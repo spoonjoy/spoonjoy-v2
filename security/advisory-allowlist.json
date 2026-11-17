@@ -1,4 +1,13 @@
 {
   "policy": "Every advisory allowlist entry must name the vulnerability ID, exact package, exact version, ecosystem, human review reason, and future expiresOn date. Expired, malformed, broad, package-less, or version-less entries fail before the scanner runs.",
-  "allowedVulnerabilities": []
+  "allowedVulnerabilities": [
+    {
+      "id": "GHSA-fc5q-39xc-vjpf",
+      "packageName": "picomatch",
+      "version": "4.0.4",
+      "ecosystem": "npm",
+      "reason": "Tooling-only: ReDoS in repeated extglobs. OSV lists every version through 4.0.7, the newest on npm, as affected, so no upgrade clears it. picomatch comes in only through build and test tooling (vite, vitest, tinyglobby, fdir, unplugin, @rollup/pluginutils), which match globs written in this repository, not user input. Remove when picomatch ships a fix (spoonjoy/spoonjoy-v2#747).",
+      "expiresOn": "2026-12-17"
+    }
+  ]
 }
