@@ -338,8 +338,7 @@ async function lineInView(locator: Locator, index: number): Promise<LineResult> 
 
     // A tall line can sit under a fixed or sticky bar by its top or bottom edge alone, with its
     // middle clear, and the bar's pixels would then be measured as what the text is painted over.
-    // A line whose middle is clear but whose edge is under such a bar is centred once, and fails
-    // when that does not move it clear of the bar.
+    // So a bar over its edge covers it, as a layer over its middle does.
     const pinned = (cover: Element | "nothing" | null): cover is Element => {
       for (let node = cover instanceof Element ? cover : null; node; node = node.parentElement) {
         const { position } = getComputedStyle(node);
@@ -364,18 +363,14 @@ async function lineInView(locator: Locator, index: number): Promise<LineResult> 
       return [rect.left + Math.min(2, rect.width / 2), rect.left + rect.width / 2, rect.right - Math.min(2, rect.width / 2)].map((x) => [x, middle] as const);
     };
     // Each covered point, with the layer over it, or "nothing" when the element is not hit there
-    // at all (clipped away, for instance).
-    const coversOf = (rect: DOMRect) => pointsOf(rect).map(([x, y]) => helpers.coverAt(element, x, y)).filter((cover) => cover !== null);
+    // at all (clipped away, for instance); or, with its middle clear, a bar over its edge.
+    const coversOf = (rect: DOMRect) => {
+      const covers = pointsOf(rect).map(([x, y]) => helpers.coverAt(element, x, y)).filter((cover) => cover !== null);
+      const bar = covers.length === 0 ? barOverEdge(rect) : null;
+      return bar ? [bar] : covers;
+    };
     const name = (cover: Element | "nothing") => (cover === "nothing" ? "nothing the page can name" : helpers.describe(cover));
     let covers = coversOf(line.rect);
-    if (covers.length === 0 && barOverEdge(line.rect)) {
-      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
-      line = helpers.lines(element)[index];
-      if (!line || !inside(line.rect)) return { blocker: `line ${index + 1} cannot be moved clear of a fixed or sticky bar over its edge` };
-      const bar = barOverEdge(line.rect);
-      if (bar) return { blocker: `line ${index + 1} is under ${helpers.describe(bar)} at its edge, and centring it does not move it clear` };
-      covers = coversOf(line.rect);
-    }
     if (covers.length > 0) {
       element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
       line = helpers.lines(element)[index];
