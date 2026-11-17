@@ -4,6 +4,7 @@ import { Tabs as BaseTabs } from "@base-ui/react/tabs";
 import { createContext, memo, useContext, useEffect, useRef, type JSX, type ReactNode } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
+import { PageDirection } from "~/lib/ouro/page-direction";
 import { devThrow } from "~/lib/ouro/dev";
 import { useMergedRef } from "~/lib/ouro/refs";
 import {
@@ -71,19 +72,24 @@ export function TabsRoot(props: TabsRootProps): JSX.Element {
  *
  * @internal
  */
-export function TabsRootUnchecked({ className, onPointerDownCapture, ...props }: TabsRootProps): JSX.Element {
+export function TabsRootUnchecked({ className, onPointerDownCapture, ref, ...props }: TabsRootProps): JSX.Element {
+  const root = useRef<HTMLDivElement>(null);
+  const merged = useMergedRef(ref, root);
   return (
     <TabsContext.Provider value>
-      <BaseTabs.Root
-        {...props}
-        data-ouro="tabs"
-        // A pointer anywhere inside (a tab, or a control in a panel) ends the keyboard's quiet spell.
-        onPointerDownCapture={(event) => {
-          event.currentTarget.toggleAttribute("data-ouro-keyboard", false);
-          onPointerDownCapture?.(event);
-        }}
-        className={cn(rootClass, className)}
-      />
+      <PageDirection of={root}>
+        <BaseTabs.Root
+          {...props}
+          ref={merged}
+          data-ouro="tabs"
+          // A pointer anywhere inside (a tab, or a control in a panel) ends the keyboard's quiet spell.
+          onPointerDownCapture={(event) => {
+            event.currentTarget.toggleAttribute("data-ouro-keyboard", false);
+            onPointerDownCapture?.(event);
+          }}
+          className={cn(rootClass, className)}
+        />
+      </PageDirection>
     </TabsContext.Provider>
   );
 }

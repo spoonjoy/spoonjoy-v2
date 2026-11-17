@@ -125,6 +125,23 @@ describe("RelativeTime", () => {
     expect(host.querySelector("time")!.textContent).toBe("2 days ago");
   });
 
+  it("hydrates without a mismatch when the server's engine wrote the UTC text differently from this browser's", async () => {
+    const value = new Date(Date.now() - 2 * DAY);
+    const node = <RelativeTime value={value} locale="en-US" />;
+    const utc = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(value);
+    // Another engine's ICU can join or space the same date differently; the server's text is only a placeholder.
+    const html = renderToString(node).replace(`>${utc}<`, `>${utc.replace(" ", "\u00a0")}<`);
+    expect(html).not.toContain(`>${utc}<`);
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    document.body.append(host);
+    mounted.push(host);
+    const onRecoverableError = vi.fn();
+    await act(async () => void roots.push(hydrateRoot(host, node, { onRecoverableError })));
+    expect(onRecoverableError).not.toHaveBeenCalled();
+    expect(host.querySelector("time")!.textContent).toBe("2 days ago");
+  });
+
   it("counts a calendar date in whole days of the reader's calendar, titled with that day", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     // Noon on June 1 where the reader is, whatever their time zone.

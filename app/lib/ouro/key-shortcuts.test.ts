@@ -23,4 +23,21 @@ describe("ariaKeyShortcuts", () => {
     expect(ariaKeyShortcuts(["option", "control", "1"])).toBe("Alt+Control+1");
     expect(ariaKeyShortcuts(["f2"])).toBe("F2");
   });
+
+  it.each([
+    ["apple", "Meta+Shift+E"],
+    ["windows", "Control+Shift+E"],
+    ["other", "Control+Shift+E"],
+  ] as const)("names mod as the platform's own modifier on %s", (platform, expected) => {
+    expect(ariaKeyShortcuts(["mod", "shift", "e"], platform)).toBe(expected);
+  });
+
+  it("names mod both ways while the platform is unknown, as the server's HTML does", () => {
+    expect(ariaKeyShortcuts(["mod", "shift", "e"], "unknown")).toBe("Control+Shift+E Meta+Shift+E");
+  });
+
+  it("spells the other keys the same on every platform", () => {
+    expect(ariaKeyShortcuts(["cmd", "/"], "apple")).toBe("Meta+/");
+    expect(ariaKeyShortcuts(["option", "control", "1"], "windows")).toBe("Alt+Control+1");
+  });
 });

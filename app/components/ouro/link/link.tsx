@@ -116,6 +116,26 @@ const inTextFocus =
   "in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:focus-visible:decoration-2";
 const inlineFocus = "focus-visible:outline-transparent focus-visible:decoration-ring focus-visible:decoration-2";
 
+// An icon of the app's own (a back arrow) stays on its text's line, a little apart. The base styles make an svg a
+// block, which in a link laid out as a block (one in a column) takes a line of its own: the icon is inline instead.
+// A link that stands alone lays its icon and text out in a row with a gap; one in running text stays inline, so it
+// sits on the sentence's baseline and wraps, and its icon takes a little room on each side. The rules sit in a nested
+// layer, so the app's own classes still win; the external icon, already inline, is left out.
+const iconInlineClass =
+  "[@layer_ouro-reset]:[&>svg:not([data-ouro-external])]:inline-block " +
+  "[@layer_ouro-reset]:[&>svg:not([data-ouro-external])]:align-[-0.125em]";
+const iconRowClass =
+  "[@layer_ouro-reset]:not-in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:has-[>svg:not([data-ouro-external])]:inline-flex " +
+  "[@layer_ouro-reset]:not-in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:has-[>svg:not([data-ouro-external])]:items-center " +
+  "[@layer_ouro-reset]:not-in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:has-[>svg:not([data-ouro-external])]:gap-1.5";
+const iconInTextClass =
+  "[@layer_ouro-reset]:in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:[&>svg:not([data-ouro-external])]:mx-[0.25em]";
+const alwaysIconRowClass =
+  "[@layer_ouro-reset]:has-[>svg:not([data-ouro-external])]:inline-flex " +
+  "[@layer_ouro-reset]:has-[>svg:not([data-ouro-external])]:items-center " +
+  "[@layer_ouro-reset]:has-[>svg:not([data-ouro-external])]:gap-1.5";
+const alwaysIconInTextClass = "[@layer_ouro-reset]:[&>svg:not([data-ouro-external])]:mx-[0.25em]";
+
 const tones = {
   primary: "text-primary",
   secondary: "text-foreground",
@@ -167,6 +187,9 @@ function linkHint(token: string): string {
  * Keyboard focus draws an outline around a link that stands alone. In running text it thickens
  * the underline in the ring's colour instead, since an outline would cover the next character.
  *
+ * An icon you put in the link (a back arrow before "Recipes") stays on its text's line, a little
+ * apart, wherever the link is laid out; mark it `aria-hidden` so the link's name is its text.
+ *
  * @group Text
  * @see https://ui.ouroboros.bot/docs/link
  *
@@ -180,6 +203,7 @@ function linkHint(token: string): string {
  * @claim "On a touch screen a link" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link with a mouse > is as tall as its text with a fine pointer, standing alone or in a sentence)
  * @claim "On a touch screen a link" registry/ouro/components/ouro/link/link.touch.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.touch.test.tsx::gives a link on its own line a 44px box, centred on its text)
  * @claim "Keyboard focus draws an outline" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link > marks keyboard focus in running text with a thick underline in the ring's colour, not an outline drawn over the next character)
+ * @claim "An icon you put in the" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link > keeps an icon of the app's own on its text's line, a little apart, wherever the link is laid out)
  * @claim "With a mouse every link is" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link with a mouse > is as tall as its text with a fine pointer, standing alone or in a sentence)
  */
 export function Link(props: LinkProps): JSX.Element {
@@ -250,13 +274,14 @@ export function Link(props: LinkProps): JSX.Element {
       data-inline={inlineProp ? "" : undefined}
       {...(current ? { "aria-current": current } : {})}
       data-current={marked ? "" : undefined}
-      className={cn(base, inlineProp === undefined ? [standalone, inTextFocus] : inlineProp ? inlineFocus : alwaysStandalone, tones[tone], currentClass, className)}
+      className={cn(base, iconInlineClass, inlineProp === undefined ? [standalone, inTextFocus, iconRowClass, iconInTextClass] : inlineProp ? [inlineFocus, alwaysIconInTextClass] : [alwaysStandalone, alwaysIconRowClass], tones[tone], currentClass, className)}
     >
       {children}
       {external && (
         <>
           <svg
             aria-hidden="true"
+            data-ouro-external=""
             viewBox="0 0 16 16"
             fill="none"
             stroke="currentColor"

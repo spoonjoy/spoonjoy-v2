@@ -138,7 +138,7 @@ describe("NativeSelect", () => {
     expect(select.getAttribute("aria-invalid")).toBe("true");
     expect(description(select)).toEqual(["Where we send it.", "We do not ship there."]);
     await userEvent.selectOptions(page.getByRole("combobox", { name: "Country" }), "za");
-    expect(select.getAttribute("aria-invalid")).toBeNull();
+    expect(select.getAttribute("aria-invalid")).toBe("false");
     expect(description(select)).toEqual(["Where we send it."]);
   });
 

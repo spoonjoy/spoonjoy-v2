@@ -86,8 +86,17 @@ afterEach(async () => {
   await act(async () => roots.splice(0).forEach((root) => root.unmount()));
   for (const node of mounted) node.remove();
   mounted = [];
+  delete (navigator as { userAgentData?: unknown }).userAgentData;
+  delete (navigator as { platform?: unknown }).platform;
   await commands.emulateMedia({ reducedMotion: "no-preference", forcedColors: "none" });
 });
+
+/** Pretends the browser runs on `platform`, through the modern API and the legacy one, so a shortcut's form is deterministic. */
+function onPlatform(platform: "macOS" | "Windows" | "Linux") {
+  const legacy = { macOS: "MacIntel", Windows: "Win32", Linux: "Linux x86_64" }[platform];
+  Object.defineProperty(navigator, "userAgentData", { configurable: true, value: { platform } });
+  Object.defineProperty(navigator, "platform", { configurable: true, value: legacy });
+}
 
 const warnings = () => warn.mock.calls.map((call: unknown[]) => call[0]);
 const menus = () => [...document.querySelectorAll<HTMLElement>('[data-ouro="menu"]')];
@@ -360,6 +369,7 @@ describe("Menu items", () => {
   });
 
   it("keeps the shortcut out of the item's name and announces it with aria-keyshortcuts", async () => {
+    onPlatform("macOS");
     await openDropdown(
       {},
       <>
@@ -368,7 +378,7 @@ describe("Menu items", () => {
       </>,
     );
     const edit = page.getByRole("menuitem", { name: "Edit", exact: true }).element();
-    expect(edit.getAttribute("aria-keyshortcuts")).toBe("Control+Shift+E Meta+Shift+E");
+    expect(edit.getAttribute("aria-keyshortcuts")).toBe("Meta+Shift+E");
     expect(edit.querySelector('[data-ouro="kbd"]')!.getAttribute("aria-hidden")).toBe("true");
     const pin = page.getByRole("menuitemcheckbox", { name: "Pin", exact: true }).element();
     expect(pin.getAttribute("aria-keyshortcuts")).toBe("Alt+Backspace");
@@ -574,6 +584,89 @@ describe("Menu items", () => {
     expect(child!.querySelector("[data-ouro-menu-back]")).toBeNull();
     await userEvent.keyboard("{ArrowLeft}");
     await expect.poll(() => menus().length).toBe(1);
+  });
+
+  it("opens a submenu with ArrowLeft in a right-to-left page, where it opens to the left, and closes it with ArrowRight", async () => {
+    document.documentElement.dir = "rtl";
+    try {
+      await render(
+        <Menu trigger={<Button>Actions</Button>}>
+          <MenuItem>Edit</MenuItem>
+          <MenuSub label="Share">
+            <MenuItem>Copy link</MenuItem>
+          </MenuSub>
+        </Menu>,
+      );
+      trigger().focus();
+      await userEvent.keyboard("{Enter}");
+      await settled();
+      await userEvent.keyboard("{ArrowDown}");
+      expect(document.activeElement?.textContent).toContain("Share");
+      await userEvent.keyboard("{ArrowLeft}");
+      await expect.poll(() => menus().length).toBe(2);
+      await expect.poll(() => document.activeElement?.textContent).toBe("Copy link");
+      const [parent, child] = menus();
+      expect(child!.getBoundingClientRect().right).toBeLessThanOrEqual(parent!.getBoundingClientRect().left + 8);
+      await userEvent.keyboard("{ArrowRight}");
+      await expect.poll(() => menus().length).toBe(1);
+    } finally {
+      document.documentElement.removeAttribute("dir");
+    }
+  });
+
+  it.each(["trigger", "context", "anchor", "bar"] as const)("keeps a %s menu left to right in a left-to-right section of a right-to-left page", async (mode) => {
+    document.documentElement.dir = "rtl";
+    try {
+      const sub = (
+        <>
+          <MenuItem>Edit</MenuItem>
+          <MenuSub label="Share">
+            <MenuItem>Copy link</MenuItem>
+          </MenuSub>
+        </>
+      );
+      function Anchored() {
+        const [anchor, setAnchor] = useState<Element | null>(null);
+        return (
+          <>
+            <Button ref={setAnchor}>Actions</Button>
+            {anchor && (
+              <Menu anchor={anchor} open onOpenChange={() => {}} aria-label="Actions">
+                {sub}
+              </Menu>
+            )}
+          </>
+        );
+      }
+      const menu =
+        mode === "trigger" ? (
+          <Menu trigger={<Button>Actions</Button>}>{sub}</Menu>
+        ) : mode === "context" ? (
+          <Menu contextTrigger={<div style={{ width: 200, height: 80 }}>Card</div>}>{sub}</Menu>
+        ) : mode === "anchor" ? (
+          <Anchored />
+        ) : (
+          <MenuBar>
+            <Menu label="Actions">{sub}</Menu>
+          </MenuBar>
+        );
+      const { host } = await render(<div dir="ltr">{menu}</div>);
+      if (mode === "context") {
+        const card = host.querySelector<HTMLElement>("div[dir] div")!;
+        const box = card.getBoundingClientRect();
+        card.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: box.left + 10, clientY: box.top + 10 }));
+      } else if (mode !== "anchor") {
+        host.querySelector<HTMLElement>("button")!.focus();
+        await userEvent.keyboard("{Enter}");
+      }
+      await settled();
+      await expect.poll(() => menus().length).toBe(1);
+      page.getByRole("menuitem", { name: "Share" }).element().focus();
+      await userEvent.keyboard("{ArrowRight}");
+      await expect.poll(() => menus().length).toBe(2);
+    } finally {
+      document.documentElement.removeAttribute("dir");
+    }
   });
 
   it("keeps an open submenu's focus guards out of its menu, where WebKit on Apple platforms makes them buttons", async () => {
@@ -1519,6 +1612,31 @@ describe("Menu server rendering", () => {
     expect(html).toContain('role="menubar"');
     expect(html).toContain(">File<");
     expect(html).toContain(">Area<");
+  });
+});
+
+describe("Menu shortcuts' platform", () => {
+  it.each([
+    ["macOS", "Meta"],
+    ["Windows", "Control"],
+    ["Linux", "Control"],
+  ] as const)("names mod as %s's own modifier on every kind of item, and no other", async (platform, modifier) => {
+    onPlatform(platform);
+    await openDropdown(
+      {},
+      <>
+        <MenuItem shortcut={["mod", "e"]}>Edit</MenuItem>
+        <MenuCheckboxItem shortcut={["mod", "p"]}>Pin</MenuCheckboxItem>
+        <MenuRadioGroup label="Sort" defaultValue="name">
+          <MenuRadioItem value="name" shortcut={["mod", "n"]}>
+            Name
+          </MenuRadioItem>
+        </MenuRadioGroup>
+      </>,
+    );
+    expect(page.getByRole("menuitem", { name: "Edit", exact: true }).element().getAttribute("aria-keyshortcuts")).toBe(`${modifier}+E`);
+    expect(page.getByRole("menuitemcheckbox", { name: "Pin", exact: true }).element().getAttribute("aria-keyshortcuts")).toBe(`${modifier}+P`);
+    expect(page.getByRole("menuitemradio", { name: "Name", exact: true }).element().getAttribute("aria-keyshortcuts")).toBe(`${modifier}+N`);
   });
 });
 

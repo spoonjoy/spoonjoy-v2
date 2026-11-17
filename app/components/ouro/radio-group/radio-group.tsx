@@ -2,7 +2,7 @@
 
 import { Radio as BaseRadio } from "@base-ui/react/radio";
 import { RadioGroup as BaseRadioGroup } from "@base-ui/react/radio-group";
-import type { JSX, ReactNode, Ref } from "react";
+import { useRef, type JSX, type ReactNode, type Ref } from "react";
 import { Field } from "~/components/ouro/field/field";
 import { choicesClass, contractWarnings } from "~/components/ouro/field/field-styles";
 import { devThrow } from "~/lib/ouro/dev";
@@ -10,6 +10,8 @@ import { controlRef } from "~/lib/ouro/control-ref";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { FieldOwnerContext, useField, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
+import { PageDirection } from "~/lib/ouro/page-direction";
+import { useMergedRef } from "~/lib/ouro/refs";
 import { dotClass, radioClass } from "~/components/ouro/radio-group/radio-group-styles";
 
 /** One choice in a {@link RadioGroup}'s `options`. */
@@ -220,10 +222,12 @@ function Choices(props: {
   children: ReactNode;
 }): JSX.Element {
   const { value, defaultValue, onValueChange, orientation, ref, children } = props;
+  const group = useRef<HTMLDivElement>(null);
+  const merged = useMergedRef(ref, group);
   const field = useField()!;
-  return (
+  const directed = (
     <BaseRadioGroup
-      ref={ref}
+      ref={merged}
       value={value}
       defaultValue={defaultValue}
       onValueChange={onValueChange && ((next) => onValueChange(next as string))}
@@ -236,6 +240,7 @@ function Choices(props: {
       {children}
     </BaseRadioGroup>
   );
+  return <PageDirection of={group}>{directed}</PageDirection>;
 }
 
 /**
@@ -246,8 +251,11 @@ function Choices(props: {
  *
  * Use `CheckboxGroup` instead when several choices may be picked, `Select` for a long list,
  * and `Switch` for on or off.
+ * In a right-to-left page (`dir="rtl"`) a row of radios follows it: ArrowLeft moves to the next.
+ *
  *
  * @group Forms
+ * @claim "In a right-to-left page" registry/ouro/components/ouro/radio-group/radio-group.test.tsx verify:testExists(registry/ouro/components/ouro/radio-group/radio-group.test.tsx::RadioGroup > moves to the next radio with ArrowLeft in a right-to-left page, laid out in a row)
  * @see https://ui.ouroboros.bot/docs/radio-group
  *
  * @example

@@ -1,9 +1,11 @@
 import { expect, test } from "../ouro-fixtures";
-import { openStory } from "./story";
+import { holdClock, openStory } from "./story";
 
 test("a timer counts down by the clock, pauses and resumes, and says Time's up at zero", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-01-01T12:00:00Z") });
   await openStory(page, "feedback-timer--playground");
+  // Stopped, so only runFor moves it: a slow runner's own seconds between steps would count too (#1729).
+  await holdClock(page);
   const timer = page.getByRole("group", { name: "Pasta" });
   const time = timer.getByRole("timer");
   await expect(time).toHaveText("10:00");

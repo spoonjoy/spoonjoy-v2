@@ -46,12 +46,19 @@ const trackClass =
 const thumbClass =
   "pointer-events-none block size-(--ouro-switch-thumb) [--corner-shape:round] [corner-shape:round] rounded-full " +
   // The Quiet switch's lens: the glass tint over the track with a rim inside, a hairline outside and the theme's small shadow.
-  "bg-[color-mix(in_oklab,var(--ouro-glass)_var(--ouro-glass-tint),transparent)] [backdrop-filter:blur(var(--ouro-glass-blur))_saturate(1.6)] " +
+  // No backdrop filter, which made every large repaint slower in WebKit without a GPU (ourostack/ouro-ui#728): the thumb only
+  // ever lies over its own track, so the lens is drawn. Off, the tint shows the page through the outlined track, with the
+  // outline's colour fading in from the near edge as the filter's blur drew it; on, the tint is mixed into the primary fill,
+  // saturated by the matrix saturate(1.6) applies.
+  "bg-[color-mix(in_oklab,var(--ouro-glass)_var(--ouro-glass-tint),transparent)] " +
   "[box-shadow:inset_0_0_0_.75px_var(--ouro-glass-rim),0_0_0_.5px_var(--ouro-glass-edge),var(--shadow-sm)] " +
-  "data-checked:bg-[color-mix(in_oklab,var(--ouro-glass)_calc(var(--ouro-glass-tint)*2),transparent)] " +
-  "[@media(prefers-reduced-transparency:reduce)]:bg-(--ouro-glass-solid) [@media(prefers-reduced-transparency:reduce)]:[backdrop-filter:none] " +
-  "contrast-more:bg-(--ouro-glass-solid) contrast-more:[backdrop-filter:none] " +
-  "forced-colors:bg-[ButtonText] forced-colors:data-checked:bg-[HighlightText] forced-colors:[backdrop-filter:none] " +
+  "bg-[image:linear-gradient(to_right,color-mix(in_oklab,var(--muted-foreground)_14%,transparent),transparent_85%)] " +
+  "rtl:bg-[image:linear-gradient(to_left,color-mix(in_oklab,var(--muted-foreground)_14%,transparent),transparent_85%)] " +
+  "data-checked:bg-none data-checked:bg-[color-mix(in_srgb,var(--ouro-glass)_calc(var(--ouro-glass-tint)*2),var(--primary))] " +
+  "supports-[color:color(from_red_srgb_r_g_b)]:data-checked:bg-[color-mix(in_srgb,var(--ouro-glass)_calc(var(--ouro-glass-tint)*2),color(from_var(--primary)_srgb_clamp(0,1.4722*r_-_0.429*g_-_0.0432*b,1)_clamp(0,-0.1278*r_+_1.171*g_-_0.0432*b,1)_clamp(0,-0.1278*r_-_0.429*g_+_1.5568*b,1)))] " +
+  "[@media(prefers-reduced-transparency:reduce)]:bg-(--ouro-glass-solid) [@media(prefers-reduced-transparency:reduce)]:bg-none " +
+  "contrast-more:bg-(--ouro-glass-solid) contrast-more:bg-none " +
+  "forced-colors:bg-[ButtonText] forced-colors:data-checked:bg-[HighlightText] forced-colors:bg-none " +
   // Translate and origin have no logical form, so a right-to-left page reverses them: the thumb
   // starts at the inline start and slides toward the inline end either way.
   "translate-x-0 data-checked:translate-x-4 rtl:data-checked:-translate-x-4 " +

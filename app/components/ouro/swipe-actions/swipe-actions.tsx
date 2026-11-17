@@ -19,6 +19,7 @@ import { renamedTones, type ToneName } from "~/lib/ouro/tones";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useDrag } from "~/lib/ouro/use-drag";
 import { useReducedMotion } from "~/lib/ouro/use-reduced-motion";
+import { handOffFocus } from "~/lib/ouro/focus-handoff";
 import { Button } from "~/components/ouro/button/button";
 import { Menu } from "~/components/ouro/menu/menu";
 import {
@@ -162,6 +163,10 @@ function Strip({
  * reaches it on any device. While a finger is down on the row, text selection and the iOS
  * callout are off, so the long press opens the menu.
  *
+ * An action that removes its row (Delete, chosen from the actions menu by keyboard) hands focus
+ * to the next row's actions button, or the row before's when it was the last, so a keyboard or
+ * screen reader user keeps their place in the list.
+ *
  * The first action of each side is its primary one: it sits at the outer edge, and a
  * swipe past 60% of the row runs it on release, with no confirmation. So make a
  * destructive primary action undoable: delete, then offer Undo in a toast, as in the
@@ -208,6 +213,7 @@ function Strip({
  *     </SwipeActions>
  *   ))}
  * </ItemGroup>
+ * @claim "An action that removes its row" registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx::SwipeActions > hands focus to %s actions button when an action chosen from the menu removes its row)
  * @claim "The first action of each side" registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx::SwipeActions > runs the primary action on a full swipe of either side)
  * @claim "The first action of each side" registry/ouro/components/ouro/swipe-actions/swipe-actions.touch.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.touch.test.tsx::SwipeActions on a phone > commits the primary action with a full swipe, once, and closes the row)
  * @claim "The first action of each side" registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx::SwipeActions > does not run the primary action when a full swipe is flicked back, and opens the side instead of nothing)
@@ -281,6 +287,8 @@ export function SwipeActions(props: SwipeActionsProps): JSX.Element {
   /** Whether the long-press menu is open. */
   const [pressed, setPressed] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  // The last element focus came to in the row or its actions menus: React's focus events reach the row through a menu's portal.
+  const focusedIn = useRef<EventTarget | null>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const leadingRef = useRef<HTMLDivElement>(null);
@@ -467,6 +475,10 @@ export function SwipeActions(props: SwipeActionsProps): JSX.Element {
       rootRef.current = element;
       const release = dragRef(element);
       return () => {
+        // A row an action removes (Delete) hands focus to the next row's actions button, or the one before. Focus is in
+        // one of the row's actions menus then, outside the row, so the row's own actions button takes it first.
+        if (document.activeElement === focusedIn.current) element.querySelector<HTMLElement>("[data-ouro-swipe-actions-menu] button")?.focus();
+        handOffFocus(element);
         rootRef.current = null;
         release!();
       };
@@ -552,6 +564,7 @@ export function SwipeActions(props: SwipeActionsProps): JSX.Element {
       onPointerUp={drag.onPointerUp}
       onPointerCancel={drag.onPointerCancel}
       onClickCapture={onClickCapture}
+      onFocus={(event) => void (focusedIn.current = event.target)}
     >
       <div ref={trackRef} data-ouro-swipe-actions-track="" className={trackClass}>
         <Strip side="leading" actions={leading} open={open === "leading"} stripRef={leadingRef} onAction={tapped} />

@@ -151,7 +151,8 @@ export type FieldControlProps = Omit<BaseField.Control.Props, "className"> & {
 
 /**
  * Part: the control, a text `<input>` by default. It takes the field's id, `name`,
- * `disabled` and `required`, `aria-invalid` from its error, and `aria-describedby` from its
+ * `disabled` and `required`, `aria-invalid` from its error (`false` without one, so WebKit does not
+ * read an empty required field as invalid before anyone types), and `aria-describedby` from its
  * description and error. Render another element with
  * `render={<textarea />}`.
  */
@@ -169,7 +170,8 @@ export function FieldControl({ className, required, ...props }: FieldControlProp
       // A passed `aria-required` says "required" without the browser's blocking check.
       aria-required={isRequired || props["aria-required"]}
       aria-describedby={describedBy}
-      {...(field.invalid ? { "aria-invalid": true } : {})}
+      // Said even when valid: without it, WebKit reads an empty required input as invalid before anyone types.
+      aria-invalid={field.invalid || (props["aria-invalid"] ?? false)}
       className={cn(controlClass, className)}
     />
   );

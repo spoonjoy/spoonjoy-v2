@@ -1096,8 +1096,10 @@ describe("Sheet parts", () => {
   });
 
   it("compose into a working sheet", async () => {
+    // What Done receives and what Base UI is told, so a press that is lost says where (ourostack/ouro-ui#1756).
+    const changes: string[] = [];
     await render(
-      <SheetRoot>
+      <SheetRoot onOpenChange={(open, details) => changes.push(`${open ? "open" : "close"} (${details.reason})`)}>
         <SheetTrigger render={<Button>Open</Button>} />
         <SheetPortal>
           <SheetBackdrop />
@@ -1118,8 +1120,18 @@ describe("Sheet parts", () => {
     await expect.element(page.getByRole("dialog", { name: "Parts" })).toBeVisible();
     expect(popup()!.getAttribute("data-side")).toBe("bottom");
     expect(document.querySelector("[data-ouro-sheet-handle]")!.getAttribute("aria-hidden")).toBe("true");
-    await userEvent.click(page.getByRole("button", { name: "Done" }));
-    await expect.poll(() => popup()).toBeNull();
+    const done = page.getByRole("button", { name: "Done" });
+    const received: string[] = [];
+    for (const type of ["pointerdown", "pointerup", "click"]) done.element().addEventListener(type, () => received.push(type));
+    await userEvent.click(done);
+    await expect
+      .poll(() => popup())
+      .toBeNull()
+      .catch((error: Error) => {
+        throw new Error(`${error.message}. Done received ${received.join(", ") || "no event"}; Base UI was told ${changes.join(", ")}; the popup is ${popup()?.getAttributeNames().filter((name) => name.startsWith("data-")).join(" ")}`, { cause: error });
+      });
+    expect(received).toEqual(["pointerdown", "pointerup", "click"]);
+    expect(changes).toEqual(["open (trigger-press)", "close (close-press)"]);
   });
 
   it("forwards a ref passed to SheetViewport", async () => {

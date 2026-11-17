@@ -184,6 +184,67 @@ describe("button branch", () => {
     expect(host.firstElementChild!.getBoundingClientRect().width).toBe(300);
     expect(button.getBoundingClientRect().width).toBe(300);
   });
+
+  it.each(["ltr", "rtl"] as const)("puts an end icon at the inline end of a button wider than its label, %s", async (dir) => {
+    const { host } = await render(
+      <div dir={dir} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", width: 300 }}>
+        <Button fullWidth endIcon={Star}>
+          Next
+        </Button>
+        <Button endIcon={Star}>Next</Button>
+      </div>,
+    );
+    // Distances along the inline axis, from the button's start edge, whatever the direction.
+    const measure = (button: HTMLElement) => {
+      const box = button.getBoundingClientRect();
+      const from = (rect: DOMRect) => (dir === "ltr" ? [rect.left - box.left, rect.right - box.left] : [box.right - rect.right, box.right - rect.left]);
+      const range = document.createRange();
+      range.selectNodeContents(button.querySelector("[data-ouro-label]")!);
+      const [textStart, textEnd] = from(range.getBoundingClientRect());
+      const [iconStart, iconEnd] = from(button.querySelector('[data-testid="icon"]')!.getBoundingClientRect());
+      return { width: box.width, textStart: textStart!, textEnd: textEnd!, iconStart: iconStart!, iconEnd: iconEnd! };
+    };
+    const [wide, snug] = [...host.querySelectorAll<HTMLElement>("[data-ouro='button']")].map(measure);
+    expect(wide!.width).toBe(300);
+    // The icon is as far from the end edge as on a button that fits its label.
+    expect(Math.abs(wide!.width - wide!.iconEnd - (snug!.width - snug!.iconEnd))).toBeLessThanOrEqual(0.5);
+    // The text is centred in the room between the start padding and the gap before the icon.
+    const room = (snug!.textStart + wide!.iconStart - (snug!.iconStart - snug!.textEnd)) / 2;
+    expect(Math.abs((wide!.textStart + wide!.textEnd) / 2 - room)).toBeLessThanOrEqual(1);
+  });
+
+  it.each([
+    ["with", Star],
+    ["without", undefined],
+  ] as const)("keeps an app's justify-start on a wide button %s an end icon", async (_, icon) => {
+    const { button } = await render(
+      <div style={{ width: 300 }}>
+        <Button fullWidth className="justify-start" startIcon={Star} endIcon={icon}>
+          Next
+        </Button>
+      </div>,
+    );
+    const box = button.getBoundingClientRect();
+    const start = button.querySelector('[data-testid="icon"]')!.getBoundingClientRect();
+    // The label starts at the button's start padding (less the start icon's -0.5 margin), not in the middle.
+    expect(start.left - box.left).toBeLessThanOrEqual(parseFloat(getComputedStyle(button).paddingInlineStart));
+  });
+
+  it("fades an end icon with the label while loading, leaving only the spinner", async () => {
+    const { button } = await render(
+      <Button endIcon={Star} loading>
+        Next
+      </Button>,
+    );
+    const icon = button.querySelector<SVGElement>('[data-testid="icon"]')!;
+    // The opacity it shows with: its own times every element's around it, up to the button.
+    const shown = () => {
+      let opacity = 1;
+      for (let node: Element | null = icon; node && node !== button; node = node.parentElement) opacity *= Number(getComputedStyle(node).opacity);
+      return opacity;
+    };
+    await expect.poll(shown).toBe(0);
+  });
 });
 
 describe("loading", () => {

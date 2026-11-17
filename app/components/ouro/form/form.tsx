@@ -1,13 +1,13 @@
 "use client";
 
 import { Form as BaseForm } from "@base-ui/react/form";
-import { isValidElement, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode, type Ref } from "react";
+import { isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { formErrorIdentity, type FormErrorIdentity, type FormErrorValue, type ReadonlyFormErrors } from "~/lib/ouro/form-answer";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useMergedRef } from "~/lib/ouro/refs";
-import { errorMessageKey, errorMessages, FormErrorsContext } from "~/lib/ouro/use-field";
+import { errorMessageKey, errorMessages, FormErrorsContext, type ErrorMessage } from "~/lib/ouro/use-field";
 
 /**
  * Errors by field name: one message, or several as an array. A React Router action returns
@@ -21,6 +21,15 @@ export type { FormErrors } from "~/lib/ouro/form-answer";
 
 /** A read-only error projection, including the frozen arrays returned by `formErrors`. */
 export type { ReadonlyFormErrors } from "~/lib/ouro/form-answer";
+
+/** What a {@link FormProps.errorSummary} receives: the number of problems, and the first one in page order. */
+export type FormErrorSummary = (
+  count: number,
+  first: {
+    label: string | undefined;
+    message: string;
+  },
+) => string;
 
 /** Props for {@link Form}: a `<form>`'s attributes, one complete `errors` value, and Base UI Form's `render`. */
 export type FormProps = Omit<BaseForm.Props, "className" | "errors" | "children"> & {
@@ -69,6 +78,19 @@ export type FormProps = Omit<BaseForm.Props, "className" | "errors" | "children"
   errors?: ReadonlyFormErrors | FormErrorValue | null | undefined;
   /** Not a prop. Bind the accepted answer inside `errors`: `errors={formErrors(answer, messages)}`. */
   result?: { 'Use errors={formErrors(answer, messages)}': never };
+  /**
+   * Translates the summary a screen reader hears first after a submit that leaves field errors:
+   * how many problems there are, and the first in page order, which is the field focus moves to.
+   * `label` is that field's label text, or `undefined` when it cannot be read; `message` is its
+   * error, or `""` when that cannot be read. A message at the top of the form counts as one
+   * problem. The summary is visually hidden: each field shows its own error.
+   * @example
+   * <Form errors={errors} errorSummary={(count, first) => `No se pudo guardar: ${count}. ${first.label ?? ""}: ${first.message}`}>
+   * @claim "Translates the summary a screen reader" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > translates the summary through errorSummary, with the count, label and message)
+   * @claim "A message at the top of the form counts as one problem" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > counts a message at the top of the form as one problem, and shows it as well)
+   * @claim "The summary is visually hidden" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > says how many problems there are, and the first in page order, once per submit)
+   */
+  errorSummary?: FormErrorSummary | undefined;
   /** The fields and the submit button. */
   children: ReactNode;
   /**
@@ -142,6 +164,84 @@ function entryPoint(element: HTMLElement): HTMLElement {
 }
 
 /**
+ * The summary a screen reader hears first: how many problems there are, then the first one's label
+ * and message. The message is dropped when its text cannot be read.
+ */
+const defaultErrorSummary: FormErrorSummary = (count, first) => {
+  const problems = `Couldn't save: ${count} ${count === 1 ? "problem" : "problems"}.`;
+  return first.message === "" ? problems : `${problems} ${first.label ? `${first.label}: ` : ""}${first.message}`;
+};
+
+/**
+ * The element that shows a control's error: the one its `aria-describedby` names with an
+ * `-error` id, which a Field renders. A radio in a group shares the group's, so the group counts once.
+ */
+function errorElementOf(control: HTMLElement): HTMLElement | undefined {
+  return control
+    .getAttribute("aria-describedby")
+    ?.split(" ")
+    .map((id) => control.ownerDocument.getElementById(id))
+    .find((element): element is HTMLElement => element?.id.endsWith("-error") === true);
+}
+
+/**
+ * A control's label text, read from the page: its radio group's `aria-labelledby`, its own, or
+ * its `<label>`. `undefined` for a control whose label cannot be read.
+ */
+function labelOf(control: HTMLElement): string | undefined {
+  const named = control.closest<HTMLElement>('[role="radiogroup"]') ?? control;
+  const labelledBy = named.getAttribute("aria-labelledby");
+  const text =
+    labelledBy === null
+      ? (control as Partial<HTMLInputElement>).labels?.[0]?.textContent
+      : labelledBy
+          .split(" ")
+          .map((id) => control.ownerDocument.getElementById(id)?.textContent)
+          .filter(Boolean)
+          .join(" ");
+  return text?.trim() || undefined;
+}
+
+/** A control's error text: its first message when several are listed, or "" for a control whose error cannot be read. */
+function messageOf(control: HTMLElement): string {
+  const error = errorElementOf(control);
+  return ((error?.querySelector("li") ?? error)?.textContent ?? "").trim();
+}
+
+/** Whether a form's errors hold any message to show: a field's, or one at the top. */
+function hasMessages(errors: ReadonlyFormErrors): boolean {
+  return Object.values(errors).some((message) => errorMessages(message).length > 0);
+}
+
+/**
+ * The messages at the top of the form: the `form` key's first, then the keys no field claims.
+ * @claim "The messages at the top of the form" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > shows a form error and keys no field claims in an alert at the top of the form)
+ */
+function topMessagesOf(errors: ReadonlyFormErrors, showsAtTop: (key: string) => boolean): ErrorMessage[] {
+  const keys = Object.keys(errors).filter(showsAtTop);
+  return [...keys.filter((key) => key === FORM_KEY), ...keys.filter((key) => key !== FORM_KEY)].flatMap((key) =>
+    errorMessages(errors[key]),
+  );
+}
+
+/**
+ * The summary of a submit's errors, or `undefined` when no focusable field shows one. Counts each
+ * field once, plus one for the messages at the top of the form, and reads the first field in page
+ * order: the one focus moves to.
+ * @claim "The summary of a submit's errors" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > has no summary and no alert when the only field with an error cannot take focus)
+ * @claim "Counts each field once" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > counts a radio group once and names it by its legend)
+ * @claim "reads the first field in page order" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > counts several problems and reads the first in page order, not the order the action lists them)
+ * @claim "plus one for the messages at the top of the form" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > counts a message at the top of the form as one problem, and shows it as well)
+ */
+function summarize(form: HTMLFormElement, topMessages: number, summary: FormErrorSummary): string | undefined {
+  const invalid = [...form.querySelectorAll<HTMLElement>('[aria-invalid="true"]')].filter(focusable);
+  const first = invalid[0];
+  if (!first) return undefined;
+  const fields = new Set(invalid.map((control) => errorElementOf(control) ?? control)).size;
+  return summary(fields + (topMessages > 0 ? 1 : 0), { label: labelOf(first), message: messageOf(first) });
+}
+
+/**
  * A form that validates with the browser's own constraints (`required`, `type="email"`,
  * `pattern`) and shows server errors on the matching fields. Pass `errors` straight from
  * your action; each message lands on the field with that `name`, and focus moves to the
@@ -189,6 +289,12 @@ function entryPoint(element: HTMLElement): HTMLElement {
  * without one. A field's message is not an alert: it is that control's description, so
  * assert it with `toHaveAccessibleDescription`.
  *
+ * After a submit that leaves field errors, the alert opens with a visually hidden summary, such as
+ * "Couldn't save: 1 problem. Name: You already have a recipe called Pasta.", which screen readers hear
+ * before focus moves to the first field. The same summary is not announced again while the errors stand,
+ * and a changed error, or one the user fixed and got back, announces again. Pass `errorSummary` to translate it.
+ * A message at the top of the form counts as one problem.
+ *
  * Focus moves to the first field with an error when errors arrive after a submit. A page
  * that loads with `errors` already set (a post without JavaScript, or a reload) shows them
  * in the server HTML and moves no focus: nothing was submitted from this page, and taking
@@ -230,6 +336,10 @@ function entryPoint(element: HTMLElement): HTMLElement {
  * @claim "It is in the page only" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > adds the alert to the page with its message already in it, each time an answer arrives, so screen readers announce it)
  * @claim "A page that loads with `errors`" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > leaves focus where the browser put it when the page loads with errors)
  * @claim "A page that loads with `errors`" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > puts the form error in the server HTML)
+ * @claim "After a submit that leaves field errors" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > says how many problems there are, and the first in page order, once per submit)
+ * @claim "The same summary is not announced again" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > does not announce an unchanged summary again, but announces a changed one)
+ * @claim "and a changed error, or one the user fixed" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > announces the same error again once the user has changed the field)
+ * @claim "A message at the top of the form counts as one problem" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > counts a message at the top of the form as one problem, and shows it as well)
  */
 export function Form(props: FormProps): JSX.Element {
   const {
@@ -238,6 +348,7 @@ export function Form(props: FormProps): JSX.Element {
     onSubmit,
     children,
     className,
+    errorSummary = defaultErrorSummary,
     // Guard props (hint types), dropped here so they never reach the DOM.
     validationErrors,
     ...rest
@@ -274,8 +385,18 @@ export function Form(props: FormProps): JSX.Element {
     () => mode === "answer" ? maskErrors(errorsProp, shown.cleared) : shown.rawErrors,
     [mode, errorsProp, shown.cleared, shown.rawErrors],
   );
+  // The alert's state: the arrival it was decided for, its key (a new key is a new element, so a
+  // new announcement) and the summary it opens with. A summary equal to the one shown keeps its key,
+  // so an unchanged refusal is not announced again.
+  const [alert, setAlert] = useState<{ arrival: number; key: number; summary: string | undefined }>({
+    arrival: 0,
+    key: 0,
+    summary: undefined,
+  });
   const clear = useCallback((name: string) => {
     if (!errors || !Object.hasOwn(errors, name)) return;
+    // Once the user changes a field, its problem is gone: a later identical error is news.
+    setAlert((current) => ({ ...current, summary: undefined }));
     setShown((current) => {
       if (current.cleared.has(name)) return current;
       const next: Record<string, ReadonlyFormErrors[string]> = { ...current.rawErrors };
@@ -306,7 +427,10 @@ export function Form(props: FormProps): JSX.Element {
   );
   useEffect(sync, [sync]);
   const value = useMemo(() => ({ errors: errors ?? EMPTY, clear, register }), [errors, clear, register]);
-  const showsAtTop = (key: string) => key === FORM_KEY || (claims.ready && !claims.names.includes(key));
+  const showsAtTop = useCallback(
+    (key: string) => key === FORM_KEY || (claims.ready && !claims.names.includes(key)),
+    [claims],
+  );
 
   useDevWarnings(
     "Form",
@@ -323,17 +447,31 @@ export function Form(props: FormProps): JSX.Element {
 
   // When new errors arrive, focus the first field showing one, in page order, or the
   // message at the top when no field has one. Not on the first render: a page that loads
-  // with errors leaves focus where the browser puts it.
+  // with errors leaves focus where the browser puts it. The summary is decided first, right
+  // after the commit that shows the errors (before paint, in the same task): the alert is then
+  // inserted with the summary already in it, and focus follows it.
   const formRef = useRef<HTMLFormElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
-  const focusedFor = useRef(shown.arrivals);
+  const focusedFor = useRef(0);
+  useLayoutEffect(() => {
+    if (alert.arrival === shown.arrivals) return;
+    const shownErrors = errors ?? EMPTY;
+    const summary = hasMessages(shownErrors)
+      ? summarize(formRef.current!, topMessagesOf(shownErrors, showsAtTop).length, errorSummary)
+      : undefined;
+    setAlert((current) => ({
+      arrival: shown.arrivals,
+      key: summary === current.summary ? current.key : shown.arrivals,
+      summary,
+    }));
+  }, [alert.arrival, shown.arrivals, errors, showsAtTop, errorSummary]);
   useEffect(() => {
-    if (focusedFor.current === shown.arrivals) return;
-    focusedFor.current = shown.arrivals;
-    if (!Object.values(errors ?? EMPTY).some((message) => errorMessages(message).length > 0)) return;
+    if (focusedFor.current === alert.arrival) return;
+    focusedFor.current = alert.arrival;
+    if (!hasMessages(errors ?? EMPTY)) return;
     const invalid = [...formRef.current!.querySelectorAll<HTMLElement>('[aria-invalid="true"]')].find(focusable);
     (invalid ? entryPoint(invalid) : messageRef.current)?.focus();
-  }, [shown.arrivals, errors]);
+  }, [alert.arrival, errors]);
 
   // A submit stops at its own Form: React bubbles events through portals, so a Form in a
   // sheet would otherwise reach the Form the sheet sits in.
@@ -349,8 +487,16 @@ export function Form(props: FormProps): JSX.Element {
           fails and focuses the first such control. Ouro's errors never reach it, so they
           never block a submit. */}
       <BaseForm {...rest} ref={setFormRef} onSubmit={submit} data-ouro="form" className={cn("grid min-w-0 gap-5", className)}>
-        {/* A new element for each answer, so its alert is announced again. */}
-        <FormMessage key={shown.arrivals} ref={messageRef} errors={errors ?? EMPTY} showsAtTop={showsAtTop} />
+        {/* A new element for each announcement: each arrival, unless its summary repeats the last one. While an
+            arrival has no summary decided, an alert without one stays out of the page, so it is inserted whole. */}
+        <FormMessage
+          key={alert.key}
+          ref={messageRef}
+          errors={errors ?? EMPTY}
+          showsAtTop={showsAtTop}
+          summary={alert.summary}
+          pending={alert.arrival !== shown.arrivals && alert.summary === undefined}
+        />
         {children}
       </BaseForm>
     </FormErrorsContext.Provider>
@@ -379,27 +525,31 @@ function unclaimedWarning(key: string, fields: string[]): readonly [string, stri
 }
 
 /**
- * The message at the top of the form. It is in the page only while it has a message, and it
- * arrives with the message already in it: an element added with `role="alert"` and its text
+ * The message at the top of the form. It is in the page only while it has a message or a summary,
+ * and it arrives with its text already in it: an element added with `role="alert"` and its text
  * is what screen readers announce, and a test's `getByRole("alert")` finds a message or nothing.
+ * The summary comes first and is visually hidden, so an alert whose only text is that summary takes
+ * no room.
+ * @claim "The summary comes first and is visually hidden" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > says how many problems there are, and the first in page order, once per submit)
  */
 function FormMessage({
   ref,
   errors,
   showsAtTop,
+  summary,
+  pending,
 }: {
   ref: Ref<HTMLDivElement>;
   errors: ReadonlyFormErrors;
   showsAtTop: (key: string) => boolean;
+  summary: string | undefined;
+  pending: boolean;
 }): JSX.Element | null {
-  // The message about the whole form comes first, then the keys no field claims.
-  const keys = Object.keys(errors).filter(showsAtTop);
-  const messages = [...keys.filter((key) => key === FORM_KEY), ...keys.filter((key) => key !== FORM_KEY)].flatMap((key) =>
-    errorMessages(errors[key]),
-  );
-  if (messages.length === 0) return null;
+  const messages = topMessagesOf(errors, showsAtTop);
+  if (pending || (messages.length === 0 && summary === undefined)) return null;
   return (
-    <div ref={ref} role="alert" tabIndex={-1} data-ouro="form-message" className={formMessageClass}>
+    <div ref={ref} role="alert" tabIndex={-1} data-ouro="form-message" className={cn(formMessageClass, messages.length === 0 && "sr-only")}>
+      {summary !== undefined && <span className="sr-only">{summary}</span>}
       {messages.map((message, index) => (
         <p key={errorMessageKey(message, index)} className="m-0">
           {message}

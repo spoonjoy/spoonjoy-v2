@@ -11,6 +11,7 @@ import { useMergedRef } from "~/lib/ouro/refs";
 import { rubberband, spring, type SpringHandle } from "~/lib/ouro/spring";
 import { connectToaster, type ToastRecord } from "~/lib/ouro/toast";
 import { keepClear } from "~/lib/ouro/keep-clear";
+import { keepFocusClear, type FocusClearHandle } from "~/lib/ouro/keep-focus-clear";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useDrag, type DragState } from "~/lib/ouro/use-drag";
@@ -102,6 +103,11 @@ export interface ToasterProps {
  * from the top: the newest toast is at the top, older ones peek out below it, it fans out
  * downward, toasts slide in from above, and a swipe up dismisses one.
  *
+ * At the bottom edge, keyboard focus stays clear of the stack. The page scrolls a control into view
+ * above it. If focus from the keyboard still lands under the stack, the stack moves to the top edge,
+ * or collapses to its newest toast if the top edge would cover the control too, and it moves back
+ * once focus has left and the stack has rested. A pointer's focus does not move it to the top.
+ *
  * Render one Toaster. A second one warns in development and shows nothing until the
  * first unmounts, then takes over.
  *
@@ -118,6 +124,12 @@ export interface ToasterProps {
  * must answer before going on.
  *
  * @claim "Put it at the top with layout" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::Toaster > hangs from the top and unfurls downward when its layout classes put it at the top)
+ * @claim "At the bottom edge, keyboard focus stays clear" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > lets the browser scroll a control above a stack in the middle of the page, and leaves the stack at the bottom)
+ * @claim "The page scrolls a control into view" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > lets the browser scroll a control above a stack in the middle of the page, and leaves the stack at the bottom)
+ * @claim "the stack moves to the top edge" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > moves the stack to the top when focus lands under it at the page's end, and back once focus has left and it has rested)
+ * @claim "or collapses to its newest toast if the top edge" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > collapses to the newest toast when the top edge is out of reach and only the front toast covers the control)
+ * @claim "and it moves back once focus has left" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > moves the stack to the top when focus lands under it at the page's end, and back once focus has left and it has rested)
+ * @claim "A pointer's focus does not move it" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > does not move the stack for a pointer click on a control it covers)
  * @group Feedback
  * @see https://ui.ouroboros.bot/docs/toaster
  *
@@ -227,6 +239,28 @@ function KeepClear({ avoid }: { avoid: string }): JSX.Element {
   const mark = useRef<HTMLSpanElement | null>(null);
   useEffect(() => keepClear(mark.current!.closest<HTMLElement>('[data-ouro="toaster"]')!, avoid), [avoid]);
   return <span ref={mark} hidden data-ouro-toaster-keep-clear="" />;
+}
+
+/**
+ * Keeps keyboard focus clear of the toasts (see keepFocusClear). It lives in the viewport while there
+ * are toasts, and measures again whenever they change.
+ */
+function FocusClear({ toasts }: { toasts: readonly unknown[] }): JSX.Element {
+  const mark = useRef<HTMLSpanElement | null>(null);
+  const keeper = useRef<FocusClearHandle | undefined>(undefined);
+  useLayoutEffect(() => {
+    keeper.current?.refresh();
+  }, [toasts]);
+  useEffect(
+    () => {
+      const handle = keepFocusClear(mark.current!.closest<HTMLElement>('[data-ouro="toaster"]')!);
+      keeper.current = handle;
+      return () => handle.release();
+    },
+    // Stryker disable next-line ArrayDeclaration: any list that never changes runs it once, as this one does.
+    [],
+  );
+  return <span ref={mark} hidden data-ouro-toaster-focus-clear="" />;
 }
 
 /** Whether a toast waits ahead of the others: a destructive one. */
@@ -352,14 +386,24 @@ function Connect({ onActive }: { onActive: (active: boolean) => void }): null {
  * @claim "Each is announced as it arrives" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > is announced once, its message and description only: politely, and a destructive toast assertively (Review Focus 5))
  * @claim "Each is announced as it arrives" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > starts a waiting toast's countdown only when it shows, so it shows for its full duration and is announced once)
  */
-function ToastList({ closeLabel }: { closeLabel: string }): JSX.Element[] {
+function ToastList({ closeLabel }: { closeLabel: string }): JSX.Element {
   const { toasts } = Toast.useToastManager();
   // Read the edge again as toasts come and go: the app's own CSS may have moved the toaster since.
   useLayoutEffect(() => {
     // With no toasts there is nothing to swipe or unfurl, and a read would lay the page out for nothing.
     if (toasts.length > 0) markEdge(document.querySelector<HTMLElement>('[data-ouro="toaster"]')!);
   }, [toasts.length]);
-  return toasts.map((item) => <ToastItem key={item.id} item={item} closeLabel={closeLabel} />);
+  return (
+    <>
+      {toasts.map((item) => (
+        <ToastItem key={item.id} item={item} closeLabel={closeLabel} />
+      ))}
+      {
+        // Stryker disable next-line ConditionalExpression,EqualityOperator: with no toasts the keeper measures nothing and moves nothing; the check only spares its listeners while none show.
+        toasts.length > 0 && <FocusClear toasts={toasts} />
+      }
+    </>
+  );
 }
 
 type ToastObject = ReturnType<typeof Toast.useToastManager>["toasts"][number];
@@ -385,8 +429,10 @@ function rememberEntry(event: FocusEvent<HTMLElement>): void {
  */
 function markEdge(viewport: HTMLElement): void {
   // keepClear (`avoid`) lifts a bottom toaster with an inline `bottom`, which can raise it past the
-  // middle: it is still at the bottom.
-  const edge = viewport.style.bottom || viewport.getBoundingClientRect().top >= window.innerHeight / 2 ? "bottom" : "top";
+  // middle: it is still at the bottom. A stack keepFocusClear moved to the top is at the top, whatever
+  // its position says.
+  let edge = "top";
+  if (!viewport.hasAttribute("data-ouro-toaster-moved") && (viewport.style.bottom || viewport.getBoundingClientRect().top >= window.innerHeight / 2)) edge = "bottom";
   if (viewport.getAttribute("data-edge") !== edge) viewport.setAttribute("data-edge", edge);
 }
 

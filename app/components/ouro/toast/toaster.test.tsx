@@ -2,7 +2,7 @@ import { StrictMode, type ReactNode } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { renderToString } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, server, userEvent } from "vitest/browser";
 import { Toaster, type ToasterProps } from "~/components/ouro/toast/toaster";
 import { toast, type ToastOptions } from "~/lib/ouro/toast";
@@ -1873,5 +1873,557 @@ describe("Toaster avoid", () => {
     await act(async () => root.render(<Toaster />));
     expect(removed).toHaveBeenCalledWith("resize", resize);
     expect(disconnected.mock.contexts).toContain(watcher);
+  });
+});
+
+describe("keyboard focus under the stack", () => {
+  const intersects = (a: DOMRect, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  const stack = () => toasts().map((item) => item.getBoundingClientRect());
+  const covered = (control: Element) => stack().some((box) => intersects(control.getBoundingClientRect(), box));
+  const moved = () => viewport()!.getAttribute("data-ouro-toaster-moved");
+  const focused = () => document.activeElement?.getAttribute("data-case");
+  const caseOf = (name: string) => document.querySelector<HTMLElement>(`[data-case="${name}"]`)!;
+  /** Waits for `count` frames, so the frame that looks at focus has run. */
+  const frames = async (count = 2) => {
+    for (let frame = 0; frame < count; frame++) await new Promise((resolve) => requestAnimationFrame(resolve));
+  };
+
+  /**
+   * A page taller than the window: a button at its top, a button mid-window once it is scrolled to its
+   * foot, and `foot` at the very foot, where the stack covers it and the page has no room to scroll.
+   */
+  async function longPage(foot: ReactNode, toaster: ReactNode = <Toaster />, lead?: ReactNode) {
+    await page.viewport(390, 844);
+    await render(
+      <>
+        {lead}
+        <button type="button" data-case="before">
+          Before
+        </button>
+        <div style={{ height: "160vh" }} />
+        <button type="button" data-case="middle">
+          Middle
+        </button>
+        <div style={{ height: 400 }} />
+        <div style={{ display: "flex", gap: 8 }}>{foot}</div>
+        {toaster}
+      </>,
+    );
+  }
+
+  /** A text field fixed at the left of the window, appended to the page for a test to place: a click focuses it in every browser. */
+  function pointerField(): HTMLInputElement {
+    const field = document.createElement("input");
+    field.setAttribute("data-case", "pointer");
+    Object.assign(field.style, { position: "fixed", left: "16px", width: "120px", zIndex: "40" });
+    document.body.append(field);
+    mounted.push(field);
+    return field;
+  }
+
+  beforeEach(() => window.scrollTo(0, 0));
+  afterEach(() => window.scrollTo(0, 0));
+
+  it("lets the browser scroll a control above a stack in the middle of the page, and leaves the stack at the bottom", async () => {
+    await page.viewport(390, 844);
+    await render(
+      <>
+        <button type="button" data-case="before">
+          Before
+        </button>
+        <div style={{ height: 790 }} />
+        <button type="button" data-case="mid">
+          Mid
+        </button>
+        <div style={{ height: "160vh" }} />
+        <Toaster />
+      </>,
+    );
+    await show("Recording saved", { duration: Infinity });
+    const mid = caseOf("mid");
+    expect(covered(mid)).toBe(true);
+    caseOf("before").focus();
+    await pressTab();
+    await until(focused, "mid");
+    await until(() => covered(mid), false);
+    await frames();
+    expect(moved()).toBeNull();
+    expect(parseFloat(document.documentElement.style.scrollPaddingBottom)).toBeGreaterThan(0);
+  });
+
+  it("moves the stack to the top when focus lands under it at the page's end, and back once focus has left and it has rested", async () => {
+    fakeClock();
+    await longPage(
+      <>
+        <button type="button" data-case="foot-one">
+          One
+        </button>
+        <button type="button" data-case="foot-two">
+          Two
+        </button>
+      </>,
+    );
+    await show("Recording saved", { duration: Infinity });
+    caseOf("before").focus();
+    await pressTab();
+    await pressTab();
+    await until(focused, "foot-one");
+    await until(moved, "top");
+    expect(covered(caseOf("foot-one"))).toBe(false);
+    await show("Second", { duration: Infinity });
+    expect(viewport()!.getAttribute("data-edge")).toBe("top");
+    // An inline bottom, as avoid's lift writes, says a toaster is at the bottom, but not one moved to the top: a resize reads the edge again.
+    viewport()!.style.bottom = "120px";
+    await act(async () => window.dispatchEvent(new Event("resize")));
+    expect(viewport()!.getAttribute("data-edge")).toBe("top");
+    viewport()!.style.removeProperty("bottom");
+    await pressTab({ shift: true });
+    await until(focused, "middle");
+    await frames();
+    expect(moved()).toBe("top");
+    await advance(600);
+    await until(moved, null);
+  });
+
+  it("moves the stack once for a form tabbed through at the foot of the page, and back only after focus leaves and it rests", async () => {
+    fakeClock();
+    await longPage(
+      <>
+        <input aria-label="Name" data-case="field-one" style={{ width: 90 }} />
+        <input aria-label="Email" data-case="field-two" style={{ width: 90 }} />
+        <input aria-label="Phone" data-case="field-three" style={{ width: 90 }} />
+      </>,
+    );
+    await show("Recording saved", { duration: Infinity });
+    const moves: Array<string | null> = [];
+    const watcher = new MutationObserver(() => moves.push(moved()));
+    watcher.observe(viewport()!, { attributes: true, attributeFilter: ["data-ouro-toaster-moved"] });
+    caseOf("before").focus();
+    await pressTab();
+    await pressTab();
+    await until(moved, "top");
+    await pressTab();
+    await pressTab();
+    await until(focused, "field-three");
+    // Rested with focus still under the stack: it stays.
+    await advance(600);
+    await frames();
+    expect(moved()).toBe("top");
+    await pressTab({ shift: true });
+    await pressTab({ shift: true });
+    await pressTab({ shift: true });
+    await until(focused, "middle");
+    await until(moved, null);
+    watcher.disconnect();
+    expect(moves.filter((value) => value === "top")).toHaveLength(1);
+  });
+
+  it("does not move the stack for a pointer click on a control it covers", async () => {
+    await longPage(<button type="button" data-case="foot-one">One</button>);
+    await show("Recording saved", { duration: Infinity });
+    const top = Math.min(...stack().map((box) => box.top));
+    // Its middle sits above the stack, so the click lands on the control and not on a toast.
+    const control = pointerField();
+    Object.assign(control.style, { top: `${top - 40}px`, height: "60px" });
+    expect(covered(control)).toBe(true);
+    await userEvent.click(control);
+    await until(focused, "pointer");
+    await frames();
+    expect(moved()).toBeNull();
+    expect(viewport()!.hasAttribute("data-ouro-toaster-collapsed")).toBe(false);
+  });
+
+  it("keeps the stack at the top for a pointer focus under it, and does not bring it back while it is covered", async () => {
+    fakeClock();
+    await longPage(<button type="button" data-case="foot-one">One</button>);
+    await show("Recording saved", { duration: Infinity });
+    caseOf("before").focus();
+    await pressTab();
+    await pressTab();
+    await until(moved, "top");
+    await advance(600);
+    const bottom = Math.max(...stack().map((box) => box.bottom));
+    // Its box reaches into the stack at the top, and its middle is below the stack.
+    const control = pointerField();
+    Object.assign(control.style, { top: `${bottom - 10}px`, height: "40px" });
+    expect(covered(control)).toBe(true);
+    await userEvent.click(control);
+    await until(focused, "pointer");
+    await frames();
+    expect(moved()).toBe("top");
+  });
+
+  it("collapses to the newest toast when the top edge is out of reach and only the front toast covers the control", async () => {
+    await page.viewport(390, 844);
+    await render(
+      <>
+        <button type="button" data-case="before">
+          Before
+        </button>
+        <button type="button" data-case="peek" style={{ position: "fixed", top: 0, left: 16, width: 120, height: 8, zIndex: 40 }}>
+          Peek
+        </button>
+        <div aria-hidden style={{ position: "fixed", top: 0, left: 0, right: 0, height: 760 }} />
+        <Toaster />
+      </>,
+    );
+    await show("Older", { duration: Infinity });
+    await show("Newer", { duration: Infinity });
+    const front = toasts()[0]!.getBoundingClientRect();
+    const top = Math.min(...stack().map((box) => box.top));
+    const peek = caseOf("peek");
+    // Between the older toast's top and the front toast's, so only the older one covers it.
+    peek.style.top = `${(top + front.top) / 2 - 4}px`;
+    expect(covered(peek)).toBe(true);
+    caseOf("before").focus();
+    await pressTab();
+    await until(focused, "peek");
+    await until(() => viewport()!.hasAttribute("data-ouro-toaster-collapsed"), true);
+    expect(moved()).toBeNull();
+    expect(intersects(peek.getBoundingClientRect(), toasts()[0]!.getBoundingClientRect())).toBe(false);
+    await until(() => getComputedStyle(toasts()[1]!).opacity, "0");
+  });
+
+  it("leaves the stack where it is when the front toast covers the control and the top edge is out of reach", async () => {
+    await page.viewport(390, 844);
+    await render(
+      <>
+        <button type="button" data-case="before">
+          Before
+        </button>
+        <button type="button" data-case="peek" style={{ position: "fixed", top: 0, left: 16, width: 120, height: 40, zIndex: 40 }}>
+          Peek
+        </button>
+        <div aria-hidden style={{ position: "fixed", top: 0, left: 0, right: 0, height: 760 }} />
+        <Toaster />
+      </>,
+    );
+    await show("Older", { duration: Infinity });
+    await show("Newer", { duration: Infinity });
+    const front = toasts()[0]!.getBoundingClientRect();
+    const peek = caseOf("peek");
+    peek.style.top = `${front.top + 10}px`;
+    expect(covered(peek)).toBe(true);
+    caseOf("before").focus();
+    await pressTab();
+    await until(focused, "peek");
+    await frames(3);
+    expect(moved()).toBeNull();
+    expect(viewport()!.hasAttribute("data-ouro-toaster-collapsed")).toBe(false);
+  });
+
+  it("counts a sticky header that touches the top edge, and moves the stack below the lowest header there", async () => {
+    await longPage(
+      <button type="button" data-case="foot-one">
+        One
+      </button>,
+      <Toaster />,
+      <>
+        <div aria-hidden style={{ position: "fixed", top: 0, left: 0, right: 0, height: 40 }} />
+        <div aria-hidden style={{ position: "sticky", top: 0, height: 100 }} />
+      </>,
+    );
+    await show("Recording saved", { duration: Infinity });
+    caseOf("before").focus();
+    await pressTab();
+    await pressTab();
+    await until(moved, "top");
+    await until(() => Math.round(Math.min(...stack().map((box) => box.top))), 116);
+  });
+
+  it("does not count a fixed header outside the stack's column, so the stack moves to the top edge", async () => {
+    await longPage(
+      <button type="button" data-case="foot-one">
+        One
+      </button>,
+      <Toaster />,
+      <div aria-hidden style={{ position: "fixed", top: 0, left: 380, width: 10, height: 760 }} />,
+    );
+    await show("Recording saved", { duration: Infinity });
+    caseOf("before").focus();
+    await pressTab();
+    await pressTab();
+    await until(moved, "top");
+    await until(() => Math.round(Math.min(...stack().map((box) => box.top))), 16);
+  });
+
+  it("moves a collapsed stack to the top once the top edge is clear", async () => {
+    await page.viewport(390, 844);
+    await render(
+      <>
+        <button type="button" data-case="before">
+          Before
+        </button>
+        <button type="button" data-case="peek" style={{ position: "fixed", top: 0, left: 16, width: 120, height: 8, zIndex: 40 }}>
+          Peek
+        </button>
+        <button type="button" data-case="front" style={{ position: "fixed", left: 16, width: 120, height: 40, zIndex: 40 }}>
+          Front
+        </button>
+        <div data-case="header" aria-hidden style={{ position: "fixed", top: 0, left: 0, right: 0, height: 760 }} />
+        <Toaster />
+      </>,
+    );
+    await show("Older", { duration: Infinity });
+    await show("Newer", { duration: Infinity });
+    const front = toasts()[0]!.getBoundingClientRect();
+    const top = Math.min(...stack().map((box) => box.top));
+    caseOf("peek").style.top = `${(top + front.top) / 2 - 4}px`;
+    caseOf("front").style.top = `${front.top + 10}px`;
+    caseOf("before").focus();
+    await pressTab();
+    await until(() => viewport()!.hasAttribute("data-ouro-toaster-collapsed"), true);
+    // The header no longer reaches the window's top edge, so the top edge is clear.
+    caseOf("header").style.display = "none";
+    await pressTab();
+    await until(focused, "front");
+    await until(moved, "top");
+  });
+
+  it("measures the stack again when a toast's words grow, so the scroll padding keeps its height", async () => {
+    await page.viewport(390, 844);
+    await render(<Toaster />);
+    await show("Short", { id: "grow", duration: Infinity });
+    const padded = () => Math.round(parseFloat(document.documentElement.style.scrollPaddingBottom));
+    const expected = () => Math.round(innerHeight - Math.min(...stack().map((box) => box.top)));
+    await until(padded, expected());
+    const before = expected();
+    await act(async () => {
+      toast("A longer message, long enough to wrap over several lines of the toast, so that the stack grows taller than it was before", { id: "grow", duration: Infinity });
+    });
+    await until(padded, expected());
+    expect(expected()).toBeGreaterThan(before);
+  });
+
+  it("moves the stack back to the bottom when focus lands under the top stack, and up again for a control the bottom covers", async () => {
+    fakeClock();
+    await longPage(
+      <button type="button" data-case="foot-one">
+        One
+      </button>,
+    );
+    await show("Recording saved", { duration: Infinity });
+    caseOf("before").focus();
+    await pressTab();
+    await pressTab();
+    await until(moved, "top");
+    await pressTab({ shift: true });
+    await pressTab({ shift: true });
+    await until(focused, "before");
+    // The top edge covers the page's first control, and the bottom does not: the stack goes back down at once.
+    // It stayed up once in an app's WebKit run (ourostack/ouro-ui#1764), so a failure says what the keeper decides from.
+    await until(moved, null).catch((error: Error) => {
+      const box = caseOf("before").getBoundingClientRect();
+      const bar = viewport()!;
+      const marks = bar.getAttributeNames().filter((name) => name.startsWith("data-")).map((name) => `${name}=${bar.getAttribute(name)}`);
+      const boxes = stack();
+      throw new Error(
+        `${error.message}. Focus on ${focused()} (focus-visible ${document.activeElement?.matches(":focus-visible")}), Before at ${Math.round(box.top)} to ${Math.round(box.bottom)}, the stack at ${Math.round(Math.min(...boxes.map((item) => item.top)))} to ${Math.round(Math.max(...boxes.map((item) => item.bottom)))}, scrolled ${Math.round(scrollY)}, the viewport ${marks.join(" ")}`,
+        { cause: error },
+      );
+    });
+    await pressTab();
+    await pressTab();
+    await until(focused, "foot-one");
+    await until(moved, "top");
+  });
+
+  it("collapses from the top when the bottom stack would still cover the control", async () => {
+    await page.viewport(390, 844);
+    await render(
+      <>
+        <button type="button" data-case="before">
+          Before
+        </button>
+        <button type="button" data-case="low" style={{ position: "fixed", bottom: 16, left: 16, width: 120, height: 40, zIndex: 40 }}>
+          Low
+        </button>
+        <button type="button" data-case="big" style={{ position: "fixed", top: 16, left: 16, width: 120, zIndex: 40 }}>
+          Big
+        </button>
+        <Toaster />
+      </>,
+    );
+    await show("Older", { duration: Infinity });
+    await show("Newer", { duration: Infinity });
+    // Reaches down to the front toast's top: under the bottom stack, but not under the front toast.
+    caseOf("big").style.height = `${toasts()[0]!.getBoundingClientRect().top - 16}px`;
+    caseOf("before").focus();
+    await pressTab();
+    await until(focused, "low");
+    await until(moved, "top");
+    await pressTab();
+    await until(focused, "big");
+    await until(() => viewport()!.hasAttribute("data-ouro-toaster-collapsed"), true);
+    expect(moved()).toBeNull();
+  });
+
+  it("moves the stack back at once when focus falls to nothing after it has rested", async () => {
+    fakeClock();
+    await longPage(
+      <button type="button" data-case="foot-one">
+        One
+      </button>,
+    );
+    await show("Recording saved", { duration: Infinity });
+    caseOf("before").focus();
+    await pressTab();
+    await pressTab();
+    await until(moved, "top");
+    await advance(600);
+    await frames();
+    expect(moved()).toBe("top");
+    (document.activeElement as HTMLElement).blur();
+    await until(moved, null);
+  });
+
+  it("keeps the stack at the top while focus moves between two controls under the bottom stack, once it has rested", async () => {
+    fakeClock();
+    await longPage(
+      <>
+        <button type="button" data-case="foot-one">
+          One
+        </button>
+        <button type="button" data-case="foot-two">
+          Two
+        </button>
+      </>,
+    );
+    await show("Recording saved", { duration: Infinity });
+    caseOf("before").focus();
+    await pressTab();
+    await pressTab();
+    await until(moved, "top");
+    await advance(600);
+    const changes: string[] = [];
+    const watcher = new MutationObserver((records) => changes.push(...records.map((record) => String(record.attributeName))));
+    watcher.observe(viewport()!, { attributes: true, attributeFilter: ["data-ouro-toaster-fading", "data-ouro-toaster-moved"] });
+    await pressTab();
+    await until(focused, "foot-two");
+    await frames(10);
+    watcher.disconnect();
+    expect(changes).toEqual([]);
+    expect(moved()).toBe("top");
+  });
+
+  it("cross-fades the move in opacity only under reduced motion", async () => {
+    await commands.emulateMedia({ reducedMotion: "reduce" });
+    await longPage(
+      <>
+        <button type="button" data-case="foot-one">
+          One
+        </button>
+      </>,
+    );
+    await show("Recording saved", { duration: Infinity });
+    const runs: string[] = [];
+    viewport()!.addEventListener("transitionrun", (event) => {
+      if (event.target === viewport()) runs.push(event.propertyName);
+    });
+    expect(getComputedStyle(viewport()!).transitionProperty).toBe("opacity");
+    caseOf("before").focus();
+    await pressTab();
+    await pressTab();
+    await until(moved, "top");
+    await until(() => runs.length, 2);
+    expect(runs).toEqual(["opacity", "opacity"]);
+  });
+
+  it("moves the stack on the next frame when the browser runs no fade, without waiting for the fallback", async () => {
+    fakeClock();
+    await longPage(
+      <>
+        <button type="button" data-case="foot-one">
+          One
+        </button>
+      </>,
+    );
+    await show("Recording saved", { duration: Infinity });
+    viewport()!.style.transition = "none";
+    caseOf("before").focus();
+    await pressTab();
+    await pressTab();
+    // With no fade to wait for, the move lands on the next frame: the fallback's clock never moves.
+    await until(moved, "top");
+  });
+
+  it("keeps the fade on until the viewport's own fade ends, not a transition of a toast in it", async () => {
+    fakeClock();
+    await longPage(
+      <>
+        <button type="button" data-case="foot-one">
+          One
+        </button>
+      </>,
+    );
+    await show("Recording saved", { duration: Infinity });
+    // A fade that runs and has not ended, so only the viewport's own end, or the fallback, lands the move.
+    viewport()!.style.transition = "opacity 60s";
+    caseOf("before").focus();
+    await pressTab();
+    await pressTab();
+    await until(() => viewport()!.hasAttribute("data-ouro-toaster-fading"), true);
+    toasts()[0]!.dispatchEvent(new TransitionEvent("transitionend", { bubbles: true, propertyName: "transform" }));
+    await frames();
+    expect(moved()).toBeNull();
+    expect(viewport()!.hasAttribute("data-ouro-toaster-fading")).toBe(true);
+    await advance(300);
+    expect(moved()).toBe("top");
+  });
+
+  it("never moves a toaster at the top edge, and sets no scroll padding for it", async () => {
+    await page.viewport(390, 844);
+    await render(
+      <>
+        <button type="button" data-case="before">
+          Before
+        </button>
+        <Toaster className="top-4 bottom-auto" />
+      </>,
+    );
+    await show("Recording saved", { duration: Infinity });
+    await pressTab();
+    await until(focused, "before");
+    expect(covered(caseOf("before"))).toBe(true);
+    await frames(3);
+    expect(moved()).toBeNull();
+    expect(viewport()!.getAttribute("data-edge")).toBe("top");
+    expect(document.documentElement.style.scrollPaddingBottom).toBe("");
+  });
+
+  it("moves the stack back when focus leaves the page altogether, once it has rested", async () => {
+    fakeClock();
+    await longPage(
+      <>
+        <button type="button" data-case="foot-one">
+          One
+        </button>
+      </>,
+    );
+    await show("Recording saved", { duration: Infinity });
+    caseOf("before").focus();
+    await pressTab();
+    await pressTab();
+    await until(moved, "top");
+    (document.activeElement as HTMLElement).blur();
+    await frames();
+    expect(moved()).toBe("top");
+    await advance(600);
+    await until(moved, null);
+  });
+
+  it("sets the page's scroll padding to the stack's height while toasts show, and gives back the app's own value after", async () => {
+    document.documentElement.style.scrollPaddingBottom = "7px";
+    onTestFinished(() => {
+      document.documentElement.style.scrollPaddingBottom = "";
+    });
+    await page.viewport(390, 844);
+    await render(<Toaster />);
+    await show("Recording saved", { duration: Infinity });
+    const expected = innerHeight - Math.min(...stack().map((box) => box.top));
+    await until(() => Math.round(parseFloat(document.documentElement.style.scrollPaddingBottom)), Math.round(expected));
+    await act(async () => toast.dismiss());
+    await gone("Recording saved");
+    await until(() => document.documentElement.style.scrollPaddingBottom, "7px");
   });
 });

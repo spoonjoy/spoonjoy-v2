@@ -131,6 +131,26 @@ describe("RadioGroup", () => {
     expect(document.activeElement).toBe(radios[1]);
   });
 
+  it("moves to the next radio with ArrowLeft in a right-to-left page, laid out in a row", async () => {
+    document.documentElement.dir = "rtl";
+    try {
+      const options = [
+        { value: "small", label: "Small" },
+        { value: "medium", label: "Medium" },
+        { value: "large", label: "Large" },
+      ];
+      const { radios } = await render(<RadioGroup legend="Size" options={options} defaultValue="small" orientation="horizontal" />);
+      expect(radios[1]!.getBoundingClientRect().left).toBeLessThan(radios[0]!.getBoundingClientRect().left);
+      radios[0]!.focus();
+      await userEvent.keyboard("{ArrowLeft}");
+      expect(document.activeElement).toBe(radios[1]);
+      await userEvent.keyboard("{ArrowRight}");
+      expect(document.activeElement).toBe(radios[0]);
+    } finally {
+      document.documentElement.removeAttribute("dir");
+    }
+  });
+
   it("picks with a click on a radio or its label, and with Space", async () => {
     const onValueChange = vi.fn();
     const { radios } = await render(<RadioGroup legend="Size" options={sizes} onValueChange={onValueChange} />);

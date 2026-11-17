@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
 import { SwipeActions, type SwipeActionsProps } from "~/components/ouro/swipe-actions/swipe-actions";
 import { rubberband } from "~/lib/ouro/spring";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
@@ -67,6 +68,20 @@ function row(spies = calls(), props: Partial<SwipeActionsProps> = {}) {
     >
       <Item href="#short-ribs" title="Short ribs" />
     </SwipeActions>
+  );
+}
+
+/** A list whose rows' Delete removes them, as an app's would. */
+function Recipes() {
+  const [rows, setRows] = useState(["Shakshuka", "Short ribs", "Lemon tart"]);
+  return (
+    <ItemGroup label="Recipes">
+      {rows.map((recipe) => (
+        <SwipeActions key={recipe} label={recipe} trailing={[{ label: "Delete", tone: "destructive", onClick: () => setRows((all) => all.filter((one) => one !== recipe)) }]}>
+          <Item title={recipe} />
+        </SwipeActions>
+      ))}
+    </ItemGroup>
   );
 }
 
@@ -837,6 +852,93 @@ describe("SwipeActions", () => {
     await pointer(window, "pointerup", 200, 20);
     expect(await click(link, 0)).toEqual({ reached: true, prevented: false });
     expect(element.hasAttribute("data-open")).toBe(false);
+  });
+
+  it.each([
+    ["the next row's", 0, "Actions for Short ribs"],
+    ["the row before's, from the last row,", 2, "Actions for Short ribs"],
+  ] as const)("hands focus to %s actions button when an action chosen from the menu removes its row", async (_, index, next) => {
+    await render(<Recipes />);
+    const buttons = () => [...host.querySelectorAll<HTMLButtonElement>("[data-ouro-swipe-actions-menu] button")];
+    buttons()[index]!.focus();
+    await userEvent.keyboard("{Enter}");
+    await expect.element(page.getByRole("menuitem", { name: "Delete" })).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => buttons().length).toBe(2);
+    await expect.poll(() => document.activeElement?.getAttribute("aria-label")).toBe(next);
+  });
+
+  it("hands focus to the next row's actions button when an action chosen from the long-press menu removes its row", async () => {
+    await render(<Recipes />);
+    const first = host.querySelector<HTMLElement>('[data-ouro="swipe-actions"]')!;
+    wait(1000);
+    await pointer(content(first), "pointerdown", 200, 20);
+    await act(async () => {
+      content(first).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 200, clientY: 20 }));
+    });
+    await pointer(window, "pointerup", 200, 20);
+    page.getByRole("menuitem", { name: "Delete" }).element().focus();
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => host.querySelectorAll('[data-ouro="swipe-actions"]').length).toBe(2);
+    await expect.poll(() => document.activeElement?.getAttribute("aria-label")).toBe("Actions for Short ribs");
+  });
+
+  it("leaves focus where it went, untouched, when its row leaves after focus has moved out of it", async () => {
+    const outside = document.createElement("input");
+    document.body.append(outside);
+    nodes.push(outside);
+    const element = await render(row());
+    menuButton(element).focus();
+    outside.focus();
+    // Not even for a moment: a blur would run the field's own handlers (validation, closing its popup).
+    const blurs = vi.fn();
+    outside.addEventListener("blur", blurs);
+    await render(<button type="button">Add a recipe</button>);
+    await act(async () => {});
+    expect(document.activeElement).toBe(outside);
+    expect(blurs).not.toHaveBeenCalled();
+  });
+
+  it("leaves a field outside untouched when its row leaves, after a control in it went away holding focus", async () => {
+    const outside = document.createElement("input");
+    document.body.append(outside);
+    nodes.push(outside);
+    const withRetry = (retry: boolean) => (
+      <SwipeActions label="Short ribs" trailing={[{ label: "Delete", onClick: () => {} }]}>
+        <Item title="Short ribs" />
+        {retry && <button type="button">Retry</button>}
+      </SwipeActions>
+    );
+    const element = await render(withRetry(true));
+    page.getByRole("button", { name: "Retry" }).element().focus();
+    expect(element.contains(document.activeElement)).toBe(true);
+    // The focused control goes, which WebKit and Firefox report with no blur.
+    await render(withRetry(false));
+    outside.focus();
+    const blurs = vi.fn();
+    outside.addEventListener("blur", blurs);
+    await render(<button type="button">Add a recipe</button>);
+    await act(async () => {});
+    expect(document.activeElement).toBe(outside);
+    expect(blurs).not.toHaveBeenCalled();
+  });
+
+  it("hands focus on from a row with no actions, which has no actions button, as it leaves", async () => {
+    await render(
+      <ItemGroup label="Recipes">
+        <SwipeActions label="Shakshuka">
+          <Item href="#shakshuka" title="Shakshuka" />
+        </SwipeActions>
+        <Item href="#short-ribs" title="Short ribs" />
+      </ItemGroup>,
+    );
+    page.getByRole("link", { name: "Shakshuka" }).element().focus();
+    await render(
+      <ItemGroup label="Recipes">
+        <Item href="#short-ribs" title="Short ribs" />
+      </ItemGroup>,
+    );
+    await expect.poll(() => document.activeElement?.textContent).toBe("Short ribs");
   });
 
   it("runs an action from its button and closes, moving focus from the button to the actions button", async () => {

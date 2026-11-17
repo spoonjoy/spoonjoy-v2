@@ -290,6 +290,17 @@ describe("Switch look and motion", () => {
     expect(trackBox.right - thumbBox.right).toBeCloseTo(offLeft, 0);
   });
 
+  it("draws its glass lens with no backdrop filter, which slowed every large repaint in WebKit without a GPU", async () => {
+    const { track, thumb } = await render(<Switch label="Wi-Fi" />);
+    const backdrop = () => getComputedStyle(thumb).getPropertyValue("backdrop-filter") || getComputedStyle(thumb).getPropertyValue("-webkit-backdrop-filter");
+    expect(backdrop()).toBe("none");
+    expect(getComputedStyle(thumb).backgroundImage).toMatch(/^linear-gradient\(/);
+    await userEvent.click(track);
+    await settled(thumb);
+    expect(backdrop()).toBe("none");
+    expect(getComputedStyle(thumb).backgroundImage).toBe("none");
+  });
+
   it("widens the thumb toward its travel while the pointer is down", async () => {
     const { track, thumb } = await render(<Switch label="Wi-Fi" />);
     await settled(thumb);

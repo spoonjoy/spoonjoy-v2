@@ -151,8 +151,11 @@ function duplicateValue(items: readonly { value: string }[]): string | undefined
  * Use `SegmentedControl` instead when the choice changes how one view looks (list or grid)
  * rather than which content shows. Use `Navbar` or `Sidebar` instead for the site's own
  * navigation. Use the parts in `tabs-parts` when `items` cannot express your layout.
+ * In a right-to-left page (`dir="rtl"` on `<html>`) the arrow keys follow the row: ArrowLeft moves to the next tab.
+ *
  *
  * @group Navigation
+ * @claim "In a right-to-left page" registry/ouro/components/ouro/tabs/tabs.test.tsx verify:testExists(registry/ouro/components/ouro/tabs/tabs.test.tsx::Tabs > moves to the next tab with ArrowLeft in a right-to-left page, where it sits on the left)
  * @see https://ui.ouroboros.bot/docs/tabs
  *
  * @example

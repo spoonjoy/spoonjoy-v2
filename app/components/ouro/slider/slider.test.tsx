@@ -90,6 +90,20 @@ describe("Slider", () => {
     expect(onValueCommitted).toHaveBeenLastCalledWith(6);
   });
 
+  it("raises the value with ArrowLeft in a right-to-left page, where the track runs from the right", async () => {
+    document.documentElement.dir = "rtl";
+    try {
+      const { inputs } = await render(<Slider label="Servings" defaultValue={4} />);
+      inputs[0]!.focus();
+      await userEvent.keyboard("{ArrowLeft}");
+      await expect.poll(() => inputs[0]!.value).toBe("5");
+      await userEvent.keyboard("{ArrowRight}{ArrowRight}");
+      expect(inputs[0]!.value).toBe("3");
+    } finally {
+      document.documentElement.removeAttribute("dir");
+    }
+  });
+
   it("takes large steps with Page Up, Page Down and Shift with an arrow", async () => {
     const { inputs } = await render(<Slider label="Oven" defaultValue={180} min={100} max={250} step={5} largeStep={25} />);
     inputs[0]!.focus();
