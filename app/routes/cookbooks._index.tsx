@@ -85,6 +85,7 @@ export default function CookbooksIndexRedirect() {
             <Card
               key={cookbook.id}
               as="li"
+              headingLevel={2}
               variant="plain"
               size="sm"
               href={`/cookbooks/${cookbook.id}`}
