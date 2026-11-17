@@ -725,7 +725,7 @@ describe("Signup Route", () => {
       );
       expect(screen.getByLabelText(requiredLabel("Confirm password"))).toHaveAttribute("aria-invalid", "true");
       expect(screen.getByLabelText(requiredLabel("Confirm password"))).toHaveAccessibleDescription("Passwords do not match");
-      expect(screen.getByLabelText(requiredLabel("Email"))).not.toHaveAttribute("aria-invalid");
+      expect(screen.getByLabelText(requiredLabel("Email"))).not.toHaveAttribute("aria-invalid", "true");
       // The fields keep what was typed, so the user corrects them instead of starting over.
       expect(screen.getByLabelText(requiredLabel("Email"))).toHaveValue("new-cook@example.com");
       expect(screen.getByLabelText(requiredLabel("Username"))).toHaveValue("ab");

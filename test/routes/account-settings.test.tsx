@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -5095,7 +5095,7 @@ describe("Account Settings Route", () => {
         await user.click(saveButton);
 
         // Error should be displayed inline for email field
-        expect(await screen.findByText(/this email is already taken/i)).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByRole("textbox", { name: /^email/i })).toHaveAccessibleDescription(/this email is already taken/i));
       });
 
       it("should display username field error when editing user info with validation error", async () => {
@@ -5146,7 +5146,7 @@ describe("Account Settings Route", () => {
         await user.click(saveButton);
 
         // Error should be displayed inline for username field
-        expect(await screen.findByText(/this username is already taken/i)).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByRole("textbox", { name: /^username/i })).toHaveAccessibleDescription(/this username is already taken/i));
       });
 
       it("should display newPassword field error in change password form", async () => {
