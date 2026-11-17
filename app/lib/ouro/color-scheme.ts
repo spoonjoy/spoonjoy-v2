@@ -90,13 +90,15 @@ const resolve = (scheme: ColorScheme, dark: boolean): ResolvedColorScheme => (sc
  * `ColorSchemeToggle` and `useColorScheme` under it share its options.
  *
  * Wrap the app once, in the root layout, and put `colorSchemeScript()` in `<head>` so the
- * first paint already has the scheme. Ouro UI components need neither: without them, dark
- * mode is whatever `.dark` class the app sets.
+ * first paint already has the scheme. In a Vite app, where `index.html` holds the `<head>`,
+ * wrap `<App />` in `src/main.tsx`, and have Vite put the script in `index.html` from
+ * `vite.config.ts`, as the example's last lines do. Ouro UI components need neither: without
+ * them, dark mode is whatever `.dark` class the app sets.
  *
  * @group App setup
  * @see https://ui.ouroboros.bot/docs/color-scheme-toggle
  * @example
- * // app/root.tsx (React Router):
+ * // app/root.tsx (React Router), or app/layout.tsx (Next.js) with {children} for <Outlet />:
  * <html lang="en" suppressHydrationWarning>
  *   <head>
  *     <script dangerouslySetInnerHTML={{ __html: colorSchemeScript() }} />
@@ -107,6 +109,11 @@ const resolve = (scheme: ColorScheme, dark: boolean): ResolvedColorScheme => (sc
  *     </ColorSchemeProvider>
  *   </body>
  * </html>
+ * // src/main.tsx (Vite):
+ * createRoot(document.getElementById("root")!).render(<ColorSchemeProvider><App /></ColorSchemeProvider>);
+ * // vite.config.ts (Vite), with import { colorSchemeScript } from "./src/lib/ouro/color-scheme-script.ts":
+ * const colorScheme = { name: "color-scheme", transformIndexHtml: () => [{ tag: "script", children: colorSchemeScript(), injectTo: "head-prepend" as const }] };
+ * export default defineConfig({ plugins: [react(), tailwindcss(), colorScheme] });
  * @claim "Every `ColorSchemeToggle` and `useColorScheme` under it" registry/ouro/lib/ouro/color-scheme.test.tsx verify:testExists(registry/ouro/lib/ouro/color-scheme.test.tsx::ColorSchemeProvider > takes the app's key and default)
  * @claim "Every `ColorSchemeToggle` and `useColorScheme` under it" registry/ouro/lib/ouro/color-scheme.test.tsx verify:testExists(registry/ouro/lib/ouro/color-scheme.test.tsx::useColorScheme > switches the page without a provider, and every reader agrees)
  */

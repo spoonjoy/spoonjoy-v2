@@ -65,7 +65,7 @@ export interface CheckboxProps {
    * warn in development; style checkboxes in your theme.
    */
   className?: string | undefined;
-  /** The box element, a `<span role="checkbox">`. */
+  /** The box element, a `<button role="checkbox">`, which the label names with `for`. */
   ref?: Ref<HTMLElement> | undefined;
 
   /** Not a prop. Ouro UI uses `onCheckedChange`, which gets the new state: `onCheckedChange={setChecked}`. */
@@ -110,6 +110,9 @@ function CheckboxBox(props: {
   return (
     <BaseCheckbox.Root
       {...rest}
+      // A real button, so the label's `for` names it and not the hidden input: its label finds one control.
+      nativeButton
+      render={<button />}
       inputRef={markInput}
       data-ouro-control="checkbox"
       data-ouro-part="box"

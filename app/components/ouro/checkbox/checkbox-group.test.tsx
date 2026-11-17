@@ -89,6 +89,17 @@ describe("CheckboxGroup", () => {
     await expect.element(page.getByRole("checkbox", { name: "Sage" })).toBeDisabled();
   });
 
+  it("makes each box the one element its exact label finds, as Testing Library and Playwright look it up, and a click on that label toggles it", async () => {
+    const onValueChange = vi.fn();
+    const { boxes } = await render(<CheckboxGroup legend="Herbs" name="herbs" options={herbs} onValueChange={onValueChange} />);
+    // Playwright's getByLabel("…", { exact: true }), which Vitest's getByLabelText shares.
+    expect(["Basil", "Mint", "Sage"].map((label) => page.getByLabelText(label, { exact: true }).elements())).toEqual(boxes.map((box) => [box]));
+    expect(boxes.map((box) => box.getAttribute("role"))).toEqual(["checkbox", "checkbox", "checkbox"]);
+    await userEvent.click(page.getByText("Mint"));
+    expect(onValueChange).toHaveBeenLastCalledWith(["mint"]);
+    expect(boxes[1]!.getAttribute("aria-checked")).toBe("true");
+  });
+
   it("keeps the group's value: defaultValue, toggling with Space and clicks, and onValueChange", async () => {
     const onValueChange = vi.fn();
     const { boxes } = await render(<CheckboxGroup legend="Herbs" options={herbs} defaultValue={["mint"]} onValueChange={onValueChange} />);
@@ -339,9 +350,9 @@ describe("CheckboxGroup on the server", () => {
     expect(texts(doc, boxes[0]!)).toEqual(["Sweet and peppery.", "Pick any.", "Pick at least one."]);
     expect(texts(doc, boxes[1]!)).toEqual(["Pick any.", "Pick at least one."]);
     expect(boxes.map((box) => box.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
-    for (const input of doc.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
-      expect(doc.querySelector(`label[for="${input.id}"]`)).not.toBeNull();
-    }
+    // Each label's `for` names its box, not the hidden input, so the label finds one control.
+    expect(boxes.map((box) => doc.querySelector(`label[for="${box.id}"]`)?.textContent)).toEqual(["Basil", "Mint", "Sage"]);
+    expect([...doc.querySelectorAll('input[type="checkbox"]')].map((input) => input.id)).toEqual(["", "", ""]);
     expect(error).not.toHaveBeenCalled();
   });
 

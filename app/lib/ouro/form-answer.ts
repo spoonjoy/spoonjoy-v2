@@ -51,23 +51,20 @@ function token(source: object): object {
 const isObject = (value: unknown): value is object => (typeof value === "object" && value !== null) || typeof value === "function";
 
 /**
- * Binds a message projection to the accepted answer that owns it, inside Form's single
- * `errors` prop: `errors={formErrors(actionData, actionData?.errors)}`. Fresh values and
- * mapped messages for the same answer are presentation updates, not new answers; edited
- * fields stay cleared. A different accepted answer resets those clears and focuses once.
+ * Ties Form's `errors` to the answer they came from: `errors={formErrors(actionData, actionData?.errors)}`.
+ * A new answer object shows every message again and moves focus once, even when the messages are the
+ * same; the same answer rendered again keeps the fields the user cleared. Build it in the render, beside Form.
  *
- * Without a key, use an object answer; `null`/`undefined` mean no accepted answer yet.
- * Cached/reused or primitive answers need `{ key }`, advanced only when that answer is
- * accepted. Keys use `Object.is`, including `0`, `""`, `false`, `NaN` and signed zero;
- * an explicitly null/undefined key is invalid. A key overrides source identity.
+ * `answer` is an object, or `null`/`undefined` before there is one. When the answer is the same object
+ * every time (a cache) or not an object, pass `{ key }` and change the key only when a new answer comes in.
+ * Keys compare with `Object.is`, including `0`, `""`, `false`, `NaN` and signed zero; an explicitly null or
+ * undefined key is invalid. A key wins over the answer's own identity.
  *
- * No source properties are read or retained in the returned value or its metadata.
- * Only selected messages are enumerable/serializable; do not select private payload
- * fields as messages. Construct beside Form, including on the undefined-answer baseline.
- * After serialization, reconstruct from the locally accepted answer or a safe acceptance
- * key transported separately; JSON/spread of this value alone loses answer identity.
- * The caller selects an accepted, form-local source; this does not certify cancellation,
- * partition route-global data between forms, or observe a framework's requests.
+ * No source properties are read or kept: the value holds only the messages you pick, and only they
+ * serialize, so pick no private fields as messages. JSON or a spread of the value keeps the messages and
+ * loses the answer, so build it beside Form, on the server and in the browser, from the answer or key you
+ * have there. You choose which answer belongs to this form; it cannot tell a cancelled request, or another
+ * form's data on the same route, from this form's answer.
  *
  * @example
  * import { formErrors } from "@/lib/ouro/form-answer";
@@ -76,6 +73,7 @@ const isObject = (value: unknown): value is object => (typeof value === "object"
  * @example
  * // Reused payload: acceptance.key changes on completed acceptance, not while pending.
  * <Form errors={formErrors(acceptance.data, acceptance.data.errors, { key: acceptance.key })} />
+ * @claim "A new answer object shows every message again" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form > a new answer and a re-render > keeps a cleared message cleared through the next submit's own re-render, then shows the equal answer and moves focus once when it arrives)
  * @claim "`, `false`, `NaN` and signed zero; an explicitly" registry/ouro/lib/ouro/form-answer.test.ts verify:testExists(registry/ouro/lib/ouro/form-answer.test.ts::formErrors answer value > uses Object.is for keys, including negative zero, without a global scalar intern table)
  * @claim "`, `false`, `NaN` and signed zero; an explicitly" registry/ouro/lib/ouro/form-answer.test.ts verify:testExists(registry/ouro/lib/ouro/form-answer.test.ts::formErrors answer value > decodes null, undefined and ordinary records as raw absence, not answer-bearing values)
  * @claim "No source properties are read or" registry/ouro/lib/ouro/form-answer.test.ts verify:testExists(registry/ouro/lib/ouro/form-answer.test.ts::formErrors answer value > retains empty selected values without treating them as answers or accessing source properties)

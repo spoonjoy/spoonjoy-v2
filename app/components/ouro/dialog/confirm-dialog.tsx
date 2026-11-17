@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type JSX, type ReactElement, type ReactNode, type RefObject } from "react";
 import { devWarn } from "~/lib/ouro/dev";
-import { checkOpenMode } from "~/lib/ouro/open-mode";
+import { checkOpenMode, type TriggerOrOpen } from "~/lib/ouro/open-mode";
 import { toneWarning } from "~/lib/ouro/tones";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { Button } from "~/components/ouro/button/button";
@@ -76,7 +76,7 @@ export type ConfirmDialogWithTriggerProps = ConfirmDialogBaseProps & {
   /** The element that opens the confirmation, usually a Button: `trigger={<Button tone="destructive">Delete</Button>}`. */
   trigger: ReactElement;
   /** Not with `trigger`. Remove `trigger` to control the confirmation with `open` and `onOpenChange`. */
-  open?: never;
+  open?: TriggerOrOpen;
   /** Not with `trigger`. Remove `trigger` to control the confirmation with `open` and `onOpenChange`. */
   onOpenChange?: never;
 };

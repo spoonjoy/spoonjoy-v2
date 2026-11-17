@@ -131,6 +131,16 @@ describe("RadioGroup", () => {
     expect(document.activeElement).toBe(radios[1]);
   });
 
+  it("takes focus on a press, in WebKit too, so the arrow keys carry on from the radio pressed", async () => {
+    const onValueChange = vi.fn();
+    const { radios } = await render(<RadioGroup legend="Size" options={sizes} onValueChange={onValueChange} />);
+    await userEvent.click(radios[1]!);
+    expect(document.activeElement).toBe(radios[1]);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(radios[3]);
+    expect(onValueChange).toHaveBeenLastCalledWith("family");
+  });
+
   it("moves to the next radio with ArrowLeft in a right-to-left page, laid out in a row", async () => {
     document.documentElement.dir = "rtl";
     try {
@@ -159,6 +169,19 @@ describe("RadioGroup", () => {
     await userEvent.click(radios[0]!);
     expect(onValueChange).toHaveBeenLastCalledWith("small");
     expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["true", "false", "false", "false"]);
+  });
+
+  it("makes each radio the one element its exact label finds, as Testing Library and Playwright look it up, and a click on that label picks it", async () => {
+    const onValueChange = vi.fn();
+    const { radios } = await render(<RadioGroup legend="Size" name="size" options={sizes} onValueChange={onValueChange} />);
+    // Playwright's getByLabel("…", { exact: true }), which Vitest's getByLabelText shares.
+    expect(["Small", "Medium", "Large", "Family"].map((label) => page.getByLabelText(label, { exact: true }).elements())).toEqual(
+      radios.map((radio) => [radio]),
+    );
+    expect(radios.map((radio) => radio.getAttribute("role"))).toEqual(["radio", "radio", "radio", "radio"]);
+    await userEvent.click(page.getByText("Family"));
+    expect(onValueChange).toHaveBeenLastCalledWith("family");
+    expect(radios[3]!.getAttribute("aria-checked")).toBe("true");
   });
 
   it("follows a controlled value", async () => {
@@ -290,6 +313,13 @@ describe("RadioGroup", () => {
     );
     await fail();
     await expect.poll(() => document.activeElement).toBe(radios[0]);
+  });
+
+  it("darkens a radio's border while its label is hovered, as a browser's own radio does", async () => {
+    const { radios } = await render(<RadioGroup legend="Size" options={sizes} />);
+    expect(pixel(getComputedStyle(radios[0]!).borderTopColor)).toBe(pixel(themeColor("--muted-foreground")));
+    await userEvent.hover(page.getByText("Small"));
+    await expect.poll(() => pixel(getComputedStyle(radios[0]!).borderTopColor)).toBe(pixel(themeColor("--foreground")));
   });
 
   it("keeps an invalid radio's border red while hovered", async () => {
@@ -481,9 +511,9 @@ describe("RadioGroup on the server", () => {
     expect(texts(doc, radios[0]!)).toEqual(["Serves 2.", "Pick one.", "Choose a size."]);
     expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["false", "true", "false", "false"]);
     expect(radios.map((radio) => radio.getAttribute("aria-invalid"))).toEqual(["true", "true", "true", "true"]);
-    for (const input of doc.querySelectorAll<HTMLInputElement>('input[type="radio"]')) {
-      expect(doc.querySelector(`label[for="${input.id}"]`)).not.toBeNull();
-    }
+    // Each label's `for` names its radio, not the hidden input, so the label finds one control.
+    expect(radios.map((radio) => doc.querySelector(`label[for="${radio.id}"]`)?.textContent)).toEqual(["Small", "Medium", "Large", "Family"]);
+    expect([...doc.querySelectorAll('input[type="radio"]')].map((input) => input.id)).toEqual(["", "", "", ""]);
     expect(error).not.toHaveBeenCalled();
   });
 

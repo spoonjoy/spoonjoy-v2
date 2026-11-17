@@ -128,7 +128,7 @@ export interface RadioProps {
   disabled?: boolean | undefined;
   /** Layout only: margins, width, grid placement. Appearance classes warn in development. */
   className?: string | undefined;
-  /** The radio element, a `<span role="radio">`. */
+  /** The radio element, a `<button role="radio">`, which the label names with `for`. */
   ref?: Ref<HTMLElement> | undefined;
 
   /** Not a prop. The group's `value` picks the radio: `<RadioGroup value="small">`. */
@@ -156,6 +156,9 @@ function RadioCircle({ value, ref }: { value: string; ref: Ref<HTMLElement> | un
     <BaseRadio.Root
       value={value}
       ref={ref}
+      // A real button, so the label's `for` names it and not the hidden input: its label finds one control.
+      nativeButton
+      render={<button />}
       inputRef={markInput}
       data-ouro-control="radio-group"
       data-ouro-part="circle"

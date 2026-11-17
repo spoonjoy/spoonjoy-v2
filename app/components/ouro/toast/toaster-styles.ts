@@ -77,8 +77,6 @@ const rootClass =
   "data-expanded:[transform:translateY(var(--offset-y))] " +
 
   "data-starting-style:opacity-0 data-ending-style:opacity-0 data-limited:opacity-0 " +
-  // While the stack is collapsed to its front toast, the older ones (those with a `data-behind` content) are hidden and let clicks through.
-  "group-data-[ouro-toaster-collapsed]/toaster:[&:has([data-behind])]:opacity-0 group-data-[ouro-toaster-collapsed]/toaster:[&:has([data-behind])]:pointer-events-none " +
   "motion-safe:data-starting-style:[transform:translateY(calc(var(--ouro-toast-dir)*-150%))] motion-safe:data-expanded:data-starting-style:[transform:translateY(calc(var(--ouro-toast-dir)*-150%))] " +
   "motion-safe:[&[data-ending-style]:not([data-limited]):not([data-ouro-swiped])]:[transform:translateY(calc(var(--ouro-toast-dir)*-150%))] " +
   "motion-safe:[transition:transform_var(--ouro-duration-slow)_var(--ouro-ease-out),opacity_var(--ouro-duration-base)_var(--ouro-ease-out)] " +

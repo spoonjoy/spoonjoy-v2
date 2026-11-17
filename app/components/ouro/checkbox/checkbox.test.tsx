@@ -129,6 +129,24 @@ describe("Checkbox", () => {
     expect(onCheckedChange).toHaveBeenCalledTimes(4);
   });
 
+  it("is the one element its exact label finds, as Testing Library and Playwright look it up, and a click on that label toggles it", async () => {
+    const { box, input } = await render(<Checkbox label="Email me new recipes" name="recipes" />);
+    // Playwright's getByLabel("…", { exact: true }), which Vitest's getByLabelText shares.
+    expect(page.getByLabelText("Email me new recipes", { exact: true }).elements()).toEqual([box]);
+    expect(box.getAttribute("role")).toBe("checkbox");
+    await userEvent.click(page.getByText("Email me new recipes"));
+    expect(box.getAttribute("aria-checked")).toBe("true");
+    expect(input.checked).toBe(true);
+  });
+
+  it("takes focus on a press, in WebKit too, so Space toggles it next", async () => {
+    const { box } = await render(<Checkbox label="Basil" />);
+    await userEvent.click(box);
+    expect(document.activeElement).toBe(box);
+    await userEvent.keyboard(" ");
+    expect(box.getAttribute("aria-checked")).toBe("false");
+  });
+
   it("does not toggle with Enter", async () => {
     const { box } = await render(<Checkbox label="Basil" />);
     box.focus();
@@ -256,6 +274,13 @@ describe("Checkbox", () => {
     await expect
       .element(page.getByRole("checkbox", { name: "I accept the terms" }))
       .toHaveAccessibleDescription("You can read them first. Accept the terms to continue.");
+  });
+
+  it("darkens the box's border while its label is hovered, as a browser's own checkbox does", async () => {
+    const { box } = await render(<Checkbox label="Email me new recipes" />);
+    expect(pixel(getComputedStyle(box).borderTopColor)).toBe(pixel(themeColor("--muted-foreground")));
+    await userEvent.hover(page.getByText("Email me new recipes"));
+    await expect.poll(() => pixel(getComputedStyle(box).borderTopColor)).toBe(pixel(themeColor("--foreground")));
   });
 
   it("keeps an invalid box's border red while hovered", async () => {
@@ -567,8 +592,9 @@ describe("Checkbox on the server", () => {
     expect(doc.getElementById(terms!.getAttribute("aria-labelledby")!)!.textContent).toContain("I accept the terms");
     expect(terms!.getAttribute("aria-invalid")).toBe("true");
     expect(terms!.getAttribute("aria-required")).toBe("true");
-    const input = doc.querySelector<HTMLInputElement>('input[name="terms"]')!;
-    expect(doc.querySelector(`label[for="${input.id}"]`)).not.toBeNull();
+    // The label's `for` names the box, not the hidden input, so the label finds one control.
+    expect(doc.querySelector(`label[for="${terms!.id}"]`)!.textContent).toContain("I accept the terms");
+    expect(doc.querySelector<HTMLInputElement>('input[name="terms"]')!.id).toBe("");
     expect(all!.getAttribute("aria-checked")).toBe("mixed");
     expect(doc.getElementById(all!.getAttribute("aria-labelledby")!)!.textContent).toBe("All herbs");
     expect(error).not.toHaveBeenCalled();

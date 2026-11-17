@@ -49,7 +49,7 @@ export interface SwitchProps {
    * warn in development; style switches in your theme.
    */
   className?: string | undefined;
-  /** The track element, a `<span role="switch">`. */
+  /** The track element, a `<button role="switch">`, which the label names with `for`. */
   ref?: Ref<HTMLElement> | undefined;
 
   /** Not a prop. Ouro UI uses `onCheckedChange`, which gets the new state: `onCheckedChange={setOn}`. */
@@ -91,6 +91,9 @@ function SwitchTrack(props: {
   return (
     <BaseSwitch.Root
       {...rest}
+      // A real button, so the label's `for` names it and not the hidden input: its label finds one control.
+      nativeButton
+      render={<button />}
       inputRef={markInput}
       data-ouro-control="switch"
       data-ouro-part="track"

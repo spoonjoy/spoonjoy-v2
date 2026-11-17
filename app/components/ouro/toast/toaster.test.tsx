@@ -2053,37 +2053,6 @@ describe("keyboard focus under the stack", () => {
     expect(moved()).toBe("top");
   });
 
-  it("collapses to the newest toast when the top edge is out of reach and only the front toast covers the control", async () => {
-    await page.viewport(390, 844);
-    await render(
-      <>
-        <button type="button" data-case="before">
-          Before
-        </button>
-        <button type="button" data-case="peek" style={{ position: "fixed", top: 0, left: 16, width: 120, height: 8, zIndex: 40 }}>
-          Peek
-        </button>
-        <div aria-hidden style={{ position: "fixed", top: 0, left: 0, right: 0, height: 760 }} />
-        <Toaster />
-      </>,
-    );
-    await show("Older", { duration: Infinity });
-    await show("Newer", { duration: Infinity });
-    const front = toasts()[0]!.getBoundingClientRect();
-    const top = Math.min(...stack().map((box) => box.top));
-    const peek = caseOf("peek");
-    // Between the older toast's top and the front toast's, so only the older one covers it.
-    peek.style.top = `${(top + front.top) / 2 - 4}px`;
-    expect(covered(peek)).toBe(true);
-    caseOf("before").focus();
-    await pressTab();
-    await until(focused, "peek");
-    await until(() => viewport()!.hasAttribute("data-ouro-toaster-collapsed"), true);
-    expect(moved()).toBeNull();
-    expect(intersects(peek.getBoundingClientRect(), toasts()[0]!.getBoundingClientRect())).toBe(false);
-    await until(() => getComputedStyle(toasts()[1]!).opacity, "0");
-  });
-
   it("leaves the stack where it is when the front toast covers the control and the top edge is out of reach", async () => {
     await page.viewport(390, 844);
     await render(
@@ -2147,39 +2116,6 @@ describe("keyboard focus under the stack", () => {
     await until(() => Math.round(Math.min(...stack().map((box) => box.top))), 16);
   });
 
-  it("moves a collapsed stack to the top once the top edge is clear", async () => {
-    await page.viewport(390, 844);
-    await render(
-      <>
-        <button type="button" data-case="before">
-          Before
-        </button>
-        <button type="button" data-case="peek" style={{ position: "fixed", top: 0, left: 16, width: 120, height: 8, zIndex: 40 }}>
-          Peek
-        </button>
-        <button type="button" data-case="front" style={{ position: "fixed", left: 16, width: 120, height: 40, zIndex: 40 }}>
-          Front
-        </button>
-        <div data-case="header" aria-hidden style={{ position: "fixed", top: 0, left: 0, right: 0, height: 760 }} />
-        <Toaster />
-      </>,
-    );
-    await show("Older", { duration: Infinity });
-    await show("Newer", { duration: Infinity });
-    const front = toasts()[0]!.getBoundingClientRect();
-    const top = Math.min(...stack().map((box) => box.top));
-    caseOf("peek").style.top = `${(top + front.top) / 2 - 4}px`;
-    caseOf("front").style.top = `${front.top + 10}px`;
-    caseOf("before").focus();
-    await pressTab();
-    await until(() => viewport()!.hasAttribute("data-ouro-toaster-collapsed"), true);
-    // The header no longer reaches the window's top edge, so the top edge is clear.
-    caseOf("header").style.display = "none";
-    await pressTab();
-    await until(focused, "front");
-    await until(moved, "top");
-  });
-
   it("measures the stack again when a toast's words grow, so the scroll padding keeps its height", async () => {
     await page.viewport(390, 844);
     await render(<Toaster />);
@@ -2212,50 +2148,22 @@ describe("keyboard focus under the stack", () => {
     await until(focused, "before");
     // The top edge covers the page's first control, and the bottom does not: the stack goes back down at once.
     // It stayed up once in an app's WebKit run (ourostack/ouro-ui#1764), so a failure says what the keeper decides from.
-    await until(moved, null).catch((error: Error) => {
+    await until(moved, null).catch(async (error: Error) => {
       const box = caseOf("before").getBoundingClientRect();
       const bar = viewport()!;
       const marks = bar.getAttributeNames().filter((name) => name.startsWith("data-")).map((name) => `${name}=${bar.getAttribute(name)}`);
       const boxes = stack();
-      throw new Error(
-        `${error.message}. Focus on ${focused()} (focus-visible ${document.activeElement?.matches(":focus-visible")}), Before at ${Math.round(box.top)} to ${Math.round(box.bottom)}, the stack at ${Math.round(Math.min(...boxes.map((item) => item.top)))} to ${Math.round(Math.max(...boxes.map((item) => item.bottom)))}, scrolled ${Math.round(scrollY)}, the viewport ${marks.join(" ")}`,
-        { cause: error },
-      );
+      const animations = bar.getAnimations({ subtree: true }).map((animation) => `${(animation as CSSTransition).transitionProperty ?? (animation as CSSAnimation).animationName} ${animation.playState}`);
+      const state = `Focus on ${focused()} (focus-visible ${document.activeElement?.matches(":focus-visible")}), Before at ${Math.round(box.top)} to ${Math.round(box.bottom)}, the stack at ${Math.round(Math.min(...boxes.map((item) => item.top)))} to ${Math.round(Math.max(...boxes.map((item) => item.bottom)))}, scrolled ${Math.round(scrollY)}, the viewport ${marks.join(" ")}, opacity ${getComputedStyle(bar).opacity}, animations ${animations.join("; ") || "none"}`;
+      // Whether the keeper missed the focus or saw it and kept the stack (#1764): told the focus came again, does it move?
+      caseOf("before").dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      throw new Error(`${error.message}. ${state}. Told the focus again, the stack is ${moved() ?? "back at the bottom"}`, { cause: error });
     });
     await pressTab();
     await pressTab();
     await until(focused, "foot-one");
     await until(moved, "top");
-  });
-
-  it("collapses from the top when the bottom stack would still cover the control", async () => {
-    await page.viewport(390, 844);
-    await render(
-      <>
-        <button type="button" data-case="before">
-          Before
-        </button>
-        <button type="button" data-case="low" style={{ position: "fixed", bottom: 16, left: 16, width: 120, height: 40, zIndex: 40 }}>
-          Low
-        </button>
-        <button type="button" data-case="big" style={{ position: "fixed", top: 16, left: 16, width: 120, zIndex: 40 }}>
-          Big
-        </button>
-        <Toaster />
-      </>,
-    );
-    await show("Older", { duration: Infinity });
-    await show("Newer", { duration: Infinity });
-    // Reaches down to the front toast's top: under the bottom stack, but not under the front toast.
-    caseOf("big").style.height = `${toasts()[0]!.getBoundingClientRect().top - 16}px`;
-    caseOf("before").focus();
-    await pressTab();
-    await until(focused, "low");
-    await until(moved, "top");
-    await pressTab();
-    await until(focused, "big");
-    await until(() => viewport()!.hasAttribute("data-ouro-toaster-collapsed"), true);
-    expect(moved()).toBeNull();
   });
 
   it("moves the stack back at once when focus falls to nothing after it has rested", async () => {

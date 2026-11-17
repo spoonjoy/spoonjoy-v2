@@ -129,6 +129,25 @@ describe("Switch", () => {
     expect(onCheckedChange).toHaveBeenCalledTimes(3);
   });
 
+  it("is the one element its exact label finds, as Testing Library and Playwright look it up, and a click on that label flips it", async () => {
+    const { track, input } = await render(<Switch label="Email me about new features" name="news" defaultChecked />);
+    // Playwright's getByLabel("…", { exact: true }), which Vitest's getByLabelText shares.
+    const found = page.getByLabelText("Email me about new features", { exact: true });
+    expect(found.elements()).toEqual([track]);
+    expect(track.getAttribute("role")).toBe("switch");
+    await userEvent.click(page.getByText("Email me about new features"));
+    expect(track.getAttribute("aria-checked")).toBe("false");
+    expect(input.checked).toBe(false);
+  });
+
+  it("takes focus on a press, in WebKit too, so Space flips it next", async () => {
+    const { track } = await render(<Switch label="Wi-Fi" />);
+    await userEvent.click(track);
+    expect(document.activeElement).toBe(track);
+    await userEvent.keyboard(" ");
+    expect(track.getAttribute("aria-checked")).toBe("false");
+  });
+
   it("follows a controlled checked value", async () => {
     function Controlled() {
       const [on, setOn] = useState(true);
@@ -483,6 +502,9 @@ describe("Switch on the server", () => {
     expect(doc.getElementById(track.getAttribute("aria-labelledby")!)!.textContent).toBe("Backups");
     expect(track.getAttribute("aria-checked")).toBe("true");
     expect(track.getAttribute("aria-invalid")).toBe("true");
+    // The label's `for` names the track, not the hidden input, so the label finds one control.
+    expect(doc.querySelector(`label[for="${track.id}"]`)!.textContent).toBe("Backups");
+    expect(doc.querySelector<HTMLInputElement>('input[name="backups"]')!.id).toBe("");
     expect(error).not.toHaveBeenCalled();
   });
 
