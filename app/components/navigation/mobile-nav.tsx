@@ -1,5 +1,5 @@
 import { useLocation } from "react-router";
-import { BookOpen, Globe, Home, Library, LogIn, Search, ShoppingBag } from "lucide-react";
+import { BookOpen, Globe, Home, Library, LogIn, Search, ShoppingCart } from "lucide-react";
 import { useDockContext } from "./dock-context";
 import { TabBar, type TabBarItem } from "~/components/ouro/tab-bar/tab-bar";
 import { InstallPrompt } from "~/components/ouro/install-prompt/install-prompt";
@@ -18,7 +18,7 @@ const signedInTabs: TabBarItem[] = [
   { label: "Kitchen", href: "/", icon: <Home />, paths: ["/account", "/chefs", "/users"] },
   { label: "Recipes", href: "/my-recipes", icon: <BookOpen />, paths: ["/recipes", "/saved-recipes"] },
   { label: "Cookbooks", href: "/cookbooks", icon: <Library /> },
-  { label: "Shopping", href: "/shopping-list", icon: <ShoppingBag /> },
+  { label: "Shopping", href: "/shopping-list", icon: <ShoppingCart /> },
 ];
 
 const signedOutTabs: TabBarItem[] = [
