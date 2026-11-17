@@ -1,3 +1,6 @@
+import { Timer } from 'lucide-react'
+import { Badge } from '~/components/ouro/badge/badge'
+import { cookTimeLabel } from '~/lib/recipe-cook-time'
 import { formatScaledAmount, formatStepReferenceName, IngredientList, type Ingredient, type StepReference } from './IngredientList'
 
 export interface StepCardProps {
@@ -23,6 +26,8 @@ export interface StepCardProps {
   onStepOutputToggle: (id: string) => void
   /** The step the cook is on: marked so they find their place again. */
   current?: boolean
+  /** The step's time in minutes, shown as a timer chip beside the step number (one-book: native's chip). */
+  duration?: number | null
 }
 
 /**
@@ -46,7 +51,9 @@ export function StepCard({
   checkedStepOutputIds,
   onStepOutputToggle,
   current = false,
+  duration,
 }: StepCardProps) {
+  const time = cookTimeLabel([duration])
   return (
     <article
       className="sj-step-card px-5 py-8 sm:px-8 sm:py-10"
@@ -61,6 +68,11 @@ export function StepCard({
           >
             Step {stepNumber}
           </p>
+          {time ? (
+            <Badge variant="soft" icon={Timer} data-testid="step-time" className="print:hidden">
+              {time}
+            </Badge>
+          ) : null}
           {current ? (
             <p data-testid="current-step-marker" className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">
               You are here

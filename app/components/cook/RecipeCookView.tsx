@@ -106,6 +106,7 @@ export function RecipeCookView({ controller, emptyStepsAction, children }: Recip
                 current={hasCookProgress && index === activeStepIndex}
                 stepNumber={step.stepNum}
                 title={step.stepTitle ?? undefined}
+                duration={step.duration}
                 description={step.description}
                 ingredients={stepIngredients(recipe, step.id)}
                 stepOutputUses={stepOutputUses(recipe, step.id)}
