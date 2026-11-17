@@ -133,7 +133,8 @@ test.describe('Mobile RecipeBuilder and tab bar audit', () => {
       masthead.getByRole('link', { name: 'Recipes' }),
       cookModeAction,
       page.getByTestId('recipe-header-list-action'),
-      page.getByTestId('recipe-header-log-cook-action'),
+      page.getByTestId('recipe-header-save-action'),
+      page.getByTestId('recipe-header-more-action'),
     ];
 
     for (const [index, action] of actions.entries()) {

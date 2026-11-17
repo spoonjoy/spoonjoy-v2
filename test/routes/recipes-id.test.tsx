@@ -43,6 +43,12 @@ import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 
+/** Log cook and Edit live in the recipe's ⋯ menu: open it and return the item. */
+async function recipeMenuItem(name: string | RegExp) {
+  await userEvent.click(await screen.findByRole("button", { name: "Recipe actions" }));
+  return screen.findByRole("menuitem", { name });
+}
+
 // Helper to extract data from React Router's data() response
 function extractResponseData(response: any): { data: any; status: number } {
   if (response && typeof response === "object" && response.type === "DataWithResponseInit") {
@@ -4168,7 +4174,8 @@ describe("Recipes $id Route", () => {
       expect(screen.getByTestId("recipe-header-save-action")).toHaveAccessibleName("Save");
       expect(screen.getByTestId("recipe-header-share-action")).toHaveAccessibleName("Share");
       expect(screen.getByRole("button", { name: "Add to list" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Log cook" })).toBeInTheDocument();
+      expect(await recipeMenuItem("Log cook")).toBeInTheDocument();
+      await userEvent.keyboard("{Escape}");
       await user.click(screen.getByRole("button", { name: "Log the first cook" }));
       expect(await screen.findByRole("dialog", { name: "Log a cook" })).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Cancel" }));
@@ -4376,7 +4383,8 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
 
       await screen.findByRole("heading", { name: "My Recipe" });
-      expect(screen.getByTestId("recipe-header-edit-action")).toHaveAttribute("href", "/recipes/recipe-1/edit");
+      expect(await recipeMenuItem("Edit")).toHaveAttribute("href", "/recipes/recipe-1/edit");
+      await userEvent.keyboard("{Escape}");
       expect(screen.queryByRole("link", { name: "Edit recipe" })).not.toBeInTheDocument();
       expect(screen.getByTestId("recipe-owner-tools")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
@@ -4986,7 +4994,8 @@ describe("Recipes $id Route", () => {
       expect(screen.getByRole("heading", { name: "The Only Step" })).toBeInTheDocument();
 
       // Owner edit/delete maintenance stays collapsed until explicitly opened.
-      expect(screen.getByTestId("recipe-header-edit-action")).toHaveAttribute("href", "/recipes/recipe-1/edit");
+      expect(await recipeMenuItem("Edit")).toHaveAttribute("href", "/recipes/recipe-1/edit");
+      await userEvent.keyboard("{Escape}");
       expect(screen.queryByRole("link", { name: "Edit recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
 

@@ -14,10 +14,9 @@ test.describe('Spoon a recipe flow', () => {
     expect(await currentRecipeOwnerUsername(page)).not.toBe(viewerUsername);
 
     // Open the spoon dialog.
-    const logCookButton = page.getByTestId('recipe-header-log-cook-action');
+    await page.getByTestId('recipe-header-more-action').click();
+    const logCookButton = page.getByRole('menuitem', { name: 'Log cook', exact: true });
     await expect(logCookButton).toBeVisible({ timeout: 5000 });
-    await expect(logCookButton).toBeEnabled();
-    await logCookButton.scrollIntoViewIfNeeded();
 
     const dialogHeading = page.getByRole('heading', { name: /log a cook/i });
     for (let attempt = 0; attempt < 3; attempt += 1) {

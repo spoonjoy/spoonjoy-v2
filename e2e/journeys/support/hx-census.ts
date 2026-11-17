@@ -171,7 +171,10 @@ export const census: Journey[] = [
       },
       {
         id: "log-cook-dialog",
-        action: (page) => openDialog(page.getByTestId("recipe-header-log-cook-action"), page.getByRole("dialog", { name: "Log a cook" })),
+        action: async (page) => {
+          await page.getByTestId("recipe-header-more-action").click();
+          await openDialog(page.getByRole("menuitem", { name: "Log cook", exact: true }), page.getByRole("dialog", { name: "Log a cook" }));
+        },
       },
     ],
   },
