@@ -382,9 +382,78 @@ describe("Timer", () => {
   });
 });
 
+describe("Timer ring", () => {
+  const arc = (host: HTMLElement) => host.querySelector<SVGCircleElement>('[data-ouro-timer-arc]')!;
+
+  it("draws the time and its main button inside a ring whose arc is the time left, and Cancel under it", async () => {
+    const { host, timer, time, primary, secondary } = await render(<Timer label="Rice" duration={600} variant="ring" />);
+    const ring = host.querySelector<SVGElement>('[data-ouro-timer-ring]')!;
+    expect(ring.getAttribute("aria-hidden")).toBe("true");
+    expect(timer().getAttribute("data-variant")).toBe("ring");
+    // The time and Start sit inside the ring's box, centred on it.
+    const box = ring.getBoundingClientRect();
+    for (const inner of [time(), primary()]) {
+      const r = inner.getBoundingClientRect();
+      expect(r.left).toBeGreaterThan(box.left);
+      expect(r.right).toBeLessThan(box.right);
+      expect(r.top).toBeGreaterThan(box.top);
+      expect(r.bottom).toBeLessThan(box.bottom);
+      expect(Math.abs((r.left + r.right) / 2 - (box.left + box.right) / 2)).toBeLessThan(1);
+    }
+    expect(Number(getComputedStyle(time()).fontWeight)).toBe(300);
+    expect(getComputedStyle(time()).fontVariantNumeric).toBe("tabular-nums");
+    expect(time().textContent).toBe("10:00");
+    expect(primary().textContent).toBe("Start");
+    expect(host.textContent).toContain("Rice · 10 min");
+    // Idle: no arc.
+    expect(arc(host).getAttribute("opacity")).toBe("0");
+    await press(primary());
+    expect(arc(host).getAttribute("opacity")).toBe("1");
+    expect(Number(arc(host).getAttribute("stroke-dashoffset"))).toBe(0);
+    await advance(150_000);
+    expect(Number(arc(host).getAttribute("stroke-dashoffset"))).toBeCloseTo(0.25, 2);
+    expect(primary().textContent).toBe("Pause");
+    expect(host.textContent).not.toContain("Paused");
+    expect(secondary()!.textContent).toBe("Cancel");
+    expect(secondary()!.getBoundingClientRect().top).toBeGreaterThanOrEqual(box.bottom);
+    await press(primary());
+    expect(primary().textContent).toBe("Resume");
+    expect(host.textContent).toContain("Paused");
+    expect(time().textContent).toBe("7:30");
+    // Paused, the arc stays where the time stopped.
+    expect(arc(host).getAttribute("opacity")).toBe("1");
+    expect(Number(arc(host).getAttribute("stroke-dashoffset"))).toBeCloseTo(0.25, 2);
+    expect(getComputedStyle(arc(host)).stroke).toBe(probe("var(--primary)"));
+  });
+
+  it("shows Time's up and Dismiss at zero, with the ring in the done colour and no arc", async () => {
+    const { host, timer, primary, secondary } = await render(<Timer label="Egg" duration={2} variant="ring" silent />);
+    await press(primary());
+    await advance(2000);
+    expect(timer().getAttribute("data-status")).toBe("done");
+    expect(primary().textContent).toBe("Dismiss");
+    expect(secondary()!.textContent).toBe("Restart");
+    expect(host.textContent).toContain("Time's up");
+    expect(arc(host).getAttribute("opacity")).toBe("0");
+    // Dismiss takes the done colour; Start, Pause and Resume do not.
+    const ready = await render(<Timer label="Tea" duration={60} variant="ring" />);
+    expect(getComputedStyle(primary()).color).not.toBe(getComputedStyle(ready.primary()).color);
+    expect(getComputedStyle(arc(host)).stroke).toBe(probe("var(--destructive)"));
+  });
+
+  it("is plain by default and for a variant that is not one", async () => {
+    const plain = await render(<Timer label="A" duration={60} />);
+    expect(plain.host.querySelector('[data-ouro-timer-ring]')).toBeNull();
+    const odd = await render(<Timer {...({ label: "B", duration: 60, variant: "dial" } as unknown as Parameters<typeof Timer>[0])} />);
+    expect(odd.host.querySelector('[data-ouro-timer-ring]')).toBeNull();
+    expect(odd.timer().hasAttribute("data-variant")).toBe(false);
+  });
+});
+
 describe("Timer development messages", () => {
   it.each([
     ["size", { size: "xl" }, 'size="xl" is not a size; use "md" or "lg"', '<Timer size="lg" />'],
+    ["variant", { variant: "dial" }, 'variant="dial" is not a variant; use "plain" or "ring"', '<Timer variant="ring" />'],
     ["duration", { duration: 0 }, "duration={0} is not a length; it is in seconds and above 0", "<Timer duration={600} />"],
     ["duration", { duration: Number.NaN }, "duration={NaN} is not a length; it is in seconds and above 0", "<Timer duration={600} />"],
     ["seconds", { seconds: 90 }, "seconds is not a prop", "<Timer duration={90} />"],

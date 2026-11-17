@@ -6,6 +6,8 @@ import { commands, page, userEvent } from "vitest/browser";
 import { NavigationMenu, type NavigationMenuProps } from "~/components/ouro/navigation-menu/navigation-menu";
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
+import { drawn, expectFirstFramesInPlace, placeFarBelow, recordPopupFrames } from "~/lib/ouro/testing/popup-frames";
+import { settled as settledBox } from "~/lib/ouro/testing/settled";
 import { isTransparent } from "~/lib/ouro/testing/color";
 import { pressTab } from "~/lib/ouro/testing/tab";
 
@@ -466,5 +468,27 @@ describe("NavigationMenu panels and easing", () => {
     await expect.poll(() => document.getAnimations().length).toBe(0);
     expect(page.getByTestId("featured").element().getBoundingClientRect().bottom).toBeLessThanOrEqual(page.getByRole("link", { name: "Browse" }).element().getBoundingClientRect().top);
     expect(popup()!.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+  });
+});
+
+describe("NavigationMenu first frame", () => {
+  const positioner = () => popup()?.parentElement ?? null;
+
+  it("is in place from its first visible frame when its trigger opens it", async () => {
+    placeFarBelow();
+    await render(
+      <NavigationMenu
+        label="Main"
+        items={[
+          { label: "Pricing", href: "/pricing" },
+          { label: "Recipes", links: [{ label: "Browse", href: "/recipes" }] },
+        ]}
+        currentPath="/pricing"
+      />,
+    );
+    const recording = recordPopupFrames(positioner);
+    await userEvent.click(page.getByRole("button", { name: "Recipes" }));
+    await settledBox(drawn(positioner));
+    expectFirstFramesInPlace(recording.stop());
   });
 });

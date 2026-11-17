@@ -10,6 +10,8 @@ import { Combobox, type ComboboxItem, type ComboboxProps } from "~/components/ou
 import { Dialog } from "~/components/ouro/dialog/dialog";
 import { Form } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
+import { drawn, expectFirstFramesInPlace, placeFarBelow, recordPopupFrames } from "~/lib/ouro/testing/popup-frames";
+import { settled as settledBox } from "~/lib/ouro/testing/settled";
 import { pressDuringScroll } from "~/lib/ouro/testing/press";
 import { pressTab } from "~/lib/ouro/testing/tab";
 import { audit, axeExclude, describeFindings } from "~/lib/ouro/testing/axe";
@@ -1174,5 +1176,18 @@ describe("Combobox in a Dialog", () => {
     const box = option.getBoundingClientRect();
     // What is drawn at the option's middle is the option, not the dialog over it.
     await expect.poll(() => option.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);
+  });
+});
+
+describe("Combobox first frame", () => {
+  const positioner = () => popup()?.parentElement ?? null;
+
+  it("is in place from its first visible frame when its input opens it", async () => {
+    placeFarBelow();
+    const { input } = await render(<Combobox label="Herb" name="herb" items={herbs} />);
+    const recording = recordPopupFrames(positioner);
+    await userEvent.click(input);
+    await settledBox(drawn(positioner));
+    expectFirstFramesInPlace(recording.stop());
   });
 });

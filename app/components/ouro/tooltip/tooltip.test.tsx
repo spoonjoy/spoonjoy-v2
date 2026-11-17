@@ -11,8 +11,9 @@ import { Tooltip, type TooltipProps } from "~/components/ouro/tooltip/tooltip";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { TooltipsHidden } from "~/lib/ouro/portal-container";
 import { act } from "~/lib/ouro/testing/act";
+import { drawn, expectFirstFramesInPlace, placeFarBelow, recordPopupFrames } from "~/lib/ouro/testing/popup-frames";
+import { settled as settledBox } from "~/lib/ouro/testing/settled";
 import { pressTab } from "~/lib/ouro/testing/tab";
-
 // Runs in Chromium and WebKit.
 
 const roots: Root[] = [];
@@ -655,5 +656,18 @@ describe("Tooltip dev messages", () => {
       '[ouro-ui] Tooltip: asChild is not a prop; the child is the trigger. Fix: <Tooltip content="…"><Button>…</Button></Tooltip>.',
     ]);
     expect(trigger().hasAttribute("title")).toBe(false);
+  });
+});
+
+describe("Tooltip first frame", () => {
+  const positioner = () => document.querySelector<HTMLElement>('[data-ouro="tooltip-positioner"]');
+
+  it("is in place from its first visible frame when its trigger opens it", async () => {
+    placeFarBelow();
+    await renderTooltip();
+    const recording = recordPopupFrames(positioner);
+    await userEvent.hover(trigger());
+    await settledBox(drawn(positioner));
+    expectFirstFramesInPlace(recording.stop());
   });
 });

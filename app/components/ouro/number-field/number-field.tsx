@@ -134,15 +134,15 @@ export interface NumberFieldProps {
   type?: { 'NumberField is always a number; for text use <TextField>': never };
 }
 
+/** Marks the hidden input Base UI submits the number with. */
+const markInput = controlRef("number-field", "hidden-input");
+
 /**
  * Icons drawn in the text color at 16px, like the other Ouro icons.
  *
  * @claim "Icons drawn in the text color" registry/ouro/components/ouro/number-field/number-field.tsx verify:fileLine(registry/ouro/components/ouro/number-field/number-field.tsx, /viewBox="0\s0\s16\s16"/)
  * @claim "Icons drawn in the text color" registry/ouro/components/ouro/number-field/number-field.tsx verify:fileLine(registry/ouro/components/ouro/number-field/number-field.tsx, /stroke="currentColor"/)
  */
-/** Marks the hidden input Base UI submits the number with. */
-const markInput = controlRef("number-field", "hidden-input");
-
 function Icon({ children }: { children: ReactNode }): JSX.Element {
   return (
     <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">

@@ -115,7 +115,6 @@ const items = [
   { label: "Shopping list", href: "/shopping-list" },
 ];
 
-/** Waits until the sheet has finished opening or closing. */
 /**
  * The menu button as a locator by its role. Built ahead of the press, the hidden sheet carries the button's label too, so
  * the element's own locator (by label) would find both.
@@ -124,6 +123,7 @@ function press(menuButton: HTMLElement) {
   return page.getByRole("button", { name: menuButton.getAttribute("aria-label")!, exact: true });
 }
 
+/** Waits until the sheet has finished opening or closing. */
 async function sheetSettled() {
   await expect.poll(() => document.getAnimations().length).toBe(0);
 }

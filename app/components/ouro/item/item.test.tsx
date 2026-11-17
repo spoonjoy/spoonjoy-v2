@@ -338,6 +338,56 @@ describe("Item", () => {
 });
 
 describe("Item with href", () => {
+  it("opens its link from a click on its media, though the app positions its text, which the link's layer then covers alone", async () => {
+    const { item } = await render(
+      <div data-consumer="">
+        <style>{'[data-consumer] [data-ouro="item"] > div:nth-child(2) { position: relative; }'}</style>
+        <Item href="#soup" title="Lentil soup" description="Forty minutes" media={<img src={pixel} alt="" data-media="" style={{ width: 40, height: 40 }} />} />
+      </div>,
+    );
+    const media = item.querySelector("[data-media]")!;
+    const [x, y] = center(media);
+    expect(document.elementFromPoint(x, y)?.closest("a")).toBeNull();
+    const link = page.getByRole("link", { name: "Lentil soup" }).element();
+    const opened = vi.fn((event: Event) => event.preventDefault());
+    link.addEventListener("click", opened);
+    await userEvent.click(media);
+    expect(opened).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens a linked row in a new tab from a middle click on its media, with no handler of the app's", async () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    const { item } = await render(
+      <div data-consumer="">
+        <style>{'[data-consumer] [data-ouro="item"] > div:nth-child(2) { position: relative; }'}</style>
+        <Item href="#soup" title="Lentil soup" media={<img src={pixel} alt="" data-media="" style={{ width: 40, height: 40 }} />} />
+      </div>,
+    );
+    expect(item.getAttribute("data-follows-link")).toBe("");
+    await userEvent.click(item.querySelector("[data-media]")!, { button: "middle" } as never);
+    expect(open).toHaveBeenCalledWith((page.getByRole("link", { name: "Lentil soup" }).element() as HTMLAnchorElement).href, "_blank", "noopener");
+  });
+
+  it("chooses its row from a click on its media, though the app positions its text", async () => {
+    const onSelect = vi.fn();
+    const { item } = await render(
+      <div data-consumer="">
+        <style>{'[data-consumer] [data-ouro="item"] > div:nth-child(2) { position: relative; }'}</style>
+        <Item onSelect={onSelect} title="Lentil soup" media={<img src={pixel} alt="" data-media="" style={{ width: 40, height: 40 }} />} />
+      </div>,
+    );
+    expect(item.getAttribute("data-follows-link")).toBe("");
+    await userEvent.click(item.querySelector("[data-media]")!);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    // A Ctrl or Cmd click chooses it too: a row's button has no tab to open.
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    await userEvent.click(item.querySelector("[data-media]")!, { modifiers: ["ControlOrMeta"] } as never);
+    expect(onSelect).toHaveBeenCalledTimes(2);
+    expect(open).not.toHaveBeenCalled();
+    const { item: plain } = await render(<Item title="Lentil soup" media={<img src={pixel} alt="" />} />);
+    expect(plain.hasAttribute("data-follows-link")).toBe(false);
+  });
+
   it("is one link named by its title, covering the row, with the actions above it", async () => {
     const onSave = vi.fn();
     const { item } = await render(

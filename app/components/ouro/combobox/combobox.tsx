@@ -17,6 +17,7 @@ import { controlRef } from "~/lib/ouro/control-ref";
 import { PageDirection } from "~/lib/ouro/page-direction";
 import { useMergedRef } from "~/lib/ouro/refs";
 import { holdPageAtPress } from "~/lib/ouro/page-scroll-hold";
+import { floatingPositionMethod } from "~/lib/ouro/floating";
 import { PortalScope, usePortalContainer } from "~/lib/ouro/portal-container";
 import {
   chipClass,
@@ -690,7 +691,7 @@ function Popup({ input, loading, children }: { input: RefObject<HTMLElement | nu
     <BaseCombobox.Portal {...portal} data-ouro="combobox-portal" className="relative isolate z-[calc(var(--ouro-layer)+1000)]">
       <PortalScope>
         <KeepPageExposed input={input} list={list} />
-        <BaseCombobox.Positioner ref={positionerRef} sideOffset={4} className="outline-none">
+        <BaseCombobox.Positioner ref={positionerRef} sideOffset={4} positionMethod={floatingPositionMethod} className="outline-none">
           <BaseCombobox.Popup data-ouro="combobox-popup" aria-busy={loading || undefined} className={popupClass}>
             {children}
           </BaseCombobox.Popup>

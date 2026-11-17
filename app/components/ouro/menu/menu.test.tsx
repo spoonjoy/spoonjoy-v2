@@ -22,6 +22,8 @@ import {
 } from "~/components/ouro/menu/menu";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
+import { drawn, expectFirstFramesInPlace, placeFarBelow, recordPopupFrames } from "~/lib/ouro/testing/popup-frames";
+import { settled as settledBox } from "~/lib/ouro/testing/settled";
 import { pressTab } from "~/lib/ouro/testing/tab";
 import { pressDuringScroll } from "~/lib/ouro/testing/press";
 import { isTransparent } from "~/lib/ouro/testing/color";
@@ -1995,5 +1997,54 @@ describe("Menu focus guards", () => {
     await settled();
     await expectGuardsReported();
     expect(describeFindings(await gated())).toBe("");
+  });
+});
+
+describe("Menu first frame", () => {
+  const positioner = () => document.querySelector<HTMLElement>('[data-ouro="menu-positioner"]');
+
+  it("is in place from its first visible frame when its trigger opens it", async () => {
+    placeFarBelow();
+    await render(<Menu trigger={<Button>Actions</Button>}>{basicItems}</Menu>);
+    const recording = recordPopupFrames(positioner);
+    await userEvent.click(trigger());
+    await settledBox(drawn(positioner));
+    expectFirstFramesInPlace(recording.stop());
+  });
+
+  it("is in place from its first visible frame when a right click opens it", async () => {
+    placeFarBelow();
+    await render(
+      <Menu contextTrigger={<div data-testid="area" style={{ width: 300, height: 200 }}>Recipe card</div>}>{basicItems}</Menu>,
+    );
+    const recording = recordPopupFrames(positioner);
+    await userEvent.click(document.querySelector<HTMLElement>('[data-testid="area"]')!, { button: "right", position: { x: 40, y: 30 } });
+    await settledBox(drawn(positioner));
+    expectFirstFramesInPlace(recording.stop());
+  });
+
+  it("is in place from its first visible frame when the app opens it with open and anchor", async () => {
+    placeFarBelow();
+    function Anchored() {
+      const [anchor, setAnchor] = useState<Element | null>(null);
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <Button ref={setAnchor} onClick={() => setOpen(true)}>
+            Actions
+          </Button>
+          {anchor && (
+            <Menu anchor={anchor} open={open} onOpenChange={setOpen} aria-label="Actions">
+              {basicItems}
+            </Menu>
+          )}
+        </>
+      );
+    }
+    await render(<Anchored />);
+    const recording = recordPopupFrames(positioner);
+    await userEvent.click(trigger());
+    await settledBox(drawn(positioner));
+    expectFirstFramesInPlace(recording.stop());
   });
 });
