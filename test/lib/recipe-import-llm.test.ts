@@ -293,7 +293,6 @@ describe("createOpenAIRecipeLlmRunner", () => {
 
   it("maps non-object thrown values to RecipeLlmError", async () => {
     const create = vi.fn(async () => {
-      // eslint-disable-next-line @typescript-eslint/only-throw-error
       throw "string error";
     });
     const runner = createOpenAIRecipeLlmRunner(env, {
@@ -304,7 +303,6 @@ describe("createOpenAIRecipeLlmRunner", () => {
 
   it("maps object errors with non-numeric status to RecipeLlmError", async () => {
     const create = vi.fn(async () => {
-      // eslint-disable-next-line @typescript-eslint/only-throw-error
       throw { status: "weird" };
     });
     const runner = createOpenAIRecipeLlmRunner(env, {

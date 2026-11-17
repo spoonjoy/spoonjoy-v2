@@ -894,7 +894,6 @@ describe("createOpenAIImageRunner", () => {
     const runner = mockRunner({
       imageToImage: vi.fn(async () => {
         // Throw a string (not an object) — must not enter the fallback branch.
-        // eslint-disable-next-line @typescript-eslint/no-throw-literal
         throw "boom";
       }),
     });

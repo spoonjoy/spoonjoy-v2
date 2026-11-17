@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { BookOpen, ChefHat, Plus, Search as SearchIcon, Settings, Share2, Users } from "lucide-react";
+import { BookOpen, ChefHat, Plus, Search as SearchIcon, Settings, Share, Users } from "lucide-react";
 import { chefDisplayName } from "~/lib/username";
 import { Button } from "~/components/ouro/button/button";
 import { Card } from "~/components/ouro/card/card";
@@ -204,7 +204,7 @@ function RecipeIndexRow({
         <>
           <CoverProvenanceBadge label={recipe.coverProvenanceLabel} />
           <Button variant="outline" tone="secondary" aria-label={`Share ${recipe.title}`} onClick={() => onShare(recipe)}>
-            <Share2 />
+            <Share />
           </Button>
         </>
       }
@@ -278,7 +278,7 @@ function CookbookCover({
       }
       action={
         <Button variant="outline" tone="secondary" aria-label={`Share ${cookbook.title}`} onClick={() => onShare(cookbook)}>
-          <Share2 />
+          <Share />
         </Button>
       }
     />

@@ -483,6 +483,10 @@ const CI_HX_SOURCE_RULES_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run hx:so
 const CI_HX_SOURCE_RULES_RATCHET_COMMAND = `${CI_HX_SOURCE_RULES_COMMAND} --base "$(git rev-parse HEAD^1)"`;
 // HX's claims checker: every claim in the merge queue and on main, and on a pull request also the
 // ratchet and its title and body (scripts/claims-pr.mjs).
+// oxlint, held to oxlint.baseline.json (scripts/lint.mjs), in both unit lanes; on pull requests
+// no rule's total may rise against the base commit's baseline.
+const CI_LINT_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run lint`;
+const CI_LINT_RATCHET_COMMAND = `${CI_LINT_COMMAND} --base "$(git rev-parse HEAD^1)"`;
 const CI_CLAIMS_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run claims:check`;
 const CI_CLAIMS_PR_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run claims:pr`;
 // Ouro UI's AX X-ray of the stdio MCP server (scripts/mcp-xray.ts), on pull requests, on the local
@@ -541,6 +545,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature("pnpm run verify:clean:typecheck"),
     commandStepSignature("pnpm run verify:clean:generated-contract"),
     commandStepSignature(CI_HX_SOURCE_RULES_COMMAND),
+    commandStepSignature(CI_LINT_COMMAND),
     commandStepSignature(CI_CLAIMS_COMMAND),
     commandStepSignature("pnpm run verify:clean:test:coverage"),
     commandStepSignature("pnpm run verify:clean:test:mcp-sdk-python"),
@@ -566,6 +571,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature("pnpm run verify:clean:generated-contract"),
     commandStepSignature(CI_MCP_XRAY_COMMAND),
     commandStepSignature(CI_HX_SOURCE_RULES_RATCHET_COMMAND),
+    commandStepSignature(CI_LINT_RATCHET_COMMAND),
     commandStepSignature(CI_CLAIMS_PR_COMMAND),
     commandStepSignature(CI_CHANGED_TESTS_COMMAND),
     commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
