@@ -143,7 +143,7 @@ test.describe('Mobile RecipeBuilder and tab bar audit', () => {
 
     await cookModeAction.click();
     await expect(page).toHaveURL(/#cook$/);
-    await expect(page.getByRole('region', { name: /.+/ }).filter({ hasText: /Now cooking/i })).toBeVisible();
+    await expect(page.getByTestId('cook-mode-panel').getByRole('button', { name: 'Exit cook mode' })).toBeVisible();
     await page.waitForFunction(() => {
       const target = [...document.querySelectorAll<HTMLElement>('#cook')].find((element) => {
         const rect = element.getBoundingClientRect();
