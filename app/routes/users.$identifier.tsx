@@ -264,11 +264,11 @@ export default function UserProfile() {
                 </p>
                 <Link href={`${profileHref}/fellow-chefs`} inline={false} tone="secondary" className="grid min-h-11 no-underline">
                   <span className="font-sj-display text-3xl/9 font-semibold text-[var(--sj-ink)]">{fellowChefsCount}</span>{" "}
-                  <span className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">fellow chefs</span>
+                  <span className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">{fellowChefsCount === 1 ? "fellow chef" : "fellow chefs"}</span>
                 </Link>
                 <Link href={`${profileHref}/kitchen-visitors`} inline={false} tone="secondary" className="grid min-h-11 no-underline">
                   <span className="font-sj-display text-3xl/9 font-semibold text-[var(--sj-ink)]">{kitchenVisitorsCount}</span>{" "}
-                  <span className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">kitchen visitors</span>
+                  <span className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">{kitchenVisitorsCount === 1 ? "kitchen visitor" : "kitchen visitors"}</span>
                 </Link>
               </nav>
             </div>
