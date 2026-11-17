@@ -76,7 +76,7 @@ describe("form-local accepted Router answers", () => {
     await user.click(save);
     await waitFor(() => expect(title).toHaveAccessibleDescription("Taken"));
     expect(title).toHaveFocus();
-    const firstAlert = screen.getByRole("alert");
+    const firstAlert = await screen.findByRole("alert");
     await user.type(title, " changed");
     expect(title).not.toHaveAttribute("aria-invalid", "true");
     // Enter submits the builder's display form, whose onSubmit prevents transport.
@@ -99,7 +99,7 @@ describe("form-local accepted Router answers", () => {
     }
     await waitFor(() => expect(title).toHaveAccessibleDescription("Taken"));
     expect(title).toHaveFocus();
-    expect(screen.getByRole("alert")).not.toBe(firstAlert);
+    await waitFor(() => expect(screen.getByRole("alert")).not.toBe(firstAlert));
     expect(calls).toBe(2);
   });
 

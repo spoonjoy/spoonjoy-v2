@@ -26,7 +26,7 @@ describe("Spoonjoy accepted form answers", () => {
     const email = screen.getByRole("textbox", { name: "Email" });
     rerender(<Fields answer={first} />);
     await waitFor(() => expect(email).toHaveFocus());
-    const firstAlert = screen.getByRole("alert");
+    const firstAlert = await screen.findByRole("alert");
     fireEvent.change(email, { target: { value: "different" } });
     expect(email).not.toHaveAttribute("aria-invalid", "true");
     act(() => screen.getByRole("button", { name: "Elsewhere" }).focus());
@@ -38,7 +38,7 @@ describe("Spoonjoy accepted form answers", () => {
     rerender(<Fields answer={{ errors: { ...first.errors }, privateToken: "another private value" }} />);
     await waitFor(() => expect(email).toHaveFocus());
     expect(email).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("alert")).not.toBe(firstAlert);
+    await waitFor(() => expect(screen.getByRole("alert")).not.toBe(firstAlert));
     expect(screen.getByText("Taken")).toBeVisible();
     expect(document.body.textContent).not.toContain("private");
   });
