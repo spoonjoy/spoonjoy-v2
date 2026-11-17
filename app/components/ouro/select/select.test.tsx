@@ -744,6 +744,6 @@ describe("Select first frame", () => {
     const recording = recordPopupFrames(positioner);
     await userEvent.click(trigger);
     await settledBox(drawn(positioner));
-    expectFirstFramesInPlace(recording.stop());
+    expectFirstFramesInPlace(await recording.stop());
   });
 });

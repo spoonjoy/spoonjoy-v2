@@ -95,11 +95,15 @@ function floatingPlacementWarnings(
 
 /**
  * The portal: its own stacking context at `--ouro-layer`, the level apps raise with the
- * token, as for Dialog and Sheet.
+ * token, as for Dialog and Sheet. Opened from inside another Ouro UI layer, it renders in that
+ * layer's portal, where the layer's own backdrop and viewport sit at z-1000, so it stacks at
+ * 1001 there; on the page it stays at `--ouro-layer`.
  *
  * @internal
+ * @claim "Opened from inside another Ouro UI" registry/ouro/components/ouro/sheet/sheet-parts.tsx verify:fileLine(registry/ouro/components/ouro/sheet/sheet-parts.tsx, /"fixed inset-0 z-1000 flex overflow-clip touch-none"/)
+ * @claim "Opened from inside another Ouro UI" registry/ouro/lib/ouro/floating.ts verify:fileLine(registry/ouro/lib/ouro/floating.ts, /in-\[\[data-ouro\$='-portal'\]\]:z-1001/)
  */
-const floatingPortalClass = "relative isolate z-(--ouro-layer)";
+const floatingPortalClass = "relative isolate z-(--ouro-layer) in-[[data-ouro$='-portal']]:z-1001";
 
 /**
  * How a floating layer's positioner places itself: `fixed`, so the first placement is measured in the space the popup

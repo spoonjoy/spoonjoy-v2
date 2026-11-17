@@ -9,8 +9,11 @@ import { Card } from "~/components/ouro/card/card";
 import { Item } from "~/components/ouro/item/item";
 import { Link } from "~/components/ouro/link/link";
 import { ScrollArea } from "~/components/ouro/scroll-area/scroll-area";
+import { Text } from "~/components/ouro/text/text";
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
+import { measureTextContrast } from "~/lib/ouro/testing/axe";
+import { pageCss } from "~/lib/ouro/testing/page-css";
 import { pressTab } from "~/lib/ouro/testing/tab";
 
 const roots: Root[] = [];
@@ -660,16 +663,85 @@ describe("Card with href, zoomMedia and revealDescription", () => {
     expect([card.getBoundingClientRect().width, card.getBoundingClientRect().height]).toEqual([box.width, box.height]);
   });
 
-  it("lays a rising title on the page's background under a theme with no card color, never on the bare picture", async () => {
+  it("lays a rising title on glass over the picture, solid without a blur, with less transparency or more contrast, and the page's background under a theme with no card color", async () => {
     const { card } = await render(<div style={{ "--card": "initial", "--card-foreground": "initial" } as never}>{tile({ revealDescription: "rise" })}</div>);
     // The block that holds the title and the rising description, over the media.
-    const surface = card.querySelector('[data-card-reveal="rise"]')!.parentElement!.parentElement!;
+    const band = card.querySelector<HTMLElement>("[data-card-glass]")!;
+    const title = card.querySelector('[data-card-reveal="rise"]')!.parentElement!.parentElement!;
+    // The glass lies under the whole of the title's block, and is no content of its own.
+    expect(band.getAttribute("aria-hidden")).toBe("true");
+    expect(band.getBoundingClientRect().toJSON()).toEqual(title.getBoundingClientRect().toJSON());
     const probe = document.createElement("div");
     probe.style.cssText = "background-color:var(--background);color:var(--foreground)";
     card.parentElement!.append(probe);
-    expect(getComputedStyle(probe).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
-    expect(getComputedStyle(surface).backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
-    expect(getComputedStyle(surface).color).toBe(getComputedStyle(probe).color);
+    const solid = getComputedStyle(probe).backgroundColor;
+    expect(solid).not.toBe("rgba(0, 0, 0, 0)");
+    // Glass: the page's background, partly see-through, blurred behind.
+    expect(getComputedStyle(band).backgroundColor).not.toBe(solid);
+    expect(getComputedStyle(band).backgroundColor).toMatch(/\/ 0\.78\)$|, 0\.78\)$/);
+    expect(getComputedStyle(band).backdropFilter).toBe("blur(12px) saturate(1.5)");
+    expect(getComputedStyle(title).color).toBe(getComputedStyle(probe).color);
+    // Test browsers cannot ask for less transparency or lack backdrop-filter, so the page's own rules for them apply to every page here.
+    for (const query of [/@media ?\(prefers-reduced-transparency: ?reduce\)/g, /@supports +not \(backdrop-filter: ?blur\(1px\)\)/g]) {
+      const rule = document.createElement("style");
+      rule.textContent = pageCss().replace(query, "@media all");
+      expect(rule.textContent).not.toBe(pageCss());
+      document.head.append(rule);
+      try {
+        expect(getComputedStyle(band).backgroundColor).toBe(solid);
+        if (String(query).includes("transparency")) expect(getComputedStyle(band).backdropFilter).toBe("none");
+      } finally {
+        rule.remove();
+      }
+    }
+    await commands.emulateMedia({ contrast: "more" });
+    try {
+      expect(getComputedStyle(band).backgroundColor).toBe(solid);
+      expect(getComputedStyle(band).backdropFilter).toBe("none");
+      expect(getComputedStyle(band).borderTopStyle).toBe("solid");
+    } finally {
+      await commands.emulateMedia({ contrast: "no-preference" });
+    }
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      expect(getComputedStyle(band).backdropFilter).toBe("none");
+      expect(getComputedStyle(band).borderTopStyle).toBe("solid");
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
+  it("keeps a rising title and description at 4.5:1 on its glass over a bright picture and a dark one, in light and dark", async () => {
+    const picture = (fill: string) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="40" height="30" fill="${fill}"/></svg>`)}`;
+    try {
+      for (const scheme of ["light", "dark"]) {
+        document.documentElement.classList.toggle("dark", scheme === "dark");
+        for (const fill of ["#ffffff", "#000000"]) {
+          const { card, host } = await render(
+            <Card href="#braising" title="Braising" description="Low heat, a lid, and time" media={<AspectRatio ratio={4 / 3}><img src={picture(fill)} alt="" /></AspectRatio>} revealDescription="rise" />,
+          );
+          card.querySelector<HTMLElement>("[data-card-link]")!.focus({ focusVisible: true } as FocusOptions);
+          const reveal = card.querySelector<HTMLElement>('[data-card-reveal="rise"]')!;
+          await settled(reveal, () => getComputedStyle(reveal).opacity).toBe("1");
+          for (const text of [card.querySelector("[data-card-link]")!, reveal.firstElementChild!]) {
+            expect(await measureTextContrast(text, 4.5), `${scheme}, ${fill}: ${text.textContent}`).toEqual({ pass: true });
+          }
+          host.remove();
+        }
+      }
+    } finally {
+      document.documentElement.classList.remove("dark");
+    }
+  });
+
+  it("mutes only its own description on the glass, leaving a tone the app gives text inside it", async () => {
+    const { card } = await render(
+      <Card href="#braising" title="Braising" description={<>Ready in 20 min · <Text as="span" tone="destructive">Sold out</Text></>} media={<AspectRatio ratio={4 / 3}><img src={pixel} alt="" /></AspectRatio>} revealDescription="rise" />,
+    );
+    const probe = document.createElement("span");
+    probe.style.color = "var(--destructive)";
+    card.append(probe);
+    expect(getComputedStyle(card.querySelector('[data-card-reveal] span[data-ouro="text"]')!).color).toBe(getComputedStyle(probe).color);
   });
 
   it("insets a plain rising card's title from the edges of its band, as an outlined card's", async () => {
