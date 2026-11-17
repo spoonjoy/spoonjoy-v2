@@ -3,8 +3,7 @@ import type { Route } from "./+types/cookbooks._index";
 import { useLoaderData } from "react-router";
 import { Plus } from "lucide-react";
 import { Button } from "~/components/ouro/button/button";
-import { Item } from "~/components/ouro/item/item";
-import { ItemGroup } from "~/components/ouro/item/item-group";
+import { Card } from "~/components/ouro/card/card";
 import { Text } from "~/components/ouro/text/text";
 import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
@@ -12,7 +11,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { readCookbookListFromD1, readCookbookListWithPrisma } from "~/lib/collection-reads.server";
 import { requireUserId } from "~/lib/session.server";
-import { LAZY_IMAGE_PROPS } from "~/lib/image-loading";
+import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { DrawerSearch } from "./my-recipes";
 
 function normalizedQuery(request: Request) {
@@ -73,26 +72,41 @@ export default function CookbooksIndexRedirect() {
         )}
         size="lg"
         divider
-        description="Cookbooks you built and saved in your kitchen."
+        description={`${cookbooks.length} ${cookbooks.length === 1 ? "cookbook" : "cookbooks"}`}
       />
 
       <DrawerSearch label="Search cookbooks" query={query} placeholder="weeknight, holidays, pasta" />
 
       {cookbooks.length > 0 ? (
-        <ItemGroup aria-label="Cookbooks" variant="divided" className="mt-6">
-          {cookbooks.map((cookbook) => {
-            const coverImageUrl = cookbook.recipes.find((item) => item.recipe.coverImageUrl)?.recipe.coverImageUrl;
-            return (
-              <Item
-                key={cookbook.id}
-                href={`/cookbooks/${cookbook.id}`}
-                title={cookbook.title}
-                description={`${cookbook._count.recipes} ${cookbook._count.recipes === 1 ? "recipe" : "recipes"}`}
-                media={coverImageUrl ? <img src={coverImageUrl} alt="" {...LAZY_IMAGE_PROPS} /> : undefined}
-              />
-            );
-          })}
-        </ItemGroup>
+        // The one-book shelf (desk target.md, Cookbooks): each cookbook as its cover, with its
+        // name and recipe count under it, as the Apple app's grid draws them.
+        <ul aria-label="Cookbooks" className="mt-8 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
+          {cookbooks.map((cookbook) => (
+            <Card
+              key={cookbook.id}
+              as="li"
+              variant="plain"
+              size="sm"
+              href={`/cookbooks/${cookbook.id}`}
+              title={cookbook.title}
+              description={`${cookbook._count.recipes} ${cookbook._count.recipes === 1 ? "recipe" : "recipes"}`}
+              media={(
+                <CookbookCoverArt
+                  title={cookbook.title}
+                  recipeCount={cookbook._count.recipes}
+                  recipeImages={cookbook.recipes.map((item) => ({
+                    coverImageUrl: item.recipe.coverImageUrl,
+                    title: "",
+                    coverProvenanceLabel: item.recipe.coverProvenanceLabel,
+                  }))}
+                  titleAsHeading={false}
+                  caption={false}
+                  className="w-full rounded-ouro-md border-0"
+                />
+              )}
+            />
+          ))}
+        </ul>
       ) : (
         <Empty headingLevel={2} align="start" description={<>
           <Text tone="muted">
