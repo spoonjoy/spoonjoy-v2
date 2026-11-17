@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { NumberField } from "~/components/ouro/number-field/number-field";
@@ -172,7 +173,7 @@ function CookModePanel({
     ingredients.filter((ingredient) => checkedIngredientIds.has(ingredient.id)).length +
     stepOutputUses.filter((reference) => checkedStepOutputIds.has(reference.id)).length;
   const pageProgressLabel = pageProgressTotal > 0
-    ? `${pageProgressChecked} of ${pageProgressTotal} checked`
+    ? `${pageProgressChecked} of ${pageProgressTotal}`
     : "No checklist items";
   const pageLabel = `Step ${activeStepIndex + 1} of ${stepCount}`;
   // On a tall or half-open foldable, fold.css ends the step's row on the fold; it needs to know
@@ -194,26 +195,27 @@ function CookModePanel({
       aria-labelledby="cook-mode-heading"
     >
       <div className="mx-auto flex h-[100svh] w-full max-w-7xl flex-col px-4 sm:px-6 lg:px-8">
-        <header className="flex min-h-20 shrink-0 items-center justify-between gap-4 border-b border-[var(--sj-border)] py-4">
+        {/* The one-book cook step (desk target.md, Cook step): close (×) at the top left, as the
+            Apple app has it, then the recipe and how much of it is checked. */}
+        <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-[var(--sj-border)] py-3">
+          <Button variant="outline" tone="secondary" aria-label="Exit cook mode" onClick={onExit}>
+            <X />
+          </Button>
           <div className="min-w-0">
-            <p className="sj-eyebrow">Now cooking</p>
             {/* Cook mode replaces the whole page (see the early return above), so this
                 promotes the recipe title to the page's `h1` instead of adding a second,
                 visually redundant one. */}
             <h1
               ref={headingRef}
               tabIndex={-1}
-              className="font-sj-ui mt-1 truncate text-sm font-semibold text-[var(--sj-ink-soft)] outline-none"
+              className="font-sj-ui truncate text-sm font-semibold text-[var(--sj-ink-soft)] outline-none"
             >
               {recipeTitle}
             </h1>
-            <p className="font-sj-ui mt-1 text-xs uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
+            <p className="font-sj-ui mt-0.5 text-xs text-[var(--sj-ink-soft)]">
               {recipeProgressLabel}
             </p>
           </div>
-          <Button variant="plain" tone="secondary" onClick={onExit}>
-            Exit cook mode
-          </Button>
         </header>
 
         <CookTimerTray timers={timers} currentStepNum={step.stepNum} onGoToStep={onGoToStepNum} />
@@ -225,18 +227,18 @@ function CookModePanel({
         >
           <article
             key={step.stepNum}
-            className="flex shrink-0 flex-col border-y border-[var(--sj-border-strong)] py-8 sm:py-10 lg:min-h-0 lg:shrink lg:justify-center lg:py-12"
+            className="flex shrink-0 flex-col py-2 sm:py-6 lg:min-h-0 lg:shrink lg:justify-center lg:py-10"
           >
             <p className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">
               {pageLabel}
             </p>
             <h2
               id="cook-mode-heading"
-              className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] font-sj-display mt-5 max-w-4xl text-4xl/10 font-semibold tracking-normal text-[var(--sj-ink)] sm:text-6xl/15 lg:text-7xl/18"
+              className="font-sj-display mt-3 max-w-4xl text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] sm:text-3xl/9"
             >
               {stepTitle}
             </h2>
-            <p className="sj-type-step md:sj-type-display mt-7 max-w-3xl whitespace-pre-wrap text-[var(--sj-ink)]">
+            <p className="sj-type-display mt-5 max-w-3xl whitespace-pre-wrap text-[var(--sj-ink)] lg:text-6xl/[1.05]">
               {step.description}
             </p>
             <CookStepTimer timer={timers.find((timer) => timer.stepNum === step.stepNum)} />
@@ -246,21 +248,12 @@ function CookModePanel({
               cook-mode controls for the current step, not tangential "complementary"
               content, and root.tsx always wraps route content in a <main> landmark, so an
               <aside> here would violate landmark-complementary-is-top-level. */}
-          <div className="mx-auto flex w-full max-w-[38rem] shrink-0 flex-col justify-between gap-8 border-y border-[var(--sj-border)] py-6 lg:min-h-0 lg:shrink lg:py-8">
+          <div className="mx-auto flex w-full max-w-[38rem] shrink-0 flex-col justify-between gap-8 rounded-ouro-lg bg-[var(--sj-panel)] p-5 lg:min-h-0 lg:shrink lg:p-6">
             <div>
-              <div className="flex items-end justify-between gap-4">
-                <div>
-                  <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-                    On this page
-                  </p>
-                  <p className="font-sj-ui mt-2 text-xs uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-                    {pageProgressLabel}
-                  </p>
-                </div>
-                <p className="font-sj-display text-3xl/8 font-semibold tabular-nums text-[var(--sj-ink)]">
-                  {activeStepIndex + 1}/{stepCount}
-                </p>
-              </div>
+              {/* The step's own ingredients, as the Apple app heads them: "For this step · 0 of 2". */}
+              <h3 className="font-sj-ui text-sm font-semibold text-[var(--sj-ink-soft)]">
+                For this step · <span>{pageProgressLabel}</span>
+              </h3>
 
               {(ingredients.length > 0 || stepOutputUses.length > 0) ? (
                 <div className="mt-6">

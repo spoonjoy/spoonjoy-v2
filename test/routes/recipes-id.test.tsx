@@ -3318,7 +3318,7 @@ describe("Recipes $id Route", () => {
       expect(within(within(cookMode).getByRole("article")).getByText("Step 2 of 2")).toBeInTheDocument();
       expect(within(cookMode).getByRole("heading", { name: "Cook" })).toBeInTheDocument();
       expect(within(cookMode).getByRole("checkbox", { name: "Step 1: Prep" })).toBeInTheDocument();
-      expect(within(cookMode).getByText("0 of 2 checked")).toBeInTheDocument();
+      expect(within(cookMode).getByRole("heading", { level: 3, name: "For this step · 0 of 2" })).toBeInTheDocument();
       await user.click(within(cookMode).getByRole("checkbox", { name: "Step 1: Prep" }));
       expect(within(cookMode).getByText("2 of 3 checked")).toBeInTheDocument();
 
