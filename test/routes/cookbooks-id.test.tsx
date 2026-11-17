@@ -1925,7 +1925,7 @@ describe("Cookbooks $id Route", () => {
         expect(screen.queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: "Edit title" }));
-        expect(screen.getByRole("textbox", { name: "Cookbook title" })).not.toHaveAttribute("aria-invalid");
+        expect(screen.getByRole("textbox", { name: "Cookbook title" })).not.toHaveAttribute("aria-invalid", "true");
         expect(screen.queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
       });
 
@@ -1965,7 +1965,7 @@ describe("Cookbooks $id Route", () => {
         fireEvent.change(input, { target: { value: "Renamed Title" } });
         fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-        expect(await screen.findByText(/Spoonjoy's database is busy and didn't save that\./)).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveAccessibleDescription(/Spoonjoy's database is busy and didn't save that\./));
         expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Renamed Title");
         expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).not.toBeInTheDocument();
         expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("alertdialog")).not.toBeInTheDocument();
@@ -2060,7 +2060,7 @@ describe("Cookbooks $id Route", () => {
           const input = await openTitleEditor();
           fireEvent.change(input, { target: { value: "Renamed Title" } });
           fireEvent.click(screen.getByRole("button", { name: "Save" }));
-          expect(await screen.findByText(/No answer from Spoonjoy/)).toBeInTheDocument();
+          await waitFor(() => expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveAccessibleDescription(/No answer from Spoonjoy/));
 
           fireEvent.click(screen.getByRole("button", { name: "Save" }));
           expect(await screen.findByRole("dialog", { name: "Cookbook renamed." })).toBeInTheDocument();

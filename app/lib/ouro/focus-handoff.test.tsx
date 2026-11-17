@@ -113,6 +113,35 @@ describe("handOffFocus", () => {
     expect(document.activeElement).toBe(document.body);
   });
 
+  it.each([
+    ["an <li>", '<ul><li><button>a</button></li><li id="item"><p id="gone"><button>gone</button></p></li><li><button>c</button></li></ul>'],
+    ["a listitem", '<div role="list"><div role="listitem"><button>a</button></div><div role="listitem" id="item"><p id="gone"><button>gone</button></p></div><div role="listitem"><button>c</button></div></div>'],
+  ])("starts where %s that held only the element stood, when the item left with it", async (_, html) => {
+    const host = page(html);
+    button(host, "gone").focus();
+    handOffFocus(host.querySelector("#gone")!);
+    host.querySelector("#item")!.remove();
+    await Promise.resolve();
+    expect(document.activeElement).toBe(button(host, "c"));
+  });
+
+  it("leaves focus to the app when the list item that held the element held more", async () => {
+    const host = page('<ul><li id="item"><p id="gone"><button>gone</button></p><span>more</span></li><li><button>c</button></li></ul>');
+    button(host, "gone").focus();
+    handOffFocus(host.querySelector("#gone")!);
+    host.querySelector("#item")!.remove();
+    await Promise.resolve();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("does nothing for the page's own root element, which has nothing around it", async () => {
+    const host = page("<button>a</button>");
+    button(host, "a").focus();
+    expect(() => handOffFocus(document.documentElement)).not.toThrow();
+    await Promise.resolve();
+    expect(document.activeElement).toBe(button(host, "a"));
+  });
+
   it("leaves focus on the page when no control is left anywhere", async () => {
     const host = page('<p id="gone"><button>gone</button></p>');
     const gone = host.querySelector("#gone")!;

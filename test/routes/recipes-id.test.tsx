@@ -2879,7 +2879,7 @@ describe("Recipes $id Route", () => {
 
       await user.type(titleInput, " again");
       expect(within(dialog).queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
-      expect(titleInput).not.toHaveAttribute("aria-invalid");
+      expect(titleInput).not.toHaveAttribute("aria-invalid", "true");
 
       await user.click(screen.getByRole("button", { name: "Create & Save" }));
       expect(await within(dialog).findByText("You already have a cookbook with this title")).toBeInTheDocument();
@@ -2895,7 +2895,7 @@ describe("Recipes $id Route", () => {
       await openSaveModalFromHeader();
       const reopened = await screen.findByRole("dialog", { name: "Save to cookbook" });
       expect(within(reopened).queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
-      expect(within(reopened).getByLabelText("Create new cookbook")).not.toHaveAttribute("aria-invalid");
+      expect(within(reopened).getByLabelText("Create new cookbook")).not.toHaveAttribute("aria-invalid", "true");
       await closeSaveModal(user);
     });
 

@@ -128,6 +128,20 @@ describe("Badge", () => {
     }
   });
 
+  it("shows a status dot before its label, in the tone's colour", async () => {
+    const { badge } = await render(<Badge tone="success" dot>Published</Badge>);
+    const dot = badge.querySelector<HTMLElement>("[data-ouro-dot]")!;
+    expect(dot.getAttribute("aria-hidden")).toBe("true");
+    expect(getComputedStyle(dot).backgroundColor).toBe(getComputedStyle(badge).color);
+    expect(dot.nextSibling?.textContent).toBe("Published");
+    expect(badge.textContent).toBe("Published");
+  });
+
+  it("draws no status dot unless asked", async () => {
+    const { badge } = await render(<Badge>Draft</Badge>);
+    expect(badge.querySelector("[data-ouro-dot]")).toBeNull();
+  });
+
   it("renders a button with onClick, with a touch target and press feedback", async () => {
     const onClick = vi.fn();
     const { badge } = await render(<Badge onClick={onClick}>Vegetarian</Badge>);

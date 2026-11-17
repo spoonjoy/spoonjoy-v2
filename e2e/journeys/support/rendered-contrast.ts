@@ -336,6 +336,26 @@ async function lineInView(locator: Locator, index: number): Promise<LineResult> 
     }
     if (!line || !inside(line.rect)) return { blocker: `line ${index + 1} cannot be scrolled fully into view` };
 
+    // A tall line can sit under a fixed or sticky bar by its top or bottom edge alone, with its
+    // middle clear, and the bar's pixels would then be measured as what the text is painted over.
+    // So a bar over its edge covers it, as a layer over its middle does.
+    const pinned = (cover: Element | "nothing" | null): cover is Element => {
+      for (let node = cover instanceof Element ? cover : null; node; node = node.parentElement) {
+        const { position } = getComputedStyle(node);
+        if (position === "fixed" || position === "sticky") return true;
+      }
+      return false;
+    };
+    const barOverEdge = (rect: DOMRect) => {
+      const xs = [rect.left + Math.min(2, rect.width / 2), rect.left + rect.width / 2, rect.right - Math.min(2, rect.width / 2)];
+      for (const y of [rect.top + Math.min(2, rect.height / 2), rect.bottom - Math.min(2, rect.height / 2)]) {
+        for (const x of xs) {
+          const cover = helpers.coverAt(element, x, y);
+          if (pinned(cover)) return cover;
+        }
+      }
+      return null;
+    };
     // What covers the line at its start, middle or end, if anything. A line in view can still sit
     // under a fixed bar, so a covered line is centred once and checked again.
     const pointsOf = (rect: DOMRect) => {
@@ -343,8 +363,12 @@ async function lineInView(locator: Locator, index: number): Promise<LineResult> 
       return [rect.left + Math.min(2, rect.width / 2), rect.left + rect.width / 2, rect.right - Math.min(2, rect.width / 2)].map((x) => [x, middle] as const);
     };
     // Each covered point, with the layer over it, or "nothing" when the element is not hit there
-    // at all (clipped away, for instance).
-    const coversOf = (rect: DOMRect) => pointsOf(rect).map(([x, y]) => helpers.coverAt(element, x, y)).filter((cover) => cover !== null);
+    // at all (clipped away, for instance); or, with its middle clear, a bar over its edge.
+    const coversOf = (rect: DOMRect) => {
+      const covers = pointsOf(rect).map(([x, y]) => helpers.coverAt(element, x, y)).filter((cover) => cover !== null);
+      const bar = covers.length === 0 ? barOverEdge(rect) : null;
+      return bar ? [bar] : covers;
+    };
     const name = (cover: Element | "nothing") => (cover === "nothing" ? "nothing the page can name" : helpers.describe(cover));
     let covers = coversOf(line.rect);
     if (covers.length > 0) {

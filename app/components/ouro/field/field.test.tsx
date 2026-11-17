@@ -74,6 +74,29 @@ describe("Field wiring", () => {
     await expect.element(page.getByRole("textbox", { name: "Email" })).toBeVisible();
   });
 
+  it("says a control without an error is valid, so WebKit does not read an empty required field as invalid", async () => {
+    // Without aria-invalid, WebKit exposes the input's own validity, and an empty required input is invalid to it.
+    const { input } = await render(
+      <Field label="Email" required>
+        <FieldControl type="email" />
+      </Field>,
+    );
+    expect(input.validity.valid).toBe(false);
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+    const errored = await render(
+      <Field label="Name" error="Enter a name.">
+        <FieldControl />
+      </Field>,
+    );
+    expect(errored.input.getAttribute("aria-invalid")).toBe("true");
+    const passed = await render(
+      <Field label="Code">
+        <FieldControl aria-invalid />
+      </Field>,
+    );
+    expect(passed.input.getAttribute("aria-invalid")).toBe("true");
+  });
+
   it("references the description and the error in aria-describedby", async () => {
     const { host, input } = await render(
       <Field label="Email" description="We never share it." error="Enter an email address.">
@@ -126,7 +149,7 @@ describe("Field wiring", () => {
         <FieldControl />
       </Field>,
     );
-    expect(input.hasAttribute("aria-invalid")).toBe(false);
+    expect(input.getAttribute("aria-invalid")).toBe("false");
     await rerender(
       <Field label="Email" error="Enter an email address.">
         <FieldControl />
@@ -139,7 +162,7 @@ describe("Field wiring", () => {
         <FieldControl />
       </Field>,
     );
-    expect(input.hasAttribute("aria-invalid")).toBe(false);
+    expect(input.getAttribute("aria-invalid")).toBe("false");
   });
 
   it("shows an error that is a React node, such as a message with a link, and describes the control with it", async () => {
@@ -177,7 +200,7 @@ describe("Field wiring", () => {
           <FieldControl />
         </Field>,
       );
-      expect(input.hasAttribute("aria-invalid")).toBe(false);
+      expect(input.getAttribute("aria-invalid")).toBe("false");
       expect(describedBy(input)).toEqual([]);
     }
   });
@@ -222,7 +245,7 @@ describe("Field wiring", () => {
         <FieldControl />
       </Field>,
     );
-    expect(input.hasAttribute("aria-invalid")).toBe(false);
+    expect(input.getAttribute("aria-invalid")).toBe("false");
   });
 
   it("sets required and aria-required, and marks the label without adding to its text or name", async () => {
@@ -388,7 +411,7 @@ describe("Field wiring", () => {
     await userEvent.fill(page.getByRole("textbox", { name: "Name", exact: true }), "Ari");
     await expect.element(email).toHaveAttribute("aria-invalid", "true");
     await userEvent.fill(email, "ari@example.com");
-    await expect.element(email).not.toHaveAttribute("aria-invalid");
+    await expect.element(email).toHaveAttribute("aria-invalid", "false");
     expect(host.textContent).not.toContain("That email is taken.");
   });
 

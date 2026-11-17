@@ -4,6 +4,7 @@ import { Slider as BaseSlider } from "@base-ui/react/slider";
 import { cloneElement, useId, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type JSX, type ReactElement, type ReactNode, type Ref } from "react";
 import { Field } from "~/components/ouro/field/field";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
+import { PageDirection } from "~/lib/ouro/page-direction";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { FieldOwnerContext, useField, useFormErrors, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
@@ -187,8 +188,11 @@ function defaultThumbLabels(count: number): string[] {
  *
  * Use `NumberField` instead when people need an exact number, and `RadioGroup` for a few
  * named choices.
+ * In a right-to-left page (`dir="rtl"` on `<html>`) the track runs from the right, and ArrowLeft raises the value.
+ *
  *
  * @group Forms
+ * @claim "In a right-to-left page" registry/ouro/components/ouro/slider/slider.test.tsx verify:testExists(registry/ouro/components/ouro/slider/slider.test.tsx::Slider > raises the value with ArrowLeft in a right-to-left page, where the track runs from the right)
  * @see https://ui.ouroboros.bot/docs/slider
  *
  * @example
@@ -364,7 +368,7 @@ function SliderControl({
     [hydrated, sampleLocale, format, min, max, step],
   );
   const samples = isRange ? texts.map((text) => `${text} – ${text}`) : texts;
-  return (
+  const directed = (
     <BaseSlider.Root
       ref={rootRef}
       {...shared}
@@ -415,4 +419,5 @@ function SliderControl({
       )}
     </BaseSlider.Root>
   );
+  return <PageDirection of={rootRef}>{directed}</PageDirection>;
 }

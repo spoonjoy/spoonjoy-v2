@@ -8,6 +8,8 @@ test("puts a server error on its field and moves focus there", async ({ page }) 
   await expect(name).toBeFocused();
   await expect(name).toHaveAttribute("aria-invalid", "true");
   await expect(name).toHaveAccessibleDescription("You already have a recipe called Pasta.");
+  // The alert opens with a summary screen readers hear first; the fields show their own errors.
+  await expect(page.getByRole("alert")).toHaveText("Couldn't save: 1 problem. Name: You already have a recipe called Pasta.");
   await name.fill("Pasta bake");
   await expect(name).not.toHaveAttribute("aria-invalid", "true");
   await page.getByRole("button", { name: "Save recipe" }).click();

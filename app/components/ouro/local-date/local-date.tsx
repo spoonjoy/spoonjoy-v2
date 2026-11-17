@@ -100,10 +100,13 @@ export function LocalDate(props: LocalDateProps): JSX.Element {
   );
   const hydrated = useSyncExternalStore(subscribeNever, inBrowser, onServer);
   // The server's language is not the reader's, so the server and hydration write en-US in UTC;
-  // the browser then switches to the reader's language and time zone.
+  // the browser then switches to the reader's language and time zone. Each engine's ICU joins and
+  // spaces the same date its own way (Node "Jun 1, 2026, 9:30 AM", Safari "Jun 1, 2026 at 9:30 AM"),
+  // so hydration lets the server's text stand: the next render replaces it anyway. (It also lets a `value` that differs
+  // between the server and the browser through: the text follows the browser's, and `datetime` keeps the server's.)
   const written = hydrated ? dateText(value, format, locale, undefined) : dateText(value, format, locale ?? "en-US", "UTC", true);
   return (
-    <time {...rest} data-ouro="local-date" dateTime={written?.dateTime} className={cn(className)}>
+    <time {...rest} data-ouro="local-date" dateTime={written?.dateTime} className={cn(className)} suppressHydrationWarning>
       {written?.text}
     </time>
   );

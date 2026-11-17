@@ -548,6 +548,8 @@ function ShowMoreText({
         ref={textRef}
         id={textId}
         data-ouro-show-more-text=""
+        data-ouro-allow="clipped-text"
+        data-ouro-allow-why="Clamped to its lines on purpose; Show more shows the rest"
         className={cn(textClass, !expanded && clampClass)}
         style={{ "--ouro-show-more-lines": lines } as CSSProperties}
       >
@@ -636,6 +638,8 @@ function ShowMoreHeight({
         id={foldId}
         data-ouro-show-more-fold=""
         data-folded={folded && fits === false ? "" : undefined}
+        data-ouro-allow="clipped-text"
+        data-ouro-allow-why="Folded to its height on purpose; Show more shows the rest"
         onFocus={reveal}
         className={cn(foldClass, folded && "max-h-(--ouro-show-more-height) overflow-hidden")}
         style={{ "--ouro-show-more-height": `${maxHeight}px` } as CSSProperties}

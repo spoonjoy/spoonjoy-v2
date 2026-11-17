@@ -209,7 +209,11 @@ function SelectControl({
       form={formId}
       inputRef={markInput}
     >
+      {/* A div, not a button: VoiceOver drops the end of a <button role="combobox">'s value and adds a comma before
+          it (WebKit bug 285047, ourostack/ouro-ui#113), and reads a div's whole, on macOS 15 and 26. */}
       <BaseSelect.Trigger
+        render={<div />}
+        nativeButton={false}
         {...holdPageAtPress.listButton}
         ref={ref}
         data-ouro-control="select"

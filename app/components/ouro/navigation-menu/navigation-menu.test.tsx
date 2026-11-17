@@ -223,6 +223,22 @@ describe("NavigationMenu", () => {
     await expect.element(page.getByRole("link", { name: /Browse/ })).toHaveFocus();
   });
 
+  it("moves to the next button with ArrowLeft in a right-to-left page, where it sits on the left", async () => {
+    document.documentElement.dir = "rtl";
+    try {
+      await render(<NavigationMenu label="Main" items={items} />);
+      const [recipes, cookbooks] = [page.getByRole("button", { name: "Recipes" }).element(), page.getByRole("button", { name: "Cookbooks" }).element()];
+      expect(cookbooks.getBoundingClientRect().left).toBeLessThan(recipes.getBoundingClientRect().left);
+      (recipes as HTMLElement).focus();
+      await userEvent.keyboard("{ArrowLeft}");
+      expect(document.activeElement).toBe(cookbooks);
+      await userEvent.keyboard("{ArrowRight}");
+      expect(document.activeElement).toBe(recipes);
+    } finally {
+      document.documentElement.removeAttribute("dir");
+    }
+  });
+
   it("closes when a link in the panel is chosen", async () => {
     await render(<NavigationMenu label="Main" items={items} />);
     await userEvent.click(page.getByRole("button", { name: "Recipes" }));

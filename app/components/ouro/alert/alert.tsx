@@ -176,7 +176,8 @@ function toneFromSeverity(value: unknown): ToneName {
  * An inline message in the page: something saved, something failed, something to know
  * before going on. It has a title, an optional description and action, and a close
  * button when you pass `onDismiss`. Destructive and warning alerts are spoken at once
- * (`role="alert"`); the others politely (`role="status"`).
+ * (`role="alert"`); the others politely (`role="status"`). A long word in the title or
+ * description, such as an address in an error, wraps inside the alert however narrow it is.
  *
  * In and around forms, use Alert for a message that belongs to neither a field nor the form
  * as a whole: a reorder or a deletion the server refused, an imported step the parser rejected. Render it where the action was taken, with `action` for the way out.
@@ -188,6 +189,7 @@ function toneFromSeverity(value: unknown): ToneName {
  *
  * @group Display
  * @see https://ui.ouroboros.bot/docs/alert
+ * @claim "A long word in the title or" registry/ouro/components/ouro/alert/alert.test.tsx verify:testExists(registry/ouro/components/ouro/alert/alert.test.tsx::Alert > wraps a long word in its title and description inside its box, as an address in an error is)
  *
  * @example
  * <Alert tone="success" title="Recipe saved" />
@@ -260,7 +262,8 @@ export function Alert(props: AlertProps): JSX.Element {
       )}
     >
       {Icon && <Icon aria-hidden="true" data-ouro-alert-icon="" className={cn("mt-0.5 size-5 shrink-0", accent)} />}
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
+      {/* A long word (an address in an error) wraps anywhere, so it stays inside the alert, however narrow. */}
+      <div className="flex min-w-0 flex-1 flex-col gap-1 [overflow-wrap:anywhere]">
         <div data-ouro-alert-title="" data-ouro-text="" className={cn("text-base/6 font-medium sm:pointer-fine:text-sm/5", accent)}>
           {title}
         </div>

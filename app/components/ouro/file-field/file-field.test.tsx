@@ -299,11 +299,11 @@ describe("FileField", () => {
       await drop(zone, [image("a.png"), text("notes.txt")]);
       expect(messages(host, input)).toEqual(["notes.txt is not an accepted file type."]);
       await userEvent.click(page.getByRole("button", { name: "Remove a.png" }).element() as HTMLButtonElement);
-      expect(input.hasAttribute("aria-invalid")).toBe(false);
+      expect(input.getAttribute("aria-invalid")).toBe("false");
       await drop(zone, [text("notes.txt")]);
       expect(input.getAttribute("aria-invalid")).toBe("true");
       await userEvent.click(host.querySelector<HTMLButtonElement>('button[type="reset"]')!);
-      await expect.poll(() => input.hasAttribute("aria-invalid")).toBe(false);
+      await expect.poll(() => input.getAttribute("aria-invalid")).toBe("false");
     });
   });
 

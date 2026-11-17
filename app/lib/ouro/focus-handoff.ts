@@ -43,7 +43,8 @@ export interface FocusHandoffOptions {
  * one before it, else the same one level up, and so on, no higher than `within`, then to
  * `fallback`. It does nothing when focus is elsewhere, when something else has already taken it,
  * or when the element's parent left too: when a whole region goes (a route change), the app
- * decides where focus lands.
+ * decides where focus lands. A list item that held only the element (a list's row in its `<li>`)
+ * may go with it: the search then starts where the item stood.
  *
  * Internal: Ouro UI components use it; apps don't need to.
  *
@@ -53,13 +54,20 @@ export interface FocusHandoffOptions {
 export function handOffFocus(root: Element, { within, fallback }: FocusHandoffOptions = {}): void {
   const document = root.ownerDocument;
   if (!root.contains(document.activeElement)) return;
-  const parent = root.parentElement;
-  const previous = root.previousElementSibling;
+  const own = root.parentElement;
+  // The page's own root element has nothing around it to look in.
+  if (own === null) return;
+  // Where the element stood, and where the list item that held only it stood (a list's row goes with its <li>): the
+  // search starts at the innermost of them still in the page.
+  const places = [{ parent: own, previous: root.previousElementSibling }];
+  if (own.matches('li, [role="listitem"]') && own.childElementCount === 1) places.push({ parent: own.parentElement!, previous: own.previousElementSibling });
   const top = within?.parentElement ?? null;
   queueMicrotask(() => {
     const active = document.activeElement;
     if (active !== null && active !== document.body && active.isConnected) return;
-    if (!parent?.isConnected) return;
+    const place = places.find((candidate) => candidate.parent.isConnected);
+    if (place === undefined) return;
+    const { parent, previous } = place;
     let child: Element | null = null;
     for (let scope: Element | null = parent; scope !== null && scope !== top; child = scope, scope = scope.parentElement) {
       const candidates = [...scope.querySelectorAll<HTMLElement>(tabbable)].filter(reachable);

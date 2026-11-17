@@ -231,6 +231,38 @@ test.describe("text axe cannot judge", () => {
     expect(measured.ratio).toBeGreaterThanOrEqual(20);
   });
 
+  test("moves a tall line clear of a sticky bar over its top edge before it measures", async ({ page }) => {
+    // The bar is painted in the text's own colour, so measuring it as the background reads 1:1.
+    await show(
+      page,
+      `<header style="position:sticky;top:0;z-index:1;height:56px;background:#123"></header><div style="height:400px"></div>` +
+        `<p style="margin:0;background:#fff"><span id="t" style="color:#123;font-size:200px;line-height:1">L</span></p><div style="height:1200px"></div>`,
+    );
+    await page.evaluate(() => {
+      const top = document.createRange();
+      top.selectNodeContents(document.querySelector("#t")!);
+      window.scrollBy(0, top.getBoundingClientRect().top - 10);
+    });
+    const measured = await measureTextContrast(page, "#t", "fixture");
+    expect(measured.error).toBeUndefined();
+    expect(measured.ratio).toBeGreaterThan(15);
+
+    // A bar too tall for the centred line to clear covers it, rather than being measured.
+    await page.evaluate(() => document.querySelector<HTMLElement>("header")!.style.setProperty("height", "300px"));
+    expect((await measureTextContrast(page, "#t", "fixture")).error).toBe("line 1 is covered by header");
+  });
+
+  test("passes a tall line behind an open modal dialog over its edge, as text behind a dialog", async ({ page }) => {
+    await show(
+      page,
+      `<main aria-hidden="true"><div style="height:100px"></div><p style="margin:0;background:#fff"><span id="t" style="color:#123;font-size:200px;line-height:1">L</span></p><div style="height:1200px"></div></main>` +
+        `<div role="dialog" aria-modal="true" aria-label="Delete" style="position:fixed;top:0;left:0;right:0;height:300px;background:#123"></div>`,
+    );
+    const measured = await measureTextContrast(page, "#t", "fixture");
+    expect(measured.passed).toBe(true);
+    expect(measured.inactive).toMatch(/^behind div\[aria-label="Delete"\] while .* is open, and hidden from assistive technology by main/);
+  });
+
   test("fails covered text hidden from assistive technology when no dialog is open", async ({ page }) => {
     await show(page, `<p id="t" aria-hidden="true" style="color:#000;background:#fff">Hidden</p><div style="position:fixed;inset:0;background:#fff"></div>`);
     const measured = await measureTextContrast(page, "#t", "fixture");

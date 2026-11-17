@@ -261,7 +261,7 @@ describe('IngredientParseInput', () => {
 
       // The failure shows as an alert with the ways on from it, not as the field's error.
       await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
-      expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid')
+      expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid', 'true')
     })
 
     it('displays error message with alert role for screen readers', async () => {

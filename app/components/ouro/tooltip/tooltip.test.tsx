@@ -1,9 +1,12 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
+import { useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { Button } from "~/components/ouro/button/button";
+import { Menu, MenuItem } from "~/components/ouro/menu/menu";
+import { Popover } from "~/components/ouro/popover/popover";
 import { Tooltip, type TooltipProps } from "~/components/ouro/tooltip/tooltip";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { TooltipsHidden } from "~/lib/ouro/portal-container";
@@ -52,6 +55,47 @@ async function shown() {
     })
     .toBe(true);
   return tooltip()!;
+}
+
+function DetailsButton() {
+  const [shownDetails, setShownDetails] = useState(false);
+  return (
+    <>
+      <Tooltip content="Show details">
+        <Button aria-label="Details" onClick={() => setShownDetails(true)}>
+          Details
+        </Button>
+      </Tooltip>
+      {shownDetails && <p>Details shown</p>}
+    </>
+  );
+}
+
+function DropsRef(props: ComponentProps<"button">) {
+  // A custom component that passes on its props but not its ref, so the tooltip never gets the trigger element.
+  const { ref, ...rest } = props;
+  void ref;
+  return <button type="button" {...rest} />;
+}
+
+function renderMenuTooltip() {
+  return render(
+    <Menu trigger={<Tooltip content="More actions"><Button aria-label="More">More</Button></Tooltip>}>
+      <MenuItem onClick={() => {}}>Edit</MenuItem>
+    </Menu>,
+  );
+}
+
+// Leaves the trigger and comes back, then runs past the open delay on a held clock: a tooltip the hover still opens would show.
+async function hoverAgainPastDelay() {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    await userEvent.unhover(trigger());
+    await userEvent.hover(trigger());
+    await act(async () => vi.advanceTimersByTime(1000));
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 async function renderTooltip(props: Partial<TooltipProps> = {}) {
@@ -320,6 +364,181 @@ describe("Tooltip", () => {
     await userEvent.hover(trigger());
     const element = await shown();
     expect(getComputedStyle(element).transitionProperty).toBe("opacity");
+  });
+
+  it("closes on a click, and stays closed while its trigger's menu is open", async () => {
+    await renderMenuTooltip();
+    await userEvent.hover(trigger());
+    await shown();
+    await userEvent.click(trigger());
+    await expect.poll(() => trigger().getAttribute("aria-expanded")).toBe("true");
+    await expect.poll(() => tooltip()).toBeNull();
+    await hoverAgainPastDelay();
+    expect(tooltip()).toBeNull();
+    expect(trigger().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("closes when Enter opens its trigger's menu, and stays closed while the menu is open", async () => {
+    await renderMenuTooltip();
+    await pressTab();
+    expect(document.activeElement).toBe(trigger());
+    await shown();
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => trigger().getAttribute("aria-expanded")).toBe("true");
+    await expect.poll(() => tooltip()).toBeNull();
+    await hoverAgainPastDelay();
+    expect(tooltip()).toBeNull();
+  });
+
+  it("closes on Enter when the press opens something and focus stays on the trigger", async () => {
+    await render(<DetailsButton />);
+    await pressTab();
+    await shown();
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => document.body.textContent).toContain("Details shown");
+    expect(document.activeElement).toBe(trigger());
+    await expect.poll(() => tooltip()).toBeNull();
+  });
+
+  it("shows on keyboard focus again once the menu it opened by keyboard closes", async () => {
+    await renderMenuTooltip();
+    await pressTab();
+    await shown();
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => tooltip()).toBeNull();
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => trigger().getAttribute("aria-expanded")).not.toBe("true");
+    await expect.poll(() => document.activeElement).toBe(trigger());
+    expect((await shown()).getAttribute("data-instant")).toBe("focus");
+  });
+
+  it("does not open on keyboard focus while its trigger's popup is open", async () => {
+    await render(
+      <Tooltip content="Add to cookbook">
+        <Button aria-expanded="true" aria-haspopup="menu">Save</Button>
+      </Tooltip>,
+    );
+    await pressTab();
+    expect(document.activeElement).toBe(trigger());
+    await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    expect(tooltip()).toBeNull();
+  });
+
+  it.each([true, "true"] as const)("closes when its trigger's popup opens while it shows, with aria-expanded %s", async (expanded) => {
+    const save = (open: boolean) => (
+      <Tooltip content="Add to cookbook">
+        <Button aria-expanded={open ? expanded : false} aria-haspopup="menu">Save</Button>
+      </Tooltip>
+    );
+    await render(save(false));
+    await userEvent.hover(trigger());
+    await shown();
+    await act(async () => roots.at(-1)!.render(save(true)));
+    await expect.poll(() => tooltip()).toBeNull();
+  });
+
+  it("closes when its menu is opened by the app while the tooltip shows", async () => {
+    const menu = (open: boolean) => (
+      <Menu open={open} onOpenChange={() => {}} trigger={<Tooltip content="More actions"><Button aria-label="More">More</Button></Tooltip>}>
+        <MenuItem onClick={() => {}}>Edit</MenuItem>
+      </Menu>
+    );
+    await render(menu(false));
+    await userEvent.hover(trigger());
+    await shown();
+    await act(async () => roots.at(-1)!.render(menu(true)));
+    await expect.poll(() => trigger().getAttribute("aria-expanded")).toBe("true");
+    await expect.poll(() => tooltip()).toBeNull();
+  });
+
+  it("closes on a click, and stays closed while its trigger's popover is open", async () => {
+    await render(
+      <Popover title="Share recipe" trigger={<Tooltip content="Share recipe"><Button aria-label="Share">Share</Button></Tooltip>}>
+        <p>Link copied</p>
+      </Popover>,
+    );
+    await userEvent.hover(trigger());
+    await shown();
+    await userEvent.click(trigger());
+    await expect.poll(() => trigger().getAttribute("aria-expanded")).toBe("true");
+    await expect.poll(() => tooltip()).toBeNull();
+    await hoverAgainPastDelay();
+    expect(tooltip()).toBeNull();
+  });
+
+  it.each([
+    ["no aria-haspopup", undefined],
+    ['aria-haspopup="false"', "false"],
+  ] as const)("shows on hover and keyboard focus while a disclosure is expanded, with %s", async (_label, haspopup) => {
+    await render(
+      <Tooltip content="Collapse panel">
+        <Button aria-expanded="true" aria-haspopup={haspopup}>
+          Collapse
+        </Button>
+      </Tooltip>,
+    );
+    await userEvent.hover(trigger());
+    await shown();
+    await userEvent.unhover(trigger());
+    await expect.poll(() => tooltip()).toBeNull();
+    await pressTab();
+    expect(document.activeElement).toBe(trigger());
+    await shown();
+  });
+
+  it.each([
+    ["no aria-haspopup", undefined],
+    ['aria-haspopup="false"', false],
+  ] as const)("keeps its tooltip open when a disclosure with %s expands under it", async (_label, haspopup) => {
+    const toggle = (expanded: "true" | "false") => (
+      <Tooltip content="Collapse panel">
+        <Button aria-expanded={expanded} aria-haspopup={haspopup}>
+          Collapse
+        </Button>
+      </Tooltip>
+    );
+    await render(toggle("false"));
+    await userEvent.hover(trigger());
+    await shown();
+    await act(async () => roots.at(-1)!.render(toggle("true")));
+    await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    expect(tooltip()!.hasAttribute("data-open")).toBe(true);
+  });
+
+  it("clears a pending open when its trigger unmounts before the delay", async () => {
+    await renderTooltip();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await userEvent.hover(trigger());
+      expect(vi.getTimerCount()).toBe(1);
+      await act(async () => roots.pop()!.unmount());
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not throw when a pending open fires for a trigger that never took its ref", async () => {
+    await render(
+      <Tooltip content="Add to cookbook">
+        <DropsRef>Save</DropsRef>
+      </Tooltip>,
+    );
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await userEvent.hover(document.querySelector<HTMLElement>("button")!);
+      await act(async () => vi.advanceTimersByTime(1000));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the trigger's data-popup-open from its menu while the tooltip is closed", async () => {
+    await renderMenuTooltip();
+    expect(trigger().hasAttribute("data-popup-open")).toBe(false);
+    await userEvent.click(trigger());
+    await expect.poll(() => trigger().getAttribute("aria-expanded")).toBe("true");
+    expect(trigger().hasAttribute("data-popup-open")).toBe(true);
   });
 
   it("renders only its trigger on the server", () => {

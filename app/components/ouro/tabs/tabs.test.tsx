@@ -175,6 +175,21 @@ describe("Tabs", () => {
     expect(tabs[1]!.getAttribute("aria-selected")).toBe("true");
   });
 
+  it("moves to the next tab with ArrowLeft in a right-to-left page, where it sits on the left", async () => {
+    document.documentElement.dir = "rtl";
+    try {
+      const { tabs } = await render(<Tabs label="Recipe" items={items} />);
+      await expect.poll(() => tabs[1]!.getBoundingClientRect().left < tabs[0]!.getBoundingClientRect().left).toBe(true);
+      tabs[0]!.focus();
+      await userEvent.keyboard("{ArrowLeft}");
+      expect(document.activeElement).toBe(tabs[1]);
+      await userEvent.keyboard("{ArrowRight}");
+      expect(document.activeElement).toBe(tabs[0]);
+    } finally {
+      document.documentElement.removeAttribute("dir");
+    }
+  });
+
   it("moves focus without activating with activation=\"manual\", and Enter activates", async () => {
     const { tabs } = await render(<Tabs label="Recipe" items={items} activation="manual" />);
     tabs[0]!.focus();

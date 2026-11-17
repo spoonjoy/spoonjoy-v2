@@ -323,6 +323,6 @@ describe("Account settings - Your data section", () => {
     await user.click(screen.getByRole("button", { name: "Delete my account" }));
 
     expect(await findShownAlert()).toHaveTextContent("Spoonjoy couldn't delete your account just now.");
-    expect(screen.getByLabelText("Current password")).not.toHaveAttribute("aria-invalid");
+    expect(screen.getByLabelText("Current password")).not.toHaveAttribute("aria-invalid", "true");
   });
 });

@@ -53,6 +53,17 @@ type Story = StoryObj<typeof meta>;
 /** Try every prop. */
 export const Playground: Story = {};
 
+export const StatusDots: Story = {
+  render: () => (
+    <div style={row}>
+      <Badge tone="success" variant="soft" dot>Published</Badge>
+      <Badge tone="warning" variant="soft" dot>Review</Badge>
+      <Badge tone="destructive" variant="soft" dot>Failed</Badge>
+      <Badge dot>Draft</Badge>
+    </div>
+  ),
+};
+
 /** Every tone in every variant. */
 export const Tones: Story = {
   parameters: { screenshot: { name: "badge-tones" } },

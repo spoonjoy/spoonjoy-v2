@@ -56,6 +56,17 @@ describe("Alert", () => {
     expect(alert.getAttribute("role")).toBe(role);
   });
 
+  it("wraps a long word in its title and description inside its box, as an address in an error is", async () => {
+    const address = "https://api.example.com/v1/recipes/rcp_lemon_orzo/ingredients?include=substitutions";
+    const { host, alert } = await render(<Alert tone="destructive" title={`Couldn't reach ${address}`} description={`Tried ${address} three times.`} />);
+    host.style.width = "240px";
+    const box = alert.getBoundingClientRect();
+    for (const part of alert.querySelectorAll<HTMLElement>("[data-ouro-alert-title], [data-ouro-alert-description]")) {
+      expect(part.scrollWidth).toBeLessThanOrEqual(part.clientWidth);
+      expect(part.getBoundingClientRect().right).toBeLessThanOrEqual(box.right);
+    }
+  });
+
   it("gives every tone a distinct look", async () => {
     const tones = ["primary", "secondary", "destructive", "success", "warning"] as const;
     const { host } = await render(
