@@ -166,7 +166,7 @@ describe("form-local accepted Router answers", () => {
     await waitFor(() => expect(description).toHaveAccessibleDescription("Refused"));
     await user.type(description, " again");
     expect(description).not.toHaveAttribute("aria-invalid", "true");
-    const alert = screen.getByRole("alert");
+    const alert = await screen.findByRole("alert");
     await user.click(screen.getByRole("button", { name: "Other action" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Other action" })).toHaveFocus());
     expect(screen.queryByText("Other form refused")).not.toBeInTheDocument();
