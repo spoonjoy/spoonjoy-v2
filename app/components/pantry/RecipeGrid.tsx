@@ -1,6 +1,6 @@
 import { Empty } from '~/components/ouro/empty/empty'
-import { UtensilsCrossed } from 'lucide-react'
-import { Heading } from '~/components/ouro/text/heading'
+import { SectionHeader } from '~/components/ouro/section-header/section-header'
+import { CoverPlaceholder } from '~/components/recipe/CoverPlaceholder'
 import { Item } from '~/components/ouro/item/item'
 import { ItemGroup } from '~/components/ouro/item/item-group'
 import { Text } from '~/components/ouro/text/text'
@@ -20,7 +20,6 @@ export interface PantryRecipeCard {
   cookTimeMinutes?: number
   difficulty?: 'Easy' | 'Medium' | 'Hard'
   servings?: string
-  chefName?: string
 }
 
 export interface RecipeGridProps {
@@ -56,8 +55,10 @@ export function RecipeGrid({
     )
   }
 
+  // A row is its cover, its title and "Serves 4" under it, as the Apple app lists recipes
+  // (desk target.md, G6).
   const rows = recipes.map((recipe, index) => {
-    const meta = [formatServingsLabel(recipe.servings), recipe.chefName].filter(Boolean).join(' • ')
+    const servings = formatServingsLabel(recipe.servings)
     return (
       <Item
         key={recipe.id}
@@ -66,34 +67,21 @@ export function RecipeGrid({
         variant={loadMore ? 'outline' : undefined}
         href={`/recipes/${recipe.id}`}
         title={recipe.title}
-        description={recipe.description || meta ? (
-          <>
-            {recipe.description ? <Text lines={2}>{recipe.description}</Text> : null}
-            {meta ? <Text size="sm">{meta}</Text> : null}
-          </>
-        ) : undefined}
+        description={servings ? <Text size="sm">{servings}</Text> : undefined}
         media={recipe.coverImageUrl ? (
           <img src={recipe.coverImageUrl} alt="" {...listImageProps(index)} />
         ) : (
-          <span className="sj-on-photo flex flex-col items-center justify-center gap-1 bg-[var(--sj-photo-charcoal)]">
-            <UtensilsCrossed className="h-5 w-5" aria-hidden="true" />
-            <span className="font-sj-ui text-xs font-semibold">Cover coming soon</span>
-          </span>
+          <CoverPlaceholder aria-hidden="true" title={recipe.title} shape="bleed" />
         )}
-        mediaSize="lg"
-        mediaAbove="sm"
+        mediaSize="md"
         actions={recipe.coverProvenanceLabel ? <CoverProvenanceBadge label={recipe.coverProvenanceLabel} /> : undefined}
-        stackBelow="sm"
       />
     )
   })
 
   return (
-    <section>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <Heading level={2} size="xl">Recipes</Heading>
-        <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs uppercase tracking-[0.14em]">{totalCount} total</p>
-      </div>
+    <section aria-label="Recipes">
+      <SectionHeader title="Recipes" meta={`${totalCount} ${totalCount === 1 ? 'recipe' : 'recipes'}`} className="mb-2" />
       {loadMore ? (
         <ShowMore
           {...loadMore}

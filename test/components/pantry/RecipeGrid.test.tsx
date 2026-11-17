@@ -12,7 +12,6 @@ const recipes: PantryRecipeCard[] = [
     difficulty: 'Easy',
     cookTimeMinutes: 20,
     servings: '4',
-    chefName: 'Chef Mario',
     coverProvenanceLabel: 'Original photo',
   },
   {
@@ -34,7 +33,7 @@ describe('RecipeGrid', () => {
     renderWithRouter(<RecipeGrid recipes={recipes} totalCount={55} loadMore={{
       hasMore: true, loading: false, href: '/users/ari?after=r-2', onShowMore: load,
     }} />)
-    expect(screen.getByText('55 total')).toBeInTheDocument()
+    expect(screen.getByText('55 recipes')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Lemon Pasta/ })).toHaveAttribute('href', '/recipes/r-1')
     expect(screen.getByRole('link', { name: /Lemon Pasta/ }).closest('article')).toHaveAttribute('data-ouro', 'item')
     const next = screen.getByRole('link', { name: 'Show more recipes' })
@@ -75,10 +74,11 @@ describe('RecipeGrid', () => {
     }
   })
 
-  it('renders placeholder when image is missing', () => {
-    renderWithRouter(<RecipeGrid recipes={recipes} />)
+  it('shows the initial tile when a recipe has no photo, not a dark "Cover coming soon" box', () => {
+    const { container } = renderWithRouter(<RecipeGrid recipes={recipes} />)
 
-    expect(screen.getByText('Cover coming soon')).toBeInTheDocument()
+    expect(screen.queryByText('Cover coming soon')).not.toBeInTheDocument()
+    expect(container.querySelector('.sj-cover-placeholder')).not.toBeNull()
   })
 
   it('renders cover provenance badges', () => {
@@ -87,10 +87,11 @@ describe('RecipeGrid', () => {
     expect(screen.getByText('Original photo')).toBeInTheDocument()
   })
 
-  it('renders servings and chef name metadata', () => {
+  it('reads each row as its title and "Serves 4", with no description', () => {
     renderWithRouter(<RecipeGrid recipes={recipes} />)
 
-    expect(screen.getByText('Serves 4 • Chef Mario')).toBeInTheDocument()
+    expect(screen.getByText('Serves 4')).toBeInTheDocument()
+    expect(screen.queryByText(/•/)).not.toBeInTheDocument()
   })
 
   it('does not double-prefix already-written servings phrases', () => {
@@ -101,13 +102,13 @@ describe('RecipeGrid', () => {
     expect(screen.queryByText('Serves 2 pizzas')).not.toBeInTheDocument()
   })
 
-  it('does not render metadata row when neither servings nor chefName provided', () => {
+  it('does not render metadata row when the recipe states no servings', () => {
     renderWithRouter(<RecipeGrid recipes={[recipes[1]]} />)
 
     expect(screen.queryByText(/Serves/)).not.toBeInTheDocument()
   })
 
-  it('renders servings only without separator when no chefName', () => {
+  it('renders servings alone', () => {
     const recipe: PantryRecipeCard = { id: 'r-3', title: 'Test', servings: '2' }
     renderWithRouter(<RecipeGrid recipes={[recipe]} />)
 
@@ -115,18 +116,11 @@ describe('RecipeGrid', () => {
     expect(screen.queryByText(/•/)).not.toBeInTheDocument()
   })
 
-  it('renders chefName only without separator when no servings', () => {
-    const recipe: PantryRecipeCard = { id: 'r-4', title: 'Test', chefName: 'Anna' }
-    renderWithRouter(<RecipeGrid recipes={[recipe]} />)
-
-    expect(screen.getByText('Anna')).toBeInTheDocument()
-    expect(screen.queryByText(/•/)).not.toBeInTheDocument()
-  })
-
   it('renders total count', () => {
     renderWithRouter(<RecipeGrid recipes={recipes} />)
 
-    expect(screen.getByText('2 total')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Recipes' })).toBeInTheDocument()
+    expect(screen.getByText('2 recipes')).toBeInTheDocument()
   })
 
   it('renders empty state when no recipes are provided', () => {

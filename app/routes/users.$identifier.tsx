@@ -10,11 +10,13 @@ import { hidesChef, loadRequestViewerHides, withoutHidden } from "~/lib/moderati
 import { ReportOrBlockButton } from "~/components/moderation/ReportOrBlockButton";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Button } from "~/components/ouro/button/button";
-import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/ouro/text/text";
 import { Link } from "~/components/ouro/link/link";
 import { RecipeGrid } from "~/components/pantry/RecipeGrid";
-import { CookbookCard } from "~/components/pantry/CookbookCard";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
+import { SectionHeader } from "~/components/ouro/section-header/section-header";
+import { CoverPlaceholder } from "~/components/recipe/CoverPlaceholder";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { absoluteUrlFromRequest } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
@@ -246,19 +248,27 @@ export default function UserProfile() {
                 {chefDisplayName(profile.username)}
               </h1>
               <Text tone="muted" size="sm" className="mt-1">
-                Joined <LocalDate value={profile.joinedAt} format="month" /> • {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
+                Joined <LocalDate value={profile.joinedAt} format="month" />
               </Text>
               <p className="m-0 mt-2 text-sm">
                 <Link href={`/?chef=${profile.username}`} className="inline-flex min-h-11 items-center">
                   Open kitchen view
                 </Link>
               </p>
-              <nav className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-sj-ui text-sm font-bold" aria-label={`${profile.username} kitchen relationships`}>
-                <Link href={`${profileHref}/fellow-chefs`} className="inline-flex min-h-11 items-center">
-                  Fellow chefs · {fellowChefsCount}
+              {/* The Apple app's stats row: recipes, fellow chefs and kitchen visitors, each a large
+                  number over its name; the last two open their lists. */}
+              <nav className="mt-3 flex flex-wrap gap-x-8 gap-y-2" aria-label={`${profile.username} kitchen relationships`}>
+                <p className="m-0 grid">
+                  <span className="font-sj-display text-3xl/9 font-semibold text-[var(--sj-ink)]">{recipeCount}</span>{" "}
+                  <span className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">{recipeCount === 1 ? "recipe" : "recipes"}</span>
+                </p>
+                <Link href={`${profileHref}/fellow-chefs`} inline={false} tone="secondary" className="grid min-h-11 no-underline">
+                  <span className="font-sj-display text-3xl/9 font-semibold text-[var(--sj-ink)]">{fellowChefsCount}</span>{" "}
+                  <span className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">fellow chefs</span>
                 </Link>
-                <Link href={`${profileHref}/kitchen-visitors`} className="inline-flex min-h-11 items-center">
-                  Kitchen visitors · {kitchenVisitorsCount}
+                <Link href={`${profileHref}/kitchen-visitors`} inline={false} tone="secondary" className="grid min-h-11 no-underline">
+                  <span className="font-sj-display text-3xl/9 font-semibold text-[var(--sj-ink)]">{kitchenVisitorsCount}</span>{" "}
+                  <span className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">kitchen visitors</span>
                 </Link>
               </nav>
             </div>
@@ -298,7 +308,6 @@ export default function UserProfile() {
                 coverImageUrl: recipe.coverImageUrl,
                 coverProvenanceLabel: recipe.coverProvenanceLabel,
                 servings: recipe.servings ?? undefined,
-                chefName: profile.username,
               }))}
               totalCount={recipeCount}
               loadMore={{
@@ -320,34 +329,30 @@ export default function UserProfile() {
               and fail landmark-complementary-is-top-level. This cookbook list is still worth
               naming as its own region for screen-reader navigation, so it keeps a labelled
               region instead of dropping to a plain <div>. */}
-          <section aria-labelledby="chef-cookbooks-heading">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <Heading id="chef-cookbooks-heading" level={2} size="xl">Cookbooks</Heading>
-              <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs uppercase tracking-[0.14em]">{cookbooks.length} total</p>
-            </div>
+          <section aria-label="Cookbooks">
+            <SectionHeader title="Cookbooks" meta={`${cookbooks.length} ${cookbooks.length === 1 ? "cookbook" : "cookbooks"}`} className="mb-2" />
 
             {cookbooks.length === 0 ? (
-              <div className="border-y border-dashed border-[var(--sj-border-strong)] py-5">
-                <Text tone="muted">
-                  {isOwner ? "No cookbooks yet." : `${chefDisplayName(profile.username)} has not shared any cookbooks yet.`}
-                </Text>
-              </div>
+              <Text tone="muted" className="py-5">
+                {isOwner ? "No cookbooks yet." : `${chefDisplayName(profile.username)} has not shared any cookbooks yet.`}
+              </Text>
             ) : (
-              <div className="space-y-4">
-                {cookbooks.map((cookbook) => (
-                  <CookbookCard
-                    key={cookbook.id}
-                    id={cookbook.id}
-                    title={cookbook.title}
-                    recipeCount={cookbook._count.recipes}
-                    recipeImages={cookbook.recipes.map((item) => ({
-                      coverImageUrl: item.recipe.coverImageUrl,
-                      title: item.recipe.title,
-                      coverProvenanceLabel: item.recipe.coverProvenanceLabel,
-                    }))}
-                  />
-                ))}
-              </div>
+              <ItemGroup aria-label="Cookbooks" variant="divided">
+                {cookbooks.map((cookbook) => {
+                  const photo = cookbook.recipes.find((item) => item.recipe.coverImageUrl)?.recipe.coverImageUrl;
+                  return (
+                    <Item
+                      key={cookbook.id}
+                      as="article"
+                      href={`/cookbooks/${cookbook.id}`}
+                      title={cookbook.title}
+                      description={<Text size="sm">{cookbook._count.recipes} {cookbook._count.recipes === 1 ? "recipe" : "recipes"}</Text>}
+                      media={photo ? <img src={photo} alt="" /> : <CoverPlaceholder aria-hidden="true" title={cookbook.title} shape="bleed" />}
+                      mediaSize="md"
+                    />
+                  );
+                })}
+              </ItemGroup>
             )}
           </section>
         </div>
