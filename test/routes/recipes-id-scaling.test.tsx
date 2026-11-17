@@ -8,6 +8,12 @@ import { createUser } from "~/lib/auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 
+/** The scale lives in the "Serves" capsule's popover (one-book meta row): open it unless it is open. */
+async function openScale() {
+  if (!screen.queryByRole("textbox", { name: "Scale" })) await userEvent.click(await screen.findByTestId("recipe-serves-trigger"));
+  await screen.findByRole("textbox", { name: "Scale" });
+}
+
 /** Log cook and Edit live in the recipe's ⋯ menu: open it and return the item. */
 async function recipeMenuItem(name: string | RegExp) {
   await userEvent.click(await screen.findByRole("button", { name: "Recipe actions" }));
@@ -68,6 +74,7 @@ describe("Recipe View Scaling Integration", () => {
       expect(await screen.findByRole("heading", { name: "Test Recipe" })).toBeInTheDocument();
 
       // The scale is Ouro HX's NumberField, described by the servings it makes
+      await openScale();
       const scale = screen.getByRole("textbox", { name: "Scale" });
       expect(scale).toHaveValue("1");
       expect(scale).toHaveAccessibleDescription("Serves 4");
@@ -106,6 +113,7 @@ describe("Recipe View Scaling Integration", () => {
       expect(within(screen.getByTestId("recipe-header-controls")).getByText(/serves 4/i)).toBeInTheDocument();
 
       // Click plus button 4 times to get to 2× scale
+      await openScale();
       const plusButton = screen.getByRole("button", { name: "Increase scale" });
       for (const _ of [1, 2, 3, 4]) await userEvent.click(plusButton);
 
@@ -182,6 +190,7 @@ describe("Recipe View Scaling Integration", () => {
       expect(screen.getByRole("checkbox", { name: "sugar" })).toHaveAccessibleDescription("Pantry ½ cup");
 
       // Scale to 2×
+      await openScale();
       const plusButton = screen.getByRole("button", { name: "Increase scale" });
       for (const _ of [1, 2, 3, 4]) await userEvent.click(plusButton);
 
@@ -256,6 +265,7 @@ describe("Recipe View Scaling Integration", () => {
       expect(flourCheckbox).toBeChecked();
 
       // Now scale the recipe
+      await openScale();
       await userEvent.click(screen.getByRole("button", { name: "Increase scale" }));
 
       // The checkbox should still be checked
@@ -542,6 +552,7 @@ describe("Recipe View Scaling Integration", () => {
       expect(within(screen.getByTestId("recipe-header-controls")).getByText(/feeds 2-4 people/i)).toBeInTheDocument();
 
       // Scale to 2×
+      await openScale();
       const plusButton = screen.getByRole("button", { name: "Increase scale" });
       for (const _ of [1, 2, 3, 4]) await userEvent.click(plusButton);
 

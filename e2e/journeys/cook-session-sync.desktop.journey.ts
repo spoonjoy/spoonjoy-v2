@@ -13,6 +13,7 @@ import { cookProgressSaved, resetCookProgress } from "./support/cook-progress";
 import { expectNoHydrationErrors } from "./support/hydration";
 import { waitForHydration } from "./support/navigation";
 import { scratchForProject, scratchStorageStateForProject } from "./support/personas";
+import { openScale } from "./support/recipe-scale";
 
 const SCRATCH_INDEX = 8;
 const LEMON_RICE_ID = "qa-kitchen-recipe-lemon-rice";
@@ -49,7 +50,9 @@ test.describe("Cook progress across devices", () => {
       progress.scaleFactor === 1.25 && progress.checkedIngredientIds.includes(JASMINE_RICE_ID));
     await jasmineRice(page).click();
     await expect(jasmineRice(page)).toHaveAttribute("aria-checked", "true");
+    await openScale(page);
     await page.getByRole("button", { name: "Increase scale" }).click();
+    await openScale(page);
     await expect(scaleDisplay).toHaveValue("1.25");
     await checkedAndScaled;
     await expect(page.getByTestId("cook-sync-status").locator("p:not([aria-hidden])")).toHaveText("Progress synced");
@@ -67,6 +70,7 @@ test.describe("Cook progress across devices", () => {
       // B sees A's check and scale, and still does after a reload.
       await openLemonRice(otherPage);
       await expect(jasmineRice(otherPage)).toHaveAttribute("aria-checked", "true");
+      await openScale(otherPage);
       await expect(otherPage.getByRole("textbox", { name: "Scale", exact: true })).toHaveValue("1.25");
       await otherPage.reload();
       await waitForHydration(otherPage);
@@ -95,6 +99,7 @@ test.describe("Cook progress across devices", () => {
     await verifyAfterReload(async () => {
       await expect(page.getByTestId("cook-sync-status").locator("p:not([aria-hidden])")).toHaveText("Progress synced");
       await expect(jasmineRice(page)).toHaveAttribute("aria-checked", "false");
+      await openScale(page);
       await expect(scaleDisplay).toHaveValue("1.25");
     });
     await expectAccessible();

@@ -7,6 +7,7 @@ import { expectNoHydrationErrors } from "./support/hydration";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { createDisposableJourneyUser, fillSecret } from "./support/secret";
 import { requiredLabel } from "./support/forms";
+import { openScale } from "./support/recipe-scale";
 
 const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
 
@@ -54,7 +55,9 @@ test.describe("Recipe list action on iPhone", () => {
     await page.keyboard.press("Escape");
 
     // 1.25×, one press of 0.25, so the list gets fractional amounts to write out.
+    await openScale(page);
     await increaseScale.click();
+    await openScale(page);
     await expect(scaleDisplay).toHaveValue("1.25");
 
     await expect(listAction).toHaveAccessibleName("Add to list");
