@@ -80,7 +80,7 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
   };
 
   return (
-    <section aria-labelledby={headingId} className="sj-form-section border-b border-[var(--sj-border)]">
+    <section id="import" aria-labelledby={headingId} className="sj-form-section border-b border-[var(--sj-border)]">
       <p className="sj-eyebrow">Bring it in</p>
       <h2 id={headingId} className="font-sj-display mt-3 text-3xl/9 font-semibold tracking-normal text-[var(--sj-ink)]">
         Start from a recipe you already have.
