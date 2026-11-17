@@ -39,9 +39,9 @@ const listClass = "group/reorder m-0 flex min-w-0 list-none flex-col p-0 data-dr
 const itemClass =
   "relative m-0 flex min-w-0 list-none items-center gap-2 p-0 pointer-coarse:min-h-11 " +
   "motion-safe:group-data-dragging/reorder:[&:not([data-dragging])]:[transition:transform_var(--ouro-duration-base)_var(--ouro-ease-out)] " +
-  "data-dragging:z-10 data-dragging:rounded-lg data-dragging:bg-background data-dragging:shadow-(--shadow-lg) " +
-  "data-dropped:z-10 data-dropped:rounded-lg data-dropped:bg-background " +
-  "data-grabbed:rounded-lg data-grabbed:outline-2 data-grabbed:outline-ring data-grabbed:outline-solid";
+  "data-dragging:z-10 data-dragging:rounded-ouro-lg data-dragging:bg-background data-dragging:shadow-(--shadow-lg) " +
+  "data-dropped:z-10 data-dropped:rounded-ouro-lg data-dropped:bg-background " +
+  "data-grabbed:rounded-ouro-lg data-grabbed:outline-2 data-grabbed:outline-ring data-grabbed:outline-solid";
 
 /**
  * The row's content. No `touch-action`: a touch that starts here scrolls the page. @internal
@@ -64,7 +64,7 @@ const contentClass = "min-w-0 flex-1";
  * @claim "`touch-none` keeps a touch that starts" registry/ouro/components/ouro/reorderable/reorderable.touch.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.touch.test.tsx::Reorderable on a phone > lets a touch that starts on a row, outside its handle, scroll the page)
  */
 const handleClass =
-  "press relative m-0 box-border inline-flex size-8 shrink-0 cursor-grab touch-none select-none items-center justify-center rounded-md border-0 " +
+  "press relative m-0 box-border inline-flex size-8 shrink-0 cursor-grab touch-none select-none items-center justify-center rounded-ouro-md border-0 " +
   "forced-colors:border forced-colors:border-solid bg-transparent p-0 text-muted-foreground [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "not-aria-disabled:pointer-fine:hover:bg-accent not-aria-disabled:pointer-fine:hover:text-accent-foreground active:cursor-grabbing data-grabbed:bg-accent data-grabbed:text-accent-foreground " +

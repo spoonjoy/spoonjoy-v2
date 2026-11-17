@@ -36,7 +36,7 @@ describe("findClassNameProblem", () => {
     "bg-red-500!",
     "!bg-red-500",
     "hover:text-red-500",
-    "md:hover:rounded-lg",
+    "md:hover:rounded-ouro-lg",
     "dark:bg-black",
     "dark:mt-4",
     "md:dark:mt-4",

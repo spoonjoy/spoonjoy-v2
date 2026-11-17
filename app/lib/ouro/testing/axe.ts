@@ -791,7 +791,9 @@ function lift(rule: HTMLStyleElement): void {
  * Passes when the text color, as painted over that pixel, meets `required` (4.5 or 3). Where an open
  * popup covers the text (its shadow too), the covered part is hidden while it is open, and only what
  * still shows is measured. It puts back every scroll position it moves, leaves nothing on the
- * focused field, and leaves no color easing outside shadow roots.
+ * focused field, and leaves no color easing outside shadow roots. Text the page does not scroll onto
+ * the screen, as a popup's scroll lock can hold it, is not measured: it fails as off the screen,
+ * since no picture of the screen shows its pixels.
  *
  * @example
  * const verdict = await measureTextContrast(label, 4.5);
@@ -807,6 +809,8 @@ function lift(rule: HTMLStyleElement): void {
  * @claim "It puts back every scroll position it moves" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > puts back the scroll position of a scrolled box inside a shadow root)
  * @claim "leaves nothing on the focused field" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > leaves no trace on the focused field when it screenshots the page)
  * @claim "and leaves no color easing" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > leaves no transition running when it is done, its own text's or a link's elsewhere on the page)
+ * @claim "Text the page does not scroll onto" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails text below the fold that a page held still cannot scroll onto the screen, rather than passing it against the pixels there)
+ * @claim "Text the page does not scroll onto" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > measures text on the screen under a page held still as it shows)
  */
 async function measureTextContrast(element: Element, required: number): Promise<Verdict> {
   return keepingScroll(async () => (await measureTexts(element, [{ element, required }], true))[0]!);
@@ -882,6 +886,14 @@ function inView(element: Element, root: Element): boolean {
   return textBoxes(element).every((box) => box.left >= clip.left - 1 && box.right <= clip.right + 1 && box.top >= clip.top - 1 && box.bottom <= clip.bottom + 1);
 }
 
+// Whether any of an element's text is on the screen now. Text the page did not scroll onto the
+// screen has no picture to be measured in.
+function onScreen(element: Element): boolean {
+  return textBoxes(element).some((box) => box.right > 0 && box.bottom > 0 && box.left < window.innerWidth && box.top < window.innerHeight);
+}
+
+const offScreenReason = "axe left its contrast undecided, and its text is off the screen";
+
 // Measures each element's text against screenshots of `root`, which holds them all: one, as a
 // chart's many axis labels share one picture, unless some text is scrolled out of a box inside it
 // (a wide table's last columns), which is scrolled to and taken with the text that then shows.
@@ -901,6 +913,14 @@ async function measureTexts(root: Element, items: Measured[], last: boolean): Pr
       // long list shows too and shares the picture (ourostack/ouro-ui#1520).
       const scroller = scrollerAround(first.element);
       if (scroller && root.contains(scroller)) scroller.scrollTop += first.element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    }
+    // Text the scroll did not bring onto the screen (a page held still, as a popup's scroll lock can
+    // hold it) is in no picture the screen takes, so a screenshot would read the pixels there instead.
+    // It gets no pass: the verdict off-screen text gets, as lineBoxes measures only what shows.
+    if (first.element.isConnected && !onScreen(first.element)) {
+      verdicts.set(first, { pass: false, reason: offScreenReason });
+      pending = pending.slice(1);
+      continue;
     }
     const batch = [first, ...pending.slice(1).filter(({ element }) => element.isConnected && inView(element, root))];
     const results = await shoot(root, batch, last);
@@ -1171,7 +1191,7 @@ async function shoot(root: Element, items: Measured[], last: boolean): Promise<V
       }
     }
     if (measured === 0 && covered > 0) return { pass: true };
-    if (worst === Number.POSITIVE_INFINITY) return { pass: false, reason: "axe left its contrast undecided, and its text is off the screen" };
+    if (worst === Number.POSITIVE_INFINITY) return { pass: false, reason: offScreenReason };
     if (worst >= required) return { pass: true };
     if (placeholder) return { pass: false, reason: `its placeholder measured ${worst.toFixed(2)}:1 against the worst pixel behind it, needs ${required}:1` };
     return { pass: false, reason: `measured ${worst.toFixed(2)}:1 against the worst pixel behind its text, needs ${required}:1` };

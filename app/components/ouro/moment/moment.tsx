@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type HTMLAttributes, type JSX, type ReactNode, type Ref } from "react";
 import { Button } from "~/components/ouro/button/button";
 import {
+  artArriveClass,
   artFrameClass,
   haloClass,
   dismissPeriods,
@@ -65,9 +66,13 @@ export interface MomentOwnProps {
    * motion, its CSS animations stop and its SVG animations pause. Its motion has a budget too:
    * its loops settle at the end of their turn about 5 s after it appears, and with a `dismissKey`
    * or `id` its entrance plays once a session, so a moment that comes back as people switch
-   * views or filters arrives still.
+   * views or filters appears at once. The art arrives when the moment first shows: it fades in,
+   * rising 10px and growing from 96% over `--ouro-duration-sheet`, and again when its kind
+   * changes. With reduced motion it is just there.
    * @claim "Its motion has a budget too:" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment motion budget > settles the art's loops at the end of their turn within 5 s, SVG animations too, and leaves other motion alone)
    * @claim "Its motion has a budget too:" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment motion budget > plays the art's entrance once a session for a moment with a key, and every time without one)
+   * @claim "The art arrives when the moment first shows" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment arrival > arrives once when the moment first shows, from the declared keyframes over the sheet duration and easing)
+   * @claim "With reduced motion it is just there." registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment arrival > has no arrival under reduced motion, or under OuroProvider's reduced motion)
    * @claim "which fills the art's height (160px," registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment sizes > gives the art 160px, 96px in a pane narrower than 24rem, and 24px inline)
    * @claim "It is decorative and hidden from" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment > hides the art from screen readers, or names it with artLabel)
    * @claim "With reduced motion, its CSS animations" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment motion > stops the art's CSS animations and pauses its SVG animations with reduced motion, and lets them run again after)
@@ -396,20 +401,23 @@ export function Moment(props: MomentProps): JSX.Element | null {
     const svgs = [...host.querySelectorAll("svg")];
     for (const svg of svgs) svg.pauseAnimations();
     return () => svgs.forEach((svg) => svg.unpauseAnimations());
-  }, [reduced, art]);
+  }, [reduced, art, kind]);
 
   // The art's own motion has a budget: its entrance plays once a session for a moment with a key,
   // and its loops settle, at the end of the turn they are on, a few seconds after it appears.
-  // Whether this moment's key had already appeared is asked once per key, so a second run of the
-  // effect, as React's StrictMode makes in development, does not count as a second showing.
-  const repeat = useRef<{ key: string; seen: boolean }>(undefined);
+  // Whether this moment's key had already appeared is asked once per key and kind, so a second run of the
+  // effect, as React's StrictMode makes in development, does not count as a second showing. A change of
+  // kind is a different moment, so its arrival plays.
+  const repeat = useRef<{ key: string; kind: MomentKind; seen: boolean }>(undefined);
   useLayoutEffect(() => {
     const host = artRef.current;
     if (!host || key === undefined) return;
-    if (repeat.current?.key !== key) repeat.current = { key, seen: seenThisSession(key) };
+    if (repeat.current?.key !== key) repeat.current = { key, kind, seen: seenThisSession(key) };
+    else if (repeat.current.kind !== kind) repeat.current = { key, kind, seen: false };
     if (!repeat.current.seen) return;
     for (const animation of host.getAnimations({ subtree: true })) if (animation.effect!.getComputedTiming().endTime !== Infinity) animation.finish();
-  }, [art, key]);
+  }, [art, key, kind]);
+
   useEffect(() => {
     const host = artRef.current;
     if (!host) return;
@@ -484,11 +492,12 @@ export function Moment(props: MomentProps): JSX.Element | null {
               </svg>
             ))}
           <div
+            key={kind}
             ref={artRef}
             {...(artLabel ? { role: "img", "aria-label": artLabel } : { "aria-hidden": true })}
             data-ouro-moment-art=""
             data-moment-art={artName ?? ""}
-            className="relative flex h-(--ouro-moment-art) max-w-full items-center justify-center *:h-(--ouro-moment-art) *:w-auto *:max-w-full motion-reduce:**:[animation:none]!"
+            className={`relative flex h-(--ouro-moment-art) max-w-full items-center justify-center *:h-(--ouro-moment-art) *:w-auto *:max-w-full motion-reduce:**:[animation:none]! ${artArriveClass}`}
           >
             {art}
           </div>

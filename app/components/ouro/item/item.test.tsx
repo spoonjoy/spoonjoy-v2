@@ -2,9 +2,10 @@ import { type ReactNode } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { Button } from "~/components/ouro/button/button";
 import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Link } from "~/components/ouro/link/link";
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
@@ -38,6 +39,21 @@ afterEach(async () => {
 
 const pixel = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
 const RouterLink: OuroLinkComponent = (props) => <a data-router="" {...props} />;
+
+/** The @media conditions around each of the page's rules that make an element under this group transparent. */
+function hidingConditions(group: string): string[][] {
+  const found: string[][] = [];
+  const walk = (rules: CSSRuleList, chain: string[]) => {
+    for (const rule of rules) {
+      // Tailwind 4.1 leaves the rule nested in the class's own rule and writes `opacity: 0%`; 4.3 flattens it.
+      if (rule instanceof CSSStyleRule && rule.selectorText.includes(`.${group}`) && Number.parseFloat(rule.style.opacity) === 0) found.push(chain);
+      if (rule instanceof CSSMediaRule) walk(rule.cssRules, [...chain, rule.conditionText]);
+      else if (rule instanceof CSSGroupingRule || rule instanceof CSSStyleRule) walk(rule.cssRules, chain);
+    }
+  };
+  for (const sheet of document.styleSheets) walk(sheet.cssRules, []);
+  return found;
+}
 
 function center(element: Element) {
   const rect = element.getBoundingClientRect();
@@ -125,6 +141,61 @@ describe("Item", () => {
     const [frame, text] = [item.children[0]!.getBoundingClientRect(), item.children[1]!.getBoundingClientRect()];
     expect(text.height).toBeGreaterThan(frame.height);
     expect(Math.abs(frame.top + frame.height / 2 - (text.top + text.height / 2))).toBeLessThanOrEqual(1);
+  });
+
+  it("reveals its actions with revealActions on hover, on focus anywhere in the row and while a menu of theirs is open, keeping their room", async () => {
+    const { item } = await render(
+      <Item href="#soup" title="Lentil soup" description="Forty minutes" actions={<Button variant="plain" size="sm">Edit</Button>} revealActions />,
+    );
+    const actions = item.querySelector<HTMLElement>("[data-item-actions]")!;
+    const edit = page.getByRole("button", { name: "Edit" });
+    // The opacity once its fade has ended.
+    const settled = (opacity: string) => expect.poll(() => (actions.getAnimations().length === 0 ? getComputedStyle(actions).opacity : "fading")).toBe(opacity);
+    expect(getComputedStyle(actions).opacity).toBe("0");
+    expect(actions.getBoundingClientRect().width).toBeGreaterThan(0);
+    await expect.element(edit).toBeInTheDocument();
+    await userEvent.hover(page.getByRole("link", { name: "Lentil soup" }));
+    await settled("1");
+    await commands.parkPointer();
+    await settled("0");
+    const before = document.createElement("button");
+    item.before(before);
+    mounted.push(before);
+    before.focus();
+    await pressTab();
+    expect(document.activeElement).toBe(page.getByRole("link", { name: "Lentil soup" }).element());
+    await settled("1");
+    await pressTab();
+    expect(document.activeElement).toBe(edit.element());
+    await settled("1");
+    before.focus();
+    await settled("0");
+    edit.element().setAttribute("aria-expanded", "true");
+    await settled("1");
+  });
+
+  it("hides revealActions' actions only where the pointer can hover, so a stylus that cannot still sees them", () => {
+    const conditions = hidingConditions(CSS.escape("group/item"));
+    expect(conditions).not.toEqual([]);
+    for (const chain of conditions) expect(chain).toContain("(hover: hover)");
+  });
+
+  it("finds the hiding rule where the app's Tailwind leaves it nested, as 4.1 does, so the check above holds there too", () => {
+    const style = document.createElement("style");
+    style.textContent =
+      ".probe-nested { @media (pointer: fine) { @media (hover: hover) { &:not(*:is(:where(.group\\/probe):hover *)) { opacity: 0%; } } } }";
+    document.head.append(style);
+    try {
+      expect(hidingConditions(CSS.escape("group/probe"))).toEqual([["(pointer: fine)", "(hover: hover)"]]);
+    } finally {
+      style.remove();
+    }
+  });
+
+  it("shows its actions from the start without revealActions", async () => {
+    const { item } = await render(<Item title="Lentil soup" actions={<Button variant="plain" size="sm">Edit</Button>} />);
+    expect(getComputedStyle(item.querySelector("[data-item-actions]")!).opacity).toBe("1");
+    expect(item.classList.contains("group/item")).toBe(false);
   });
 
   it("keeps the actions beside the text on a phone by default", async () => {
@@ -405,6 +476,197 @@ describe("Item with href", () => {
   });
 });
 
+describe("Item with onSelect", () => {
+  // The theme's value of a colour variable, as the browser computes it.
+  const themeColor = (variable: string) => {
+    const probe = document.createElement("div");
+    probe.style.backgroundColor = `var(${variable})`;
+    document.body.append(probe);
+    mounted.push(probe);
+    return getComputedStyle(probe).backgroundColor;
+  };
+
+  it("is one button named by its title, covering the row, that calls onSelect, with the actions above it", async () => {
+    const onSelect = vi.fn();
+    const onSave = vi.fn();
+    const { item } = await render(
+      <Item onSelect={onSelect} media={<img src={pixel} alt="" data-media="" />} title="Braised short ribs" description="Four hours" actions={<Button onClick={onSave}>Save</Button>} />,
+    );
+    const button = page.getByRole("button", { name: "Braised short ribs" });
+    await expect.element(button).toHaveAccessibleDescription("Four hours");
+    expect(button.element().getAttribute("type")).toBe("button");
+    for (const element of [item.querySelector("[data-media]")!, page.getByText("Four hours").element()]) {
+      const [x, y] = center(element);
+      expect(document.elementFromPoint(x, y)).toBe(button.element());
+    }
+    // A press on the description lands on the row's button, which covers it.
+    await userEvent.click(page.getByText("Four hours"), { force: true });
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    await userEvent.click(page.getByRole("button", { name: "Save" }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    const before = document.createElement("button");
+    item.parentElement!.prepend(before);
+    before.focus();
+    await pressTab();
+    expect(document.activeElement).toBe(button.element());
+    expect(getComputedStyle(item).outlineStyle).toBe("solid");
+    await userEvent.keyboard("{Enter}");
+    expect(onSelect).toHaveBeenCalledTimes(2);
+    await pressTab();
+    expect(document.activeElement).toBe(page.getByRole("button", { name: "Save" }).element());
+  });
+
+  it("marks the chosen row current, in the selected colour, and leaves the others plain", async () => {
+    const { host } = await render(
+      <ItemGroup aria-label="Recipes">
+        <Item onSelect={() => {}} selected title="Short ribs" description="Four hours" data-row="chosen" />
+        <Item onSelect={() => {}} selected={false} title="Lentil soup" description="Forty minutes" data-row="other" />
+      </ItemGroup>,
+    );
+    await expect.element(page.getByRole("button", { name: "Short ribs" })).toHaveAttribute("aria-current", "true");
+    expect(page.getByRole("button", { name: "Lentil soup" }).element().hasAttribute("aria-current")).toBe(false);
+    const chosen = host.querySelector<HTMLElement>('[data-row="chosen"]')!;
+    const other = host.querySelector<HTMLElement>('[data-row="other"]')!;
+    expect(getComputedStyle(chosen).backgroundColor).toBe(themeColor("--accent"));
+    expect(getComputedStyle(other).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    // The selected row's description mixes 20% toward the foreground, for contrast on the selected colour.
+    const probe = document.createElement("div");
+    probe.style.color = "color-mix(in oklab, var(--muted-foreground) 80%, var(--foreground))";
+    document.body.append(probe);
+    mounted.push(probe);
+    expect(getComputedStyle(chosen.querySelector("[data-ouro-text]")!).color).toBe(getComputedStyle(probe).color);
+    expect(getComputedStyle(other.querySelector("[data-ouro-text]")!).color).not.toBe(getComputedStyle(probe).color);
+  });
+
+  it("keeps its padding and corners in a divided or plain group, so the selected colour has room, and a plain row keeps none", async () => {
+    for (const variant of ["divided", "plain"] as const) {
+      const { host } = await render(
+        <ItemGroup aria-label="Recipes" variant={variant}>
+          <Item onSelect={() => {}} selected title="Short ribs" data-row="chosen" />
+          <Item title="Lentil soup" data-row="plain" />
+        </ItemGroup>,
+      );
+      const chosen = getComputedStyle(host.querySelector('[data-row="chosen"]')!);
+      expect(chosen.paddingInlineStart, variant).toBe("12px");
+      expect(parseFloat(chosen.borderTopLeftRadius), variant).toBeGreaterThan(0);
+      expect(getComputedStyle(host.querySelector('[data-row="plain"]')!).paddingInlineStart, variant).toBe("0px");
+    }
+
+  });
+
+  it("keeps an outlined row's corners and padding, and rounds its press layer to them", async () => {
+    const { item } = await render(<Item onSelect={() => {}} selected variant="outline" title="Short ribs" />);
+    expect(getComputedStyle(item.querySelector("button")!, "::after").borderTopLeftRadius).toBe(getComputedStyle(item).borderTopLeftRadius);
+    const outline = (await render(<Item variant="outline" title="Lentil soup" />)).item;
+    expect(getComputedStyle(item).borderTopLeftRadius).toBe(getComputedStyle(outline).borderTopLeftRadius);
+    expect(getComputedStyle(item).paddingInlineStart).toBe(getComputedStyle(outline).paddingInlineStart);
+  });
+
+  it("marks a linked row as the page shown with selected", async () => {
+    await render(
+      <ItemGroup aria-label="Sections">
+        <Item href="/profile" selected title="Profile" />
+        <Item href="/billing" selected={false} title="Billing" />
+      </ItemGroup>,
+    );
+    await expect.element(page.getByRole("link", { name: "Profile" })).toHaveAttribute("aria-current", "page");
+    expect(page.getByRole("link", { name: "Billing" }).element().hasAttribute("aria-current")).toBe(false);
+  });
+
+  it("gives a row on its own room for the selected colour, and a static row none", async () => {
+    const { item } = await render(<Item onSelect={() => {}} title="Short ribs" />);
+    expect(getComputedStyle(item).paddingInlineStart).toBe("12px");
+    expect(parseFloat(getComputedStyle(item).borderTopLeftRadius)).toBeGreaterThan(0);
+    const still = (await render(<Item title="Lentil soup" />)).item;
+    expect(getComputedStyle(still).paddingInlineStart).toBe("0px");
+    expect(getComputedStyle(still).borderTopLeftRadius).toBe("0px");
+  });
+
+  it("marks a row a person presses or chooses for the stretched layer, and a static row not", async () => {
+    const { host } = await render(
+      <ItemGroup aria-label="Rows">
+        <Item onSelect={() => {}} title="Pressed" data-row="pressed" actions={<Button>Save</Button>} />
+        <Item href="/a" title="Linked" data-row="linked" />
+        <Item href="/b" selected={false} title="Chosen link" data-row="chosen-link" />
+        <Item title="Static" data-row="static" actions={<Button>Keep</Button>} />
+      </ItemGroup>,
+    );
+    const row = (name: string) => host.querySelector<HTMLElement>(`[data-row="${name}"]`)!;
+    expect(row("pressed").getAttribute("data-linked")).toBe("");
+    expect(row("linked").getAttribute("data-linked")).toBe("");
+    expect(row("static").hasAttribute("data-linked")).toBe(false);
+    expect(row("pressed").getAttribute("data-choosable")).toBe("");
+    expect(row("chosen-link").getAttribute("data-choosable")).toBe("");
+    expect(row("linked").hasAttribute("data-choosable")).toBe(false);
+    expect(row("static").hasAttribute("data-choosable")).toBe(false);
+    // A link row told whether it is shown keeps its padding in a divided group; a plain link row does not.
+    expect(getComputedStyle(row("chosen-link")).paddingInlineStart).toBe("12px");
+    expect(getComputedStyle(row("linked")).paddingInlineStart).toBe("0px");
+    // The press look and the raised controls are a pressable row's, not a static one's.
+    expect(getComputedStyle(row("pressed")).cursor).toBe("pointer");
+    expect(getComputedStyle(row("static")).cursor).toBe("auto");
+    expect(getComputedStyle(page.getByRole("button", { name: "Save" }).element()).zIndex).toBe("10");
+    expect(getComputedStyle(page.getByRole("button", { name: "Keep" }).element()).zIndex).toBe("auto");
+  });
+
+  it("colours the shown row's title with the selected colour's text, and the others' with the page's", async () => {
+    const { host } = await render(
+      <div style={{ ["--accent-foreground" as string]: "rgb(200, 0, 0)", ["--foreground" as string]: "rgb(0, 0, 200)" }}>
+        <Item onSelect={() => {}} selected title="Shown" data-row="shown" />
+        <Item onSelect={() => {}} selected={false} title="Other" data-row="other" />
+      </div>,
+    );
+    const titleOf = (name: string) => getComputedStyle(host.querySelector(`[data-row="${name}"] button`)!.parentElement!).color;
+    expect(titleOf("shown")).toBe("rgb(200, 0, 0)");
+    expect(titleOf("other")).toBe("rgb(0, 0, 200)");
+  });
+
+  it("rounds a button or link row's press layer to the row, and sets its title at the start", async () => {
+    const { host } = await render(
+      <div>
+        <Item onSelect={() => {}} title={"A title long enough to wrap onto a second line in a narrow row ".repeat(2)} data-row="button" />
+        <Item href="/a" selected title="Link" data-row="link" />
+        <Item href="/b" selected variant="outline" title="Outlined link" data-row="outlined" />
+      </div>,
+    );
+    for (const name of ["button", "link", "outlined"]) {
+      const row = host.querySelector<HTMLElement>(`[data-row="${name}"]`)!;
+      const layer = row.querySelector("[data-stretched-link]")!;
+      expect(getComputedStyle(layer, "::after").borderTopLeftRadius, name).toBe(getComputedStyle(row).borderTopLeftRadius);
+    }
+    expect(getComputedStyle(host.querySelector('[data-row="button"] button')!).textAlign).toBe("start");
+  });
+
+  it("draws an edge round each row a person chooses under forced colours, and a thicker Highlight one round the row shown", async () => {
+    try {
+      await render(
+        <div>
+          <Item onSelect={() => {}} selected title="Shown" />
+          <Item onSelect={() => {}} selected={false} title="Other" />
+          <Item href="/a" selected title="Linked shown" />
+        </div>,
+      );
+      const after = (name: string, role: "button" | "link" = "button") => getComputedStyle(page.getByRole(role, { name }).element(), "::after");
+      expect(after("Other").borderTopWidth).toBe("0px");
+      expect(after("Shown").borderTopWidth).toBe("0px");
+      await commands.emulateMedia({ forcedColors: "active" });
+      expect(after("Other").borderTopStyle).toBe("solid");
+      expect(after("Other").borderTopWidth).toBe("1px");
+      expect(after("Shown").borderTopWidth).toBe("2px");
+      expect(after("Linked shown", "link").borderTopWidth).toBe("2px");
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
+  it("forwards buttonRef to the row's button", async () => {
+    let button: HTMLButtonElement | null = null;
+    await render(<Item onSelect={() => {}} buttonRef={(node) => void (button = node)} title="Short ribs" />);
+    expect(button).toBe(page.getByRole("button", { name: "Short ribs" }).element());
+  });
+});
+
 describe("Item development messages", () => {
   it.each([
     ["subtitle", { subtitle: "Four hours" }, "subtitle is not a prop", '<Item description="Four hours">'],
@@ -426,10 +688,15 @@ describe("Item development messages", () => {
     ["mediaAbove with an icon", { mediaAbove: "sm", media: "x", mediaSize: "icon" }, "mediaAbove is for a photo, not an icon", '<Item media={<img src="…" alt="" />} mediaSize="lg" mediaAbove="sm">'],
     ["as", { as: "a" }, 'as="a" is not an element Item renders; use "div", "li", "article"', '<Item href="/path" title="…">'],
     ["as span", { as: "span" }, 'as="span" is not an element Item renders; use "div", "li", "article"', '<Item as="div">'],
+    ["selected without onSelect or href", { selected: true }, "selected marks a row a person chooses; give it onSelect, or href", '<Item selected={row.id === openId} onSelect={() => open(row.id)} title="…">'],
+    ["active", { active: true }, "active is not a prop", "<Item selected={row.id === openId} onSelect={() => open(row.id)}>"],
+    ["isSelected", { isSelected: true }, "isSelected is not a prop", "<Item selected={row.id === openId} onSelect={() => open(row.id)}>"],
+    ["current", { current: true }, "current is not a prop", "<Item selected={row.id === openId} onSelect={() => open(row.id)}>"],
+    ["revealActions without actions", { revealActions: true }, "revealActions needs actions to reveal", "<Item actions={<Button>…</Button>} revealActions>"],
   ])("warns for %s with the fix", async (_name, extra, problem, fix) => {
     const { item } = await render(<Item {...({ title: "Ribs", ...extra } as unknown as Parameters<typeof Item>[0])} />);
     expect(warn).toHaveBeenCalledWith(`[ouro-ui] Item: ${problem}. Fix: ${fix}.`);
-    for (const attribute of ["subtitle", "icon", "avatar", "image", "thumbnail", "action", "label", "to", "aschild"]) {
+    for (const attribute of ["subtitle", "icon", "avatar", "image", "thumbnail", "action", "label", "to", "aschild", "selected", "active", "isselected", "current", "revealactions"]) {
       expect(item.hasAttribute(attribute)).toBe(false);
     }
   });

@@ -73,6 +73,28 @@ describe("Empty", () => {
     expect(style.textAlign).toBe("start");
   });
 
+  it.each(["ltr", "rtl"] as const)("lines its text up with the text around it with variant=plain and align=start, in either direction", async (dir) => {
+    const { el } = await render(
+      <div dir={dir}>
+        <p data-around="">Saved recipes</p>
+        <Empty title="Nothing matches" description="Try other words." variant="plain" align="start" />
+      </div>,
+    );
+    const empty = el.querySelector<HTMLElement>('[data-ouro="empty"]')!;
+    const around = el.querySelector("[data-around]")!.getBoundingClientRect();
+    const title = page.getByText("Nothing matches").element().getBoundingClientRect();
+    if (dir === "ltr") expect(title.left).toBe(around.left);
+    else expect(title.right).toBe(around.right);
+    expect(getComputedStyle(empty).paddingInlineStart).toBe("0px");
+  });
+
+  it("keeps room at its sides with an outline, or centred", async () => {
+    for (const props of [{ align: "start" }, { variant: "plain" }, {}] as const) {
+      const { el } = await render(<Empty title="Nothing here" {...props} />);
+      expect(parseFloat(getComputedStyle(el).paddingInlineStart), JSON.stringify(props)).toBeGreaterThan(0);
+    }
+  });
+
   it.each([2, 4, 5, 6] as const)("renders the title at headingLevel %i", async (level) => {
     await render(<Empty title="Nothing here" headingLevel={level} />);
     await expect.element(page.getByRole("heading", { level, name: "Nothing here" })).toBeVisible();

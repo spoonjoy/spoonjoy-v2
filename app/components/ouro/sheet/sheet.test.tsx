@@ -1039,7 +1039,7 @@ describe("Sheet dev messages", () => {
   it.each([
     ["bg-white", ":root { --popover: …; } .dark { --popover: …; }"],
     ["rounded-none", ":root { --radius: 0px }"],
-    ["rounded-3xl", ":root { --radius: 0.75rem }"],
+    ["rounded-ouro-3xl", ":root { --radius: 0.75rem }"],
     ["text-lg", '<Sheet title="…"><div className="text-lg">…</div></Sheet>'],
   ])("warns about the appearance class %s on the popup", async (token, fix) => {
     await openUncontrolled({ className: `mx-auto ${token}` });

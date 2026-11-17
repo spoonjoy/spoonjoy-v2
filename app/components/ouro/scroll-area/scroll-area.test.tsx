@@ -341,12 +341,12 @@ describe("ScrollArea development messages", () => {
 
   it("checks the className", async () => {
     await render(
-      <ScrollArea className="h-40 rounded-md border">
+      <ScrollArea className="h-40 rounded-ouro-md border">
         {tall}
       </ScrollArea>,
     );
     expect(warn).toHaveBeenCalledWith(
-      '[ouro-ui] ScrollArea: "rounded-md" sets appearance, and className is for layout only. Fix: put the ScrollArea inside a <Card> for a frame.',
+      '[ouro-ui] ScrollArea: "rounded-ouro-md" sets appearance, and className is for layout only. Fix: put the ScrollArea inside a <Card> for a frame.',
     );
   });
 

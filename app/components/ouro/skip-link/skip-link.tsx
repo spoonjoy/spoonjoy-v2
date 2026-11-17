@@ -35,7 +35,7 @@ export type SkipLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof 
 // focus the link is clipped to a 1px box, still read by screen readers; a fixed element parked
 // above the top edge would still paint in a full-page screenshot of a scrolled page.
 const base =
-  "fixed top-2 start-2 z-(--ouro-layer) box-border inline-flex min-h-9 pointer-coarse:min-h-11 items-center rounded-md " +
+  "fixed top-2 start-2 z-(--ouro-layer) box-border inline-flex min-h-9 pointer-coarse:min-h-11 items-center rounded-ouro-md " +
   "bg-background px-4 text-sm leading-5 font-medium text-foreground underline underline-offset-4 shadow-(--shadow-lg) ring-1 ring-border/60 " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid print:hidden " +
   "not-focus:m-0 not-focus:size-px not-focus:min-h-0 not-focus:overflow-hidden not-focus:p-0 not-focus:whitespace-nowrap not-focus:ring-0 not-focus:[clip-path:inset(50%)]";
