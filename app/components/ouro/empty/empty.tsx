@@ -45,7 +45,7 @@ export interface EmptyOwnProps {
    * @claim "`center` centers everything, for a page" registry/ouro/components/ouro/empty/empty.test.tsx verify:testExists(registry/ouro/components/ouro/empty/empty.test.tsx::Empty > has no outline with variant=plain, and aligns to the start with align=start)
    */
   align?: "center" | "start" | (string & { 'Use "center" or "start": left is "start"': never }) | undefined;
-  /** Layout only: margins, width, grid placement (`mt-6`). Appearance classes warn in development; use `variant`. */
+  /** Layout only: margins, width (`max-w-md` holds the whole Empty to a column), grid placement (`mt-6`). Appearance classes warn in development; use `variant`. */
   className?: string | undefined;
   ref?: Ref<HTMLDivElement> | undefined;
 
@@ -147,7 +147,7 @@ export function Empty(props: EmptyProps): JSX.Element {
           {icon}
         </div>
       )}
-      <div className={cn("flex max-w-md flex-col gap-1.5", aligns[align])}>
+      <div className={cn("flex flex-col gap-1.5", aligns[align])}>
         <Heading level={level} size="md">
           {title}
         </Heading>
@@ -158,7 +158,7 @@ export function Empty(props: EmptyProps): JSX.Element {
         )}
       </div>
       {action && <div className="flex flex-wrap gap-2">{action}</div>}
-      {children && <div className="w-full max-w-md">{children}</div>}
+      {children && <div className="w-full">{children}</div>}
     </div>
   );
 }

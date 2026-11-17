@@ -9,6 +9,7 @@ import {
   floatingMotionClass,
   floatingPlacementWarnings,
   floatingPortalClass,
+  floatingPositionMethod,
   floatingSide,
   type FloatingAlign,
   type FloatingSide,
@@ -334,7 +335,7 @@ export function Tooltip(props: TooltipProps): JSX.Element {
       >
         <BaseTooltip.Portal {...portal} data-ouro="tooltip-portal" className={floatingPortalClass}>
           <PortalScope>
-            <BaseTooltip.Positioner anchor={triggerRef} side={side} align={align} sideOffset={6} collisionPadding={8} data-ouro="tooltip-positioner">
+            <BaseTooltip.Positioner anchor={triggerRef} positionMethod={floatingPositionMethod} side={side} align={align} sideOffset={6} collisionPadding={8} data-ouro="tooltip-positioner">
               <BaseTooltip.Popup
                 ref={checkContent}
                 data-ouro="tooltip"

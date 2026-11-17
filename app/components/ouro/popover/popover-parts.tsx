@@ -11,6 +11,7 @@ import {
   floatingMotionClass,
   floatingPlacementWarnings,
   floatingPortalClass,
+  floatingPositionMethod,
   floatingSide,
   floatingSurfaceClass,
   type FloatingAlign,
@@ -110,7 +111,7 @@ export function PopoverPortal(props: Omit<BasePopover.Portal.Props, "className">
 }
 
 /** Props for {@link PopoverPositioner}. */
-export type PopoverPositionerProps = Omit<BasePopover.Positioner.Props, "className" | "side" | "align"> & {
+export type PopoverPositionerProps = Omit<BasePopover.Positioner.Props, "className" | "side" | "align" | "positionMethod"> & {
   /**
    * The side of the trigger the popover sits on; it flips when there is no room. @default "bottom"
    *
@@ -144,10 +145,10 @@ export function PopoverPositioner({ side: sideProp, align: alignProp, ...props }
  * @internal
  */
 export function PopoverPositionerUnchecked(
-  props: Omit<BasePopover.Positioner.Props, "className" | "side" | "align"> & { side: FloatingSide; align: FloatingAlign },
+  props: Omit<BasePopover.Positioner.Props, "className" | "side" | "align" | "positionMethod"> & { side: FloatingSide; align: FloatingAlign },
 ): JSX.Element {
   usePopoverPart("PopoverPositioner", "…");
-  return <BasePopover.Positioner sideOffset={8} collisionPadding={8} {...props} data-ouro="popover-positioner" />;
+  return <BasePopover.Positioner sideOffset={8} collisionPadding={8} {...props} positionMethod={floatingPositionMethod} data-ouro="popover-positioner" />;
 }
 
 /** Props for {@link PopoverPopup}. `className` is for layout only (width, padding). */

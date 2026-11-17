@@ -4,7 +4,7 @@ import { createElement, useId, type HTMLAttributes, type JSX, type MouseEvent, t
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { RouterLink, safeRel } from "~/lib/ouro/router-link";
-import { raiseControlsClass, stretchedLinkClass } from "~/lib/ouro/stretched-link";
+import { followStretchedLink, raiseControlsClass, stretchedLinkClass } from "~/lib/ouro/stretched-link";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
 /**
@@ -420,8 +420,12 @@ export function Item(props: ItemProps): JSX.Element {
     element,
     {
       ...rest,
+      // A click anywhere on a linked row opens its link, wherever the app's layout leaves the link's layer.
+      onClick: (event: MouseEvent<HTMLElement>) => (rest.onClick?.(event), followStretchedLink(event)),
+      onAuxClick: (event: MouseEvent<HTMLElement>) => (rest.onAuxClick?.(event), followStretchedLink(event)),
       "data-ouro": "item",
       "data-linked": linked || pressable ? "" : undefined,
+      "data-follows-link": linked || pressable ? "" : undefined,
       "data-choosable": choosable ? "" : undefined,
       className: cn(
         "relative isolate grid min-w-0 list-none items-center gap-x-4 gap-y-2",

@@ -651,7 +651,7 @@ describe("audit", () => {
     return () => Object.assign(style, saved);
   }
 
-  it("fails text below the fold that a page held still cannot scroll onto the screen, rather than passing it against the pixels there", async () => {
+  it("leaves out text below the fold that a page held still cannot scroll onto the screen, rather than measuring it against the pixels there", async () => {
     const size = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(390, 844);
     mountPage(
@@ -659,10 +659,122 @@ describe("audit", () => {
     );
     const release = holdStill();
     try {
-      // The text is 4.39:1 against its worst pixel where it shows, so a pass would be the pixels beside it.
-      expect(await measureTextContrast(document.querySelector("#low")!, 4.5)).toEqual({ pass: false, reason: "axe left its contrast undecided, and its text is off the screen" });
+      // The text is 4.39:1 against its worst pixel where it shows: a measurement there would read the pixels beside it.
+      expect(await measureTextContrast(document.querySelector("#low")!, 4.5)).toEqual({ pass: true });
     } finally {
       release();
+      await page.viewport(size.width, size.height);
+    }
+  });
+
+  it("leaves out text below the fold under a page held still that shares a box with text on the screen, rather than measuring it against pixels the screen does not show", async () => {
+    const size = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    // One box, as a chart holds its axis labels: a dark label on the screen, a faint one below the fold.
+    mountPage(
+      '<div id="box" style="background:linear-gradient(90deg,#fff,#eee)"><p id="top" style="margin:0;padding:8px;color:#111;font-size:16px;line-height:24px">Top label</p>' +
+        '<div style="height:900px"></div><p id="low" style="margin:0;padding:8px;color:#999;font-size:16px;line-height:24px">Low label</p></div>',
+    );
+    // Held as a phone menu holds it: the body's overflow hidden, which axe still counts as a page it can scroll, and a
+    // scroll put back once it lands, so a scroll by script shows for a moment and the picture after it shows the top.
+    document.body.style.overflow = "hidden";
+    const back = () => window.scrollTo(0, 0);
+    window.addEventListener("scroll", back);
+    const release = () => {
+      window.removeEventListener("scroll", back);
+      document.body.style.removeProperty("overflow");
+    };
+    try {
+      // Measured, #low is 2.8:1: what the scan reports for it is no picture of the screen, so it is left out.
+      expect(describeFindings(await audit({ include: [document.querySelector("#box")!] }))).toBe("");
+    } finally {
+      release();
+      await page.viewport(size.width, size.height);
+    }
+  });
+
+  it("measures only the part of a line the fold of a held page leaves on the screen", async () => {
+    const size = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    // White on near-black passes; below the fold of a held page there are no pixels to measure it against.
+    mountPage('<div style="height:810px"></div><p id="cut" style="margin:0;padding:0;color:#fff;background:linear-gradient(90deg,#000,#111);font-size:16px;line-height:24px">Axis label</p><div style="height:900px"></div>');
+    document.body.style.overflow = "hidden";
+    const back = () => window.scrollTo(0, 0);
+    window.addEventListener("scroll", back);
+    try {
+      const cut = document.querySelector("#cut")!;
+      expect(cut.getBoundingClientRect().top).toBeLessThan(844);
+      expect(cut.getBoundingClientRect().bottom).toBeGreaterThan(844);
+      expect(await measureTextContrast(cut, 4.5)).toEqual({ pass: true });
+    } finally {
+      window.removeEventListener("scroll", back);
+      document.body.style.removeProperty("overflow");
+      await page.viewport(size.width, size.height);
+    }
+  });
+
+  // Holds the page still as a phone menu holds it, with SVG text (a chart's axis label, measured
+  // letter by letter) moved so its letters start 0.4px above the fold, short of any pixel's centre.
+  function sliverAtFold(): () => void {
+    const sliver = document.querySelector("#sliver")!;
+    const spacer = document.querySelector<HTMLElement>("#spacer")!;
+    spacer.style.height = `${spacer.offsetHeight + 843.6 - sliver.getBoundingClientRect().top}px`;
+    expect(844 - sliver.getBoundingClientRect().top).toBeCloseTo(0.4, 1);
+    document.body.style.overflow = "hidden";
+    const back = () => window.scrollTo(0, 0);
+    window.addEventListener("scroll", back);
+    return () => {
+      window.removeEventListener("scroll", back);
+      document.body.style.removeProperty("overflow");
+    };
+  }
+  const svgLabel = '<svg width="200" height="40" style="display:block"><text id="sliver" x="10" y="20" fill="#111" font-size="16">Axis label</text></svg>';
+
+  it("leaves out an axis label whose sliver above the fold of a held page covers no pixel's centre", async () => {
+    const size = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    mountPage(`<div style="position:absolute;inset:0 0 auto"><div id="spacer" style="height:800px"></div>${svgLabel}<div style="height:900px"></div></div>`);
+    let release: (() => void) | undefined;
+    try {
+      release = sliverAtFold();
+      expect(await measureTextContrast(document.querySelector("#sliver")!, 4.5)).toEqual({ pass: true });
+    } finally {
+      release?.();
+      await page.viewport(size.width, size.height);
+    }
+  });
+
+  it("leaves out an axis label in a shared picture whose sliver above the fold of a held page covers no pixel's centre", async () => {
+    const size = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    // A label on the screen first, so the sliver is measured in its picture.
+    mountPage(
+      '<div id="box" style="position:absolute;inset:0 0 auto;background:linear-gradient(90deg,#fff,#eee)"><p style="margin:0;padding:8px;color:#111;font-size:16px;line-height:24px">Top label</p>' +
+        `<div id="spacer" style="height:760px"></div>${svgLabel}<div style="height:900px"></div></div>`,
+    );
+    let release: (() => void) | undefined;
+    try {
+      release = sliverAtFold();
+      expect(describeFindings(await audit({ include: [document.querySelector("#box")!] }))).toBe("");
+    } finally {
+      release?.();
+      await page.viewport(size.width, size.height);
+    }
+  });
+
+  it("maps a held page's picture from where its frame is, when the page moves fixed boxes off the window's corner", async () => {
+    const size = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    // A transformed body places fixed boxes inside itself, 60px in: white text on a dark strip, white beside it.
+    mountPage(
+      '<div style="width:100px;padding:8px 0;background:linear-gradient(#000,#111)"><p id="strip" style="margin:0;padding:0 8px;color:#fff;font-size:16px;line-height:24px">White text</p></div>',
+    );
+    document.documentElement.style.paddingLeft = "60px";
+    Object.assign(document.body.style, { margin: "0", height: "844px", overflow: "hidden", transform: "translateZ(0)" });
+    try {
+      expect(await measureTextContrast(document.querySelector("#strip")!, 4.5)).toEqual({ pass: true });
+    } finally {
+      document.documentElement.style.removeProperty("padding-left");
       await page.viewport(size.width, size.height);
     }
   });
