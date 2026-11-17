@@ -10,7 +10,7 @@ Follow ourostack's shared [PR merge rule](https://github.com/ourostack/.github/b
 
 ## Interfaces follow Ouro UI
 
-**[Interfaces follow Ouro UI](https://github.com/ourostack/.github/blob/main/agents/interfaces-follow-ouro-ui.md).** Build screens from Ouro HX, declare agent doors once with `ouro-actions` and check them with the Ouro AX X-ray in CI, take Ouro from its release tags (never copied by hand) and stay within a day of them, and fix what Ouro lacks in Ouro first.
+**[Interfaces follow Ouro UI](https://github.com/ourostack/.github/blob/main/agents/interfaces-follow-ouro-ui.md).** Build screens from Ouro HX, declare agent doors once with `ouro-actions` and check them with the Ouro AX X-ray in CI, take Ouro from its release tags (never copied by hand; enforced: the design-system hygiene test) and stay within a day of them, and fix what Ouro lacks in Ouro first.
 
 ## Backlog
 
@@ -97,13 +97,12 @@ The API is documented in [`docs/api.md`](docs/api.md), and the MCP server and it
 
 ## Development Commands
 
-Local commands are for writing code and running unit tests. App behaviour is validated only by the `Journeys` workflow in CI (see Validation above), so do not start the app locally to check it.
-
 ```bash
 pnpm test -- --run    # Run unit tests once (plain `pnpm test` watches and never exits)
 pnpm run test:ui      # Vitest UI mode
 pnpm run test:coverage # Unit test coverage report
 pnpm run typecheck    # Type-check the code
+pnpm lint             # oxlint; hits may only fall (oxlint.baseline.json)
 pnpm run build        # Production build, to check the app compiles
 ```
 
@@ -135,22 +134,10 @@ pnpm run build        # Production build, to check the app compiles
 
 ## Code Style
 
-### General Principles
-- Keep it simple — don't over-engineer
-- Follow existing patterns in the codebase
-- Clear, descriptive naming over clever abbreviations
-- Keep TypeScript's strict mode on, and avoid `any` unless it is truly necessary
-- Prefer composition over inheritance
-
 ### File Naming
 - Route files: `kebab-case.tsx` (e.g., `recipes.$id.edit.tsx`)
 - Components: `PascalCase.tsx`
 - Utilities: `camelCase.ts` with `.server.ts` suffix for server-only code
-
-### React Patterns
-- Loaders fetch data, actions handle mutations (React Router conventions)
-- Keep components focused — extract when they get unwieldy
-- Use existing components before creating new ones
 
 ### Building with Ouro HX
 - Spoonjoy is the reference app for Ouro HX: read [`docs/building-with-ouro-hx.md`](docs/building-with-ouro-hx.md) before changing UI. It covers installing HX from a release tag, theming through tokens, composing HX directly rather than through local wrappers, and what to do when HX lacks a component (add it to HX first; mark app code waiting on an unreleased item with `TODO(ouro-hx: <item>)`).
@@ -177,10 +164,6 @@ pnpm run build        # Production build, to check the app compiles
 ### Philosophy
 - **Cover every line, branch, function and statement.** The coverage job fails below 100% of each.[^coverage] Test every edge case: valid, invalid, boundary, null, empty and error paths.
 - **Treat warnings as errors.** CI runs its commands through a warning gate that fails a command when it prints a warning.[^warnings] Fix each warning before committing.
-- **Write tests alongside code** — not after, not "later", but as part of the same commit
-- **Use tests to validate your work**: run tests frequently to catch issues early, and check for warnings before each commit.
-- **Tests are documentation** — they show how code is meant to be used
-- **Keep both rules, coverage and warnings, without exception.**
 
 ### Conventions
 - Test files live alongside or in `test/` directory
@@ -207,7 +190,7 @@ pnpm run test:coverage # With coverage
 ### Disposable Data Hygiene
 - Don't leave agent-created recipes, users or cookbooks in QA or production outside the `qa-kitchen` personas. Throwaway users use the `codex-e2e-*` / `codex_e2e_*` naming so cleanup can find them.
 - The native (spoonjoy-apple) Journeys workflow creates its own `codex-native-*` / `codex_native_*` accounts per run; `scripts/cleanup-local-qa-data.mjs` leaves those alone while young so a concurrent native run is not swept mid-flight, then removes an account and everything it owns once it is at least 3 hours old.[^native-accounts]
-- The `Journeys` workflow runs `pnpm run cleanup:remote:qa:apply` after its journeys.[^qa-cleanup] Never run cleanup with `--apply` against production.
+- The `Journeys` workflow runs `pnpm run cleanup:remote:qa:apply` after its journeys.[^qa-cleanup]
 - The `QA Data Cleanup` workflow sweeps shared QA daily, removing only disposable accounts (native ones included) created more than 6 hours before the run started (`--older-than-hours 6 --as-of <start>`), so an account a run is still using stays.[^qa-daily-cleanup]
 - `scripts/smoke-live.mjs` cleans its disposable user by default; pass `--keep-smoke-data` only when the human explicitly asks to preserve debugging data, and remove that data before the task is done.
 
@@ -217,16 +200,12 @@ pnpm run test:coverage # With coverage
 - Work should happen on an agent-scoped branch whose first path segment identifies the active agent (for example, `<agent>/<task-slug>`).
 - If the current branch is `main`, detached, or otherwise not agent-scoped, the agent has authority to create or switch to an appropriate agent-scoped branch without human approval.
 - Choose the branch from the active agent identity and current task context. Ask the human only if automatic branch setup fails or if multiple valid agent identities are genuinely ambiguous.
-- Do not use a `codex/` prefix when the branch is only being created to satisfy this repo's agent-scoped workflow.
 
 ### Atomic Commits
 - **One commit per file** (or logical unit of work)
 - **Keep GitHub in sync**: run `git push` after every commit
 - **Clear commit messages**: `"[action] [what] in [filename]"`
   - Example: `"Replace db.unit.create with getOrCreateUnit in recipe.test.ts"`
-
-### One-Way Flow
-Changes flow: Local → GitHub. Never pull from GitHub during active work sessions. This prevents merge conflicts and keeps history clean.
 
 ### Commit Message Format
 ```
@@ -249,27 +228,15 @@ Include this only after the Final Response Gate is satisfied. Example:
 ouro msg --to slugger "Done: Fixed all 21 ingredientRef test calls, all tests passing"
 ```
 
-## Communication Style
-
-When reporting status or issues:
-- Be direct — name problems clearly without deflection
-- State facts and next steps, without apologies or empty promises
-- If something failed, say what failed and what you'll try next
-- If uncertain, say so rather than guessing
-
 ## Common Gotchas
 
-1. **Server-only imports**: Files with `.server.ts` suffix are server-only. Don't import them in client code.
+1. **Databases**: The app uses D1 through `@prisma/adapter-d1`; unit tests use SQLite (`test.db`).
 
-2. **D1 adapter**: Production uses `@prisma/adapter-d1`. Local dev uses SQLite file directly.
+2. **Foreign key constraints**: When deleting test data, delete in correct order (children before parents).
 
-3. **Test database**: Tests use `test.db` (SQLite). Make each test file clean up its own data.
+3. **Unique constraints**: use unique suffixes (faker alphanumeric) for test data to avoid collisions.
 
-4. **Foreign key constraints**: When deleting test data, delete in correct order (children before parents).
-
-5. **Unique constraints**: use unique suffixes (faker alphanumeric) for test data to avoid collisions.
-
-6. **Canonical domain**: Spoonjoy's canonical domain is `spoonjoy.app`; do not assume ownership of `spoonjoy.com`.
+4. **Canonical domain**: Spoonjoy's canonical domain is `spoonjoy.app`; do not assume ownership of `spoonjoy.com`.
 
 ## Key Files to Know
 
@@ -278,7 +245,7 @@ When reporting status or issues:
 - `prisma/schema.prisma` — Data models
 - `test/utils.ts` — Test data helpers
 - `vitest.config.ts` — Test configuration
-- `wrangler.toml` — Cloudflare deployment config
+- `wrangler.json` — Cloudflare deployment config
 
 [^qa-run]: scripts/qa-run-scope.mjs verify:fileLine(scripts/qa-run-scope.mjs, /export const RUN_WORKER_PREFIX = "spoonjoy-v2-qa-run-";/) verify:fileLine(scripts/qa-run-scope.mjs, /export const RUN_DATABASE_PREFIX = "spoonjoy-qa-run-";/) verify:fileLine(scripts/qa-run-scope.mjs, /its own D1 database, `spoonjoy-qa-run-<run id>-<attempt>`, created empty and migrated from/)
 [^qa-sweep]: scripts/qa-run-scope.mjs; .github/workflows/qa-run-sweep.yml verify:fileLine(scripts/qa-run-scope.mjs, /export const STALE_AFTER_MS = 3 \* 60 \* 60_000;/) verify:fileLine(scripts/qa-run-scope.mjs, /export const MAX_RUN_WORKERS = 100;/) verify:fileLine(.github/workflows/qa-run-sweep.yml, /cron: "41 \* \* \* \*"/)
