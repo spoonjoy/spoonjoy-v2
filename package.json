@@ -233,5 +233,8 @@
     "vitest": "4.1.12",
     "wrangler": "^4.90.0",
     "yaml": "2.9.0"
+  },
+  "imports": {
+    "#ouro-ax/*": "./app/lib/ouro/ax/*"
   }
 }

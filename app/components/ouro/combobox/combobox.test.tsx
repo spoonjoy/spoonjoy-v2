@@ -1,7 +1,7 @@
 import { createRef, useState, type ReactNode } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Badge } from "~/components/ouro/badge/badge";
@@ -1145,8 +1145,31 @@ describe("Combobox in a Dialog", () => {
     );
     await userEvent.click(page.getByRole("button", { name: "New chat" }));
     await expect.element(page.getByRole("dialog", { name: "New chat" })).toBeVisible();
-    await userEvent.click(page.getByRole("combobox", { name: "To" }));
-    await expect.poll(options).toHaveLength(herbs.length);
+    // What a failure reports (#1830): where focus is, whether the input says its list is open, the list's state, and whether
+    // the dialog was still opening when the click landed, so a dialog's initial focus that lands after the click shows itself.
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const opening = { before: "", after: "" };
+    const state = (element: HTMLElement) => `${[...element.attributes].filter((a) => a.name.startsWith("data-")).map((a) => a.name).join(" ")} animations=${element.getAnimations().length}`;
+    const focusLog: string[] = [];
+    const onFocus = (event: FocusEvent) => focusLog.push(`${Math.round(performance.now())} ${(event.target as HTMLElement).tagName}${(event.target as HTMLElement).getAttribute("role") ? `[${(event.target as HTMLElement).getAttribute("role")}]` : ""}`);
+    document.addEventListener("focusin", onFocus);
+    onTestFinished(() => document.removeEventListener("focusin", onFocus));
+    opening.before = state(dialog);
+    const input = page.getByRole("combobox", { name: "To" });
+    await userEvent.click(input);
+    opening.after = `${Math.round(performance.now())} ${state(dialog)}`;
+    try {
+      await expect.poll(options).toHaveLength(herbs.length);
+    } catch (error) {
+      const active = document.activeElement as HTMLElement | null;
+      const listbox = document.querySelector<HTMLElement>('[role="listbox"]');
+      throw new Error(
+        `${(error as Error).message}\nfocus: ${active?.tagName}[${active?.getAttribute("role") ?? ""}] ${active?.getAttribute("aria-label") ?? active?.id ?? ""}; ` +
+          `aria-expanded=${input.element().getAttribute("aria-expanded")}; listbox=${listbox ? state(listbox) : "none"}; ` +
+          `dialog before click: ${opening.before}; after: ${opening.after}; focusin: ${focusLog.join(", ")}`,
+        { cause: error },
+      );
+    }
     const option = document.querySelector<HTMLElement>('[role="listbox"] [role="option"]')!;
     const box = option.getBoundingClientRect();
     // What is drawn at the option's middle is the option, not the dialog over it.

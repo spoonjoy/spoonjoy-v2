@@ -42,7 +42,7 @@ const server = [
 ].join(" ");
 const xray = spawnSync(
   process.execPath,
-  ["app/lib/ouro/ax/xray.ts", "--mcp", server, "--inventory", inventory, "--conformance", "--timeout", "60000", ...process.argv.slice(2)],
+  ["scripts/ouro/ax/xray.ts", "--mcp", server, "--inventory", inventory, "--conformance", "--timeout", "60000", ...process.argv.slice(2)],
   { stdio: "inherit" },
 );
 rmSync(dir, { recursive: true, force: true });

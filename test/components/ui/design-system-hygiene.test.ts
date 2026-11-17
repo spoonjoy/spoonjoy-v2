@@ -48,10 +48,10 @@ const SPOONJOY_FILES_IN_HX_FOLDERS = ["e2e/ouro-census/census.baseline.json"];
 const HX_FOLDERS = ["app/components/ouro", "app/lib/ouro", "e2e/ouro", "e2e/ouro-census"];
 const publishedPaths = new Set(installedFiles);
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
-// The CLI rewrites HX's registry aliases to the app's; this reverses only that.
+// The CLI rewrites HX's registry aliases to the app's in quoted module paths; this reverses only that, so a comment
+// that names an alias in prose keeps its words.
 const normalizedRegistrySource = (source: string) => source
-  .replaceAll("~/components/ouro/", "@/registry/ouro/components/ouro/")
-  .replaceAll("~/lib/ouro/", "@/registry/ouro/lib/ouro/");
+  .replace(/(["'`])~\/(components|lib)\/ouro\//g, "$1@/registry/ouro/$2/ouro/");
 function listAllFiles(dirs: string[]): string[] {
   const found: string[] = [];
   function walk(relativeDir: string) {
