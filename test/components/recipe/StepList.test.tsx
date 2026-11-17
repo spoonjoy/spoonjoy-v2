@@ -278,7 +278,6 @@ describe('StepList', () => {
       const Wrapper = createTestWrapper({ steps, disabled: true, recipeId: 'new-recipe-1' })
       render(<Wrapper initialEntries={['/recipes/new-recipe-1/edit']} />)
 
-      // Add button should be disabled
       expect(screen.getByRole('button', { name: /add step/i })).toBeDisabled()
 
       // All step cards should have disabled controls
@@ -301,7 +300,6 @@ describe('StepList', () => {
       const Wrapper = createTestWrapper({ steps: [], onChange, recipeId: 'new-recipe-1' })
       render(<Wrapper initialEntries={['/recipes/new-recipe-1/edit']} />)
 
-      // Add a new step
       await userEvent.click(screen.getByRole('button', { name: /add step/i }))
 
       expect(onChange).toHaveBeenCalledWith(
@@ -326,7 +324,6 @@ describe('StepList', () => {
       const Wrapper = createTestWrapper({ steps, onChange })
       render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
 
-      // Find the description textarea and update it
       const textarea = stepCard(1).querySelector('textarea')
       expect(textarea).toBeInTheDocument()
 
@@ -353,7 +350,6 @@ describe('StepList', () => {
       const Wrapper = createTestWrapper({ steps, onChange })
       render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
 
-      // Find the first step's textarea and update it
       const firstStepCard = stepCard(1)
       const textarea = firstStepCard.querySelector('textarea')
       expect(textarea).toBeInTheDocument()
@@ -557,7 +553,6 @@ describe('StepList', () => {
       const Wrapper = createTestWrapper({ steps, onChange, recipeId: 'new-recipe-1' })
       render(<Wrapper initialEntries={['/recipes/new-recipe-1/edit']} />)
 
-      // Add a step
       await userEvent.click(screen.getByRole('button', { name: /add step/i }))
       expect(onChange).toHaveBeenCalledTimes(1)
 

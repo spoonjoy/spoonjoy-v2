@@ -85,7 +85,6 @@ export function useIngredientParser({ recipeId, stepId }: UseIngredientParserPro
         return
       }
 
-      // Set up new debounce
       debounceRef.current = setTimeout(() => {
         submitParse(newText)
       }, DEBOUNCE_DELAY_MS)

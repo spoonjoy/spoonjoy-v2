@@ -11,13 +11,11 @@ describe("loadRecipeStepOutputUses", () => {
   beforeEach(async () => {
     await cleanupDatabase();
 
-    // Create test user
     const user = await db.user.create({
       data: createTestUser(),
     });
     testUserId = user.id;
 
-    // Create test recipe
     const recipe = await db.recipe.create({
       data: createTestRecipe(testUserId),
     });
@@ -59,7 +57,6 @@ describe("loadRecipeStepOutputUses", () => {
   });
 
   it("should return step output uses with step details", async () => {
-    // Create steps
     const step1Title = createStepTitle();
     const step2Title = createStepTitle();
     await db.recipeStep.createMany({
@@ -139,7 +136,6 @@ describe("loadRecipeStepOutputUses", () => {
   });
 
   it("should return multiple step output uses ordered by inputStepNum then outputStepNum", async () => {
-    // Create three steps
     const step1Title = createStepTitle();
     const step2Title = createStepTitle();
     const step3Title = createStepTitle();
@@ -191,7 +187,6 @@ describe("loadRecipeStepOutputUses", () => {
   });
 
   it("should only return step output uses for the specified recipe", async () => {
-    // Create steps for the test recipe
     await db.recipeStep.createMany({
       data: [
         {
@@ -209,7 +204,6 @@ describe("loadRecipeStepOutputUses", () => {
       ],
     });
 
-    // Create step output use for test recipe
     await db.stepOutputUse.create({
       data: {
         recipeId: testRecipeId,
@@ -266,13 +260,11 @@ describe("loadStepDependencies", () => {
   beforeEach(async () => {
     await cleanupDatabase();
 
-    // Create test user
     const user = await db.user.create({
       data: createTestUser(),
     });
     testUserId = user.id;
 
-    // Create test recipe
     const recipe = await db.recipe.create({
       data: createTestRecipe(testUserId),
     });
@@ -300,7 +292,6 @@ describe("loadStepDependencies", () => {
   });
 
   it("should return dependencies for a step that uses other steps", async () => {
-    // Create three steps
     const step1Title = createStepTitle();
     const step2Title = createStepTitle();
     await db.recipeStep.createMany({
@@ -380,7 +371,6 @@ describe("loadStepDependencies", () => {
   });
 
   it("should only return dependencies for the specified step, not other steps", async () => {
-    // Create three steps
     await db.recipeStep.createMany({
       data: [
         {
@@ -421,7 +411,6 @@ describe("loadStepDependencies", () => {
   });
 
   it("should return empty array for non-existent step", async () => {
-    // Create a step
     await db.recipeStep.create({
       data: {
         recipeId: testRecipeId,
@@ -444,7 +433,6 @@ describe("loadStepDependencies", () => {
   });
 
   it("should only return dependencies from the specified recipe", async () => {
-    // Create steps for the test recipe
     const step1Title = createStepTitle();
     await db.recipeStep.createMany({
       data: [
@@ -508,7 +496,6 @@ describe("loadStepDependencies", () => {
   });
 
   it("should return dependencies ordered by outputStepNum ascending", async () => {
-    // Create four steps
     const step1Title = createStepTitle();
     const step2Title = createStepTitle();
     const step3Title = createStepTitle();
@@ -570,13 +557,11 @@ describe("checkStepUsage", () => {
   beforeEach(async () => {
     await cleanupDatabase();
 
-    // Create test user
     const user = await db.user.create({
       data: createTestUser(),
     });
     testUserId = user.id;
 
-    // Create test recipe
     const recipe = await db.recipe.create({
       data: createTestRecipe(testUserId),
     });
@@ -604,7 +589,6 @@ describe("checkStepUsage", () => {
   });
 
   it("should return steps that depend on this step", async () => {
-    // Create three steps
     const step2Title = createStepTitle();
     const step3Title = createStepTitle();
     await db.recipeStep.createMany({
@@ -684,7 +668,6 @@ describe("checkStepUsage", () => {
   });
 
   it("should only return steps that use the specified step, not other dependencies", async () => {
-    // Create three steps
     await db.recipeStep.createMany({
       data: [
         {
@@ -725,7 +708,6 @@ describe("checkStepUsage", () => {
   });
 
   it("should return empty array for non-existent step", async () => {
-    // Create a step
     await db.recipeStep.create({
       data: {
         recipeId: testRecipeId,
@@ -748,7 +730,6 @@ describe("checkStepUsage", () => {
   });
 
   it("should only return dependents from the specified recipe", async () => {
-    // Create steps for the test recipe
     const step2Title = createStepTitle();
     await db.recipeStep.createMany({
       data: [
@@ -812,7 +793,6 @@ describe("checkStepUsage", () => {
   });
 
   it("should return dependents ordered by inputStepNum ascending", async () => {
-    // Create four steps
     const step2Title = createStepTitle();
     const step3Title = createStepTitle();
     const step4Title = createStepTitle();

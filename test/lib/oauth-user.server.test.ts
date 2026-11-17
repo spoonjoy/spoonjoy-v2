@@ -189,7 +189,6 @@ describe("oauth-user.server", () => {
     });
 
     it("should return error when email already exists and user not logged in", async () => {
-      // Create existing user with email
       const existingEmail = faker.internet.email().toLowerCase();
       const testUser = createTestUser();
       await db.user.create({
@@ -387,7 +386,6 @@ describe("oauth-user.server", () => {
     });
 
     it("should not find account with different provider", async () => {
-      // Create an OAuth user with Google
       const providerUserId = faker.string.uuid();
       const oauthData = {
         provider: "google",
@@ -405,7 +403,6 @@ describe("oauth-user.server", () => {
     });
 
     it("should not find account with different providerUserId", async () => {
-      // Create an OAuth user
       const oauthData = {
         provider: "google",
         providerUserId: faker.string.uuid(),
@@ -499,7 +496,6 @@ describe("oauth-user.server", () => {
     });
 
     it("should return error when same provider already linked to this user", async () => {
-      // Create a user with Google OAuth
       const oauthData = {
         provider: "google",
         providerUserId: faker.string.uuid(),

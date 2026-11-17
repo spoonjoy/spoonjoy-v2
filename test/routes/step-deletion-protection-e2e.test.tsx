@@ -272,7 +272,6 @@ describe("E2E: Step Deletion Protection", () => {
       const step1Id = await addStep(recipeId, "First step", "Step 1");
       await addStep(recipeId, "Second step using first", "Step 2", [1]);
 
-      // Load step edit data
       const loaderData = await loadStepEdit(recipeId, step1Id);
       const actionResult = {
         errors: {
@@ -316,7 +315,6 @@ describe("E2E: Step Deletion Protection", () => {
       const step1Id = await addStep(recipeId, "First step", "Step 1");
       await addStep(recipeId, "Second step using first", "Step 2", [1]);
 
-      // Load step edit data
       const loaderData = await loadStepEdit(recipeId, step1Id);
       const actionResult = {
         errors: {
@@ -359,7 +357,6 @@ describe("E2E: Step Deletion Protection", () => {
       const recipeId = await createRecipe("No Error Test " + faker.string.alphanumeric(6));
       const step1Id = await addStep(recipeId, "First step", "Step 1");
 
-      // Load step edit data
       const loaderData = await loadStepEdit(recipeId, step1Id);
 
       // Render component without action data (no errors)
@@ -392,7 +389,6 @@ describe("E2E: Step Deletion Protection", () => {
       const recipeId = await createRecipe("Delete Success Test 1 " + faker.string.alphanumeric(6));
       const step1Id = await addStep(recipeId, "First step", "Step 1");
 
-      // Delete step 1
       const { status } = await deleteStep(recipeId, step1Id);
 
       // Should redirect on success
@@ -439,7 +435,6 @@ describe("E2E: Step Deletion Protection", () => {
     });
 
     it("should successfully delete independent step in multi-step recipe", async () => {
-      // Create recipe with three independent steps
       const recipeId = await createRecipe("Delete Independent Test " + faker.string.alphanumeric(6));
       await addStep(recipeId, "First step", "Step 1");
       const step2Id = await addStep(recipeId, "Second step", "Step 2");
@@ -548,7 +543,6 @@ describe("E2E: Step Deletion Protection", () => {
       const recipeId = await createRecipe("Cascade Ingredient Test " + faker.string.alphanumeric(6));
       const step1Id = await addStep(recipeId, "First step", "Step 1");
 
-      // Get the step to get its stepNum
       const step = await db.recipeStep.findUnique({ where: { id: step1Id } });
       expect(step).not.toBeNull();
 
@@ -575,7 +569,6 @@ describe("E2E: Step Deletion Protection", () => {
       });
       expect(ingredients).toHaveLength(1);
 
-      // Delete step 1
       const { status } = await deleteStep(recipeId, step1Id);
       expect(status).toBe(302);
 

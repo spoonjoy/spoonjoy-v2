@@ -178,7 +178,6 @@ export async function revokeConnectorGrantsByConnectionKeys(
   return result.count;
 }
 
-/** OAuth 2.1 error, carrying an RFC 6749 error code for the wire response. */
 /**
  * Why a refresh was refused. `OAuthErrorReason` is for clients that act on it:
  * `revoked_by_user` means the chef ended this session on purpose (sign out everywhere, a password
@@ -190,6 +189,7 @@ export async function revokeConnectorGrantsByConnectionKeys(
 export type OAuthErrorReason = "revoked_by_user";
 export type OAuthRefreshRefusal = "grace_replay" | "reuse_revoked" | "expired";
 
+/** OAuth 2.1 error, carrying an RFC 6749 error code for the wire response. */
 export class OAuthError extends Error {
   code: string;
   status: number;

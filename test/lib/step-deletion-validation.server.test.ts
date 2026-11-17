@@ -14,13 +14,11 @@ describe("validateStepDeletion", () => {
     db = await getLocalDb();
     await cleanupDatabase();
 
-    // Create test user
     const user = await db.user.create({
       data: createTestUser(),
     });
     testUserId = user.id;
 
-    // Create test recipe
     const recipe = await db.recipe.create({
       data: createTestRecipe(testUserId),
     });
@@ -88,7 +86,6 @@ describe("validateStepDeletion", () => {
   });
 
   it("should return error when step is used by one other step", async () => {
-    // Create two steps
     await db.recipeStep.createMany({
       data: [
         {
@@ -124,7 +121,6 @@ describe("validateStepDeletion", () => {
   });
 
   it("should return error listing multiple dependent steps in order", async () => {
-    // Create four steps
     await db.recipeStep.createMany({
       data: [
         {
@@ -172,7 +168,6 @@ describe("validateStepDeletion", () => {
   });
 
   it("should return error with two dependent steps using 'and' format", async () => {
-    // Create three steps
     await db.recipeStep.createMany({
       data: [
         {
@@ -213,7 +208,6 @@ describe("validateStepDeletion", () => {
   });
 
   it("should return valid for non-existent step", async () => {
-    // Create a step
     await db.recipeStep.create({
       data: {
         recipeId: testRecipeId,
@@ -236,7 +230,6 @@ describe("validateStepDeletion", () => {
   });
 
   it("should only consider dependents from the specified recipe", async () => {
-    // Create steps for the test recipe
     await db.recipeStep.createMany({
       data: [
         {
@@ -291,7 +284,6 @@ describe("validateStepDeletion", () => {
   });
 
   it("should handle step in the middle being used by later steps", async () => {
-    // Create three steps
     await db.recipeStep.createMany({
       data: [
         {
@@ -333,7 +325,6 @@ describe("validateStepDeletion", () => {
   });
 
   it("should return dependents in ascending order by step number", async () => {
-    // Create five steps
     await db.recipeStep.createMany({
       data: [
         {

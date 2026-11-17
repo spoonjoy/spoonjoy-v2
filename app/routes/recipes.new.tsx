@@ -159,7 +159,6 @@ export async function action({ request, context }: Route.ActionArgs) {
     errors.servings = servingsResult.error;
   }
 
-  // Validate image file if provided
   if (imageFile) {
     const imageError = await validateImageFileForStorage(imageFile, {
       allowedTypes: RECIPE_IMAGE_TYPES,

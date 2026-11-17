@@ -1883,10 +1883,6 @@ async function handleRecipeDetailIntent(
 }
 
 /**
- * Runs a recipe page write as one atomic D1 batch that first re-checks the recipe still
- * exists; if it was removed after the page's checks, nothing applies and the answer is 404.
- */
-/**
  * How a write on an existing recipe runs again after a transient D1 error. An idempotent write
  * (one that sets fixed values) names only its scope; one that creates a cover also names the
  * cover's id, chosen before the first try, and after an ambiguous failure the cover's presence
@@ -1902,6 +1898,10 @@ interface ExistingRecipeWriteRetry {
   committedWhen?: D1Query;
 }
 
+/**
+ * Runs a recipe page write as one atomic D1 batch that first re-checks the recipe still
+ * exists; if it was removed after the page's checks, nothing applies and the answer is 404.
+ */
 async function writeExistingRecipeOnD1(
   d1: D1ReadDatabase,
   recipeId: string,

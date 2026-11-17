@@ -275,7 +275,6 @@ describe("RecipeBuilder", () => {
         within(stepCard).getByLabelText(/instructions/i);
       await userEvent.type(instructionsTextarea, "Mix all ingredients");
 
-      // Save the step first
       await userEvent.click(
         within(stepCard).getByRole("button", { name: /save/i }),
       );
@@ -365,7 +364,6 @@ describe("RecipeBuilder", () => {
       // Type a title
       await userEvent.type(screen.getByLabelText(/title/i), "My Recipe");
 
-      // Save button should now be enabled
       const saveButton = screen.getByRole("button", { name: /create recipe/i });
       expect(saveButton).toBeEnabled();
     });
@@ -394,7 +392,6 @@ describe("RecipeBuilder", () => {
       // Type only whitespace
       await userEvent.type(screen.getByLabelText(/title/i), "   ");
 
-      // Get the save button
       const saveButton = screen.getByRole("button", { name: /create recipe/i });
 
       // Force a click
@@ -534,10 +531,8 @@ describe("RecipeBuilder", () => {
       expect(screen.getByLabelText(/description/i)).toBeDisabled();
       expect(screen.getByLabelText(/servings/i)).toBeDisabled();
 
-      // Add step button should be disabled
       expect(screen.getByRole("button", { name: /add step/i })).toBeDisabled();
 
-      // Save button should be disabled
       expect(
         screen.getByRole("button", { name: /create recipe/i }),
       ).toBeDisabled();
@@ -634,7 +629,6 @@ describe("RecipeBuilder", () => {
       // Initially shows prompt
       expect(screen.getByText(/add your first step/i)).toBeInTheDocument();
 
-      // Add a step
       await userEvent.click(screen.getByRole("button", { name: /add step/i }));
 
       // Prompt should be hidden
@@ -653,7 +647,6 @@ describe("RecipeBuilder", () => {
       // Type in title
       await userEvent.type(screen.getByLabelText(/title/i), "New Recipe");
 
-      // Add a step
       await userEvent.click(screen.getByRole("button", { name: /add step/i }));
 
       // onSave should not have been called yet
@@ -671,12 +664,10 @@ describe("RecipeBuilder", () => {
         within(firstStepCard).getByLabelText(/instructions/i);
       await userEvent.type(firstTextarea, "First step instructions");
 
-      // Save first step
       await userEvent.click(
         within(firstStepCard).getByRole("button", { name: /save/i }),
       );
 
-      // Add second step
       await userEvent.click(screen.getByRole("button", { name: /add step/i }));
 
       // First step should still have its content

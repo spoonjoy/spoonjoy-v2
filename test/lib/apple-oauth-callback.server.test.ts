@@ -502,7 +502,6 @@ describe("apple-oauth-callback.server", () => {
         });
         if (firstUserResult.userId) testUserIds.push(firstUserResult.userId);
 
-        // Create second user
         const secondUserData = createTestUser();
         const secondUser = await db.user.create({
           data: secondUserData,
@@ -627,7 +626,6 @@ describe("apple-oauth-callback.server", () => {
       });
 
       it("should handle case-insensitive email collision", async () => {
-        // Create existing user with email
         const testUserData = createTestUser();
         testUserData.email = "Test@Example.COM";
         const existingUser = await db.user.create({
@@ -674,7 +672,6 @@ describe("apple-oauth-callback.server", () => {
       });
 
       it("should return userId on successful login for session", async () => {
-        // Create user first
         const mockAppleUser = createMockAppleUser();
         const createResult = await handleAppleOAuthCallback({
           db,

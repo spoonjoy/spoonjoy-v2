@@ -598,7 +598,6 @@ describe("session.server", () => {
       // Set-Cookie format: "name=value; Path=/; HttpOnly; ..."
       const cookieValue = setCookieHeader.split(";")[0];
 
-      // Create headers object explicitly
       const headers = new Headers();
       headers.set("Cookie", cookieValue);
 
@@ -645,7 +644,6 @@ describe("session.server", () => {
       // Extract just the cookie value from the Set-Cookie header
       const cookieValue = setCookieHeader.split(";")[0];
 
-      // Create headers object explicitly
       const headers = new Headers();
       headers.set("Cookie", cookieValue);
 
@@ -759,7 +757,6 @@ describe("session.server", () => {
       // Extract just the cookie value from the Set-Cookie header
       const cookieValue = setCookieHeader.split(";")[0];
 
-      // Create headers object explicitly
       const headers = new Headers();
       headers.set("Cookie", cookieValue);
 

@@ -20,7 +20,6 @@ test.describe('Cookbook Flow', () => {
   test('clicking cookbook shows recipes in cookbook', async ({ page }) => {
     await page.goto('/cookbooks');
     
-    // Find a cookbook link
     const cookbookLink = page.locator('a[href^="/cookbooks/"]').first();
     
     // Should have clickable cookbook cards
