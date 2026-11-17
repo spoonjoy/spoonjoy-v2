@@ -42,7 +42,7 @@ const viewportClass =
 
 const popupClass =
   "relative isolate box-border flex max-h-full min-h-0 flex-col outline-none " +
-  "rounded-xl bg-(--ouro-bg) text-popover-foreground ring-1 ring-border/60 " +
+  "rounded-ouro-xl bg-(--ouro-bg) text-popover-foreground ring-1 ring-border/60 " +
   "[--ouro-bg:var(--popover)] [--ouro-bd:color-mix(in_oklab,var(--border)_60%,transparent)] [--ouro-sq-w:1px] " +
   "[--ouro-sq-r:calc(var(--radius)*var(--ouro-radius-scale,1)*1.4)] shadow-(--shadow-xl) " +
   "[transition:transform_var(--ouro-duration-slow)_var(--ouro-ease-out),opacity_var(--ouro-duration-slow)_var(--ouro-ease-out)] " +

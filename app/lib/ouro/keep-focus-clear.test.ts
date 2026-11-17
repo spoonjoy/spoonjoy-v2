@@ -137,6 +137,25 @@ const stateOf = (bar: HTMLElement) => ({
 const padding = () => document.documentElement.style.scrollPaddingBottom;
 const movedTop = (bar: HTMLElement) => bar.style.getPropertyValue("--ouro-toaster-moved-top");
 
+/**
+ * A control `top` px down a page tall enough to scroll (`TOP` once `scroller`, the window or a scroll container filling it,
+ * is scrolled to its start), with the scroller scrolled 1000px down, so a control at `TOP` is above the window.
+ */
+function scrolledAway(name: string, scroller: "the window" | "a scroll container", top = TOP.top): { node: HTMLElement; scrollBack: () => void } {
+  const box = scroller === "the window" ? document.body : fixed(document.createElement("div"), "position: absolute; inset: 0; overflow: auto;");
+  const spacer = document.createElement("div");
+  spacer.style.height = "4000px";
+  const node = document.createElement("button");
+  node.dataset.case = name;
+  node.textContent = name;
+  node.style.cssText = `position: absolute; left: ${TOP.left}px; top: ${top}px; width: ${TOP.width}px; height: ${TOP.height}px;`;
+  box.append(spacer, node);
+  added.push(spacer, node);
+  const target = scroller === "the window" ? window : box;
+  target.scrollTo(0, 1000);
+  return { node, scrollBack: () => target.scrollTo(0, 0) };
+}
+
 describe("keepFocusClear", () => {
   describe("where the stack goes", () => {
     it("leaves the stack at the bottom for a control no part of it covers, however long it rests", async () => {
@@ -395,6 +414,168 @@ describe("keepFocusClear", () => {
       advance(FADE_MS);
       await frames();
       expect(stateOf(bar).moved).toBeNull();
+    });
+  });
+
+  describe("a scroll that brings focus into view late", () => {
+    /** Moves the stack to the top for a covered control, then puts focus on a control above the window, unscrolled, and lets the frame that looks at it pass. */
+    async function focusBeforeTheScroll(scroller: "the window" | "a scroll container") {
+      const bar = setup();
+      control("covered", COVERED);
+      const late = scrolledAway("late", scroller);
+      await tab("covered");
+      advance(FADE_MS);
+      await frames();
+      expect(stateOf(bar).moved).toBe("top");
+      // The browser's scroll to the focused control comes after the frame that looks at it, as WebKit's sometimes does.
+      late.node.focus({ preventScroll: true });
+      await frames();
+      expect(stateOf(bar)).toEqual({ moved: "top", collapsed: false, fading: false, edge: "top" });
+      return { bar, node: late.node, scrollBack: late.scrollBack };
+    }
+
+    it.each(["the window", "a scroll container"] as const)("looks again once the browser's scroll in %s has stopped, and moves the stack off the control it brought under it", async (scroller) => {
+      const { bar, scrollBack } = await focusBeforeTheScroll(scroller);
+      scrollBack();
+      await frames(3);
+      expect(stateOf(bar).fading).toBe(true);
+      advance(FADE_MS);
+      expect(stateOf(bar).moved).toBeNull();
+    });
+
+    it("leaves a scroll that starts after the browser's turn, three frames from the focus change, to the person: the stack stays", async () => {
+      const { bar, scrollBack } = await focusBeforeTheScroll("the window");
+      // Its scroll would start on the fourth frame: a focus change that needed none, then a scroll the page hears no key or wheel for.
+      await frame();
+      scrollBack();
+      await frames(3);
+      expect(stateOf(bar)).toEqual({ moved: "top", collapsed: false, fading: false, edge: "top" });
+    });
+
+    it("gives each focus change its own turn: an earlier one's does not cut the next one's short", async () => {
+      const bar = setup();
+      control("covered", COVERED);
+      control("middle", MIDDLE);
+      const late = scrolledAway("late", "the window");
+      await tab("covered");
+      advance(FADE_MS);
+      caseOf("middle").focus();
+      await frames();
+      // Two frames into the middle control's turn, focus moves on; the scroll for it starts on its own third frame.
+      late.node.focus({ preventScroll: true });
+      await frames();
+      late.scrollBack();
+      await frames(3);
+      expect(stateOf(bar).fading).toBe(true);
+    });
+
+    it("gives a focus change its own turn while an earlier control's scroll is still being waited out", async () => {
+      const bar = setup();
+      control("covered", COVERED);
+      control("middle", MIDDLE);
+      const late = scrolledAway("late", "the window");
+      await tab("covered");
+      advance(FADE_MS);
+      caseOf("middle").focus();
+      // A scroll for the middle control, and focus moves on before it has been waited out.
+      scrollTo(0, 900);
+      await frame();
+      late.node.focus({ preventScroll: true });
+      await frames();
+      late.scrollBack();
+      await frames(3);
+      expect(stateOf(bar).fading).toBe(true);
+    });
+
+    it("waits for a scroll that lasts several frames to stop before it looks", async () => {
+      const { bar } = await focusBeforeTheScroll("the window");
+      // Over the control from the second frame on, the stack must not decide until the scroll has stopped.
+      scrollTo(0, 500);
+      await frame();
+      scrollTo(0, 0);
+      await frame();
+      scrollTo(0, 1);
+      await frame();
+      expect(stateOf(bar).fading).toBe(false);
+      await frames(2);
+      expect(stateOf(bar).fading).toBe(true);
+    });
+
+    it.each([
+      ["a key press", () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "PageUp" }))],
+      ["the wheel", () => document.dispatchEvent(new WheelEvent("wheel", { deltaY: -1000 }))],
+      [
+        "the wheel over a part of the page that keeps it to itself",
+        (node: HTMLElement) => {
+          node.addEventListener("wheel", (event) => event.stopPropagation());
+          node.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1000 }));
+        },
+      ],
+    ] as const)("leaves a scroll after %s to the person: the stack stays", async (_, press) => {
+      const { bar, node, scrollBack } = await focusBeforeTheScroll("the window");
+      press(node);
+      scrollBack();
+      await frames(3);
+      expect(stateOf(bar)).toEqual({ moved: "top", collapsed: false, fading: false, edge: "top" });
+    });
+
+    it("looks again for the first scroll after a focus change only: a later one is the person's", async () => {
+      const bar = setup();
+      // 790px down the window once the page is scrolled 2000px: under the bottom stack.
+      const low = scrolledAway("low", "the window", 2790);
+      // The page's own scroll lands before focus moves, so it is no part of the focus's turn.
+      await frames();
+      low.node.focus({ preventScroll: true });
+      await frames();
+      // The browser's scroll stops short of the stack, and the stack stays.
+      scrollTo(0, 1500);
+      await frames(3);
+      expect(stateOf(bar).fading).toBe(false);
+      // A scroll after it, with no key or wheel the page hears, as a screen reader's or the scrollbar's: the stack stays too.
+      scrollTo(0, 2000);
+      await frames(3);
+      expect(stateOf(bar)).toEqual({ moved: null, collapsed: false, fading: false, edge: "bottom" });
+    });
+
+    it("leaves a scroll before any focus change to the person, as when the stack first shows", async () => {
+      // 790px down the window once the page is scrolled 2000px: under the bottom stack. Focus is on it before the stack shows.
+      const low = scrolledAway("low", "the window", 2790);
+      low.node.focus({ preventScroll: true });
+      const bar = stage();
+      handle = keepFocusClear(bar);
+      await frames();
+      scrollTo(0, 2000);
+      await frames(3);
+      expect(stateOf(bar)).toEqual({ moved: null, collapsed: false, fading: false, edge: "bottom" });
+    });
+
+    /** Puts focus on a control that a scroll of the page to 2000px brings under the bottom stack, within the browser's turn. */
+    async function focusLow() {
+      const bar = setup();
+      // 790px down the window once the page is scrolled 2000px: under the bottom stack.
+      const low = scrolledAway("low", "the window", 2790);
+      // The page's own scroll lands before focus moves, so it is no part of the focus's turn.
+      await frames();
+      low.node.focus({ preventScroll: true });
+      await frame();
+      return bar;
+    }
+
+    it("does not look after it is released for a scroll that had started", async () => {
+      const bar = await focusLow();
+      scrollTo(0, 2000);
+      await frame();
+      handle!.release();
+      await frames(3);
+      expect(stateOf(bar)).toEqual({ moved: null, collapsed: false, fading: false, edge: "bottom" });
+    });
+
+    it("does not look after it is released for a scroll that starts after", async () => {
+      const bar = await focusLow();
+      handle!.release();
+      scrollTo(0, 2000);
+      await frames(3);
+      expect(stateOf(bar)).toEqual({ moved: null, collapsed: false, fading: false, edge: "bottom" });
     });
   });
 

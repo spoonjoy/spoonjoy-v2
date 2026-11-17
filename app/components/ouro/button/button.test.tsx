@@ -85,6 +85,38 @@ describe("button branch", () => {
     expect(button.textContent).toBe("Go");
   });
 
+  // An app's theme may change the medium weight and the radius, on the root or on its buttons alone, and may give its
+  // controls their own radius (--ouro-control-radius, which falls back to Ouro's lg step), so compare with a probe
+  // inside the button that wears the same steps.
+  function expectThemeLook(button: HTMLElement) {
+    const style = getComputedStyle(button);
+    expect(style.whiteSpace).toBe("nowrap");
+    expect(style.borderTopStyle).toBe("solid");
+    expect(style.borderTopWidth).toBe("1px");
+    const step = button.appendChild(document.createElement("div"));
+    mounted.push(step);
+    step.className = "absolute font-medium";
+    step.style.borderRadius = "calc(var(--ouro-control-radius, var(--radius)) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1))";
+    expect(style.fontWeight).toBe(getComputedStyle(step).fontWeight);
+    expect(style.borderTopLeftRadius).toBe(getComputedStyle(step).borderTopLeftRadius);
+  }
+
+  it("is a medium-weight label on one line, in a 1px solid border, rounded on Ouro's lg step", async () => {
+    const { button } = await render(<Button>Save the draft</Button>);
+    expectThemeLook(button);
+  });
+
+  it("takes the weight and radius an app sets on its buttons alone", async () => {
+    const { button } = await render(<Button>Save the draft</Button>);
+    const root = getComputedStyle(button).borderTopLeftRadius;
+    const scoped = document.head.appendChild(document.createElement("style"));
+    mounted.push(scoped);
+    scoped.textContent = '[data-ouro="button"] { --font-weight-medium: 600; --radius: 0.125rem; --ouro-control-radius: 0.125rem; }';
+    expect(getComputedStyle(button).fontWeight).toBe("600");
+    expect(getComputedStyle(button).borderTopLeftRadius).not.toBe(root);
+    expectThemeLook(button);
+  });
+
   it("names its variant in data-variant, on buttons and links, so groups can style by look", async () => {
     const { host } = await render(
       <>
@@ -688,6 +720,62 @@ describe("icon-only size", () => {
     const icon = iconOnly!.querySelector("svg")!.getBoundingClientRect();
     expect(icon.width).toBeGreaterThan(0);
     expect(icon.width).toBe(withStart!.querySelector("svg")!.getBoundingClientRect().width);
+  });
+
+  it.each([
+    ["md", "md"],
+    ["sm", "sm"],
+    ["lg", "lg"],
+  ] as const)("is as wide as it is tall at size %s, with only an icon and a name", async (_, size) => {
+    const { host } = await render(
+      <>
+        <Button aria-label="Add" size={size}>
+          <Star />
+        </Button>
+        <Button href="/add" aria-labelledby="add-label" size={size}>
+          <Star />
+        </Button>
+        <span id="add-label">Add</span>
+      </>,
+    );
+    for (const button of host.querySelectorAll<HTMLElement>('[data-ouro="button"]')) {
+      const box = button.getBoundingClientRect();
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.width).toBe(box.height);
+    }
+  });
+
+  it("keeps a label's padding where the icon has text beside it, a start icon, no name, or the inline size", async () => {
+    const { host } = await render(
+      <>
+        <Button aria-label="Add">
+          <Star />
+        </Button>
+        <Button aria-label="Add">
+          <Star /> Add
+        </Button>
+        <Button aria-label="Add">
+          <>
+            <Star />
+          </>
+        </Button>
+        <Button aria-label="Add" startIcon={Star}>
+          <Star />
+        </Button>
+        <Button aria-label="Add" endIcon={Star}>
+          <Star />
+        </Button>
+        <Button>
+          <Star />
+        </Button>
+        <Button aria-label="Add" size="inline">
+          <Star />
+        </Button>
+      </>,
+    );
+    const [square, ...rest] = [...host.querySelectorAll<HTMLElement>('[data-ouro="button"]')];
+    expect(getComputedStyle(square!).paddingInlineStart).toBe("0px");
+    for (const button of rest) expect(getComputedStyle(button).paddingInlineStart).not.toBe("0px");
   });
 
   it("keeps the size an icon sets for itself", async () => {

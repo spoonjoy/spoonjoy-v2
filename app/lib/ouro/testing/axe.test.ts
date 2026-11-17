@@ -641,4 +641,46 @@ describe("audit", () => {
     Object.assign(document.querySelector<HTMLElement>('[role="dialog"]')!.style, { left: `${box.right + 2}px`, top: `${box.top}px` });
     expect(await measureTextContrast(text, 4.5)).toEqual({ pass: true });
   });
+
+  // A page held still where it is, as a popup's scroll lock can hold it: its body is fixed, so
+  // nothing scrolls the text below the fold onto the screen. Returns the way back.
+  function holdStill(): () => void {
+    const { style } = document.body;
+    const saved = { position: style.position, top: style.top, width: style.width };
+    Object.assign(style, { position: "fixed", top: "0px", width: "100%" });
+    return () => Object.assign(style, saved);
+  }
+
+  it("fails text below the fold that a page held still cannot scroll onto the screen, rather than passing it against the pixels there", async () => {
+    const size = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    mountPage(
+      '<div style="height:900px"></div><p id="low" style="margin:0;padding:8px;color:#767676;background:linear-gradient(90deg,#fff,#eee);font-size:16px;line-height:24px">Axis label</p><div style="height:400px"></div>',
+    );
+    const release = holdStill();
+    try {
+      // The text is 4.39:1 against its worst pixel where it shows, so a pass would be the pixels beside it.
+      expect(await measureTextContrast(document.querySelector("#low")!, 4.5)).toEqual({ pass: false, reason: "axe left its contrast undecided, and its text is off the screen" });
+    } finally {
+      release();
+      await page.viewport(size.width, size.height);
+    }
+  });
+
+  it("measures text on the screen under a page held still as it shows", async () => {
+    const size = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    mountPage(
+      '<p id="faint" style="margin:0;padding:8px;color:#767676;background:linear-gradient(90deg,#fff,#eee);font-size:16px;line-height:24px">Axis label</p>' +
+        '<p id="dark" style="margin:0;padding:8px;color:#111;background:linear-gradient(90deg,#fff,#eee);font-size:16px;line-height:24px">Dark label</p><div style="height:1200px"></div>',
+    );
+    const release = holdStill();
+    try {
+      expect(await measureTextContrast(document.querySelector("#faint")!, 4.5)).toEqual({ pass: false, reason: expect.stringMatching(/^measured 4\.\d\d:1 against the worst pixel behind its text, needs 4\.5:1$/) });
+      expect(await measureTextContrast(document.querySelector("#dark")!, 4.5)).toEqual({ pass: true });
+    } finally {
+      release();
+      await page.viewport(size.width, size.height);
+    }
+  });
 });

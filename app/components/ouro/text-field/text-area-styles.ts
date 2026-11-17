@@ -34,7 +34,7 @@ export type { HighlightEdit, HighlightRun };
  * @internal
  */
 const textAreaClass =
-  "m-0 box-border block w-full min-w-0 rounded-md text-foreground " +
+  "m-0 box-border block w-full min-w-0 rounded-ouro-md text-foreground " +
   "font-[inherit] placeholder:text-muted-foreground " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "disabled:cursor-not-allowed disabled:opacity-50";

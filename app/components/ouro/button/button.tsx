@@ -1,7 +1,7 @@
 "use client";
 
 import { Button as BaseButton } from "@base-ui/react/button";
-import { useEffect, useRef } from "react";
+import { Fragment, isValidElement, useEffect, useRef } from "react";
 import type {
   AnchorHTMLAttributes,
   ButtonHTMLAttributes,
@@ -77,8 +77,10 @@ export interface ButtonBaseProps {
    * such as Undo in a note: it takes the text's size, leaves the line's height as it was and
    * keeps a target at least 24px tall and wide (44px on a coarse pointer). shadcn's `default`
    * is `md`; for an icon-only button, pass the icon as children and an `aria-label`: Button sizes
-   * the icon as it sizes `startIcon`, unless the icon has a size class of its own. Any other
+   * the icon as it sizes `startIcon`, unless the icon has a size class of its own, and makes the
+   * button as wide as it is tall (a circle where the theme's controls are capsules). Any other
    * string is a type error whose message names the fix. @default "md"
+   * @claim "as wide as it is tall" registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::icon-only size > is as wide as it is tall at size %s, with only an icon and a name)
    * @claim "are taller on phones" registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::appearance > orders sizes sm < md < lg)
    * @claim "are taller on phones" registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::className > lets the app's height and padding win at desktop widths too)
    * @claim "it takes the text's size" registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::inline size > sits in a line of text at the text's size without moving the line, and keeps a 24px target)
@@ -212,7 +214,7 @@ export type ButtonProps = ButtonLinkProps | ButtonButtonProps;
 // Class strings are literal so the app's Tailwind finds them when it compiles.
 const base =
   "press relative box-border inline-flex shrink-0 items-center justify-center align-middle " +
-  "rounded-lg border border-solid font-medium whitespace-nowrap " +
+  "rounded-ouro-control border border-solid font-medium whitespace-nowrap " +
   "no-underline select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   // A state layer in the text color: a light wash on hover, a deeper one while pressed.
@@ -220,7 +222,7 @@ const base =
   "before:opacity-0 before:transition-opacity before:duration-(--ouro-duration-fast) before:ease-[ease] " +
   "not-data-disabled:not-active:pointer-fine:hover:before:opacity-8 not-data-disabled:active:before:opacity-14 " +
   // Where corner-shape is missing, the surface slot paints the background, border and state layer instead (see ouro-base.css).
-  "bg-(--ouro-bg) border-(--ouro-bd) [--ouro-sq-w:1px] [--ouro-sq-r:calc(var(--radius)*var(--ouro-radius-scale,1))] " +
+  "bg-(--ouro-bg) border-(--ouro-bd) [--ouro-sq-w:1px] " +
   // Stryker disable next-line StringLiteral: a class string in a class position, which no test reads
   "not-data-disabled:not-active:pointer-fine:hover:[--ouro-state:0.08] not-data-disabled:active:[--ouro-state:0.14] " +
   // Press feedback: scale only when motion is allowed and the button is enabled.
@@ -243,7 +245,7 @@ const sizes = {
     "sm:[--ouro-button-h:calc(var(--spacing)*11)]",
   // In a line of text, at the text's own size: the padding takes the box to 24px and more, and the
   // negative margin gives that back, so the line keeps its height and the label sits on its baseline.
-  inline: "h-auto min-w-6 px-1 py-[3px] -my-1 gap-1 rounded-md align-baseline text-[length:inherit] leading-[inherit]",
+  inline: "h-auto min-w-6 px-1 py-[3px] -my-1 gap-1 rounded-ouro-md align-baseline text-[length:inherit] leading-[inherit]",
 } as const;
 
 // `soft` is the tone at low opacity behind text in the tone, the pattern shadcn uses for
@@ -490,7 +492,17 @@ export function Button(props: ButtonProps): JSX.Element {
   }, [pressable]);
 
   const buttonRef = useMergedRef((rest as { ref?: Ref<HTMLElement> }).ref, own);
-  const classes = cn(base, iconChildClass, sizes[size], looks[variant][tone], fullWidth && "w-full", className);
+  // An icon-only button (one element as its whole label, named by aria-label or aria-labelledby) is as wide as it is
+  // tall, as shadcn's icon size is, so a theme whose controls are capsules draws it as a circle.
+  const named = rest as { "aria-label"?: string; "aria-labelledby"?: string };
+  const iconOnly =
+    size !== "inline" &&
+    !StartIcon &&
+    !EndIcon &&
+    isValidElement(children) &&
+    children.type !== Fragment &&
+    Boolean(named["aria-label"] || named["aria-labelledby"]);
+  const classes = cn(base, iconChildClass, sizes[size], iconOnly && "w-(--ouro-button-h) px-0", looks[variant][tone], fullWidth && "w-full", className);
 
   // The touch target comes first and the label is positioned, so the label paints above
   // the target: the target still enlarges the hit area, and nothing covers the text

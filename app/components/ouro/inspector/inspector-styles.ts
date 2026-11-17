@@ -97,7 +97,7 @@ const frameClass =
  * @claim "where it covers no text and" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > leaves every line of the page's text as readable as it was, in light and dark: outlines step around text, and tags sit clear of text and of each other)
  */
 const tagClass =
-  "pointer-events-auto absolute top-0 left-0 z-1 inline-flex max-w-48 items-center truncate rounded-sm px-1.5 " +
+  "pointer-events-auto absolute top-0 left-0 z-1 inline-flex max-w-48 items-center truncate rounded-ouro-sm px-1.5 " +
   "font-mono text-[11px] leading-4 font-medium text-primary-foreground no-underline bg-primary " +
   "data-covered:invisible data-crowded:invisible " +
   "outline-ring outline-offset-1 focus-visible:outline-2 focus-visible:outline-solid pointer-fine:hover:underline";
@@ -113,7 +113,7 @@ const tagClass =
 const pillClass =
   "pointer-events-auto in-data-modal:invisible fixed inset-x-0 mx-auto flex w-fit max-w-[calc(100%-2rem)] flex-wrap items-center gap-1 " +
   "bottom-[max(1rem,env(safe-area-inset-bottom),var(--ouro-inspector-bottom,0px),var(--ouro-inspector-tab-bar,0px))] " +
-  "rounded-3xl bg-popover p-1 ps-4 text-sm leading-5 text-popover-foreground shadow-(--shadow-lg) ring-1 ring-border/60";
+  "rounded-ouro-3xl bg-popover p-1 ps-4 text-sm leading-5 text-popover-foreground shadow-(--shadow-lg) ring-1 ring-border/60";
 
 /** X-ray's label, on one line. @internal */
 const labelClass = "shrink-0 py-1.5 font-medium whitespace-nowrap";
@@ -134,5 +134,5 @@ const listClass = "m-0 grid list-none gap-1 p-0";
 
 /** A Docs or Source link in the list. @internal */
 const linkClass =
-  "rounded-sm px-1 text-sm leading-5 font-medium text-foreground underline underline-offset-4 " +
+  "rounded-ouro-sm px-1 text-sm leading-5 font-medium text-foreground underline underline-offset-4 " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";

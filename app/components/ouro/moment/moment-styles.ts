@@ -1,4 +1,5 @@
 export {
+  artArriveClass,
   artFrameClass,
   dismissedKey,
   dismissPeriods,
@@ -186,6 +187,15 @@ const artFrameClass = {
   hero: "relative flex h-(--ouro-moment-art) max-w-full shrink-0 items-center justify-center [--ouro-moment-art:13.75rem] @max-[21rem]/moment:[--ouro-moment-art:6rem]",
   inline: "relative flex size-(--ouro-moment-art) shrink-0 items-center justify-center [--ouro-moment-art:1.5rem]",
 } as const;
+
+/**
+ * The art's arrival, a keyframe animation from ouro-base.css. It is gated on the motion-safe query,
+ * so with reduced motion the art is simply there.
+ *
+ * @internal
+ * @claim "The art's arrival, a keyframe animation" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment arrival > arrives once when the moment first shows, from the declared keyframes over the sheet duration and easing)
+ */
+const artArriveClass = "motion-safe:[animation:ouro-moment-arrive_var(--ouro-duration-sheet)_var(--ouro-ease-out)]";
 
 /**
  * The soft disc that swells out from behind the art when a moment celebrates; with reduced

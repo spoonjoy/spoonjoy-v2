@@ -280,7 +280,8 @@ describe("Moment sizes", () => {
     for (const [props, width, px] of cases) {
       const { frame, art } = await render(<Moment art={<Art />} title="Nothing here" {...props} />, width);
       expect(frame!.getBoundingClientRect().height).toBe(px);
-      expect(art!.querySelector("svg")!.getBoundingClientRect().height).toBe(px);
+      // The art's computed height, which its arrival's scale (0.96 while it runs) does not change.
+      expect(getComputedStyle(art!.querySelector("svg")!).height).toBe(`${px}px`);
     }
   });
 
@@ -291,7 +292,7 @@ describe("Moment sizes", () => {
     ] as const) {
       const { moment, frame, art } = await render(<Moment size="hero" art={<Art />} title="Pick a conversation" />, width);
       expect(frame!.getBoundingClientRect().height).toBe(px);
-      expect(art!.querySelector("svg")!.getBoundingClientRect().height).toBe(px);
+      expect(getComputedStyle(art!.querySelector("svg")!).height).toBe(`${px}px`);
       expect(getComputedStyle(moment!).flexDirection).toBe("column");
     }
     // Quiet wins over hero: a quiet hero moment is words only, with no art.
@@ -517,6 +518,104 @@ describe("Moment motion", () => {
     expect(host.querySelector("[data-ouro-moment-frame]")).toBeNull();
     await act(async () => root.render(<Moment kind="loading" title="Art now" art={<Art />} />));
     await expect.poll(() => host.querySelector<SVGSVGElement>("[data-ouro-moment-art] svg")!.animationsPaused()).toBe(true);
+  });
+});
+
+describe("Moment arrival", () => {
+  const artOf = (host: Element) => host.querySelector<HTMLElement>("[data-ouro-moment-art]")!;
+  const arrivals = (element: Element) => element.getAnimations().filter((animation): animation is CSSAnimation => animation instanceof CSSAnimation && animation.animationName === "ouro-moment-arrive");
+  const easingToken = () => getComputedStyle(document.documentElement).getPropertyValue("--ouro-ease-out").replace(/\s+/g, "");
+
+  beforeEach(() => {
+    for (const key of Object.keys(sessionStorage)) if (key.startsWith("ouro-moment:")) sessionStorage.removeItem(key);
+  });
+
+  it("arrives once when the moment first shows, from the declared keyframes over the sheet duration and easing", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    const { host } = await render(<Moment kind="empty" title="Nothing yet" art={<Art />} />);
+    const [arrival] = arrivals(artOf(host));
+    expect(arrival, "the art runs the arrival").toBeDefined();
+    const [start, end] = (arrival!.effect as KeyframeEffect).getKeyframes();
+    expect(start).toMatchObject({ opacity: "0" });
+    expect(String(start?.transform)).toMatch(/translateY\(10px\)/);
+    expect(String(start?.transform)).toMatch(/scale\(0\.96\)/);
+    expect(end).toMatchObject({ opacity: "1" });
+    expect(arrival!.effect!.getComputedTiming().duration).toBe(token("--ouro-duration-sheet"));
+    // A CSS animation's easing belongs to each keyframe; the effect's own reads linear.
+    expect(String(start?.easing).replace(/\s+/g, "")).toBe(easingToken());
+    expect(getComputedStyle(artOf(host)).animationTimingFunction.replace(/\s+/g, "")).toBe(easingToken());
+    await expect.poll(() => arrival!.playState).toBe("finished");
+  });
+
+  it("does not play again when the same moment re-renders", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    const { host, root } = await render(<Moment kind="loading" title="Working" art={<Art />} />);
+    const [first] = arrivals(artOf(host));
+    await act(async () => root.render(<Moment kind="loading" title="Still working" description="Almost there" art={<Art id="again" />} />));
+    expect(arrivals(artOf(host)).filter((animation) => animation !== first)).toEqual([]);
+    await expect.poll(() => first!.playState).toBe("finished");
+    await act(async () => root.render(<Moment kind="loading" title="Nearly done" art={<Art id="later" />} />));
+    // WebKit can still list the finished arrival for a frame; none may run again.
+    expect(arrivals(artOf(host)).filter((animation) => animation.playState !== "finished")).toEqual([]);
+  });
+
+  it("arrives again when its kind changes or it remounts, but a moment with a key arrives once a session", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    const { host, root } = await render(<Moment kind="loading" title="Working" art={<Art />} />);
+    expect(arrivals(artOf(host))).toHaveLength(1);
+    await act(async () => root.render(<Moment kind="error" title="Failed" art={<Art />} />));
+    expect(arrivals(artOf(host))).toHaveLength(1);
+    const unkeyed = await render(<Moment title="Keyless" art={<Art />} />);
+    expect(arrivals(artOf(unkeyed.host))).toHaveLength(1);
+    const keyed = await render(<Moment id="arrival-once" title="Welcome" art={<Art />} />);
+    expect(arrivals(artOf(keyed.host))).toHaveLength(1);
+    await act(async () => keyed.root.unmount());
+    const back = await render(<Moment id="arrival-once" title="Welcome" art={<Art />} />);
+    expect(arrivals(artOf(back.host))).toEqual([]);
+    await act(async () => back.root.render(<Moment id="arrival-once" kind="success" title="Done" art={<Art />} />));
+    expect(arrivals(artOf(back.host))).toHaveLength(1);
+  });
+
+  it("has no arrival under reduced motion, or under OuroProvider's reduced motion", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    expect(arrivals(artOf((await render(<Moment kind="empty" title="Moving" art={<Art />} />)).host))).toHaveLength(1);
+    await commands.emulateMedia({ reducedMotion: "reduce" });
+    const device = await render(<Moment kind="empty" title="Still" art={<Art />} />);
+    expect(getComputedStyle(artOf(device.host)).animationName).toBe("none");
+    expect(artOf(device.host).getAnimations()).toEqual([]);
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    const provided = await render(
+      <OuroProvider motion="reduced">
+        <Moment kind="empty" title="Held" art={<Art />} />
+      </OuroProvider>,
+    );
+    expect(getComputedStyle(artOf(provided.host)).animationDuration).toBe("0s");
+    await expect.poll(() => artOf(provided.host).getAnimations().every((animation) => animation.playState === "finished")).toBe(true);
+  });
+
+  it("keeps Celebrate's flourish playing after the arrival, which does not cancel it", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    const { moment, host, root } = await render(<Moment kind="loading" title="Sending" art={<Art />} />);
+    const opened = attributeAdded(moment!, "data-open");
+    await act(async () => root.render(<Moment kind="success" title="All caught up" art={<Art />} />));
+    const [arrival] = arrivals(artOf(host));
+    expect(arrival, "the art runs the arrival").toBeDefined();
+    await opened;
+    const halo = host.querySelector<HTMLElement>('[data-ouro-part="halo"]')!;
+    const flourishing = halo.getAnimations();
+    expect(flourishing.length, "the halo's flourish runs").toBeGreaterThan(0);
+    await expect.poll(() => flourishing.every((animation) => animation.playState === "finished")).toBe(true);
+    await expect(arrival!.finished, "the arrival finishes, not cancelled").resolves.toBeDefined();
+  });
+  it("keeps a keyed arrival running through a re-render of the same kind", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    const { host, root } = await render(<Moment id="keeps-running" kind="loading" title="Working" art={<Art />} />);
+    await act(async () => root.render(<Moment id="keeps-running" kind="error" title="Failed" art={<Art />} />));
+    const [arrival] = arrivals(artOf(host));
+    expect(arrival, "the new kind arrives").toBeDefined();
+    await act(async () => root.render(<Moment id="keeps-running" kind="error" title="Failed again" art={<Art id="again" />} />));
+    // A re-render of the same moment must not finish its arrival: a finished one has run its whole duration.
+    expect(arrival!.currentTime, "the arrival is still running").toBeLessThan(token("--ouro-duration-sheet") / 2);
   });
 });
 

@@ -36,7 +36,7 @@ describe("radiusFor", () => {
   it.each([
     ["rounded-none", "0px"],
     ["rounded-full", "999px"],
-    ["rounded-lg", "0.75rem"],
+    ["rounded-ouro-lg", "0.75rem"],
     ["rounded", "0.75rem"],
   ])("maps %s to a %s theme radius", (token, value) =>
     expect(radiusFor(token)).toBe(`:root { --radius: ${value} }`),

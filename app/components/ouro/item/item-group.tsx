@@ -49,12 +49,16 @@ export interface ItemGroupOwnProps {
 export type ItemGroupProps = Omit<HTMLAttributes<HTMLDivElement>, keyof ItemGroupOwnProps> & ItemGroupOwnProps;
 
 // The group sets its Items' frame: no outline of their own, and padding in an outlined group.
+// A row a person chooses keeps its padding and corners in a divided or plain group, so its selected colour has room.
+const choosable = "[&_[data-ouro=item][data-choosable]]:rounded-ouro-lg [&_[data-ouro=item][data-choosable]]:px-3";
 const variants = {
-  divided: "[&>li:not(:last-child)]:border-b [&>li]:border-border [&_[data-ouro=item]]:rounded-none [&_[data-ouro=item]]:border-0 [&_[data-ouro=item]]:px-0",
+  divided:
+    "[&>li:not(:last-child)]:border-b [&>li]:border-border [&_[data-ouro=item]]:rounded-none [&_[data-ouro=item]]:border-0 [&_[data-ouro=item]]:px-0 " +
+    choosable,
   outline:
-    "rounded-xl border border-border bg-card text-card-foreground overflow-hidden [&>li:not(:last-child)]:border-b [&>li]:border-border " +
+    "rounded-ouro-xl border border-border bg-card text-card-foreground overflow-hidden [&>li:not(:last-child)]:border-b [&>li]:border-border " +
     "[&_[data-ouro=item]]:rounded-none [&_[data-ouro=item]]:border-0 [&_[data-ouro=item]]:px-4",
-  plain: "[&_[data-ouro=item]]:rounded-none [&_[data-ouro=item]]:border-0 [&_[data-ouro=item]]:px-0",
+  plain: `[&_[data-ouro=item]]:rounded-none [&_[data-ouro=item]]:border-0 [&_[data-ouro=item]]:px-0 ${choosable}`,
 } as const;
 
 /**
@@ -116,9 +120,10 @@ export function ItemGroup(props: ItemGroupProps): JSX.Element {
   const { "aria-label": ariaLabel, "aria-labelledby": ariaLabelledBy, ...wrapper } = rest;
   const List = ordered ? "ol" : "ul";
   return (
-    <div {...wrapper} data-ouro="item-group" className={cn("flex min-w-0 flex-col gap-2", className)}>
+    <div {...wrapper} data-ouro="item-group" className={cn("group/item-group flex min-w-0 flex-col gap-2", className)}>
       {label && (
-        <div id={labelId} className="text-sm font-medium text-muted-foreground">
+        // Lined up with the rows' text when they keep padding to show a selected row.
+        <div id={labelId} className={cn("text-sm font-medium text-muted-foreground", variant !== "outline" && "group-has-[[data-choosable]]/item-group:px-3")}>
           {label}
         </div>
       )}

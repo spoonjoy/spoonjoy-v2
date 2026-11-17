@@ -133,6 +133,39 @@ describe("automatic presentation", () => {
     }
   });
 
+  it("gives the page behind back to assistive technology when it closes, by Escape or Close: nothing left inert, hidden or guarded", async () => {
+    const outside = document.createElement("button");
+    outside.textContent = "Behind";
+    document.body.append(outside);
+    // What a closed dialog may not leave on the page (ourostack/ouro-ui#1812): a screen reader would skip what it marks.
+    const leftovers = () => ({
+      inert: document.querySelectorAll("[inert]").length,
+      hidden: document.querySelectorAll('[aria-hidden="true"]:not(svg, svg *)').length,
+      guards: document.querySelectorAll("[data-base-ui-focus-guard]").length,
+    });
+    try {
+      for (const close of ["Escape", "Close"]) {
+        await render(
+          <Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>
+            <input aria-label="Name" />
+          </Dialog>,
+        );
+        const before = leftovers();
+        await userEvent.click(trigger());
+        await settled();
+        expect(outside.closest('[aria-hidden="true"], [inert]')).not.toBeNull();
+        if (close === "Escape") await userEvent.keyboard("{Escape}");
+        else await userEvent.click(page.getByRole("button", { name: "Close" }));
+        await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
+        expect(outside.closest('[aria-hidden="true"], [inert]')).toBeNull();
+        expect(leftovers()).toEqual(before);
+        await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+      }
+    } finally {
+      outside.remove();
+    }
+  });
+
   it("renders the bottom sheet at 390px", async () => {
     await page.viewport(390, 844);
     const element = await openUncontrolled();

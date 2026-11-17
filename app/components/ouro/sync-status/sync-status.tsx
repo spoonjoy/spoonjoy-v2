@@ -132,7 +132,7 @@ function Line({
           data-ouro-control="sync-status"
           data-ouro-part="retry"
           onClick={onRetry}
-          className="relative ms-2 cursor-pointer rounded-sm border-0 bg-transparent p-0 font-[inherit] text-[length:inherit] leading-[inherit] font-medium text-foreground underline underline-offset-4 outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid pointer-fine:hover:decoration-2"
+          className="relative ms-2 cursor-pointer rounded-ouro-sm border-0 bg-transparent p-0 font-[inherit] text-[length:inherit] leading-[inherit] font-medium text-foreground underline underline-offset-4 outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid pointer-fine:hover:decoration-2"
         >
           <TouchTarget />
           {retry}
@@ -233,7 +233,7 @@ export function SyncStatus(props: SyncStatusProps): JSX.Element {
       <p
         ref={line}
         tabIndex={-1}
-        className={cn("m-0 rounded-sm outline-ring outline-offset-2 [grid-area:1/1] focus-visible:outline-2 focus-visible:outline-solid", tones[status])}
+        className={cn("m-0 rounded-ouro-sm outline-ring outline-offset-2 [grid-area:1/1] focus-visible:outline-2 focus-visible:outline-solid", tones[status])}
       >
         <Line state={status} label={word[status]} retry={word.retry} onRetry={onRetry} retryRef={retryRef} />
       </p>

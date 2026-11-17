@@ -194,7 +194,7 @@ export function CodeBlock(props: CodeBlockProps): JSX.Element {
       data-ouro="code-block"
       data-language={language}
       className={cn(
-        "[@layer_ouro-reset]:m-0 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-solid border-border bg-muted text-foreground outline-ring outline-offset-2 has-[>[data-ouro-part=code]:focus-visible]:outline-2 has-[>[data-ouro-part=code]:focus-visible]:outline-solid",
+        "[@layer_ouro-reset]:m-0 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] overflow-hidden rounded-ouro-lg border border-solid border-border bg-muted text-foreground outline-ring outline-offset-2 has-[>[data-ouro-part=code]:focus-visible]:outline-2 has-[>[data-ouro-part=code]:focus-visible]:outline-solid",
         bar ? "grid-rows-[minmax(calc(var(--spacing)*11),auto)_minmax(0,1fr)]" : "grid-rows-[minmax(0,1fr)]",
         className,
       )}

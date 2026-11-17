@@ -5,7 +5,7 @@ describe("floatingHint", () => {
   const hint = floatingHint('<Popover title="…">', "</Popover>");
 
   it("points a radius class at the theme radius", () => {
-    expect(hint("rounded-xl")).toBe(":root { --radius: 0.75rem }");
+    expect(hint("rounded-ouro-xl")).toBe(":root { --radius: 0.75rem }");
   });
 
   it("wraps a text class around the body", () => {

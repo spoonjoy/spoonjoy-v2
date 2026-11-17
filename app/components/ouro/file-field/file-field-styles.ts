@@ -15,7 +15,7 @@ export { acceptProblem, fileKey, formatSize, listClass, matchesAccept, nameClass
  */
 const zoneClass =
   "relative m-0 box-border flex min-h-11 w-full min-w-0 cursor-pointer flex-col items-center justify-center gap-1 px-4 py-6 " +
-  "rounded-lg border border-dashed border-input bg-transparent text-center text-muted-foreground " +
+  "rounded-ouro-lg border border-dashed border-input bg-transparent text-center text-muted-foreground " +
   "outline-ring outline-offset-2 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-solid " +
   "transition-[border-color,background-color] duration-(--ouro-duration-fast) ease-[ease] " +
   "not-data-disabled:pointer-fine:hover:border-ring not-data-disabled:active:bg-accent/60 data-dragging:border-primary data-dragging:bg-primary/10 " +
@@ -44,7 +44,7 @@ const listClass = "m-0 grid list-none gap-2 p-0";
  * @internal
  */
 const previewClass =
-  "flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-solid border-border bg-muted text-muted-foreground object-cover [&_svg]:size-5";
+  "flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-ouro-md border border-solid border-border bg-muted text-muted-foreground object-cover [&_svg]:size-5";
 
 /**
  * A file's name: one line, cut short with an ellipsis.

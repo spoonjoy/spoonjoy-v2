@@ -76,7 +76,7 @@ const typeDefaults: Readonly<Record<TextFieldType, TypeDefaults>> = {
  */
 const groupBaseClass =
   "relative m-0 box-border flex w-full min-w-0 items-center gap-2 h-(--ouro-control-h) py-0 cursor-text " +
-  "rounded-md text-foreground " +
+  "rounded-ouro-control-md text-foreground " +
   "outline-ring outline-offset-2 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-solid " +
   "has-[input:disabled]:cursor-not-allowed has-[input:disabled]:opacity-50";
 
@@ -93,7 +93,7 @@ const groupVariants = {
     "isolate px-3 border border-solid border-(--ouro-bd) bg-(--ouro-bg) " +
     "[--ouro-bg:transparent] dark:[--ouro-bg:color-mix(in_oklab,var(--input)_30%,transparent)] [--ouro-bd:var(--input)] " +
     "has-[input[aria-invalid=true]]:[--ouro-bd:var(--destructive)] [--ouro-sq-w:1px] " +
-    "[--ouro-sq-r:calc(var(--radius)*var(--ouro-radius-scale,1)*0.8)] " +
+    "" +
     "transition-[border-color] duration-(--ouro-duration-fast) ease-[ease] ",
   plain: "px-0 border-0 bg-transparent",
 } as const;
