@@ -11,7 +11,6 @@ import {
   listFiles,
   main,
   parseRoutes,
-  readOuroTag,
   rendersPage,
   resolveImport,
   runCliIfEntry,
@@ -41,7 +40,6 @@ export default [
     "app/routes/shell.tsx": `export default function Shell() {}`,
     "app/routes/inside.tsx": `export default function Inside() {}`,
     "app/routes/ping.ts": `export function loader() {}`,
-    "app/lib/ouro/dev.ts": `const fix = "npx shadcn@latest add ourostack/ouro-ui/ouro-base#v1.1.0";`,
     "app/components/ouro/button/button.tsx": "",
     "app/components/ouro/checklist/checklist-parts.tsx": "",
     "app/components/ouro/text/text.tsx": "",
@@ -149,20 +147,15 @@ describe("files and items", () => {
       },
     });
   });
-
-  it("reads the installed release from HX's own source", () => {
-    expect(readOuroTag(fixture().files["app/lib/ouro/dev.ts"]!)).toBe("v1.1.0");
-    expect(() => readOuroTag("nothing here")).toThrow("names no Ouro HX release");
-  });
 });
 
 describe("buildProvenance", () => {
-  it("records the release, the root, and every page with its sources and the HX it renders", () => {
+  it("records the root and every page with its sources and the HX it renders, and no HX release, so an Ouro update leaves it as it is", () => {
     const { deps, ouroFiles } = fixture();
     const provenance = buildProvenance({ ...deps, ouroFiles });
 
     expect(provenance.guide).toBe("https://github.com/spoonjoy/spoonjoy-v2/blob/main/docs/building-with-ouro-hx.md");
-    expect(provenance.ouroTag).toBe("v1.1.0");
+    expect(Object.keys(provenance)).toEqual(["guide", "root", "routes"]);
     expect(provenance.root).toEqual({
       file: "app/root.tsx",
       sources: ["app/root.tsx"],
@@ -211,7 +204,7 @@ describe("main", () => {
     const io = { log: vi.fn(), error: vi.fn() };
 
     main([], { ...deps, writeFile }, io, readdir as never);
-    expect(writeFile).toHaveBeenCalledWith(OUTPUT_PATH, expect.stringContaining('"ouroTag": "v1.1.0"'));
+    expect(writeFile).toHaveBeenCalledWith(OUTPUT_PATH, expect.stringContaining('"file": "app/root.tsx"'));
     expect(io.log).toHaveBeenLastCalledWith(`Wrote ${OUTPUT_PATH}.`);
 
     main(["--check"], { ...deps, writeFile }, io, readdir as never);
@@ -238,7 +231,7 @@ describe("main", () => {
     expect(defaultDeps.readFile("app/routes.ts")).toContain("test-kitchen");
     // Writing the committed manifest over itself changes nothing.
     defaultDeps.writeFile(OUTPUT_PATH, readFileSync(OUTPUT_PATH, "utf8"));
-    expect(readFileSync(OUTPUT_PATH, "utf8")).toContain('"ouroTag"');
+    expect(readFileSync(OUTPUT_PATH, "utf8")).toContain('"guide"');
   });
 });
 
