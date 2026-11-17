@@ -23,7 +23,6 @@ function validateIngredientFields(
 ): ValidationErrors {
   const errors: ValidationErrors = {}
 
-  // Validate quantity
   if (!quantity.trim()) {
     errors.quantity = 'Required'
   } else {
@@ -35,12 +34,10 @@ function validateIngredientFields(
     }
   }
 
-  // Validate unit
   if (!unit.trim()) {
     errors.unit = 'Required'
   }
 
-  // Validate ingredient name
   if (!ingredientName.trim()) {
     errors.ingredientName = 'Required'
   }

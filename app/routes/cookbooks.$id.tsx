@@ -149,7 +149,6 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     throw new Response("Cookbook not found", { status: 404 });
   }
 
-  // Check if user owns this cookbook
   const isOwner = userId !== null && cookbook.authorId === userId;
 
   const cookbookWithCovers = {

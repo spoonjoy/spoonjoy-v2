@@ -215,7 +215,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     throw new Response("Step not found", { status: 404 });
   }
 
-  // Handle parseIngredients intent
   if (intent === "parseIngredients") {
     const ingredientText = formData.get("ingredientText")?.toString() || "";
 
@@ -242,7 +241,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
   }
 
-  // Handle delete intent
   if (intent === "delete") {
     // Validate step can be deleted (no dependencies)
     const validationResult = await validateStepDeletion(database, id, step.stepNum);
@@ -361,7 +359,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ success: true });
   }
 
-  // Handle add ingredient intent
   if (intent === "addIngredient") {
     /* istanbul ignore next -- @preserve
      * formData null fallbacks: These fallbacks handle edge cases where form fields
@@ -373,7 +370,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     const unitName = formData.get("unitName")?.toString() || "";
     const ingredientName = formData.get("ingredientName")?.toString() || "";
 
-    // Validate ingredient fields
     const ingredientErrors: ActionData["errors"] = {};
 
     const quantityResult = validateQuantity(quantity);
@@ -450,7 +446,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ success: true });
   }
 
-  // Handle delete ingredient intent
   if (intent === "deleteIngredient") {
     const ingredientId = formData.get("ingredientId")?.toString();
     const d1 = requestD1(context);
@@ -500,7 +495,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const usesStepsRaw = formData.getAll("usesSteps");
   const parsedSteps = usesStepsRaw.map((s) => parseInt(s.toString(), 10));
 
-  // Validate each selected step reference
   for (const outputStepNum of parsedSteps) {
     const validationResult = validateStepReference(outputStepNum, step.stepNum);
     if (!validationResult.valid) {

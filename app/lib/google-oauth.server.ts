@@ -192,7 +192,6 @@ export async function verifyGoogleCallback(
   callbackData: GoogleCallbackData,
   capture?: AuthVerifyCaptureFn
 ): Promise<GoogleCallbackResult> {
-  // Validate state
   if (!callbackData.state) {
     return {
       success: false,
@@ -203,7 +202,6 @@ export async function verifyGoogleCallback(
     };
   }
 
-  // Validate code
   if (!callbackData.code) {
     return {
       success: false,
@@ -214,7 +212,6 @@ export async function verifyGoogleCallback(
     };
   }
 
-  // Validate codeVerifier
   if (!callbackData.codeVerifier) {
     return {
       success: false,

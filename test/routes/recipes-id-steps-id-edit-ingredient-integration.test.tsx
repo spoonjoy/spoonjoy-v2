@@ -55,7 +55,6 @@ describe('Step Edit Ingredient Integration', () => {
     const user = await createUser(db, email, username, 'testPassword123')
     testUserId = user.id
 
-    // Create a recipe for testing
     const recipe = await db.recipe.create({
       data: {
         title: 'Test Recipe ' + faker.string.alphanumeric(6),
@@ -64,7 +63,6 @@ describe('Step Edit Ingredient Integration', () => {
     })
     recipeId = recipe.id
 
-    // Create a step for testing
     const step = await db.recipeStep.create({
       data: {
         recipeId,
