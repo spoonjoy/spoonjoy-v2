@@ -23,6 +23,7 @@ export function CookbookCoverArt({
   className,
   titleAsHeading = true,
   priority = false,
+  caption = true,
 }: {
   title: string;
   recipeCount: number;
@@ -43,6 +44,11 @@ export function CookbookCoverArt({
    * a grid, loads lazily so React does not preload it during SSR.
    */
   priority?: boolean;
+  /**
+   * Whether a photo cover carries the title and count over its foot. A grid that sets the name
+   * and count under the cover itself, as the cookbooks shelf does, passes `false`.
+   */
+  caption?: boolean;
 }) {
   const images = cookbookCoverImages(recipeImages);
   const recipeLabel = `${recipeCount} ${recipeCount === 1 ? "recipe" : "recipes"}`;
@@ -60,14 +66,14 @@ export function CookbookCoverArt({
       ) : (
         <>
           <CookbookImageCover images={images} title={title} priority={priority} />
-          <figcaption className="absolute inset-x-0 bottom-0 z-10 border-t border-[color-mix(in_srgb,var(--sj-paper)_18%,transparent)] bg-[color-mix(in_srgb,var(--sj-charcoal)_82%,transparent)] p-4 text-[var(--sj-paper)] backdrop-blur-sm">
+          {caption ? <figcaption className="absolute inset-x-0 bottom-0 z-10 border-t border-[color-mix(in_srgb,var(--sj-paper)_18%,transparent)] bg-[color-mix(in_srgb,var(--sj-charcoal)_82%,transparent)] p-4 text-[var(--sj-paper)] backdrop-blur-sm">
         <TitleTag className="font-sj-display line-clamp-2 text-2xl/7 font-semibold tracking-normal">
           {title}
         </TitleTag>
         <p className="font-sj-ui mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[color-mix(in_srgb,var(--sj-paper)_72%,transparent)]">
           {recipeLabel}
         </p>
-          </figcaption>
+          </figcaption> : null}
         </>
       )}
     </figure>
