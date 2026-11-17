@@ -13,3 +13,12 @@ test("a click on the label or Space flips the switch", async ({ page }) => {
   await expect(timers).not.toBeChecked();
   await expect(timers).toHaveAccessibleDescription("Sound an alarm when a step is done.");
 });
+
+test("an app's test finds the switch by its exact label alone, and checks it there", async ({ page }) => {
+  await openStory(page, "forms-switch--settings");
+  const awake = page.getByLabel("Keep screen awake", { exact: true });
+  await expect(awake).toHaveCount(1);
+  await expect(awake).toHaveRole("switch");
+  await awake.check();
+  await expect(awake).toBeChecked();
+});

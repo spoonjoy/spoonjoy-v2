@@ -520,6 +520,19 @@ describe("Navbar", () => {
     await render(<Navbar {...unnamed} />);
     expect(warn).toHaveBeenCalledWith('[ouro-ui] Navbar: label is required; it names the navigation for screen readers. Fix: <Navbar label="Main">.');
   });
+
+  it("warns about an unknown collapseBelow, and collapses at sm", async () => {
+    await page.viewport(700, 844);
+    await render(<Navbar label="Main" items={items} collapseBelow={"md " as NavbarProps["collapseBelow"]} />);
+    expect(warn).toHaveBeenCalledWith('[ouro-ui] Navbar: collapseBelow is not a breakpoint; it takes sm, md, lg or xl. Fix: <Navbar collapseBelow="lg">.');
+    // At 700px sm shows the links; md, which the value is not, would show the menu.
+    await expect.element(page.getByRole("navigation", { name: "Main" })).toBeVisible();
+  });
+
+  it("takes a breakpoint name without a warning", async () => {
+    await render(<Navbar label="Main" items={items} collapseBelow="xl" />);
+    expect(warn).not.toHaveBeenCalled();
+  });
 });
 
 describe("Navbar at tablet widths and with groups", () => {

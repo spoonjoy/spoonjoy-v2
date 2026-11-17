@@ -74,18 +74,19 @@ function SchemeIcon({ dark }: { dark: boolean }): JSX.Element {
 }
 
 /**
- * The control that switches the app between light, dark and the system's scheme, and
- * keeps the choice. `variant="menu"`, the default, is an icon button for a header: the sun
+ * The dark mode control: it switches the app between light, dark and the system's scheme,
+ * and keeps the choice. `variant="menu"`, the default, is an icon button for a header: the sun
  * or the moon of the scheme the page shows, opening a menu of Light, Dark and System, the
  * current one checked. `variant="segmented"` shows the three side by side, for a settings
  * page. Either way the choice applies at once, as the `.dark` class on `<html>` that
  * shadcn themes switch on, and is kept in `localStorage`.
  *
  * It works on its own, but the choice then shows only once the toggle changes it: wrap the
- * app in `ColorSchemeProvider`, which applies the kept choice on every page and follows the
- * system's setting live, and put `colorSchemeScript()` in `<head>` so a reload never flashes
- * the wrong scheme. For a control of your own, `useColorScheme()` gives the scheme
- * and its setter.
+ * app in `ColorSchemeProvider` (`import { ColorSchemeProvider } from "@/lib/ouro/color-scheme"`),
+ * which applies the kept choice on every page and follows the system's setting live, and put
+ * `colorSchemeScript()` (from `@/lib/ouro/color-scheme-script`) in `<head>` so a reload never
+ * flashes the wrong scheme; `ColorSchemeProvider`'s page shows both for React Router, Next.js
+ * and Vite. For a control of your own, `useColorScheme()` gives the scheme and its setter.
  *
  * Use `Switch` with `useColorScheme()` instead for a plain dark-mode on/off, and
  * `SegmentedControl` for other choices of how a view looks.

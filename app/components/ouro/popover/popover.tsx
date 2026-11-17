@@ -5,7 +5,7 @@ import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { devThrow } from "~/lib/ouro/dev";
 import { floatingAlign, floatingHint, floatingPlacementWarnings, floatingSide, type FloatingAlign, type FloatingSide } from "~/lib/ouro/floating";
 import { lastInput } from "~/lib/ouro/last-input";
-import { checkOpenMode } from "~/lib/ouro/open-mode";
+import { checkOpenMode, type TriggerOrOpen } from "~/lib/ouro/open-mode";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useKeyboardScrollable } from "~/lib/ouro/use-keyboard-scrollable";
 import { useSheetPresentation } from "~/lib/ouro/use-sheet-presentation";
@@ -103,7 +103,7 @@ export type PopoverWithTriggerProps = PopoverBaseProps & {
   /** The element that opens and closes the popover, usually a Button: `trigger={<Button>Share</Button>}`. */
   trigger: ReactElement;
   /** Not with `trigger`. Remove `trigger` to control the popover with `open`, `onOpenChange` and `anchor`. */
-  open?: never;
+  open?: TriggerOrOpen;
   /** Not with `trigger`. Remove `trigger` to control the popover with `open`, `onOpenChange` and `anchor`. */
   onOpenChange?: never;
   /** Not with `trigger`. The popover sits beside its trigger. */

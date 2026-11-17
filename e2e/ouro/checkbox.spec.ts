@@ -21,3 +21,12 @@ test("a select-all box is mixed while some items are checked", async ({ page }) 
   for (const name of ["Basil", "Mint", "Sage"]) await expect(page.getByRole("checkbox", { name })).toBeChecked();
   await expect(all).toHaveAttribute("aria-checked", "true");
 });
+
+test("an app's test finds the checkbox by its exact label alone, and checks it there", async ({ page }) => {
+  await openStory(page, "forms-checkbox--states");
+  const box = page.getByLabel("Email me new recipes", { exact: true });
+  await expect(box).toHaveCount(1);
+  await expect(box).toHaveRole("checkbox");
+  await box.check();
+  await expect(box).toBeChecked();
+});

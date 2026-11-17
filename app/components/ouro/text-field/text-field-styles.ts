@@ -93,7 +93,7 @@ const groupVariants = {
     "isolate px-3 border border-solid border-(--ouro-bd) bg-(--ouro-bg) " +
     "[--ouro-bg:transparent] dark:[--ouro-bg:color-mix(in_oklab,var(--input)_30%,transparent)] [--ouro-bd:var(--input)] " +
     "has-[input[aria-invalid=true]]:[--ouro-bd:var(--destructive)] [--ouro-sq-w:1px] " +
-    "[--ouro-sq-r:calc(var(--radius-md)/var(--ouro-corner-fallback,1))] " +
+    "[--ouro-sq-r:calc(var(--radius)*var(--ouro-radius-scale,1)*0.8)] " +
     "transition-[border-color] duration-(--ouro-duration-fast) ease-[ease] ",
   plain: "px-0 border-0 bg-transparent",
 } as const;

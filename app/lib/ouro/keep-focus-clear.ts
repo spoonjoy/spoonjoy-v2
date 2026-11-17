@@ -1,8 +1,8 @@
 export { keepFocusClear };
 export type { FocusClearHandle };
 
-/** Where a bottom toaster's stack is: at the bottom, collapsed to its front toast, or at the top edge. */
-type Place = "bottom" | "collapsed" | "top";
+/** Where a bottom toaster's stack is: at the bottom, or at the top edge. */
+type Place = "bottom" | "top";
 
 /** A box in the window's coordinates. */
 interface Area {
@@ -12,12 +12,11 @@ interface Area {
   bottom: number;
 }
 
-/** What the stack covers: its column, its height and its front toast's height, and the gap under it at the bottom. */
+/** What the stack covers: its column, its height, and the gap under it at the bottom. */
 interface Size {
   left: number;
   right: number;
   height: number;
-  front: number;
   gap: number;
 }
 
@@ -35,10 +34,8 @@ const EDGE_GAP = 16;
 const FADE_FALLBACK_MS = 300;
 /** The places a stack may move to from its current place, in the order they are tried. */
 const CANDIDATES: Record<Place, Place[]> = {
-  bottom: ["top", "collapsed"],
-  // The full stack at the bottom covers wherever the front toast does, so it is never a place to move to from here.
-  collapsed: ["top"],
-  top: ["bottom", "collapsed"],
+  bottom: ["top"],
+  top: ["bottom"],
 };
 
 /**
@@ -46,10 +43,9 @@ const CANDIDATES: Record<Place, Place[]> = {
  * While toasts show, the page's scroll padding at the bottom is the stack's height, so the browser
  * scrolls a control it brings into view above the stack. When focus from the keyboard still lands
  * under the stack, the stack moves to the top edge, below the fixed or sticky header that touches the
- * window's top edge. If the top edge would cover that control too, the stack collapses to its front
- * toast, and if that covers it, the stack stays. The stack moves back once focus has left the area it
+ * window's top edge. If the top edge would cover that control too, the stack stays. The stack moves back once focus has left the area it
  * covers and the stack has rested since its last move, provided the control focus is on is not covered
- * at the bottom. A pointer's focus does not move the stack to the top or collapse it. A move
+ * at the bottom. A pointer's focus does not move the stack to the top. A move
  * cross-fades in opacity in both motion settings, because the stack hangs from the other edge once it
  * has moved.
  *
@@ -57,8 +53,7 @@ const CANDIDATES: Record<Place, Place[]> = {
  * @claim "While toasts show, the page's scroll padding" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > sets the page's scroll padding to the stack's height while toasts show, and gives back the app's own value after)
  * @claim "so the browser scrolls a control it brings into view above the stack" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > lets the browser scroll a control above a stack in the middle of the page, and leaves the stack at the bottom)
  * @claim "the stack moves to the top edge" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > moves the stack to the top when focus lands under it at the page's end, and back once focus has left and it has rested)
- * @claim "the stack collapses to its front toast" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > collapses to the newest toast when the top edge is out of reach and only the front toast covers the control)
- * @claim "and if that covers it, the stack stays" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > leaves the stack where it is when the front toast covers the control and the top edge is out of reach)
+ * @claim "If the top edge would cover that control too, the stack stays" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > leaves the stack where it is when the front toast covers the control and the top edge is out of reach)
  * @claim "A pointer's focus does not move the stack to the top" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > does not move the stack for a pointer click on a control it covers)
  * @claim "A move cross-fades in opacity" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > cross-fades the move in opacity only under reduced motion)
  * @claim "The stack moves back once focus has left" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > moves the stack back when focus leaves the page altogether, once it has rested)
@@ -67,7 +62,7 @@ function keepFocusClear(viewport: HTMLElement): FocusClearHandle {
   const root = document.documentElement;
   let place: Place = "bottom";
   // Stryker disable next-line ObjectLiteral: every read of size follows a measure() that overwrites it, and a move only follows one.
-  let size: Size = { left: 0, right: 0, height: 0, front: 0, gap: 0 };
+  let size: Size = { left: 0, right: 0, height: 0, gap: 0 };
   // False from a move until it has rested SETTLE_MS; only a move back waits for it.
   // Stryker disable next-line BooleanLiteral: ready is read only once the stack has moved, and a move's land sets it false before anything else runs.
   let ready = false;
@@ -86,7 +81,7 @@ function keepFocusClear(viewport: HTMLElement): FocusClearHandle {
   const movable = () => place === "top" || viewport.getAttribute("data-edge") === "bottom";
 
   /**
-   * Measures the stack's toasts: its column, its height, its front toast's height, and the gap under
+   * Measures the stack's toasts: its column, its height, and the gap under
    * it while it is at the bottom. It reads the toasts' boxes, not the viewport's, which is an anchor
    * at the window's edge. Returns false when a toast is not laid out.
    */
@@ -98,7 +93,7 @@ function keepFocusClear(viewport: HTMLElement): FocusClearHandle {
     const right = Math.max(...boxes.map((box) => box.right));
     const top = Math.min(...boxes.map((box) => box.top));
     const bottom = Math.max(...boxes.map((box) => box.bottom));
-    size = { left, right, height: bottom - top, front: boxes[0]!.height, gap: place === "top" ? size.gap : innerHeight - bottom };
+    size = { left, right, height: bottom - top, gap: place === "top" ? size.gap : innerHeight - bottom };
     return true;
   }
 
@@ -125,13 +120,13 @@ function keepFocusClear(viewport: HTMLElement): FocusClearHandle {
 
   /** The window area the stack covers in `next` place. */
   function zone(next: Place): Area {
-    const { left, right, height, front, gap } = size;
+    const { left, right, height, gap } = size;
     if (next === "top") {
       const top = clearance();
       return { left, right, top, bottom: top + height };
     }
     const bottom = innerHeight - gap;
-    return { left, right, top: bottom - (next === "bottom" ? height : front), bottom };
+    return { left, right, top: bottom - height, bottom };
   }
 
   /** Whether the box shares area with the window area. */
@@ -155,7 +150,7 @@ function keepFocusClear(viewport: HTMLElement): FocusClearHandle {
 
   /** Measures again and sets the scroll padding: the stack's height while it is at the bottom, the app's own value otherwise. */
   function refresh(): void {
-    if (measure() && place !== "top" && movable()) setPadding(`${(place === "collapsed" ? size.front : size.height) + size.gap}px`);
+    if (measure() && place !== "top" && movable()) setPadding(`${size.height + size.gap}px`);
     else restorePadding();
   }
 
@@ -169,8 +164,6 @@ function keepFocusClear(viewport: HTMLElement): FocusClearHandle {
       viewport.removeAttribute("data-ouro-toaster-moved");
       viewport.style.removeProperty("--ouro-toaster-moved-top");
     }
-    if (next === "collapsed") viewport.setAttribute("data-ouro-toaster-collapsed", "");
-    else viewport.removeAttribute("data-ouro-toaster-collapsed");
     viewport.setAttribute("data-edge", next === "top" ? "top" : "bottom");
   }
 
@@ -214,6 +207,9 @@ function keepFocusClear(viewport: HTMLElement): FocusClearHandle {
 
   /** Moves the stack to the first place that does not cover `box`, the control focus is on, and that fits. */
   function choose(box: DOMRect): void {
+    // Leaving the bottom, the gap to come back to is the viewport's, where the toasts rest: a toast still sliding in hangs
+    // below the window, and a gap read from it leaves no room to move back to (#1818).
+    if (place !== "top") size.gap = innerHeight - viewport.getBoundingClientRect().bottom;
     const next = CANDIDATES[place].find((candidate) => {
       const area = zone(candidate);
       return area.bottom <= innerHeight && !covers(box, area);
