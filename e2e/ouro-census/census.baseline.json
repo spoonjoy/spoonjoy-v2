@@ -1325,7 +1325,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Soups\" [item/link] in main",
+          "identity": "link \"Soups\" [card/link] in main",
           "count": 1
         },
         {
@@ -1337,7 +1337,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Weeknight Dinners\" [item/link] in main",
+          "identity": "link \"Weeknight Dinners\" [card/link] in main",
           "count": 1
         },
         {
@@ -8643,7 +8643,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Soups\" [item/link] in main",
+          "identity": "link \"Soups\" [card/link] in main",
           "count": 1
         },
         {
@@ -8651,7 +8651,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Weeknight Dinners\" [item/link] in main",
+          "identity": "link \"Weeknight Dinners\" [card/link] in main",
           "count": 1
         },
         {
