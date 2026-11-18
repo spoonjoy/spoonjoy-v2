@@ -1,6 +1,6 @@
 {
-  "tag": "v1.3.292",
-  "tagCommit": "d0c7fed7759586b32ae8d364c3e63dac121a4d55",
+  "tag": "v1.3.293",
+  "tagCommit": "1804f07a3c3ae1ecfd0cf55fa971db38785c830a",
   "files": {
     "app/components/ouro/alert/alert.stories.tsx": "9fc0c3fec0cc4be3ce2281c979da815134bdc67e260645bbd0546fcae092613f",
     "app/components/ouro/alert/alert.test-d.ts": "f60fa946e10cc89dd3a53fc812f3cb458e8e903d034bd7a3e8d1965c62cd0ad4",
@@ -410,7 +410,7 @@
     "app/lib/ouro/ax/checks.ts": "21f7f2dd63a86ce58447c7af3b02dc00069df43620bee53c71b0faa3697a0ff4",
     "app/lib/ouro/ax/claims.ts": "2557bcff1c03a8b36a7a0f3ce9a17037ec90f43f7e18ef9d91790c5078415919",
     "app/lib/ouro/ax/cli.ts": "1cbaf0a683321b6343c3f45a77934c138d8ea25eac36526d34d688b8ede36234",
-    "app/lib/ouro/ax/command.ts": "f630829b90fd17009e55f2a226edc2225d0663425d63ca0ab7bca5cbd2247987",
+    "app/lib/ouro/ax/command.ts": "84690718241fe815047427804e3759c90c8347a7e2ae39fbc48749a526709250",
     "app/lib/ouro/ax/component.ts": "6d250c2d3d70d62ae106b4a32897e53145f965db4fbfae6c1ec76152a6aa9127",
     "app/lib/ouro/ax/dev-commands.ts": "911d0d56d47f7feb0d64eb96367c29369bd82a7fa925568e8dacda7a4454e09f",
     "app/lib/ouro/ax/doctor.ts": "50f27db03682d620e2c78babc40e4ff9d62f731d07ab4eb52678a7c2ad8a4c9d",
@@ -443,8 +443,8 @@
     "app/lib/ouro/css-panel.tsx": "9639c4b066448f4e8fafd20addfadb6ea78d9daae09c9daf67b0244ebeab9e18",
     "app/lib/ouro/current-path.test.ts": "673a243110ddadee1ea715573546ea96c7ea09d213f1266e738673ec23b0316c",
     "app/lib/ouro/current-path.ts": "bbb63ed157c7458ddec1d11ccf615da1f0978a5f224eeffb7c8fe0ab7a2cc3f6",
-    "app/lib/ouro/dev.test.ts": "7292b23e9fe26cd851d345357936bb17f74b464bf5e25f0b6bf94db5f5c52262",
-    "app/lib/ouro/dev.ts": "8379047b30a94ae097635a6f6bada89f33b1af8fb1ee54d375461b46dd02a035",
+    "app/lib/ouro/dev.test.ts": "66966ffafd625a60ae5b37c90414a439418b8841e7723607080cf5f9fbf31dbe",
+    "app/lib/ouro/dev.ts": "5f9c9dc5302a19980b20648aea0018a2f8f22ae5230627d23323fcc480d2017f",
     "app/lib/ouro/env.d.ts": "b9b1f9fbff01e0acecd2452110007846804d4d30e159a302f56312d2771fe90c",
     "app/lib/ouro/feedback.test.ts": "921d47c19c46743c5a02b6d73e326850d5ba799577bd31f687b4597f811c4c0d",
     "app/lib/ouro/feedback.ts": "768048d8a283454fbd9cc3a02db6c590d7fa45c17d369da93decfb9acfba5a4d",
