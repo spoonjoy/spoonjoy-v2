@@ -1,4 +1,5 @@
 import { createRef, useState, type ReactNode, type Ref } from "react";
+import { Menu } from "@base-ui/react/menu";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -764,9 +765,41 @@ describe("close control", () => {
   });
 });
 
+describe("sheet in a sheet", () => {
+  it.each([true, false])("shows a Sheet opened from inside a Sheet above it, outer modal %s", async (modal) => {
+    await page.viewport(390, 844);
+    await render(
+      <Sheet title="Look" modal={modal} open onOpenChange={() => {}}>
+        <Sheet title="Rename look" trigger={<Button>Rename</Button>}>
+          <input aria-label="Name" />
+        </Sheet>
+      </Sheet>,
+    );
+    await userEvent.click(page.getByRole("button", { name: "Rename" }));
+    const field = page.getByRole("textbox", { name: "Name" });
+    await expect.element(field).toBeVisible();
+    await expect
+      .poll(() => {
+        const box = (field.element() as HTMLElement).getBoundingClientRect();
+        return field.element().contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
+      })
+      .toBe(true);
+  });
+});
+
 describe("non-modal sheet", () => {
   /** A page with its own controls and a side sheet beside it that leaves it in use. */
-  function Preview({ onPage = () => {}, onOpenChange = () => {} }: { onPage?: () => void; onOpenChange?: (open: boolean) => void }) {
+  function Preview({
+    onPage = () => {},
+    onOpenChange = () => {},
+    closeOnOutsidePress,
+    children = <Button>Ocean</Button>,
+  }: {
+    onPage?: () => void;
+    onOpenChange?: (open: boolean) => void;
+    closeOnOutsidePress?: boolean;
+    children?: ReactNode;
+  }) {
     const [open, setOpen] = useState(true);
     return (
       <>
@@ -778,13 +811,14 @@ describe("non-modal sheet", () => {
           title="Look"
           side="right"
           modal={false}
+          closeOnOutsidePress={closeOnOutsidePress}
           open={open}
           onOpenChange={(next) => {
             onOpenChange(next);
             setOpen(next);
           }}
         >
-          <Button>Ocean</Button>
+          {children}
         </Sheet>
       </>
     );
@@ -842,6 +876,91 @@ describe("non-modal sheet", () => {
     (page.getByRole("button", { name: "Ocean" }).element() as HTMLElement).focus();
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => popup()).toBeNull();
+  });
+
+  it("with closeOnOutsidePress, closes on a press on the page, and the press still reaches the page", async () => {
+    await page.viewport(1280, 800);
+    const onPage = vi.fn();
+    const onOpenChange = vi.fn();
+    await render(<Preview onPage={onPage} onOpenChange={onOpenChange} closeOnOutsidePress />);
+    await settled();
+    await userEvent.click(page.getByRole("button", { name: "Ocean" }));
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await userEvent.click(page.getByRole("button", { name: "Page action" }));
+    expect(onPage).toHaveBeenCalledOnce();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    await expect.poll(() => popup()).toBeNull();
+  });
+
+  it("with closeOnOutsidePress, stays open on a press in a menu or a dialog opened from inside it", async () => {
+    await page.viewport(1280, 800);
+    const onOpenChange = vi.fn();
+    const onPick = vi.fn();
+    await render(
+      <Preview onOpenChange={onOpenChange} closeOnOutsidePress>
+        <Menu.Root>
+          <Menu.Trigger>Sort</Menu.Trigger>
+          <Menu.Portal>
+            {/* Its portal nests in the sheet's, so it clears the sheet's own layers (z-1000). */}
+            <Menu.Positioner style={{ zIndex: 1001 }}>
+              <Menu.Popup>
+                <Menu.Item onClick={onPick}>Newest first</Menu.Item>
+              </Menu.Popup>
+            </Menu.Positioner>
+          </Menu.Portal>
+        </Menu.Root>
+        <Sheet title="Rename" trigger={<Button>Rename</Button>}>
+          <input aria-label="Name" />
+        </Sheet>
+      </Preview>,
+    );
+    await settled();
+    await userEvent.click(page.getByRole("button", { name: "Sort" }));
+    await userEvent.click(page.getByRole("menuitem", { name: "Newest first" }));
+    expect(onPick).toHaveBeenCalledOnce();
+    await userEvent.click(page.getByRole("button", { name: "Rename" }));
+    await expect.element(page.getByRole("dialog", { name: "Rename" })).toBeVisible();
+    await userEvent.click(page.getByRole("textbox", { name: "Name" }));
+    await userEvent.keyboard("Tide");
+    expect(onOpenChange).not.toHaveBeenCalled();
+    // The panel is still open beneath the dialog, which hides it from the accessibility tree while it is open.
+    expect(document.querySelectorAll('[data-ouro="sheet"]')).toHaveLength(2);
+  });
+
+  it.each(["tab", "code"] as const)("with closeOnOutsidePress, closes when focus moves out of it by %s, and leaves focus where it went", async (leave) => {
+    await page.viewport(1280, 800);
+    await render(
+      <>
+        <input aria-label="Page field" />
+        <Sheet title="Look" side="right" modal={false} closeOnOutsidePress trigger={<Button>Open look</Button>}>
+          <Button>Ocean</Button>
+        </Sheet>
+      </>,
+    );
+    await userEvent.click(page.getByRole("button", { name: "Open look" }));
+    await settled();
+    const ocean = page.getByRole("button", { name: "Ocean" }).element() as HTMLElement;
+    const field = page.getByRole("textbox", { name: "Page field" }).element() as HTMLElement;
+    ocean.focus();
+    if (leave === "tab") await userEvent.keyboard("{Tab}{Tab}");
+    else field.focus();
+    await expect.poll(() => popup()).toBeNull();
+    expect(document.activeElement).not.toBe(document.body);
+    if (leave === "code") expect(document.activeElement).toBe(field);
+  });
+
+  it("closeOnOutsidePress={false} keeps a modal sheet open on a press on its backdrop", async () => {
+    const onOpenChange = vi.fn();
+    await render(
+      <Sheet title="Save to cookbook" open onOpenChange={onOpenChange} closeOnOutsidePress={false}>
+        <Body />
+      </Sheet>,
+    );
+    await settled();
+    expect(backdrop()).not.toBeNull();
+    await userEvent.click(document.body, { position: { x: 20, y: 20 } });
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(popup()).not.toBeNull();
   });
 
   it("built from parts, stays open on a press on the page, unless the app passes disablePointerDismissal={false}", async () => {

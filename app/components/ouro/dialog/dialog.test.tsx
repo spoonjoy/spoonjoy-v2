@@ -19,6 +19,7 @@ import {
   DialogTrigger,
   DialogViewport,
 } from "~/components/ouro/dialog/dialog-parts";
+import { Sheet } from "~/components/ouro/sheet/sheet";
 import { act } from "~/lib/ouro/testing/act";
 import { pressDuringScroll } from "~/lib/ouro/testing/press";
 import { pageCss } from "~/lib/ouro/testing/page-css";
@@ -413,6 +414,24 @@ describe("Dialog stacking above the app's fixed bars", () => {
     return element.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2));
   };
   const portal = () => document.querySelector<HTMLElement>('[data-ouro="dialog-portal"]')!;
+
+  it.each([true, false])("shows above a Sheet it is opened from, modal %s", async (modal) => {
+    await page.viewport(1280, 800);
+    await render(
+      <Sheet title="Look" side="right" modal={modal} open onOpenChange={() => {}}>
+        <Dialog title="Rename look" trigger={<Button>Rename</Button>}>
+          <input aria-label="Name" />
+        </Dialog>
+      </Sheet>,
+    );
+    await userEvent.click(page.getByRole("button", { name: "Rename" }));
+    const field = page.getByRole("textbox", { name: "Name" });
+    await expect.element(field).toBeVisible();
+    await expect.poll(() => onTop(field.element() as HTMLElement)).toBe(true);
+    // The dialog's backdrop covers the sheet too: a press on the sheet lands on the backdrop, not the sheet.
+    const sheet = document.querySelector<HTMLElement>('[data-ouro="sheet"]')!;
+    expect(onTop(sheet)).toBe(false);
+  });
 
   it("puts the portal on the --ouro-layer level, as its own stacking context", async () => {
     await render(

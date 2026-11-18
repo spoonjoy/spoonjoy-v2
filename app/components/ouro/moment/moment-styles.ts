@@ -190,10 +190,12 @@ const artFrameClass = {
 
 /**
  * The art's arrival, a keyframe animation from ouro-base.css. It is gated on the motion-safe query,
- * so with reduced motion the art is simply there.
+ * so with reduced motion the art is simply there. Moment adds it to art that comes in after mount,
+ * and to art at mount with `appear`.
  *
  * @internal
- * @claim "The art's arrival, a keyframe animation" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment arrival > arrives once when the moment first shows, from the declared keyframes over the sheet duration and easing)
+ * @claim "The art's arrival, a keyframe animation" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment arrival > arrives once when the moment first shows with appear, from the declared keyframes over the sheet duration and easing)
+ * @claim "Moment adds it to art that comes in" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment arrival > arrives when content comes in after mount, whether or not appear is set)
  */
 const artArriveClass = "motion-safe:[animation:ouro-moment-arrive_var(--ouro-duration-sheet)_var(--ouro-ease-out)]";
 

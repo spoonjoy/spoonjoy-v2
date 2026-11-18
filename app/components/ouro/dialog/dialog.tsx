@@ -230,16 +230,23 @@ function firstFocus(popup: HTMLElement): HTMLElement {
  * control it. Use `ConfirmDialog` instead to confirm an action, and `Sheet`
  * instead when the panel should slide in from an edge at every width.
  *
+ * Use the page itself (`AuthLayout`) instead for a step the person must take, such as
+ * signing in or a first run's setup: a person can always put a Dialog away, and what
+ * they find behind it must hold the way forward. Ouro check's `dismissable-step` fails
+ * a modal dialog over a blank page, or over a signed-out page with no way to sign in.
+ *
  * It stacks above the page at `--ouro-layer`, a z-index of 50 by default (from
  * ouro-base.css). If your app has fixed bars above z-50, raise it in a `:root` rule
  * of your own after the Ouro tokens, outside any `@layer`: `:root { --ouro-layer: 60; }`.
  * Don't edit the `--ouro-layer: 50` line shadcn wrote; `shadcn add` resets it.
+ * Opened from inside a Sheet, it shows above it.
  * An app that draws its own bar across the window's top sets `--ouro-inset-top` to that bar's height, and a centered dialog, its backdrop and a full-screen Lightbox open below it.
  *
  * Testing accessibility: in WebKit, Base UI's focus guards take `role="button"`
  * without a name so VoiceOver's cursor stays trapped. Exclude them:
  * `new AxeBuilder({ page }).exclude("[data-base-ui-focus-guard]")`.
  *
+ * @claim "Ouro check's `dismissable-step` fails" test/check-first-run-in-page.test.ts verify:testExists(test/check-first-run-in-page.test.ts::findFirstRunIssues: dismissable-step > finds a modal dialog that Escape or its close button puts away onto a blank page) verify:testExists(test/check-first-run-in-page.test.ts::findFirstRunIssues: dismissable-step > finds one that puts a signed-out person onto a page with no way to sign in, and passes one with a way in or progress)
  * @group Overlays
  * @see https://ui.ouroboros.bot/docs/dialog
  *
@@ -260,6 +267,7 @@ function firstFocus(popup: HTMLElement): HTMLElement {
  * @claim "Once open, a centered dialog" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog's top edge while its content changes > opens centred, then keeps its top edge where it opened as its content grows)
  * @claim "Once open, a centered dialog" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog's top edge while its content changes > moves up only as far as it must when it grows past the screen's bottom margin)
  * @claim "It stacks above the page at" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog stacking above the app's fixed bars > puts the portal on the --ouro-layer level, as its own stacking context)
+ * @claim "Opened from inside a Sheet, it shows above it" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog stacking above the app's fixed bars > shows above a Sheet it is opened from, modal %s)
  * @claim "It stacks above the page at" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
  * @claim "a centered dialog, its backdrop and a full-screen Lightbox open below it" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog below an app's own bar > starts the backdrop and the centered viewport below --ouro-inset-top, and centres in the space under it)
  * @claim "a centered dialog, its backdrop and a full-screen Lightbox open below it" registry/ouro/components/ouro/lightbox/lightbox.mosaic.test.tsx verify:testExists(registry/ouro/components/ouro/lightbox/lightbox.mosaic.test.tsx::Lightbox full screen > starts below --ouro-inset-top and fills the rest of the window)

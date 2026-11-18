@@ -74,6 +74,13 @@ const levels = [2, 3, 4, 5, 6] as const;
  * still loading, and `Moment` for a state with art of its own, a first run, a success that
  * celebrates, or one the person can dismiss.
  *
+ * Signed out, show the way in (a "You're signed out" title and a Sign in action) instead of
+ * the empty state a signed-in person would see, which tells a signed-out person nothing is
+ * wrong. Mark the app's shell `data-ouro-session="signed-out"` and Ouro check's
+ * `signed-out-empty` fails an Empty, or words that say there is nothing, under it, unless the
+ * Empty holds the way in: `<Empty title="You're signed out" action={<Button>Sign in</Button>} />` passes.
+ *
+ * @claim "Ouro check's `signed-out-empty` fails an Empty" test/check-first-run-in-page.test.ts verify:testExists(test/check-first-run-in-page.test.ts::findFirstRunIssues: signed-out-empty > finds an Ouro Empty or words that say there is nothing, on a signed-out page, once per empty state)
  * @group Display
  * @see https://ui.ouroboros.bot/docs/empty
  *

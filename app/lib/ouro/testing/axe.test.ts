@@ -795,4 +795,92 @@ describe("audit", () => {
       await page.viewport(size.width, size.height);
     }
   });
+
+  // Runs `check` at a phone's screen, 390 by 844, and puts the test frame's size back after.
+  async function atPhone<T>(check: () => Promise<T>): Promise<T> {
+    const size = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    try {
+      return await check();
+    } finally {
+      await page.viewport(size.width, size.height);
+    }
+  }
+
+  // A paragraph 1488px tall at a phone's width, dark text (#767676) over `background`: 62 short lines that each break
+  // where the fixture says, at 24px each, so its height does not hang on how wide the host app's font sets the text
+  // (spoonjoy-v2#760: 1104px tall when it wrapped one long run of text).
+  const tallParagraph = (background: string, id = "tall") =>
+    `<p id="${id}" style="margin:0;color:#767676;background:${background};font-size:16px;line-height:24px;white-space:nowrap">${"Every line of it is text.<br>".repeat(62)}</p>`;
+  const darkBelowTheFold = "linear-gradient(#fff 85%,#555)";
+
+  it("fails a tall paragraph whose gradient darkens below the fold, and names the part below the fold that fails", async () => {
+    await atPhone(async () => {
+      mountPage(tallParagraph(darkBelowTheFold));
+      const paragraph = document.querySelector<HTMLElement>("#tall")!;
+      expect(paragraph.getBoundingClientRect().height).toBeGreaterThan(1400);
+      const verdict = await measureTextContrast(paragraph, 4.5);
+      expect(verdict).toEqual({ pass: false, reason: expect.stringMatching(/^measured \d\.\d\d:1 against the worst pixel behind its text, needs 4\.5:1, in the part of its text centred \d+px below its top, scrolled onto the screen$/) });
+      // The first picture is centred on the paragraph's middle; the part that fails is scrolled onto the screen from below it.
+      const { reason } = verdict as { reason: string };
+      expect(Number(/centred (\d+)px/.exec(reason)![1])).toBeGreaterThan(paragraph.getBoundingClientRect().height / 2);
+      expect(describeFindings(await scanPage())).toMatch(/^undecided color-contrast \(serious\): .*\n {2}#tall: measured \d\.\d\d:1 against the worst pixel behind its text, needs 4\.5:1, in the part of its text centred \d+px below its top/);
+    });
+  });
+
+  it("keeps the tall paragraph taller than the screen in an app whose font sets text narrow", async () => {
+    await atPhone(async () => {
+      document.documentElement.style.setProperty("letter-spacing", "-3px");
+      try {
+        mountPage(tallParagraph("#fff"));
+        expect(document.querySelector("#tall")!.getBoundingClientRect().height).toBeGreaterThan(1400);
+      } finally {
+        document.documentElement.style.removeProperty("letter-spacing");
+      }
+    });
+  });
+
+  it("passes the same tall paragraph over plain white, as every part of its text meets 4.5:1", async () => {
+    await atPhone(async () => {
+      mountPage(tallParagraph("#fff"));
+      expect(await measureTextContrast(document.querySelector("#tall")!, 4.5)).toEqual({ pass: true });
+    });
+  });
+
+  it("measures a tall paragraph in a picture per screenful, not one per line, as a line once measured is not scrolled back to", async () => {
+    await atPhone(async () => {
+      mountPage(tallParagraph("#fff"));
+      const shots = vi.spyOn(page, "screenshot");
+      try {
+        expect(await measureTextContrast(document.querySelector("#tall")!, 4.5)).toEqual({ pass: true });
+        // The middle, then the top and the bottom: about 1500px of text on an 844px screen.
+        expect(shots.mock.calls.length).toBeLessThanOrEqual(4);
+      } finally {
+        shots.mockRestore();
+      }
+    });
+  });
+
+  it("puts back the page's and a scrolled box's scroll positions after it measures a tall paragraph's parts", async () => {
+    await atPhone(async () => {
+      mountPage(`<div style="height:1000px"></div>${tallParagraph(darkBelowTheFold)}<div style="height:1000px"></div>`);
+      window.scrollTo({ top: 300, behavior: "instant" });
+      expect((await measureTextContrast(document.querySelector("#tall")!, 4.5)).pass).toBe(false);
+      expect(window.scrollY).toBe(300);
+    });
+    await atPhone(async () => {
+      mountPage(`<div id="box" role="region" aria-label="Notes" tabindex="0" style="height:300px;overflow:auto">${tallParagraph(darkBelowTheFold, "inbox")}</div>`);
+      const box = document.querySelector<HTMLElement>("#box")!;
+      box.scrollTop = 40;
+      expect((await measureTextContrast(document.querySelector("#inbox")!, 4.5)).pass).toBe(false);
+      expect([window.scrollY, box.scrollTop]).toEqual([0, 40]);
+    });
+  });
+
+  it("leaves out the part of a tall paragraph that no scroll brings onto the screen, as a fixed box's below the fold", async () => {
+    await atPhone(async () => {
+      mountPage(`<div style="position:fixed;top:0;left:0;width:100%">${tallParagraph(darkBelowTheFold)}</div>`);
+      expect(await measureTextContrast(document.querySelector("#tall")!, 4.5)).toEqual({ pass: true });
+    });
+  });
 });
