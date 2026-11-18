@@ -67,6 +67,15 @@ export interface DialogBaseProps {
    * @claim "Screen-reader users on phones (who have" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > shows the sheet's close icon button in the top corner in sheet presentation too)
    */
   closeLabel?: string | undefined;
+  /**
+   * Whether a press outside the dialog, on its backdrop, closes it. `false` keeps it open, for a
+   * dialog holding work a stray press would lose; Escape and the close button still close it, and focus
+   * still returns to the trigger. It names the same thing as `Sheet`'s `closeOnOutsidePress`.
+   * @default true
+   * @claim "Whether a press outside the dialog, on" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::closeOnOutsidePress > closes on a press on the backdrop by default, at %ipx)
+   * @claim "Whether a press outside the dialog, on" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::closeOnOutsidePress > false keeps it open on a backdrop press, yet Escape closes it and focus returns to the trigger, centered and as a sheet, at %ipx)
+   */
+  closeOnOutsidePress?: boolean | undefined;
   /** A short line under the title, read out when the dialog opens. */
   description?: ReactNode;
   /**
@@ -279,6 +288,7 @@ export function Dialog(props: DialogProps): JSX.Element {
     hideTitle,
     closeLabel = "Close",
     description,
+    closeOnOutsidePress,
     presentation: presentationProp = "auto",
     size: sizeProp = "auto",
     footer,
@@ -351,6 +361,7 @@ export function Dialog(props: DialogProps): JSX.Element {
       hideTitle={hideTitle}
       closeLabel={closeLabel}
       description={description}
+      closeOnOutsidePress={closeOnOutsidePress}
       presentation={presentation}
       size={size}
       footer={footer}
@@ -370,6 +381,8 @@ export interface DialogFrameProps {
   hideTitle?: boolean | undefined;
   closeLabel: string;
   description?: ReactNode;
+  /** Whether a press on the backdrop closes the dialog (`Dialog`'s `closeOnOutsidePress`). @default true */
+  closeOnOutsidePress?: boolean | undefined;
   presentation: DialogPresentation;
   size: DialogSize;
   footer?: ReactNode;
@@ -395,6 +408,7 @@ export function DialogFrame({
   hideTitle,
   closeLabel,
   description,
+  closeOnOutsidePress = true,
   presentation,
   size,
   footer,
@@ -470,6 +484,7 @@ export function DialogFrame({
       closeLabel={closeLabel}
       description={description}
       side="bottom"
+      closeOnOutsidePress={closeOnOutsidePress}
       className={className}
       open={isOpenNow}
       onOpenChange={setOpen}
@@ -481,7 +496,7 @@ export function DialogFrame({
       {children}
     </SheetFrame>
   ) : (
-    <DialogRoot open={isOpenNow} onOpenChange={(next) => setOpen(next)}>
+    <DialogRoot open={isOpenNow} onOpenChange={(next) => setOpen(next)} disablePointerDismissal={!closeOnOutsidePress}>
       <DialogPortal>
         <DialogBackdrop />
         <DialogViewport>

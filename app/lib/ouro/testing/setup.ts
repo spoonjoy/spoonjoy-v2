@@ -16,6 +16,10 @@ import { trackUserEventCommands } from "./command-deadline.ts";
 // A userEvent command that never answers fails its test naming the command (command-deadline.ts).
 trackUserEventCommands();
 
+// Ouro UI stays silent where navigator.webdriver is true, which the automated browser these tests
+// run in sets. The tests of sound turn it back to false; they stub the audio they check.
+Object.defineProperty(navigator, "webdriver", { value: false, configurable: true });
+
 // Media emulation (reduced motion, forced colours, colour scheme, contrast) stays on the page after
 // the test that set it. So each file starts from the browser's defaults, and each test puts back the
 // media it found, which keeps a setting its file makes in `beforeAll` for all of its tests.

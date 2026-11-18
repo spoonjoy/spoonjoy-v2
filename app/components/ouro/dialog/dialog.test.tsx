@@ -231,6 +231,26 @@ describe("automatic presentation", () => {
   });
 });
 
+describe("closeOnOutsidePress", () => {
+  it.each([1280, 390])("closes on a press on the backdrop by default, at %ipx", async (width) => {
+    await page.viewport(width, 844);
+    await openUncontrolled();
+    await userEvent.click(document.body, { position: { x: 5, y: 5 } });
+    await expect.poll(() => popup()).toBeNull();
+  });
+
+  it.each([1280, 390])("false keeps it open on a backdrop press, yet Escape closes it and focus returns to the trigger, centered and as a sheet, at %ipx", async (width) => {
+    await page.viewport(width, 844);
+    await openUncontrolled({ closeOnOutsidePress: false });
+    await userEvent.click(document.body, { position: { x: 5, y: 5 } });
+    await act(async () => {});
+    expect(popup()).not.toBeNull();
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => popup()).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(trigger());
+  });
+});
+
 describe("Dialog server rendering", () => {
   it("renders on the server without throwing or rendering the popup", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});

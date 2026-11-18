@@ -6,13 +6,16 @@ import { Field } from "~/components/ouro/field/field";
 import { FieldControl, type FieldControlProps } from "~/components/ouro/field/field-parts";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
 import { cn } from "~/lib/ouro/cn";
+import { devWarn } from "~/lib/ouro/dev";
 import { useMergedRef } from "~/lib/ouro/refs";
 import { FieldOwnerContext, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import {
+  autoGrowBounds,
+  autoGrowClass,
+  clearFit,
   describeHighlights,
   fitHeight,
-  fitHeightNative,
   supportsFieldSizing,
   highlightLayerClass,
   highlightRuns,
@@ -110,7 +113,12 @@ export interface TextAreaOwnProps {
   rows?: number | undefined;
   /**
    * Grows with the content, from `rows` lines up to `maxRows`, instead of scrolling. Use it
-   * for messages and notes, so people see what they wrote.
+   * for messages and notes, so people see what they wrote. Its first frame already has the
+   * height it settles at, with a starting value too. To change its vertical padding, set
+   * `--ouro-text-area-py` (`className="[&_textarea]:[--ouro-text-area-py:12px]"`), not a `py-*` class.
+   *
+   * @claim "Its first frame already has the" registry/ouro/components/ouro/text-field/text-area.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.test.tsx::TextArea autoGrow first frame > is its settled height on its first frame, with a defaultValue of several lines) verify:testExists(registry/ouro/components/ouro/text-field/text-area.test.tsx::TextArea autoGrow first frame > is its new height on the first frame after its value changes)
+   * @claim "To change its vertical padding, set" registry/ouro/components/ouro/text-field/text-area.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.test.tsx::TextArea development messages > warns that a py class leaves autoGrow's bounds out of step, and not for the padding variable)
    */
   autoGrow?: boolean | undefined;
   /**
@@ -286,51 +294,56 @@ export function TextArea(props: TextAreaProps): JSX.Element {
   const highlighting = highlights !== undefined;
   const marked = useHighlights(textareaRef, highlights, rest.value, rest.defaultValue);
 
-  // With autoGrow, fit once per change of the text and when a prop that sets the height changes:
-  // an uncontrolled field as the person types, a controlled one once its value arrives. A render
-  // that changes neither (a parent's, as a message arrives beside a composer) measures nothing,
-  // since each fit reads the textarea's style and lays out the page. Without autoGrow, measure
-  // nothing: the inline height is the user's resize handle. Turning autoGrow off once clears the
-  // height autoGrow set, so `rows` applies again.
+  // With autoGrow, the textarea renders with its bounds and, where the browser can, grows itself
+  // (field-sizing), so its first frame already has its height and nothing is measured. Elsewhere
+  // (WebKit), fit before the paint, once per change of the text and when a prop that sets the
+  // height changes: an uncontrolled field as the person types, a controlled one once its value
+  // arrives. A render that changes neither (a parent's, as a message arrives beside a composer)
+  // measures nothing, since each fit reads the textarea's style and lays out the page. Without
+  // autoGrow, measure nothing: the inline height is the user's resize handle. Turning autoGrow
+  // off once clears the height autoGrow set, so `rows` applies again.
   const controlled = rest.value !== undefined;
-  const grew = useRef(autoGrow);
+  const grew = useRef(false);
   const native = autoGrow && supportsFieldSizing();
-  const fit = () => {
-    const textarea = textareaRef.current!;
-    if (autoGrow && native) fitHeightNative(textarea, rows, maxRows);
-    else if (autoGrow) fitHeight(textarea, rows, maxRows);
-    // Stryker disable next-line ConditionalExpression: clearing styles that were never set changes nothing.
-    else if (grew.current) {
-      textarea.style.height = "";
-      textarea.style.overflowY = "";
-      textarea.style.removeProperty("field-sizing");
-      textarea.style.minHeight = "";
-      textarea.style.maxHeight = "";
-    }
-    grew.current = autoGrow;
-  };
   const watched = native ? undefined : rest.value;
-  // The browser sizes a native field itself; the fit only sets its floor and cap from the padding,
-  // which can wait for the frame after the first paint. Measuring does not fit before the paint.
-  // Stryker disable next-line BooleanLiteral: the first fit's timing shows only in test/mount-reads.test.tsx.
-  const placed = useRef(false);
-  /* eslint-disable react-hooks/exhaustive-deps -- fit is rebuilt each render; the lists name what it reads that should trigger a fit */
   useLayoutEffect(() => {
-    // Stryker disable next-line ConditionalExpression,LogicalOperator: as above; a later fit follows in the frame.
-    if (!native || placed.current) fit();
+    const textarea = textareaRef.current!;
+    if (autoGrow && !native) {
+      fitHeight(textarea, rows, maxRows);
+      grew.current = true;
+    } else if (autoGrow || grew.current) {
+      // Where the browser grows it, a height left inline (the resize handle's, before autoGrow) would hold it still.
+      clearFit(textarea);
+      grew.current = false;
+    }
   }, [autoGrow, native, rows, maxRows, size, variant, watched]);
+  // In development, once the field has painted: a class that sets the textarea's vertical padding
+  // (`py-*`) leaves `--ouro-text-area-frame` out of step, so the bounds autoGrow renders miss it.
+  const checked = useRef({});
   useEffect(() => {
-    // Stryker disable next-line ConditionalExpression: a refit in the frame gives a non-native field the height the layout effect already gave it.
-    if (!native) return;
-    const frame = requestAnimationFrame(() => {
-      // Stryker disable next-line BooleanLiteral: as above.
-      placed.current = true;
-      fit();
-    });
-    return () => cancelAnimationFrame(frame);
-    // Stryker disable next-line ArrayDeclaration: the frame refits with the same inputs the layout effect did.
-  }, [autoGrow, native, rows, maxRows, size, variant]);
-  /* eslint-enable react-hooks/exhaustive-deps */
+    /* istanbul ignore else @preserve -- the else path exists only in production bundles */
+    if (process.env.NODE_ENV !== "production") {
+      if (!autoGrow) return;
+      const textarea = textareaRef.current!;
+      const frame = requestAnimationFrame(() => {
+        const style = getComputedStyle(textarea);
+        const chrome = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+        const ours = textarea.style.minHeight === autoGrowBounds(rows, maxRows).minHeight;
+        // Firefox and WebKit report a border snapped to device pixels (0.67px at 150%), under 1px in all; a py class moves it by more.
+        // Stryker disable next-line EqualityOperator: no padding is exactly 1px out, so > and >= find the same classes.
+        if (ours && Math.abs(parseFloat(style.minHeight) - (rows * parseFloat(style.lineHeight) + chrome)) > 1) {
+          devWarn(
+            "TextArea",
+            "a class sets the textarea's vertical padding, so autoGrow's rows and maxRows leave it out",
+            'set its variable instead: <TextArea autoGrow className="[&_textarea]:[--ouro-text-area-py:12px]">',
+            checked.current,
+          );
+        }
+      });
+      // Stryker disable next-line ArrowFunction: a check that runs after unmount reads a detached textarea, whose styles are empty, and says nothing.
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [autoGrow, rows, maxRows, size, variant]);
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     // A controlled field fits once its value arrives, in the effect above.
     if (autoGrow && !native && !controlled) fitHeight(event.currentTarget, rows, maxRows);
@@ -390,15 +403,17 @@ export function TextArea(props: TextAreaProps): JSX.Element {
           ref={setRef as Ref<HTMLInputElement>}
           onChange={handleChange as unknown as FieldControlProps["onChange"]}
           render={(controlProps) => {
+            const { style, ...textareaProps } = controlProps as TextareaHTMLAttributes<HTMLTextAreaElement>;
             const textarea = (
               <textarea
-                {...(controlProps as TextareaHTMLAttributes<HTMLTextAreaElement>)}
+                {...textareaProps}
+                style={autoGrow ? { ...autoGrowBounds(rows, maxRows), ...style } : style}
                 rows={rows}
                 data-ouro-control="text-area"
                 data-ouro-part="input"
                 data-variant={variant}
                 data-size={size}
-                className={cn(textAreaClass, textAreaVariants[variant], textAreaSizes[size], autoGrow ? "resize-none" : "resize-y")}
+                className={cn(textAreaClass, textAreaVariants[variant], textAreaSizes[size], autoGrow ? autoGrowClass : "resize-y")}
               />
             );
             if (!highlighting) return textarea;

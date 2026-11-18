@@ -1,4 +1,4 @@
-export { actionsClass, frameClass, isPartOf, itemFor, labelClass, layerClass, linkClass, listClass, outlineClass, pillClass, statusClass, tagClass };
+export { actionsClass, frameClass, isPartOf, itemFor, labelClass, layerClass, linkClass, listClass, outlineClass, outlinesClass, pillClass, scanClass, statusClass, tagClass };
 
 // Class strings and names for Inspector, apart from the component so its file exports only
 // components (React Fast Refresh). Class strings are literal so the app's Tailwind finds them.
@@ -64,6 +64,30 @@ const layerClass =
   "pointer-events-none fixed inset-0 z-[calc(var(--ouro-layer)+1)] opacity-100 " +
   "motion-safe:[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out)] starting:data-starting-style:opacity-0 " +
   "[body:has([data-ouro-inspector-list])_&]:invisible";
+
+/**
+ * The outlines, together: as X-ray opens they show from the top of the screen down, as the scan passes over them, over
+ * twice `--ouro-duration-slow`; with reduced motion they show at once, with the layer. @internal
+ *
+ * @claim "The outlines, together: as X-ray opens" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > opens with a scan down the screen that shows the outlines as it passes, and at once with reduced motion)
+ */
+// It covers the layer, so the outlines keep the layer's corner as their origin and the clip has a box to cut.
+const outlinesClass =
+  "absolute inset-0 [clip-path:inset(0)] motion-safe:[transition:clip-path_calc(var(--ouro-duration-slow)*2)_var(--ouro-ease-in-out),translate_calc(var(--ouro-duration-slow)*2)_var(--ouro-ease-in-out)] " +
+  "starting:in-data-starting-style:[clip-path:inset(0_0_100%_0)]";
+
+/**
+ * The scan: a band tinted with the primary color, with a line at its lower edge, that sweeps down the screen once as X-ray opens,
+ * on the outlines' timing, and then rests below it. With reduced motion there is no scan. @internal
+ *
+ * @claim "With reduced motion there is no" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > opens with a scan down the screen that shows the outlines as it passes, and at once with reduced motion)
+ * @claim "The scan: a band tinted with" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > opens with a scan down the screen that shows the outlines as it passes, and at once with reduced motion)
+ */
+const scanClass =
+  "absolute inset-x-0 top-0 h-16 [translate:0_100vh] border-b-2 border-primary bg-primary/5 " +
+  // The outlines' transition, the one class for both: each part changes only its own property.
+  "motion-safe:[transition:clip-path_calc(var(--ouro-duration-slow)*2)_var(--ouro-ease-in-out),translate_calc(var(--ouro-duration-slow)*2)_var(--ouro-ease-in-out)] " +
+  "starting:in-data-starting-style:[translate:0_-100%] motion-reduce:hidden";
 
 /**
  * One outline: placed by `transform` from its component's box, and hidden, tag and all, while nothing of it shows. @internal
