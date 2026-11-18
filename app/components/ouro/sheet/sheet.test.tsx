@@ -12,6 +12,7 @@ import {
   SheetDescription,
   SheetHandle,
   SheetPopup,
+  SheetScrim,
   SheetPortal,
   SheetRoot,
   SheetTitle,
@@ -19,7 +20,7 @@ import {
   SheetViewport,
 } from "~/components/ouro/sheet/sheet-parts";
 import { registerSheetProperties } from "~/components/ouro/sheet/sheet-styles";
-import { Sheet, SheetFrame, type SheetProps } from "~/components/ouro/sheet/sheet";
+import { Sheet, SheetFrame, type SheetProps, type SheetSnapPoint } from "~/components/ouro/sheet/sheet";
 import { act } from "~/lib/ouro/testing/act";
 import { pageCss } from "~/lib/ouro/testing/page-css";
 import { pressTab } from "~/lib/ouro/testing/tab";
@@ -101,6 +102,16 @@ function Body() {
         Note <input aria-label="Note" />
       </label>
     </>
+  );
+}
+
+/** A bottom SheetFrame whose snap points and held snap point its caller sets, as Command holds its phone sheet's size. */
+function HeldSheet({ snapPoints, snapPoint }: { snapPoints: SheetSnapPoint[]; snapPoint: number }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <SheetFrame title="Save to cookbook" closeLabel="Close" side="bottom" snapPoints={snapPoints} snapPoint={snapPoint} open={open} onOpenChange={setOpen}>
+      <Body />
+    </SheetFrame>
   );
 }
 
@@ -520,6 +531,16 @@ describe("feel", () => {
     expect(Math.abs(innerHeight - sheet.getBoundingClientRect().top - innerHeight / 2)).toBeLessThanOrEqual(2);
   });
 
+  it("rests at the snap point its caller holds, not the first one, and moves when the caller changes it, with no warning", async () => {
+    await render(<HeldSheet snapPoints={[0.5, 1]} snapPoint={1} />);
+    await settled();
+    // Uncontrolled, this sheet would rest at its first snap point, half the viewport.
+    expect(innerHeight - popup()!.getBoundingClientRect().top).toBeGreaterThan(innerHeight * 0.9);
+    await act(async () => roots.at(-1)!.render(<HeldSheet snapPoints={[0.5, 1]} snapPoint={0.5} />));
+    await settled();
+    expect(Math.abs(innerHeight - popup()!.getBoundingClientRect().top - innerHeight / 2)).toBeLessThanOrEqual(2);
+  });
+
   it("gives a top sheet with snap points the full height less the gap, and fits a top sheet without them", async () => {
     const fitted = await openUncontrolled({ side: "top" });
     const fittedHeight = fitted.getBoundingClientRect().height;
@@ -793,11 +814,13 @@ describe("non-modal sheet", () => {
     onPage = () => {},
     onOpenChange = () => {},
     closeOnOutsidePress,
+    scrim,
     children = <Button>Ocean</Button>,
   }: {
     onPage?: () => void;
     onOpenChange?: (open: boolean) => void;
     closeOnOutsidePress?: boolean;
+    scrim?: boolean;
     children?: ReactNode;
   }) {
     const [open, setOpen] = useState(true);
@@ -812,6 +835,7 @@ describe("non-modal sheet", () => {
           side="right"
           modal={false}
           closeOnOutsidePress={closeOnOutsidePress}
+          scrim={scrim}
           open={open}
           onOpenChange={(next) => {
             onOpenChange(next);
@@ -890,6 +914,45 @@ describe("non-modal sheet", () => {
     expect(onPage).toHaveBeenCalledOnce();
     expect(onOpenChange).toHaveBeenCalledWith(false);
     await expect.poll(() => popup()).toBeNull();
+  });
+
+  it("with scrim, the page keeps its colours and contrast, the layer takes no presses, and a press on the page still closes it", async () => {
+    await page.viewport(1280, 800);
+    const onPage = vi.fn();
+    const onOpenChange = vi.fn();
+    await render(<Preview onPage={onPage} onOpenChange={onOpenChange} closeOnOutsidePress scrim />);
+    await settled();
+    const scrim = document.querySelector<HTMLElement>('[data-ouro="sheet-scrim-backdrop"]')!;
+    expect(scrim).not.toBeNull();
+    expect(backdrop()).toBeNull();
+    const style = getComputedStyle(scrim);
+    expect(style.pointerEvents).toBe("none");
+    expect(scrim.getAttribute("aria-hidden")).toBe("true");
+    // The page beside a non-modal sheet is in use: a tint over it lowers its text's contrast, and an app's text near
+    // 4.5:1 falls under it (spoonjoy-v2#770's "Change look" button, 4.56:1 to about 4.2:1 under a 10% tint).
+    expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(style.backgroundImage).toBe("none");
+    expect(style.backdropFilter === "none" || style.backdropFilter === "").toBe(true);
+    expect(getComputedStyle(popup()!).boxShadow).not.toBe("none");
+    await userEvent.click(page.getByRole("button", { name: "Page action" }));
+    expect(onPage).toHaveBeenCalledOnce();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    await expect.poll(() => popup()).toBeNull();
+  });
+
+  it("draws no scrim unless asked, and not on a modal sheet, which has its backdrop", async () => {
+    await page.viewport(1280, 800);
+    await render(<Preview />);
+    await settled();
+    expect(document.querySelector('[data-ouro="sheet-scrim-backdrop"]')).toBeNull();
+    await render(
+      <Sheet title="Modal" open onOpenChange={() => {}} scrim>
+        <Body />
+      </Sheet>,
+    );
+    await settled();
+    expect(document.querySelector('[data-ouro="sheet-scrim-backdrop"]')).toBeNull();
+    expect(backdrop()).not.toBeNull();
   });
 
   it("with closeOnOutsidePress, stays open on a press in a menu or a dialog opened from inside it", async () => {
@@ -1435,6 +1498,7 @@ describe("Sheet parts", () => {
     ["SheetTrigger", <SheetTrigger key="t" />, shape("…")],
     ["SheetPortal", <SheetPortal key="p" />, shape("…")],
     ["SheetBackdrop", <SheetBackdrop key="b" />, shape("…")],
+    ["SheetScrim", <SheetScrim key="s" />, shape("…")],
     ["SheetViewport", <SheetViewport key="v" />, shape("…")],
     ["SheetPopup", <SheetPopup key="pp" />, shape("…")],
     ["SheetHandle", <SheetHandle key="h" />, shape("<SheetHandle />…")],

@@ -203,6 +203,9 @@ const looks = [
  * `modal={false}`: a panel beside a page that stays in use, here a live preview of a look. No
  * backdrop dims the page, its controls stay in reach, and the sheet closes with Escape or its
  * close button.
+ *
+ * With `closeOnOutsidePress`, a press on the page closes the sheet and still reaches the page.
+ * `scrim` lays a layer over the page that paints nothing, so the page keeps its contrast.
  */
 export const NonModal: Story = {
   parameters: { screenshot: { name: "sheet-non-modal", open: true }, layout: "fullscreen" },
@@ -217,7 +220,7 @@ export const NonModal: Story = {
           <span style={{ height: 8, borderRadius: 4, background: look.color }} />
         </div>
         <div style={row}>
-          <Sheet title="Look" description="Pick one; the page shows it at once." side="right" modal={false} trigger={<Button variant="soft">Change look</Button>}>
+          <Sheet title="Look" description="Pick one; the page shows it at once." side="right" modal={false} scrim closeOnOutsidePress trigger={<Button variant="soft">Change look</Button>}>
             <div style={{ display: "grid", gap: 4 }}>
               {looks.map((item) => (
                 <Button key={item.name} variant={item === look ? "soft" : "plain"} tone={item === look ? "primary" : "secondary"} fullWidth aria-pressed={item === look} onClick={() => setLook(item)}>

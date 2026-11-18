@@ -78,6 +78,11 @@ const backdropClass =
   "data-swipe-dismiss:data-ending-style:duration-(--ouro-duration-fast) " +
   iosBackdrop;
 
+// A non-modal sheet's scrim: it lets every press through to the page, so a press outside still dismisses. It paints
+// nothing: the page beside a non-modal sheet is in use, and any tint over it lowers its text's contrast (a 10% tint
+// took spoonjoy-v2's 4.56:1 "Change look" button to about 4.2:1). The sheet's hairline and shadow set it apart instead.
+const scrimClass = "pointer-events-none fixed inset-0 z-1000 min-h-dvh bg-transparent";
+
 const viewportClasses = {
   bottom: "items-end justify-center",
   top: "items-start justify-center",
@@ -283,6 +288,20 @@ export function SheetBackdrop({
   useSheetPart("SheetBackdrop", "…");
   const anchorRef = useBackdropAnchor(ref);
   return <Drawer.Backdrop {...props} ref={anchorRef} data-ouro="sheet-backdrop" className={backdropClass} />;
+}
+
+/**
+ * Part: the layer over the page beside a `modal={false}` sheet (a modal sheet draws its own backdrop). It paints
+ * nothing, so the page in use keeps its contrast, and it passes presses through: a press on the page reaches the
+ * page, and closes the sheet when it closes on an outside press. A `ref` reaches its element.
+ */
+export function SheetScrim({
+  ref,
+  ...props
+}: Omit<Drawer.Backdrop.Props, "className" | "forceRender"> & { ref?: Ref<HTMLDivElement> | undefined }): JSX.Element {
+  useSheetPart("SheetScrim", "…");
+  const anchorRef = useBackdropAnchor(ref);
+  return <Drawer.Backdrop {...props} forceRender ref={anchorRef} aria-hidden="true" data-ouro="sheet-scrim-backdrop" className={scrimClass} />;
 }
 
 /**

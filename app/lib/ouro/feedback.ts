@@ -30,6 +30,9 @@ const PATTERN: readonly number[] = [200, 100, 200, 100, 400];
 const RESUME_MS = 300;
 
 function constructor(): AudioContextConstructor | null {
+  // An automated browser (Playwright, WebDriver, an agent's headless page) sets navigator.webdriver; nobody is there to hear it.
+  // Stryker disable next-line ConditionalExpression,StringLiteral: the typeof guard only spares a server with no navigator; the browser tests cannot lose it
+  if (typeof navigator !== "undefined" && navigator.webdriver) return null;
   const scope = globalThis as unknown as { AudioContext?: AudioContextConstructor; webkitAudioContext?: AudioContextConstructor };
   return scope.AudioContext ?? scope.webkitAudioContext ?? null;
 }
