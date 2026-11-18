@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode, type Ref } from "react";
 import { Button } from "~/components/ouro/button/button";
-import { ChecklistRootUnchecked, ChecklistRow } from "~/components/ouro/checklist/checklist-parts";
+import { ChecklistRootUnchecked, ChecklistRow, type ChecklistVariant } from "~/components/ouro/checklist/checklist-parts";
 import { emptyClass, rowPartNames } from "~/components/ouro/checklist/checklist-styles";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { announce } from "~/lib/ouro/announce";
@@ -23,8 +23,15 @@ export interface ChecklistItemData {
   checked: boolean;
   /** Disables the row's box and fades it. */
   disabled?: boolean | undefined;
+  /**
+   * An icon at the start of the row, in a soft tile, such as a step's picture. Screen readers
+   * skip it, since the label names the row.
+   */
+  media?: ReactNode | undefined;
   /** A control of the row's own beside it (a button, a menu), its own tab stop; clicking it does not toggle the row. */
   action?: ReactNode | undefined;
+  /** Not a field. Ouro UI uses `media`: `{ id, label, media: <Icon />, checked }`. */
+  icon?: { 'Use media: <Icon />': never };
 }
 
 /** Props for {@link Checklist}. */
@@ -38,6 +45,17 @@ export interface ChecklistProps {
   hideLabel?: boolean | undefined;
   /** Supporting text under the label, read after it through `aria-describedby`. */
   description?: ReactNode | undefined;
+  /**
+   * How the rows look. `plain`: open rows, the box at their start. `outline`: each row a card
+   * with a hairline border, and its tick a circle at the row's end that fills with the primary
+   * tone when ticked and the warning tone while out of order, for steps with their own icons
+   * (`media`). Another value renders `plain` and warns in development.
+   *
+   * @default "plain"
+   * @claim "`outline`: each row a card with" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist outline > frames each row as a card and puts a round tick at its end, which fills with the tone)
+   * @claim "Another value renders `plain` and warns" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist development messages > renders plain rows for an unknown variant, and names the fix)
+   */
+  variant?: ChecklistVariant | (string & { 'Use "plain" or "outline"': never }) | undefined;
   /**
    * The rows, in order. Adding one brings it in; removing one lets it leave before it goes, and
    * an id added back while its row leaves returns that row in place.
@@ -103,6 +121,9 @@ export interface ChecklistProps {
   /** Not a prop. Steps to do in order are `ordered`: `<Checklist ordered>`, or `ordered={["boil", "pour"]}`. */
   sequential?: { 'Use <Checklist ordered>': never };
 }
+
+/** The variants a checklist has; another value renders `plain`. */
+const variants: readonly string[] = ["plain", "outline"];
 
 /** The default note for a row ticked out of order. */
 const comesFirst = (first: string) => `${first} comes first`;
@@ -257,6 +278,7 @@ export function Checklist(props: ChecklistProps): JSX.Element {
     label,
     hideLabel,
     description,
+    variant: variantProp,
     items,
     onCheckedChange,
     onClearChecked,
@@ -298,6 +320,8 @@ export function Checklist(props: ChecklistProps): JSX.Element {
             onCheck !== undefined && [`onCheck is not a prop; ${change[0]}`, change[1]],
             legend !== undefined && ["legend is not a prop; a checklist is named by its label", '<Checklist label="Ingredients">'],
             sequential !== undefined && ["sequential is not a prop; steps to do in order are ordered", "<Checklist ordered>"],
+            variantProp !== undefined && !variants.includes(variantProp) && [`variant="${variantProp}" is not a variant; use "plain" or "outline"`, '<Checklist variant="outline">'],
+            items.some((item) => item.icon !== undefined) && ["an item's icon is not a field; an item's picture is its media", 'items={[{ id: "boil", label: "Boil the water", media: <KettleIcon />, checked: false }]}'],
             ...(Array.isArray(ordered) ? ordered : [])
               .filter((id: string) => !ids.includes(id))
               .map((id: string) => [`ordered names "${id}", which no item has; list the items' ids in the order to do them`, `ordered={[${ids.map((known) => JSON.stringify(known)).join(", ")}]}`] as const),
@@ -306,6 +330,7 @@ export function Checklist(props: ChecklistProps): JSX.Element {
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
 
+  const variant = (variants.includes(variantProp as string) ? variantProp : "plain") as ChecklistVariant;
   const root = useRef<HTMLDivElement>(null);
   const rootRef = useMergedRef(ref, root);
   const { entries, rows } = useExitRetention(items, (item) => item.id);
@@ -372,6 +397,7 @@ export function Checklist(props: ChecklistProps): JSX.Element {
       className={className}
       ref={rootRef}
       reserve={onClearChecked !== undefined}
+      variant={variant}
       actions={
         onClearChecked && anyChecked ? (
           <Button
@@ -400,6 +426,7 @@ export function Checklist(props: ChecklistProps): JSX.Element {
           checked={item.checked}
           outOfOrder={shownNotes.get(item.id)}
           disabled={item.disabled}
+          media={item.media}
           action={item.action}
           onCheckedChange={(checked) => onCheckedChange(item.id, checked)}
         />

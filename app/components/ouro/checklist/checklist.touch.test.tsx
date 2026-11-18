@@ -18,11 +18,12 @@ afterEach(async () => {
 const many: ChecklistItemData[] = Array.from({ length: 24 }, (_, index) => ({ id: `item-${index}`, label: `ingredient ${index + 1}`, value: `${index + 1} g`, checked: false }));
 let changes: Array<[string, boolean]> = [];
 
-function Host() {
+function Host({ variant }: { variant?: "outline" | undefined }) {
   const [items, setItems] = useState(many);
   return (
     <Checklist
       label="Ingredients"
+      variant={variant}
       items={items}
       onCheckedChange={(id, checked) => {
         changes.push([id, checked]);
@@ -32,20 +33,25 @@ function Host() {
   );
 }
 
-async function render() {
+async function render(variant?: "outline") {
   changes = [];
   const host = document.createElement("div");
   host.style.padding = "16px";
   document.body.append(host);
   nodes.push(host);
   root = createRoot(host);
-  await act(async () => root!.render(<Host />));
+  await act(async () => root!.render(<Host variant={variant} />));
   return host;
 }
 
 it("gives every row at least 44px to tap", async () => {
   expect(matchMedia("(pointer: coarse)").matches).toBe(true);
   const host = await render();
+  for (const label of host.querySelectorAll('[data-ouro-part="row"] label')) expect(label.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+});
+
+it("gives every outlined row at least 44px to tap, round tick and all", async () => {
+  const host = await render("outline");
   for (const label of host.querySelectorAll('[data-ouro-part="row"] label')) expect(label.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
 });
 

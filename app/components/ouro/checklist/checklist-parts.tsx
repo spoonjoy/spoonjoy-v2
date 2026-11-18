@@ -10,10 +10,16 @@ import {
   groupLabelClass,
   headerClass,
   hitClass,
+  hitOutlineClass,
+  hitPlainClass,
   labelClass,
+  mediaClass,
   noteClass,
   outOfOrderBoxClass,
+  outlineCardClass,
+  outlineRowInnerClass,
   rootClass,
+  roundBoxClass,
   rowClass,
   rowInnerClass,
   rowsClass,
@@ -26,7 +32,11 @@ import { cn } from "~/lib/ouro/cn";
 import { controlRef } from "~/lib/ouro/control-ref";
 import { devThrow } from "~/lib/ouro/dev";
 
-const ChecklistContext = createContext(false);
+/** How a checklist's rows look: `ChecklistRoot`'s `variant`, or null outside a root. */
+const ChecklistContext = createContext<ChecklistVariant | null>(null);
+
+/** How a checklist's rows look. */
+export type ChecklistVariant = "plain" | "outline";
 
 /** Marks the hidden input that Base UI submits a box with. */
 const markInput = controlRef("checklist", "hidden-input");
@@ -44,6 +54,8 @@ export interface ChecklistRootProps {
   description?: ReactNode | undefined;
   /** Controls at the end of the header, such as a "Clear checked" button. */
   actions?: ReactNode | undefined;
+  /** How the rows look: `plain` rows, or `outline` cards with a round tick at their end. @default "plain" */
+  variant?: ChecklistVariant | undefined;
   /** The rows: `ChecklistItem`s. */
   children?: ReactNode;
   /** Layout only: margins, width, grid placement (`mt-4`). */
@@ -73,7 +85,7 @@ export function ChecklistRoot(props: ChecklistRootProps): JSX.Element {
  *
  * @internal
  */
-export function ChecklistRootUnchecked({ label, hideLabel, description, actions, children, className, ref, reserve }: ChecklistRootProps & { reserve?: boolean | undefined }): JSX.Element {
+export function ChecklistRootUnchecked({ label, hideLabel, description, actions, variant = "plain", children, className, ref, reserve }: ChecklistRootProps & { reserve?: boolean | undefined }): JSX.Element {
   const id = useId();
   const labelNode = (
     <div id={`${id}-label`} data-ouro-checklist-label="" className={hideLabel ? "sr-only" : groupLabelClass}>
@@ -82,7 +94,7 @@ export function ChecklistRootUnchecked({ label, hideLabel, description, actions,
   );
   const header = !hideLabel || description !== undefined || actions || reserve;
   return (
-    <ChecklistContext.Provider value>
+    <ChecklistContext.Provider value={variant}>
       <div
         ref={ref}
         role="group"
@@ -130,6 +142,8 @@ export interface ChecklistItemProps {
   onCheckedChange: (checked: boolean) => void;
   /** Disables the row's box and fades it. */
   disabled?: boolean | undefined;
+  /** An icon at the start of the row, in a soft tile; screen readers skip it, since the label names the row. */
+  media?: ReactNode | undefined;
   /** A control of the row's own beside it (a button, a menu), its own tab stop outside the row's label. */
   action?: ReactNode | undefined;
 }
@@ -159,6 +173,7 @@ export function ChecklistRow({
   checked,
   onCheckedChange,
   disabled,
+  media,
   action,
   phase = "present",
   rowRef,
@@ -169,7 +184,8 @@ export function ChecklistRow({
   /** The note a checked row shows while a step before it is still unticked: `Checklist`'s `ordered`. */
   outOfOrder?: string | undefined;
 }): JSX.Element {
-  if (!useContext(ChecklistContext)) {
+  const variant = useContext(ChecklistContext);
+  if (!variant) {
     devThrow(
       "ChecklistItem",
       "must be rendered inside <ChecklistRoot>",
@@ -180,8 +196,64 @@ export function ChecklistRow({
   }
   const id = useId();
   const leaving = phase === "leaving";
+  const outline = variant === "outline";
   const held = checked && outOfOrder !== undefined;
   const describedBy = [held && `${id}-note`, description !== undefined && `${id}-description`, value !== undefined && `${id}-value`].filter(Boolean).join(" ") || undefined;
+  const box = (
+    <BaseCheckbox.Root
+      checked={checked}
+      onCheckedChange={(next) => onCheckedChange(next)}
+      disabled={disabled}
+      inputRef={markInput}
+      data-ouro-control="checklist"
+      data-ouro-part="box"
+      data-out-of-order={held ? "" : undefined}
+      aria-labelledby={`${id}-label`}
+      aria-describedby={describedBy}
+      className={cn(boxClass, outOfOrderBoxClass, outline && roundBoxClass)}
+    >
+      <BaseCheckbox.Indicator keepMounted className={indicatorClass}>
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="size-full">
+          <path d="M3.5 8.5 6.5 11.5 12.5 4.5" pathLength={1} data-ouro-part="tick" className={tickClass} />
+        </svg>
+      </BaseCheckbox.Indicator>
+    </BaseCheckbox.Root>
+  );
+  const content = (
+    <>
+      <label className={cn(hitClass, outline ? hitOutlineClass : hitPlainClass)}>
+        {!outline && box}
+        {media !== undefined && (
+          <span aria-hidden="true" data-ouro-checklist-media="" className={mediaClass}>
+            {media}
+          </span>
+        )}
+        <span className={textClass}>
+          <span id={`${id}-label`} data-ouro-part="label" className={labelClass}>
+            {label}
+            <span aria-hidden="true" data-ouro-part="strike" className={strikeClass} />
+          </span>
+          {held && (
+            <span id={`${id}-note`} data-ouro-part="note" className={noteClass}>
+              {outOfOrder}
+            </span>
+          )}
+          {description !== undefined && (
+            <span id={`${id}-description`} data-ouro-checklist-description="" className={descriptionClass}>
+              {description}
+            </span>
+          )}
+        </span>
+        {value !== undefined && (
+          <span id={`${id}-value`} data-ouro-part="value" className={valueClass}>
+            {value}
+          </span>
+        )}
+        {outline && box}
+      </label>
+      {action !== undefined && <div className={actionClass}>{action}</div>}
+    </>
+  );
   return (
     <div
       ref={rowRef}
@@ -197,49 +269,8 @@ export function ChecklistRow({
       aria-hidden={leaving || undefined}
       className={rowClass}
     >
-      <div className={rowInnerClass}>
-        <label className={hitClass}>
-          <BaseCheckbox.Root
-            checked={checked}
-            onCheckedChange={(next) => onCheckedChange(next)}
-            disabled={disabled}
-            inputRef={markInput}
-            data-ouro-control="checklist"
-            data-ouro-part="box"
-            data-out-of-order={held ? "" : undefined}
-            aria-labelledby={`${id}-label`}
-            aria-describedby={describedBy}
-            className={cn(boxClass, outOfOrderBoxClass)}
-          >
-            <BaseCheckbox.Indicator keepMounted className={indicatorClass}>
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="size-full">
-                <path d="M3.5 8.5 6.5 11.5 12.5 4.5" pathLength={1} data-ouro-part="tick" className={tickClass} />
-              </svg>
-            </BaseCheckbox.Indicator>
-          </BaseCheckbox.Root>
-          <span className={textClass}>
-            <span id={`${id}-label`} data-ouro-part="label" className={labelClass}>
-              {label}
-              <span aria-hidden="true" data-ouro-part="strike" className={strikeClass} />
-            </span>
-            {held && (
-              <span id={`${id}-note`} data-ouro-part="note" className={noteClass}>
-                {outOfOrder}
-              </span>
-            )}
-            {description !== undefined && (
-              <span id={`${id}-description`} data-ouro-checklist-description="" className={descriptionClass}>
-                {description}
-              </span>
-            )}
-          </span>
-          {value !== undefined && (
-            <span id={`${id}-value`} data-ouro-part="value" className={valueClass}>
-              {value}
-            </span>
-          )}
-        </label>
-        {action !== undefined && <div className={actionClass}>{action}</div>}
+      <div className={outline ? outlineRowInnerClass : rowInnerClass}>
+        {outline ? <div className={outlineCardClass}>{content}</div> : content}
       </div>
     </div>
   );
