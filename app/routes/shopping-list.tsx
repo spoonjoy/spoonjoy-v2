@@ -3,7 +3,9 @@ import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/shopping-list";
 import { formatAmount } from "~/lib/quantity";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useLoaderData, Form, useSubmit, useFetchers, useActionData, useLocation, useRevalidator } from "react-router";
+import { useLoaderData, Form, useSubmit, useFetchers, useActionData, useLocation, useRevalidator, type ShouldRevalidateFunctionArgs } from "react-router";
+import { revalidateUnlessNetworkFailure, submitOrReportLostRequest } from "~/lib/network-failure";
+import { useResendLostSubmission } from "~/hooks/use-resend-lost-submission";
 import { controls } from "../../actions/generated/web";
 import { browserModelContext, registerShoppingListWebMcpTools } from "~/lib/webmcp-actions";
 import {
@@ -46,6 +48,27 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 export async function action({ request, context }: Route.ActionArgs) {
   return handleShoppingListAction({ request, context });
+}
+
+// Clearing the list, or its checked rows, leaves the same list however many times it is applied,
+// so only these are sent again when a submission got no answer (useResendLostSubmission, which
+// covers the page's own submissions, not the rows' fetchers). Adding an item twice adds it twice.
+const IDEMPOTENT_INTENTS = new Set(["clearAll", "clearCompleted"]);
+
+// A submission that got no answer shows a message where the cook acted, instead of the error page
+// (spoonjoy-v2#771: a reset Clear all replaced the list with "That's on our side").
+export async function clientAction({ request, serverAction }: Route.ClientActionArgs) {
+  const formData = await request.clone().formData();
+  const intent = formData.get("intent");
+  const name = typeof intent === "string" ? intent : null;
+  const resend = name !== null && IDEMPOTENT_INTENTS.has(name)
+    ? Object.fromEntries([...formData].filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+    : null;
+  return submitOrReportLostRequest(serverAction, { intent: name, resend });
+}
+
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return revalidateUnlessNetworkFailure(args, args.defaultShouldRevalidate);
 }
 
 export type ShoppingListViewMode = "all" | "need" | "basket";
@@ -130,6 +153,7 @@ export function amountLabel(item: { quantity: number | string | null; unit?: { n
 
 export default function ShoppingList() {
   const actionData = useActionData<ShoppingListActionData>();
+  const resendingLostSubmission = useResendLostSubmission(actionData);
   const { shoppingList, recipes } = useLoaderData<typeof loader>();
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
@@ -328,7 +352,7 @@ export default function ShoppingList() {
             <Plus data-slot="icon" className="size-4" />
             New item
           </Button>
-          {actionData?.error ? (
+          {actionData?.error && !resendingLostSubmission ? (
             <p role="alert" className="mt-4 text-sm text-[var(--sj-tomato)]" data-testid="shopping-list-action-error">
               {actionData.error}
             </p>
