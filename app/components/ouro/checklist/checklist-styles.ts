@@ -6,10 +6,16 @@ export {
   groupLabelClass,
   headerClass,
   hitClass,
+  hitOutlineClass,
+  hitPlainClass,
   labelClass,
+  mediaClass,
   noteClass,
   outOfOrderBoxClass,
+  outlineCardClass,
+  outlineRowInnerClass,
   rootClass,
+  roundBoxClass,
   rowClass,
   rowInnerClass,
   rowPartNames,
@@ -81,10 +87,58 @@ const rowInnerClass = "flex min-h-0 min-w-0 items-center gap-1 [[data-starting-s
  * @claim "It highlights while hovered (a mouse's" registry/ouro/components/ouro/checklist/checklist-styles.ts verify:fileLine(registry/ouro/components/ouro/checklist/checklist-styles.ts, /not-has-data-disabled:pointer-fine:hover:bg-muted\/60\snot-has-data-disabled:active:bg-muted\/60/)
  */
 const hitClass =
-  "relative m-0 flex min-w-0 flex-1 items-start gap-3 rounded-ouro-md px-2 py-2 pointer-coarse:min-h-11 pointer-coarse:py-2.5 " +
+  "relative m-0 flex min-w-0 flex-1 gap-3 pointer-coarse:min-h-11 " +
   "cursor-pointer select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "[transition:background-color_var(--ouro-duration-fast)_ease] " +
   "not-has-data-disabled:pointer-fine:hover:bg-muted/60 not-has-data-disabled:active:bg-muted/60 has-data-disabled:cursor-not-allowed";
+
+/** The hit area's shape in a plain checklist: the box at the top of the label's first line. @internal */
+const hitPlainClass = "items-start rounded-ouro-md px-2 py-2 pointer-coarse:py-2.5";
+
+/**
+ * The hit area's shape in an outlined row: it fills the row's card, its media, text and round
+ * tick centered on one line.
+ *
+ * @internal
+ */
+const hitOutlineClass = "items-center rounded-ouro-xl px-3 py-2";
+
+/**
+ * An outlined row's single grid cell, clipped only while the row grows or shrinks. The space
+ * between cards is the cards' own margin, inside this cell, so a row that leaves takes its share
+ * with it.
+ *
+ * @internal
+ */
+const outlineRowInnerClass = "min-h-0 min-w-0 [[data-starting-style]>&]:overflow-hidden [[data-ending-style]>&]:overflow-hidden";
+
+/**
+ * An outlined row's card: a hairline border on the theme's border colour, on Ouro's xl corner,
+ * holding the hit area and the row's action.
+ *
+ * @internal
+ * @claim "An outlined row's card: a hairline" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist outline > frames each row as a card and puts a round tick at its end, which fills with the tone)
+ */
+const outlineCardClass = "my-1 flex min-w-0 items-center gap-1 rounded-ouro-xl border border-solid border-border";
+
+/**
+ * A row's media: an icon in a soft 36px tile, the muted surface behind the muted foreground, as
+ * Item's icon tile is. Hidden from screen readers; the label names the row.
+ *
+ * @internal
+ * @claim "A row's media: an icon in" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist outline > draws each item's media in a soft tile at the start of the row, hidden from screen readers)
+ */
+const mediaClass = "flex size-9 shrink-0 items-center justify-center rounded-ouro-lg bg-muted text-muted-foreground *:[svg]:size-5";
+
+/**
+ * The round tick at the end of an outlined row: the box as a 24px circle (the check radius set
+ * to a full round), centered on the row. It fills with the primary tone when ticked, and with the
+ * warning tone while out of order.
+ *
+ * @internal
+ * @claim "The round tick at the end of" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist outline > frames each row as a card and puts a round tick at its end, which fills with the tone)
+ */
+const roundBoxClass = "mt-0 size-6 sm:pointer-fine:size-6 [--ouro-check-radius:9999px] [--ouro-check-corner-shape:round]";
 
 /** The text column: the label, and the description under it. @internal */
 const textClass = "flex min-w-0 flex-1 flex-col gap-0.5";

@@ -668,6 +668,21 @@ describe("Checklist ordered", () => {
     await expect.poll(() => labels(host)).toEqual(["Boil the water", "Warm the pot"]);
   });
 
+  it("draws an out-of-order box with a dashed edge under forced colours, in both looks", async () => {
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      for (const variant of ["plain", "outline"] as const) {
+        const { row } = await render(<Host items={tea.map((step) => ({ ...step, checked: step.id === "leaves" }))} extra={{ label: "Steps", ordered: true, variant }} />);
+        expect(getComputedStyle(partOf(row("Add the leaves"), "box")).borderTopStyle, variant).toBe("dashed");
+        await act(() => partOf(row("Boil the water"), "box").click());
+        expect(getComputedStyle(partOf(row("Boil the water"), "box")).borderTopStyle, variant).toBe("solid");
+        await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+      }
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
   it("keeps 4.5:1 for the out-of-order note in light and dark", async () => {
     for (const scheme of ["light", "dark"]) {
       document.documentElement.classList.toggle("dark", scheme === "dark");
@@ -688,6 +703,82 @@ describe("Checklist ordered", () => {
     const parsed = document.createElement("div");
     parsed.innerHTML = html;
     expect(parsed.querySelector('[data-out-of-order] [data-ouro-part="note"]')?.textContent).toBe("Boil the water comes first");
+  });
+});
+
+/** A step's picture, as an app passes it in `media`. */
+const Icon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" data-testid="icon">
+    <circle cx="12" cy="12" r="8" />
+  </svg>
+);
+
+describe("Checklist outline", () => {
+  const steps = tea.map((step) => ({ ...step, media: <Icon /> }));
+
+  it("frames each row as a card and puts a round tick at its end, which fills with the tone", async () => {
+    for (const dir of ["ltr", "rtl"]) {
+      const { row } = await render(<Host items={steps} extra={{ label: "Steps", variant: "outline", ordered: true }} />, { dir });
+      const leaves = row("Add the leaves");
+      const box = partOf(leaves, "box");
+      const card = box.closest("label")!.parentElement!;
+      expect(getComputedStyle(card).borderTopWidth).toBe("1px");
+      expect(getComputedStyle(card).borderTopColor).toBe(themeColor("--border"));
+      // A circle: a full-round corner (9999px, which draws as half the box's width) on a round corner shape.
+      expect(Number.parseFloat(getComputedStyle(box).borderTopLeftRadius)).toBeGreaterThanOrEqual(1000);
+      // Engines that draw corner shapes report round as superellipse(1).
+      if (CSS.supports("corner-shape: round")) expect(["round", "superellipse(1)"]).toContain(getComputedStyle(box).getPropertyValue("corner-shape"));
+      expect(box.offsetWidth).toBe(24);
+      // At the row's end, past its label: the right in left-to-right text, the left in right-to-left.
+      const [boxRect, labelRect] = [box, partOf(leaves, "label")].map((element) => element.getBoundingClientRect()) as [DOMRect, DOMRect];
+      if (dir === "ltr") expect(boxRect.left).toBeGreaterThan(labelRect.right);
+      else expect(boxRect.right).toBeLessThan(labelRect.left);
+      // Ticked out of order it fills with the warning tone; once the earlier steps are ticked, with the primary.
+      await act(() => box.click());
+      await expect.poll(() => running(leaves).length).toBe(0);
+      expect(getComputedStyle(box).backgroundColor).toBe(themeColor("--warning"));
+      await act(() => partOf(row("Boil the water"), "box").click());
+      await act(() => partOf(row("Warm the pot"), "box").click());
+      await expect.poll(() => running(leaves).length).toBe(0);
+      expect(getComputedStyle(box).backgroundColor).toBe(themeColor("--primary"));
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    }
+  });
+
+  it("draws each item's media in a soft tile at the start of the row, hidden from screen readers", async () => {
+    const { row } = await render(<Host items={steps} extra={{ label: "Steps", variant: "outline" }} />);
+    const boil = row("Boil the water");
+    const tile = boil.querySelector<HTMLElement>("[data-ouro-checklist-media]")!;
+    expect(tile).toHaveAttribute("aria-hidden", "true");
+    expect(getComputedStyle(tile).backgroundColor).toBe(themeColor("--muted"));
+    expect(getComputedStyle(tile).color).toBe(themeColor("--muted-foreground"));
+    expect(tile.getBoundingClientRect().right).toBeLessThanOrEqual(partOf(boil, "label").getBoundingClientRect().left);
+    // The icon adds nothing to the row's name.
+    await expect.element(page.getByRole("checkbox", { name: "Boil the water", exact: true })).toBeVisible();
+  });
+
+  it("renders no tile, description, value or action wrapper for a row without them, in both looks", async () => {
+    for (const variant of ["plain", "outline"] as const) {
+      const { row } = await render(<Host items={[{ id: "boil", label: "Boil the water", checked: false }]} extra={{ label: "Steps", variant }} />);
+      const boil = row("Boil the water");
+      const label = boil.querySelector("label")!;
+      expect(boil.querySelector("[data-ouro-checklist-media]"), variant).toBeNull();
+      expect(boil.querySelector("[data-ouro-checklist-description]"), variant).toBeNull();
+      expect(boil.querySelector('[data-ouro-part="value"]'), variant).toBeNull();
+      // The label is alone in its row (or its card): no empty action beside it.
+      expect(label.parentElement!.children, variant).toHaveLength(1);
+      // The label holds the box and the text, and nothing else but Base UI's hidden input.
+      expect([...label.children].filter((child) => child.tagName !== "INPUT"), variant).toHaveLength(2);
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    }
+  });
+
+  it("puts the media after the box in a plain row", async () => {
+    const { row } = await render(<Host items={steps} extra={{ label: "Steps" }} />);
+    const boil = row("Boil the water");
+    const tile = boil.querySelector<HTMLElement>("[data-ouro-checklist-media]")!;
+    expect(partOf(boil, "box").getBoundingClientRect().right).toBeLessThanOrEqual(tile.getBoundingClientRect().left);
+    expect(boil.querySelector("label")!.parentElement).toBe(boil.firstElementChild);
   });
 });
 
@@ -764,8 +855,25 @@ describe("Checklist development messages", () => {
     ]);
   });
 
+  it("renders plain rows for an unknown variant, and names the fix", async () => {
+    const guessed = { variant: "card" } as unknown as Partial<ChecklistProps>;
+    const { row } = await render(<Checklist label="Steps" items={tea} onCheckedChange={() => {}} {...guessed} />);
+    await expect.poll(messages).toEqual(['[ouro-ui] Checklist: variant="card" is not a variant; use "plain" or "outline". Fix: <Checklist variant="outline">.']);
+    // The plain box keeps its check corner, not the outline's full round.
+    expect(Number.parseFloat(getComputedStyle(partOf(row("Boil the water"), "box")).borderTopLeftRadius)).toBeLessThan(100);
+  });
+
+  it("names media for an item's icon", async () => {
+    // One item of two: any item with an icon is enough for the message.
+    const items = [{ ...tea[0]!, icon: <svg /> }, tea[1]!] as unknown as ChecklistItemData[];
+    await render(<Checklist label="Steps" items={items} onCheckedChange={() => {}} />);
+    await expect.poll(messages).toEqual([
+      "[ouro-ui] Checklist: an item's icon is not a field; an item's picture is its media. Fix: items={[{ id: \"boil\", label: \"Boil the water\", media: <KettleIcon />, checked: false }]}.",
+    ]);
+  });
+
   it("has no messages for valid props", async () => {
-    await render(<Host extra={{ description: "For four bowls.", empty: "Nothing yet." }} />);
+    await render(<Host extra={{ description: "For four bowls.", empty: "Nothing yet.", variant: "plain" }} />);
     await act(async () => {});
     expect(messages()).toEqual([]);
   });
