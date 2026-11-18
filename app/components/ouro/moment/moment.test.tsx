@@ -530,9 +530,97 @@ describe("Moment arrival", () => {
     for (const key of Object.keys(sessionStorage)) if (key.startsWith("ouro-moment:")) sessionStorage.removeItem(key);
   });
 
-  it("arrives once when the moment first shows, from the declared keyframes over the sheet duration and easing", async () => {
+  // Mounts synchronously, so a test reads what the first frame draws before any frame has run.
+  const mountNow = (node: ReactNode) => {
+    const host = document.createElement("div");
+    host.style.width = "480px";
+    document.body.append(host);
+    mounted.push(host);
+    const root = createRoot(host);
+    roots.push(root);
+    flushSync(() => root.render(node));
+    return { host, root };
+  };
+  const firstFrameOpacity = (element: HTMLElement) => new Promise<string>((resolve) => requestAnimationFrame(() => resolve(getComputedStyle(element).opacity)));
+
+  it("draws a moment that is ready at mount at full opacity in its first frame, with no arrival", async () => {
     await commands.emulateMedia({ reducedMotion: "no-preference" });
-    const { host } = await render(<Moment kind="empty" title="Nothing yet" art={<Art />} />);
+    for (const kind of ["empty", "success"] as const) {
+      const { host } = mountNow(<Moment kind={kind} title="Ready" art={<Art />} />);
+      expect(getComputedStyle(artOf(host)).opacity, `${kind}: right after the commit`).toBe("1");
+      expect(arrivals(artOf(host)), `${kind}: no arrival runs`).toEqual([]);
+      expect(await firstFrameOpacity(artOf(host)), `${kind}: on the first animation frame`).toBe("1");
+      expect(artOf(host).getAnimations(), `${kind}: nothing animates the art`).toEqual([]);
+    }
+  });
+
+  it("with appear, runs the arrival from opacity 0 when a moment that is ready at mount first shows", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    const { host } = mountNow(<Moment appear kind="empty" title="Nothing yet" art={<Art />} />);
+    const art = artOf(host);
+    let started = 0;
+    art.addEventListener("animationstart", (event) => {
+      if (event.animationName === "ouro-moment-arrive") started++;
+    });
+    const [arrival] = arrivals(art);
+    expect(arrival, "the art runs the arrival").toBeDefined();
+    expect(getComputedStyle(art).opacity).toBe("0");
+    // Settled: no arrival runs and the art is opaque, read as the engine next paints it.
+    await expect.poll(() => arrivals(art).length === 0 && getComputedStyle(art).opacity).toBe("1");
+    expect(arrival!.playState).toBe("finished");
+    expect(started, "the arrival runs once").toBeLessThanOrEqual(1);
+  });
+
+  it("arrives when content comes in after mount, whether or not appear is set", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    const { host, root } = mountNow(<Moment kind="loading" title="Working" />);
+    expect(host.querySelector("[data-ouro-moment-frame]"), "no art yet").toBeNull();
+    flushSync(() => root.render(<Moment kind="loading" title="Working" art={<Art />} />));
+    const [loaded] = arrivals(artOf(host));
+    expect(loaded, "art that loads after mount arrives").toBeDefined();
+    expect(getComputedStyle(artOf(host)).opacity).toBe("0");
+    await expect.poll(() => loaded!.playState).toBe("finished");
+  });
+
+  it("arrives when a dismissed moment comes back, which shows it after mount", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    localStorage.setItem("ouro-moment:dismissed:comes-back", "1");
+    const { host } = mountNow(<Moment dismissKey="comes-back" title="Back" art={<Art />} />);
+    expect(host.querySelector('[data-ouro="moment"]'), "dismissed, so nothing shows").toBeNull();
+    localStorage.removeItem("ouro-moment:dismissed:comes-back");
+    await act(async () => window.dispatchEvent(new StorageEvent("storage")));
+    expect(arrivals(artOf(host)), "shown after mount, so it arrives").toHaveLength(1);
+  });
+
+  it("arrives when a moment that showed at mount is hidden and comes back, and when its art returns", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    const { host, root } = mountNow(<Moment dismissKey="hidden-again" title="Again" art={<Art />} />);
+    expect(arrivals(artOf(host)), "ready at mount, so no arrival").toEqual([]);
+    localStorage.setItem("ouro-moment:dismissed:hidden-again", "1");
+    await act(async () => window.dispatchEvent(new StorageEvent("storage")));
+    expect(host.querySelector('[data-ouro="moment"]')).toBeNull();
+    localStorage.removeItem("ouro-moment:dismissed:hidden-again");
+    await act(async () => window.dispatchEvent(new StorageEvent("storage")));
+    expect(arrivals(artOf(host)), "back after being hidden, so it arrives").toHaveLength(1);
+    flushSync(() => root.render(<Moment dismissKey="hidden-again" title="Again" />));
+    expect(host.querySelector("[data-ouro-moment-frame]"), "its art left").toBeNull();
+    flushSync(() => root.render(<Moment dismissKey="hidden-again" title="Again" art={<Art />} />));
+    expect(arrivals(artOf(host)), "art that returns arrives").toHaveLength(1);
+  });
+
+  it("arrives on every change of kind, back to the kind it mounted with too", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    const { host, root } = mountNow(<Moment kind="loading" title="Working" art={<Art />} />);
+    expect(arrivals(artOf(host)), "ready at mount, so no arrival").toEqual([]);
+    flushSync(() => root.render(<Moment kind="error" title="Failed" art={<Art />} />));
+    expect(arrivals(artOf(host)), "error arrives").toHaveLength(1);
+    flushSync(() => root.render(<Moment kind="loading" title="Working" art={<Art />} />));
+    expect(arrivals(artOf(host)), "back to loading arrives too").toHaveLength(1);
+  });
+
+  it("arrives once when the moment first shows with appear, from the declared keyframes over the sheet duration and easing", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    const { host } = await render(<Moment appear kind="empty" title="Nothing yet" art={<Art />} />);
     const [arrival] = arrivals(artOf(host));
     expect(arrival, "the art runs the arrival").toBeDefined();
     const [start, end] = (arrival!.effect as KeyframeEffect).getKeyframes();
@@ -549,9 +637,9 @@ describe("Moment arrival", () => {
 
   it("does not play again when the same moment re-renders", async () => {
     await commands.emulateMedia({ reducedMotion: "no-preference" });
-    const { host, root } = await render(<Moment kind="loading" title="Working" art={<Art />} />);
+    const { host, root } = await render(<Moment appear kind="loading" title="Working" art={<Art />} />);
     const [first] = arrivals(artOf(host));
-    await act(async () => root.render(<Moment kind="loading" title="Still working" description="Almost there" art={<Art id="again" />} />));
+    await act(async () => root.render(<Moment appear kind="loading" title="Still working" description="Almost there" art={<Art id="again" />} />));
     expect(arrivals(artOf(host)).filter((animation) => animation !== first)).toEqual([]);
     await expect.poll(() => first!.playState).toBe("finished");
     await act(async () => root.render(<Moment kind="loading" title="Nearly done" art={<Art id="later" />} />));
@@ -559,34 +647,34 @@ describe("Moment arrival", () => {
     expect(arrivals(artOf(host)).filter((animation) => animation.playState !== "finished")).toEqual([]);
   });
 
-  it("arrives again when its kind changes or it remounts, but a moment with a key arrives once a session", async () => {
+  it("arrives again when its kind changes, and a moment with a key arrives once a session even when it remounts", async () => {
     await commands.emulateMedia({ reducedMotion: "no-preference" });
     const { host, root } = await render(<Moment kind="loading" title="Working" art={<Art />} />);
-    expect(arrivals(artOf(host))).toHaveLength(1);
+    expect(arrivals(artOf(host)), "ready at mount, so no arrival").toEqual([]);
     await act(async () => root.render(<Moment kind="error" title="Failed" art={<Art />} />));
-    expect(arrivals(artOf(host))).toHaveLength(1);
-    const unkeyed = await render(<Moment title="Keyless" art={<Art />} />);
+    expect(arrivals(artOf(host)), "a new kind is a new moment").toHaveLength(1);
+    const unkeyed = await render(<Moment appear title="Keyless" art={<Art />} />);
     expect(arrivals(artOf(unkeyed.host))).toHaveLength(1);
-    const keyed = await render(<Moment id="arrival-once" title="Welcome" art={<Art />} />);
+    const keyed = await render(<Moment appear id="arrival-once" title="Welcome" art={<Art />} />);
     expect(arrivals(artOf(keyed.host))).toHaveLength(1);
     await act(async () => keyed.root.unmount());
-    const back = await render(<Moment id="arrival-once" title="Welcome" art={<Art />} />);
+    const back = await render(<Moment appear id="arrival-once" title="Welcome" art={<Art />} />);
     expect(arrivals(artOf(back.host))).toEqual([]);
-    await act(async () => back.root.render(<Moment id="arrival-once" kind="success" title="Done" art={<Art />} />));
+    await act(async () => back.root.render(<Moment appear id="arrival-once" kind="success" title="Done" art={<Art />} />));
     expect(arrivals(artOf(back.host))).toHaveLength(1);
   });
 
   it("has no arrival under reduced motion, or under OuroProvider's reduced motion", async () => {
     await commands.emulateMedia({ reducedMotion: "no-preference" });
-    expect(arrivals(artOf((await render(<Moment kind="empty" title="Moving" art={<Art />} />)).host))).toHaveLength(1);
+    expect(arrivals(artOf((await render(<Moment appear kind="empty" title="Moving" art={<Art />} />)).host))).toHaveLength(1);
     await commands.emulateMedia({ reducedMotion: "reduce" });
-    const device = await render(<Moment kind="empty" title="Still" art={<Art />} />);
+    const device = await render(<Moment appear kind="empty" title="Still" art={<Art />} />);
     expect(getComputedStyle(artOf(device.host)).animationName).toBe("none");
     expect(artOf(device.host).getAnimations()).toEqual([]);
     await commands.emulateMedia({ reducedMotion: "no-preference" });
     const provided = await render(
       <OuroProvider motion="reduced">
-        <Moment kind="empty" title="Held" art={<Art />} />
+        <Moment appear kind="empty" title="Held" art={<Art />} />
       </OuroProvider>,
     );
     expect(getComputedStyle(artOf(provided.host)).animationDuration).toBe("0s");
@@ -706,17 +794,17 @@ describe("Moment motion budget", () => {
       </svg>
     );
     const entrance = (host: Element) => host.querySelector(".ouro-test-moment-in")!.getAnimations().length;
-    const first = await render(<Moment id="welcome-in" title="Welcome" art={art} />);
+    const first = await render(<Moment appear id="welcome-in" title="Welcome" art={art} />);
     expect(entrance(first.host)).toBe(1);
     expect(sessionStorage.getItem("ouro-moment:seen:welcome-in")).toBe("1");
-    const again = await render(<Moment id="welcome-in" title="Welcome" art={art} />);
+    const again = await render(<Moment appear id="welcome-in" title="Welcome" art={art} />);
     expect(entrance(again.host)).toBe(0);
     // A loop is not an entrance: it keeps running, until it settles.
     expect(again.host.querySelector(".ouro-test-moment-bob3")!.getAnimations()).toHaveLength(1);
-    const byDismissKey = await render(<Moment dismissKey="tour-in" title="Tour" art={art} />);
+    const byDismissKey = await render(<Moment appear dismissKey="tour-in" title="Tour" art={art} />);
     expect(entrance(byDismissKey.host)).toBe(1);
-    expect(entrance((await render(<Moment dismissKey="tour-in" title="Tour" art={art} />)).host)).toBe(0);
-    for (let index = 0; index < 2; index++) expect(entrance((await render(<Moment title="Keyless" art={art} />)).host)).toBe(1);
+    expect(entrance((await render(<Moment appear dismissKey="tour-in" title="Tour" art={art} />)).host)).toBe(0);
+    for (let index = 0; index < 2; index++) expect(entrance((await render(<Moment appear title="Keyless" art={art} />)).host)).toBe(1);
   });
 
   it("asks once per key whether its entrance played, so StrictMode's second run still plays it, and finishes new art under a key already shown", async () => {
@@ -733,13 +821,13 @@ describe("Moment motion budget", () => {
     const entrance = (host: Element, name: string) => host.querySelector(`.${name}`)!.getAnimations().length;
     const strict = await render(
       <StrictMode>
-        <Moment id="strict-in" title="Welcome" art={art("ouro-test-moment-in3")} />
+        <Moment appear id="strict-in" title="Welcome" art={art("ouro-test-moment-in3")} />
       </StrictMode>,
     );
     expect(entrance(strict.host, "ouro-test-moment-in3")).toBe(1);
     // The same moment turns to a key already shown: its running entrance finishes.
     sessionStorage.setItem("ouro-moment:seen:shown-in", "1");
-    await act(async () => strict.root.render(<StrictMode><Moment id="shown-in" title="Welcome" art={art("ouro-test-moment-in3")} /></StrictMode>));
+    await act(async () => strict.root.render(<StrictMode><Moment appear id="shown-in" title="Welcome" art={art("ouro-test-moment-in3")} /></StrictMode>));
     expect(entrance(strict.host, "ouro-test-moment-in3")).toBe(0);
     // New art under that key enters already finished too.
     await act(async () => strict.root.render(<StrictMode><Moment id="shown-in" title="Welcome" art={art("ouro-test-moment-in4")} /></StrictMode>));
@@ -757,8 +845,8 @@ describe("Moment motion budget", () => {
       </svg>
     );
     const entrance = (host: Element) => host.querySelector(".ouro-test-moment-in2")!.getAnimations().length;
-    expect(entrance((await render(<Moment id="private-in" title="Hello" art={art} />)).host)).toBe(1);
-    expect(entrance((await render(<Moment id="private-in" title="Hello" art={art} />)).host)).toBe(0);
+    expect(entrance((await render(<Moment appear id="private-in" title="Hello" art={art} />)).host)).toBe(1);
+    expect(entrance((await render(<Moment appear id="private-in" title="Hello" art={art} />)).host)).toBe(0);
   });
 });
 

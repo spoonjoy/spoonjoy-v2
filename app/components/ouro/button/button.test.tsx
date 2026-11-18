@@ -722,6 +722,33 @@ describe("icon-only size", () => {
     expect(icon.width).toBe(withStart!.querySelector("svg")!.getBoundingClientRect().width);
   });
 
+  it("keeps a label's padding around a wide picture such as a logo, and squares a square one or an icon", async () => {
+    const picture = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 32'/%3E";
+    const { host } = await render(
+      <>
+        <Button aria-label="Home" variant="plain">
+          <img src={picture} alt="" width={50} height={32} />
+        </Button>
+        <Button aria-label="Profile" variant="plain">
+          <img src={picture} alt="" width={24} height={24} />
+        </Button>
+        <Button aria-label="Add" variant="plain">
+          <Star width={30} height={24} />
+        </Button>
+      </>,
+    );
+    const [logo, square, icon] = [...host.querySelectorAll<HTMLElement>('[data-ouro="button"]')];
+    const box = logo!.getBoundingClientRect();
+    const image = logo!.querySelector("img")!.getBoundingClientRect();
+    expect(image.width).toBe(50);
+    expect(image.left).toBeGreaterThan(box.left);
+    expect(image.right).toBeLessThan(box.right);
+    for (const button of [square!, icon!]) {
+      const squareBox = button.getBoundingClientRect();
+      expect(squareBox.width).toBe(squareBox.height);
+    }
+  });
+
   it.each([
     ["md", "md"],
     ["sm", "sm"],
@@ -738,11 +765,67 @@ describe("icon-only size", () => {
         <span id="add-label">Add</span>
       </>,
     );
-    for (const button of host.querySelectorAll<HTMLElement>('[data-ouro="button"]')) {
-      const box = button.getBoundingClientRect();
-      expect(box.width).toBeGreaterThan(0);
-      expect(box.width).toBe(box.height);
+    // On a phone and from the sm breakpoint up, where each size sets its own padding.
+    try {
+      for (const [width, height] of [[414, 896], [1280, 800]] as const) {
+        await page.viewport(width, height);
+        for (const button of host.querySelectorAll<HTMLElement>('[data-ouro="button"]')) {
+          const box = button.getBoundingClientRect();
+          expect(box.width).toBeGreaterThan(0);
+          expect(box.width).toBe(box.height);
+        }
+      }
+    } finally {
+      await page.viewport(414, 896);
     }
+  });
+
+  it("keeps an image child at its own width, and the button is never narrower than it is tall", async () => {
+    const logo = `data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='40' height='20'><rect width='40' height='20'/></svg>")}`;
+    const { host } = await render(
+      <>
+        <Button aria-label="Home" size="sm">
+          <img src={logo} width={40} height={20} alt="" />
+        </Button>
+        <Button size="sm">Home</Button>
+      </>,
+    );
+    const [logoButton, label] = [...host.querySelectorAll<HTMLElement>('[data-ouro="button"]')];
+    const img = logoButton!.querySelector("img")!;
+    await img.decode();
+    const image = img.getBoundingClientRect();
+    const box = logoButton!.getBoundingClientRect();
+    expect(image.width).toBe(img.naturalWidth);
+    expect(image.left).toBeGreaterThanOrEqual(box.left);
+    expect(image.right).toBeLessThanOrEqual(box.right);
+    expect(box.width).toBeGreaterThanOrEqual(box.height);
+    expect(box.height).toBe(label!.getBoundingClientRect().height);
+  });
+
+  it("keeps a wide element child at its full width under its aria-label", async () => {
+    const { button } = await render(
+      <Button aria-label="Wide" size="sm">
+        <span data-testid="wide" style={{ display: "block", width: 80, height: 20 }} />
+      </Button>,
+    );
+    expect(button.querySelector("[data-testid=wide]")!.getBoundingClientRect().width).toBe(80);
+    expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(80);
+  });
+
+  it("lets the app's width and padding win over an icon-only button's square", async () => {
+    const { host } = await render(
+      <>
+        <Button aria-label="Add" className="w-20">
+          <Star />
+        </Button>
+        <Button aria-label="Add" className="px-4">
+          <Star />
+        </Button>
+      </>,
+    );
+    const [wide, padded] = [...host.querySelectorAll<HTMLElement>('[data-ouro="button"]')];
+    expect(wide!.getBoundingClientRect().width).toBe(80);
+    expect(getComputedStyle(padded!).paddingInlineStart).toBe("16px");
   });
 
   it("keeps a label's padding where the icon has text beside it, a start icon, no name, or the inline size", async () => {
