@@ -185,3 +185,26 @@ export const WithActions: Story = {
     </Surface>
   ),
 };
+
+const pot: ChecklistItemData[] = [
+  { id: "boil", label: "Boil the water", checked: false },
+  { id: "warm", label: "Warm the pot", checked: false },
+  { id: "leaves", label: "Add the leaves", checked: true },
+  { id: "pour", label: "Pour on the water", checked: false },
+  { id: "steep", label: "Let it steep", value: "4 min", checked: false },
+];
+
+function TeaSteps() {
+  const state = useItems(pot);
+  return <Checklist label="Make a pot of tea" description="Tick each step as you do it." ordered items={state.items} onCheckedChange={state.onCheckedChange} onClearChecked={state.onClearChecked} clearLabel="Start over" />;
+}
+
+/** Steps to do in order: the leaves went in first, so they wait for the water and the pot, and turn done on their own once those are ticked. */
+export const Ordered: Story = {
+  parameters: { screenshot: { name: "checklist-ordered" } },
+  render: () => (
+    <Surface>
+      <TeaSteps />
+    </Surface>
+  ),
+};

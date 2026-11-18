@@ -11,6 +11,8 @@ import {
   headerClass,
   hitClass,
   labelClass,
+  noteClass,
+  outOfOrderBoxClass,
   rootClass,
   rowClass,
   rowInnerClass,
@@ -160,7 +162,13 @@ export function ChecklistRow({
   action,
   phase = "present",
   rowRef,
-}: ChecklistItemProps & { phase?: "entering" | "present" | "leaving" | undefined; rowRef?: Ref<HTMLDivElement> | undefined }): JSX.Element {
+  outOfOrder,
+}: ChecklistItemProps & {
+  phase?: "entering" | "present" | "leaving" | undefined;
+  rowRef?: Ref<HTMLDivElement> | undefined;
+  /** The note a checked row shows while a step before it is still unticked: `Checklist`'s `ordered`. */
+  outOfOrder?: string | undefined;
+}): JSX.Element {
   if (!useContext(ChecklistContext)) {
     devThrow(
       "ChecklistItem",
@@ -172,14 +180,16 @@ export function ChecklistRow({
   }
   const id = useId();
   const leaving = phase === "leaving";
-  const describedBy = [description !== undefined && `${id}-description`, value !== undefined && `${id}-value`].filter(Boolean).join(" ") || undefined;
+  const held = checked && outOfOrder !== undefined;
+  const describedBy = [held && `${id}-note`, description !== undefined && `${id}-description`, value !== undefined && `${id}-value`].filter(Boolean).join(" ") || undefined;
   return (
     <div
       ref={rowRef}
       data-slot="checklist-row"
       data-ouro-part="row"
-      data-checked={checked ? "" : undefined}
+      data-checked={checked && !held ? "" : undefined}
       data-unchecked={checked ? undefined : ""}
+      data-out-of-order={held ? "" : undefined}
       data-disabled={disabled ? "" : undefined}
       data-starting-style={phase === "entering" ? "" : undefined}
       data-ending-style={leaving ? "" : undefined}
@@ -196,9 +206,10 @@ export function ChecklistRow({
             inputRef={markInput}
             data-ouro-control="checklist"
             data-ouro-part="box"
+            data-out-of-order={held ? "" : undefined}
             aria-labelledby={`${id}-label`}
             aria-describedby={describedBy}
-            className={boxClass}
+            className={cn(boxClass, outOfOrderBoxClass)}
           >
             <BaseCheckbox.Indicator keepMounted className={indicatorClass}>
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="size-full">
@@ -211,6 +222,11 @@ export function ChecklistRow({
               {label}
               <span aria-hidden="true" data-ouro-part="strike" className={strikeClass} />
             </span>
+            {held && (
+              <span id={`${id}-note`} data-ouro-part="note" className={noteClass}>
+                {outOfOrder}
+              </span>
+            )}
             {description !== undefined && (
               <span id={`${id}-description`} data-ouro-checklist-description="" className={descriptionClass}>
                 {description}

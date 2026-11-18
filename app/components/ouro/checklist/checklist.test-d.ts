@@ -17,6 +17,8 @@ expectTypeOf<{
   onCheckedChange: OnCheckedChange;
   onClearChecked: () => void;
   clearLabel: "Start over";
+  ordered: true;
+  outOfOrderLabel: (first: string) => string;
   empty: "Nothing yet.";
   className: "mt-4";
 }>().toExtend<ChecklistProps>();
@@ -36,6 +38,9 @@ expectTypeOf<{ label: "Ingredients"; items: []; onCheckedChange: OnCheckedChange
 expectTypeOf<{ label: "Ingredients"; items: []; onCheckedChange: OnCheckedChange; onToggle: () => void }>().not.toExtend<ChecklistProps>();
 expectTypeOf<{ label: "Ingredients"; items: []; onCheckedChange: OnCheckedChange; onCheck: () => void }>().not.toExtend<ChecklistProps>();
 expectTypeOf<{ label: "Ingredients"; items: []; onCheckedChange: OnCheckedChange; legend: "Ingredients" }>().not.toExtend<ChecklistProps>();
+expectTypeOf<{ label: "Steps"; items: []; onCheckedChange: OnCheckedChange; sequential: true }>().not.toExtend<ChecklistProps>();
+// An order of ids, for steps shown in another order.
+expectTypeOf<{ label: "Steps"; items: []; onCheckedChange: OnCheckedChange; ordered: readonly ["boil", "pour"] }>().toExtend<ChecklistProps>();
 
 // Parts: a root needs its label; a row its label, state and handler.
 expectTypeOf<{ label: "Steps" }>().toExtend<ChecklistRootProps>();
