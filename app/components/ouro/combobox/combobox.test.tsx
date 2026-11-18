@@ -574,6 +574,8 @@ describe("Combobox motion", () => {
     await userEvent.keyboard("{ArrowDown}");
     await expect.poll(popup).not.toBeNull();
     const element = popup()!;
+    // The opening frame draws with no transition (data-starting-style); the leave is read once that frame is over (#1839).
+    await expect.poll(() => element.hasAttribute("data-starting-style")).toBe(false);
     element.style.setProperty("--transform-origin", "7px 3px");
     expect(getComputedStyle(element).transformOrigin).toBe("7px 3px");
     element.setAttribute("data-ending-style", "");
