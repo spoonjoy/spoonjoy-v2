@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX, type ReactNode, type Ref } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode, type Ref } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { ChecklistRootUnchecked, ChecklistRow } from "~/components/ouro/checklist/checklist-parts";
 import { emptyClass, rowPartNames } from "~/components/ouro/checklist/checklist-styles";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
+import { announce } from "~/lib/ouro/announce";
 import { useMergedRef } from "~/lib/ouro/refs";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
@@ -53,6 +54,25 @@ export interface ChecklistProps {
   /** The clear button's text. Translate it here. @default "Clear checked" */
   clearLabel?: string | undefined;
   /**
+   * Says the rows are steps to do in order. `true`: the rows' own order. An array of ids: that
+   * order, for steps shown in another (shuffled, sorted). A row ticked while a step before it is
+   * still unticked is out of order: its box turns the warning tone instead of the primary, it is
+   * not struck through, a note under it names the step that comes first, and that note is
+   * announced. Once the steps before it are ticked it reads as done on its own. Disabled rows
+   * and ids left out of the array never hold a row back.
+   *
+   * @claim "A row ticked while a step before" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist ordered > marks a step ticked before the one that comes first, names that step, and announces it)
+   * @claim "Once the steps before it are ticked" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist ordered > reads a step as done on its own once the steps before it are ticked)
+   * @claim "Disabled rows and ids left out" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist ordered > follows an order of ids for steps shown in another order, past disabled rows)
+   * @claim "An array of ids: that order" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist ordered > follows an order of ids for steps shown in another order, past disabled rows)
+   */
+  ordered?: boolean | readonly string[] | undefined;
+  /**
+   * The note an out-of-order row shows and announces, from the label of the step that comes
+   * first. Translate it here. @default (first) => `${first} comes first`
+   */
+  outOfOrderLabel?: ((first: string) => string) | undefined;
+  /**
    * What shows when there are no rows: text, or an `Empty`.
    *
    * @claim "What shows when there are no" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist > shows the empty state once the last row has left)
@@ -80,6 +100,43 @@ export interface ChecklistProps {
   onCheck?: { 'Use onCheckedChange={(id, checked) => setChecked(id, checked)}': never };
   /** Not a prop. A checklist is named by its `label`: `<Checklist label="Ingredients">`. */
   legend?: { 'Use <Checklist label="Ingredients">': never };
+  /** Not a prop. Steps to do in order are `ordered`: `<Checklist ordered>`, or `ordered={["boil", "pour"]}`. */
+  sequential?: { 'Use <Checklist ordered>': never };
+}
+
+/** The default note for a row ticked out of order. */
+const comesFirst = (first: string) => `${first} comes first`;
+
+/**
+ * Each checked row that a step before it holds back, with the label of the first unticked step
+ * before it. Disabled rows, which a person can't tick, hold nothing back.
+ *
+ * @claim "Each checked row that a step" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist ordered > reads a step as done on its own once the steps before it are ticked)
+ * @claim "Disabled rows, which a person can't" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist ordered > follows an order of ids for steps shown in another order, past disabled rows)
+ */
+function outOfOrder(items: readonly ChecklistItemData[], ordered: boolean | readonly string[] | undefined): Map<string, string> {
+  const held = new Map<string, string>();
+  if (!ordered) return held;
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const steps = (ordered === true ? items : ordered.map((id) => byId.get(id))).filter((item) => item !== undefined);
+  let first: ChecklistItemData | undefined;
+  for (const step of steps) {
+    if (step.checked && first) held.set(step.id, first.label);
+    else if (!step.checked && !step.disabled) first ??= step;
+  }
+  return held;
+}
+
+/**
+ * The current notes, plus the last note of each row that is leaving, so it leaves as it was.
+ *
+ * @claim "The current notes, plus the last" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist ordered > lets a row leave as it was, out of order, without reading as done on its way out)
+ */
+function keepLeaving(notes: Map<string, string>, before: Map<string, string>, entries: ReadonlyArray<{ key: string; phase: string }>): Map<string, string> {
+  const next = new Map(notes);
+  const leaving = new Set(entries.filter((entry) => entry.phase === "leaving").map((entry) => entry.key));
+  for (const [key, note] of before) if (leaving.has(key)) next.set(key, note);
+  return next;
 }
 
 /** A row and where it is in its life. */
@@ -176,7 +233,9 @@ const boxOf = (row: HTMLElement) => row.querySelector<HTMLElement>('[role="check
  * A list of things to tick off, such as a recipe's ingredients or a shopping list: each row a
  * checkbox the whole row toggles, with an optional value and action. Checking a row fills its
  * box, draws its tick and then a strike through its label, and softens its text; rows enter and
- * leave as `items` changes, and "Clear checked" shows while something is checked.
+ * leave as `items` changes, and "Clear checked" shows while something is checked. With `ordered`,
+ * the rows are steps: one ticked before an earlier step reads as not yet done and names the step
+ * that comes first, until that step is ticked.
  *
  * Use `CheckboxGroup` instead when the choices submit with a form; use `Checklist` for progress a
  * person ticks off.
@@ -202,6 +261,8 @@ export function Checklist(props: ChecklistProps): JSX.Element {
     onCheckedChange,
     onClearChecked,
     clearLabel = "Clear checked",
+    ordered,
+    outOfOrderLabel = comesFirst,
     empty,
     className,
     ref,
@@ -211,6 +272,7 @@ export function Checklist(props: ChecklistProps): JSX.Element {
     onToggle,
     onCheck,
     legend,
+    sequential,
   } = props;
 
   useAppearanceClassNameCheck(
@@ -235,6 +297,10 @@ export function Checklist(props: ChecklistProps): JSX.Element {
             onToggle !== undefined && [`onToggle is not a prop; ${change[0]}`, change[1]],
             onCheck !== undefined && [`onCheck is not a prop; ${change[0]}`, change[1]],
             legend !== undefined && ["legend is not a prop; a checklist is named by its label", '<Checklist label="Ingredients">'],
+            sequential !== undefined && ["sequential is not a prop; steps to do in order are ordered", "<Checklist ordered>"],
+            ...(Array.isArray(ordered) ? ordered : [])
+              .filter((id: string) => !ids.includes(id))
+              .map((id: string) => [`ordered names "${id}", which no item has; list the items' ids in the order to do them`, `ordered={[${ids.map((known) => JSON.stringify(known)).join(", ")}]}`] as const),
           ];
         }
       : /* istanbul ignore next @preserve -- production only */ undefined,
@@ -245,6 +311,26 @@ export function Checklist(props: ChecklistProps): JSX.Element {
   const { entries, rows } = useExitRetention(items, (item) => item.id);
   const anyChecked = items.some((item) => item.checked);
   const clearing = useRef(false);
+  const notes = useMemo(() => new Map([...outOfOrder(items, ordered)].map(([id, first]) => [id, outOfOrderLabel(first)])), [items, ordered, outOfOrderLabel]);
+  // A row leaves as it was: one that was out of order keeps its note, and never reads as done on its way out.
+  const [shown, setShown] = useState(() => ({ notes, all: notes }));
+  let shownNotes = shown.all;
+  if (shown.notes !== notes) {
+    shownNotes = keepLeaving(notes, shown.all, entries);
+    setShown({ notes, all: shownNotes });
+  }
+
+  // A row that has just gone out of order says which step comes first, once; one that is
+  // already out of order on the first render, or stays so, says nothing more.
+  const spoken = useRef<Map<string, string> | null>(null);
+  useEffect(() => {
+    const before = spoken.current;
+    spoken.current = notes;
+    if (!before) return;
+    // Every row held back waits on the same first unticked step, so one note says it for all of them.
+    const fresh = [...notes].find(([id]) => !before.has(id));
+    if (fresh) announce(`${fresh[1]}.`);
+  });
 
   /** Focuses the first enabled box after `from` among the rows still present, else the one before, else the group. */
   const refocus = (from: number) => {
@@ -312,6 +398,7 @@ export function Checklist(props: ChecklistProps): JSX.Element {
           description={item.description}
           value={item.value}
           checked={item.checked}
+          outOfOrder={shownNotes.get(item.id)}
           disabled={item.disabled}
           action={item.action}
           onCheckedChange={(checked) => onCheckedChange(item.id, checked)}

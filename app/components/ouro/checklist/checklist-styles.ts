@@ -7,6 +7,8 @@ export {
   headerClass,
   hitClass,
   labelClass,
+  noteClass,
+  outOfOrderBoxClass,
   rootClass,
   rowClass,
   rowInnerClass,
@@ -112,6 +114,28 @@ const strikeClass =
   "motion-safe:[transition:scale_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
   "motion-safe:group-data-checked/row:[transition:scale_var(--ouro-duration-draw)_var(--ouro-ease-out)_calc(var(--ouro-duration-fast)*2)] " +
   "motion-reduce:[scale:none] motion-reduce:opacity-0 motion-reduce:group-data-checked/row:opacity-100 motion-reduce:[transition:opacity_var(--ouro-duration-fast)_ease]";
+
+/**
+ * The box of a row ticked out of order (`Checklist`'s `ordered`): the warning tone in place of
+ * the primary, so it reads as ticked but not yet right, with a dashed edge that forced colours
+ * keep. Its colours change over `--ouro-duration-fast`.
+ *
+ * @internal
+ * @claim "The box of a row ticked" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist ordered > marks a step ticked before the one that comes first, names that step, and announces it)
+ */
+const outOfOrderBoxClass =
+  "data-out-of-order:data-checked:border-warning data-out-of-order:data-checked:bg-warning data-out-of-order:data-checked:text-warning-foreground forced-colors:data-out-of-order:border-dashed";
+
+/**
+ * The note under an out-of-order row's label, naming the step that comes first: the warning
+ * tone mixed 20% toward the foreground, as Alert's is, so it holds 4.5:1. It fades in over
+ * `--ouro-duration-fast`, with reduced motion too, since it only fades.
+ *
+ * @internal
+ * @claim "the warning tone mixed 20% toward" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist ordered > keeps 4.5:1 for the out-of-order note in light and dark)
+ */
+const noteClass =
+  "text-sm leading-5 font-medium text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))] opacity-100 starting:opacity-0 [transition:opacity_var(--ouro-duration-fast)_ease]";
 
 /** A row's description, under its label. @internal */
 const descriptionClass = "text-sm leading-5 text-muted-foreground";
