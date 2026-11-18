@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type HTMLAttributes, type JSX, type Ref } from "react";
-import { announce } from "~/lib/ouro/announce";
+import { AFTER_ACTION_MS, announce } from "~/lib/ouro/announce";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { TouchTarget } from "~/lib/ouro/touch-target";
@@ -65,11 +65,6 @@ const words: Record<keyof SyncStatusLabels, string> = {
   retry: "Retry",
 };
 const problems = new Set<SyncState>(["offline", "error"]);
-// Match Celebrate's time for the triggering control's state announcement (a switch's "off").
-// This fixed delay does not detect when a screen reader has finished speaking. Recovery keeps
-// the default delay: Retry's save moves focus to this line, and VoiceOver's usage hint for it
-// starts about then and swallows a later message.
-const SPEAK_DELAY_MS = 1500;
 
 const tones: Record<SyncState, string> = {
   saved: "text-[color-mix(in_oklab,var(--muted-foreground)_88%,var(--foreground))]",
@@ -192,12 +187,14 @@ export function SyncStatus(props: SyncStatusProps): JSX.Element {
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
-  // Spoken when a problem starts, and when changes are saved again after one.
+  // Spoken when a problem starts, after the triggering control's own state announcement (a switch's "off"), and when
+  // changes are saved again after one. Recovery keeps the default delay: Retry's save moves focus to this line, and
+  // VoiceOver's usage hint for it starts about then and swallows a later message.
   const troubled = useRef(false);
   useEffect(() => {
     if (problems.has(status)) {
       troubled.current = true;
-      return announce(word[status], { delayMs: SPEAK_DELAY_MS });
+      return announce(word[status], { delayMs: AFTER_ACTION_MS });
     } else if (status === "saved" && troubled.current) {
       return announce(word.saved, { onWrite: () => { troubled.current = false; } });
     }

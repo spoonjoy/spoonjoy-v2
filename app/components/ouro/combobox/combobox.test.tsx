@@ -10,6 +10,7 @@ import { Combobox, type ComboboxItem, type ComboboxProps } from "~/components/ou
 import { Dialog } from "~/components/ouro/dialog/dialog";
 import { Form } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
+import { watchAnnouncements } from "~/lib/ouro/testing/announcements";
 import { drawn, expectFirstFramesInPlace, placeFarBelow, recordPopupFrames } from "~/lib/ouro/testing/popup-frames";
 import { settled as settledBox } from "~/lib/ouro/testing/settled";
 import { pressDuringScroll } from "~/lib/ouro/testing/press";
@@ -270,6 +271,37 @@ describe("Combobox", () => {
     await userEvent.click(input);
     await userEvent.type(input, "zz");
     await expect.element(page.getByText("No herbs match.")).toBeVisible();
+  });
+
+  it("takes content for its empty state, such as a picture with words, said politely once each time nothing matches", async () => {
+    const announced = watchAnnouncements();
+    try {
+      const empty = (
+        <figure data-testid="nothing" style={{ margin: 0 }}>
+          <svg aria-hidden="true" width="48" height="48" />
+          <figcaption>No herbs by that name.</figcaption>
+        </figure>
+      );
+      const { input } = await render(<Combobox label="Herb" items={herbs} empty={empty} emptyLabel="Unused" />);
+      await userEvent.click(input);
+      await userEvent.type(input, "zz");
+      await expect.element(page.getByText("No herbs by that name.")).toBeVisible();
+      const region = document.querySelector('[data-testid="nothing"]')!.closest('[role="status"]')!;
+      expect(region.getAttribute("aria-live")).toBe("polite");
+      expect(document.body.textContent).not.toContain("Unused");
+      // Typing on while nothing matches leaves it as it was, so it is not said again.
+      await userEvent.type(input, "z");
+      await act(async () => {});
+      expect(announced.count("No herbs by that name.")).toBe(1);
+      // Matching again, and then nothing again, is a change, said once more.
+      await userEvent.clear(input);
+      await userEvent.type(input, "b");
+      await expect.element(page.getByRole("option", { name: "Basil" })).toBeVisible();
+      await userEvent.type(input, "q");
+      await expect.poll(() => announced.count("No herbs by that name.")).toBe(2);
+    } finally {
+      announced.stop();
+    }
   });
 
   it("clears the value with the clear button and puts focus back in the input", async () => {

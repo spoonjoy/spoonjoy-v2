@@ -139,6 +139,16 @@ export interface ComboboxBaseProps {
    */
   emptyLabel?: string | undefined;
   /**
+   * Content for the empty state in place of `emptyLabel`, such as a picture with words:
+   * `empty={<Empty icon={<SearchIcon />} title="No herbs by that name" />}`, in the popup and in the
+   * phone's sheet alike. Screen readers hear it politely, once each time nothing comes to match.
+   * @claim "Content for the empty state" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox > takes content for its empty state, such as a picture with words, said politely once each time nothing matches)
+   * @claim "Content for the empty state" registry/ouro/components/ouro/combobox/combobox.touch.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.touch.test.tsx::Combobox on a phone > shows its empty content in the sheet when nothing matches, said politely once)
+   * @claim "Screen readers hear it politely" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox > takes content for its empty state, such as a picture with words, said politely once each time nothing matches)
+   * @claim "Screen readers hear it politely" registry/ouro/components/ouro/combobox/combobox.touch.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.touch.test.tsx::Combobox on a phone > shows its empty content in the sheet when nothing matches, said politely once)
+   */
+  empty?: ReactNode;
+  /**
    * The name of the button that clears the field, as visually hidden text and not an
    * `aria-label`, so a test's label lookup for the field finds the field alone. It shows while
    * there is something to clear. Translate it with your app.
@@ -305,6 +315,7 @@ interface ControlProps {
   loading: boolean | undefined;
   loadingLabel: string;
   emptyLabel: string;
+  empty: ReactNode;
   clearLabel: string;
   doneLabel: string;
   removeLabel: (label: string) => string;
@@ -429,6 +440,7 @@ export function Combobox(props: ComboboxProps): JSX.Element {
     readOnly,
     loadingLabel = "Loading…",
     emptyLabel = "No results",
+    empty,
     clearLabel = "Clear",
     doneLabel = "Done",
     className,
@@ -529,6 +541,7 @@ export function Combobox(props: ComboboxProps): JSX.Element {
     loading,
     loadingLabel,
     emptyLabel,
+    empty,
     clearLabel,
     doneLabel,
     removeLabel,
@@ -611,6 +624,7 @@ function ListBody({
   loading,
   loadingLabel,
   emptyLabel,
+  empty,
   showEmpty,
   className,
   renderItem,
@@ -620,6 +634,7 @@ function ListBody({
   showEmpty: boolean;
   loadingLabel: string;
   emptyLabel: string;
+  empty: ReactNode;
   className: string;
   renderItem: (option: Option) => JSX.Element;
 }): JSX.Element {
@@ -642,7 +657,7 @@ function ListBody({
           </>
         )}
       </BaseCombobox.Status>
-      <BaseCombobox.Empty className={emptyClass}>{!loading && showEmpty && emptyLabel}</BaseCombobox.Empty>
+      <BaseCombobox.Empty className={emptyClass}>{!loading && showEmpty && (empty ?? emptyLabel)}</BaseCombobox.Empty>
       <BaseCombobox.List className={className}>{renderItem}</BaseCombobox.List>
     </>
   );
@@ -749,7 +764,7 @@ function useCustomReset(ref: RefObject<HTMLInputElement | HTMLButtonElement | nu
 /** A Combobox that picks one item or several, on Base UI Combobox. */
 function ComboboxControl(props: ControlProps): JSX.Element {
   const { label, items, multiple, value, defaultValue, onValueChange, onInputChange, placeholder, required, loading } = props;
-  const { loadingLabel, emptyLabel, clearLabel, doneLabel, removeLabel, customValueLabel, custom, inputRef, sheet } = props;
+  const { loadingLabel, emptyLabel, empty, clearLabel, doneLabel, removeLabel, customValueLabel, custom, inputRef, sheet } = props;
   const { autoHighlight, onInputKeyDown, readOnly, inputValue } = props;
   const field = useField()!;
   // Ouro's own invalid state (the error prop or the Form's error for this name), not Base UI's,
@@ -811,6 +826,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
       loading={loading}
       loadingLabel={loadingLabel}
       emptyLabel={emptyLabel}
+      empty={empty}
       showEmpty={showEmpty}
       className={className}
       renderItem={renderItem}
@@ -976,7 +992,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
 /** A Combobox that accepts any text, on Base UI Autocomplete. */
 function AutocompleteControl(props: ControlProps): JSX.Element {
   const { items, value, onValueChange, onInputChange, placeholder, required, loading } = props;
-  const { loadingLabel, emptyLabel, clearLabel, inputRef, autoHighlight, onInputKeyDown, readOnly } = props;
+  const { loadingLabel, emptyLabel, empty, clearLabel, inputRef, autoHighlight, onInputKeyDown, readOnly } = props;
   const field = useField()!;
   // Ouro's own invalid state (the error prop or the Form's error for this name), not Base UI's,
   // which would count it as a failed check and block the next submit.
@@ -1022,6 +1038,7 @@ function AutocompleteControl(props: ControlProps): JSX.Element {
           loading={loading}
           loadingLabel={loadingLabel}
           emptyLabel={emptyLabel}
+          empty={empty}
           showEmpty={!onInputChange || value !== ""}
           className={listClass}
           renderItem={(option) => (
