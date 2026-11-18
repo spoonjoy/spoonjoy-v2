@@ -862,6 +862,74 @@ describe("Menu focus", () => {
   });
 });
 
+describe("Menu focus ring", () => {
+  /** An item's outline: solid while the keyboard focuses it, none at rest. */
+  const outline = (element: Element) => {
+    const style = getComputedStyle(element);
+    return { style: style.outlineStyle, width: style.outlineWidth };
+  };
+
+  it("draws the ring on the item the keyboard focuses, while the item at rest has none", async () => {
+    await render(<Menu trigger={<Button>Actions</Button>}>{basicItems}</Menu>);
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    await expect.poll(() => document.activeElement?.textContent).toBe("Edit");
+    const edit = item("Edit").element();
+    const duplicate = item("Duplicate").element();
+    expect(outline(edit).style).toBe("solid");
+    expect(outline(edit).width).not.toBe("0px");
+    expect(outline(duplicate).style).toBe("none");
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Duplicate");
+    expect(outline(duplicate).style).toBe("solid");
+    expect(outline(edit).style).toBe("none");
+  });
+
+  it("draws the ring on a submenu trigger the keyboard focuses", async () => {
+    await render(
+      <Menu trigger={<Button>Actions</Button>}>
+        <MenuItem>Edit</MenuItem>
+        <MenuSub label="Share">
+          <MenuItem>Copy link</MenuItem>
+        </MenuSub>
+      </Menu>,
+    );
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.poll(() => document.activeElement?.textContent?.includes("Share")).toBe(true);
+    expect(outline(document.activeElement!).style).toBe("solid");
+    expect(outline(item("Edit").element()).style).toBe("none");
+  });
+
+  it("draws the ring on a checkbox item and a radio item the keyboard focuses", async () => {
+    await render(
+      <Menu trigger={<Button>View</Button>}>
+        <MenuCheckboxItem defaultChecked onCheckedChange={() => {}}>
+          Show ingredients
+        </MenuCheckboxItem>
+        <MenuRadioGroup label="Sort by" defaultValue="name">
+          <MenuRadioItem value="name">Name</MenuRadioItem>
+          <MenuRadioItem value="date">Date</MenuRadioItem>
+        </MenuRadioGroup>
+      </Menu>,
+    );
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    await expect.poll(() => document.activeElement?.textContent).toBe("Show ingredients");
+    const checkbox = page.getByRole("menuitemcheckbox", { name: /Show ingredients/ }).element();
+    expect(outline(checkbox).style).toBe("solid");
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Date");
+    const date = page.getByRole("menuitemradio", { name: "Date" }).element();
+    expect(outline(date).style).toBe("solid");
+    expect(outline(checkbox).style).toBe("none");
+  });
+});
+
 describe("Menu presentation", () => {
   it("is a bottom sheet below 640px, with a backdrop, and its submenu is a sheet with a Back item", async () => {
     await page.viewport(390, 844);
