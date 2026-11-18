@@ -1,7 +1,7 @@
 {
-  "tag": "v0.18.2",
-  "release": "https://github.com/ourostack/ouro-ui-core/releases/tag/v0.18.2",
-  "asset": "ouro-ui-core-v0.18.2-dist.zip",
+  "tag": "v0.18.3",
+  "release": "https://github.com/ourostack/ouro-ui-core/releases/tag/v0.18.3",
+  "asset": "ouro-ui-core-v0.18.3-dist.zip",
   "path": "web/themes/cookbook.css",
   "sha256": "d52a1964870242bffb808c2da73cea3ab9add2ae0a82753c20f32886c07ed890"
 }
