@@ -456,7 +456,7 @@
     "app/lib/ouro/focus-handoff.ts": "6fd083c7a3eb65f7c0995dba603538adaad7c311448f266abf765ff9468f9337",
     "app/lib/ouro/form-answer.test.ts": "60a4254b4e4c0661594b966f2b7e74faf4a91a6a7eff5006433b5c441a53c26d",
     "app/lib/ouro/form-answer.ts": "7a78cc676c7492227f7c1961fb6f118876794b654f0539d167b902dfc3597516",
-    "app/lib/ouro/fragment-focus-script.test.ts": "4c3b0bea6aafa2fe88280031894b90773ee6852d14e7e169d3f8826ca4c31fc7",
+    "app/lib/ouro/fragment-focus-script.test.ts": "7afb2dc0aff02145097fee02b4b3d572e801dacccca70b1f74236bd4cba61d64",
     "app/lib/ouro/fragment-focus-script.ts": "ff725ffb57e7abc0d244cf651537649b22ba0b1d81501c9a5dcb2237a41ece46",
     "app/lib/ouro/keep-clear.test.ts": "9e183864959ef7196c408e7b054cd23e6001e5bf39197c010452f46b36ccbe28",
     "app/lib/ouro/keep-clear.ts": "872632fea9379251d450eef0e4177f7254be22a96168e33df151a7f81dd4fcd7",
