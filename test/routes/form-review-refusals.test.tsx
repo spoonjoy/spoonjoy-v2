@@ -232,7 +232,7 @@ it("shows the actual manual ingredient 409 separately from a cleared primary upd
   const description = await screen.findByRole("textbox", { name: "Description", exact: true });
   await user.click(screen.getByRole("button", { name: "Update", exact: true }));
   await waitFor(() => expect(description).toHaveAccessibleDescription("Primary refusal"));
-  const primaryAlert = screen.getByRole("alert");
+  const primaryAlert = await screen.findByRole("alert");
   await user.type(description, " again");
   expect(description).not.toHaveAttribute("aria-invalid", "true");
   await user.click(screen.getByRole("button", { name: "+ Add ingredient", exact: true }));

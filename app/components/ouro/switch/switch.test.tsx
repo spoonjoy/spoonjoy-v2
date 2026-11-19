@@ -260,7 +260,7 @@ describe("Switch focus when Form errors arrive", () => {
 });
 
 describe("Switch look and motion", () => {
-  it("tells on from off without hue, with an off outline at 3:1 against the page, in light and dark", async () => {
+  it("tells on from off without hue, with a 1px off hairline at 3:1 against the page, in light and dark", async () => {
     const measured: Record<string, number[]> = {};
     for (const scheme of ["light", "dark"] as const) {
       document.documentElement.classList.toggle("dark", scheme === "dark");
@@ -277,9 +277,12 @@ describe("Switch look and motion", () => {
         const page = rgb(themeColor("--background"));
         const over = `rgb(${page.join(",")})`;
         const offStyle = getComputedStyle(off!);
-        // Off is an outline: its border is the boundary WCAG 1.4.11 asks to stand out.
-        expect(Number.parseFloat(offStyle.borderTopWidth)).toBeGreaterThan(0);
-        expect(contrast(rgb(offStyle.borderTopColor, over), page)).toBeGreaterThanOrEqual(3);
+        // Off is the muted surface in a hairline: the hairline is the boundary WCAG 1.4.11 asks to stand out.
+        for (const side of ["Top", "Right", "Bottom", "Left"] as const) {
+          expect(offStyle.getPropertyValue(`border-${side.toLowerCase()}-width`)).toBe("1px");
+          expect(contrast(rgb(offStyle.getPropertyValue(`border-${side.toLowerCase()}-color`), over), page)).toBeGreaterThanOrEqual(3);
+        }
+        expect(offStyle.backgroundColor).toBe(themeColor("--muted"));
         // On is a solid fill that differs from the off fill by lightness, not only hue.
         const offFill = rgb(offStyle.backgroundColor, over);
         const onFill = rgb(getComputedStyle(on!).backgroundColor, over);
@@ -295,6 +298,26 @@ describe("Switch look and motion", () => {
     }
     // The dark run measured the dark theme, not the light one twice.
     expect(measured.dark).not.toEqual(measured.light);
+  });
+
+  it("draws the off hairline 1px, and 2px with more contrast, with the thumb in the same place", async () => {
+    const { track, thumb } = await render(<Switch label="Wi-Fi" />);
+    await settled(thumb);
+    const place = () => {
+      const trackBox = track.getBoundingClientRect();
+      const thumbBox = thumb.getBoundingClientRect();
+      return [thumbBox.left - trackBox.left, thumbBox.top - trackBox.top, trackBox.width, trackBox.height];
+    };
+    expect(getComputedStyle(track).borderTopWidth).toBe("1px");
+    const rest = place();
+    try {
+      await commands.emulateMedia({ contrast: "more" });
+      expect(getComputedStyle(track).borderTopWidth).toBe("2px");
+      expect(place()).toEqual(rest);
+    } finally {
+      await commands.emulateMedia({ contrast: "no-preference" });
+    }
+    expect(getComputedStyle(track).borderTopWidth).toBe("1px");
   });
 
   it("fills the track with the primary color and moves the thumb to the end when on", async () => {

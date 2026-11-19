@@ -187,7 +187,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     throw new Response("Unauthorized", { status: 403 });
   }
 
-  // Handle reorder step intent
   if (intent === "reorderStep") {
     const stepId = formData.get("stepId")?.toString();
     const direction = formData.get("direction")?.toString();
@@ -263,7 +262,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
   }
 
-  // Handle delete step intent
   if (intent === "deleteStep") {
     const stepId = formData.get("stepId")?.toString();
 
@@ -340,7 +338,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     errors.servings = servingsResult.error;
   }
 
-  // Validate image file if provided
   if (imageFile) {
     const imageError = await validateImageFileForStorage(imageFile, {
       allowedTypes: RECIPE_IMAGE_TYPES,

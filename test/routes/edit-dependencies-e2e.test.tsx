@@ -406,7 +406,6 @@ describe("E2E: Edit Step Dependencies", () => {
         [1, 2]
       );
 
-      // Load recipe detail
       const result = await loadRecipeDetail(recipeId);
 
       // Verify dependencies show on recipe detail
@@ -493,7 +492,6 @@ describe("E2E: Edit Step Dependencies", () => {
         []
       );
 
-      // Load recipe detail
       const result = await loadRecipeDetail(recipeId);
       expect(result.recipe.steps[1].usingSteps).toHaveLength(0);
     });
@@ -605,10 +603,8 @@ describe("E2E: Edit Step Dependencies", () => {
       await addStep(recipeId, "Second step", "Step 2");
       const step3Id = await addStep(recipeId, "Third step", "Step 3", [1, 2]);
 
-      // Load step edit data
       const result = await loadStepEdit(recipeId, step3Id);
 
-      // Render component
       const Stub = createTestRoutesStub([
         {
           path: "/recipes/:id/steps/:stepId/edit",
@@ -634,14 +630,11 @@ describe("E2E: Edit Step Dependencies", () => {
     });
 
     it("should render edit form with no dependencies for step 1", async () => {
-      // Create recipe
       const recipeId = await createRecipe("Render Step 1 Test " + faker.string.alphanumeric(6));
       const step1Id = await addStep(recipeId, "First step", "Step 1");
 
-      // Load step edit data
       const result = await loadStepEdit(recipeId, step1Id);
 
-      // Render component
       const Stub = createTestRoutesStub([
         {
           path: "/recipes/:id/steps/:stepId/edit",
@@ -681,10 +674,8 @@ describe("E2E: Edit Step Dependencies", () => {
         []
       );
 
-      // Load step edit data
       const result = await loadStepEdit(recipeId, step2Id);
 
-      // Render component
       const Stub = createTestRoutesStub([
         {
           path: "/recipes/:id/steps/:stepId/edit",
@@ -711,7 +702,6 @@ describe("E2E: Edit Step Dependencies", () => {
       await addStep(recipeId, "Third step", "Step 3");
       const step4Id = await addStep(recipeId, "Fourth step", "Step 4", [1]);
 
-      // Load step edit data
       const result = await loadStepEdit(recipeId, step4Id);
 
       // Verify step 4 only depends on step 1
@@ -806,7 +796,6 @@ describe("E2E: Edit Step Dependencies", () => {
     });
 
     it("should handle rapid consecutive edits correctly", async () => {
-      // Create recipe
       const recipeId = await createRecipe("Rapid Edit Test " + faker.string.alphanumeric(6));
       await addStep(recipeId, "First step", "Step 1");
       await addStep(recipeId, "Second step", "Step 2");
@@ -835,7 +824,6 @@ describe("E2E: Edit Step Dependencies", () => {
       await addStep(recipeId, "First step without title"); // No stepTitle
       const step2Id = await addStep(recipeId, "Second step", "Step 2", [1]);
 
-      // Load step edit data
       const result = await loadStepEdit(recipeId, step2Id);
 
       // Verify dependency includes null title step

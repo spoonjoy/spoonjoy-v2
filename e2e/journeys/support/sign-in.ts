@@ -19,7 +19,7 @@ async function submitLoginForm(page: Page, user: { username: string; password: S
   // tap, so mark it handled here and let the tap's own error fail the test.
   answered.catch(() => undefined);
   // The desktop header also has a "Log in" menu button; the form's submit is the one in <main>.
-  await page.getByRole("main").getByRole("button", { name: "Log in", exact: true }).click();
+  await page.getByRole("main").getByRole("button", { name: "Sign in", exact: true }).click();
   const response = await answered;
   expect(response.status(), `the login action answered ${response.status()}`).toBeLessThan(400);
   await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);

@@ -521,8 +521,10 @@ describe("Checklist", () => {
   });
 
   it("describes a row by its description and value", async () => {
-    await render(<Host items={[{ id: "oats", label: "rolled oats", description: "or quick oats", value: "1 cup", checked: false }]} />);
+    const { row } = await render(<Host items={[{ id: "oats", label: "rolled oats", description: "or quick oats", value: "1 cup", checked: false }, { id: "salt", label: "salt", value: "a pinch", checked: false }]} />);
     await expect.element(page.getByRole("checkbox", { name: "rolled oats" })).toHaveAccessibleDescription("or quick oats 1 cup");
+    // A row names only the parts it has.
+    expect(partOf(row("salt"), "box")).toHaveAttribute("aria-describedby", partOf(row("salt"), "value").id);
   });
 
   it("forwards ref to the group and keeps layout classes", async () => {
@@ -530,6 +532,253 @@ describe("Checklist", () => {
     const { root } = await render(<Checklist label="Ingredients" items={ingredients} onCheckedChange={() => {}} className="mt-4" ref={(node) => void (element = node)} />);
     expect(element).toBe(root);
     expect(root.className).toContain("mt-4");
+  });
+});
+
+const tea: ChecklistItemData[] = [
+  { id: "boil", label: "Boil the water", checked: false },
+  { id: "warm", label: "Warm the pot", checked: false },
+  { id: "leaves", label: "Add the leaves", checked: false },
+];
+
+describe("Checklist ordered", () => {
+  it("marks a step ticked before the one that comes first, names that step, and announces it", async () => {
+    const { row } = await render(<Host items={tea} extra={{ label: "Steps", ordered: true }} />);
+    const leaves = row("Add the leaves");
+    const [box, tick, strike, label] = ["box", "tick", "strike", "label"].map((part) => partOf(leaves, part)) as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
+    const fast = duration("--ouro-duration-fast");
+    const draw = duration("--ouro-duration-draw");
+    const announcements = watchAnnouncements();
+    for (const [round, [scheme, reduced]] of ([
+      ["light", false],
+      ["light", true],
+      ["dark", false],
+      ["dark", true],
+    ] as const).entries()) {
+      document.documentElement.classList.toggle("dark", scheme === "dark");
+      await commands.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
+      await expect.poll(() => running(leaves).length).toBe(0);
+      // The box's tick colour changes too where the theme's two foregrounds differ (Ouro's dark scheme).
+      const recolours = themeColor("--primary-foreground") !== themeColor("--warning-foreground");
+      expect(box).not.toHaveAttribute("aria-describedby");
+      flushSync(() => box.click());
+      const note = partOf(leaves, "note");
+      // Only the note describes a row with no description or value.
+      expect(box).toHaveAttribute("aria-describedby", note.id);
+      await Promise.all([
+        expectMotion(box, { stem: "checklist", state: "data-out-of-order", properties: { "background-color": fast, "border-color": fast, ...(recolours ? { color: fast } : {}) }, reduced }),
+        expectMotion(tick, { stem: "checklist", state: "data-out-of-order", properties: reduced ? { opacity: fast } : { "stroke-dashoffset": draw }, reduced }),
+        expectMotion(note, { stem: "checklist", state: "data-out-of-order", properties: { opacity: fast }, reduced }),
+      ]);
+      // Ticked, but not done: the warning tone, no strike, the text at full strength.
+      expect(leaves).toHaveAttribute("data-out-of-order", "");
+      expect(leaves).not.toHaveAttribute("data-checked");
+      expect(box).toHaveAttribute("data-out-of-order", "");
+      expect(box).toHaveAttribute("aria-checked", "true");
+      expect(getComputedStyle(box).backgroundColor).toBe(themeColor("--warning"));
+      if (reduced) expect(getComputedStyle(strike).opacity).toBe("0");
+      else expect(Number.parseFloat(getComputedStyle(strike).scale)).toBe(0);
+      expect(getComputedStyle(label).color).toBe(themeColor("--foreground"));
+      await expect.element(page.getByRole("checkbox", { name: "Add the leaves" })).toHaveAccessibleDescription("Boil the water comes first");
+      await expect.poll(() => announcements.count("Boil the water comes first.")).toBe(round + 1);
+      flushSync(() => box.click());
+      expect(leaves.querySelector('[data-ouro-part="note"]')).toBeNull();
+    }
+    announcements.stop();
+  });
+
+  it("reads a step as done on its own once the steps before it are ticked", async () => {
+    const { row } = await render(<Host items={tea} extra={{ label: "Steps", ordered: true }} />);
+    const leaves = row("Add the leaves");
+    const [box, strike, label] = ["box", "strike", "label"].map((part) => partOf(leaves, part)) as [HTMLElement, HTMLElement, HTMLElement];
+    const fast = duration("--ouro-duration-fast");
+    const draw = duration("--ouro-duration-draw");
+    const announcements = watchAnnouncements();
+    await act(() => box.click());
+    await expect.poll(() => announcements.count("Boil the water comes first.")).toBe(1);
+    // Boiling the water leaves the pot to warm: still held, by the next step, and nothing more is said.
+    await act(() => partOf(row("Boil the water"), "box").click());
+    await expect.element(page.getByRole("checkbox", { name: "Add the leaves" })).toHaveAccessibleDescription("Warm the pot comes first");
+    await expect.poll(() => running(leaves).length).toBe(0);
+    const recolours = themeColor("--primary-foreground") !== themeColor("--warning-foreground");
+    flushSync(() => partOf(row("Warm the pot"), "box").click());
+    expectTransition({ stem: "checklist", from: "data-out-of-order", to: "data-checked", interrupt: false });
+    expect(leaves).toHaveAttribute("data-checked", "");
+    expect(leaves).not.toHaveAttribute("data-out-of-order");
+    expect(box).not.toHaveAttribute("data-out-of-order");
+    await Promise.all([
+      expectMotion(box, { stem: "checklist", state: "data-checked", properties: { "background-color": fast, "border-color": fast, ...(recolours ? { color: fast } : {}) }, reduced: false }),
+      expectMotion(strike, { stem: "checklist", state: "data-checked", properties: { scale: draw }, reduced: false }),
+      expectMotion(label, { stem: "checklist", state: "data-checked", properties: { color: draw }, reduced: false }),
+    ]);
+    expect(getComputedStyle(box).backgroundColor).toBe(themeColor("--primary"));
+    expect(getComputedStyle(label).color).toBe(themeColor("--muted-foreground"));
+    expect(leaves.querySelector('[data-ouro-part="note"]')).toBeNull();
+    await expect.element(page.getByRole("checkbox", { name: "Add the leaves" })).not.toHaveAccessibleDescription(/comes first/);
+    await act(async () => {});
+    expect(announcements.changes.map((change) => change.text)).toEqual(["Boil the water comes first."]);
+    announcements.stop();
+  });
+
+  it("follows an order of ids for steps shown in another order, past disabled rows", async () => {
+    const shown: ChecklistItemData[] = [
+      { id: "leaves", label: "Add the leaves", checked: false },
+      { id: "garnish", label: "Find a cup", checked: false },
+      { id: "warm", label: "Warm the pot", checked: false, disabled: true },
+      { id: "boil", label: "Boil the water", checked: false },
+    ];
+    const { row } = await render(<Host items={shown} extra={{ label: "Steps", ordered: ["boil", "warm", "leaves"] }} />);
+    const announcements = watchAnnouncements();
+    await act(() => partOf(row("Add the leaves"), "box").click());
+    // The shared announcer writes about 100ms later; waiting here keeps it from landing in the next test's watch.
+    await expect.poll(() => announcements.count("Boil the water comes first.")).toBe(1);
+    announcements.stop();
+    await act(() => partOf(row("Find a cup"), "box").click());
+    expect(row("Add the leaves")).toHaveAttribute("data-out-of-order");
+    // A row the order leaves out is never held back.
+    expect(row("Find a cup")).toHaveAttribute("data-checked");
+    await expect.element(page.getByRole("checkbox", { name: "Add the leaves" })).toHaveAccessibleDescription("Boil the water comes first");
+    // The pot can't be warmed here, so boiling the water is all the leaves wait for.
+    await act(() => partOf(row("Boil the water"), "box").click());
+    expect(row("Add the leaves")).toHaveAttribute("data-checked");
+    expect(row("Add the leaves")).not.toHaveAttribute("data-out-of-order");
+  });
+
+  it("says a row was out of order only when it goes out of order, not on the first render", async () => {
+    const announcements = watchAnnouncements();
+    const { row } = await render(
+      <Host items={tea.map((step) => (step.id === "warm" ? { ...step, checked: true } : step))} extra={{ label: "Steps", ordered: true, outOfOrderLabel: (first) => `First: ${first}` }} />,
+    );
+    expect(row("Warm the pot")).toHaveAttribute("data-out-of-order");
+    expect(partOf(row("Warm the pot"), "note").textContent).toBe("First: Boil the water");
+    await act(() => partOf(row("Add the leaves"), "box").click());
+    await expect.poll(() => announcements.changes.map((change) => change.text)).toEqual(["First: Boil the water."]);
+    announcements.stop();
+  });
+
+  it("lets a row leave as it was, out of order, without reading as done on its way out", async () => {
+    const { host, row } = await render(<Host items={tea.map((step) => ({ ...step, checked: step.id === "leaves" }))} extra={{ label: "Steps", ordered: true }} />);
+    const leaves = row("Add the leaves");
+    await act(() => setList((list) => list.filter((item) => item.id !== "leaves")));
+    expect(leaves).toHaveAttribute("data-ending-style");
+    expect(leaves).toHaveAttribute("data-out-of-order");
+    expect(leaves).not.toHaveAttribute("data-checked");
+    expect(partOf(leaves, "note").textContent).toBe("Boil the water comes first");
+    expect(Number.parseFloat(getComputedStyle(partOf(leaves, "strike")).scale)).toBe(0);
+    await expect.poll(() => labels(host)).toEqual(["Boil the water", "Warm the pot"]);
+  });
+
+  it("draws an out-of-order box with a dashed edge under forced colours, in both looks", async () => {
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      for (const variant of ["plain", "outline"] as const) {
+        const { row } = await render(<Host items={tea.map((step) => ({ ...step, checked: step.id === "leaves" }))} extra={{ label: "Steps", ordered: true, variant }} />);
+        expect(getComputedStyle(partOf(row("Add the leaves"), "box")).borderTopStyle, variant).toBe("dashed");
+        await act(() => partOf(row("Boil the water"), "box").click());
+        expect(getComputedStyle(partOf(row("Boil the water"), "box")).borderTopStyle, variant).toBe("solid");
+        await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+      }
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
+  it("keeps 4.5:1 for the out-of-order note in light and dark", async () => {
+    for (const scheme of ["light", "dark"]) {
+      document.documentElement.classList.toggle("dark", scheme === "dark");
+      const { row } = await render(
+        <div style={{ background: "var(--background)" }}>
+          <Host items={tea.map((step) => ({ ...step, checked: step.id === "leaves" }))} extra={{ label: "Steps", ordered: true }} />
+        </div>,
+      );
+      const note = partOf(row("Add the leaves"), "note");
+      await expect.poll(() => running(row("Add the leaves")).length).toBe(0);
+      expect(contrast(getComputedStyle(note).color, backdrop(note)), scheme).toBeGreaterThanOrEqual(4.5);
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    }
+  });
+
+  it("renders a row ticked out of order in the server HTML", () => {
+    const html = renderToString(<Checklist label="Steps" ordered items={tea.map((step) => ({ ...step, checked: step.id === "leaves" }))} onCheckedChange={() => {}} />);
+    const parsed = document.createElement("div");
+    parsed.innerHTML = html;
+    expect(parsed.querySelector('[data-out-of-order] [data-ouro-part="note"]')?.textContent).toBe("Boil the water comes first");
+  });
+});
+
+/** A step's picture, as an app passes it in `media`. */
+const Icon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" data-testid="icon">
+    <circle cx="12" cy="12" r="8" />
+  </svg>
+);
+
+describe("Checklist outline", () => {
+  const steps = tea.map((step) => ({ ...step, media: <Icon /> }));
+
+  it("frames each row as a card and puts a round tick at its end, which fills with the tone", async () => {
+    for (const dir of ["ltr", "rtl"]) {
+      const { row } = await render(<Host items={steps} extra={{ label: "Steps", variant: "outline", ordered: true }} />, { dir });
+      const leaves = row("Add the leaves");
+      const box = partOf(leaves, "box");
+      const card = box.closest("label")!.parentElement!;
+      expect(getComputedStyle(card).borderTopWidth).toBe("1px");
+      expect(getComputedStyle(card).borderTopColor).toBe(themeColor("--border"));
+      // A circle: a full-round corner (9999px, which draws as half the box's width) on a round corner shape.
+      expect(Number.parseFloat(getComputedStyle(box).borderTopLeftRadius)).toBeGreaterThanOrEqual(1000);
+      // Engines that draw corner shapes report round as superellipse(1).
+      if (CSS.supports("corner-shape: round")) expect(["round", "superellipse(1)"]).toContain(getComputedStyle(box).getPropertyValue("corner-shape"));
+      expect(box.offsetWidth).toBe(24);
+      // At the row's end, past its label: the right in left-to-right text, the left in right-to-left.
+      const [boxRect, labelRect] = [box, partOf(leaves, "label")].map((element) => element.getBoundingClientRect()) as [DOMRect, DOMRect];
+      if (dir === "ltr") expect(boxRect.left).toBeGreaterThan(labelRect.right);
+      else expect(boxRect.right).toBeLessThan(labelRect.left);
+      // Ticked out of order it fills with the warning tone; once the earlier steps are ticked, with the primary.
+      await act(() => box.click());
+      await expect.poll(() => running(leaves).length).toBe(0);
+      expect(getComputedStyle(box).backgroundColor).toBe(themeColor("--warning"));
+      await act(() => partOf(row("Boil the water"), "box").click());
+      await act(() => partOf(row("Warm the pot"), "box").click());
+      await expect.poll(() => running(leaves).length).toBe(0);
+      expect(getComputedStyle(box).backgroundColor).toBe(themeColor("--primary"));
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    }
+  });
+
+  it("draws each item's media in a soft tile at the start of the row, hidden from screen readers", async () => {
+    const { row } = await render(<Host items={steps} extra={{ label: "Steps", variant: "outline" }} />);
+    const boil = row("Boil the water");
+    const tile = boil.querySelector<HTMLElement>("[data-ouro-checklist-media]")!;
+    expect(tile).toHaveAttribute("aria-hidden", "true");
+    expect(getComputedStyle(tile).backgroundColor).toBe(themeColor("--muted"));
+    expect(getComputedStyle(tile).color).toBe(themeColor("--muted-foreground"));
+    expect(tile.getBoundingClientRect().right).toBeLessThanOrEqual(partOf(boil, "label").getBoundingClientRect().left);
+    // The icon adds nothing to the row's name.
+    await expect.element(page.getByRole("checkbox", { name: "Boil the water", exact: true })).toBeVisible();
+  });
+
+  it("renders no tile, description, value or action wrapper for a row without them, in both looks", async () => {
+    for (const variant of ["plain", "outline"] as const) {
+      const { row } = await render(<Host items={[{ id: "boil", label: "Boil the water", checked: false }]} extra={{ label: "Steps", variant }} />);
+      const boil = row("Boil the water");
+      const label = boil.querySelector("label")!;
+      expect(boil.querySelector("[data-ouro-checklist-media]"), variant).toBeNull();
+      expect(boil.querySelector("[data-ouro-checklist-description]"), variant).toBeNull();
+      expect(boil.querySelector('[data-ouro-part="value"]'), variant).toBeNull();
+      // The label is alone in its row (or its card): no empty action beside it.
+      expect(label.parentElement!.children, variant).toHaveLength(1);
+      // The label holds the box and the text, and nothing else but Base UI's hidden input.
+      expect([...label.children].filter((child) => child.tagName !== "INPUT"), variant).toHaveLength(2);
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    }
+  });
+
+  it("puts the media after the box in a plain row", async () => {
+    const { row } = await render(<Host items={steps} extra={{ label: "Steps" }} />);
+    const boil = row("Boil the water");
+    const tile = boil.querySelector<HTMLElement>("[data-ouro-checklist-media]")!;
+    expect(partOf(boil, "box").getBoundingClientRect().right).toBeLessThanOrEqual(tile.getBoundingClientRect().left);
+    expect(boil.querySelector("label")!.parentElement).toBe(boil.firstElementChild);
   });
 });
 
@@ -597,8 +846,34 @@ describe("Checklist development messages", () => {
     );
   });
 
+  it("names the real prop for sequential, and an ordered id no item has", async () => {
+    const guessed = { sequential: true } as unknown as Partial<ChecklistProps>;
+    await render(<Checklist label="Steps" items={tea} onCheckedChange={() => {}} ordered={["boil", "kettle"]} {...guessed} />);
+    await expect.poll(messages).toEqual([
+      "[ouro-ui] Checklist: sequential is not a prop; steps to do in order are ordered. Fix: <Checklist ordered>.",
+      '[ouro-ui] Checklist: ordered names "kettle", which no item has; list the items\' ids in the order to do them. Fix: ordered={["boil", "warm", "leaves"]}.',
+    ]);
+  });
+
+  it("renders plain rows for an unknown variant, and names the fix", async () => {
+    const guessed = { variant: "card" } as unknown as Partial<ChecklistProps>;
+    const { row } = await render(<Checklist label="Steps" items={tea} onCheckedChange={() => {}} {...guessed} />);
+    await expect.poll(messages).toEqual(['[ouro-ui] Checklist: variant="card" is not a variant; use "plain" or "outline". Fix: <Checklist variant="outline">.']);
+    // The plain box keeps its check corner, not the outline's full round.
+    expect(Number.parseFloat(getComputedStyle(partOf(row("Boil the water"), "box")).borderTopLeftRadius)).toBeLessThan(100);
+  });
+
+  it("names media for an item's icon", async () => {
+    // One item of two: any item with an icon is enough for the message.
+    const items = [{ ...tea[0]!, icon: <svg /> }, tea[1]!] as unknown as ChecklistItemData[];
+    await render(<Checklist label="Steps" items={items} onCheckedChange={() => {}} />);
+    await expect.poll(messages).toEqual([
+      "[ouro-ui] Checklist: an item's icon is not a field; an item's picture is its media. Fix: items={[{ id: \"boil\", label: \"Boil the water\", media: <KettleIcon />, checked: false }]}.",
+    ]);
+  });
+
   it("has no messages for valid props", async () => {
-    await render(<Host extra={{ description: "For four bowls.", empty: "Nothing yet." }} />);
+    await render(<Host extra={{ description: "For four bowls.", empty: "Nothing yet.", variant: "plain" }} />);
     await act(async () => {});
     expect(messages()).toEqual([]);
   });

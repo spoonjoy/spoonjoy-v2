@@ -209,7 +209,6 @@ describe("E2E: Create Recipe with Step Dependencies", () => {
       await addStep(recipeId, "Prepare vegetables and protein", "Prep Toppings");
       await addStep(recipeId, "Assemble bowl with rice and toppings", "Assemble", [1, 2]);
 
-      // Load recipe detail via loader
       const result = await loadRecipeDetail(recipeId);
 
       // Verify recipe data structure
@@ -238,7 +237,6 @@ describe("E2E: Create Recipe with Step Dependencies", () => {
       await addStep(recipeId, "Stir fry protein until cooked", "Cook Protein", [1]);
       await addStep(recipeId, "Add vegetables and sauce", "Final Assembly", [2, 3]);
 
-      // Load recipe detail
       const result = await loadRecipeDetail(recipeId);
 
       // Render the component with the loaded data
@@ -408,11 +406,9 @@ describe("E2E: Create Recipe with Step Dependencies", () => {
       const recipe1Id = await createRecipe("Recipe One " + faker.string.alphanumeric(6));
       const recipe2Id = await createRecipe("Recipe Two " + faker.string.alphanumeric(6));
 
-      // Add steps with dependencies to recipe 1
       await addStep(recipe1Id, "Recipe 1 Step 1", "R1S1");
       await addStep(recipe1Id, "Recipe 1 Step 2", "R1S2", [1]);
 
-      // Add steps with dependencies to recipe 2
       await addStep(recipe2Id, "Recipe 2 Step 1", "R2S1");
       await addStep(recipe2Id, "Recipe 2 Step 2", "R2S2", [1]);
 

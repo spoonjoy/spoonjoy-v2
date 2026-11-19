@@ -127,7 +127,7 @@ export type PaginationProps = (PaginationLinkProps | PaginationButtonProps) & (P
 // A cell: 44px with 16px text on a coarse pointer at every width, 36px with 14px text with a fine one.
 const cell =
   "press relative m-0 box-border inline-flex h-11 min-w-11 pointer-fine:h-9 pointer-fine:min-w-9 items-center justify-center gap-1 " +
-  "rounded-md border-0 forced-colors:border forced-colors:border-solid bg-transparent px-2 font-[inherit] text-base pointer-fine:text-sm leading-5 font-medium text-foreground no-underline " +
+  "rounded-ouro-md border-0 forced-colors:border forced-colors:border-solid bg-transparent px-2 font-[inherit] text-base pointer-fine:text-sm leading-5 font-medium text-foreground no-underline " +
   "tabular-nums select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";
 const live = "cursor-pointer pointer-fine:hover:bg-accent pointer-fine:hover:text-accent-foreground motion-safe:active:scale-(--ouro-press-scale)";

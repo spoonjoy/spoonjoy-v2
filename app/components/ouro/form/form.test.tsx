@@ -1042,7 +1042,7 @@ describe("Form-level messages (review fix round 1, finding 3)", () => {
     await rerender(<Mapped answer={answers[1]} />);
     expect(host.querySelector('[role="alert"]')!.textContent).toBe("The server is down.");
     await rerender(<Mapped answer={answers[2]} />);
-    expect(host.querySelector('[role="alert"]')!.textContent).toBe("Couldn't save: 1 problem. Email: That email is taken.");
+    await expect.poll(() => host.querySelector('[role="alert"]')?.textContent).toBe("Couldn't save: 1 problem. Email: That email is taken.");
     expect(input("email").getAttribute("aria-invalid")).toBe("true");
     expect(input("name").getAttribute("aria-invalid")).toBe("false");
     expect(warn).not.toHaveBeenCalled();
@@ -1218,6 +1218,31 @@ describe("Form error summary", () => {
     await userEvent.click(page.getByRole("button", { name: "Save" }));
   }
 
+  it("opens the alert two frames after focus moves to the field, so the summary is announced after the field", async () => {
+    const announcements = watchAnnouncements();
+    try {
+      const { host, input } = await render(<ActionPage result={{ email: taken }} />);
+      const alertShown = () => host.querySelector('[role="alert"]') !== null;
+      // Each step is what the page shows when focus lands on the field, then one and two frames later.
+      // Frame callbacks run in the order they were requested: this one's first, then the form's.
+      const seen: string[] = [];
+      input("email").addEventListener("focus", () => {
+        seen.push(`focus: ${alertShown()}`);
+        requestAnimationFrame(() => {
+          seen.push(`frame 1: ${alertShown()}`);
+          requestAnimationFrame(() => seen.push(`frame 2: ${alertShown()}`));
+        });
+      });
+      await submit(input("name"));
+      await expect.poll(() => announcements.count(`Couldn't save: 1 problem. Email: ${taken}`)).toBe(1);
+      expect(document.activeElement).toBe(input("email"));
+      expect(seen).toEqual(["focus: false", "frame 1: false", "frame 2: false"]);
+      expect(summaryOf(host)).toBe(`Couldn't save: 1 problem. Email: ${taken}`);
+    } finally {
+      announcements.stop();
+    }
+  });
+
   it("says how many problems there are, and the first in page order, once per submit", async () => {
     const announcements = watchAnnouncements();
     try {
@@ -1243,7 +1268,7 @@ describe("Form error summary", () => {
     const { host, input } = await render(<ActionPage result={{ bio: "Too short.", email: taken }} />);
     await submit(input("name"));
     await expect.poll(() => document.activeElement).toBe(input("email"));
-    expect(summaryOf(host)).toBe(`Couldn't save: 2 problems. Email: ${taken}`);
+    await expect.poll(() => summaryOf(host)).toBe(`Couldn't save: 2 problems. Email: ${taken}`);
   });
 
   it("does not announce an unchanged summary again, but announces a changed one", async () => {
@@ -1300,6 +1325,22 @@ describe("Form error summary", () => {
     } finally {
       announcements.stop();
     }
+  });
+
+  it("shows a message at the top at once and focuses it, when the answer that replaces a field's error has no field to focus", async () => {
+    const layout = (errors: FormErrors | undefined) => (
+      <Form errors={errors}>
+        <TextField label="Email" name="email" />
+      </Form>
+    );
+    const { host, rerender, input } = await render(layout(undefined));
+    await rerender(layout({ email: taken }));
+    await expect.poll(() => summaryOf(host)).toBe(`Couldn't save: 1 problem. Email: ${taken}`);
+    await rerender(layout({ form: "The server is down." }));
+    // No field has an error now, so the message at the top is the alert: it is in the page, and focused, with no wait.
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe("The server is down.");
+    await expect.poll(() => document.activeElement).toBe(host.querySelector('[role="alert"]'));
+    expect(input("email").getAttribute("aria-invalid")).toBe("false");
   });
 
   it("translates the summary through errorSummary, with the count, label and message", async () => {

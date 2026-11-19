@@ -997,7 +997,6 @@ describe("Account Settings Route", () => {
 
       // Should be back to view mode - edit button visible again
       expect(screen.getByRole("button", { name: /edit/i })).toBeInTheDocument();
-      // Save button should not be visible
       expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
     });
   });
@@ -1839,7 +1838,6 @@ describe("Account Settings Route", () => {
 
     describe("loader - photo data", () => {
       it("should return user photoUrl when user has a custom photo", async () => {
-        // Update user with custom photo URL
         const customPhotoUrl = "https://example.com/custom-photo.jpg";
         await db.user.update({
           where: { id: testUserId },

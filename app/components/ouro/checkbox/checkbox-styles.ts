@@ -20,7 +20,7 @@ export { boxClass, dashClass, indicatorClass, tickClass };
 // Its own transition, not `press`'s: the box's fill eases before the tick draws, one choreographed motion.
 const boxClass =
   "group [transition:scale_var(--ouro-duration-press)_var(--ouro-ease-out),background-color_var(--ouro-duration-fast)_ease,border-color_var(--ouro-duration-fast)_ease,color_var(--ouro-duration-fast)_ease,opacity_var(--ouro-duration-fast)_ease] relative m-0 mt-0.5 box-border inline-flex size-5 shrink-0 items-center justify-center p-0 sm:pointer-fine:size-4 " +
-  "rounded-sm border border-solid border-muted-foreground bg-transparent text-primary-foreground dark:not-data-checked:not-data-indeterminate:bg-input/30 " +
+  "rounded-ouro-check border border-solid border-muted-foreground bg-transparent text-primary-foreground dark:not-data-checked:not-data-indeterminate:bg-input/30 " +
   "data-checked:border-primary data-checked:bg-primary data-indeterminate:border-primary data-indeterminate:bg-primary " +
   "aria-invalid:border-destructive " +
   "cursor-default select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +

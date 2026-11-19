@@ -81,7 +81,7 @@ const columnClasses = {
 } as const;
 
 const cardClass =
-  "group/card relative flex min-h-11 min-w-0 cursor-pointer flex-col overflow-hidden rounded-lg border border-solid border-border bg-background text-foreground " +
+  "group/card relative flex min-h-11 min-w-0 cursor-pointer flex-col overflow-hidden rounded-ouro-lg border border-solid border-border bg-background text-foreground " +
   "transition-[background-color,border-color] duration-(--ouro-duration-fast) ease-[ease] " +
   "data-checked:border-primary data-checked:bg-primary/5 " +
   "pointer-fine:hover:not-data-checked:not-data-disabled:border-[color-mix(in_oklab,var(--border)_50%,var(--foreground))] " +

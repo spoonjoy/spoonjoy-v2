@@ -223,7 +223,6 @@ describe("RecipeStep Model", () => {
     });
 
     it("should cascade delete StepOutputUse records where step is outputStepNum", async () => {
-      // Create steps 1 and 2
       const step1 = await db.recipeStep.create({
         data: {
           recipeId: testRecipeId,
@@ -267,7 +266,6 @@ describe("RecipeStep Model", () => {
     });
 
     it("should cascade delete StepOutputUse records where step is inputStepNum", async () => {
-      // Create steps 1 and 2
       await db.recipeStep.create({
         data: {
           recipeId: testRecipeId,
@@ -311,7 +309,6 @@ describe("RecipeStep Model", () => {
     });
 
     it("should cascade delete multiple StepOutputUse records when step is deleted", async () => {
-      // Create steps 1, 2, 3, and 4
       const step1 = await db.recipeStep.create({
         data: {
           recipeId: testRecipeId,
@@ -369,7 +366,6 @@ describe("RecipeStep Model", () => {
     });
 
     it("should cascade delete only related StepOutputUse records when step is deleted", async () => {
-      // Create steps 1, 2, 3, and 4
       const step1 = await db.recipeStep.create({
         data: {
           recipeId: testRecipeId,
@@ -433,7 +429,6 @@ describe("RecipeStep Model", () => {
     });
 
     it("should cascade delete StepOutputUse records in both directions when step is deleted", async () => {
-      // Create steps 1, 2, 3, and 4
       await db.recipeStep.create({
         data: {
           recipeId: testRecipeId,
@@ -500,7 +495,6 @@ describe("RecipeStep Model", () => {
     });
 
     it("should not affect StepOutputUse records in other recipes when step is deleted", async () => {
-      // Create another recipe
       const otherRecipe = await db.recipe.create({
         data: createTestRecipe(testUserId),
       });

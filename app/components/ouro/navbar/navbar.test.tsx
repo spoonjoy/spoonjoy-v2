@@ -115,7 +115,6 @@ const items = [
   { label: "Shopping list", href: "/shopping-list" },
 ];
 
-/** Waits until the sheet has finished opening or closing. */
 /**
  * The menu button as a locator by its role. Built ahead of the press, the hidden sheet carries the button's label too, so
  * the element's own locator (by label) would find both.
@@ -124,6 +123,7 @@ function press(menuButton: HTMLElement) {
   return page.getByRole("button", { name: menuButton.getAttribute("aria-label")!, exact: true });
 }
 
+/** Waits until the sheet has finished opening or closing. */
 async function sheetSettled() {
   await expect.poll(() => document.getAnimations().length).toBe(0);
 }
@@ -216,6 +216,14 @@ describe("Navbar", () => {
     expect(nav.getByRole("link").elements().map((link) => link.textContent)).toEqual(["Recipes", "Cookbooks", "Shopping list"]);
     await expect.element(nav.getByRole("link", { name: "Recipes" })).toHaveAttribute("aria-current", "page");
     await expect.poll(() => Math.round(sheet.element().getBoundingClientRect().left)).toBe(0);
+    // Each link is a row with room at its sides and corners rounded on Ouro's md step, as the theme sets it.
+    const link = nav.getByRole("link", { name: "Cookbooks" }).element();
+    const row = getComputedStyle(link);
+    const step = link.appendChild(document.createElement("div"));
+    mounted.push(step);
+    step.className = "absolute rounded-ouro-md ps-3";
+    expect(row.borderTopLeftRadius).toBe(getComputedStyle(step).borderTopLeftRadius);
+    expect(row.paddingInlineStart).toBe(getComputedStyle(step).paddingInlineStart);
   });
 
   it("marks the section a page is in as current but not the page in the sheet too, and no other link", async () => {

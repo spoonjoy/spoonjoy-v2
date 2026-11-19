@@ -405,7 +405,6 @@ describe("E2E: Complete Recipe Creation Flow", () => {
       const uniqueSuffix = faker.string.alphanumeric(6).toLowerCase();
       await addIngredientManual(recipeId, stepId, 3, "tbsp_" + uniqueSuffix, "butter_" + uniqueSuffix);
 
-      // Load recipe detail
       const result = await loadRecipeDetail(recipeId);
 
       // Verify data structure
@@ -719,7 +718,6 @@ describe("E2E: Complete Recipe Creation Flow", () => {
       const newDescription = "Edited description for display test";
       await editRecipe(recipeId, newTitle, newDescription, "8");
 
-      // Load and render
       const result = await loadRecipeDetail(recipeId);
 
       expect(result.recipe.title).toBe(newTitle);
@@ -1001,7 +999,6 @@ describe("E2E: Complete Recipe Creation Flow", () => {
       await addIngredientManual(recipeId, step1Id, 1, "cup_" + uniqueSuffix, "flour_" + uniqueSuffix);
       await addIngredientManual(recipeId, step2Id, 2, "tbsp_" + uniqueSuffix, "butter_" + uniqueSuffix);
 
-      // Get step data
       const step1 = await db.recipeStep.findUnique({ where: { id: step1Id } });
       const step2 = await db.recipeStep.findUnique({ where: { id: step2Id } });
 

@@ -56,7 +56,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
     const otherUser = await createUser(db, otherEmail, otherUsername, "testPassword123");
     otherUserId = otherUser.id;
 
-    // Create a recipe for testing
     const recipe = await db.recipe.create({
       data: {
         title: "Test Recipe " + faker.string.alphanumeric(6),
@@ -65,7 +64,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
     });
     recipeId = recipe.id;
 
-    // Create a step for testing
     const step = await db.recipeStep.create({
       data: {
         recipeId,
@@ -227,7 +225,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
     });
 
     it("should throw 404 when step belongs to different recipe", async () => {
-      // Create another recipe
       const otherRecipe = await db.recipe.create({
         data: {
           title: "Other Recipe " + faker.string.alphanumeric(6),
@@ -260,7 +257,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
     });
 
     it("should include step ingredients with unit and ingredientRef", async () => {
-      // Create unit and ingredientRef
       const unit = await db.unit.create({ data: { name: "cup_" + faker.string.alphanumeric(6) } });
       const ingredientRef = await db.ingredientRef.create({ data: { name: "flour_" + faker.string.alphanumeric(6) } });
 
@@ -428,7 +424,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
     });
 
     it("should return multiple outputUses when step uses multiple previous steps", async () => {
-      // Create step 2 and 3
       await db.recipeStep.create({
         data: {
           recipeId,
@@ -485,7 +480,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
     });
 
     it("should return availableSteps with only stepNum and stepTitle selected", async () => {
-      // Create step 2
       await db.recipeStep.create({
         data: {
           recipeId,
@@ -647,7 +641,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
     });
 
     it("should throw 404 when step belongs to different recipe in action", async () => {
-      // Create another recipe
       const otherRecipe = await db.recipe.create({
         data: {
           title: "Other Recipe " + faker.string.alphanumeric(6),
@@ -1036,7 +1029,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
           },
         });
 
-        // Create dependencies
         await db.stepOutputUse.createMany({
           data: [
             { recipeId, outputStepNum: 1, inputStepNum: 2 },
@@ -1067,7 +1059,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
     describe("step output uses update", () => {
       it("should create step output uses when updating step", async () => {
-        // Create step 2 for testing
         const step2 = await db.recipeStep.create({
           data: {
             recipeId,
@@ -1111,7 +1102,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       });
 
       it("should create multiple step output uses when updating step", async () => {
-        // Create step 2 and 3
         await db.recipeStep.create({
           data: {
             recipeId,
@@ -1158,7 +1148,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       });
 
       it("should delete existing step output uses and create new ones on update", async () => {
-        // Create step 2 and 3
         await db.recipeStep.create({
           data: {
             recipeId,
@@ -1213,7 +1202,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       });
 
       it("should clear all step output uses when none selected", async () => {
-        // Create step 2
         const step2 = await db.recipeStep.create({
           data: {
             recipeId,
@@ -1222,7 +1210,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
           },
         });
 
-        // Create existing step output use
         await db.stepOutputUse.create({
           data: {
             recipeId,
@@ -1276,7 +1263,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       });
 
       it("should return validation error when mix of valid and invalid step numbers", async () => {
-        // Create step 2
         const step2 = await db.recipeStep.create({
           data: {
             recipeId,
@@ -1405,7 +1391,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       });
 
       it("should return validation error when selecting current step (self-reference)", async () => {
-        // Create step 2
         const step2 = await db.recipeStep.create({
           data: {
             recipeId,
@@ -1437,7 +1422,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       });
 
       it("should return validation error when selecting future step (forward reference)", async () => {
-        // Create steps 2 and 3
         const step2 = await db.recipeStep.create({
           data: {
             recipeId,
@@ -1476,7 +1460,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       });
 
       it("should return validation error with multiple invalid step references", async () => {
-        // Create steps 2 and 3
         const step2 = await db.recipeStep.create({
           data: {
             recipeId,
@@ -1516,7 +1499,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       });
 
       it("should return validation error for invalid step number (zero)", async () => {
-        // Create step 2
         const step2 = await db.recipeStep.create({
           data: {
             recipeId,
@@ -1548,7 +1530,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       });
 
       it("should return validation error for negative step number", async () => {
-        // Create step 2
         const step2 = await db.recipeStep.create({
           data: {
             recipeId,
@@ -1988,7 +1969,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         const unitName = "cup_" + faker.string.alphanumeric(6).toLowerCase();
         const ingredientName = "flour_" + faker.string.alphanumeric(6).toLowerCase();
 
-        // Create unit and ingredientRef
         const unit = await db.unit.create({ data: { name: unitName } });
         const ingredientRef = await db.ingredientRef.create({ data: { name: ingredientName } });
 
@@ -2035,7 +2015,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         const unitName = "tbsp_" + faker.string.alphanumeric(6).toLowerCase();
         const ingredientName = "sugar_" + faker.string.alphanumeric(6).toLowerCase();
 
-        // Create a second step
         const step2 = await db.recipeStep.create({
           data: {
             recipeId,
@@ -2044,7 +2023,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
           },
         });
 
-        // Create unit and ingredientRef
         const unit = await db.unit.create({ data: { name: unitName } });
         const ingredientRef = await db.ingredientRef.create({ data: { name: ingredientName } });
 
@@ -2133,11 +2111,9 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         const ingredientName1 = "flour_" + faker.string.alphanumeric(6).toLowerCase();
         const ingredientName2 = "sugar_" + faker.string.alphanumeric(6).toLowerCase();
 
-        // Create unit and first ingredientRef
         const unit = await db.unit.create({ data: { name: unitName } });
         const ingredientRef1 = await db.ingredientRef.create({ data: { name: ingredientName1 } });
 
-        // Add first ingredient
         await db.ingredient.create({
           data: {
             recipeId,
@@ -2315,7 +2291,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
     describe("deleteIngredient intent", () => {
       it("should delete ingredient successfully", async () => {
-        // Create unit, ingredientRef, and ingredient
         const unit = await db.unit.create({ data: { name: "cup_" + faker.string.alphanumeric(6) } });
         const ingredientRef = await db.ingredientRef.create({ data: { name: "flour_" + faker.string.alphanumeric(6) } });
         const ingredient = await db.ingredient.create({
@@ -3717,7 +3692,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         const quantityInput = screen.getByRole("spinbutton", { name: /Quantity/i });
         fireEvent.change(quantityInput, { target: { value: "3" } });
 
-        // Save the edit
         const saveButton = screen.getByRole("button", { name: "Save" });
         fireEvent.click(saveButton);
 
@@ -3752,7 +3726,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
               const intent = formData.get("intent")?.toString();
 
               if (intent === "parseIngredients") {
-                // Return a parse error
                 return {
                   errors: { parse: "Failed to parse ingredients" },
                 };
@@ -4048,7 +4021,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
           />
         );
 
-        // Find and click the Add All button
         const addAllButton = screen.getByRole("button", { name: /Add all 2 ingredients/i });
         fireEvent.click(addAllButton);
 

@@ -78,6 +78,11 @@ const backdropClass =
   "data-swipe-dismiss:data-ending-style:duration-(--ouro-duration-fast) " +
   iosBackdrop;
 
+// A non-modal sheet's scrim: it lets every press through to the page, so a press outside still dismisses. It paints
+// nothing: the page beside a non-modal sheet is in use, and any tint over it lowers its text's contrast (a 10% tint
+// took spoonjoy-v2's 4.56:1 "Change look" button to about 4.2:1). The sheet's hairline and shadow set it apart instead.
+const scrimClass = "pointer-events-none fixed inset-0 z-1000 min-h-dvh bg-transparent";
+
 const viewportClasses = {
   bottom: "items-end justify-center",
   top: "items-start justify-center",
@@ -110,14 +115,14 @@ const popupSides = {
     "w-full max-w-[40rem] max-h-[calc(100dvh-var(--ouro-sheet-gap))] ps-[env(safe-area-inset-left,0px)] pe-[env(safe-area-inset-right,0px)] " +
     "[--ouro-sheet-y:calc(var(--drawer-snap-point-offset,0px)+var(--drawer-swipe-movement-y,0px))] " +
     "[--ouro-sheet-transform:translateY(calc(max(var(--ouro-sheet-y),0px)+min(var(--ouro-sheet-y)+var(--ouro-sheet-slack),0px)*var(--ouro-sheet-stretch)+var(--ouro-sheet-grab,0px)))] " +
-    "rounded-t-xl [box-shadow:var(--ouro-shadow-sheet-bottom)] " +
+    "rounded-t-ouro-xl [box-shadow:var(--ouro-shadow-sheet-bottom)] " +
     "after:inset-x-0 after:top-[calc(100%-1px)] after:h-[50dvh] " +
     "data-starting-style:[transform:translateY(calc(100%+2px))] data-ending-style:[transform:translateY(calc(100%+2px))]",
   top:
     "w-full max-w-[40rem] max-h-[calc(100dvh-var(--ouro-sheet-gap))] ps-[env(safe-area-inset-left,0px)] pe-[env(safe-area-inset-right,0px)] " +
     "[--ouro-sheet-y:calc(var(--drawer-snap-point-offset,0px)+var(--drawer-swipe-movement-y,0px))] " +
     "[--ouro-sheet-transform:translateY(calc(min(var(--ouro-sheet-y),0px)+max(var(--ouro-sheet-y)-var(--ouro-sheet-slack),0px)*var(--ouro-sheet-stretch)+var(--ouro-sheet-grab,0px)))] " +
-    "rounded-b-xl [box-shadow:var(--ouro-shadow-sheet-top)] " +
+    "rounded-b-ouro-xl [box-shadow:var(--ouro-shadow-sheet-top)] " +
     "pt-[env(safe-area-inset-top,0px)] " +
     "after:inset-x-0 after:bottom-[calc(100%-1px)] after:h-[50dvh] " +
     "data-starting-style:[transform:translateY(calc(-100%-2px))] data-ending-style:[transform:translateY(calc(-100%-2px))]",
@@ -127,7 +132,7 @@ const popupSides = {
     "pb-[calc(env(safe-area-inset-bottom,0px)+var(--drawer-keyboard-inset,0px))] " +
     "[--ouro-sheet-x:var(--drawer-swipe-movement-x,0px)] " +
     "[--ouro-sheet-transform:translateX(calc(min(var(--ouro-sheet-x),0px)+max(var(--ouro-sheet-x)-var(--ouro-sheet-slack),0px)*var(--ouro-sheet-stretch)+var(--ouro-sheet-grab,0px)))] " +
-    "rounded-r-xl [box-shadow:var(--ouro-shadow-sheet-left)] pl-[env(safe-area-inset-left,0px)] " +
+    "rounded-r-ouro-xl [box-shadow:var(--ouro-shadow-sheet-left)] pl-[env(safe-area-inset-left,0px)] " +
     "after:inset-y-0 after:right-[calc(100%-1px)] after:w-[50vw] " +
     "data-starting-style:[transform:translateX(calc(-100%-2px))] data-ending-style:[transform:translateX(calc(-100%-2px))]",
   right:
@@ -135,7 +140,7 @@ const popupSides = {
     "pb-[calc(env(safe-area-inset-bottom,0px)+var(--drawer-keyboard-inset,0px))] " +
     "[--ouro-sheet-x:var(--drawer-swipe-movement-x,0px)] " +
     "[--ouro-sheet-transform:translateX(calc(max(var(--ouro-sheet-x),0px)+min(var(--ouro-sheet-x)+var(--ouro-sheet-slack),0px)*var(--ouro-sheet-stretch)+var(--ouro-sheet-grab,0px)))] " +
-    "rounded-l-xl [box-shadow:var(--ouro-shadow-sheet-right)] pr-[env(safe-area-inset-right,0px)] " +
+    "rounded-l-ouro-xl [box-shadow:var(--ouro-shadow-sheet-right)] pr-[env(safe-area-inset-right,0px)] " +
     "after:inset-y-0 after:left-[calc(100%-1px)] after:w-[50vw] " +
     "data-starting-style:[transform:translateX(calc(100%+2px))] data-ending-style:[transform:translateX(calc(100%+2px))]",
 } as const;
@@ -264,7 +269,7 @@ export function SheetPortal(props: Omit<Drawer.Portal.Props, "className">): JSX.
       {/* The keyboard's inset, 0px until Base UI sets it on the viewport inside: set there as each sheet opens, it
           changed what the whole sheet inherits and restyled all of it once more in the middle of the press. Under a
           0px of the same name it changes nothing until a keyboard shows. */}
-      <Drawer.Portal {...props} data-ouro="sheet-portal" className="relative isolate z-(--ouro-layer) [--drawer-keyboard-inset:0px]">
+      <Drawer.Portal {...props} data-ouro="sheet-portal" className="relative isolate z-(--ouro-layer) in-[[data-ouro$='-portal']]:z-1001 [--drawer-keyboard-inset:0px]">
         <PortalScope>{props.children}</PortalScope>
       </Drawer.Portal>
     </Drawer.VirtualKeyboardProvider>
@@ -283,6 +288,20 @@ export function SheetBackdrop({
   useSheetPart("SheetBackdrop", "…");
   const anchorRef = useBackdropAnchor(ref);
   return <Drawer.Backdrop {...props} ref={anchorRef} data-ouro="sheet-backdrop" className={backdropClass} />;
+}
+
+/**
+ * Part: the layer over the page beside a `modal={false}` sheet (a modal sheet draws its own backdrop). It paints
+ * nothing, so the page in use keeps its contrast, and it passes presses through: a press on the page reaches the
+ * page, and closes the sheet when it closes on an outside press. A `ref` reaches its element.
+ */
+export function SheetScrim({
+  ref,
+  ...props
+}: Omit<Drawer.Backdrop.Props, "className" | "forceRender"> & { ref?: Ref<HTMLDivElement> | undefined }): JSX.Element {
+  useSheetPart("SheetScrim", "…");
+  const anchorRef = useBackdropAnchor(ref);
+  return <Drawer.Backdrop {...props} forceRender ref={anchorRef} aria-hidden="true" data-ouro="sheet-scrim-backdrop" className={scrimClass} />;
 }
 
 /**

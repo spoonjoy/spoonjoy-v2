@@ -352,9 +352,9 @@ describe("ToggleGroup development messages", () => {
   });
 
   it("warns for appearance classes and an empty label", async () => {
-    await render(<ToggleGroup label="" items={align} className="rounded-xl" />);
+    await render(<ToggleGroup label="" items={align} className="rounded-ouro-xl" />);
     expect(warn).toHaveBeenCalledWith(
-      '[ouro-ui] ToggleGroup: "rounded-xl" sets appearance, and className is for layout only. Fix: :root { --radius: 0.75rem }.',
+      '[ouro-ui] ToggleGroup: "rounded-ouro-xl" sets appearance, and className is for layout only. Fix: :root { --radius: 0.75rem }.',
     );
     expect(warn).toHaveBeenCalledWith('[ouro-ui] ToggleGroup: label is empty, so the group has no name. Fix: <ToggleGroup label="Text style" hideLabel>.');
   });

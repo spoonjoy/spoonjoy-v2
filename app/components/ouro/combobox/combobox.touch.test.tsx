@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { Combobox } from "~/components/ouro/combobox/combobox";
 import { act } from "~/lib/ouro/testing/act";
+import { watchAnnouncements } from "~/lib/ouro/testing/announcements";
 import { pressTint } from "~/lib/ouro/testing/press";
 import { rotate } from "~/lib/ouro/testing/rotate";
 import { pressTab } from "~/lib/ouro/testing/tab";
@@ -203,6 +204,23 @@ describe("Combobox on a phone", () => {
     await userEvent.type(input, "9");
     await expect.poll(() => panel.querySelectorAll('[role="option"]').length).toBe(0);
     expect(input.getBoundingClientRect().top).toBe(top);
+  });
+
+  it("shows its empty content in the sheet when nothing matches, said politely once", async () => {
+    const announced = watchAnnouncements();
+    try {
+      await render(<Combobox label="Herb" items={herbs} empty={<strong>No herbs by that name.</strong>} />);
+      await commands.tap(TRIGGER);
+      const panel = await opened();
+      await commands.tap('[data-ouro="sheet"] input[role="combobox"]');
+      await userEvent.type(panel.querySelector("input")!, "zz");
+      await expect.poll(() => panel.querySelector("strong")?.textContent).toBe("No herbs by that name.");
+      expect(panel.querySelector("strong")!.closest('[role="status"]')!.getAttribute("aria-live")).toBe("polite");
+      expect(panel.textContent).not.toContain("No results");
+      await expect.poll(() => announced.count("No herbs by that name.")).toBe(1);
+    } finally {
+      announced.stop();
+    }
   });
 
   it("does not say No results before a search has been typed", async () => {
