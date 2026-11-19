@@ -3022,6 +3022,7 @@
         "link",
         "native-select",
         "page-header",
+        "section-header",
         "share-button",
         "tab-bar",
         "tabs",
@@ -3064,6 +3065,9 @@
           "app/routes/cookbooks.$id.tsx"
         ],
         "page-header": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "section-header": [
           "app/routes/cookbooks.$id.tsx"
         ],
         "share-button": [
