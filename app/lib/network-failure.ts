@@ -22,10 +22,13 @@ export interface NetworkFailureResult {
 // A pattern, not strings: these are the browsers' own words to match, not copy Spoonjoy shows.
 const FETCH_FAILURE_MESSAGES = /^(?:Failed to fetch|Load failed|NetworkError when attempting to fetch resource\.)$/;
 const WEBKIT_LINUX_TLS_FAILURE = "Peer failed to perform TLS handshake";
+// WebKit on Linux words a connection reset after the handshake in libsoup's own terms, as on
+// spoonjoy-v2#771's shopping-list.data ("Error receiving data: Connection reset by peer").
+const WEBKIT_LINUX_RESET = /^Error (?:receiving|sending) data: Connection reset by peer$/;
 
 export function isNetworkFailure(error: unknown): boolean {
   return error instanceof TypeError &&
-    (FETCH_FAILURE_MESSAGES.test(error.message) || error.message.startsWith(WEBKIT_LINUX_TLS_FAILURE));
+    (FETCH_FAILURE_MESSAGES.test(error.message) || error.message.startsWith(WEBKIT_LINUX_TLS_FAILURE) || WEBKIT_LINUX_RESET.test(error.message));
 }
 
 export function isNetworkFailureResult(value: unknown): value is NetworkFailureResult {
