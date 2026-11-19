@@ -122,11 +122,6 @@ export function d1StuckCoverStore(d1: D1ReadDatabase): StuckCoverStore {
 }
 
 /**
- * Fails the recipe's stuck generations among `covers`, then returns the covers as they now
- * read. A read that finds none stuck does nothing at all. A null stands for a missing cover
- * (a recipe with no active cover) and passes through.
- */
-/**
  * The store for a request: the D1 binding's batch when there is one, so failing the covers and
  * touching native sync land together; Prisma only without a binding (unit tests, scripts), where
  * its transaction is real. On D1, Prisma runs a $transaction as separate statements.
@@ -135,6 +130,11 @@ export function stuckCoverStore(db: PrismaClient, d1: D1ReadDatabase | null): St
   return d1 ? d1StuckCoverStore(d1) : prismaStuckCoverStore(db);
 }
 
+/**
+ * Fails the recipe's stuck generations among `covers`, then returns the covers as they now
+ * read. A read that finds none stuck does nothing at all. A null stands for a missing cover
+ * (a recipe with no active cover) and passes through.
+ */
 export async function settleStuckCoverGenerations<T extends StuckCheckCover | null>(
   store: StuckCoverStore,
   recipeId: string,

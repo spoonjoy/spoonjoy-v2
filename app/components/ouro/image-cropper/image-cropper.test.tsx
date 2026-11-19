@@ -205,6 +205,12 @@ describe("ImageCropper", () => {
     await act(async () => root.render(<Harness image={file} onCropped={() => {}} aspect={16 / 9} title="Crop cover" />));
     await expect.element(page.getByRole("dialog", { name: "Crop cover" })).toBeVisible();
     await expect.poll(() => area().getBoundingClientRect().height).toBe(162);
+    // The rectangle keeps its corners, rounded on Ouro's lg step as the theme sets it.
+    const step = area().appendChild(document.createElement("div"));
+    mounted.push(step);
+    step.className = "absolute rounded-ouro-lg";
+    expect(parseFloat(getComputedStyle(area()).borderTopLeftRadius)).toBeGreaterThan(0);
+    expect(getComputedStyle(area()).borderTopLeftRadius).toBe(getComputedStyle(step).borderTopLeftRadius);
   });
 
   it("crops a Blob or an image address too, naming the file photo", async () => {

@@ -107,7 +107,6 @@ describe("Cookbooks $id Route", () => {
     const otherUser = await createUser(db, otherEmail, otherUsername, "testPassword123");
     otherUserId = otherUser.id;
 
-    // Create a cookbook for testing
     const cookbook = await db.cookbook.create({
       data: {
         title: "Test Cookbook " + faker.string.alphanumeric(6),
@@ -1079,7 +1078,6 @@ describe("Cookbooks $id Route", () => {
     });
 
     it("should return empty availableRecipes for non-owner", async () => {
-      // Create a recipe for the owner
       await db.recipe.create({
         data: {
           title: "Owner Recipe " + faker.string.alphanumeric(6),

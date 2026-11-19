@@ -325,7 +325,7 @@ describe("Skeleton", () => {
     for (const variant of ["text", "rectangular", "rounded", "wave"]) {
       await render(<Skeleton {...({ variant } as unknown as SkeletonProps)} />);
     }
-    await render(<Skeleton className="rounded-md" />);
+    await render(<Skeleton className="rounded-ouro-md" />);
     await render(<Skeleton className="bg-muted" />);
     await render(<Skeleton {...({ width: "50%", height: "2rem" } as unknown as SkeletonProps)} />);
     expect(warnings()).toEqual([
@@ -333,7 +333,7 @@ describe("Skeleton", () => {
       '[ouro-ui] Skeleton: variant is not a prop. Fix: <Skeleton shape="rect">.',
       '[ouro-ui] Skeleton: variant is not a prop. Fix: <Skeleton shape="rect">.',
       '[ouro-ui] Skeleton: variant is not a prop. Fix: <Skeleton shape="rect">.',
-      '[ouro-ui] Skeleton: "rounded-md" sets appearance, and className is for layout only. Fix: shape="rect".',
+      '[ouro-ui] Skeleton: "rounded-ouro-md" sets appearance, and className is for layout only. Fix: shape="rect".',
       '[ouro-ui] Skeleton: "bg-muted" sets appearance, and className is for layout only. Fix: remove it; Skeleton takes its color from the theme\'s --muted.',
       '[ouro-ui] Skeleton: width is not a prop. Fix: <Skeleton className="w-[50%]">.',
       '[ouro-ui] Skeleton: height is not a prop. Fix: <Skeleton className="h-[2rem]">.',

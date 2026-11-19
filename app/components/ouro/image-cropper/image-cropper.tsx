@@ -291,7 +291,7 @@ export function ImageCropper(props: ImageCropperProps): JSX.Element {
           className={cn(
             "relative max-w-full cursor-grab touch-none overflow-hidden bg-muted select-none active:cursor-grabbing",
             "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid",
-            shape === "circle" ? "rounded-full" : "rounded-lg",
+            shape === "circle" ? "rounded-full" : "rounded-ouro-lg",
           )}
         >
           {/* `left`, not `start`: the offset and the crop are in screen pixels in either direction. */}

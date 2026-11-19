@@ -105,7 +105,6 @@ export async function action({ request, context }: Route.ActionArgs) {
     errors.confirmPassword = "Passwords do not match";
   }
 
-  // Get the appropriate database instance
   const database = await getRequestDb(context);
 
   // Check if email or username already exists
@@ -128,7 +127,6 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ errors, values: { email, username } }, { status: 400 });
   }
 
-  // Create user
   let user: Awaited<ReturnType<typeof createUser>>;
   try {
     user = await createUser(database, email, username, password);

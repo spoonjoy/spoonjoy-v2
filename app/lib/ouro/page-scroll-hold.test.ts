@@ -309,6 +309,21 @@ describe("holdPageAtPress", () => {
     expect(html.style.scrollBehavior).toBe("smooth");
   });
 
+  it("holds the page from where a script scrolled it just before the press, whose scroll event comes after, with a closed popup's portal on the page", async () => {
+    // A closed popup's portal keeps the hold listening (Combobox keeps its list mounted). A script scrolls the page, and
+    // the trigger is pressed in the same task, as a test tool scrolls a trigger into view and clicks it.
+    portal(false);
+    window.scrollTo({ left: 40, top: 3000, behavior: "instant" });
+    // The portal's listeners serve the press too: it adds none of its own.
+    const add = vi.spyOn(document, "addEventListener");
+    pointerDown();
+    expect(add).not.toHaveBeenCalled();
+    // The scroll's event comes now, after the press: the page stays where the press found it.
+    await frame();
+    expect(at()).toEqual([40, 3000]);
+    expect(await scrollTo(40, 3600)).toEqual([40, 3000]);
+  });
+
   it("holds the page while a press is pending, though the popup that was open closes", async () => {
     const html = document.documentElement;
     html.style.scrollBehavior = "smooth";

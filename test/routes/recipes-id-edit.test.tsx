@@ -88,7 +88,6 @@ describe("Recipes $id Edit Route", () => {
     const otherUser = await createUser(db, otherEmail, otherUsername, "testPassword123");
     otherUserId = otherUser.id;
 
-    // Create a recipe for testing
     const recipe = await db.recipe.create({
       data: {
         title: "Test Recipe " + faker.string.alphanumeric(6),
@@ -255,7 +254,6 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("should include recipe steps with ingredients", async () => {
-      // Create a step with an ingredient
       const unit = await db.unit.create({ data: { name: "cup_" + faker.string.alphanumeric(6) } });
       const ingredientRef = await db.ingredientRef.create({ data: { name: "flour_" + faker.string.alphanumeric(6) } });
 
@@ -543,7 +541,6 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("should handle reorderStep intent - move step up", async () => {
-      // Create two steps
       const step1 = await db.recipeStep.create({
         data: {
           recipeId,
@@ -592,7 +589,6 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("should handle reorderStep intent - move step down", async () => {
-      // Create two steps
       const step1 = await db.recipeStep.create({
         data: {
           recipeId,
@@ -635,7 +631,6 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("should not reorder if step is already at boundary", async () => {
-      // Create a single step
       const step1 = await db.recipeStep.create({
         data: {
           recipeId,

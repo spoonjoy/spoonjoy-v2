@@ -9,8 +9,11 @@ import { Card } from "~/components/ouro/card/card";
 import { Item } from "~/components/ouro/item/item";
 import { Link } from "~/components/ouro/link/link";
 import { ScrollArea } from "~/components/ouro/scroll-area/scroll-area";
+import { Text } from "~/components/ouro/text/text";
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
+import { measureTextContrast } from "~/lib/ouro/testing/axe";
+import { pageCss } from "~/lib/ouro/testing/page-css";
 import { pressTab } from "~/lib/ouro/testing/tab";
 
 const roots: Root[] = [];
@@ -47,6 +50,21 @@ const RouterLink: OuroLinkComponent = (props) => <a data-router="" {...props} />
 function center(element: Element) {
   const rect = element.getBoundingClientRect();
   return [rect.left + rect.width / 2, rect.top + rect.height / 2] as const;
+}
+
+/** The @media conditions around each of the page's rules that make an element under this group transparent. */
+function hidingConditions(group: string): string[][] {
+  const found: string[][] = [];
+  const walk = (rules: CSSRuleList, chain: string[]) => {
+    for (const rule of rules) {
+      // Tailwind 4.1 leaves the rule nested in the class's own rule and writes `opacity: 0%`; 4.3 flattens it.
+      if (rule instanceof CSSStyleRule && rule.selectorText.includes(`.${group}`) && Number.parseFloat(rule.style.opacity) === 0) found.push(chain);
+      if (rule instanceof CSSMediaRule) walk(rule.cssRules, [...chain, rule.conditionText]);
+      else if (rule instanceof CSSGroupingRule || rule instanceof CSSStyleRule) walk(rule.cssRules, chain);
+    }
+  };
+  for (const sheet of document.styleSheets) walk(sheet.cssRules, []);
+  return found;
 }
 
 describe("Card", () => {
@@ -292,6 +310,148 @@ describe("Card with href", () => {
     expect(getComputedStyle(cardLink).position).toBe("static");
   });
 
+  // An app's layout that positions the card's body over its media, as a front door's tiles do: the link's layer then
+  // covers the body alone, which is the box it is positioned in.
+  const overMedia = '[data-consumer] [data-ouro="card"] > div:last-child { position: absolute; inset: auto 0 0 0; background: var(--card); }';
+  const consumerCard = (extra: ReactNode = null) => (
+    <div data-consumer="">
+      <style>{overMedia}</style>
+      <Card
+        href="#opened"
+        title="Braising"
+        description="Low heat, a lid, and time"
+        media={
+          <AspectRatio ratio={4 / 3}>
+            <img src={pixel} alt="" data-picture="" />
+          </AspectRatio>
+        }
+        action={extra}
+      />
+    </div>
+  );
+
+  it("opens its link from a click anywhere on it, though the app positions its body over the media, with the same button and keys", async () => {
+    const { card } = await render(consumerCard());
+    expect(card.getAttribute("data-follows-link")).toBe("");
+    const link = card.querySelector<HTMLAnchorElement>("[data-card-link]")!;
+    const picture = card.querySelector("[data-picture]")!.getBoundingClientRect();
+    // The app's layout leaves the top of the picture outside the link's layer.
+    expect(document.elementFromPoint(picture.left + 8, picture.top + 8)?.closest("a")).toBeNull();
+    const clicks: { button: number; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }[] = [];
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      clicks.push({ button: event.button, metaKey: event.metaKey, ctrlKey: event.ctrlKey, shiftKey: event.shiftKey });
+    });
+    // A middle or modified click opens the address in a new tab: Safari ignores the keys on a click a script hands on.
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    const at = { position: { x: 8, y: 8 } };
+    await userEvent.click(card.querySelector("[data-picture]")!, at);
+    expect(clicks).toEqual([{ button: 0, metaKey: false, ctrlKey: false, shiftKey: false }]);
+    await userEvent.click(card.querySelector("[data-picture]")!, { ...at, modifiers: ["ControlOrMeta"] } as never);
+    await userEvent.click(card.querySelector("[data-picture]")!, { ...at, modifiers: ["Shift"] } as never);
+    await userEvent.click(card.querySelector("[data-picture]")!, { ...at, button: "middle" } as never);
+    expect(clicks).toHaveLength(1);
+    expect(open.mock.calls).toEqual(Array.from({ length: 3 }, () => [link.href, "_blank", "noopener"]));
+  });
+
+  it("hands its click on out of a shadow root, as the browser's own click goes, so the page's link handler sees it", async () => {
+    const outer = document.createElement("div");
+    document.body.append(outer);
+    mounted.push(outer);
+    const host = document.createElement("div");
+    outer.attachShadow({ mode: "open" }).append(host);
+    const root = createRoot(host);
+    roots.push(root);
+    await act(async () => root.render(<Card href="#shadow" title="Searing" media={<img src={pixel} alt="" data-picture="" />} />));
+    const link = host.querySelector<HTMLAnchorElement>("[data-card-link]")!;
+    const seen: EventTarget[] = [];
+    const onPage = (event: MouseEvent) => {
+      seen.push(event.composedPath()[0]!);
+      event.preventDefault();
+    };
+    document.addEventListener("click", onPage);
+    try {
+      host.querySelector<HTMLElement>("[data-picture]")!.click();
+    } finally {
+      document.removeEventListener("click", onPage);
+    }
+    // The root hands the click on as the browser's own passes it, so the link's reaches the page first.
+    expect(seen).toEqual([link, host.querySelector("[data-picture]")]);
+  });
+
+  it("hands a plain click to the app's router link, whose own handler sees it and can stop the browser's navigation", async () => {
+    const seen: boolean[] = [];
+    const Router: OuroLinkComponent = ({ onClick, ...props }) => (
+      <a
+        {...props}
+        onClick={(event) => {
+          onClick?.(event);
+          event.preventDefault();
+          // The browser's own event, which a click it cannot cancel would leave to navigate.
+          seen.push(event.nativeEvent.defaultPrevented);
+        }}
+      />
+    );
+    const { card } = await render(<OuroProvider linkComponent={Router}>{consumerCard()}</OuroProvider>);
+    await userEvent.click(card.querySelector("[data-picture]")!, { position: { x: 8, y: 8 } });
+    expect(seen).toEqual([true]);
+  });
+
+  it("opens nothing from a right click, or a click the app's own handler cancels, and a card with no link takes its clicks as it is", async () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    const { card } = await render(consumerCard());
+    const link = card.querySelector<HTMLAnchorElement>("[data-card-link]")!;
+    const opened = vi.fn((event: Event) => event.preventDefault());
+    link.addEventListener("click", opened);
+    await userEvent.click(card.querySelector("[data-picture]")!, { position: { x: 8, y: 8 }, button: "right" } as never);
+    expect(opened).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+    const cancelled = await render(
+      <div data-consumer="">
+        <style>{overMedia}</style>
+        <Card href="#opened" title="Searing" media={<AspectRatio ratio={4 / 3}><img src={pixel} alt="" data-picture="" /></AspectRatio>} onClick={(event) => event.preventDefault()} />
+      </div>,
+    );
+    const second = vi.fn((event: Event) => event.preventDefault());
+    cancelled.card.querySelector("[data-card-link]")!.addEventListener("click", second);
+    await userEvent.click(cancelled.card.querySelector("[data-picture]")!, { position: { x: 8, y: 8 } });
+    expect(second).not.toHaveBeenCalled();
+    const onClick = vi.fn();
+    const plain = await render(<Card title="Pantry" description="What you have on hand" onClick={onClick} />);
+    await userEvent.click(page.getByText("What you have on hand"));
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(plain.card.hasAttribute("data-follows-link")).toBe(false);
+  });
+
+  it("opens nothing from a click that ends a text selection, or one a control of its own takes", async () => {
+    const onClick = vi.fn();
+    const { card } = await render(consumerCard(<Button variant="plain" onClick={onClick}>Save</Button>));
+    const link = card.querySelector<HTMLAnchorElement>("[data-card-link]")!;
+    const opened = vi.fn((event: Event) => event.preventDefault());
+    link.addEventListener("click", opened);
+    await userEvent.click(page.getByRole("button", { name: "Save" }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(opened).not.toHaveBeenCalled();
+    const picture = card.querySelector("[data-picture]")!;
+    const range = document.createRange();
+    range.selectNodeContents(page.getByText("Low heat, a lid, and time").element());
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(range);
+    picture.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(opened).not.toHaveBeenCalled();
+    // Text selected elsewhere on the page, which a press on a picture leaves selected, does not stop the card.
+    const elsewhere = document.createElement("p");
+    elsewhere.textContent = "Notes beside the card";
+    card.parentElement!.after(elsewhere);
+    mounted.push(elsewhere);
+    range.selectNodeContents(elsewhere);
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(range);
+    picture.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(opened).toHaveBeenCalledTimes(1);
+    getSelection()!.removeAllRanges();
+  });
+
   it("outlines the whole card when the link has keyboard focus", async () => {
     const { card } = await render(<Card href="/x" title="Go" />);
     expect(getComputedStyle(card).outlineStyle).toBe("none");
@@ -413,7 +573,7 @@ describe("Card with href, zoomMedia and revealDescription", () => {
         return still ? value : undefined;
       }, { interval: 50 });
   }
-  const tile = (props: { zoomMedia?: boolean; revealDescription?: boolean }) => (
+  const tile = (props: { zoomMedia?: boolean; revealDescription?: boolean | "rise" }) => (
     <Card
       href="#braising"
       title="Braising"
@@ -458,6 +618,180 @@ describe("Card with href, zoomMedia and revealDescription", () => {
     await commands.emulateMedia({ reducedMotion: "reduce" });
     await userEvent.hover(card.querySelector("h3")!);
     await settled(picture, () => getComputedStyle(picture).scale).toBe("none");
+  });
+
+  it("hides a revealDescription card's description only where the pointer can hover, so a stylus that cannot still sees it", () => {
+    const conditions = hidingConditions(CSS.escape("group/card"));
+    expect(conditions).not.toEqual([]);
+    for (const chain of conditions) expect(chain).toContain("(hover: hover)");
+  });
+
+  it('rises the description over the media with revealDescription="rise", taking no room before, and the card\'s box never changes', async () => {
+    const { card } = await render(tile({ revealDescription: "rise" }));
+    const reveal = card.querySelector<HTMLElement>('[data-card-reveal="rise"]')!;
+    const picture = card.querySelector("[data-picture]")!.getBoundingClientRect();
+    const box = card.getBoundingClientRect();
+    const title = page.getByRole("heading", { name: "Braising" }).element();
+    // At rest: the title sits on the media's bottom, and the description takes no room.
+    expect(title.getBoundingClientRect().bottom).toBeLessThanOrEqual(picture.bottom);
+    expect(reveal.getBoundingClientRect().height).toBe(0);
+    expect(getComputedStyle(reveal).opacity).toBe("0");
+    await expect.element(page.getByRole("link", { name: "Braising" })).toHaveAccessibleDescription("Low heat, a lid, and time");
+    const titleTop = title.getBoundingClientRect().top;
+    await userEvent.hover(title);
+    await settled(reveal, () => getComputedStyle(reveal).opacity).toBe("1");
+    expect(reveal.getBoundingClientRect().height).toBeGreaterThan(0);
+    // Without zoomMedia the picture keeps its size.
+    expect(getComputedStyle(card.querySelector("[data-picture]")!).scale).toBe("none");
+    // It rose: the title moved up over the media, and the card kept its box.
+    expect(title.getBoundingClientRect().top).toBeLessThan(titleTop);
+    expect(reveal.getBoundingClientRect().bottom).toBeLessThanOrEqual(picture.bottom);
+    expect(card.getBoundingClientRect().toJSON()).toEqual(box.toJSON());
+    // The link's layer covers the picture too, so the browser's own link handles a click there: its address, its menu.
+    expect(document.elementFromPoint(picture.left + 8, picture.top + 8)?.closest("a")).toBe(card.querySelector("[data-card-link]"));
+    await commands.parkPointer();
+    await settled(reveal, () => getComputedStyle(reveal).opacity).toBe("0");
+    expect(reveal.getBoundingClientRect().height).toBe(0);
+    const start = document.createElement("button");
+    card.parentElement!.prepend(start);
+    start.focus();
+    await pressTab();
+    await pressTab();
+    expect(document.activeElement).toBe(card.querySelector("[data-card-link]"));
+    await settled(reveal, () => getComputedStyle(reveal).opacity).toBe("1");
+    // The button before it moved the card down; its size is the same.
+    expect([card.getBoundingClientRect().width, card.getBoundingClientRect().height]).toEqual([box.width, box.height]);
+  });
+
+  it("lays a rising title on glass over the picture, solid without a blur, with less transparency or more contrast, and the page's background under a theme with no card color", async () => {
+    const { card } = await render(<div style={{ "--card": "initial", "--card-foreground": "initial" } as never}>{tile({ revealDescription: "rise" })}</div>);
+    // The block that holds the title and the rising description, over the media.
+    const band = card.querySelector<HTMLElement>("[data-card-glass]")!;
+    const title = card.querySelector('[data-card-reveal="rise"]')!.parentElement!.parentElement!;
+    // The glass lies under the whole of the title's block, and is no content of its own.
+    expect(band.getAttribute("aria-hidden")).toBe("true");
+    expect(band.getBoundingClientRect().toJSON()).toEqual(title.getBoundingClientRect().toJSON());
+    const probe = document.createElement("div");
+    probe.style.cssText = "background-color:var(--background);color:var(--foreground)";
+    card.parentElement!.append(probe);
+    const solid = getComputedStyle(probe).backgroundColor;
+    expect(solid).not.toBe("rgba(0, 0, 0, 0)");
+    // Glass: the page's background, partly see-through, blurred behind.
+    expect(getComputedStyle(band).backgroundColor).not.toBe(solid);
+    expect(getComputedStyle(band).backgroundColor).toMatch(/\/ 0\.78\)$|, 0\.78\)$/);
+    expect(getComputedStyle(band).backdropFilter).toBe("blur(12px) saturate(1.5)");
+    expect(getComputedStyle(title).color).toBe(getComputedStyle(probe).color);
+    // Test browsers cannot ask for less transparency or lack backdrop-filter, so the page's own rules for them apply to every page here.
+    for (const query of [/@media ?\(prefers-reduced-transparency: ?reduce\)/g, /@supports +not \(backdrop-filter: ?blur\(1px\)\)/g]) {
+      const rule = document.createElement("style");
+      rule.textContent = pageCss().replace(query, "@media all");
+      expect(rule.textContent).not.toBe(pageCss());
+      document.head.append(rule);
+      try {
+        expect(getComputedStyle(band).backgroundColor).toBe(solid);
+        if (String(query).includes("transparency")) expect(getComputedStyle(band).backdropFilter).toBe("none");
+      } finally {
+        rule.remove();
+      }
+    }
+    await commands.emulateMedia({ contrast: "more" });
+    try {
+      expect(getComputedStyle(band).backgroundColor).toBe(solid);
+      expect(getComputedStyle(band).backdropFilter).toBe("none");
+      expect(getComputedStyle(band).borderTopStyle).toBe("solid");
+    } finally {
+      await commands.emulateMedia({ contrast: "no-preference" });
+    }
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      expect(getComputedStyle(band).backdropFilter).toBe("none");
+      expect(getComputedStyle(band).borderTopStyle).toBe("solid");
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
+  it("keeps a rising title and description at 4.5:1 on its glass over a bright picture and a dark one, in light and dark", async () => {
+    const picture = (fill: string) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="40" height="30" fill="${fill}"/></svg>`)}`;
+    try {
+      for (const scheme of ["light", "dark"]) {
+        document.documentElement.classList.toggle("dark", scheme === "dark");
+        for (const fill of ["#ffffff", "#000000"]) {
+          const { card, host } = await render(
+            <Card href="#braising" title="Braising" description="Low heat, a lid, and time" media={<AspectRatio ratio={4 / 3}><img src={picture(fill)} alt="" /></AspectRatio>} revealDescription="rise" />,
+          );
+          card.querySelector<HTMLElement>("[data-card-link]")!.focus({ focusVisible: true } as FocusOptions);
+          const reveal = card.querySelector<HTMLElement>('[data-card-reveal="rise"]')!;
+          await settled(reveal, () => getComputedStyle(reveal).opacity).toBe("1");
+          for (const text of [card.querySelector("[data-card-link]")!, reveal.firstElementChild!]) {
+            expect(await measureTextContrast(text, 4.5), `${scheme}, ${fill}: ${text.textContent}`).toEqual({ pass: true });
+          }
+          host.remove();
+        }
+      }
+    } finally {
+      document.documentElement.classList.remove("dark");
+    }
+  });
+
+  it("mutes only its own description on the glass, leaving a tone the app gives text inside it", async () => {
+    const { card } = await render(
+      <Card href="#braising" title="Braising" description={<>Ready in 20 min · <Text as="span" tone="destructive">Sold out</Text></>} media={<AspectRatio ratio={4 / 3}><img src={pixel} alt="" /></AspectRatio>} revealDescription="rise" />,
+    );
+    const probe = document.createElement("span");
+    probe.style.color = "var(--destructive)";
+    card.append(probe);
+    expect(getComputedStyle(card.querySelector('[data-card-reveal] span[data-ouro="text"]')!).color).toBe(getComputedStyle(probe).color);
+  });
+
+  it("insets a plain rising card's title from the edges of its band, as an outlined card's", async () => {
+    for (const [size, inset] of [["md", 24], ["sm", 16]] as const) {
+      const { card } = await render(
+        <Card variant="plain" size={size} href="#braising" title="Braising" description="Low heat, a lid, and time" media={<AspectRatio ratio={4 / 3}><img src={pixel} alt="" /></AspectRatio>} revealDescription="rise" />,
+      );
+      const band = card.querySelector('[data-card-reveal="rise"]')!.parentElement!.parentElement!.getBoundingClientRect();
+      const title = card.querySelector("h3")!.getBoundingClientRect();
+      expect(title.left - band.left, size).toBe(inset);
+      expect(band.right - title.right, size).toBeGreaterThanOrEqual(inset);
+    }
+  });
+
+  it("grows a rising card to fit a title and description taller than its media, rather than cutting the title off", async () => {
+    const long = "Low heat, a lid, and time: brown the meat well, add the liquid halfway up, and leave it in a slow oven for hours.";
+    const { card } = await render(
+      <Card
+        href="#braising"
+        title="Braising"
+        description={long}
+        media={
+          <AspectRatio ratio={4}>
+            <img src={pixel} alt="" />
+          </AspectRatio>
+        }
+        revealDescription="rise"
+      />,
+    );
+    const title = page.getByRole("heading", { name: "Braising" }).element();
+    await userEvent.hover(title);
+    const reveal = card.querySelector<HTMLElement>('[data-card-reveal="rise"]')!;
+    await settled(reveal, () => getComputedStyle(reveal).opacity).toBe("1");
+    expect(title.getBoundingClientRect().top).toBeGreaterThanOrEqual(card.getBoundingClientRect().top);
+    expect(reveal.getBoundingClientRect().bottom).toBeLessThanOrEqual(card.getBoundingClientRect().bottom);
+  });
+
+  it("grows a rising card's picture with zoomMedia too", async () => {
+    const { card } = await render(tile({ revealDescription: "rise", zoomMedia: true }));
+    const picture = card.querySelector<HTMLElement>("[data-picture]")!;
+    await userEvent.hover(page.getByRole("heading", { name: "Braising" }));
+    await settled(picture, () => getComputedStyle(picture).scale).toBe("1.03");
+  });
+
+  it("with reduced motion, a rising description only fades, and nothing moves", async () => {
+    const { card } = await render(tile({ revealDescription: "rise" }));
+    const reveal = card.querySelector<HTMLElement>('[data-card-reveal="rise"]')!;
+    expect(getComputedStyle(reveal).transitionProperty).toContain("grid-template-rows");
+    await commands.emulateMedia({ reducedMotion: "reduce" });
+    expect(getComputedStyle(reveal).transitionProperty).toBe("opacity");
   });
 
   it("shows the description on hover or keyboard focus, keeping its room, and names it as the link's description", async () => {
@@ -521,10 +855,26 @@ describe("Card development messages", () => {
     ["as span", { title: "x", as: "span" }, 'as="span" is not an element Card renders; use "div", "article", "section", "li"', '<Card as="div">'],
     ["stackBelow", { title: "x", stackBelow: "lg" }, 'stackBelow="lg" is not a breakpoint; use "sm", "md"', '<Card stackBelow="sm">'],
     ["headingLevel", { title: "x", headingLevel: 1 }, "headingLevel must be 2, 3, 4, 5 or 6, got 1", "<Card headingLevel={2}>"],
+    ["revealDescription", { href: "#x", title: "x", description: "y", revealDescription: "slide" }, 'revealDescription="slide" is not a reveal; use revealDescription or "rise"', '<Card revealDescription="rise">'],
+    ["rise without href", { title: "x", description: "y", media: <div />, revealDescription: "rise" }, "revealDescription needs href, a title and a description", '<Card href="/path" title="…" description="…" revealDescription>'],
+    ["rise without media", { href: "#x", title: "x", description: "y", revealDescription: "rise" }, 'revealDescription="rise" needs media to rise over', '<Card href="/path" title="…" description="…" media={…} revealDescription="rise">'],
   ])("warns for %s with the fix", async (_name, props, problem, fix) => {
     const { card } = await render(<Card {...(props as unknown as Parameters<typeof Card>[0])} />);
     expect(warn).toHaveBeenCalledWith(`[ouro-ui] Card: ${problem}. Fix: ${fix}.`);
     for (const attribute of ["subtitle", "image", "header", "actions", "to", "aschild", "interactive"]) expect(card.hasAttribute(attribute)).toBe(false);
+  });
+
+  it.each([undefined, false, true, "rise"] as const)("says nothing of revealDescription=%s, which is a reveal", async (value) => {
+    await render(<Card href="#x" title="x" description="y" media={<div />} revealDescription={value} />);
+    expect(warn.mock.calls.filter((call: unknown[]) => String(call[0]).includes("is not a reveal"))).toEqual([]);
+  });
+
+  it("renders no box for an action it is not given", async () => {
+    const { card } = await render(<Card title="Pantry" description="What you have on hand" />);
+    const title = page.getByRole("heading", { name: "Pantry" }).element();
+    // The title's column is the header's only child.
+    expect(title.parentElement!.parentElement!.children).toHaveLength(1);
+    expect(card.textContent).toBe("PantryWhat you have on hand");
   });
 
   it("renders the defaults for unknown values", async () => {

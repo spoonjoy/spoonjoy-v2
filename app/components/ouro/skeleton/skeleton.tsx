@@ -166,7 +166,7 @@ function useBreathes(shimmer: boolean): boolean {
 }
 
 const shapes = {
-  rect: "h-4 w-full rounded-md",
+  rect: "h-4 w-full rounded-ouro-md",
   circle: "aspect-square rounded-full",
 } as const;
 
@@ -176,7 +176,7 @@ const textSizes = { sm: "text-sm", md: "text-base", lg: "text-lg" } as const;
 // A line is one line box of its text (`1lh`), with a bar the height of the letters in the middle,
 // so the text that replaces it takes the same space.
 const line = "flex h-[1lh] items-center";
-const bar = "h-[0.75em] rounded-sm";
+const bar = "h-[0.75em] rounded-ouro-sm";
 
 // Item's row (item.tsx): a 40px media lined up with the title, a medium title and a small description.
 const rowSizes = { md: "py-3", sm: "py-2" } as const;
@@ -311,7 +311,7 @@ export function Skeleton(props: SkeletonProps): JSX.Element {
         if (shape === "row") {
           return (
             <span key={index} {...own} {...common} className={cn("grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4", rowSizes[frame], className)}>
-              <Bar shimmer={shimmer} className="mt-0.75 size-10 self-start rounded-md" />
+              <Bar shimmer={shimmer} className="mt-0.75 size-10 self-start rounded-ouro-md" />
               <span className="flex min-w-0 flex-col gap-0.5">
                 <span className={cn(line, "text-base")}>
                   <Bar shimmer={shimmer} className={title} />
@@ -329,7 +329,7 @@ export function Skeleton(props: SkeletonProps): JSX.Element {
             key={index}
             {...own}
             {...common}
-            className={cn("flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card", card.root, className)}
+            className={cn("flex min-w-0 flex-col overflow-hidden rounded-ouro-xl border border-border bg-card", card.root, className)}
           >
             <span className={cn("flex min-w-0 flex-col gap-1", card.pad)}>
               <span className={cn(line, card.title)}>

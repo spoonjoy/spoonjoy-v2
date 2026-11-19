@@ -403,7 +403,6 @@ dGVzdA==
         const testAppleUserId = generateAppleUserId();
         const testEmail = faker.internet.email().toLowerCase();
 
-        // Set mock state for this test
         mockArcticState.appleUserId = testAppleUserId;
         mockArcticState.email = testEmail;
         mockArcticState.emailVerified = "true";
@@ -427,7 +426,6 @@ dGVzdA==
         const testAppleUserId = generateAppleUserId();
         const testEmail = faker.internet.email().toLowerCase();
 
-        // Set mock state for this test
         mockArcticState.appleUserId = testAppleUserId;
         mockArcticState.email = testEmail;
 

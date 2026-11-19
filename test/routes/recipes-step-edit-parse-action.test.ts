@@ -71,13 +71,11 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
   let mockContext: any
 
   beforeEach(async () => {
-    // Create test user
     const userData = createTestUser()
     testUser = await db.user.create({
       data: userData,
     })
 
-    // Create test recipe
     testRecipe = await db.recipe.create({
       data: {
         title: 'Test Recipe for Parsing',
@@ -85,7 +83,6 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
       },
     })
 
-    // Create test step
     testStep = await db.recipeStep.create({
       data: {
         recipeId: testRecipe.id,
@@ -421,7 +418,6 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
     })
 
     it('rejects parsing for non-owner', async () => {
-      // Create another user
       const otherUser = await db.user.create({
         data: createTestUser(),
       })

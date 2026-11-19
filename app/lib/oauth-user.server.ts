@@ -438,7 +438,6 @@ export async function linkOAuthAccount(
   userId: string,
   oauthData: LinkOAuthData
 ): Promise<LinkOAuthResult> {
-  // Check if user exists
   const user = await db.user.findUnique({
     where: { id: userId },
   });
@@ -523,7 +522,6 @@ export async function unlinkOAuthAccount(
   userId: string,
   provider: string
 ): Promise<UnlinkOAuthResult> {
-  // Check if user exists
   const user = await db.user.findUnique({
     where: { id: userId },
   });

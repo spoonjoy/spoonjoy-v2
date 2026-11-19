@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type JSX } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ouro/button/button";
-import { actionsClass, frameClass, isPartOf, itemFor, labelClass, layerClass, linkClass, listClass, outlineClass, pillClass, statusClass, tagClass } from "~/components/ouro/inspector/inspector-styles";
+import { actionsClass, frameClass, isPartOf, itemFor, labelClass, layerClass, linkClass, listClass, outlineClass, outlinesClass, pillClass, scanClass, statusClass, tagClass } from "~/components/ouro/inspector/inspector-styles";
 import { Sheet } from "~/components/ouro/sheet/sheet";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useReducedMotion } from "~/lib/ouro/use-reduced-motion";
@@ -350,7 +350,8 @@ const ouroDocs = (item: string) => `https://ui.ouroboros.bot/docs/${item}/`;
  * its component (its RadioGroup). X-ray never draws over the page's text: an outline's edge breaks
  * where a line of text crosses it, and a tag sits where it covers no text and no other tag, or
  * hides. Its bar is a landmark named by `label`. Escape or Close turns it off, once Escape has
- * closed any other overlay. It renders nothing on the server.
+ * closed any other overlay. It renders nothing on the server. It opens with a scan: a band sweeps down
+ * the screen, and the outlines show as it passes over them; with reduced motion they show at once.
  *
  * The bar floats above the bottom of the screen and above a `TabBar` that shows. To keep it clear of
  * other chrome the app pins to the bottom, set `--ouro-inspector-bottom` to the distance to keep,
@@ -367,6 +368,7 @@ const ouroDocs = (item: string) => `https://ui.ouroboros.bot/docs/${item}/`;
  * <Switch label="X-ray" checked={xray} onCheckedChange={setXray} />
  * <Inspector open={xray} onOpenChange={setXray} />
  * <Inspector open={xray} onOpenChange={setXray} sourceHref={(item) => sourceOf(item)} />
+ * @claim "It opens with a scan: a" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > opens with a scan down the screen that shows the outlines as it passes, and at once with reduced motion)
  * @claim "X-ray for a page built with" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > outlines every Ouro component on the page, each tagged with its item and linked to its docs)
  * @claim "Each tag names the component's registry" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > lists every component in document order in its sheet, with docs and source links)
  * @claim "Outlines follow their components through scrolling" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > follows its components as the page scrolls and resizes)
@@ -604,7 +606,8 @@ function InspectorLayer({
   const count = `${found.length} ${found.length === 1 ? "component" : "components"}`;
   return (
     <div ref={layer} data-ouro="inspector" data-ouro-part="layer" data-starting-style={entering ? "" : undefined} className={layerClass}>
-      <div aria-hidden="true">
+      <div aria-hidden="true" data-ouro-part="scan" className={scanClass} />
+      <div aria-hidden="true" data-ouro-part="outlines" className={outlinesClass}>
         {found.map((component) => (
           <div
             key={component.key}

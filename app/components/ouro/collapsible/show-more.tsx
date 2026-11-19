@@ -194,9 +194,9 @@ export interface ShowMoreListProps extends ShowMoreBaseProps {
   items: readonly ReactNode[];
   /** Renders an `<ol>`, for a ranked or numbered list. @default false (`<ul>`) */
   ordered?: boolean | undefined;
-  /** Text mode only: not with `items`. */
   /** Text and height modes only: a list shows its first items. */
   estimate?: never;
+  /** Text mode only: not with `items`. */
   lines?: never;
   /** Height mode only: not with `items`. */
   maxHeight?: never;

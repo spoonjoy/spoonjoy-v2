@@ -1,5 +1,6 @@
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it } from "vitest";
+import { Button } from "~/components/ouro/button/button";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { act } from "~/lib/ouro/testing/act";
@@ -32,4 +33,28 @@ it("makes a linked row at least 44px tall at every size, so it is a full touch t
     const item = host.querySelector(`[data-row="${row}"]`)!;
     expect(item.getBoundingClientRect().height, row).toBeGreaterThanOrEqual(44);
   }
+});
+
+it("makes a row with onSelect at least 44px tall too, so the whole row is a touch target", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  nodes.push(host);
+  root = createRoot(host);
+  await act(async () =>
+    root!.render(
+      <ItemGroup aria-label="Recipes">
+        <Item onSelect={() => {}} title="Small" size="sm" data-row="select" />
+      </ItemGroup>,
+    ),
+  );
+  expect(host.querySelector('[data-row="select"]')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+});
+
+it("shows a revealActions row's actions on a touch screen", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  nodes.push(host);
+  root = createRoot(host);
+  await act(async () => root!.render(<Item title="Lentil soup" actions={<Button variant="plain" size="sm">Edit</Button>} revealActions />));
+  expect(getComputedStyle(host.querySelector("[data-item-actions]")!).opacity).toBe("1");
 });

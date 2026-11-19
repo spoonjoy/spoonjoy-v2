@@ -67,7 +67,7 @@ const crumb =
   "[-webkit-tap-highlight-color:transparent] outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";
 const more =
   "press m-0 box-border inline-flex h-11 min-w-11 pointer-fine:h-7 pointer-fine:min-w-7 cursor-pointer items-center justify-center " +
-  "rounded-md border-0 forced-colors:border forced-colors:border-solid bg-transparent p-0 font-[inherit] text-muted-foreground select-none touch-manipulation " +
+  "rounded-ouro-md border-0 forced-colors:border forced-colors:border-solid bg-transparent p-0 font-[inherit] text-muted-foreground select-none touch-manipulation " +
   "[-webkit-tap-highlight-color:transparent] pointer-fine:hover:bg-accent pointer-fine:hover:text-accent-foreground data-popup-open:bg-accent data-popup-open:text-accent-foreground " +
   "motion-safe:active:scale-(--ouro-press-scale) outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";
 

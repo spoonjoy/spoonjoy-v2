@@ -150,7 +150,8 @@ export type PopoverProps = PopoverWithTriggerProps | PopoverControlledProps;
  * the user's full attention.
  *
  * It stacks above the page at `--ouro-layer`, a z-index of 50 by default (from
- * ouro-base.css), like Dialog and Sheet. Raise it in a `:root` rule of your own after
+ * ouro-base.css), like Dialog and Sheet. Opened from inside a Dialog or a Sheet, it shows
+ * above it. Raise it in a `:root` rule of your own after
  * the Ouro tokens, outside any `@layer`: `:root { --ouro-layer: 60; }`.
  *
  * @group Overlays
@@ -165,6 +166,7 @@ export type PopoverProps = PopoverWithTriggerProps | PopoverControlledProps;
  * </Popover>
  * @claim "` it is a bottom sheet on phones" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover presentation > is a bottom sheet below 640px with presentation auto, and a popover from 640px up)
  * @claim "It stacks above the page at" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover stacking > puts the portal on the --ouro-layer level, as its own stacking context)
+ * @claim "Opened from inside a Dialog or a Sheet" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover stacking > shows above a %s it is opened from)
  * @claim "It stacks above the page at" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
  * @claim "It is named by its title" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > opens below its trigger as a non-modal dialog named by its title)
  * @claim "It is named by its title" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > closes on Escape and returns focus to the trigger)

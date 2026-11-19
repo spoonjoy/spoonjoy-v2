@@ -21,13 +21,11 @@ describe("validateStepReorder", () => {
   beforeEach(async () => {
     await cleanupDatabase();
 
-    // Create test user
     const user = await db.user.create({
       data: createTestUser(),
     });
     testUserId = user.id;
 
-    // Create test recipe
     const recipe = await db.recipe.create({
       data: createTestRecipe(testUserId),
     });
@@ -71,7 +69,6 @@ describe("validateStepReorder", () => {
     });
 
     it("should return valid when moving step forward but dependents are after new position", async () => {
-      // Create four steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -117,7 +114,6 @@ describe("validateStepReorder", () => {
     });
 
     it("should return valid when moving step backward", async () => {
-      // Create three steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -157,7 +153,6 @@ describe("validateStepReorder", () => {
     });
 
     it("should return valid when staying in same position", async () => {
-      // Create two steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -193,7 +188,6 @@ describe("validateStepReorder", () => {
 
   describe("invalid reorders (incoming dependencies violated)", () => {
     it("should return error when moving step past a step that uses it", async () => {
-      // Create three steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -239,7 +233,6 @@ describe("validateStepReorder", () => {
     });
 
     it("should return error listing multiple blocking steps", async () => {
-      // Create four steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -289,7 +282,6 @@ describe("validateStepReorder", () => {
     });
 
     it("should return error listing three or more blocking steps with Oxford comma", async () => {
-      // Create five steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -346,7 +338,6 @@ describe("validateStepReorder", () => {
     });
 
     it("should only include blocking steps that would be before the new position", async () => {
-      // Create five steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -411,7 +402,6 @@ describe("validateStepReorder", () => {
 
   describe("edge cases", () => {
     it("should return valid for non-existent step", async () => {
-      // Create a step
       await db.recipeStep.create({
         data: {
           recipeId: testRecipeId,
@@ -434,7 +424,6 @@ describe("validateStepReorder", () => {
     });
 
     it("should only consider dependencies from the specified recipe", async () => {
-      // Create steps for the test recipe
       await db.recipeStep.createMany({
         data: [
           {
@@ -495,7 +484,6 @@ describe("validateStepReorder", () => {
     });
 
     it("should return blocking steps in ascending order by step number", async () => {
-      // Create five steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -553,7 +541,6 @@ describe("validateStepReorder", () => {
     });
 
     it("should handle moving middle step forward past dependents", async () => {
-      // Create four steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -612,13 +599,11 @@ describe("validateStepReorderOutgoing", () => {
   beforeEach(async () => {
     await cleanupDatabase();
 
-    // Create test user
     const user = await db.user.create({
       data: createTestUser(),
     });
     testUserId = user.id;
 
-    // Create test recipe
     const recipe = await db.recipe.create({
       data: createTestRecipe(testUserId),
     });
@@ -662,7 +647,6 @@ describe("validateStepReorderOutgoing", () => {
     });
 
     it("should return valid when moving step backward but dependencies are still before new position", async () => {
-      // Create four steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -708,7 +692,6 @@ describe("validateStepReorderOutgoing", () => {
     });
 
     it("should return valid when moving step forward", async () => {
-      // Create three steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -748,7 +731,6 @@ describe("validateStepReorderOutgoing", () => {
     });
 
     it("should return valid when staying in same position", async () => {
-      // Create two steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -784,7 +766,6 @@ describe("validateStepReorderOutgoing", () => {
 
   describe("invalid reorders (outgoing dependencies violated)", () => {
     it("should return error when moving step before a step it uses", async () => {
-      // Create three steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -830,7 +811,6 @@ describe("validateStepReorderOutgoing", () => {
     });
 
     it("should return error listing multiple blocking dependencies", async () => {
-      // Create four steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -880,7 +860,6 @@ describe("validateStepReorderOutgoing", () => {
     });
 
     it("should return error listing three or more blocking dependencies with Oxford comma", async () => {
-      // Create five steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -937,7 +916,6 @@ describe("validateStepReorderOutgoing", () => {
     });
 
     it("should only include blocking dependencies that would be after the new position", async () => {
-      // Create five steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -999,7 +977,6 @@ describe("validateStepReorderOutgoing", () => {
 
   describe("edge cases", () => {
     it("should return valid for non-existent step", async () => {
-      // Create a step
       await db.recipeStep.create({
         data: {
           recipeId: testRecipeId,
@@ -1027,7 +1004,6 @@ describe("validateStepReorderOutgoing", () => {
     });
 
     it("should only consider dependencies from the specified recipe", async () => {
-      // Create steps for the test recipe
       await db.recipeStep.createMany({
         data: [
           {
@@ -1094,7 +1070,6 @@ describe("validateStepReorderOutgoing", () => {
     });
 
     it("should return blocking steps in ascending order by step number", async () => {
-      // Create five steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -1152,7 +1127,6 @@ describe("validateStepReorderOutgoing", () => {
     });
 
     it("should handle moving middle step backward past dependencies", async () => {
-      // Create four steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -1211,13 +1185,11 @@ describe("validateStepReorderComplete", () => {
   beforeEach(async () => {
     await cleanupDatabase();
 
-    // Create test user
     const user = await db.user.create({
       data: createTestUser(),
     });
     testUserId = user.id;
 
-    // Create test recipe
     const recipe = await db.recipe.create({
       data: createTestRecipe(testUserId),
     });
@@ -1261,7 +1233,6 @@ describe("validateStepReorderComplete", () => {
     });
 
     it("should return valid when staying in same position", async () => {
-      // Create two steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -1295,7 +1266,6 @@ describe("validateStepReorderComplete", () => {
     });
 
     it("should return valid when moving forward without violating incoming dependencies", async () => {
-      // Create four steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -1341,7 +1311,6 @@ describe("validateStepReorderComplete", () => {
     });
 
     it("should return valid when moving backward without violating outgoing dependencies", async () => {
-      // Create four steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -1389,7 +1358,6 @@ describe("validateStepReorderComplete", () => {
 
   describe("invalid reorders (incoming dependencies only)", () => {
     it("should return error when moving step forward past a step that uses it", async () => {
-      // Create three steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -1436,7 +1404,6 @@ describe("validateStepReorderComplete", () => {
 
   describe("invalid reorders (outgoing dependencies only)", () => {
     it("should return error when moving step backward past a step it uses", async () => {
-      // Create three steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -1483,7 +1450,6 @@ describe("validateStepReorderComplete", () => {
 
   describe("invalid reorders (both directions violated)", () => {
     it("should return combined error when both incoming and outgoing dependencies are violated", async () => {
-      // Create five steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -1626,7 +1592,6 @@ describe("validateStepReorderComplete", () => {
       // 1. Has a dependent step that would be passed over (incoming violation)
       // 2. Uses a step that would end up after it (outgoing violation)
 
-      // Create five steps
       await db.recipeStep.createMany({
         data: [
           {
@@ -1845,7 +1810,6 @@ describe("validateStepReorderComplete", () => {
 
   describe("edge cases", () => {
     it("should return valid for non-existent step", async () => {
-      // Create a step
       await db.recipeStep.create({
         data: {
           recipeId: testRecipeId,

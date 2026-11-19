@@ -26,3 +26,12 @@ test("a row's link is described by its description, as a screen reader hears it"
   await expect(link).toHaveAccessibleName("Braised short ribs");
   await expect(link).toHaveAccessibleDescription(/^Seared hard, then braised low in red wine and stock/);
 });
+
+test("a list beside its detail shows the row pressed and marks it current", async ({ page }) => {
+  await openStory(page, "lists-item--beside-detail");
+  await expect(page.getByRole("button", { name: "Braised short ribs" })).toHaveAttribute("aria-current", "true");
+  await page.getByRole("button", { name: "Lentil soup" }).click();
+  await expect(page.locator("[data-detail]")).toContainText("Lentil soup");
+  await expect(page.getByRole("button", { name: "Lentil soup" })).toHaveAttribute("aria-current", "true");
+  await expect(page.getByRole("button", { name: "Braised short ribs" })).not.toHaveAttribute("aria-current", "true");
+});

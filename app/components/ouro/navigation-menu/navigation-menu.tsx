@@ -5,7 +5,7 @@ import { useRef, useState, type JSX, type MouseEvent as ReactMouseEvent, type Re
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { currentHref, samePath } from "~/lib/ouro/current-path";
-import { floatingPortalClass } from "~/lib/ouro/floating";
+import { floatingPortalClass, floatingPositionMethod } from "~/lib/ouro/floating";
 import { RouterLink } from "~/lib/ouro/router-link";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { PortalScope, usePortalContainer } from "~/lib/ouro/portal-container";
@@ -133,7 +133,7 @@ export interface NavigationMenuProps {
 // FamilyBar; forced colours keep the underline.
 const rowItem =
   "press relative m-0 box-border inline-flex h-11 min-w-11 pointer-fine:h-9 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap " +
-  "rounded-md border-0 forced-colors:border forced-colors:border-solid bg-transparent px-3 font-[inherit] text-base pointer-fine:text-sm leading-5 font-medium text-muted-foreground no-underline " +
+  "rounded-ouro-md border-0 forced-colors:border forced-colors:border-solid bg-transparent px-3 font-[inherit] text-base pointer-fine:text-sm leading-5 font-medium text-muted-foreground no-underline " +
   "select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "pointer-fine:hover:bg-accent pointer-fine:hover:text-accent-foreground data-popup-open:bg-accent data-popup-open:text-accent-foreground " +
   "aria-[current=page]:font-semibold aria-[current=page]:text-foreground aria-[current=true]:font-semibold aria-[current=true]:text-foreground data-current:text-foreground " +
@@ -154,7 +154,7 @@ const chevron = cn("inline-flex motion-safe:transition-[rotate] motion-safe:dura
 // Reduced motion keeps only the fade.
 const positioner = "box-border h-(--positioner-height) w-(--positioner-width) max-w-(--available-width)";
 const popup = cn(
-  "relative box-border h-(--popup-height) w-(--popup-width) origin-(--transform-origin) rounded-lg bg-popover text-popover-foreground outline-none " +
+  "relative box-border h-(--popup-height) w-(--popup-width) origin-(--transform-origin) rounded-ouro-lg bg-popover text-popover-foreground outline-none " +
   "ring-1 ring-border/60 shadow-(--shadow-lg) " +
   "transition-opacity duration-(--ouro-duration-base) data-starting-style:opacity-0 data-ending-style:opacity-0 data-ending-style:duration-(--ouro-duration-fast) " +
     "motion-safe:transition-[opacity,scale] motion-safe:data-starting-style:scale-96 motion-safe:data-ending-style:scale-96",
@@ -171,7 +171,7 @@ const panel = cn(
 );
 // A link in a panel: a full-width row, which highlights while pressed instead of scaling.
 const panelLink =
-  "relative m-0 box-border flex min-h-11 pointer-fine:min-h-9 flex-col justify-center gap-0.5 rounded-md px-3 py-2 text-base pointer-fine:text-sm leading-5 " +
+  "relative m-0 box-border flex min-h-11 pointer-fine:min-h-9 flex-col justify-center gap-0.5 rounded-ouro-md px-3 py-2 text-base pointer-fine:text-sm leading-5 " +
   "text-popover-foreground no-underline select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "transition-colors duration-(--ouro-duration-fast) ease-[ease] pointer-fine:hover:bg-accent pointer-fine:hover:text-accent-foreground active:bg-accent active:text-accent-foreground " +
   "outline-ring -outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";
@@ -395,7 +395,7 @@ export function NavigationMenuView(props: NavigationMenuViewProps): JSX.Element 
       </BaseNavigationMenu.List>
       <BaseNavigationMenu.Portal {...portal} data-ouro="navigation-menu-portal" className={floatingPortalClass}>
         <PortalScope>
-          <BaseNavigationMenu.Positioner sideOffset={8} collisionPadding={16} className={positioner}>
+          <BaseNavigationMenu.Positioner positionMethod={floatingPositionMethod} sideOffset={8} collisionPadding={16} className={positioner}>
             <BaseNavigationMenu.Popup data-ouro="navigation-menu-popup" data-ouro-instant={instant ? "" : undefined} className={popup}>
               <BaseNavigationMenu.Viewport className="relative h-full w-full overflow-hidden rounded-[inherit]" />
             </BaseNavigationMenu.Popup>

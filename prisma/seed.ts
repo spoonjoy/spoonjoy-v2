@@ -359,7 +359,6 @@ async function seedUsers(seedRun: DisposableLocalSeedRun) {
   const users: SeededUser[] = [];
 
   for (const userData of createSeedUsers(seedRun)) {
-    // Check if user exists
     const existing = await prisma.user.findUnique({
       where: { email: userData.email },
     });
@@ -392,7 +391,6 @@ async function seedUsers(seedRun: DisposableLocalSeedRun) {
       continue;
     }
 
-    // Create user data
     const userCreateData: {
       email: string;
       username: string;
@@ -1349,7 +1347,6 @@ async function seedRecipes(
       ? chefByRole.get(recipeData.chefRole) ?? users[i % users.length]
       : users[i % users.length];
 
-    // Check if recipe exists
     const existing = await prisma.recipe.findFirst({
       where: {
         chefId: chef.id,
@@ -1375,7 +1372,6 @@ async function seedRecipes(
       continue;
     }
 
-    // Create recipe
     const recipe = await prisma.recipe.create({
       data: {
         title: recipeData.title,
@@ -1405,7 +1401,6 @@ async function seedRecipes(
         },
       });
 
-      // Create ingredients for this step
       for (const ing of stepData.ingredients) {
         const unitId = unitMap.get(ing.unit);
         const ingredientRefId = ingredientMap.get(ing.name);
@@ -1515,7 +1510,6 @@ async function seedCookbooks(
       ? authorByRole.get(cbData.authorRole) ?? users[i % users.length]
       : users[i % users.length];
 
-    // Check if cookbook exists
     let cookbook = await prisma.cookbook.findFirst({
       where: {
         authorId: author.id,
@@ -1619,7 +1613,6 @@ async function seedShoppingLists(
     const user = users[i];
     const listData = shoppingListData[i];
 
-    // Check if shopping list exists
     let shoppingList = await prisma.shoppingList.findUnique({
       where: { authorId: user.id },
     });

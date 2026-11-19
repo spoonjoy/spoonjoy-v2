@@ -5,6 +5,7 @@ export type { CliIo, RunOptions };
 // first statement, which would take the JSDoc below with it.
 
 import { checksText, isChecksReport } from "./checks.ts";
+import { doctorText, isDoctorReport } from "./doctor.ts";
 import { checkOwner, flagsOf, findCommand, invocation, parse, type ArgSpec, type Cli, type CommandDef, type Input, type InputValue, type Parsed, type RunContext } from "./command.ts";
 import { DRY_RUN_FLAG } from "./effects.ts";
 import { AxError, errorJson, errorLine, errorMessage, isAxError, type AxErrorShape } from "./problem.ts";
@@ -121,7 +122,8 @@ function printResult(
     const style = terminalStyle(io.stdout, env);
     // The --verbose hint is offered only by a command that takes the flag.
     const command = "verbose" in flagsOf(cli, cmd) ? { command: invocation(cli, cmd) } : {};
-    io.stdout.write(render(result, { json, text: (r) => checksText(r, style, { ...command, verbose: input["verbose"] === true }) }));
+    const options = { ...command, verbose: input["verbose"] === true };
+    io.stdout.write(render(result, { json, text: (r) => (isDoctorReport(r) ? doctorText(r, style, options) : checksText(r, style, options)) }));
     if (result.verdict === "passed" && result.counts.passed && !result.counts.skipped) say("healthy");
     return result.exitCode;
   }
@@ -203,7 +205,9 @@ async function runCli(cli: Cli, argv: readonly string[], io: CliIo, options: Run
     return printResult(cli, cmd, input, result, json, io, voice, options.env ?? processEnv());
   } catch (e) {
     const shape: AxErrorShape = isAxError(e) ? e.shape : { code: "error", exit: cli.exits.code("error"), thing: cli.name, problem: e instanceof Error ? e.message : String(e), fix: null };
-    io.stderr.write(`${errorLine(cli.name, shape)}\n`);
+    // A message that is already a whole `<tool>: ...` line (a failure the tool's own code built) is printed as it is, not prefixed again.
+    const whole = !isAxError(e) && e instanceof Error && /^[a-z][a-z0-9-]*: /.test(e.message);
+    io.stderr.write(`${whole ? shape.problem.replace(/\s*[\r\n]+\s*/g, " ") : errorLine(cli.name, shape)}\n`);
     // A person-only word, or another agent's item, is a refusal of an action, so --json answers with its outcome, which
     // carries the same error.
     if (json) io.stdout.write(`${JSON.stringify(shape.code === "person-only" || shape.code === "not-yours" ? outcome({ action: shape.thing, state: "refused", summary: errorMessage(shape), error: shape }) : errorJson(shape), null, 2)}\n`);

@@ -21,11 +21,21 @@ import {
   type MenuProps,
 } from "~/components/ouro/menu/menu";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
+import { Dialog } from "~/components/ouro/dialog/dialog";
+import { Sheet } from "~/components/ouro/sheet/sheet";
 import { act } from "~/lib/ouro/testing/act";
+import { drawn, expectFirstFramesInPlace, placeFarBelow, recordPopupFrames } from "~/lib/ouro/testing/popup-frames";
+import { settled as settledBox } from "~/lib/ouro/testing/settled";
 import { pressTab } from "~/lib/ouro/testing/tab";
 import { pressDuringScroll } from "~/lib/ouro/testing/press";
 import { isTransparent } from "~/lib/ouro/testing/color";
 import { audit, axeExclude, describeFindings } from "~/lib/ouro/testing/axe";
+
+/** Whether the element is what a press at its centre would reach. */
+const onTop = (element: HTMLElement) => {
+  const box = element.getBoundingClientRect();
+  return element.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
+};
 
 /** The colour behind an element: the nearest background around it that is not transparent. */
 function behind(element: Element): string {
@@ -852,6 +862,74 @@ describe("Menu focus", () => {
   });
 });
 
+describe("Menu focus ring", () => {
+  /** An item's outline: solid while the keyboard focuses it, none at rest. */
+  const outline = (element: Element) => {
+    const style = getComputedStyle(element);
+    return { style: style.outlineStyle, width: style.outlineWidth };
+  };
+
+  it("draws the ring on the item the keyboard focuses, while the item at rest has none", async () => {
+    await render(<Menu trigger={<Button>Actions</Button>}>{basicItems}</Menu>);
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    await expect.poll(() => document.activeElement?.textContent).toBe("Edit");
+    const edit = item("Edit").element();
+    const duplicate = item("Duplicate").element();
+    expect(outline(edit).style).toBe("solid");
+    expect(outline(edit).width).not.toBe("0px");
+    expect(outline(duplicate).style).toBe("none");
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Duplicate");
+    expect(outline(duplicate).style).toBe("solid");
+    expect(outline(edit).style).toBe("none");
+  });
+
+  it("draws the ring on a submenu trigger the keyboard focuses", async () => {
+    await render(
+      <Menu trigger={<Button>Actions</Button>}>
+        <MenuItem>Edit</MenuItem>
+        <MenuSub label="Share">
+          <MenuItem>Copy link</MenuItem>
+        </MenuSub>
+      </Menu>,
+    );
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.poll(() => document.activeElement?.textContent?.includes("Share")).toBe(true);
+    expect(outline(document.activeElement!).style).toBe("solid");
+    expect(outline(item("Edit").element()).style).toBe("none");
+  });
+
+  it("draws the ring on a checkbox item and a radio item the keyboard focuses", async () => {
+    await render(
+      <Menu trigger={<Button>View</Button>}>
+        <MenuCheckboxItem defaultChecked onCheckedChange={() => {}}>
+          Show ingredients
+        </MenuCheckboxItem>
+        <MenuRadioGroup label="Sort by" defaultValue="name">
+          <MenuRadioItem value="name">Name</MenuRadioItem>
+          <MenuRadioItem value="date">Date</MenuRadioItem>
+        </MenuRadioGroup>
+      </Menu>,
+    );
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    await expect.poll(() => document.activeElement?.textContent).toBe("Show ingredients");
+    const checkbox = page.getByRole("menuitemcheckbox", { name: /Show ingredients/ }).element();
+    expect(outline(checkbox).style).toBe("solid");
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Date");
+    const date = page.getByRole("menuitemradio", { name: "Date" }).element();
+    expect(outline(date).style).toBe("solid");
+    expect(outline(checkbox).style).toBe("none");
+  });
+});
+
 describe("Menu presentation", () => {
   it("is a bottom sheet below 640px, with a backdrop, and its submenu is a sheet with a Back item", async () => {
     await page.viewport(390, 844);
@@ -1564,6 +1642,30 @@ describe("Menu stacking", () => {
     expect(style.isolation).toBe("isolate");
     expect(style.zIndex).toBe(String(layer));
   });
+
+  it.each(["Sheet", "Dialog"] as const)("shows above a %s it is opened from", async (layer) => {
+    await page.viewport(1280, 800);
+    const menu = (
+      <Menu trigger={<Button>Sort</Button>}>
+        <MenuItem>Newest first</MenuItem>
+      </Menu>
+    );
+    await render(
+      layer === "Sheet" ? (
+        <Sheet title="Look" side="right" modal={false} open onOpenChange={() => {}}>
+          {menu}
+        </Sheet>
+      ) : (
+        <Dialog title="Look" open onOpenChange={() => {}}>
+          {menu}
+        </Dialog>
+      ),
+    );
+    await userEvent.click(page.getByRole("button", { name: "Sort" }));
+    const item = page.getByRole("menuitem", { name: "Newest first" });
+    await expect.element(item).toBeVisible();
+    await expect.poll(() => onTop(item.element() as HTMLElement)).toBe(true);
+  });
 });
 
 describe("Menu server rendering", () => {
@@ -1995,5 +2097,54 @@ describe("Menu focus guards", () => {
     await settled();
     await expectGuardsReported();
     expect(describeFindings(await gated())).toBe("");
+  });
+});
+
+describe("Menu first frame", () => {
+  const positioner = () => document.querySelector<HTMLElement>('[data-ouro="menu-positioner"]');
+
+  it("is in place from its first visible frame when its trigger opens it", async () => {
+    placeFarBelow();
+    await render(<Menu trigger={<Button>Actions</Button>}>{basicItems}</Menu>);
+    const recording = recordPopupFrames(positioner);
+    await userEvent.click(trigger());
+    await settledBox(drawn(positioner));
+    expectFirstFramesInPlace(await recording.stop());
+  });
+
+  it("is in place from its first visible frame when a right click opens it", async () => {
+    placeFarBelow();
+    await render(
+      <Menu contextTrigger={<div data-testid="area" style={{ width: 300, height: 200 }}>Recipe card</div>}>{basicItems}</Menu>,
+    );
+    const recording = recordPopupFrames(positioner);
+    await userEvent.click(document.querySelector<HTMLElement>('[data-testid="area"]')!, { button: "right", position: { x: 40, y: 30 } });
+    await settledBox(drawn(positioner));
+    expectFirstFramesInPlace(await recording.stop());
+  });
+
+  it("is in place from its first visible frame when the app opens it with open and anchor", async () => {
+    placeFarBelow();
+    function Anchored() {
+      const [anchor, setAnchor] = useState<Element | null>(null);
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <Button ref={setAnchor} onClick={() => setOpen(true)}>
+            Actions
+          </Button>
+          {anchor && (
+            <Menu anchor={anchor} open={open} onOpenChange={setOpen} aria-label="Actions">
+              {basicItems}
+            </Menu>
+          )}
+        </>
+      );
+    }
+    await render(<Anchored />);
+    const recording = recordPopupFrames(positioner);
+    await userEvent.click(trigger());
+    await settledBox(drawn(positioner));
+    expectFirstFramesInPlace(await recording.stop());
   });
 });

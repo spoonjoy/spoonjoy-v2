@@ -19,6 +19,7 @@ import {
   DialogTrigger,
   DialogViewport,
 } from "~/components/ouro/dialog/dialog-parts";
+import { Sheet } from "~/components/ouro/sheet/sheet";
 import { act } from "~/lib/ouro/testing/act";
 import { pressDuringScroll } from "~/lib/ouro/testing/press";
 import { pageCss } from "~/lib/ouro/testing/page-css";
@@ -133,6 +134,39 @@ describe("automatic presentation", () => {
     }
   });
 
+  it("gives the page behind back to assistive technology when it closes, by Escape or Close: nothing left inert, hidden or guarded", async () => {
+    const outside = document.createElement("button");
+    outside.textContent = "Behind";
+    document.body.append(outside);
+    // What a closed dialog may not leave on the page (ourostack/ouro-ui#1812): a screen reader would skip what it marks.
+    const leftovers = () => ({
+      inert: document.querySelectorAll("[inert]").length,
+      hidden: document.querySelectorAll('[aria-hidden="true"]:not(svg, svg *)').length,
+      guards: document.querySelectorAll("[data-base-ui-focus-guard]").length,
+    });
+    try {
+      for (const close of ["Escape", "Close"]) {
+        await render(
+          <Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>
+            <input aria-label="Name" />
+          </Dialog>,
+        );
+        const before = leftovers();
+        await userEvent.click(trigger());
+        await settled();
+        expect(outside.closest('[aria-hidden="true"], [inert]')).not.toBeNull();
+        if (close === "Escape") await userEvent.keyboard("{Escape}");
+        else await userEvent.click(page.getByRole("button", { name: "Close" }));
+        await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
+        expect(outside.closest('[aria-hidden="true"], [inert]')).toBeNull();
+        expect(leftovers()).toEqual(before);
+        await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+      }
+    } finally {
+      outside.remove();
+    }
+  });
+
   it("renders the bottom sheet at 390px", async () => {
     await page.viewport(390, 844);
     const element = await openUncontrolled();
@@ -194,6 +228,26 @@ describe("automatic presentation", () => {
     await userEvent.click(trigger());
     await settled();
     expect(popup()!.getAttribute("data-ouro-presentation")).toBe("sheet");
+  });
+});
+
+describe("closeOnOutsidePress", () => {
+  it.each([1280, 390])("closes on a press on the backdrop by default, at %ipx", async (width) => {
+    await page.viewport(width, 844);
+    await openUncontrolled();
+    await userEvent.click(document.body, { position: { x: 5, y: 5 } });
+    await expect.poll(() => popup()).toBeNull();
+  });
+
+  it.each([1280, 390])("false keeps it open on a backdrop press, yet Escape closes it and focus returns to the trigger, centered and as a sheet, at %ipx", async (width) => {
+    await page.viewport(width, 844);
+    await openUncontrolled({ closeOnOutsidePress: false });
+    await userEvent.click(document.body, { position: { x: 5, y: 5 } });
+    await act(async () => {});
+    expect(popup()).not.toBeNull();
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => popup()).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(trigger());
   });
 });
 
@@ -380,6 +434,24 @@ describe("Dialog stacking above the app's fixed bars", () => {
     return element.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2));
   };
   const portal = () => document.querySelector<HTMLElement>('[data-ouro="dialog-portal"]')!;
+
+  it.each([true, false])("shows above a Sheet it is opened from, modal %s", async (modal) => {
+    await page.viewport(1280, 800);
+    await render(
+      <Sheet title="Look" side="right" modal={modal} open onOpenChange={() => {}}>
+        <Dialog title="Rename look" trigger={<Button>Rename</Button>}>
+          <input aria-label="Name" />
+        </Dialog>
+      </Sheet>,
+    );
+    await userEvent.click(page.getByRole("button", { name: "Rename" }));
+    const field = page.getByRole("textbox", { name: "Name" });
+    await expect.element(field).toBeVisible();
+    await expect.poll(() => onTop(field.element() as HTMLElement)).toBe(true);
+    // The dialog's backdrop covers the sheet too: a press on the sheet lands on the backdrop, not the sheet.
+    const sheet = document.querySelector<HTMLElement>('[data-ouro="sheet"]')!;
+    expect(onTop(sheet)).toBe(false);
+  });
 
   it("puts the portal on the --ouro-layer level, as its own stacking context", async () => {
     await render(

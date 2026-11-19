@@ -118,7 +118,6 @@ export function IngredientParseInput({
   const isDisabled = disabled || parser.isLoading
   const hasError = !!parser.error
 
-  // Get actionable error info
   const errorInfo = hasError ? getActionableErrorMessage(parser.error!) : null
 
   const handleTryAgain = () => {

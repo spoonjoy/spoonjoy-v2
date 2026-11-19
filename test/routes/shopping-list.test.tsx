@@ -247,7 +247,6 @@ describe("Shopping List Routes", () => {
         },
       });
 
-      // Get ingredients from recipe
       const recipeWithIngredients = await db.recipe.findUnique({
         where: { id: recipe.id },
         include: {
@@ -264,7 +263,6 @@ describe("Shopping List Routes", () => {
         },
       });
 
-      // Add to shopping list
       for (const step of recipeWithIngredients!.steps) {
         for (const ingredient of step.ingredients) {
           await db.shoppingListItem.create({

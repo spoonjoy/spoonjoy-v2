@@ -99,7 +99,6 @@ const action = (element: HTMLElement, name: string) =>
 const menuButton = (element: HTMLElement) => element.querySelector<HTMLButtonElement>("[data-ouro-swipe-actions-menu] button")!;
 /** The offset the component set on the track, in px. */
 const offset = (element: HTMLElement) => hundredths(Number.parseFloat(/translateX\((.+)px\)/.exec(track(element).style.transform)?.[1] ?? "0"));
-/** Waits for the row to come to rest after a release. */
 /** Brings every spring to rest: steps the frames a test holds and gives them back, or waits for real ones. */
 const rest = async (element: HTMLElement) => {
   if (!frames) return expect.poll(() => element.hasAttribute("data-ouro-settling")).toBe(false);

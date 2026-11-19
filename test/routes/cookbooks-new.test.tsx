@@ -164,7 +164,6 @@ describe("Cookbooks New Route", () => {
     });
 
     it("should return error for duplicate title", async () => {
-      // Create first cookbook
       await db.cookbook.create({
         data: {
           title: "Existing Cookbook",
