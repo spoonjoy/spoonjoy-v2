@@ -75,6 +75,14 @@ export interface TimerOwnProps {
   repeatFor?: number | undefined;
   /** How large the time is: `md` beside other content, `lg` as a screen's focus. @default "md" */
   size?: "md" | "lg" | (string & { 'Use "md" or "lg"': never }) | undefined;
+  /**
+   * How it is drawn. `plain` is the time over its buttons. `ring` sets the time, in light figures,
+   * and its Start, Pause or Resume inside a ring whose arc shows the time left, for a screen where
+   * the timer is the focus, such as a cooking step; Cancel or Restart sits under the ring.
+   * @default "plain"
+   * @claim "whose arc shows the time left" registry/ouro/components/ouro/timer/timer.test.tsx verify:testExists(registry/ouro/components/ouro/timer/timer.test.tsx::Timer ring > draws the time and its main button inside a ring whose arc is the time left, and Cancel under it)
+   */
+  variant?: "plain" | "ring" | (string & { 'Use "plain" or "ring"': never }) | undefined;
   /** The words it shows and says, for apps in other languages. */
   labels?: TimerLabels | undefined;
   /** Layout only: margins, width (`mt-6`). Appearance classes warn in development. */
@@ -149,6 +157,7 @@ export function Timer(props: TimerProps): JSX.Element {
     alert: alertProp = "once",
     repeatFor: repeatForProp = REPEAT_FOR,
     size: sizeProp = "md",
+    variant: variantProp = "plain",
     labels,
     className,
     // Guard props (hint types), dropped here so they never reach the DOM.
@@ -162,6 +171,7 @@ export function Timer(props: TimerProps): JSX.Element {
     ...rest
   } = props;
   const size = sizeProp === "lg" ? "lg" : "md";
+  const variant = variantProp === "ring" ? "ring" : "plain";
   // Stryker disable next-line StringLiteral: any alert but "repeat" sounds once, so the fallback's name changes nothing.
   const alert = timerAlerts.includes(alertProp as TimerAlert) ? (alertProp as TimerAlert) : "once";
   const repeatFor = repeatLength(repeatForProp);
@@ -178,6 +188,7 @@ export function Timer(props: TimerProps): JSX.Element {
     process.env.NODE_ENV !== "production"
       ? () => [
           size !== sizeProp && [`size="${String(sizeProp)}" is not a size; use "md" or "lg"`, '<Timer size="lg" />'],
+          variant !== variantProp && [`variant="${String(variantProp)}" is not a variant; use "plain" or "ring"`, '<Timer variant="ring" />'],
           alert !== alertProp && [`alert="${String(alertProp)}" is not an alert; use "once" or "repeat"`, '<Timer alert="repeat" />'],
           repeatFor !== repeatForProp && [`repeatFor={${String(repeatForProp)}} is not a length; it is in seconds and above 0`, '<Timer alert="repeat" repeatFor={120} />'],
           !(duration > 0) && [`duration={${String(duration)}} is not a length; it is in seconds and above 0`, "<Timer duration={600} />"],
@@ -233,15 +244,77 @@ export function Timer(props: TimerProps): JSX.Element {
     primary.current!.focus();
   };
 
+  const primaryLabel = status === "running" ? words.pause : status === "paused" ? words.resume : done ? words.dismiss : words.start;
+  const secondary = status !== "idle" ? (
+    <Button data-ouro-control="timer" data-ouro-part="secondary" variant="plain" tone="secondary" onClick={other}>
+      {done ? words.restart : words.cancel}
+    </Button>
+  ) : null;
+  const caption = (
+    <p className={cn("m-0 min-w-0 truncate text-sm leading-5 font-medium", done ? doneText : "text-muted-foreground")}>
+      {done ? words.done : `${label} · ${lengthOf(timer.duration)}`}
+    </p>
+  );
+  const paused = status === "paused" ? <span className="ms-3 align-middle text-sm font-medium text-muted-foreground">{words.paused}</span> : null;
+
+  if (variant === "ring") {
+    const counting = status === "running" || status === "paused";
+    // The arc is the time left: whole when the timer starts, gone at zero, and hidden while idle.
+    const left = counting ? Math.min(1, Math.max(0, timer.remaining / timer.duration)) : 0;
+    return (
+      <div {...rest} data-ouro="timer" data-status={status} data-variant="ring" role="group" aria-label={label} className={cn("grid min-w-0 justify-items-center gap-3", className)}>
+        {/* 20rem wide, so the square inside the circle (about two thirds of it) holds the large time,
+            its button and Paused without any of them crossing the arc. */}
+        <div className="relative grid aspect-square w-full max-w-80 place-items-center">
+          <svg aria-hidden="true" data-ouro-timer-ring="" viewBox="0 0 100 100" className="absolute inset-0 size-full">
+            <circle cx="50" cy="50" r="47" fill="none" strokeWidth="3" className="stroke-muted" />
+            <circle
+              data-ouro-timer-arc=""
+              cx="50"
+              cy="50"
+              r="47"
+              fill="none"
+              strokeWidth="3"
+              strokeLinecap="round"
+              pathLength={1}
+              strokeDasharray="1"
+              strokeDashoffset={1 - left}
+              transform="rotate(-90 50 50)"
+              opacity={left > 0 ? 1 : 0}
+              className={done ? "stroke-destructive" : "stroke-primary"}
+            />
+          </svg>
+          <div className="relative grid justify-items-center gap-1">
+            <p role="timer" className={cn("m-0 font-light tabular-nums", sizes[size], done ? doneText : "text-foreground")}>
+              {formatDuration(timer.remaining)}
+            </p>
+            <Button
+              ref={primary}
+              data-ouro-control="timer"
+              data-ouro-part="primary"
+              size="sm"
+              tone={done ? "destructive" : undefined}
+              variant="plain"
+              onClick={act}
+            >
+              {primaryLabel}
+            </Button>
+            {status === "paused" ? <span className="text-sm font-medium text-muted-foreground">{words.paused}</span> : null}
+          </div>
+        </div>
+        {caption}
+        {secondary}
+      </div>
+    );
+  }
+
   return (
     <div {...rest} data-ouro="timer" data-status={status} role="group" aria-label={label} className={cn("grid min-w-0 gap-3", className)}>
       <div className="grid min-w-0 gap-1">
-        <p className={cn("m-0 min-w-0 truncate text-sm leading-5 font-medium", done ? doneText : "text-muted-foreground")}>
-          {done ? words.done : `${label} · ${lengthOf(timer.duration)}`}
-        </p>
+        {caption}
         <p role="timer" className={cn("m-0 font-semibold tabular-nums", sizes[size], done ? doneText : "text-foreground")}>
           {formatDuration(timer.remaining)}
-          {status === "paused" ? <span className="ms-3 align-middle text-sm font-medium text-muted-foreground">{words.paused}</span> : null}
+          {paused}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -253,13 +326,9 @@ export function Timer(props: TimerProps): JSX.Element {
           variant={status === "running" ? "soft" : "solid"}
           onClick={act}
         >
-          {status === "running" ? words.pause : status === "paused" ? words.resume : done ? words.dismiss : words.start}
+          {primaryLabel}
         </Button>
-        {status !== "idle" ? (
-          <Button data-ouro-control="timer" data-ouro-part="secondary" variant="plain" tone="secondary" onClick={other}>
-            {done ? words.restart : words.cancel}
-          </Button>
-        ) : null}
+        {secondary}
       </div>
     </div>
   );

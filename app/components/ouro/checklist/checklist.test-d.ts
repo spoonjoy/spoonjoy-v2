@@ -17,10 +17,15 @@ expectTypeOf<{
   onCheckedChange: OnCheckedChange;
   onClearChecked: () => void;
   clearLabel: "Start over";
+  ordered: true;
+  variant: "outline";
+  outOfOrderLabel: (first: string) => string;
   empty: "Nothing yet.";
   className: "mt-4";
 }>().toExtend<ChecklistProps>();
-expectTypeOf<{ id: "oats"; label: "rolled oats"; description: "or quick oats"; value: "1 cup"; checked: false; disabled: true; action: null }>().toExtend<ChecklistItemData>();
+expectTypeOf<{ id: "oats"; label: "rolled oats"; description: "or quick oats"; value: "1 cup"; checked: false; disabled: true; media: null; action: null }>().toExtend<ChecklistItemData>();
+// An item's picture is its media, not an icon.
+expectTypeOf<{ id: "boil"; label: "Boil the water"; checked: false; icon: null }>().not.toExtend<ChecklistItemData>();
 
 // The label, the items and onCheckedChange are required: a checklist without them has no name or never changes.
 expectTypeOf<{ items: ChecklistItemData[]; onCheckedChange: OnCheckedChange }>().not.toExtend<ChecklistProps>();
@@ -36,6 +41,11 @@ expectTypeOf<{ label: "Ingredients"; items: []; onCheckedChange: OnCheckedChange
 expectTypeOf<{ label: "Ingredients"; items: []; onCheckedChange: OnCheckedChange; onToggle: () => void }>().not.toExtend<ChecklistProps>();
 expectTypeOf<{ label: "Ingredients"; items: []; onCheckedChange: OnCheckedChange; onCheck: () => void }>().not.toExtend<ChecklistProps>();
 expectTypeOf<{ label: "Ingredients"; items: []; onCheckedChange: OnCheckedChange; legend: "Ingredients" }>().not.toExtend<ChecklistProps>();
+expectTypeOf<{ label: "Steps"; items: []; onCheckedChange: OnCheckedChange; sequential: true }>().not.toExtend<ChecklistProps>();
+// A variant Checklist doesn't have is a type error that names the two.
+expectTypeOf<{ label: "Steps"; items: []; onCheckedChange: OnCheckedChange; variant: "card" }>().not.toExtend<ChecklistProps>();
+// An order of ids, for steps shown in another order.
+expectTypeOf<{ label: "Steps"; items: []; onCheckedChange: OnCheckedChange; ordered: readonly ["boil", "pour"] }>().toExtend<ChecklistProps>();
 
 // Parts: a root needs its label; a row its label, state and handler.
 expectTypeOf<{ label: "Steps" }>().toExtend<ChecklistRootProps>();

@@ -23,7 +23,8 @@ import ts from "typescript";
 //   with OuroLinkComponent).
 // - contenteditable, positive-tabindex, interactive-role (any element, Ouro calls included).
 // - plain-element-handler: click, key, pointer or touch handlers on a non-control intrinsic element.
-// - data-ouro-attr: any data-ouro* attribute app code writes (JSX, props objects, setAttribute).
+// - data-ouro-attr: any data-ouro* attribute app code writes (JSX, props objects, setAttribute),
+//   except the markers Ouro check asks an app to write (APP_MARKERS).
 // - third-party-control: a JSX element from a UI-control library other than Ouro UI
 //   (THIRD_PARTY_CONTROL_PACKAGES), by named, default or namespace import or a same-file alias of
 //   one; app code reaches those libraries only through Ouro UI. Type-only imports and hooks are
@@ -190,6 +191,20 @@ export const CATEGORIES = [
   "hand-drawn-unread-dot",
   "uses-hand-rolled-control",
 ];
+
+// The data-ouro* attributes Ouro check asks an app to write on its own elements: where the person
+// is signed out, an opt-out of a rule with its reason, the controls the check may press, and a card's
+// part that shows on hover or focus. The rest (data-ouro, data-ouro-control, data-ouro-part ...) are Ouro's components' own marks.
+export const APP_MARKERS = [
+  "data-ouro-session",
+  "data-ouro-allow",
+  "data-ouro-allow-why",
+  "data-ouro-check-press",
+  "data-ouro-check-no-press",
+  "data-ouro-reveal",
+];
+
+const ouroMark = (name) => name.startsWith("data-ouro") && !APP_MARKERS.includes(name);
 
 // UI-control libraries other than Ouro UI. A trailing `/*` is a whole npm scope; any other entry is
 // the package and its subpaths. Ouro UI itself builds on Base UI, but only inside its installed
@@ -1732,7 +1747,7 @@ function scanScript(module, resolver, failureCopyAllow) {
       ) {
         offenders.push({ category: "hand-drawn-switch", fingerprint: [file, componentName(node), "hand-drawn-switch", control.display, props].join("::"), file, line: lineOf(node) });
       }
-      if (name.startsWith("data-ouro")) add("data-ouro-attr", node, `${control.display}[${name}]`, props);
+      if (ouroMark(name)) add("data-ouro-attr", node, `${control.display}[${name}]`, props);
     }
     const classStrings = [...attributes]
       .filter(([name, initializer]) => CLASS_ATTRIBUTE.test(name) && initializer)
@@ -1783,7 +1798,7 @@ function scanScript(module, resolver, failureCopyAllow) {
     if (
       ts.isPropertyAssignment(node) &&
       ts.isStringLiteral(node.name) &&
-      node.name.text.startsWith("data-ouro") &&
+      ouroMark(node.name.text) &&
       !isCreateElementProps(node.parent)
     ) {
       add("data-ouro-attr", node, "object");
@@ -1794,7 +1809,7 @@ function scanScript(module, resolver, failureCopyAllow) {
       /^(?:set|toggle)Attribute$/.test(node.expression.name.text) &&
       node.arguments[0] &&
       ts.isStringLiteralLike(node.arguments[0]) &&
-      node.arguments[0].text.startsWith("data-ouro")
+      ouroMark(node.arguments[0].text)
     ) {
       add("data-ouro-attr", node, "setAttribute");
     }

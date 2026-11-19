@@ -14,7 +14,10 @@ const meta = {
   component: Timer,
   parameters: { layout: "padded" },
   args: { label: "Pasta", duration: 600 },
-  argTypes: { size: { control: "inline-radio", options: ["md", "lg"] } },
+  argTypes: {
+    size: { control: "inline-radio", options: ["md", "lg"] },
+    variant: { control: "inline-radio", options: ["plain", "ring"] },
+  },
 } satisfies Meta<typeof Timer>;
 export default meta;
 
@@ -50,6 +53,17 @@ export const Finished: Story = {
   render: () => {
     stored("story-finished", { status: "done", duration: 300, endedAt: Date.UTC(2026, 0, 1) });
     return <Timer label="Bread" duration={300} timerId="story-finished" size="lg" />;
+  },
+};
+
+/** `variant="ring"`: the time and Start inside a ring, for a screen where the timer is the focus, such as a cooking step. */
+export const Ring: Story = { args: { label: "Rice", duration: 900, variant: "ring", size: "lg" } };
+
+/** The ring part way: its arc is the time left, with Resume inside and Cancel under it. */
+export const RingPaused: Story = {
+  render: () => {
+    stored("story-ring", { status: "paused", duration: 900, remainingMs: 600_000 });
+    return <Timer label="Rice" duration={900} timerId="story-ring" variant="ring" size="lg" />;
   },
 };
 

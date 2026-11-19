@@ -3,9 +3,11 @@ import type { DevWarning } from "~/lib/ouro/use-dev-messages";
 import { renamedTones } from "~/lib/ouro/tones";
 
 export {
+  autoGrowBounds,
+  autoGrowClass,
+  clearFit,
   describeHighlights,
   fitHeight,
-  fitHeightNative,
   supportsFieldSizing,
   canFieldSize,
   highlightLayerClass,
@@ -34,7 +36,7 @@ export type { HighlightEdit, HighlightRun };
  * @internal
  */
 const textAreaClass =
-  "m-0 box-border block w-full min-w-0 rounded-md text-foreground " +
+  "m-0 box-border block w-full min-w-0 rounded-ouro-md text-foreground " +
   "font-[inherit] placeholder:text-muted-foreground " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "disabled:cursor-not-allowed disabled:opacity-50";
@@ -42,17 +44,23 @@ const textAreaClass =
 /**
  * The textarea's frame. `outline` is Field's control look. `plain` draws no border,
  * background or padding, for a textarea inside a frame the app draws (a chat composer); it
- * keeps the corner radius, which only the focus outline shows.
+ * keeps the corner radius, which only the focus outline shows. The vertical padding is
+ * `--ouro-text-area-py`, and `--ouro-text-area-frame` that padding and the border, which
+ * `autoGrowBounds` adds to its lines: set the variable, not a `py-*` class, to change it
+ * (`[&_textarea]:[--ouro-text-area-py:12px]`).
  *
  * @internal
  * @claim "`plain` draws no border, background or" registry/ouro/components/ouro/text-field/text-area.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.test.tsx::TextArea variant and size > draws no frame of its own with variant plain, and still outlines on keyboard focus)
  */
 const textAreaVariants = {
   outline:
-    "px-3 py-2 border border-solid border-input bg-transparent " +
+    "px-3 py-(--ouro-text-area-py) [--ouro-text-area-py:calc(var(--spacing)*2)] " +
+    "[--ouro-text-area-frame:calc(var(--ouro-text-area-py)*2_+_2px)] border border-solid border-input bg-transparent " +
     "transition-[border-color] duration-(--ouro-duration-fast) ease-[ease] " +
     "aria-invalid:border-destructive dark:bg-input/30",
-  plain: "p-0 border-0 bg-transparent",
+  plain:
+    "px-0 py-(--ouro-text-area-py) [--ouro-text-area-py:0px] [--ouro-text-area-frame:calc(var(--ouro-text-area-py)*2)] " +
+    "border-0 bg-transparent",
 } as const;
 
 /**
@@ -92,30 +100,51 @@ function canFieldSize(userAgent: string, parses: boolean): boolean {
 }
 
 /**
- * Where the browser grows the textarea itself, sets only the bounds: `rows` and `maxRows`
- * lines in `lh` units, plus the padding and border, and measures nothing as the text or the
- * width changes. The browser scrolls it once it passes the cap.
+ * An `autoGrow` textarea's bounds, rendered with it so its first frame has them: `rows` and
+ * `maxRows` lines in `lh` units, plus the padding and border its variant sets in
+ * `--ouro-text-area-frame`. Where the browser grows the textarea itself (`field-sizing: content`,
+ * in `autoGrowClass`), they are all it needs, and nothing is measured at mount or as the text or
+ * the width changes; the browser scrolls it once it passes the cap.
+ *
+ * @internal
+ * @claim "Where the browser grows the textarea" registry/ouro/components/ouro/text-field/text-area.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.test.tsx::TextArea autoGrow > forces no layout as the text changes where the browser grows it, and one measure per edit elsewhere) verify:testExists(registry/ouro/components/ouro/text-field/text-area.test.tsx::TextArea autoGrow > grows with the content and stops at maxRows, then scrolls) verify:fileLine(test/mount-reads.test.tsx, /"text-area": "WebKit cannot size a text box/)
+ */
+function autoGrowBounds(rows: number, maxRows: number | undefined): { minHeight: string; maxHeight?: string } {
+  const bounds: { minHeight: string; maxHeight?: string } = { minHeight: `calc(${rows}lh + var(--ouro-text-area-frame))` };
+  if (maxRows !== undefined) bounds.maxHeight = `calc(${Math.max(rows, maxRows)}lh + var(--ouro-text-area-frame))`;
+  return bounds;
+}
+
+/**
+ * An `autoGrow` textarea's class: it grows with its content where the browser can, and the user
+ * cannot drag its height.
  *
  * @internal
  */
-function fitHeightNative(textarea: HTMLTextAreaElement, rows: number, maxRows: number | undefined): void {
-  const style = getComputedStyle(textarea);
-  const extra = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
-  textarea.style.setProperty("field-sizing", "content");
+const autoGrowClass = "resize-none [field-sizing:content]";
+
+/**
+ * Clears the inline height, overflow and sizing `fitHeight` set, so the browser grows the
+ * textarea again, or `rows` and the resize handle apply when `autoGrow` turns off.
+ *
+ * @internal
+ */
+function clearFit(textarea: HTMLTextAreaElement): void {
   textarea.style.height = "";
   textarea.style.overflowY = "";
-  textarea.style.minHeight = `calc(${rows}lh + ${extra}px)`;
-  textarea.style.maxHeight = maxRows === undefined ? "" : `calc(${Math.max(rows, maxRows)}lh + ${extra}px)`;
+  textarea.style.removeProperty("field-sizing");
 }
 
 /**
  * Sizes a textarea to its content, between `rows` and `maxRows` lines, and lets it scroll
- * only once it is capped. What scrolls around it stays where it was while it measures. Only an `autoGrow` TextArea calls it; without `autoGrow` the
+ * only once it is capped, where the browser cannot grow it itself. What scrolls around it stays where it was while it measures. Only an `autoGrow` TextArea calls it; without `autoGrow` the
  * inline height belongs to the user's resize handle.
  *
  * @internal
  */
 function fitHeight(textarea: HTMLTextAreaElement, rows: number, maxRows: number | undefined): void {
+  // The height is measured here, so the browser's own sizing (autoGrowClass) stays off.
+  textarea.style.setProperty("field-sizing", "fixed");
   const style = getComputedStyle(textarea);
   const line = parseFloat(style.lineHeight);
   const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);

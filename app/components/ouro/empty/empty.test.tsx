@@ -11,9 +11,9 @@ import { computedValue } from "~/lib/ouro/testing/computed";
 const roots: Root[] = [];
 let mounted: Element[] = [];
 
-async function render(node: ReactNode) {
+async function render(node: ReactNode, width = 480) {
   const host = document.createElement("div");
-  host.style.width = "480px";
+  host.style.width = `${width}px`;
   document.body.append(host);
   mounted.push(host);
   const root = createRoot(host);
@@ -73,6 +73,28 @@ describe("Empty", () => {
     expect(style.textAlign).toBe("start");
   });
 
+  it.each(["ltr", "rtl"] as const)("lines its text up with the text around it with variant=plain and align=start, in either direction", async (dir) => {
+    const { el } = await render(
+      <div dir={dir}>
+        <p data-around="">Saved recipes</p>
+        <Empty title="Nothing matches" description="Try other words." variant="plain" align="start" />
+      </div>,
+    );
+    const empty = el.querySelector<HTMLElement>('[data-ouro="empty"]')!;
+    const around = el.querySelector("[data-around]")!.getBoundingClientRect();
+    const title = page.getByText("Nothing matches").element().getBoundingClientRect();
+    if (dir === "ltr") expect(title.left).toBe(around.left);
+    else expect(title.right).toBe(around.right);
+    expect(getComputedStyle(empty).paddingInlineStart).toBe("0px");
+  });
+
+  it("keeps room at its sides with an outline, or centred", async () => {
+    for (const props of [{ align: "start" }, { variant: "plain" }, {}] as const) {
+      const { el } = await render(<Empty title="Nothing here" {...props} />);
+      expect(parseFloat(getComputedStyle(el).paddingInlineStart), JSON.stringify(props)).toBeGreaterThan(0);
+    }
+  });
+
   it.each([2, 4, 5, 6] as const)("renders the title at headingLevel %i", async (level) => {
     await render(<Empty title="Nothing here" headingLevel={level} />);
     await expect.element(page.getByRole("heading", { level, name: "Nothing here" })).toBeVisible();
@@ -87,6 +109,23 @@ describe("Empty", () => {
     const text = el.textContent!;
     expect(text.indexOf("Try another search.")).toBeLessThan(text.length);
     expect(el.lastElementChild!.querySelector("input")).not.toBeNull();
+  });
+
+  it("lays its text and children out in the width the app gives it, with no measure of its own", async () => {
+    const text = "Start by creating your first recipe for this pantry, then come back here to see every recipe you save.";
+    const { el } = await render(
+      <Empty title="No experiments match the filters you chose today" description={text}>
+        <input aria-label="Search" />
+      </Empty>,
+      900,
+    );
+    const heading = el.querySelector("h3")!;
+    const description = page.getByText(text).element();
+    expect(getComputedStyle(heading).maxWidth).toBe("none");
+    expect(getComputedStyle(description.parentElement!).maxWidth).toBe("none");
+    expect(getComputedStyle(el.lastElementChild!).maxWidth).toBe("none");
+    // The 28rem (448px) column this test rules out: a long description runs past it in a 900px container.
+    expect(description.getBoundingClientRect().width).toBeGreaterThan(448);
   });
 
   it("passes attributes and a ref through, and lets layout classes win", async () => {

@@ -17,9 +17,17 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "~/components/ouro/popover/popover-parts";
+import { Sheet } from "~/components/ouro/sheet/sheet";
 import { act } from "~/lib/ouro/testing/act";
 import { pressDuringScroll } from "~/lib/ouro/testing/press";
 import { pressTab } from "~/lib/ouro/testing/tab";
+import { expectFirstFramesInPlace, placeFarBelow, recordPopupFrames } from "~/lib/ouro/testing/popup-frames";
+
+/** Whether the element is what a press at its centre would reach. */
+const onTop = (element: HTMLElement) => {
+  const box = element.getBoundingClientRect();
+  return element.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
+};
 
 // Runs in Chromium and WebKit.
 
@@ -315,12 +323,12 @@ describe("Popover presentation", () => {
 });
 
 describe("controlled Popover", () => {
-  function Controlled({ onOpenChange, presentation }: { onOpenChange?: (open: boolean) => void; presentation?: "auto" }) {
+  function Controlled({ onOpenChange, presentation, height }: { onOpenChange?: (open: boolean) => void; presentation?: "auto"; height?: string }) {
     const [open, setOpen] = useState(false);
     const anchor = useRef<HTMLButtonElement>(null);
     return (
       <>
-        <button ref={anchor} type="button" onClick={() => setOpen((value) => !value)}>
+        <button ref={anchor} type="button" style={height ? { height } : undefined} onClick={() => setOpen((value) => !value)}>
           Filters
         </button>
         <Popover
@@ -339,14 +347,34 @@ describe("controlled Popover", () => {
     );
   }
 
+  // The positioner sits on whole device pixels, so below an anchor whose edge falls between pixels (an app's
+  // font or padding can put it there) the gap is the offset to within half a device pixel, not the offset exactly.
+  function expectGapBelow(anchor: Element, offset: number) {
+    const gap = popup()!.getBoundingClientRect().top - anchor.getBoundingClientRect().bottom;
+    expect(Math.abs(gap - offset)).toBeLessThanOrEqual(0.5 / devicePixelRatio);
+  }
+
+  it("sits its offset below an anchor whose edge falls between pixels, to within half a device pixel", async () => {
+    const view = await render(<Controlled />);
+    const toggle = page.getByRole("button", { name: "Filters" });
+    for (const height of ["30.25px", "30.5px", "30.75px"]) {
+      await view.rerender(<Controlled height={height} />);
+      await userEvent.click(toggle);
+      await settled();
+      expect(toggle.element().getBoundingClientRect().bottom % 1, height).not.toBe(0);
+      expectGapBelow(toggle.element(), 8);
+      await userEvent.click(toggle);
+      await expect.poll(() => popup()).toBeNull();
+    }
+  });
+
   it("positions against anchor, and the app's own toggle closes it without reopening", async () => {
     const onOpenChange = vi.fn();
     await render(<Controlled onOpenChange={onOpenChange} />);
     const toggle = page.getByRole("button", { name: "Filters" });
     await userEvent.click(toggle);
     await settled();
-    const anchor = toggle.element().getBoundingClientRect();
-    expect(Math.round(popup()!.getBoundingClientRect().top - anchor.bottom)).toBe(8);
+    expectGapBelow(toggle.element(), 8);
     await userEvent.click(toggle);
     await expect.poll(() => popup()).toBeNull();
     expect(onOpenChange).not.toHaveBeenCalled();
@@ -521,6 +549,28 @@ describe("Popover stacking", () => {
     expect(style.isolation).toBe("isolate");
     expect(style.zIndex).toBe(String(layer()));
     expect(document.body.lastElementChild).toBe(portal);
+  });
+
+  it.each(["Sheet", "Dialog"] as const)("shows above a %s it is opened from", async (layer) => {
+    await page.viewport(1280, 800);
+    const popover = (
+      <Popover title="Share recipe" trigger={<Button>Share</Button>}>
+        <input aria-label="Link" />
+      </Popover>
+    );
+    await render(
+      layer === "Sheet" ? (
+        <Sheet title="Look" side="right" modal={false} open onOpenChange={() => {}}>
+          {popover}
+        </Sheet>
+      ) : (
+        <Dialog title="Look" open onOpenChange={() => {}}>
+          {popover}
+        </Dialog>
+      ),
+    );
+    await userEvent.click(page.getByRole("button", { name: "Share" }));
+    await expect.poll(() => popoverPopup() !== null && onTop(popoverPopup()!)).toBe(true);
   });
 });
 
@@ -979,5 +1029,45 @@ describe("Popover and the page's scroll", () => {
     await frame();
     expect(window.scrollY).toBe(1500);
     expect(popoverPopup()).toBeNull();
+  });
+});
+
+describe("Popover first frame", () => {
+  const positioner = () => document.querySelector<HTMLElement>('[data-ouro="popover-positioner"]');
+
+  it("is in place from its first visible frame when its trigger opens it", async () => {
+    placeFarBelow();
+    await render(
+      <Popover title="Share recipe" trigger={<Button>Share</Button>}>
+        <input aria-label="Link" />
+      </Popover>,
+    );
+    const recording = recordPopupFrames(positioner);
+    await userEvent.click(trigger());
+    await settled();
+    expectFirstFramesInPlace(await recording.stop());
+  });
+
+  it("is in place from its first visible frame when the app opens it with open and anchor", async () => {
+    placeFarBelow();
+    function Anchored() {
+      const anchor = useRef<HTMLButtonElement>(null);
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <Button ref={anchor} onClick={() => setOpen(true)}>
+            Share
+          </Button>
+          <Popover title="Share recipe" open={open} onOpenChange={setOpen} anchor={anchor}>
+            <input aria-label="Link" />
+          </Popover>
+        </>
+      );
+    }
+    await render(<Anchored />);
+    const recording = recordPopupFrames(positioner);
+    await userEvent.click(trigger());
+    await settled();
+    expectFirstFramesInPlace(await recording.stop());
   });
 });

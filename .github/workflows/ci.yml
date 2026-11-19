@@ -221,6 +221,11 @@ jobs:
         if: github.event_name != 'pull_request'
         run: node scripts/warning-gate.ts -- pnpm run hx:source-rules
 
+      # oxlint's hits may only fall: the count per file and rule must equal oxlint.baseline.json.
+      - name: 🧹 Lint
+        if: github.event_name != 'pull_request'
+        run: node scripts/warning-gate.ts -- pnpm run lint
+
       # Each factual sentence on Spoonjoy's surfaces (claims.config.json) carries its primary
       # source and a check that still holds, checked with HX's lib-claims checker (AGENTS.md,
       # "Claims").
@@ -310,6 +315,9 @@ jobs:
       # the new baseline records why under allowedRegressions.
       - name: 🧭 HX source rule
         run: node scripts/warning-gate.ts -- pnpm run hx:source-rules --base "$(git rev-parse HEAD^1)"
+
+      - name: 🧹 Lint
+        run: node scripts/warning-gate.ts -- pnpm run lint --base "$(git rev-parse HEAD^1)"
 
       # The claims ratchet against the base commit (an exemption claims.config.json adds needs a
       # reason and a mention in the description), the title and body, and every claim, with the

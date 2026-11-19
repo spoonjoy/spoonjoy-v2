@@ -256,7 +256,7 @@ export function Alert(props: AlertProps): JSX.Element {
       data-ouro="alert"
       data-tone={tone}
       className={cn(
-        "box-border flex w-full items-start gap-3 rounded-lg border border-solid p-4 text-foreground",
+        "box-border flex w-full items-start gap-3 rounded-ouro-lg border border-solid p-4 text-foreground",
         tones[tone].root,
         className,
       )}

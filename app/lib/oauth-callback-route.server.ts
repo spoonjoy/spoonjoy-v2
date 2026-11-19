@@ -115,14 +115,6 @@ function oauthFailureTelemetry(
 }
 
 /**
- * Emit a `spoonjoy.oauth.social_callback` error event for an OAuth callback
- * exit, then return the user-facing error redirect. Every dark
- * `redirectWithOAuthError` exit (provider error, CSRF/invalid_state, missing
- * config, verify failure, link/session failure) routes through here so the
- * outcome is observable. `error_code` is the machine code already surfaced to
- * the client; `phase` distinguishes a provider/infra failure from user error.
- */
-/**
  * Callback requests that link a provider to the already signed-in account. Their failures are
  * not failed sign-ins, so they are left out of `spoonjoy.auth.sign_in_failed`.
  */
@@ -153,6 +145,14 @@ async function recordOAuthSignInSucceeded(
   await recordAccountSignIn(env, callbackResult.userId, provider);
 }
 
+/**
+ * Emit a `spoonjoy.oauth.social_callback` error event for an OAuth callback
+ * exit, then return the user-facing error redirect. Every dark
+ * `redirectWithOAuthError` exit (provider error, CSRF/invalid_state, missing
+ * config, verify failure, link/session failure) routes through here so the
+ * outcome is observable. `error_code` is the machine code already surfaced to
+ * the client; `phase` distinguishes a provider/infra failure from user error.
+ */
 function redirectWithCapturedOAuthError(
   telemetry: AuthTelemetry,
   request: Request,

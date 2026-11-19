@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "jsPlugins": ["./scripts/lint/comments.mjs"],
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": [
+      "warn",
+      {
+        "allowConstantExport": true,
+        "allowExportNames": ["meta", "links", "headers", "loader", "clientLoader", "action", "clientAction", "shouldRevalidate", "handle", "middleware"]
+      }
+    ],
+    "typescript/no-explicit-any": "error",
+    "comments/no-orphan-doc": "error",
+    "comments/no-restating-comment": "error"
+  },
+  "overrides": [
+    {
+      "files": ["app/components/ouro/**", "app/lib/ouro/**", "e2e/ouro/**", "e2e/ouro-census/**", "scripts/ouro/**"],
+      "rules": { "comments/no-orphan-doc": "off", "comments/no-restating-comment": "off" }
+    },
+    {
+      "files": ["e2e/**"],
+      "rules": { "react/rules-of-hooks": "off" }
+    }
+  ]
+}

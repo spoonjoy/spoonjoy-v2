@@ -31,3 +31,15 @@ test("checked rows leave when removed, and new rows arrive", async ({ page }) =>
   await page.getByRole("button", { name: "Add an item" }).click();
   await expect(page.getByRole("checkbox", { name: "extra item 1" })).toBeVisible();
 });
+
+test("a step ticked out of order says which comes first, and turns done once it has", async ({ page }) => {
+  await openStory(page, "lists-checklist--ordered");
+  const leaves = page.getByRole("checkbox", { name: "Add the leaves" });
+  await expect(leaves).toBeChecked();
+  await expect(leaves).toHaveAccessibleDescription("Boil the water comes first");
+  await page.getByRole("checkbox", { name: "Boil the water" }).press("Space");
+  await expect(leaves).toHaveAccessibleDescription("Warm the pot comes first");
+  await page.getByText("Warm the pot", { exact: true }).click();
+  await expect(leaves).not.toHaveAccessibleDescription(/comes first/);
+  await expect(page.getByText("comes first")).toHaveCount(0);
+});

@@ -30,6 +30,8 @@ interface FocusClearHandle {
 const SETTLE_MS = 600;
 /** The gap between the stack and the window's edge. */
 const EDGE_GAP = 16;
+/** How many frames after a focus change the browser's own scroll to the control may start: WebKit's starts on the second. */
+const FOCUS_SCROLL_FRAMES = 3;
 /** How long a move waits for its fade's end before it lands without it. */
 const FADE_FALLBACK_MS = 300;
 /** The places a stack may move to from its current place, in the order they are tried. */
@@ -43,7 +45,8 @@ const CANDIDATES: Record<Place, Place[]> = {
  * While toasts show, the page's scroll padding at the bottom is the stack's height, so the browser
  * scrolls a control it brings into view above the stack. When focus from the keyboard still lands
  * under the stack, the stack moves to the top edge, below the fixed or sticky header that touches the
- * window's top edge. If the top edge would cover that control too, the stack stays. The stack moves back once focus has left the area it
+ * window's top edge. If the top edge would cover that control too, the stack stays. When the browser scrolls the control
+ * into view after the keeper has looked, as WebKit sometimes does, it looks again once that scroll has stopped. The stack moves back once focus has left the area it
  * covers and the stack has rested since its last move, provided the control focus is on is not covered
  * at the bottom. A pointer's focus does not move the stack to the top. A move
  * cross-fades in opacity in both motion settings, because the stack hangs from the other edge once it
@@ -54,6 +57,7 @@ const CANDIDATES: Record<Place, Place[]> = {
  * @claim "so the browser scrolls a control it brings into view above the stack" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > lets the browser scroll a control above a stack in the middle of the page, and leaves the stack at the bottom)
  * @claim "the stack moves to the top edge" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > moves the stack to the top when focus lands under it at the page's end, and back once focus has left and it has rested)
  * @claim "If the top edge would cover that control too, the stack stays" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > leaves the stack where it is when the front toast covers the control and the top edge is out of reach)
+ * @claim "When the browser scrolls the control" registry/ouro/lib/ouro/keep-focus-clear.test.ts verify:testExists(registry/ouro/lib/ouro/keep-focus-clear.test.ts::keepFocusClear > a scroll that brings focus into view late > looks again once the browser's scroll in %s has stopped, and moves the stack off the control it brought under it)
  * @claim "A pointer's focus does not move the stack to the top" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > does not move the stack for a pointer click on a control it covers)
  * @claim "A move cross-fades in opacity" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > cross-fades the move in opacity only under reduced motion)
  * @claim "The stack moves back once focus has left" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard focus under the stack > moves the stack back when focus leaves the page altogether, once it has rested)
@@ -233,13 +237,54 @@ function keepFocusClear(viewport: HTMLElement): FocusClearHandle {
     relax(box);
   }
 
-  // A browser that scrolls a focused control into view does it as the focus moves, so the check waits
+  // A browser that scrolls a focused control into view mostly does it as the focus moves, so the check waits
   // for the next frame, after the control is where the browser left it. Focus that falls to nothing
   // waits too: a press blurs a control before it focuses the next one, which can land in the same task.
   const later = () => {
     // Stryker disable next-line CallExpression: two checks in one frame decide the same, and the second finds the first's move already made or nothing to move.
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(decide);
+  };
+  // WebKit sometimes scrolls the control into view a frame after that check (#1818), so a scroll that starts within
+  // FOCUS_SCROLL_FRAMES of a focus change, before a key press or the wheel, is the browser's: once it has stopped for a
+  // frame, focus is looked at again. Any other scroll is the person's (a screen reader's, the scrollbar's), and leaves the
+  // stack where it is, as before.
+  let focusScroll = false;
+  // Stryker disable next-line BooleanLiteral: a wait for the scroll to stop starts only from a scroll, which sets scrolled first.
+  let scrolled = false;
+  let scrollFrame = 0;
+  let focusFrame = 0;
+  /** Ends the browser's turn to scroll `left` frames from now, unless its scroll has started by then. */
+  const awaitScroll = (left: number) => {
+    focusFrame = requestAnimationFrame(() => {
+      if (scrollFrame !== 0) return;
+      if (left > 1) awaitScroll(left - 1);
+      else focusScroll = false;
+    });
+  };
+  const afterScroll = () => {
+    scrollFrame = 0;
+    if (scrolled) {
+      scrolled = false;
+      scrollFrame = requestAnimationFrame(afterScroll);
+    } else {
+      focusScroll = false;
+      decide();
+    }
+  };
+  const onScroll = () => {
+    if (!focusScroll) return;
+    scrolled = true;
+    if (!scrollFrame) scrollFrame = requestAnimationFrame(afterScroll);
+  };
+  // A focus change takes the turn over: an earlier control's scroll still being waited out is not this one's.
+  const onFocusIn = () => {
+    focusScroll = true;
+    cancelAnimationFrame(scrollFrame);
+    scrollFrame = 0;
+    cancelAnimationFrame(focusFrame);
+    awaitScroll(FOCUS_SCROLL_FRAMES);
+    later();
   };
   // Focus that falls to nothing (a blur, a click on the page) is a move away from every control.
   const onFocusOut = (event: FocusEvent) => {
@@ -250,8 +295,17 @@ function keepFocusClear(viewport: HTMLElement): FocusClearHandle {
   };
   const onKeyDown = () => {
     pointing = false;
+    focusScroll = false;
   };
-  document.addEventListener("focusin", later);
+  const onWheel = () => {
+    focusScroll = false;
+  };
+  document.addEventListener("focusin", onFocusIn);
+  // Scroll events do not bubble, so a scroll container's reaches the document only while capturing.
+  document.addEventListener("scroll", onScroll, true);
+  // Captured, so a part of the page that keeps its wheel to itself (a map, a carousel) still says the scroll is the person's.
+  // A wheel listener on the document is passive unless it says otherwise.
+  document.addEventListener("wheel", onWheel, true);
   document.addEventListener("focusout", onFocusOut);
   document.addEventListener("pointerdown", onPointerDown, true);
   document.addEventListener("keydown", onKeyDown, true);
@@ -266,7 +320,13 @@ function keepFocusClear(viewport: HTMLElement): FocusClearHandle {
       stopFade();
       clearTimeout(settle);
       cancelAnimationFrame(frame);
-      document.removeEventListener("focusin", later);
+      cancelAnimationFrame(scrollFrame);
+      // Stryker disable next-line CallExpression: a released keeper's countdown only clears a flag that nothing reads once the scroll listener is gone.
+      cancelAnimationFrame(focusFrame);
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("scroll", onScroll, true);
+      // Stryker disable next-line CallExpression,StringLiteral,BooleanLiteral: a released keeper's wheel listener only clears a flag that nothing reads once the scroll listener is gone.
+      document.removeEventListener("wheel", onWheel, true);
       document.removeEventListener("focusout", onFocusOut);
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("keydown", onKeyDown, true);

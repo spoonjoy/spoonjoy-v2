@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { Button } from "~/components/ouro/button/button";
 import { TextArea, type TextAreaProps } from "~/components/ouro/text-field/text-area";
-import { canFieldSize, fitHeightNative, supportsFieldSizing } from "~/components/ouro/text-field/text-area-styles";
+import { canFieldSize, supportsFieldSizing } from "~/components/ouro/text-field/text-area-styles";
 import { act } from "~/lib/ouro/testing/act";
+import { holdFrames } from "~/lib/ouro/testing/frames";
 import { watchLayoutReads } from "~/lib/ouro/testing/layout-reads";
 
 const roots: Root[] = [];
@@ -290,20 +291,25 @@ describe("TextArea autoGrow", () => {
     expect(supportsFieldSizing()).toBe(chromium);
   });
 
-  it("measures with fitHeight when the user agent is Safari, clearing what the native path set, and back again", async () => {
+  it("measures with fitHeight when the user agent is Safari, clearing what it set when the browser sizes it, and back again", async () => {
     const safari = "Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
     const agent = vi.spyOn(navigator, "userAgent", "get").mockReturnValue(safari);
     const { textarea, rerender } = await render(<TextArea label="Notes" autoGrow rows={1} maxRows={4} defaultValue={"a\nb\nc"} />);
-    expect(textarea.style.getPropertyValue("field-sizing")).toBe("");
-    expect(textarea.style.minHeight).toBe("");
-    expect(textarea.style.maxHeight).toBe("");
+    expect(textarea.style.getPropertyValue("field-sizing")).toBe("fixed");
+    // It beats the class that lets the browser size the textarea, which WebKit parses.
+    if (CSS.supports("field-sizing", "content")) expect(getComputedStyle(textarea).getPropertyValue("field-sizing")).toBe("fixed");
     expect(textarea.style.height).not.toBe("");
     expect(height(textarea)).toBeCloseTo(linesHeight(textarea, 3), 0);
     agent.mockRestore();
     await rerender(<TextArea label="Notes" autoGrow rows={1} maxRows={4} defaultValue={"a\nb\nc"} />);
-    if (supportsFieldSizing()) expect(textarea.style.getPropertyValue("field-sizing")).toBe("content");
+    if (supportsFieldSizing()) {
+      expect(textarea.style.getPropertyValue("field-sizing")).toBe("");
+      expect(textarea.style.height).toBe("");
+      expect(height(textarea)).toBeCloseTo(linesHeight(textarea, 3), 0);
+    }
     await rerender(<TextArea label="Notes" rows={2} defaultValue={"a\nb\nc"} />);
     expect(textarea.style.height).toBe("");
+    expect(textarea.style.overflowY).toBe("");
     expect(textarea.style.getPropertyValue("field-sizing")).toBe("");
     expect(textarea.style.minHeight).toBe("");
     expect(textarea.style.maxHeight).toBe("");
@@ -315,6 +321,17 @@ describe("TextArea autoGrow", () => {
       for (let i = 0; i < n; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
     };
     afterEach(() => vi.restoreAllMocks());
+
+    it("goes back to rows and a resize handle when autoGrow turns off after it measured", async () => {
+      vi.spyOn(navigator, "userAgent", "get").mockReturnValue(safari);
+      const value = "1\n2\n3\n4\n5";
+      const { rerender, textarea } = await render(<TextArea label="Notes" autoGrow defaultValue={value} />);
+      expect(textarea.style.height).not.toBe("");
+      await rerender(<TextArea label="Notes" defaultValue={value} />);
+      expect(textarea.style.height).toBe("");
+      expect(textarea.style.getPropertyValue("field-sizing")).toBe("");
+      expect(height(textarea)).toBeCloseTo(linesHeight(textarea, 3), 0);
+    });
 
     it("fits an uncontrolled field as it is typed in", async () => {
       vi.spyOn(navigator, "userAgent", "get").mockReturnValue(safari);
@@ -346,19 +363,22 @@ describe("TextArea autoGrow", () => {
     });
   });
 
-  it("hands the height to the browser: it clears the inline height and overflow, and caps only with maxRows", async () => {
-    const { textarea } = await render(<TextArea label="Notes" rows={2} />);
-    textarea.style.height = "99px";
-    textarea.style.overflowY = "hidden";
-    textarea.style.maxHeight = "50px";
-    fitHeightNative(textarea, 2, undefined);
-    expect(textarea.style.getPropertyValue("field-sizing")).toBe("content");
-    expect(textarea.style.height).toBe("");
-    expect(textarea.style.overflowY).toBe("");
-    expect(textarea.style.maxHeight).toBe("");
-    expect(textarea.style.minHeight).toMatch(/^calc\(2lh \+ /);
-    fitHeightNative(textarea, 2, 5);
-    expect(textarea.style.maxHeight).toMatch(/^calc\(5lh \+ /);
+  it("renders its bounds with it, so the browser grows it with no inline height, and caps only with maxRows", async () => {
+    const grown = await render(<TextArea label="Notes" autoGrow rows={2} />);
+    expect(grown.textarea.style.minHeight).toBe("calc(2lh + var(--ouro-text-area-frame))");
+    expect(grown.textarea.style.maxHeight).toBe("");
+    const capped = await render(<TextArea label="Notes" autoGrow rows={2} maxRows={5} style={{ minHeight: "1px" }} />);
+    // The app's own style wins.
+    expect(capped.textarea.style.minHeight).toBe("1px");
+    expect(capped.textarea.style.maxHeight).toBe("calc(5lh + var(--ouro-text-area-frame))");
+    if (supportsFieldSizing()) {
+      expect(getComputedStyle(grown.textarea).getPropertyValue("field-sizing")).toBe("content");
+      expect(grown.textarea.style.height).toBe("");
+      expect(grown.textarea.style.overflowY).toBe("");
+    }
+    const fixed = await render(<TextArea label="Notes" rows={2} />);
+    expect(fixed.textarea.style.minHeight).toBe("");
+    expect(getComputedStyle(fixed.textarea).getPropertyValue("field-sizing")).not.toBe("content");
   });
 
   it("refits when rows, maxRows or size change", async () => {
@@ -408,6 +428,33 @@ describe("TextArea autoGrow", () => {
     expect(height(textarea)).toBeCloseTo(linesHeight(textarea, 3), 0);
   });
 
+  it("grows with its text when autoGrow turns on after the user dragged its height", async () => {
+    const value = "1\n2\n3\n4\n5";
+    const { rerender, textarea } = await render(<TextArea label="Notes" defaultValue={value} />);
+    textarea.style.height = "200px";
+    await rerender(<TextArea label="Notes" autoGrow defaultValue={value} />);
+    expect(height(textarea)).toBeCloseTo(linesHeight(textarea, 5), 0);
+  });
+
+  it("keeps an app's own inline height when it does not grow", async () => {
+    const { textarea } = await render(<TextArea label="Notes" style={{ height: "120px" }} />);
+    expect(textarea.style.height).toBe("120px");
+    expect(height(textarea)).toBe(120);
+  });
+
+  it("keeps a height the user dragged as a controlled value changes, after autoGrow turned off and when it never grew", async () => {
+    const field = (value: string, autoGrow: boolean) => <TextArea label="Notes" autoGrow={autoGrow} value={value} onChange={() => {}} />;
+    const never = await render(field("one", false));
+    never.textarea.style.height = "200px";
+    await never.rerender(field("one\ntwo", false));
+    expect(never.textarea.style.height).toBe("200px");
+    const { rerender, textarea } = await render(field("one", true));
+    await rerender(field("one", false));
+    textarea.style.height = "200px";
+    await rerender(field("one\ntwo", false));
+    expect(textarea.style.height).toBe("200px");
+  });
+
   it("goes back to rows and a resize handle when autoGrow turns off", async () => {
     const value = "1\n2\n3\n4\n5";
     const { rerender, textarea } = await render(<TextArea label="Notes" autoGrow defaultValue={value} />);
@@ -416,6 +463,62 @@ describe("TextArea autoGrow", () => {
     expect(textarea.style.height).toBe("");
     expect(height(textarea)).toBeCloseTo(linesHeight(textarea, 3), 0);
     expect(getComputedStyle(textarea).resize).toBe("vertical");
+  });
+});
+
+describe("TextArea autoGrow first frame", () => {
+  // The first frame the browser paints after a commit has run no animation frame yet: with frames held, what the
+  // textarea measures right after the commit is what that frame shows. It must already be the height the field settles at.
+  async function firstFrame(node: ReactNode) {
+    const host = document.createElement("div");
+    host.style.padding = "24px";
+    host.style.width = "360px";
+    document.body.append(host);
+    mounted.push(host);
+    const root = createRoot(host);
+    roots.push(root);
+    const textarea = () => host.querySelector("textarea")!;
+    const commit = async (next: ReactNode) => {
+      const frames = holdFrames();
+      await act(async () => root.render(next));
+      const first = { height: height(textarea()), scrolls: textarea().scrollHeight > textarea().clientHeight };
+      frames.release();
+      await frame();
+      return first;
+    };
+    const first = await commit(node);
+    return { first, textarea: textarea(), commit };
+  }
+
+  it("is its settled height on its first frame, with a defaultValue of several lines", async () => {
+    const { first, textarea } = await firstFrame(<TextArea label="Notes" autoGrow rows={2} defaultValue={"1\n2\n3\n4\n5"} />);
+    expect(first.height).toBeCloseTo(linesHeight(textarea, 5), 0);
+    expect(height(textarea)).toBe(first.height);
+  });
+
+  it("is capped at maxRows and scrolls on its first frame, with a controlled value", async () => {
+    const { first, textarea } = await firstFrame(<TextArea label="Notes" autoGrow rows={2} maxRows={4} value={"1\n2\n3\n4\n5\n6"} onChange={() => {}} />);
+    expect(first.height).toBeCloseTo(linesHeight(textarea, 4), 0);
+    expect(first.scrolls).toBe(true);
+    expect(height(textarea)).toBe(first.height);
+  });
+
+  it("shows rows lines on its first frame when the text is shorter, in each variant and size", async () => {
+    const outline = await firstFrame(<TextArea label="Notes" autoGrow rows={3} />);
+    expect(outline.first.height).toBeCloseTo(linesHeight(outline.textarea, 3), 0);
+    expect(height(outline.textarea)).toBe(outline.first.height);
+    const plain = await firstFrame(<TextArea label="Notes" variant="plain" size="lg" autoGrow rows={1} maxRows={8} defaultValue={"a\nb\nc"} />);
+    expect(plain.first.height).toBeCloseTo(linesHeight(plain.textarea, 3), 0);
+    expect(height(plain.textarea)).toBe(plain.first.height);
+  });
+
+  it("is its new height on the first frame after its value changes", async () => {
+    const field = (value: string) => <TextArea label="Notes" autoGrow rows={1} maxRows={6} value={value} onChange={() => {}} />;
+    const { commit, textarea } = await firstFrame(field("one"));
+    expect(height(textarea)).toBeCloseTo(linesHeight(textarea, 1), 0);
+    const first = await commit(field("1\n2\n3\n4"));
+    expect(first.height).toBeCloseTo(linesHeight(textarea, 4), 0);
+    expect(height(textarea)).toBe(first.height);
   });
 });
 
@@ -491,6 +594,20 @@ describe("TextArea development messages", () => {
     expect(warn).toHaveBeenCalledWith(
       '[ouro-ui] TextArea: "shadow-lg" sets appearance, and className is for layout only. Fix: style fields in your theme (--input, --ring, --radius).',
     );
+  });
+
+  it("warns that a py class leaves autoGrow's bounds out of step, and not for the padding variable", async () => {
+    const message =
+      "[ouro-ui] TextArea: a class sets the textarea's vertical padding, so autoGrow's rows and maxRows leave it out. " +
+      'Fix: set its variable instead: <TextArea autoGrow className="[&_textarea]:[--ouro-text-area-py:12px]">.';
+    const variable = await render(<TextArea label="Notes" autoGrow rows={2} className="[&_textarea]:[--ouro-text-area-py:calc(var(--spacing)*4)]" />);
+    expect(warn).not.toHaveBeenCalledWith(message);
+    expect(height(variable.textarea)).toBeCloseTo(linesHeight(variable.textarea, 2), 0);
+    // An app that sets its own min-height has taken the bounds over.
+    await render(<TextArea label="Notes" autoGrow rows={2} className="[&_textarea]:py-4" style={{ minHeight: "1px" }} />);
+    expect(warn).not.toHaveBeenCalledWith(message);
+    await render(<TextArea label="Notes" autoGrow rows={2} className="[&_textarea]:py-4" />);
+    expect(warn).toHaveBeenCalledWith(message);
   });
 
   it("says nothing for a full, valid field", async () => {

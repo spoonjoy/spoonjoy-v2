@@ -956,7 +956,6 @@ describe('StepEditorCard', () => {
       await userEvent.type(screen.getByLabelText(/unit/i), 'tbsp')
       await userEvent.type(screen.getByLabelText('Ingredient'), 'olive oil')
 
-      // Add the ingredient
       await userEvent.click(screen.getByRole('button', { name: /add/i }))
 
       // Verify ingredient appears in the list

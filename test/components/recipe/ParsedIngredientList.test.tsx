@@ -226,7 +226,6 @@ describe('ParsedIngredientList', () => {
         />
       )
 
-      // Get the first edit button
       const firstRow = screen.getByText('flour').closest('li')!
       const editButton = within(firstRow).getByRole('button', { name: /edit/i })
       await userEvent.click(editButton)

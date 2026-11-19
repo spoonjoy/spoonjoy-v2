@@ -167,7 +167,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     throw new Response("Unauthorized", { status: 403 });
   }
 
-  // Handle parseIngredients intent
   if (intent === "parseIngredients") {
     const ingredientText = formData.get("ingredientText")?.toString() || "";
 
@@ -236,7 +235,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const usesStepsRaw = formData.getAll("usesSteps");
   const parsedSteps = usesStepsRaw.map((s) => parseInt(s.toString(), 10));
 
-  // Validate each selected step reference
   for (const outputStepNum of parsedSteps) {
     const validationResult = validateStepReference(outputStepNum, nextStepNum);
     if (!validationResult.valid) {

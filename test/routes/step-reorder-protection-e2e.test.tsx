@@ -412,7 +412,6 @@ describe("E2E: Step Reorder Protection", () => {
 
   describe("Valid reorders succeed", () => {
     it("should allow moving step up when no dependencies would break", async () => {
-      // Create recipe with two independent steps
       const recipeId = await createRecipe("Valid Reorder Test 1 " + faker.string.alphanumeric(6));
       await addStep(recipeId, "First step", "Step 1");
       const step2Id = await addStep(recipeId, "Second step (independent)", "Step 2");
@@ -429,7 +428,6 @@ describe("E2E: Step Reorder Protection", () => {
     });
 
     it("should allow moving step down when no dependencies would break", async () => {
-      // Create recipe with two independent steps
       const recipeId = await createRecipe("Valid Reorder Test 2 " + faker.string.alphanumeric(6));
       const step1Id = await addStep(recipeId, "First step", "Step 1");
       await addStep(recipeId, "Second step (independent)", "Step 2");
@@ -522,7 +520,6 @@ describe("E2E: Step Reorder Protection", () => {
       await addStep(recipeId, "First step", "Step 1");
       await addStep(recipeId, "Second step uses first", "Step 2", [1]);
 
-      // Load recipe edit data
       const loaderData = await loadRecipeEdit(recipeId);
       const actionResult = {
         errors: {
@@ -572,7 +569,6 @@ describe("E2E: Step Reorder Protection", () => {
       await addStep(recipeId, "First step", "Step 1");
       await addStep(recipeId, "Second step uses first", "Step 2", [1]);
 
-      // Load recipe edit data
       const loaderData = await loadRecipeEdit(recipeId);
       const actionResult = {
         errors: {
@@ -622,7 +618,6 @@ describe("E2E: Step Reorder Protection", () => {
       await addStep(recipeId, "First step", "Step 1");
       await addStep(recipeId, "Second step", "Step 2");
 
-      // Load recipe edit data
       const loaderData = await loadRecipeEdit(recipeId);
 
       // Render component without action data (no errors)

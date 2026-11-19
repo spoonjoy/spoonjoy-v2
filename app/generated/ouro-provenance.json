@@ -264,7 +264,6 @@
         "app/components/auth/PasskeySignInButton.tsx",
         "app/components/auth/auth-page.tsx",
         "app/components/oauth.tsx",
-        "app/components/spoonjoy-logo.tsx",
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-redirect-hash.ts",
         "app/lib/account-activity.server.ts",
@@ -310,18 +309,15 @@
         "app/lib/webauthn-client.ts"
       ],
       "components": [
-        "auth-layout",
         "button",
         "form",
+        "heading",
         "link",
         "separator",
         "text",
         "text-field"
       ],
       "renders": {
-        "auth-layout": [
-          "app/components/auth/auth-page.tsx"
-        ],
         "button": [
           "app/components/auth/PasskeySignInButton.tsx",
           "app/components/oauth.tsx",
@@ -329,6 +325,9 @@
         ],
         "form": [
           "app/routes/login.tsx"
+        ],
+        "heading": [
+          "app/components/auth/auth-page.tsx"
         ],
         "link": [
           "app/components/auth/auth-page.tsx",
@@ -353,7 +352,6 @@
         "app/routes/signup.tsx",
         "app/components/auth/auth-page.tsx",
         "app/components/oauth.tsx",
-        "app/components/spoonjoy-logo.tsx",
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-redirect-hash.ts",
         "app/lib/account-identity.server.ts",
@@ -389,24 +387,24 @@
         "app/lib/username.ts"
       ],
       "components": [
-        "auth-layout",
         "button",
         "form",
+        "heading",
         "link",
         "separator",
         "text",
         "text-field"
       ],
       "renders": {
-        "auth-layout": [
-          "app/components/auth/auth-page.tsx"
-        ],
         "button": [
           "app/components/oauth.tsx",
           "app/routes/signup.tsx"
         ],
         "form": [
           "app/routes/signup.tsx"
+        ],
+        "heading": [
+          "app/components/auth/auth-page.tsx"
         ],
         "link": [
           "app/components/auth/auth-page.tsx",
@@ -429,7 +427,6 @@
       "sources": [
         "app/routes/forgot-password.tsx",
         "app/components/auth/auth-page.tsx",
-        "app/components/spoonjoy-logo.tsx",
         "app/hooks/use-form-errors.ts",
         "app/lib/account-revocation.server.ts",
         "app/lib/analytics-server.ts",
@@ -463,9 +460,9 @@
       ],
       "components": [
         "alert",
-        "auth-layout",
         "button",
         "form",
+        "heading",
         "link",
         "text",
         "text-field"
@@ -474,14 +471,14 @@
         "alert": [
           "app/routes/forgot-password.tsx"
         ],
-        "auth-layout": [
-          "app/components/auth/auth-page.tsx"
-        ],
         "button": [
           "app/routes/forgot-password.tsx"
         ],
         "form": [
           "app/routes/forgot-password.tsx"
+        ],
+        "heading": [
+          "app/components/auth/auth-page.tsx"
         ],
         "link": [
           "app/components/auth/auth-page.tsx",
@@ -501,7 +498,6 @@
       "sources": [
         "app/routes/reset-password.tsx",
         "app/components/auth/auth-page.tsx",
-        "app/components/spoonjoy-logo.tsx",
         "app/hooks/use-form-errors.ts",
         "app/lib/account-revocation.server.ts",
         "app/lib/analytics-server.ts",
@@ -535,9 +531,9 @@
       ],
       "components": [
         "alert",
-        "auth-layout",
         "button",
         "form",
+        "heading",
         "link",
         "text",
         "text-field"
@@ -546,14 +542,14 @@
         "alert": [
           "app/routes/reset-password.tsx"
         ],
-        "auth-layout": [
-          "app/components/auth/auth-page.tsx"
-        ],
         "button": [
           "app/routes/reset-password.tsx"
         ],
         "form": [
           "app/routes/reset-password.tsx"
+        ],
+        "heading": [
+          "app/components/auth/auth-page.tsx"
         ],
         "link": [
           "app/components/auth/auth-page.tsx",
@@ -573,7 +569,6 @@
       "sources": [
         "app/routes/logout.tsx",
         "app/components/auth/auth-page.tsx",
-        "app/components/spoonjoy-logo.tsx",
         "app/hooks/use-form-errors.ts",
         "app/lib/api-auth.server.ts",
         "app/lib/api-idempotency.server.ts",
@@ -592,21 +587,21 @@
         "app/lib/slow-call.server.ts"
       ],
       "components": [
-        "auth-layout",
         "button",
         "form",
+        "heading",
         "link",
         "text"
       ],
       "renders": {
-        "auth-layout": [
-          "app/components/auth/auth-page.tsx"
-        ],
         "button": [
           "app/routes/logout.tsx"
         ],
         "form": [
           "app/routes/logout.tsx"
+        ],
+        "heading": [
+          "app/components/auth/auth-page.tsx"
         ],
         "link": [
           "app/components/auth/auth-page.tsx",
@@ -4044,21 +4039,20 @@
       "file": "app/routes/oauth.callback.tsx",
       "sources": [
         "app/routes/oauth.callback.tsx",
-        "app/components/auth/auth-page.tsx",
-        "app/components/spoonjoy-logo.tsx"
+        "app/components/auth/auth-page.tsx"
       ],
       "components": [
-        "auth-layout",
         "button",
+        "heading",
         "link",
         "text"
       ],
       "renders": {
-        "auth-layout": [
-          "app/components/auth/auth-page.tsx"
-        ],
         "button": [
           "app/routes/oauth.callback.tsx"
+        ],
+        "heading": [
+          "app/components/auth/auth-page.tsx"
         ],
         "link": [
           "app/components/auth/auth-page.tsx"

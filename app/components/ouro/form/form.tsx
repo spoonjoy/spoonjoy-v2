@@ -288,9 +288,10 @@ function summarize(form: HTMLFormElement, topMessages: number, summary: FormErro
  * without one. A field's message is not an alert: it is that control's description, so
  * assert it with `toHaveAccessibleDescription`.
  *
- * After a submit that leaves field errors, the alert opens with a visually hidden summary, such as
- * "Couldn't save: 1 problem. Name: You already have a recipe called Pasta.", which screen readers hear
- * before focus moves to the first field. The same summary is not announced again while the errors stand,
+ * After a submit that leaves field errors, focus moves to the first field, and once the browser has painted
+ * that move the alert opens with a visually hidden summary, such as "Couldn't save: 1 problem. Name: You
+ * already have a recipe called Pasta.". Screen readers announce the summary after the field, so they speak
+ * the field, then its error. The same summary is not announced again while the errors stand,
  * and a changed error, or one the user fixed and got back, announces again. Pass `errorSummary` to translate it.
  * A message at the top of the form counts as one problem.
  *
@@ -357,6 +358,8 @@ function summarize(form: HTMLFormElement, topMessages: number, summary: FormErro
  * @claim "A page that loads with `errors`" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > leaves focus where the browser put it when the page loads with errors)
  * @claim "A page that loads with `errors`" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > puts the form error in the server HTML)
  * @claim "After a submit that leaves field errors" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > says how many problems there are, and the first in page order, once per submit)
+ * @claim "once the browser has painted that move" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > opens the alert two frames after focus moves to the field, so the summary is announced after the field)
+ * @claim "Screen readers announce the summary after the field" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > opens the alert two frames after focus moves to the field, so the summary is announced after the field)
  * @claim "The same summary is not announced again" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > does not announce an unchanged summary again, but announces a changed one)
  * @claim "and a changed error, or one the user fixed" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > announces the same error again once the user has changed the field)
  * @claim "A message at the top of the form counts as one problem" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form error summary > counts a message at the top of the form as one problem, and shows it as well)
@@ -413,6 +416,10 @@ export function Form(props: FormProps): JSX.Element {
     key: 0,
     summary: undefined,
   });
+  // The key of the alert the page has shown since its focus moved. A new alert with a summary is held out
+  // of the page until then (see the effect after focus moves), so it is inserted whole, with its summary.
+  const [revealedKey, setRevealedKey] = useState(0);
+  const alertHeld = alert.summary !== undefined && alert.key !== revealedKey;
   const clear = useCallback((name: string) => {
     if (!errors || !Object.hasOwn(errors, name)) return;
     // Once the user changes a field, its problem is gone: a later identical error is news.
@@ -467,9 +474,9 @@ export function Form(props: FormProps): JSX.Element {
 
   // When new errors arrive, focus the first field showing one, in page order, or the
   // message at the top when no field has one. Not on the first render: a page that loads
-  // with errors leaves focus where the browser puts it. The summary is decided first, right
-  // after the commit that shows the errors (before paint, in the same task): the alert is then
-  // inserted with the summary already in it, and focus follows it.
+  // with errors leaves focus where the browser puts it. The summary is decided right after
+  // the commit that shows the errors (before paint, in the same task); the alert that carries
+  // it waits for focus, in the effect below.
   const formRef = useRef<HTMLFormElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
   const focusedFor = useRef(0);
@@ -492,6 +499,14 @@ export function Form(props: FormProps): JSX.Element {
     const invalid = [...formRef.current!.querySelectorAll<HTMLElement>('[aria-invalid="true"]')].find(focusable);
     (invalid ? entryPoint(invalid) : messageRef.current)?.focus();
   }, [alert.arrival, errors]);
+  // The alert with a summary is inserted after focus has moved to the field, not with it. The browser
+  // sends a focus move to assistive tech in the frame that paints it, so the alert is inserted two frames
+  // after focus: the first frame's callbacks run before that frame is painted, the second's after it.
+  // A key replaced before its reveal sets a key nothing shows any more, and the newer key stays held.
+  useEffect(() => {
+    const key = alert.key;
+    requestAnimationFrame(() => requestAnimationFrame(() => setRevealedKey(key)));
+  }, [alert.key]);
 
   // A submit stops at its own Form: React bubbles events through portals, so a Form in a
   // sheet would otherwise reach the Form the sheet sits in.
@@ -507,15 +522,16 @@ export function Form(props: FormProps): JSX.Element {
           fails and focuses the first such control. Ouro's errors never reach it, so they
           never block a submit. */}
       <BaseForm {...rest} ref={setFormRef} onSubmit={submit} data-ouro="form" className={cn("grid min-w-0 gap-5", className)}>
-        {/* A new element for each announcement: each arrival, unless its summary repeats the last one. While an
-            arrival has no summary decided, an alert without one stays out of the page, so it is inserted whole. */}
+        {/* A new element for each announcement: each arrival, unless its summary repeats the last one. A held
+            alert stays out of the page until focus has moved, and an arrival that has no summary decided yet
+            waits for the layout effect that decides it, so it is inserted whole. */}
         <FormMessage
           key={alert.key}
           ref={messageRef}
           errors={errors ?? EMPTY}
           showsAtTop={showsAtTop}
           summary={alert.summary}
-          pending={alert.arrival !== shown.arrivals && alert.summary === undefined}
+          pending={alertHeld || (alert.arrival !== shown.arrivals && alert.summary === undefined)}
         />
         {children}
       </BaseForm>

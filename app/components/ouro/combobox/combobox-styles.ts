@@ -28,7 +28,7 @@ export {
 const chipsGroupClass =
   "relative m-0 box-border flex w-full min-w-0 flex-wrap items-center gap-1.5 py-1.5 ps-1.5 pe-3 cursor-text " +
   "min-h-(--ouro-control-h) [--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] " +
-  "rounded-md border border-solid border-input bg-transparent text-base text-foreground sm:pointer-fine:text-sm " +
+  "rounded-ouro-control-md border border-solid border-input bg-transparent text-base text-foreground sm:pointer-fine:text-sm " +
   "outline-ring outline-offset-2 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-solid " +
   "transition-[border-color] duration-(--ouro-duration-fast) ease-[ease] " +
   "has-[input[aria-invalid=true]]:border-destructive has-[input:disabled]:cursor-not-allowed has-[input:disabled]:opacity-50 " +
@@ -51,7 +51,7 @@ const chipsInputClass =
  * @internal
  */
 const chipClass =
-  "inline-flex h-8 max-w-full min-w-0 items-center gap-0.5 rounded-sm bg-secondary ps-2 text-sm text-secondary-foreground " +
+  "inline-flex h-8 max-w-full min-w-0 items-center gap-0.5 rounded-ouro-sm bg-secondary ps-2 text-sm text-secondary-foreground " +
   "sm:pointer-fine:h-6 outline-ring outline-offset-1 data-highlighted:outline-2 data-highlighted:outline-solid " +
   "[&>span]:truncate";
 
@@ -63,7 +63,7 @@ const chipClass =
  * @claim "A chip's remove button: a square" registry/ouro/components/ouro/combobox/combobox.touch.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.touch.test.tsx::Combobox on a phone > gives chip remove buttons a 44px hit area)
  */
 const chipRemoveClass =
-  "press relative m-0 box-border inline-flex aspect-square h-full shrink-0 items-center justify-center rounded-sm border-0 p-0 " +
+  "press relative m-0 box-border inline-flex aspect-square h-full shrink-0 items-center justify-center rounded-ouro-sm border-0 p-0 " +
   "bg-transparent text-inherit cursor-pointer [-webkit-tap-highlight-color:transparent] pointer-fine:hover:bg-accent active:bg-accent motion-safe:active:scale-(--ouro-press-scale) " +
   "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid [&_svg]:size-3.5";
 
@@ -78,7 +78,7 @@ const chipRemoveClass =
  */
 const popupClass =
   "box-border flex w-(--anchor-width) max-w-(--available-width) max-h-[min(var(--available-height),22rem)] flex-col " +
-  "origin-(--transform-origin) overflow-hidden rounded-md border border-solid border-border bg-popover text-popover-foreground " +
+  "origin-(--transform-origin) overflow-hidden rounded-ouro-md border border-solid border-border bg-popover text-popover-foreground " +
   "shadow-(--shadow-lg) outline-none " +
   "[transition:opacity_var(--ouro-duration-fast)_var(--ouro-ease-out),scale_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
   "data-starting-style:transition-none data-ending-style:opacity-0 data-ending-style:scale-95 " +
@@ -100,7 +100,7 @@ const listClass = "box-border min-h-0 flex-1 overflow-y-auto overscroll-contain 
  * @claim "An item: 44px tall on phones" registry/ouro/components/ouro/combobox/combobox.tsx verify:fileLine(registry/ouro/components/ouro/combobox/combobox.tsx, /<BaseCombobox.ItemIndicator\sclassName="col-start-1\sflex\s\[&_svg\]:size-4">/)
  */
 const itemClass =
-  "relative box-border grid min-h-11 cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-sm px-2 py-1.5 " +
+  "relative box-border grid min-h-11 cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-ouro-sm px-2 py-1.5 " +
   "text-base leading-5 outline-none select-none sm:pointer-fine:min-h-8 sm:pointer-fine:text-sm " +
   "data-highlighted:bg-accent data-highlighted:text-accent-foreground not-data-disabled:active:bg-accent not-data-disabled:active:text-accent-foreground " +
   // Forced colours drop the fill, so the highlight takes the system's pair.
@@ -129,7 +129,7 @@ const statusClass = "box-border flex items-center gap-2 px-3 py-2 text-sm leadin
  */
 const triggerClass =
   "relative m-0 box-border flex w-full min-w-0 items-center justify-between gap-2 h-(--ouro-control-h) px-3 py-0 " +
-  "[--ouro-control-h:calc(var(--spacing)*11)] rounded-md border border-solid border-input bg-transparent " +
+  "[--ouro-control-h:calc(var(--spacing)*11)] rounded-ouro-control-md border border-solid border-input bg-transparent " +
   "text-start text-base text-foreground font-[inherit] cursor-pointer [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "not-disabled:active:bg-accent/60 aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 " +

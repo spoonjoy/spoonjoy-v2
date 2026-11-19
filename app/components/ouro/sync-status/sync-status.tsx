@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type HTMLAttributes, type JSX, type Ref } from "react";
-import { announce } from "~/lib/ouro/announce";
+import { AFTER_ACTION_MS, announce } from "~/lib/ouro/announce";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { TouchTarget } from "~/lib/ouro/touch-target";
@@ -65,11 +65,6 @@ const words: Record<keyof SyncStatusLabels, string> = {
   retry: "Retry",
 };
 const problems = new Set<SyncState>(["offline", "error"]);
-// Match Celebrate's time for the triggering control's state announcement (a switch's "off").
-// This fixed delay does not detect when a screen reader has finished speaking. Recovery keeps
-// the default delay: Retry's save moves focus to this line, and VoiceOver's usage hint for it
-// starts about then and swallows a later message.
-const SPEAK_DELAY_MS = 1500;
 
 const tones: Record<SyncState, string> = {
   saved: "text-[color-mix(in_oklab,var(--muted-foreground)_88%,var(--foreground))]",
@@ -132,7 +127,7 @@ function Line({
           data-ouro-control="sync-status"
           data-ouro-part="retry"
           onClick={onRetry}
-          className="relative ms-2 cursor-pointer rounded-sm border-0 bg-transparent p-0 font-[inherit] text-[length:inherit] leading-[inherit] font-medium text-foreground underline underline-offset-4 outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid pointer-fine:hover:decoration-2"
+          className="relative ms-2 cursor-pointer rounded-ouro-sm border-0 bg-transparent p-0 font-[inherit] text-[length:inherit] leading-[inherit] font-medium text-foreground underline underline-offset-4 outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid pointer-fine:hover:decoration-2"
         >
           <TouchTarget />
           {retry}
@@ -192,12 +187,14 @@ export function SyncStatus(props: SyncStatusProps): JSX.Element {
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
-  // Spoken when a problem starts, and when changes are saved again after one.
+  // Spoken when a problem starts, after the triggering control's own state announcement (a switch's "off"), and when
+  // changes are saved again after one. Recovery keeps the default delay: Retry's save moves focus to this line, and
+  // VoiceOver's usage hint for it starts about then and swallows a later message.
   const troubled = useRef(false);
   useEffect(() => {
     if (problems.has(status)) {
       troubled.current = true;
-      return announce(word[status], { delayMs: SPEAK_DELAY_MS });
+      return announce(word[status], { delayMs: AFTER_ACTION_MS });
     } else if (status === "saved" && troubled.current) {
       return announce(word.saved, { onWrite: () => { troubled.current = false; } });
     }
@@ -233,7 +230,7 @@ export function SyncStatus(props: SyncStatusProps): JSX.Element {
       <p
         ref={line}
         tabIndex={-1}
-        className={cn("m-0 rounded-sm outline-ring outline-offset-2 [grid-area:1/1] focus-visible:outline-2 focus-visible:outline-solid", tones[status])}
+        className={cn("m-0 rounded-ouro-sm outline-ring outline-offset-2 [grid-area:1/1] focus-visible:outline-2 focus-visible:outline-solid", tones[status])}
       >
         <Line state={status} label={word[status]} retry={word.retry} onRetry={onRetry} retryRef={retryRef} />
       </p>

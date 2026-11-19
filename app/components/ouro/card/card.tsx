@@ -1,11 +1,11 @@
 "use client";
 
-import { createElement, useId, type HTMLAttributes, type JSX, type ReactNode, type Ref } from "react";
+import { createElement, useId, type HTMLAttributes, type JSX, type MouseEvent, type ReactNode, type Ref } from "react";
 import { radiusFor } from "~/lib/ouro/appearance-hints";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { RouterLink, safeRel } from "~/lib/ouro/router-link";
-import { raiseControlsClass, stretchedLinkClass } from "~/lib/ouro/stretched-link";
+import { followStretchedLink, raiseControlsClass, stretchedLinkClass } from "~/lib/ouro/stretched-link";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/ouro/text/text";
@@ -45,11 +45,24 @@ export interface CardOwnProps {
    * fades in. On a touch screen it shows from the start. Screen readers read it while it is
    * transparent too, and the link names it as its description, so a person who tabs to the card
    * hears it.
+   *
+   * With `"rise"`, and `media` too, the title sits on the bottom of the media, and the
+   * description stays folded away until the pointer rests on the card or keyboard focus is in it,
+   * then rises over the media, while the card's box stays the same. On a touch screen a rising
+   * description shows from the start. With reduced motion a rising description fades in place.
+   * The title and description lie on a glass band, the card's surface with the picture blurred
+   * through it, which turns solid where the browser cannot blur, with reduced transparency, more
+   * contrast or forced colors; its text holds 4.5:1 over a bright picture and a dark one.
    * @claim "Screen readers read it while it" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > shows the description on hover or keyboard focus, keeping its room, and names it as the link's description)
    * @claim "On a touch screen it shows" registry/ouro/components/ouro/card/card.touch.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.touch.test.tsx::shows a revealDescription card's description on a touch screen)
    * @claim "on a screen with a mouse" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > shows the description on hover or keyboard focus, keeping its room, and names it as the link's description)
+   * @claim "the title sits on the bottom of the media" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > rises the description over the media with revealDescription="rise", taking no room before, and the card's box never changes)
+   * @claim "On a touch screen a rising" registry/ouro/components/ouro/card/card.touch.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.touch.test.tsx::shows a rising card's description on a touch screen)
+   * @claim "The title and description lie on" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > lays a rising title on glass over the picture, solid without a blur, with less transparency or more contrast, and the page's background under a theme with no card color)
+   * @claim "The title and description lie on" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > keeps a rising title and description at 4.5:1 on its glass over a bright picture and a dark one, in light and dark)
+   * @claim "With reduced motion a rising" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href, zoomMedia and revealDescription > with reduced motion, a rising description only fades, and nothing moves)
    */
-  revealDescription?: boolean | undefined;
+  revealDescription?: boolean | "rise" | (string & { 'Use revealDescription, or revealDescription="rise"': never }) | undefined;
   /**
    * One control beside the title, at the end: a menu or a share button. With `href` it
    * stays its own tab stop, above the link.
@@ -129,7 +142,7 @@ const levels = [2, 3, 4, 5, 6] as const;
 const variants = {
   // Where corner-shape is missing, the surface slot paints the background and border instead (see ouro-base.css).
   outline:
-    "rounded-xl border border-border bg-(--ouro-bg) border-(--ouro-bd) [--ouro-bg:var(--card)] [--ouro-bd:var(--border)] [--ouro-sq-w:1px] [--ouro-sq-r:calc(var(--radius)*var(--ouro-radius-scale,1)*1.4)] text-card-foreground shadow-(--shadow-xs)",
+    "rounded-ouro-xl border border-border bg-(--ouro-bg) border-(--ouro-bd) [--ouro-bg:var(--card)] [--ouro-bd:var(--border)] [--ouro-sq-w:1px] [--ouro-sq-r:calc(var(--radius)*var(--ouro-radius-scale,1)*1.4)] text-card-foreground shadow-(--shadow-xs)",
   plain: "bg-transparent text-foreground",
 } as const;
 
@@ -139,7 +152,7 @@ const rootSizes = {
   plain: { md: "gap-4 py-0", sm: "gap-3 py-0" },
 } as const;
 const inset = { outline: { md: "px-6", sm: "px-4" }, plain: { md: "px-0", sm: "px-0" } } as const;
-const mediaPull = { outline: { md: "-mt-6", sm: "-mt-4" }, plain: { md: "rounded-xl", sm: "rounded-lg" } } as const;
+const mediaPull = { outline: { md: "-mt-6", sm: "-mt-4" }, plain: { md: "rounded-ouro-xl", sm: "rounded-ouro-lg" } } as const;
 
 // With href, the title's link stretches over the card (`stretchedLinkClass`), so the whole
 // card is one link with one tab stop, and every control in any slot (a share button over
@@ -154,9 +167,31 @@ const linkRoot =
 const zoomMediaClass =
   "motion-safe:[&_:is(img,video)]:transition-transform motion-safe:[&_:is(img,video)]:duration-(--ouro-duration-base) motion-safe:[&_:is(img,video)]:ease-(--ouro-ease-out) " +
   "motion-safe:pointer-fine:group-hover/card:[&_:is(img,video)]:scale-[1.03] motion-safe:group-has-[:focus-visible]/card:[&_:is(img,video)]:scale-[1.03]";
+// The rising description: no room until the card is hovered with a mouse or focus is in it, then it
+// opens from nothing, and the body it is in, anchored to the media's bottom, grows up over the media.
+const riseClass =
+  "grid grid-rows-[1fr] transition-[grid-template-rows,opacity] duration-(--ouro-duration-base) ease-(--ouro-ease-out) " +
+  "motion-reduce:transition-opacity motion-reduce:duration-(--ouro-duration-fast) " +
+  "pointer-fine:[@media(hover:hover)]:not-group-hover/card:not-group-has-[:focus-visible]/card:grid-rows-[0fr] " +
+  "pointer-fine:[@media(hover:hover)]:not-group-hover/card:not-group-has-[:focus-visible]/card:opacity-0";
+// The band a rising title lies on: the card's surface as glass over the media, so the picture reads through it, and
+// solid where the browser cannot blur behind it, the person asks for less transparency or more contrast, or forced
+// colours paint it. A theme with no card color gets the page's background, as the card itself shows. The glass is a
+// layer of its own beside the title, never around it: a backdrop filter on the link's ancestor would hold the link's
+// layer to the band. The wrapper is no stacking context, so the glass blurs the picture, not an empty layer of its own.
+const riseBandClass =
+  "grid self-end [grid-area:1/1] text-(--card-foreground,var(--foreground)) " +
+  // Muted text halfway to the foreground, which holds 4.5:1 on the glass over any picture.
+  "[&_[data-card-reveal]>[data-ouro=text]]:text-[color-mix(in_oklab,var(--muted-foreground)_50%,var(--foreground))]";
+const riseGlassClass =
+  "z-1 [grid-area:1/1] bg-[color-mix(in_oklab,var(--card,var(--background))_78%,transparent)] backdrop-blur-md backdrop-saturate-150 " +
+  "supports-[not(backdrop-filter:blur(1px))]:bg-(--card,var(--background)) " +
+  "[@media(prefers-reduced-transparency:reduce)]:bg-(--card,var(--background)) [@media(prefers-reduced-transparency:reduce)]:backdrop-filter-none " +
+  "contrast-more:bg-(--card,var(--background)) contrast-more:backdrop-filter-none contrast-more:border-t contrast-more:border-solid contrast-more:border-foreground " +
+  "forced-colors:bg-[Canvas] forced-colors:backdrop-filter-none forced-colors:border-t forced-colors:border-solid";
 const revealClass =
   "transition-opacity duration-(--ouro-duration-base) ease-(--ouro-ease-out) motion-reduce:duration-(--ouro-duration-fast) " +
-  "pointer-fine:not-group-hover/card:not-group-has-[:focus-visible]/card:opacity-0";
+  "pointer-fine:[@media(hover:hover)]:not-group-hover/card:not-group-has-[:focus-visible]/card:opacity-0";
 
 // Below the breakpoint the header's action drops under the title, at the start.
 const headerStacked = { sm: "max-sm:flex-col max-sm:gap-3", md: "max-md:flex-col max-md:gap-3" } as const;
@@ -173,7 +208,10 @@ function cardHint(token: string): string {
  *
  * A linked card can answer the pointer and the keyboard: `zoomMedia` grows its pictures a little
  * inside their frame, and `revealDescription` keeps its description back until the card is
- * hovered or focused, on a screen with a mouse. Both honour reduced motion.
+ * hovered or focused, on a screen with a mouse; `revealDescription="rise"` lays the title on the
+ * media and raises the description over it instead, from folded away. Both honour
+ * reduced motion. A click anywhere on a linked card opens it, whatever the app's own layout does
+ * to its parts, and a middle or Cmd/Ctrl click opens it in a new tab.
  *
  * Use `Item` instead for a compact row in a list (media, title, description and actions
  * side by side), and `Stack` when the group needs no surface.
@@ -198,6 +236,13 @@ function cardHint(token: string): string {
  *   description="Low heat, a lid, and time"
  *   zoomMedia
  *   revealDescription
+ * />
+ * <Card
+ *   href="/guides/searing"
+ *   media={<AspectRatio ratio={4 / 3}><img src={cover} alt="" /></AspectRatio>}
+ *   title="Searing"
+ *   description="A dry pan and patience"
+ *   revealDescription="rise"
  * />
  */
 export function Card(props: CardProps): JSX.Element {
@@ -236,7 +281,9 @@ export function Card(props: CardProps): JSX.Element {
   const stackBelow: "sm" | "md" | undefined = stackBelowProp === "sm" ? "sm" : stackBelowProp === "md" ? "md" : undefined;
   const linked = href !== undefined && Boolean(title);
   const zoom = linked && zoomMedia === true && Boolean(media);
-  const reveal = linked && revealDescription === true && Boolean(description);
+  const reveal = linked && (revealDescription === true || revealDescription === "rise") && Boolean(description);
+  // The rising description needs media to rise over; without it the description fades in place.
+  const rise = reveal && revealDescription === "rise" && Boolean(media);
   useAppearanceClassNameCheck(
     "Card",
     className,
@@ -264,12 +311,19 @@ export function Card(props: CardProps): JSX.Element {
           asChild !== undefined && ["asChild is not a prop", '<Card href="/path" title="…">'],
           interactive !== undefined && ["interactive is not a prop; a card with href is a link", '<Card href="/path" title="…" zoomMedia revealDescription>'],
           zoomMedia === true && !zoom && ["zoomMedia needs href, a title and media", '<Card href="/path" title="…" media={…} zoomMedia>'],
-          revealDescription === true &&
+          revealDescription !== undefined &&
+            revealDescription !== false &&
+            revealDescription !== true &&
+            revealDescription !== "rise" && [`revealDescription="${String(revealDescription)}" is not a reveal; use revealDescription or "rise"`, '<Card revealDescription="rise">'],
+          (revealDescription === true || revealDescription === "rise") &&
             !reveal && ["revealDescription needs href, a title and a description", '<Card href="/path" title="…" description="…" revealDescription>'],
+          revealDescription === "rise" && reveal && !rise && ['revealDescription="rise" needs media to rise over', '<Card href="/path" title="…" description="…" media={…} revealDescription="rise">'],
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
   const pad = inset[variant][size];
+  // A rising title lies on a surface of its own over the media, so it keeps an outlined card's inset whatever the variant.
+  const titlePad = rise ? inset.outline[size] : pad;
   const heading = title ? (
     <Heading level={level} size={size === "sm" ? "sm" : "md"}>
       {linked ? (
@@ -293,33 +347,16 @@ export function Card(props: CardProps): JSX.Element {
       )}
     </Heading>
   ) : null;
-  return createElement(
-    element,
-    {
-      ...rest,
-      "data-ouro": "card",
-      "data-ouro-squircle": variant === "outline" ? "" : undefined,
-      "data-linked": linked ? "" : undefined,
-      className: cn(
-        "relative isolate flex min-w-0 list-none flex-col overflow-hidden",
-        variants[variant],
-        rootSizes[variant][size],
-        linked && linkRoot,
-        (zoom || reveal) && "group/card",
-        linked && raiseControlsClass,
-        className,
-      ),
-    },
-    variant === "outline" && <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />,
-    media && <div className={cn("relative overflow-hidden", mediaPull[variant][size], zoom && zoomMediaClass)}>{media}</div>,
+  // The title, description and action; for a rising description, laid over the media's bottom.
+  const titleBlock = (place?: string) =>
     (heading || description || action) && (
-      <div className={cn("flex items-start gap-4", stackBelow && headerStacked[stackBelow], pad)}>
+      <div className={cn("flex items-start gap-4", stackBelow && headerStacked[stackBelow], titlePad, place)}>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           {heading}
           {description &&
             (reveal ? (
-              <div id={descriptionId} data-card-reveal="" className={revealClass}>
-                <Text as="div" size="sm" tone="muted">
+              <div id={descriptionId} data-card-reveal={rise ? "rise" : ""} className={rise ? riseClass : revealClass}>
+                <Text as="div" size="sm" tone="muted" className={rise ? "min-h-0 overflow-hidden" : undefined}>
                   {description}
                 </Text>
               </div>
@@ -331,7 +368,42 @@ export function Card(props: CardProps): JSX.Element {
         </div>
         {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
       </div>
+    );
+  return createElement(
+    element,
+    {
+      ...rest,
+      // A click anywhere on a linked card opens its link, wherever the app's layout leaves the link's layer.
+      onClick: (event: MouseEvent<HTMLElement>) => (rest.onClick?.(event), followStretchedLink(event)),
+      onAuxClick: (event: MouseEvent<HTMLElement>) => (rest.onAuxClick?.(event), followStretchedLink(event)),
+      "data-ouro": "card",
+      "data-ouro-squircle": variant === "outline" ? "" : undefined,
+      "data-linked": linked ? "" : undefined,
+      "data-follows-link": linked ? "" : undefined,
+      className: cn(
+        "relative isolate flex min-w-0 list-none flex-col overflow-hidden",
+        variants[variant],
+        rootSizes[variant][size],
+        linked && linkRoot,
+        (zoom || reveal) && "group/card",
+        linked && raiseControlsClass,
+        className,
+      ),
+    },
+    variant === "outline" && <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />,
+    media && !rise && <div className={cn("relative overflow-hidden", mediaPull[variant][size], zoom && zoomMediaClass)}>{media}</div>,
+    // The title stacked over the media in one grid cell, not positioned, so the link's layer still covers the whole
+    // card; a cell grows to fit a title and description taller than the media rather than cutting the title off.
+    rise && (
+      <div className={cn("grid overflow-hidden", mediaPull[variant][size])}>
+        <div className={cn("relative overflow-hidden [grid-area:1/1]", zoom && zoomMediaClass)}>{media}</div>
+        <div className={riseBandClass}>
+          <div aria-hidden="true" data-card-glass="" className={riseGlassClass} />
+          {titleBlock("z-2 py-3 [grid-area:1/1]")}
+        </div>
+      </div>
     ),
+    !rise && titleBlock(),
     children && <div className={cn("min-w-0", pad)}>{children}</div>,
     footer && <div className={cn("flex flex-wrap items-center gap-2", pad)}>{footer}</div>,
   );

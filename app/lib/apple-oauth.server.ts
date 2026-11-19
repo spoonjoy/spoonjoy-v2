@@ -209,7 +209,6 @@ export async function verifyAppleCallback(
   callbackData: AppleCallbackData,
   capture?: AuthVerifyCaptureFn
 ): Promise<AppleCallbackResult> {
-  // Validate state
   if (!callbackData.state) {
     return {
       success: false,
@@ -218,7 +217,6 @@ export async function verifyAppleCallback(
     };
   }
 
-  // Validate code
   if (!callbackData.code) {
     return {
       success: false,
