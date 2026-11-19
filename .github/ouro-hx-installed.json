@@ -1,6 +1,6 @@
 {
-  "tag": "v1.3.314",
-  "tagCommit": "9c40a19136ad184aeca989f8833b3c0b86111dd2",
+  "tag": "v1.3.315",
+  "tagCommit": "5d00e1e7cc6b8d3771eab0748f0c2110a7ee3110",
   "files": {
     "app/components/ouro/alert/alert.stories.tsx": "9fc0c3fec0cc4be3ce2281c979da815134bdc67e260645bbd0546fcae092613f",
     "app/components/ouro/alert/alert.test-d.ts": "f60fa946e10cc89dd3a53fc812f3cb458e8e903d034bd7a3e8d1965c62cd0ad4",
@@ -408,15 +408,15 @@
     "app/lib/ouro/appearance-hints.test.ts": "9ba17f9caea7c40c25d00c57b703c1e42f04c07d55b3bdb41b257785cef4dfc1",
     "app/lib/ouro/appearance-hints.ts": "425329b0e45fe239e3ef1710c6c09060730a1e922fe1d29a5780adbde7bc6c7b",
     "app/lib/ouro/ax/checks.ts": "21f7f2dd63a86ce58447c7af3b02dc00069df43620bee53c71b0faa3697a0ff4",
-    "app/lib/ouro/ax/claims.ts": "2557bcff1c03a8b36a7a0f3ce9a17037ec90f43f7e18ef9d91790c5078415919",
+    "app/lib/ouro/ax/claims.ts": "73f3b292ca162467fabf368d27f8af1fc0e3781de0e1efbd043e53f95078bc4a",
     "app/lib/ouro/ax/cli.ts": "1cbaf0a683321b6343c3f45a77934c138d8ea25eac36526d34d688b8ede36234",
-    "app/lib/ouro/ax/command.ts": "0f2b7d0b8ff29bc23a8ff6e360da92f3eb7256b3b854b014b48b27b052ed5c43",
+    "app/lib/ouro/ax/command.ts": "ca4600211879e681b9f2b5fbf69989af42de8fd26ad38e6efb05e45942054492",
     "app/lib/ouro/ax/component.ts": "6d250c2d3d70d62ae106b4a32897e53145f965db4fbfae6c1ec76152a6aa9127",
     "app/lib/ouro/ax/dev-commands.ts": "911d0d56d47f7feb0d64eb96367c29369bd82a7fa925568e8dacda7a4454e09f",
     "app/lib/ouro/ax/doctor.ts": "50f27db03682d620e2c78babc40e4ff9d62f731d07ab4eb52678a7c2ad8a4c9d",
     "app/lib/ouro/ax/effects.ts": "08c5e6ebd2485ec34a6e0d915200bdd09447548754d5b430cfb4941a7c7dc5ca",
     "app/lib/ouro/ax/exit-codes.ts": "b6a6cc62877e7125f17846f9aa0861e3f849fa20cff3e52d4e44391562780d7c",
-    "app/lib/ouro/ax/help.ts": "3e10e7b43b176bfae882ec25ab950f722eca76bda2b24a8239f19f8805dbb1cb",
+    "app/lib/ouro/ax/help.ts": "62940b717f6876e731d2a9f6cd429feaca803c8567667268cdbd72ed44fd3134",
     "app/lib/ouro/ax/outcome.ts": "ab83a9c4182039a7d23a176bdfc159c29aaf9b3515c7bb939190877bdbaefe60",
     "app/lib/ouro/ax/output.ts": "fcee98161b3537d82043898d4139af0fa2b84f4a6fa52bc1bb9c0ed6615356a2",
     "app/lib/ouro/ax/precise-copy.ts": "d93b0f3dc86634e3432b81f8709d1f0ce42e1c63a1554c059ae285f46792edee",
@@ -443,8 +443,8 @@
     "app/lib/ouro/css-panel.tsx": "9639c4b066448f4e8fafd20addfadb6ea78d9daae09c9daf67b0244ebeab9e18",
     "app/lib/ouro/current-path.test.ts": "673a243110ddadee1ea715573546ea96c7ea09d213f1266e738673ec23b0316c",
     "app/lib/ouro/current-path.ts": "bbb63ed157c7458ddec1d11ccf615da1f0978a5f224eeffb7c8fe0ab7a2cc3f6",
-    "app/lib/ouro/dev.test.ts": "ba351682e43be8d5cbcdfea1c094062649e57ea94d9d98da45488fe0d62b695f",
-    "app/lib/ouro/dev.ts": "18136f70d863a16189c3004857ecbdd7c49be7b8144d4d14ef1f57dc16082361",
+    "app/lib/ouro/dev.test.ts": "d69ec85a6710b888a1279a833020564b39bccce5535b9decb5ec399c26061765",
+    "app/lib/ouro/dev.ts": "bdc0a7426fa5b5a29f6ec69a6f9878c880382ec5a01d0df6b3e4de3cbbf53284",
     "app/lib/ouro/env.d.ts": "b9b1f9fbff01e0acecd2452110007846804d4d30e159a302f56312d2771fe90c",
     "app/lib/ouro/feedback.test.ts": "8d92ab26f084a69c94c08b146813c77e3d28727baddd4ff7cb968985b908dc3f",
     "app/lib/ouro/feedback.ts": "592d9c89a6d2b3252325e8cad267de645e50f416b859228b184d9d8a78445489",
@@ -639,7 +639,7 @@
     "e2e/ouro/toggle.spec.ts": "1d395f5ead542e15881e67e073995e4bfdfa3ded65eeb7dd6ab7104d3871135e",
     "e2e/ouro/tooltip.spec.ts": "0281a6131d5e145c3b421001270af27fd2b39c3c57e4b17a5d6061f211a79c5e",
     "scripts/ouro-source-rules.mjs": "04e66616c41d2326ffe914d0d1cae8986af6171655c78db12e0591629f2b78a5",
-    "scripts/ouro/ax/xray.kit.mts": "692b53e9cb44397fb93dd56e2c62a477942fd2ee112700fc69cabbc547157f4f",
-    "scripts/ouro/ax/xray.ts": "75837d3810350237f2f58f32fad218f181f9c949c5f1e4ca61aa4b5d2c72f7bd"
+    "scripts/ouro/ax/xray.kit.mts": "318d4a45d22a360e022d9228f669d96f4fd64080141d3dc3fd931b2d0f3e8e07",
+    "scripts/ouro/ax/xray.ts": "f50250cbfcaf54a1e37436b37f29cc4b5db0ce95ce928d23b95838a11ecf83b3"
   }
 }
