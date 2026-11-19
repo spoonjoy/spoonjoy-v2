@@ -57,10 +57,10 @@ test.describe("Recipe list action on iPhone", () => {
     await increaseScale.click();
     await expect(scaleDisplay).toHaveValue("1.25");
 
-    await expect(listAction).toHaveText("Add to list");
+    await expect(listAction).toHaveAccessibleName("Add to list");
     await listAction.click();
     await expect(page.getByRole("region", { name: "Notifications" }).getByRole("dialog", { name: "4 items added at 1.25x", exact: true })).toBeVisible();
-    await expect(listAction).toHaveText("In list");
+    await expect(listAction).toHaveAccessibleName("In list");
     await expect(listAction).toHaveAttribute("aria-pressed", "true");
     await expectAccessible();
 
