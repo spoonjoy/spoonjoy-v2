@@ -338,7 +338,7 @@ export function Field(props: FieldProps): JSX.Element {
         messages[0]
       )}
     </FieldError>
-  ) : (
+  ) : owner.quiet ? null : (
     <FieldError id={errorId} className={layout === "inline" ? "col-start-2" : undefined} />
   );
   // An inline control comes first, so it reads before its label, and sits to its left. A

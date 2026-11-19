@@ -108,7 +108,9 @@ function surface(avatar: Element): HTMLElement {
 }
 
 function drawn(scope: Element): string {
-  const letters = scope.querySelector("[data-ouro-avatar-initials], [data-ouro-avatar-count]");
+  const selector = "[data-ouro-avatar-initials], [data-ouro-avatar-count]";
+  // A group's slice draws its own initial; every other avatar draws it in an element inside.
+  const letters = scope.matches(selector) ? scope : scope.querySelector(selector);
   const content = letters ? getComputedStyle(letters, "::before").content : "none";
   return content.startsWith('"') ? (JSON.parse(content) as string) : "";
 }

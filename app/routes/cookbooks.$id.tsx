@@ -1,6 +1,5 @@
 import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/cookbooks.$id";
-import { chefDisplayName } from "~/lib/username";
 import { redirect, useLoaderData, useActionData, Form as RouterForm, data, useSubmit, type AppLoadContext, type ShouldRevalidateFunctionArgs } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
@@ -87,6 +86,7 @@ import { TextField } from "~/components/ouro/text-field/text-field";
 import { toast } from "~/lib/ouro/toast";
 import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
+import { SectionHeader } from "~/components/ouro/section-header/section-header";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { CoverPlaceholder } from "~/components/recipe/CoverPlaceholder";
@@ -438,16 +438,10 @@ export default function CookbookDetail() {
       {/* On a foldable held like a book, the cover sits on the left page and the contents on the right. */}
       <div className="mx-auto max-w-5xl" data-fold-book="">
         <div data-fold-page="left">
-        <div className="mb-6 flex items-center justify-between gap-4 print:hidden">
+        <div className="mb-6 print:hidden">
           <Link href="/cookbooks" tone="secondary">
             ← Back to cookbooks
           </Link>
-          <ShareButton
-            variant="plain"
-            url={canonicalUrl}
-            title={cookbook.title}
-            text={`${cookbook.title} by ${cookbook.author.username} on Spoonjoy.`}
-          />
         </div>
 
         <div className="grid gap-8 border-b border-[var(--sj-border-strong)] pb-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
@@ -462,6 +456,16 @@ export default function CookbookDetail() {
                   {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
                 </span>
               </Text>
+            )}
+            // The one-book cookbook (desk target.md, Cookbook): Share cookbook is a capsule under the byline.
+            actions={(
+              <ShareButton
+                label="Share cookbook"
+                className="print:hidden"
+                url={canonicalUrl}
+                title={cookbook.title}
+                text={`${cookbook.title} by ${cookbook.author.username} on Spoonjoy.`}
+              />
             )}
           />
           <CookbookCoverArt
@@ -503,35 +507,32 @@ export default function CookbookDetail() {
             </Text>
           </>} title="No recipes yet" />
         ) : (
-          <section aria-labelledby="cookbook-recipes-heading" className="mt-10">
-            <div className="max-w-3xl">
-              <p className="sj-eyebrow">Contents</p>
-              <h2 id="cookbook-recipes-heading" className="font-sj-display mt-2 text-4xl/10 font-semibold text-[var(--sj-ink)]">
-                Recipes
-              </h2>
-            </div>
+          // Contents as the Apple app sets them: a section header, then numbered rows (01, the
+          // cover tile, the title and "Serves 4"); the number is the list's own counter.
+          <section aria-label="Contents" className="mt-10">
+            <SectionHeader
+              title="Contents"
+              meta={`${cookbook.recipes.length} ${cookbook.recipes.length === 1 ? "recipe" : "recipes"}`}
+            />
 
-            <ItemGroup aria-labelledby="cookbook-recipes-heading" ordered variant="divided" className="@container mt-6 [overflow-wrap:anywhere]">
-              {cookbook.recipes.map((item, index) => (
-                <Item
-                  key={item.id}
-                  href={`/recipes/${item.recipe.id}`}
-                  title={item.recipe.title}
-                  description={
-                    <>
-                      <Text lines={2}>{item.recipe.description ?? `By ${chefDisplayName(item.recipe.chef.username)}`}</Text>
-                      {formatServingsLabel(item.recipe.servings) ? <Text size="sm">{formatServingsLabel(item.recipe.servings)}</Text> : null}
-                    </>
-                  }
-                  media={item.recipe.coverImageUrl ? <img src={item.recipe.coverImageUrl} alt="" {...listImageProps(index, { prioritizeFirst: false })} /> : (
-                    // Native's initial tile, square so the media slot's own corner rounds it as it does a photo.
-                    <CoverPlaceholder aria-hidden="true" data-testid={`cookbook-recipe-cover-placeholder-${item.recipe.id}`} title={item.recipe.title} shape="bleed" />
-                  )}
-                  mediaSize="md"
-                  actions={item.recipe.coverProvenanceLabel ? <CoverProvenanceBadge label={item.recipe.coverProvenanceLabel} /> : undefined}
-                />
-              ))}
-            </ItemGroup>
+            <div className="[counter-reset:contents] [&_ol>li]:grid [&_ol>li]:grid-cols-[2.25rem_minmax(0,1fr)] [&_ol>li]:items-center [&_ol>li]:[counter-increment:contents] [&_ol>li]:before:font-sj-ui [&_ol>li]:before:text-sm [&_ol>li]:before:font-semibold [&_ol>li]:before:tracking-[0.12em] [&_ol>li]:before:text-[var(--sj-brass)] [&_ol>li]:before:tabular-nums [&_ol>li]:before:content-[counter(contents,decimal-leading-zero)]">
+              <ItemGroup aria-label="Contents" ordered variant="divided" className="@container mt-2 [overflow-wrap:anywhere]">
+                {cookbook.recipes.map((item, index) => (
+                  <Item
+                    key={item.id}
+                    href={`/recipes/${item.recipe.id}`}
+                    title={item.recipe.title}
+                    description={formatServingsLabel(item.recipe.servings) ? <Text size="sm">{formatServingsLabel(item.recipe.servings)}</Text> : undefined}
+                    media={item.recipe.coverImageUrl ? <img src={item.recipe.coverImageUrl} alt="" {...listImageProps(index, { prioritizeFirst: false })} /> : (
+                      // Native's initial tile, square so the media slot's own corner rounds it as it does a photo.
+                      <CoverPlaceholder aria-hidden="true" data-testid={`cookbook-recipe-cover-placeholder-${item.recipe.id}`} title={item.recipe.title} shape="bleed" />
+                    )}
+                    mediaSize="md"
+                    actions={item.recipe.coverProvenanceLabel ? <CoverProvenanceBadge label={item.recipe.coverProvenanceLabel} /> : undefined}
+                  />
+                ))}
+              </ItemGroup>
+            </div>
           </section>
         )}
 

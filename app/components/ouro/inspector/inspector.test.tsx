@@ -465,7 +465,7 @@ describe("Inspector geometry", () => {
 
 describe("Inspector", () => {
   it("tags a part's own root with the item it ships in, and its docs", () => {
-    expect([itemFor("time-grid-nav"), itemFor("toast"), itemFor("time-grid"), itemFor("snap-pip-frame"), itemFor("snap-pip-hint")]).toEqual(["time-grid", "toaster", "time-grid", "snap-pip", "snap-pip"]);
+    expect([itemFor("time-grid-nav"), itemFor("toast"), itemFor("time-grid"), itemFor("snap-pip-frame"), itemFor("snap-pip-hint"), itemFor("page-section")]).toEqual(["time-grid", "toaster", "time-grid", "snap-pip", "snap-pip", "page-shell"]);
   });
 
   it("outlines every Ouro component on the page, each tagged with its item and linked to its docs", async () => {

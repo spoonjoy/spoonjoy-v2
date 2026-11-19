@@ -2768,12 +2768,14 @@
       "file": "app/routes/cookbooks._index.tsx",
       "sources": [
         "app/routes/cookbooks._index.tsx",
+        "app/components/cookbook/CookbookCoverArt.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/navigation/dock-context.tsx",
         "app/components/navigation/index.ts",
         "app/components/navigation/mobile-nav.tsx",
         "app/components/navigation/quick-actions.tsx",
         "app/components/navigation/recipes-section-nav.tsx",
+        "app/components/recipe/CoverProvenanceBadge.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
         "app/lib/api-auth.server.ts",
@@ -2812,7 +2814,9 @@
         "app/routes/my-recipes.tsx"
       ],
       "components": [
+        "badge",
         "button",
+        "card",
         "empty",
         "install-prompt",
         "item",
@@ -2827,9 +2831,15 @@
         "toaster"
       ],
       "renders": {
+        "badge": [
+          "app/components/recipe/CoverProvenanceBadge.tsx"
+        ],
         "button": [
           "app/routes/cookbooks._index.tsx",
           "app/routes/my-recipes.tsx"
+        ],
+        "card": [
+          "app/routes/cookbooks._index.tsx"
         ],
         "empty": [
           "app/routes/cookbooks._index.tsx",
@@ -2839,11 +2849,9 @@
           "app/components/navigation/mobile-nav.tsx"
         ],
         "item": [
-          "app/routes/cookbooks._index.tsx",
           "app/routes/my-recipes.tsx"
         ],
         "item-group": [
-          "app/routes/cookbooks._index.tsx",
           "app/routes/my-recipes.tsx"
         ],
         "link": [
@@ -3018,6 +3026,7 @@
         "link",
         "native-select",
         "page-header",
+        "section-header",
         "share-button",
         "tab-bar",
         "tabs",
@@ -3060,6 +3069,9 @@
           "app/routes/cookbooks.$id.tsx"
         ],
         "page-header": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "section-header": [
           "app/routes/cookbooks.$id.tsx"
         ],
         "share-button": [
