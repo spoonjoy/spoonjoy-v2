@@ -16,7 +16,7 @@ overrides:
   deepmerge-ts: 8.0.2
   defu: 6.1.5
   dompurify: 3.4.17
-  effect: 3.20.0
+  effect: 3.22.1
   esbuild@<0.28.1: 0.28.1
   fflate@0.4: 0.4.9
   fflate@0.8: 0.8.3
@@ -2457,8 +2457,8 @@ packages:
     resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==}
     engines: {node: '>=12'}
 
-  effect@3.20.0:
-    resolution: {integrity: sha512-qMLfDJscrNG8p/aw+IkT9W7fgj50Z4wG5bLBy0Txsxz8iUHjDIkOgO3SV0WZfnQbNG2VJYb0b+rDLMrhM4+Krw==}
+  effect@3.22.1:
+    resolution: {integrity: sha512-TNoXushmPOBAjJlthF5d2QwnX2xBPEtcNJr5XKNKbRLbDvBcOYkXlYDfvGfSA0zriwLFuCll5MDtNMAdZL17PQ==}
 
   electron-to-chromium@1.5.439:
     resolution: {integrity: sha512-qu6QIPXhsb+CRcAiTMNjR4A1y/7tCYKkKjr5CZXRVih6qkDf79peZ2BpEU3qoDBNCRrcy3Mra3X9nG5oruuA7Q==}
@@ -4627,7 +4627,7 @@ snapshots:
     dependencies:
       c12: 3.1.0
       deepmerge-ts: 8.0.2
-      effect: 3.20.0
+      effect: 3.22.1
       empathic: 2.0.0
     transitivePeerDependencies:
       - magicast
@@ -5536,7 +5536,7 @@ snapshots:
 
   dotenv@16.6.1: {}
 
-  effect@3.20.0:
+  effect@3.22.1:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 3.23.2
