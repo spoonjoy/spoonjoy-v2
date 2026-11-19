@@ -141,7 +141,6 @@
       "file": "app/routes/_index.tsx",
       "sources": [
         "app/routes/_index.tsx",
-        "app/components/cookbook/CookbookCoverArt.tsx",
         "app/components/cookbook/KitchenHome.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/cooking-now/CookingNow.tsx",
@@ -213,12 +212,11 @@
         "avatar",
         "badge",
         "button",
-        "card",
-        "empty",
-        "heading",
         "item",
         "item-group",
         "link",
+        "menu",
+        "section-header",
         "text"
       ],
       "renders": {
@@ -233,15 +231,6 @@
           "app/components/cooking-now/CookingNow.tsx",
           "app/routes/_index.tsx"
         ],
-        "card": [
-          "app/components/cookbook/KitchenHome.tsx"
-        ],
-        "empty": [
-          "app/components/cookbook/KitchenHome.tsx"
-        ],
-        "heading": [
-          "app/components/cookbook/KitchenHome.tsx"
-        ],
         "item": [
           "app/components/cookbook/KitchenHome.tsx"
         ],
@@ -249,7 +238,14 @@
           "app/components/cookbook/KitchenHome.tsx"
         ],
         "link": [
+          "app/components/cookbook/KitchenHome.tsx",
           "app/components/cooking-now/CookingNow.tsx"
+        ],
+        "menu": [
+          "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "section-header": [
+          "app/components/cookbook/KitchenHome.tsx"
         ],
         "text": [
           "app/components/cookbook/KitchenHome.tsx"
