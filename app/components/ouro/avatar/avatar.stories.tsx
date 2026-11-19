@@ -97,6 +97,36 @@ export const Group: Story = {
   ),
 };
 
+/**
+ * A group chat (`members`) beside a person and a channel, at every size: the person's squircle cut
+ * into slices of its members, two below 40px and three from 40px, with a gap that lets the panel
+ * show through. One member fills it; a group's own picture takes its place.
+ */
+export const GroupChats: Story = {
+  parameters: { screenshot: { name: "avatar-group-chats" } },
+  render: () => (
+    <Surface>
+      {(["xs", "sm", "md", "lg", "xl", "2xl", "3xl"] as const).map((size) => (
+        <div key={size} style={row}>
+          <Avatar name="Ana Lind" src={people[0]!.src} size={size} />
+          <Avatar name="Cooks" members={people} size={size} />
+          <Avatar name="Night shift" members={[people[1]!, people[3]!, people[0]!]} size={size} />
+          <Avatar name="Design reviews" shape="square" size={size} />
+        </div>
+      ))}
+      <div style={row}>
+        <Avatar name="Just us" members={[people[2]!]} size="lg" />
+        <Avatar name="Supper club" members={people} src={portrait("#fecaca", "#c68642")} size="lg" />
+        <Avatar name="Cooks" members={people} size="lg" color="neutral" />
+      </div>
+      <div style={{ ...row, background: "linear-gradient(90deg, var(--primary), var(--destructive))", padding: 12, borderRadius: 12 }}>
+        <Avatar name="Cooks" members={people} size="xl" />
+        <Avatar name="Night shift" members={[people[1]!, people[3]!]} size="xl" />
+      </div>
+    </Surface>
+  ),
+};
+
 /** A stroked 24px icon, as lucide-react draws them. */
 function Icon({ d }: { d: string }) {
   return (
