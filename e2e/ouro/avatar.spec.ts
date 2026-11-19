@@ -26,3 +26,12 @@ test("a presence dot is read after the name", async ({ page }) => {
   await expect(page.getByRole("img", { name: "Grace Hopper, In a meeting" }).first()).toBeVisible();
   await expect(page.getByRole("img", { name: "Available", exact: true })).toBeVisible();
 });
+
+test("a group chat is drawn from its members and says who is in it", async ({ page }) => {
+  await openStory(page, "display-avatar--group-chats");
+  const cooks = page.getByRole("img", { name: "Cooks, group chat with Ana Lind, Grace Hopper and 3 others" }).first();
+  await expect(cooks).toHaveAttribute("data-shape", "group");
+  await expect(cooks.locator("[data-ouro-avatar-slice]")).toHaveCount(2);
+  await expect(page.getByRole("img", { name: /^Cooks, group chat/ }).nth(2).locator("[data-ouro-avatar-slice]")).toHaveCount(3);
+  await expect(page.getByRole("img", { name: "Design reviews" }).first()).toHaveAttribute("data-shape", "square");
+});

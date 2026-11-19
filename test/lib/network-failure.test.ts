@@ -61,6 +61,8 @@ describe("network failure results", () => {
     "Load failed",
     "NetworkError when attempting to fetch resource.",
     "Peer failed to perform TLS handshake: Error receiving data: Connection reset by peer",
+    "Error receiving data: Connection reset by peer",
+    "Error sending data: Connection reset by peer",
   ])("knows fetch's own failure %j as a lost request", (message) => {
     expect(isNetworkFailure(new TypeError(message))).toBe(true);
   });
