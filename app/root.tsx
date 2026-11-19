@@ -30,6 +30,7 @@ import { registerServiceWorkerOnPageLoad } from "~/lib/push-client";
 import { useHydratedMark } from "~/hooks/use-hydrated-mark";
 import { ColorSchemeProvider } from "~/lib/ouro/color-scheme";
 import { colorSchemeScript } from "~/lib/ouro/color-scheme-script";
+import { fragmentFocusScript } from "~/lib/ouro/fragment-focus-script";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { ColorSchemeToggle } from "~/components/ouro/color-scheme-toggle/color-scheme-toggle";
 import { RouteProgress } from "~/components/ouro/route-progress/route-progress";
@@ -321,6 +322,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `(${FOLD_BOOTSTRAP})(window);` }} />
       </head>
       <body className="m-0 bg-[var(--sj-page)] p-0 text-[var(--sj-ink)] antialiased">
+        {/* First in body, after every stylesheet: Safari keeps a person's focus on a page opened at a place on it
+            (/recipes/x#steps) as later stylesheets load (Ouro UI's fragmentFocusScript). */}
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: fragmentFocusScript() }} />
         <ColorSchemeProvider storageKey={THEME_STORAGE_KEY}>
           {/* Ouro UI's links and link buttons navigate through React Router. */}
           <OuroProvider linkComponent={OuroRouterLink} portalContainer={popups}>
