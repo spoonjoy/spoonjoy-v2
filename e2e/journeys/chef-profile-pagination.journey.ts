@@ -42,7 +42,7 @@ test.describe("Chef profile paging", () => {
     await page.goto(PAGER);
     await waitForHydration(page);
     await expect(rows).toHaveCount(PAGE_SIZE);
-    await expect(recipesSection.getByText(`${TOTAL} total`)).toBeVisible();
+    await expect(recipesSection.getByText(`${TOTAL} recipes`, { exact: true })).toBeVisible();
     // Without JavaScript the button is a link to the next page after a cursor.
     await expect(showMore).toHaveAttribute("href", /^\/users\/qa_kitchen_pager\?after=[A-Za-z0-9_-]+$/);
     // The button sits under the list and above Recent cooks.
