@@ -34,6 +34,11 @@ describe("shopping list clientAction", () => {
     expect(serverAction).toHaveBeenCalledTimes(1);
   });
 
+  it("offers nothing to send again for a submission without an intent", async () => {
+    const serverAction = vi.fn().mockRejectedValue(noAnswer());
+    await expect(clientAction({ request: post({}), params: {}, serverAction } as never)).resolves.toMatchObject({ intent: null, resend: null });
+  });
+
   it("rethrows a server's error, which is an answer", async () => {
     const serverError = new Error("Unexpected Server Error");
     await expect(clientAction({ request: post({ intent: "clearAll" }), params: {}, serverAction: vi.fn().mockRejectedValue(serverError) } as never)).rejects.toBe(serverError);
