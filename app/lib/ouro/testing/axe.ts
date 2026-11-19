@@ -722,22 +722,17 @@ async function showsAndHoldsStill(element: Element): Promise<boolean> {
 // The element's box as a canvas, two frames after a change to what it shows. Only the element is
 // taken: the browser paints a whole long page's screenshot wrongly away from where it is scrolled.
 async function screenshot(element: Element): Promise<CanvasRenderingContext2D> {
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  // Vitest's Node process, which runs Playwright, can stall for seconds on other work while the page
+  // holds still, and the stall counts against the limit. A box that shows and holds still gets one
+  // try long enough to wait out the runner (#1668: a shorter first try ran out on each such box on
+  // a loaded runner, and spent its seconds for nothing before the longer one); a box with no area,
+  // hidden, or moving gets a short one, since Playwright never takes it.
+  const timeout = (await showsAndHoldsStill(element)) ? 20_000 : 5000;
   const image = new Image();
   // `caret: "initial"`: hiding the caret, Playwright leaves an empty style attribute on the focused
   // field. The measuring rules hide the caret themselves.
-  const take = (timeout: number) => page.screenshot({ save: false, element, animations: "disabled", caret: "initial", timeout });
-  let data: string;
-  try {
-    data = await take(5000);
-  } catch (error) {
-    // Vitest's Node process, which runs Playwright, can stall for seconds on other work while the
-    // page holds still, and the stall counts against the limit. A box that shows and holds still
-    // did not hold the screenshot up, so it gets one more try, with longer to wait out the runner;
-    // a box with no area never shows.
-    if (!/Timeout/.test((error as Error).message) || !(await showsAndHoldsStill(element))) throw error;
-    data = await take(15_000);
-  }
+  const data = await page.screenshot({ save: false, element, animations: "disabled", caret: "initial", timeout });
   image.src = `data:image/png;base64,${data}`;
   await image.decode();
   const canvas = document.createElement("canvas");

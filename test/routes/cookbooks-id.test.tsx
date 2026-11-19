@@ -1306,7 +1306,7 @@ describe("Cookbooks $id Route", () => {
       expect(screen.getByText("No recipes yet")).toBeInTheDocument();
       expect(screen.getByText("Add recipes to your cookbook using the owner tools below.")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "← Back to cookbooks" })).toHaveAttribute("href", "/cookbooks");
-      fireEvent.click(screen.getByRole("button", { name: "Share" }));
+      fireEvent.click(screen.getByRole("button", { name: "Share cookbook" }));
       await waitFor(() => {
         expect(vi.mocked(share)).toHaveBeenCalledWith({
           title: "My Test Cookbook",
@@ -1396,17 +1396,21 @@ describe("Cookbooks $id Route", () => {
       expect(within(screen.getByLabelText("Recipe Collection cover photos")).getByText("Editorial photo")).toBeInTheDocument();
       // The cover art caption repeats the cookbook title visually (still present as text)
       // but must not add a second heading: the page's h1 already is this title, and a
-      // duplicate/second heading there would appear before the "Recipes" h2 and skip a
+      // duplicate/second heading there would appear before the "Contents" h2 and skip a
       // level (heading-order).
       expect(screen.getAllByText("Recipe Collection").length).toBeGreaterThan(1);
       expect(screen.getAllByRole("heading").map((heading) => heading.tagName)).toEqual(["H1", "H2"]);
-      const recipesSection = screen.getByRole("region", { name: "Recipes" });
+      // Contents as the Apple app sets them: a section header, then numbered rows of tile, title
+      // and servings; the row carries no description.
+      const recipesSection = screen.getByRole("region", { name: "Contents" });
+      expect(within(recipesSection).getByRole("heading", { level: 2, name: "Contents" })).toBeInTheDocument();
+      expect(within(recipesSection).getByRole("list", { name: "Contents" }).tagName).toBe("OL");
       expect(within(recipesSection).getByText("Editorial photo")).toBeInTheDocument();
       expect(within(recipesSection).getByRole("link", { name: "Spaghetti" })).toHaveAttribute(
         "href",
         "/recipes/recipe-1"
       );
-      expect(screen.getByText("Classic pasta")).toBeInTheDocument();
+      expect(screen.queryByText("Classic pasta")).not.toBeInTheDocument();
       expect(screen.getByText("Serves 2")).toBeInTheDocument();
       expect(within(recipesSection).getByRole("link", { name: "Salad" })).toHaveAttribute(
         "href",

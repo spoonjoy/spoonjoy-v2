@@ -221,6 +221,16 @@ test.describe("text axe cannot judge", () => {
     expect(measured.error).toMatch(/covered by span/);
   });
 
+  test("measures through a faint wash drawn over the text, as a hovered row's tint", async ({ page }) => {
+    await show(
+      page,
+      `<p id="t" style="position:relative;color:#000;background:#fff">Washed<span aria-hidden="true" style="position:absolute;inset:0;pointer-events:none;background:rgb(0 0 0 / 0.03)"></span></p>`,
+    );
+    const measured = await measureTextContrast(page, "#t", "fixture");
+    expect(measured.error).toBeUndefined();
+    expect(measured.passed).toBe(true);
+  });
+
   test("measures through a strike drawn in the text's own colour", async ({ page }) => {
     await show(
       page,
@@ -261,6 +271,24 @@ test.describe("text axe cannot judge", () => {
     const measured = await measureTextContrast(page, "#t", "fixture");
     expect(measured.passed).toBe(true);
     expect(measured.inactive).toMatch(/^behind div\[aria-label="Delete"\] while .* is open, and hidden from assistive technology by main/);
+  });
+
+  test("passes hidden text below the fold while an open popup holds the page still, and fails it with none open", async ({ page }) => {
+    // Base UI's scroll lock puts the page back where it was on the next frame.
+    const holdStill = () => {
+      document.body.style.overflow = "hidden";
+      addEventListener("scroll", () => requestAnimationFrame(() => scrollTo(0, 0)));
+    };
+    const fold = `<div style="height:1200px"></div><p style="margin:0;background:#fff"><span id="t" aria-hidden="true" style="color:#123">L</span></p><div style="height:400px"></div>`;
+    await show(page, fold + `<div data-base-ui-portal><div role="menu" data-open style="position:fixed;top:8px;left:8px;width:80px;height:40px;background:#fff">Menu</div></div>`);
+    await page.evaluate(holdStill);
+    const measured = await measureTextContrast(page, "#t", "fixture");
+    expect(measured.passed).toBe(true);
+    expect(measured.inactive).toMatch(/^out of view while div is open and holds the page still, and hidden from assistive technology by span#t$/);
+
+    await show(page, fold);
+    await page.evaluate(holdStill);
+    expect((await measureTextContrast(page, "#t", "fixture")).error).toBe("line 1 moved out of view");
   });
 
   test("fails covered text hidden from assistive technology when no dialog is open", async ({ page }) => {

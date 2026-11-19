@@ -167,6 +167,7 @@ export type TextFieldProps = Omit<FieldControlProps, keyof TextFieldOwnProps | "
 
 /** Field's messages and root name TextField. */
 const owner = { name: "TextField", data: "text-field" };
+const quietOwner = { ...owner, quiet: true } as const;
 
 const preventFocusMove = (event: MouseEvent) => event.preventDefault();
 
@@ -297,6 +298,12 @@ export function TextField(props: TextFieldProps): JSX.Element {
   const startId = `${id}-start`;
   const endId = `${id}-end`;
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // Only a constraint can make the browser report a message, and only a message needs the empty error slot.
+  const constrained =
+    required === true ||
+    type === "email" ||
+    type === "url" ||
+    ["pattern", "minLength", "maxLength", "min", "max", "step"].some((name) => name in rest);
 
   useDevWarnings(
     "TextField",
@@ -393,7 +400,7 @@ export function TextField(props: TextFieldProps): JSX.Element {
   const showClear = clearable && filled && !disabled && !readOnly;
 
   return (
-    <FieldOwnerContext.Provider value={owner}>
+    <FieldOwnerContext.Provider value={constrained ? owner : quietOwner}>
       <Field
         label={label}
         hideLabel={hideLabel}
