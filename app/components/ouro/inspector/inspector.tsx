@@ -29,7 +29,7 @@ export interface InspectorProps {
   /** What X-ray is called, on its bar and as its list's title. Translate it here. @default "X-ray" */
   label?: string | undefined;
   /**
-   * A registry item to point out, such as `"button"`: X-ray scrolls the first one in the page's `main` (or else the first anywhere) to the middle of the screen (at once with reduced motion) and draws its outline stronger, with its tag placed first. Its bar says which item it shows, or that the page has none, and points one out when it appears.
+   * A registry item to point out, such as `"button"`: X-ray scrolls the first one in the page's `main` (or else the first anywhere) to the middle of the screen (at once with reduced motion) and draws its outline stronger, with its tag placed first. If that would scroll the control that opened X-ray off the screen, it scrolls only as far as keeps that control in view, and leaves the page where it is when the item already shows. Its bar says which item it shows, or that the page has none, and points one out when it appears.
    *
    * @claim "A registry item to point out" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > points out the spotlit item: scrolls the first one into view, draws its outline stronger and names it on the bar)
    * @claim "A registry item to point out" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > scrolls to the spotlit item at once with reduced motion)
@@ -139,6 +139,53 @@ function findComponents(own: Element, modal: boolean): Found[] {
 function spotlitOf(components: Found[], spotlight: string | undefined): Found | undefined {
   const all = components.filter((component) => component.item === spotlight);
   return all.find((component) => component.element.closest("main")) ?? all[0];
+}
+
+/** The part of the screen the page scrolls into: the viewport less the root's scroll-padding, which a phone's tab bar sets. */
+function scrollport(): Edges {
+  const style = getComputedStyle(document.documentElement);
+  // The initial scroll-padding is auto, which counts as 0.
+  const top = Number.parseFloat(style.scrollPaddingTop) || 0;
+  const bottom = Number.parseFloat(style.scrollPaddingBottom) || 0;
+  return { top, right: innerWidth, bottom: innerHeight - bottom, left: 0 };
+}
+
+/** Whether a box shows anywhere in the scrollport, which the page scrolls vertically. */
+const showsIn = (box: Edges, port: Edges) => box.top < port.bottom && box.bottom > port.top;
+
+/** Whether an element sits in a box that scrolls it, so the page's own scroll does not bring it into view. */
+function insideScrollContainer(element: Element): boolean {
+  // The walk stops at body: body's overflow carries over to the viewport, whose scroll is the page's own, so a body with
+  // overflow-x hidden (and so overflow-y auto) scrolls nothing itself.
+  for (let node = element.parentElement; node !== document.body; node = node.parentElement) {
+    /* istanbul ignore if @preserve -- every element X-ray spotlights is in the page, so its walk meets body first */
+    // Stryker disable next-line ConditionalExpression,BooleanLiteral: every element X-ray spotlights is in the page, so its walk meets body first; this guards one removed mid-walk.
+    if (node === null) return false;
+    if (/auto|scroll|overlay|hidden/.test(getComputedStyle(node).overflowY)) return true;
+  }
+  return false;
+}
+
+/**
+ * Brings the spotlit element to the middle of the screen, as `block: "center"` does, but keeps the control that opened X-ray on screen (#2340): the scroll stops short of centring when it must, and leaves the page where it is when the element already shows.
+ */
+function pointAt(element: Element, behavior: ScrollBehavior) {
+  const centre = () => element.scrollIntoView({ block: "center", inline: "nearest", behavior });
+  const port = scrollport();
+  const opener = document.activeElement;
+  if (!(opener instanceof HTMLElement) || opener === document.body || opener === document.documentElement) return centre();
+  const control = opener.getBoundingClientRect();
+  if (!showsIn(control, port)) return centre();
+  const target = element.getBoundingClientRect();
+  if (showsIn(target, port)) return;
+  if (insideScrollContainer(element)) return element.scrollIntoView({ block: "nearest", inline: "nearest", behavior });
+  // How far `block: "center"` would scroll: the element's middle to the scrollport's middle.
+  const centring = target.top + target.height / 2 - (port.top + port.bottom) / 2;
+  if (control.top - centring >= port.top && control.bottom - centring <= port.bottom) return centre();
+  // Scrolling down stops once the control's top reaches the scrollport's top; scrolling up, once its bottom reaches the bottom.
+  // Stryker disable next-line EqualityOperator: centring is never 0 here, since an element whose middle is the scrollport's middle shows, and returned above.
+  const delta = centring > 0 ? Math.min(centring, Math.max(0, control.top - port.top)) : Math.max(centring, -Math.max(0, port.bottom - control.bottom));
+  window.scrollBy({ top: delta, behavior });
 }
 
 /** A box's edges on the screen. */
@@ -564,7 +611,7 @@ function InspectorLayer({
   useEffect(() => {
     if (!spotlit || pointedAt.current === spotlit.item) return;
     pointedAt.current = spotlit.item;
-    spotlit.element.scrollIntoView({ block: "center", inline: "nearest", behavior: reduced ? "instant" : "smooth" });
+    pointAt(spotlit.element, reduced ? "instant" : "smooth");
   }, [spotlit, reduced]);
 
   // The layer fades in from `@starting-style` while it carries `data-starting-style`, then drops it.
