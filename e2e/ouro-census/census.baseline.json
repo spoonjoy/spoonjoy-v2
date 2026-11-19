@@ -3443,15 +3443,15 @@
           "count": 1
         },
         {
-          "identity": "button \"Log cook\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
           "identity": "button \"Log the first cook\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Recipe actions\" [button/root] in main",
           "count": 1
         },
         {
@@ -4099,10 +4099,6 @@
           "count": 1
         },
         {
-          "identity": "button \"Log cook\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
@@ -4112,6 +4108,10 @@
         },
         {
           "identity": "button \"Manage recipe\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Recipe actions\" [button/root] in main",
           "count": 1
         },
         {
@@ -4180,10 +4180,6 @@
         },
         {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Edit\" [button/root] in main",
           "count": 1
         },
         {
@@ -4314,7 +4310,7 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [link/root] in banner",
@@ -4428,7 +4424,7 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [link/root] in banner",
@@ -4505,10 +4501,6 @@
           "count": 1
         },
         {
-          "identity": "button \"Log cook\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
@@ -4526,6 +4518,10 @@
         },
         {
           "identity": "button \"Optional Spoon details\" [button/root] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Recipe actions\" [button/root] in main",
           "count": 1
         },
         {
@@ -4610,10 +4606,6 @@
         },
         {
           "identity": "link \"Edit recipe\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"Edit\" [button/root] in main",
           "count": 1
         },
         {
@@ -4756,7 +4748,7 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [link/root] in banner",
@@ -4870,7 +4862,7 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [link/root] in banner",
@@ -5053,6 +5045,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Recipe actions\" [button/root] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Save\" [button/root] in main",
           "count": 1
         },
@@ -5102,10 +5098,6 @@
         },
         {
           "identity": "link \"Fork\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"Log cook\" [button/root] in main",
           "count": 1
         },
         {
@@ -10461,11 +10453,11 @@
           "count": 1
         },
         {
-          "identity": "button \"Log cook\" [button/root] in main",
+          "identity": "button \"Log the first cook\" [button/root] in main",
           "count": 1
         },
         {
-          "identity": "button \"Log the first cook\" [button/root] in main",
+          "identity": "button \"Recipe actions\" [button/root] in main",
           "count": 1
         },
         {
@@ -10921,15 +10913,15 @@
           "count": 1
         },
         {
-          "identity": "button \"Log cook\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Log the first cook\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "button \"Manage recipe\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Recipe actions\" [button/root] in main",
           "count": 1
         },
         {
@@ -10990,10 +10982,6 @@
         },
         {
           "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Edit\" [button/root] in main",
           "count": 1
         },
         {
@@ -11100,7 +11088,7 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
@@ -11198,7 +11186,7 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
@@ -11271,10 +11259,6 @@
           "count": 1
         },
         {
-          "identity": "button \"Log cook\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Log the first cook\" [button/root] in main",
           "count": 1
         },
@@ -11288,6 +11272,10 @@
         },
         {
           "identity": "button \"Optional Spoon details\" [button/root] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Recipe actions\" [button/root] in main",
           "count": 1
         },
         {
@@ -11360,10 +11348,6 @@
         },
         {
           "identity": "link \"Edit recipe\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"Edit\" [button/root] in main",
           "count": 1
         },
         {
@@ -11466,7 +11450,7 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
@@ -11568,7 +11552,7 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
@@ -11711,6 +11695,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Recipe actions\" [button/root] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Save\" [button/root] in main",
           "count": 1
         },
@@ -11760,10 +11748,6 @@
         },
         {
           "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Log cook\" [button/root] in main",
           "count": 1
         },
         {
