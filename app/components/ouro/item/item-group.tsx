@@ -51,13 +51,19 @@ export type ItemGroupProps = Omit<HTMLAttributes<HTMLDivElement>, keyof ItemGrou
 // The group sets its Items' frame: no outline of their own, and padding in an outlined group.
 // A row a person chooses keeps its padding and corners in a divided or plain group, so its selected colour has room.
 const choosable = "[&_[data-ouro=item][data-choosable]]:rounded-ouro-lg [&_[data-ouro=item][data-choosable]]:px-3";
+// The outlined group doesn't clip what is in it: clipping a whole live list to a squircle repaints all of it on each change (#2349).
+// Its first and last rows round their own outer corners to its radius less its border, and clip only their own highlight.
+const outlineEnds =
+  "[&>li:first-child]:overflow-clip [&>li:first-child]:rounded-t-[calc(var(--radius-ouro-xl)-1px)] " +
+  "[&>li:last-child]:overflow-clip [&>li:last-child]:rounded-b-[calc(var(--radius-ouro-xl)-1px)]";
 const variants = {
   divided:
     "[&>li:not(:last-child)]:border-b [&>li]:border-border [&_[data-ouro=item]]:rounded-none [&_[data-ouro=item]]:border-0 [&_[data-ouro=item]]:px-0 " +
     choosable,
   outline:
-    "rounded-ouro-xl border border-border bg-card text-card-foreground overflow-hidden [&>li:not(:last-child)]:border-b [&>li]:border-border " +
-    "[&_[data-ouro=item]]:rounded-none [&_[data-ouro=item]]:border-0 [&_[data-ouro=item]]:px-4",
+    "rounded-ouro-xl border border-border bg-card text-card-foreground [&>li:not(:last-child)]:border-b [&>li]:border-border " +
+    outlineEnds +
+    " [&_[data-ouro=item]]:rounded-none [&_[data-ouro=item]]:border-0 [&_[data-ouro=item]]:px-4",
   plain: `[&_[data-ouro=item]]:rounded-none [&_[data-ouro=item]]:border-0 [&_[data-ouro=item]]:px-0 ${choosable}`,
 } as const;
 

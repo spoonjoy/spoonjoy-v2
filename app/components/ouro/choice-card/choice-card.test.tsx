@@ -66,6 +66,21 @@ describe("ChoiceCard", () => {
     await expect.element(page.getByRole("group", { name: "Cover photo" })).toHaveAccessibleDescription("Shown on the card.");
   });
 
+  it("does not clip its cards: a picture rounds its own top corners to the card's radius less its border", async () => {
+    const { cards } = await render(<ChoiceCard legend="Cover" items={items} />);
+    const card = cards()[0]!;
+    const outer = parseFloat(getComputedStyle(card).borderTopLeftRadius);
+    expect(outer).toBeGreaterThan(1);
+    expect(getComputedStyle(card).overflow).toBe("visible");
+    const picture = card.querySelector("img")!.parentElement!;
+    expect(getComputedStyle(picture).overflow).toBe("clip");
+    expect(parseFloat(getComputedStyle(picture).borderTopLeftRadius)).toBeCloseTo(outer - 1, 2);
+    expect(parseFloat(getComputedStyle(picture).borderTopRightRadius)).toBeCloseTo(outer - 1, 2);
+    expect(getComputedStyle(picture).borderBottomLeftRadius).toBe("0px");
+    // A card with no picture has nothing edge to edge, so nothing in it clips.
+    expect(getComputedStyle(cards()[2]!).overflow).toBe("visible");
+  });
+
   it("chooses a card on a click, marks it with the primary border, and reports the value", async () => {
     const onValueChange = vi.fn();
     const { cards, inputs } = await render(<ChoiceCard legend="Cover" items={items} onValueChange={onValueChange} />);

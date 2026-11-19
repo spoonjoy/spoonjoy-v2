@@ -96,6 +96,26 @@ describe("CodeBlock", () => {
     expect(block.getAttribute("data-language")).toBe("ts");
   });
 
+  it("does not clip its frame: under a bar, the code area rounds its bottom corners to the frame's radius less its border", async () => {
+    const { block, pre } = await render(<CodeBlock language="bash" code={long} />);
+    const outer = parseFloat(getComputedStyle(block).borderBottomLeftRadius);
+    expect(outer).toBeGreaterThan(1);
+    expect(getComputedStyle(block).overflow).toBe("visible");
+    expect(parseFloat(getComputedStyle(pre).borderBottomLeftRadius)).toBeCloseTo(outer - 1, 2);
+    expect(parseFloat(getComputedStyle(pre).borderBottomRightRadius)).toBeCloseTo(outer - 1, 2);
+    expect(getComputedStyle(pre).borderTopLeftRadius).toBe("0px");
+    // The code area is the scroller, so it stays a clipping box for its own long lines.
+    expect(getComputedStyle(pre).overflowX).toBe("auto");
+  });
+
+  it("without a bar, the code area rounds all four corners to the frame's radius less its border", async () => {
+    const { block, pre } = await render(<CodeBlock code={long} copy={false} />);
+    const outer = parseFloat(getComputedStyle(block).borderTopLeftRadius);
+    expect(getComputedStyle(block).overflow).toBe("visible");
+    expect(parseFloat(getComputedStyle(pre).borderTopLeftRadius)).toBeCloseTo(outer - 1, 2);
+    expect(parseFloat(getComputedStyle(pre).borderBottomRightRadius)).toBeCloseTo(outer - 1, 2);
+  });
+
   it("is a figure named by its caption alone, never by its copy button", async () => {
     const { host } = await render(
       <>
