@@ -7,6 +7,7 @@ import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { Skeleton } from "~/components/ouro/skeleton/skeleton";
+import { groupChatWith } from "~/components/ouro/avatar/avatar-styles";
 
 /**
  * Avatar sizes: 24, 32, 40, 48, 64, 72 and 112px.
@@ -32,6 +33,18 @@ export type AvatarShape = "circle" | "square" | "agent";
 
 /** Where the initials' colors come from: a hue picked from the name, the theme's primary, or the neutral surface. */
 export type AvatarColor = "colorful" | "brand" | "neutral";
+
+/** One member of a group chat, as Avatar's `members` takes them. */
+export interface AvatarMember {
+  /** The member's name: their initial comes from it, and screen readers hear it in the group's name. */
+  name: string;
+  /** The member's picture. Until it loads, and if it fails, their initial shows in their hue. */
+  src?: string | undefined;
+  /** What their hue is picked from, when it should not be `name`, as Avatar's `idForColor`. */
+  idForColor?: string | undefined;
+  /** The letters to take their initial from, when it should not come from `name`. */
+  initials?: string | undefined;
+}
 
 /** The props Avatar adds to the `<span>` attributes it passes through. */
 export interface AvatarOwnProps {
@@ -71,7 +84,35 @@ export interface AvatarOwnProps {
    * presence dot). The initials, icon or picture fill the shape, centered. @default "circle"
    * @claim "a presence dot" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar shapes and icons > shows no presence on a square, and names the fix)
    */
-  shape?: AvatarShape | (string & { 'Use "circle", "square" or "agent"; rounded is "square", hexagon is "agent"': never }) | undefined;
+  shape?: AvatarShape | (string & { 'Use "circle", "square" or "agent"; rounded is "square", hexagon is "agent", a group chat is members': never }) | undefined;
+  /**
+   * A group chat's members, which draw the avatar as the group: the person's squircle cut into
+   * slices, one per member shown, with a gap between them that lets what lies behind show
+   * through. Below 40px it shows the first two, side by side; from 40px up, the first three (one
+   * half and two quarters). Each slice is the member's picture, or their initial in their own
+   * hue. One member fills the whole avatar. A group draws no presence dot and takes no `shape`:
+   * a person is the circle, a group chat `members`, and a team, a channel, an app or a bot
+   * `shape="square"`.
+   *
+   * Screen readers hear the group's name and who is in it: "The whole crew, group chat with
+   * Captain Nemo, Professor Aronnax and 2 others" (`membersLabel` for other languages). Pass
+   * `src` for a picture the group set for itself, which shows in place of the slices once it
+   * loads.
+   * @claim "Below 40px it shows the first two" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar group chats > cuts the avatar into two slices below 40px and three from 40px, at every size)
+   * @claim "with a gap between them that lets" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar group chats > leaves a gap between the slices that shows what lies behind)
+   * @claim "Each slice is the member's picture" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar group chats > shows each member's picture, or their initial in their own hue until it loads)
+   * @claim "One member fills the whole avatar" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar group chats > fills the whole avatar with one member)
+   * @claim "A group draws no presence dot" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar group chats > draws no presence and takes no shape, and names the fix)
+   * @claim "Screen readers hear the group's name" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar group chats > says the group's name and who is in it)
+   * @claim "which shows in place of the slices" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar group chats > shows the group's own picture in place of the slices once it loads)
+   */
+  members?: readonly AvatarMember[] | undefined;
+  /**
+   * The words screen readers hear after a group's name, for other languages, from its members'
+   * names. @default "group chat with" the first two names, then the rest's count ("and 2 others")
+   * @claim "the first two names, then the rest's count" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar group chats > says the group's name and who is in it)
+   */
+  membersLabel?: ((names: readonly string[]) => string) | undefined;
   /**
    * How the initials are colored. `"colorful"` picks one of eight hues from `idForColor`
    * (else `name`), so the same person always gets the same one, and the initials keep at
@@ -106,6 +147,12 @@ export interface AvatarOwnProps {
   children?: { 'Use <Avatar name="Ana Lind" initials="AL" />': never };
   /** Not a prop. The initials come from `name`, or pass `initials`: `<Avatar name="Ana Lind" initials="AL" />`. */
   fallback?: { 'Use <Avatar name="Ana Lind" initials="AL" />': never };
+  /** Not a prop. A group chat's people are `members`: `<Avatar name="Crew" members={[{ name: "Ana Lind", src }]} />`. */
+  participants?: { 'Use members={[{ name, src }]}': never };
+  /** Not a prop. A group chat's people are `members`: `<Avatar name="Crew" members={[{ name: "Ana Lind", src }]} />`. */
+  people?: { 'Use members={[{ name, src }]}': never };
+  /** Not a prop. A group chat's people are `members`: `<Avatar name="Crew" members={[{ name: "Ana Lind", src }]} />`. */
+  users?: { 'Use members={[{ name, src }]}': never };
 }
 
 /** An Avatar with a presence dot and the words it says. */
@@ -323,6 +370,38 @@ function initialsOf(name: string): string {
 }
 
 /**
+ * One member's slice of a group's avatar: their picture once it loads, else their initial (one
+ * letter, which a slice has room for) in their hue. A quarter's letter is smaller than a half's.
+ */
+function GroupSlice({ member, tint, quarter }: { member: AvatarMember; tint: string | undefined; quarter: boolean }): JSX.Element {
+  const image = useImageStatus(member.src);
+  const [fill, ink] = (tint ?? hueOf(member.idForColor ?? member.name)).split(" ") as [string, string];
+  return (
+    <span
+      data-ouro-avatar-slice=""
+      data-image={image}
+      className={cn(
+        "relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden",
+        fill,
+        ink,
+        quarter ? "text-[0.75em]" : "row-span-2",
+        // Forced colours paint every fill as the page, so each slice keeps an edge of its own (in CanvasText, as forced colours draw every border).
+        "forced-colors:border",
+      )}
+    >
+      {image === "loaded" ? (
+        <img src={member.src} alt="" className="size-full object-cover" />
+      ) : (
+        <span
+          data-ouro-avatar-initials={Array.from(member.initials ?? initialsOf(member.name))[0]}
+          className="block whitespace-nowrap [text-box:trim-both_cap_alphabetic] before:content-[attr(data-ouro-avatar-initials)]"
+        />
+      )}
+    </span>
+  );
+}
+
+/**
  * One of the hues for a key, the same on the server and in the browser: an FNV hash, mixed by
  * MurmurHash3's finalizer and scaled from its top bits. Without the mix, keys that differ only
  * in their last character (sequential ids) barely move the top bits, and all take one hue.
@@ -408,9 +487,10 @@ function PresenceGlyph({ presence, plain }: { presence: AvatarPresence; plain: b
 /**
  * A person's picture, or their initials until it loads or when it fails, in a color picked
  * from the name. `name` is required: screen readers hear it, and the initials come from it.
- * `presence` adds a status dot that says what it shows (`presenceLabel`), and
+ * `presence` adds a status dot that says what it shows (`presenceLabel`),
  * `shape="square"` marks a team, a channel, an app or a bot, and `shape="agent"` an AI
- * agent. Server HTML holds the initials, and the picture replaces
+ * agent. `members` draws a group chat from its members' pictures or initials, so a group chat
+ * never looks like a channel. Server HTML holds the initials, and the picture replaces
  * them at full strength the moment it loads, with no fade: a picture already in the browser's
  * cache is there on the avatar's first frame.
  *
@@ -422,8 +502,10 @@ function PresenceGlyph({ presence, plain }: { presence: AvatarPresence; plain: b
  * test, find an avatar by its role and name (`getByRole("img", { name: "Ana Lind" })`), not by
  * its letters.
  *
- * Use `AvatarGroup` instead to stack several, and `Badge` for a status label that isn't a person.
+ * Use `AvatarGroup` instead to show several people side by side (the cooks on a recipe), and
+ * `Badge` for a status label that isn't a person.
  *
+ * @claim "so a group chat never looks like a channel" registry/ouro/components/ouro/conversation-list/conversation-list.test.tsx verify:testExists(registry/ouro/components/ouro/conversation-list/conversation-list.test.tsx::ConversationList group chats > draws a group chat's avatar from its members, at the list's size)
  * @claim "with no fade" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar > draws a picture already in the cache at full strength on its first frame, with no fade)
  * @group Display
  * @see https://ui.ouroboros.bot/docs/avatar
@@ -432,6 +514,7 @@ function PresenceGlyph({ presence, plain }: { presence: AvatarPresence; plain: b
  * <Avatar name="Ana Lind" src={user.photoUrl} presence="busy" presenceLabel="In a meeting" />
  * <Avatar name="Grace Hopper" size="lg" idForColor={user.id} />
  * <Avatar name="Design reviews" shape="square" />
+ * <Avatar name="The whole crew" members={crew.map((person) => ({ name: person.name, src: person.photoUrl }))} />
  * <Avatar name="Halden" shape="agent" src={agent.photoUrl} />
  * <span className="flex items-center gap-2"><Avatar name={user.name} alt="" size="sm" />{user.name}</span>
  * @claim "in a color picked from the name" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar colors > picks the same hue for the same name, and spreads names across the hues)
@@ -453,21 +536,29 @@ export function Avatar(props: AvatarProps): JSX.Element {
     presence: presenceProp,
     presenceLabel,
     size: sizeProp,
+    members,
+    membersLabel = groupChatWith,
     className,
     // Guard props (hint types), dropped here so they never reach the DOM.
     children,
     fallback,
+    participants,
+    people,
+    users,
     ...rest
   } = props;
   const name = nameProp ?? "";
   const nameLoading = nameProp === null;
+  // A group chat: drawn from its members, with no shape and no presence of its own.
+  const group = !nameLoading && members !== undefined && members.length > 0;
+  const misnamedMembers = participants !== undefined ? "participants" : people !== undefined ? "people" : users !== undefined ? "users" : undefined;
   const groupSize = useContext(GroupSize);
   // A size, shape, color or presence that is not one of Ouro UI's (a type error) warns and renders the default.
   const size = groupSize ?? checkSize(sizeProp) ?? "md";
-  const shape = oneOf(shapes, shapeProp) ?? "circle";
+  const shape = group ? "circle" : (oneOf(shapes, shapeProp) ?? "circle");
   const color = oneOf(colors, colorProp);
-  // A team has no presence: a square draws no dot and says none.
-  const presence = shape === "square" ? undefined : oneOf(presences, presenceProp);
+  // A team has no presence: a square draws no dot and says none; nor does a group.
+  const presence = shape === "square" || group ? undefined : oneOf(presences, presenceProp);
   const image = useImageStatus(src);
   useAppearanceClassNameCheck(
     "Avatar",
@@ -480,12 +571,32 @@ export function Avatar(props: AvatarProps): JSX.Element {
       ? () => [
           nameProp === undefined && ["name is missing, so screen readers hear nothing", '<Avatar name="Ana Lind" src={url} />'],
           !groupSize && sizeProp !== undefined && !checkSize(sizeProp) && sizeWarning("Avatar", sizeProp),
+          !group &&
+            shapeProp === "group" && [
+              'shape="group" is not a shape; a group chat is drawn from its members',
+              `<Avatar name="${name}" members={[{ name: "Ana Lind", src: ana }, { name: "Ben Ito" }]} />`,
+            ],
           shapeProp !== undefined &&
+            shapeProp !== "group" &&
             !oneOf(shapes, shapeProp) && [
               `shape="${String(shapeProp)}" is not a shape; use "circle", "square", "agent"`,
               `<Avatar shape="${/agent|hex/i.test(String(shapeProp)) ? "agent" : "square"}">`,
             ],
-          shape === "square" &&
+          group &&
+            shapeProp !== undefined && [
+              `a group chat is drawn from its members, so shape="${String(shapeProp)}" does nothing; a channel or team is shape="square" with no members`,
+              `<Avatar name="${name}" members={members} />`,
+            ],
+          group &&
+            presenceProp !== undefined && ["a group chat shows no presence, so members draws no dot", `<Avatar name="${name}" members={members} />`],
+          members !== undefined &&
+            members.length === 0 && [
+              "members is empty, so the avatar shows the group's initials",
+              `<Avatar name="${name}" members={[{ name: "Ana Lind", src: ana }, { name: "Ben Ito" }]} />`,
+            ],
+          misnamedMembers !== undefined && [`${misnamedMembers} is not a prop; a group chat's people are members`, '<Avatar name="Crew" members={[{ name: "Ana Lind", src: ana }]} />'],
+          !group &&
+            shape === "square" &&
             presenceProp !== undefined && ["a team shows no presence, so a square draws no dot", `<Avatar name="${name}" shape="square" />`],
           colorProp !== undefined &&
             !oneOf(colors, colorProp) && [`color="${String(colorProp)}" is not a color; use "colorful", "brand", "neutral"`, '<Avatar color="colorful">'],
@@ -508,7 +619,11 @@ export function Avatar(props: AvatarProps): JSX.Element {
   // A presence's words follow the name, so a screen reader hears "Ana Lind, Busy"; with
   // alt="" (the name written beside it) only the presence is read.
   const spoken = presence ? presenceLabel || presence.replaceAll("-", " ") : "";
-  const label = [alt ?? (nameLoading ? nameLoadingLabel : name), spoken].filter(Boolean).join(", ");
+  const groupWords = group ? membersLabel(members!.map((member) => member.name)) : "";
+  const label = [alt ?? (nameLoading ? nameLoadingLabel : [name, groupWords].filter(Boolean).join(", ")), spoken].filter(Boolean).join(", ");
+  // Two slices below 40px, three from 40px up: a quarter of a smaller avatar is too small to tell who it is.
+  // Stryker disable next-line ArrayDeclaration: the slices are read only for a group, so what a non-group holds here is never drawn.
+  const slices = group ? members!.slice(0, plainSizes.includes(size) ? 2 : 3) : [];
   const glyph = icon !== undefined && icon !== null ? icon : shape === "agent" ? <AgentGlyph /> : undefined;
   const iconShown = glyph !== undefined;
   const tint = color === "neutral" ? neutral : color === "brand" ? brand : hueOf(idForColor ?? name);
@@ -519,7 +634,7 @@ export function Avatar(props: AvatarProps): JSX.Element {
       {...(label ? { role: "img", "aria-label": label } : { "aria-hidden": true })}
       data-ouro="avatar"
       data-image={image}
-      data-shape={shape}
+      data-shape={group ? "group" : shape}
       data-presence={presence}
       data-name-loading={nameLoading ? "" : undefined}
       className={cn(
@@ -527,7 +642,7 @@ export function Avatar(props: AvatarProps): JSX.Element {
         "font-medium leading-none select-none",
         shape === "circle" ? "rounded-[44%]" : "rounded-[24%]",
         shape === "square" && squareEdgeClass,
-        !nameLoading && ink,
+        !nameLoading && !group && ink,
         presence && biteSizes[size],
         sizes[size],
         className,
@@ -536,16 +651,24 @@ export function Avatar(props: AvatarProps): JSX.Element {
       <span
         data-ouro-avatar-surface=""
         className={cn(
-          "absolute inset-0 flex items-center justify-center rounded-[inherit]",
+          "absolute inset-0 rounded-[inherit]",
+          // A group's slices: a half each, or a half and two quarters, with a hole between them, clipped to the
+          // squircle where corner-shape draws it as where the clip path does. Its own picture fills the one cell.
+          group ? "grid grid-rows-2 gap-[max(1px,calc(var(--ouro-edge)*0.6))] overflow-hidden" : "flex items-center justify-center",
           shape === "circle" ? "[--ouro-sq-r:44%]" : "[--ouro-sq-r:24%]",
-          shape === "agent" ? agentTileClass : !nameLoading && fill,
+          shape === "agent" ? agentTileClass : !nameLoading && !group && fill,
+          group && image !== "loaded" && slices.length > 1 && "grid-cols-2",
           presence && biteClass,
-          image !== "loaded" && iconShown && !nameLoading && "*:size-[55%]",
+          image !== "loaded" && iconShown && !nameLoading && !group && "*:size-[55%]",
           nameLoading && "overflow-hidden",
         )}
       >
         {image === "loaded" ? (
-          <img src={src} alt="" className="size-full rounded-[inherit] object-cover" />
+          <img src={src} alt="" className="row-span-2 size-full rounded-[inherit] object-cover" />
+        ) : group ? (
+          slices.map((member, index) => (
+            <GroupSlice key={index} member={member} tint={color === "neutral" ? neutral : color === "brand" ? brand : undefined} quarter={index > 0 && slices.length > 2} />
+          ))
         ) : nameLoading ? (
           // The avatar's own box and corners, so it is the avatar's exact shape; the presence dot stays whole outside it.
           <Skeleton className="size-full [border-radius:inherit]" />
@@ -580,7 +703,7 @@ export function Avatar(props: AvatarProps): JSX.Element {
  * applies to every avatar in it.
  *
  * Use a list of `Avatar`s with names beside them instead when readers need to see who
- * each person is.
+ * each person is, and `<Avatar members>` for a group chat's avatar, which keeps to one avatar's size.
  *
  * The "+N" count is drawn like Avatar's initials, not written, and screen readers hear
  * `moreLabel`, so a button that wraps the group and names itself shows no text its name must hold.
