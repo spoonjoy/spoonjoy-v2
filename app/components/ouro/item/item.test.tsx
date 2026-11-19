@@ -7,6 +7,7 @@ import { Button } from "~/components/ouro/button/button";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Link } from "~/components/ouro/link/link";
+import { Menu, MenuItem } from "~/components/ouro/menu/menu";
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
 import { pressTab } from "~/lib/ouro/testing/tab";
@@ -353,6 +354,28 @@ describe("Item with href", () => {
     link.addEventListener("click", opened);
     await userEvent.click(media);
     expect(opened).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens nothing from a choice in its actions' menu, which React hands up from the menu's portal outside the row", async () => {
+    const shared = vi.fn();
+    await render(
+      <Item
+        href="#soup"
+        title="Lentil soup"
+        actions={
+          <Menu trigger={<Button variant="plain" size="sm" aria-label="More for Lentil soup">More</Button>}>
+            <MenuItem onClick={shared}>Share</MenuItem>
+          </Menu>
+        }
+      />,
+    );
+    const link = page.getByRole("link", { name: "Lentil soup" }).element();
+    const opened = vi.fn((event: Event) => event.preventDefault());
+    link.addEventListener("click", opened);
+    await userEvent.click(page.getByRole("button", { name: "More for Lentil soup" }));
+    await userEvent.click(page.getByRole("menuitem", { name: "Share" }));
+    expect(shared).toHaveBeenCalledTimes(1);
+    expect(opened).not.toHaveBeenCalled();
   });
 
   it("opens a linked row in a new tab from a middle click on its media, with no handler of the app's", async () => {
