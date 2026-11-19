@@ -10,6 +10,8 @@ import { Select, type SelectProps } from "~/components/ouro/select/select";
 import { SelectGroup, SelectItem } from "~/components/ouro/select/select-parts";
 import { focusOptionFromPopup } from "~/components/ouro/select/select-styles";
 import { act } from "~/lib/ouro/testing/act";
+import { drawn, expectFirstFramesInPlace, placeFarBelow, recordPopupFrames } from "~/lib/ouro/testing/popup-frames";
+import { settled as settledBox } from "~/lib/ouro/testing/settled";
 import { pressAndLetGo, pressDuringScroll } from "~/lib/ouro/testing/press";
 
 /** The colour behind an element: the nearest background around it that is not transparent. */
@@ -730,5 +732,18 @@ describe("Select and the page's scroll", () => {
     expect(popup()!.hasAttribute("data-open")).toBe(true);
     expect(behaviorAtPress).toBe("auto");
     expect(window.scrollY).toBe(2000);
+  });
+});
+
+describe("Select first frame", () => {
+  const positioner = () => document.querySelector<HTMLElement>('[data-ouro="select-popup"]')?.parentElement ?? null;
+
+  it("is in place from its first visible frame when its trigger opens it", async () => {
+    placeFarBelow();
+    const { trigger } = await render(<Select label="Course" name="course" options={courses} />);
+    const recording = recordPopupFrames(positioner);
+    await userEvent.click(trigger);
+    await settledBox(drawn(positioner));
+    expectFirstFramesInPlace(await recording.stop());
   });
 });

@@ -139,7 +139,7 @@ describe('AuthLayout', () => {
       )
       const wrapper = container.querySelector('div.sj-page > div')
       expect(wrapper).toHaveClass('grid')
-      expect(wrapper).toHaveClass('min-h-dvh')
+      expect(wrapper).toHaveClass('lg:min-h-dvh')
       expect(wrapper).toHaveClass('lg:grid-cols-[minmax(0,0.92fr)_minmax(24rem,0.58fr)]')
     })
 

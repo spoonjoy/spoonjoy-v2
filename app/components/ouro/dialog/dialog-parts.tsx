@@ -42,7 +42,7 @@ const viewportClass =
 
 const popupClass =
   "relative isolate box-border flex max-h-full min-h-0 flex-col outline-none " +
-  "rounded-xl bg-(--ouro-bg) text-popover-foreground ring-1 ring-border/60 " +
+  "rounded-ouro-xl bg-(--ouro-bg) text-popover-foreground ring-1 ring-border/60 " +
   "[--ouro-bg:var(--popover)] [--ouro-bd:color-mix(in_oklab,var(--border)_60%,transparent)] [--ouro-sq-w:1px] " +
   "[--ouro-sq-r:calc(var(--radius)*var(--ouro-radius-scale,1)*1.4)] shadow-(--shadow-xl) " +
   "[transition:transform_var(--ouro-duration-slow)_var(--ouro-ease-out),opacity_var(--ouro-duration-slow)_var(--ouro-ease-out)] " +
@@ -156,13 +156,15 @@ export function DialogTrigger({ onPointerDown, onKeyDown, ...props }: BaseDialog
  * `--ouro-layer` z-index (50 by default, from ouro-base.css). If your app has fixed
  * bars above z-50, raise it in a `:root` rule of your own after the Ouro tokens, outside
  * any `@layer`: `:root { --ouro-layer: 60; }`. Don't edit the line shadcn wrote; `shadcn add` resets it.
+ * Opened from inside a Sheet, it shows above it.
+ * @claim "Opened from inside a Sheet, it shows" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog stacking above the app's fixed bars > shows above a Sheet it is opened from, modal %s)
  * @claim "Part: moves the dialog to the" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog stacking above the app's fixed bars > puts the portal on the --ouro-layer level, as its own stacking context)
  * @claim "Part: moves the dialog to the" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
  */
 export function DialogPortal(props: Omit<BaseDialog.Portal.Props, "className">): JSX.Element {
   useDialogPart("DialogPortal", "…");
   return (
-    <BaseDialog.Portal {...props} data-ouro="dialog-portal" className="relative isolate z-(--ouro-layer)">
+    <BaseDialog.Portal {...props} data-ouro="dialog-portal" className="relative isolate z-(--ouro-layer) in-[[data-ouro$='-portal']]:z-1001">
       <PortalScope>{props.children}</PortalScope>
     </BaseDialog.Portal>
   );

@@ -541,7 +541,6 @@ async function handleAccountSettingsIntent({
   if (intent === "uploadPhoto") {
     const photo = formData.get("photo");
 
-    // Check if file was provided
     if (!hasUploadedImageFile(photo)) {
       return {
         success: false,
@@ -622,7 +621,6 @@ async function handleAccountSettingsIntent({
   if (intent === "unlinkOAuth") {
     const provider = formData.get("provider")?.toString();
 
-    // Validate provider
     if (!provider || !isValidProvider(provider)) {
       return {
         success: false,
@@ -768,7 +766,6 @@ async function handleAccountSettingsIntent({
   if (intent === "linkOAuth") {
     const provider = formData.get("provider")?.toString();
 
-    // Validate provider
     if (!provider || !isValidProvider(provider)) {
       return {
         success: false,
@@ -804,7 +801,6 @@ async function handleAccountSettingsIntent({
     const newPassword = formData.get("newPassword")?.toString() || "";
     const confirmPassword = formData.get("confirmPassword")?.toString() || "";
 
-    // Check if user has a password set
     const user = await database.user.findUnique({
       where: { id: userId },
       select: { hashedPassword: true, salt: true },
@@ -818,7 +814,6 @@ async function handleAccountSettingsIntent({
       };
     }
 
-    // Validate current password is provided
     if (!currentPassword) {
       return {
         success: false,
@@ -827,7 +822,6 @@ async function handleAccountSettingsIntent({
       };
     }
 
-    // Validate new password is provided
     if (!newPassword) {
       return {
         success: false,
@@ -836,7 +830,6 @@ async function handleAccountSettingsIntent({
       };
     }
 
-    // Validate password length
     if (newPassword.length < 8) {
       return {
         success: false,
@@ -848,7 +841,6 @@ async function handleAccountSettingsIntent({
       };
     }
 
-    // Validate passwords match
     if (newPassword !== confirmPassword) {
       return {
         success: false,
@@ -867,7 +859,6 @@ async function handleAccountSettingsIntent({
       };
     }
 
-    // Check if new password is same as current
     const isSamePassword = await verifyStoredPassword(newPassword, { hashedPassword: user.hashedPassword, salt: user.salt });
     if (isSamePassword) {
       return {
@@ -934,7 +925,6 @@ async function handleAccountSettingsIntent({
     const newPassword = formData.get("newPassword")?.toString() || "";
     const confirmPassword = formData.get("confirmPassword")?.toString() || "";
 
-    // Check if user already has a password
     const user = await database.user.findUnique({
       where: { id: userId },
       select: { hashedPassword: true },
@@ -948,7 +938,6 @@ async function handleAccountSettingsIntent({
       };
     }
 
-    // Validate new password is provided
     if (!newPassword) {
       return {
         success: false,
@@ -957,7 +946,6 @@ async function handleAccountSettingsIntent({
       };
     }
 
-    // Validate password length
     if (newPassword.length < 8) {
       return {
         success: false,
@@ -969,7 +957,6 @@ async function handleAccountSettingsIntent({
       };
     }
 
-    // Validate passwords match
     if (newPassword !== confirmPassword) {
       return {
         success: false,
@@ -978,7 +965,6 @@ async function handleAccountSettingsIntent({
       };
     }
 
-    // Hash and save password
     const { hashedPassword, salt } = await hashPassword(newPassword);
     await retryD1Write({ scope: "account.set_password" }, () => database.user.update({
       where: { id: userId },
@@ -1002,7 +988,6 @@ async function handleAccountSettingsIntent({
       message,
     });
 
-    // Check if user has a password to remove
     const user = await database.user.findUnique({
       where: { id: userId },
       select: {
@@ -1040,7 +1025,6 @@ async function handleAccountSettingsIntent({
       return failure("recent_sign_in_required", REMOVE_PASSWORD_RECENT_SIGN_IN_MESSAGE);
     }
 
-    // Remove password
     await retryD1Write({ scope: "account.remove_password" }, () => database.user.update({
       where: { id: userId },
       data: { hashedPassword: null, salt: null },

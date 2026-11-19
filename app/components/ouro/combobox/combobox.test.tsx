@@ -10,6 +10,9 @@ import { Combobox, type ComboboxItem, type ComboboxProps } from "~/components/ou
 import { Dialog } from "~/components/ouro/dialog/dialog";
 import { Form } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
+import { watchAnnouncements } from "~/lib/ouro/testing/announcements";
+import { drawn, expectFirstFramesInPlace, placeFarBelow, recordPopupFrames } from "~/lib/ouro/testing/popup-frames";
+import { settled as settledBox } from "~/lib/ouro/testing/settled";
 import { pressDuringScroll } from "~/lib/ouro/testing/press";
 import { pressTab } from "~/lib/ouro/testing/tab";
 import { audit, axeExclude, describeFindings } from "~/lib/ouro/testing/axe";
@@ -268,6 +271,37 @@ describe("Combobox", () => {
     await userEvent.click(input);
     await userEvent.type(input, "zz");
     await expect.element(page.getByText("No herbs match.")).toBeVisible();
+  });
+
+  it("takes content for its empty state, such as a picture with words, said politely once each time nothing matches", async () => {
+    const announced = watchAnnouncements();
+    try {
+      const empty = (
+        <figure data-testid="nothing" style={{ margin: 0 }}>
+          <svg aria-hidden="true" width="48" height="48" />
+          <figcaption>No herbs by that name.</figcaption>
+        </figure>
+      );
+      const { input } = await render(<Combobox label="Herb" items={herbs} empty={empty} emptyLabel="Unused" />);
+      await userEvent.click(input);
+      await userEvent.type(input, "zz");
+      await expect.element(page.getByText("No herbs by that name.")).toBeVisible();
+      const region = document.querySelector('[data-testid="nothing"]')!.closest('[role="status"]')!;
+      expect(region.getAttribute("aria-live")).toBe("polite");
+      expect(document.body.textContent).not.toContain("Unused");
+      // Typing on while nothing matches leaves it as it was, so it is not said again.
+      await userEvent.type(input, "z");
+      await act(async () => {});
+      expect(announced.count("No herbs by that name.")).toBe(1);
+      // Matching again, and then nothing again, is a change, said once more.
+      await userEvent.clear(input);
+      await userEvent.type(input, "b");
+      await expect.element(page.getByRole("option", { name: "Basil" })).toBeVisible();
+      await userEvent.type(input, "q");
+      await expect.poll(() => announced.count("No herbs by that name.")).toBe(2);
+    } finally {
+      announced.stop();
+    }
   });
 
   it("clears the value with the clear button and puts focus back in the input", async () => {
@@ -572,6 +606,8 @@ describe("Combobox motion", () => {
     await userEvent.keyboard("{ArrowDown}");
     await expect.poll(popup).not.toBeNull();
     const element = popup()!;
+    // The opening frame draws with no transition (data-starting-style); the leave is read once that frame is over (#1839).
+    await expect.poll(() => element.hasAttribute("data-starting-style")).toBe(false);
     element.style.setProperty("--transform-origin", "7px 3px");
     expect(getComputedStyle(element).transformOrigin).toBe("7px 3px");
     element.setAttribute("data-ending-style", "");
@@ -1174,5 +1210,18 @@ describe("Combobox in a Dialog", () => {
     const box = option.getBoundingClientRect();
     // What is drawn at the option's middle is the option, not the dialog over it.
     await expect.poll(() => option.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);
+  });
+});
+
+describe("Combobox first frame", () => {
+  const positioner = () => popup()?.parentElement ?? null;
+
+  it("is in place from its first visible frame when its input opens it", async () => {
+    placeFarBelow();
+    const { input } = await render(<Combobox label="Herb" name="herb" items={herbs} />);
+    const recording = recordPopupFrames(positioner);
+    await userEvent.click(input);
+    await settledBox(drawn(positioner));
+    expectFirstFramesInPlace(await recording.stop());
   });
 });

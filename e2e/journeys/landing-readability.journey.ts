@@ -135,6 +135,10 @@ async function checkAction(page: Page, measurements: Measurements, action: Locat
     await action.focus();
     await expect(action).toBeFocused();
     await recordCovered(measurements, action, `${name}, focused`);
+    // WebKit's focus scroll can stop with the action flush against the viewport's top, where the pixels
+    // the edge and outline checks sample around it are off screen (#733). Centre it, keeping focus, to measure.
+    await action.evaluate((element) => element.scrollIntoView({ block: "center" }));
+    await expect(action).toBeFocused();
     recordText(measurements, await measureTextContrast(page, action, `${name} focused`));
     await recordBoundary(page, measurements, action, `${name} focused`);
     const ring = await measureFocusIndicator(page, action, name);

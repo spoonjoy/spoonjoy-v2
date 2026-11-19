@@ -1,4 +1,5 @@
 import { createRef, useState, type ReactNode, type Ref } from "react";
+import { Menu } from "@base-ui/react/menu";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +12,7 @@ import {
   SheetDescription,
   SheetHandle,
   SheetPopup,
+  SheetScrim,
   SheetPortal,
   SheetRoot,
   SheetTitle,
@@ -18,7 +20,7 @@ import {
   SheetViewport,
 } from "~/components/ouro/sheet/sheet-parts";
 import { registerSheetProperties } from "~/components/ouro/sheet/sheet-styles";
-import { Sheet, SheetFrame, type SheetProps } from "~/components/ouro/sheet/sheet";
+import { Sheet, SheetFrame, type SheetProps, type SheetSnapPoint } from "~/components/ouro/sheet/sheet";
 import { act } from "~/lib/ouro/testing/act";
 import { pageCss } from "~/lib/ouro/testing/page-css";
 import { pressTab } from "~/lib/ouro/testing/tab";
@@ -100,6 +102,16 @@ function Body() {
         Note <input aria-label="Note" />
       </label>
     </>
+  );
+}
+
+/** A bottom SheetFrame whose snap points and held snap point its caller sets, as Command holds its phone sheet's size. */
+function HeldSheet({ snapPoints, snapPoint }: { snapPoints: SheetSnapPoint[]; snapPoint: number }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <SheetFrame title="Save to cookbook" closeLabel="Close" side="bottom" snapPoints={snapPoints} snapPoint={snapPoint} open={open} onOpenChange={setOpen}>
+      <Body />
+    </SheetFrame>
   );
 }
 
@@ -519,6 +531,16 @@ describe("feel", () => {
     expect(Math.abs(innerHeight - sheet.getBoundingClientRect().top - innerHeight / 2)).toBeLessThanOrEqual(2);
   });
 
+  it("rests at the snap point its caller holds, not the first one, and moves when the caller changes it, with no warning", async () => {
+    await render(<HeldSheet snapPoints={[0.5, 1]} snapPoint={1} />);
+    await settled();
+    // Uncontrolled, this sheet would rest at its first snap point, half the viewport.
+    expect(innerHeight - popup()!.getBoundingClientRect().top).toBeGreaterThan(innerHeight * 0.9);
+    await act(async () => roots.at(-1)!.render(<HeldSheet snapPoints={[0.5, 1]} snapPoint={0.5} />));
+    await settled();
+    expect(Math.abs(innerHeight - popup()!.getBoundingClientRect().top - innerHeight / 2)).toBeLessThanOrEqual(2);
+  });
+
   it("gives a top sheet with snap points the full height less the gap, and fits a top sheet without them", async () => {
     const fitted = await openUncontrolled({ side: "top" });
     const fittedHeight = fitted.getBoundingClientRect().height;
@@ -764,9 +786,43 @@ describe("close control", () => {
   });
 });
 
+describe("sheet in a sheet", () => {
+  it.each([true, false])("shows a Sheet opened from inside a Sheet above it, outer modal %s", async (modal) => {
+    await page.viewport(390, 844);
+    await render(
+      <Sheet title="Look" modal={modal} open onOpenChange={() => {}}>
+        <Sheet title="Rename look" trigger={<Button>Rename</Button>}>
+          <input aria-label="Name" />
+        </Sheet>
+      </Sheet>,
+    );
+    await userEvent.click(page.getByRole("button", { name: "Rename" }));
+    const field = page.getByRole("textbox", { name: "Name" });
+    await expect.element(field).toBeVisible();
+    await expect
+      .poll(() => {
+        const box = (field.element() as HTMLElement).getBoundingClientRect();
+        return field.element().contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
+      })
+      .toBe(true);
+  });
+});
+
 describe("non-modal sheet", () => {
   /** A page with its own controls and a side sheet beside it that leaves it in use. */
-  function Preview({ onPage = () => {}, onOpenChange = () => {} }: { onPage?: () => void; onOpenChange?: (open: boolean) => void }) {
+  function Preview({
+    onPage = () => {},
+    onOpenChange = () => {},
+    closeOnOutsidePress,
+    scrim,
+    children = <Button>Ocean</Button>,
+  }: {
+    onPage?: () => void;
+    onOpenChange?: (open: boolean) => void;
+    closeOnOutsidePress?: boolean;
+    scrim?: boolean;
+    children?: ReactNode;
+  }) {
     const [open, setOpen] = useState(true);
     return (
       <>
@@ -778,13 +834,15 @@ describe("non-modal sheet", () => {
           title="Look"
           side="right"
           modal={false}
+          closeOnOutsidePress={closeOnOutsidePress}
+          scrim={scrim}
           open={open}
           onOpenChange={(next) => {
             onOpenChange(next);
             setOpen(next);
           }}
         >
-          <Button>Ocean</Button>
+          {children}
         </Sheet>
       </>
     );
@@ -842,6 +900,130 @@ describe("non-modal sheet", () => {
     (page.getByRole("button", { name: "Ocean" }).element() as HTMLElement).focus();
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => popup()).toBeNull();
+  });
+
+  it("with closeOnOutsidePress, closes on a press on the page, and the press still reaches the page", async () => {
+    await page.viewport(1280, 800);
+    const onPage = vi.fn();
+    const onOpenChange = vi.fn();
+    await render(<Preview onPage={onPage} onOpenChange={onOpenChange} closeOnOutsidePress />);
+    await settled();
+    await userEvent.click(page.getByRole("button", { name: "Ocean" }));
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await userEvent.click(page.getByRole("button", { name: "Page action" }));
+    expect(onPage).toHaveBeenCalledOnce();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    await expect.poll(() => popup()).toBeNull();
+  });
+
+  it("with scrim, the page keeps its colours and contrast, the layer takes no presses, and a press on the page still closes it", async () => {
+    await page.viewport(1280, 800);
+    const onPage = vi.fn();
+    const onOpenChange = vi.fn();
+    await render(<Preview onPage={onPage} onOpenChange={onOpenChange} closeOnOutsidePress scrim />);
+    await settled();
+    const scrim = document.querySelector<HTMLElement>('[data-ouro="sheet-scrim-backdrop"]')!;
+    expect(scrim).not.toBeNull();
+    expect(backdrop()).toBeNull();
+    const style = getComputedStyle(scrim);
+    expect(style.pointerEvents).toBe("none");
+    expect(scrim.getAttribute("aria-hidden")).toBe("true");
+    // The page beside a non-modal sheet is in use: a tint over it lowers its text's contrast, and an app's text near
+    // 4.5:1 falls under it (spoonjoy-v2#770's "Change look" button, 4.56:1 to about 4.2:1 under a 10% tint).
+    expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(style.backgroundImage).toBe("none");
+    expect(style.backdropFilter === "none" || style.backdropFilter === "").toBe(true);
+    expect(getComputedStyle(popup()!).boxShadow).not.toBe("none");
+    await userEvent.click(page.getByRole("button", { name: "Page action" }));
+    expect(onPage).toHaveBeenCalledOnce();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    await expect.poll(() => popup()).toBeNull();
+  });
+
+  it("draws no scrim unless asked, and not on a modal sheet, which has its backdrop", async () => {
+    await page.viewport(1280, 800);
+    await render(<Preview />);
+    await settled();
+    expect(document.querySelector('[data-ouro="sheet-scrim-backdrop"]')).toBeNull();
+    await render(
+      <Sheet title="Modal" open onOpenChange={() => {}} scrim>
+        <Body />
+      </Sheet>,
+    );
+    await settled();
+    expect(document.querySelector('[data-ouro="sheet-scrim-backdrop"]')).toBeNull();
+    expect(backdrop()).not.toBeNull();
+  });
+
+  it("with closeOnOutsidePress, stays open on a press in a menu or a dialog opened from inside it", async () => {
+    await page.viewport(1280, 800);
+    const onOpenChange = vi.fn();
+    const onPick = vi.fn();
+    await render(
+      <Preview onOpenChange={onOpenChange} closeOnOutsidePress>
+        <Menu.Root>
+          <Menu.Trigger>Sort</Menu.Trigger>
+          <Menu.Portal>
+            {/* Its portal nests in the sheet's, so it clears the sheet's own layers (z-1000). */}
+            <Menu.Positioner style={{ zIndex: 1001 }}>
+              <Menu.Popup>
+                <Menu.Item onClick={onPick}>Newest first</Menu.Item>
+              </Menu.Popup>
+            </Menu.Positioner>
+          </Menu.Portal>
+        </Menu.Root>
+        <Sheet title="Rename" trigger={<Button>Rename</Button>}>
+          <input aria-label="Name" />
+        </Sheet>
+      </Preview>,
+    );
+    await settled();
+    await userEvent.click(page.getByRole("button", { name: "Sort" }));
+    await userEvent.click(page.getByRole("menuitem", { name: "Newest first" }));
+    expect(onPick).toHaveBeenCalledOnce();
+    await userEvent.click(page.getByRole("button", { name: "Rename" }));
+    await expect.element(page.getByRole("dialog", { name: "Rename" })).toBeVisible();
+    await userEvent.click(page.getByRole("textbox", { name: "Name" }));
+    await userEvent.keyboard("Tide");
+    expect(onOpenChange).not.toHaveBeenCalled();
+    // The panel is still open beneath the dialog, which hides it from the accessibility tree while it is open.
+    expect(document.querySelectorAll('[data-ouro="sheet"]')).toHaveLength(2);
+  });
+
+  it.each(["tab", "code"] as const)("with closeOnOutsidePress, closes when focus moves out of it by %s, and leaves focus where it went", async (leave) => {
+    await page.viewport(1280, 800);
+    await render(
+      <>
+        <input aria-label="Page field" />
+        <Sheet title="Look" side="right" modal={false} closeOnOutsidePress trigger={<Button>Open look</Button>}>
+          <Button>Ocean</Button>
+        </Sheet>
+      </>,
+    );
+    await userEvent.click(page.getByRole("button", { name: "Open look" }));
+    await settled();
+    const ocean = page.getByRole("button", { name: "Ocean" }).element() as HTMLElement;
+    const field = page.getByRole("textbox", { name: "Page field" }).element() as HTMLElement;
+    ocean.focus();
+    if (leave === "tab") await userEvent.keyboard("{Tab}{Tab}");
+    else field.focus();
+    await expect.poll(() => popup()).toBeNull();
+    expect(document.activeElement).not.toBe(document.body);
+    if (leave === "code") expect(document.activeElement).toBe(field);
+  });
+
+  it("closeOnOutsidePress={false} keeps a modal sheet open on a press on its backdrop", async () => {
+    const onOpenChange = vi.fn();
+    await render(
+      <Sheet title="Save to cookbook" open onOpenChange={onOpenChange} closeOnOutsidePress={false}>
+        <Body />
+      </Sheet>,
+    );
+    await settled();
+    expect(backdrop()).not.toBeNull();
+    await userEvent.click(document.body, { position: { x: 20, y: 20 } });
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(popup()).not.toBeNull();
   });
 
   it("built from parts, stays open on a press on the page, unless the app passes disablePointerDismissal={false}", async () => {
@@ -1039,7 +1221,7 @@ describe("Sheet dev messages", () => {
   it.each([
     ["bg-white", ":root { --popover: …; } .dark { --popover: …; }"],
     ["rounded-none", ":root { --radius: 0px }"],
-    ["rounded-3xl", ":root { --radius: 0.75rem }"],
+    ["rounded-ouro-3xl", ":root { --radius: 0.75rem }"],
     ["text-lg", '<Sheet title="…"><div className="text-lg">…</div></Sheet>'],
   ])("warns about the appearance class %s on the popup", async (token, fix) => {
     await openUncontrolled({ className: `mx-auto ${token}` });
@@ -1316,6 +1498,7 @@ describe("Sheet parts", () => {
     ["SheetTrigger", <SheetTrigger key="t" />, shape("…")],
     ["SheetPortal", <SheetPortal key="p" />, shape("…")],
     ["SheetBackdrop", <SheetBackdrop key="b" />, shape("…")],
+    ["SheetScrim", <SheetScrim key="s" />, shape("…")],
     ["SheetViewport", <SheetViewport key="v" />, shape("…")],
     ["SheetPopup", <SheetPopup key="pp" />, shape("…")],
     ["SheetHandle", <SheetHandle key="h" />, shape("<SheetHandle />…")],

@@ -791,11 +791,17 @@ function lift(rule: HTMLStyleElement): void {
  * Passes when the text color, as painted over that pixel, meets `required` (4.5 or 3). Where an open
  * popup covers the text (its shadow too), the covered part is hidden while it is open, and only what
  * still shows is measured. It puts back every scroll position it moves, leaves nothing on the
- * focused field, and leaves no color easing outside shadow roots.
+ * focused field, and leaves no color easing outside shadow roots. Text the page does not scroll onto
+ * the screen, as a popup's scroll lock can hold it, is left out: no picture of the screen shows its
+ * pixels, no one sees it while the page is held, and a scan with the popup closed measures it.
+ * Text taller than the screen is measured part by part, each part scrolled onto the screen in turn,
+ * and the worst part decides it.
  *
  * @example
  * const verdict = await measureTextContrast(label, 4.5);
  * expect(verdict).toEqual({ pass: true });
+ * @claim "Text taller than the screen is measured part by part" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails a tall paragraph whose gradient darkens below the fold, and names the part below the fold that fails)
+ * @claim "and the worst part decides it" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes the same tall paragraph over plain white, as every part of its text meets 4.5:1)
  * @claim "Measures text contrast that axe left undecided" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes text over a gradient when every pixel behind it meets 4.5:1, and fails faint text over the same gradient)
  * @claim "Measures text contrast that axe left undecided" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > measures a line drawn over text as what the text is seen against, though axe never sees it)
  * @claim "Measures text contrast that axe left undecided" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > measures text once its color transitions finish, as after a switch to dark)
@@ -807,6 +813,9 @@ function lift(rule: HTMLStyleElement): void {
  * @claim "It puts back every scroll position it moves" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > puts back the scroll position of a scrolled box inside a shadow root)
  * @claim "leaves nothing on the focused field" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > leaves no trace on the focused field when it screenshots the page)
  * @claim "and leaves no color easing" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > leaves no transition running when it is done, its own text's or a link's elsewhere on the page)
+ * @claim "Text the page does not scroll onto" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > leaves out text below the fold that a page held still cannot scroll onto the screen, rather than measuring it against the pixels there)
+ * @claim "Text the page does not scroll onto" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > leaves out text below the fold under a page held still that shares a box with text on the screen, rather than measuring it against pixels the screen does not show)
+ * @claim "Text the page does not scroll onto" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > measures text on the screen under a page held still as it shows)
  */
 async function measureTextContrast(element: Element, required: number): Promise<Verdict> {
   return keepingScroll(async () => (await measureTexts(element, [{ element, required }], true))[0]!);
@@ -870,6 +879,42 @@ function scrollerAround(element: Element): HTMLElement | undefined {
 
 // Whether all of an element's text shows: inside every box that clips it up to `root`, and the screen.
 function inView(element: Element, root: Element): boolean {
+  const clip = clipAround(element, root);
+  return textBoxes(element).every((box) => box.left >= clip.left - 1 && box.right <= clip.right + 1 && box.top >= clip.top - 1 && box.bottom <= clip.bottom + 1);
+}
+
+// Whether the page is held: its viewport's overflow hidden or clipped. The viewport takes <html>'s
+// overflow when <html> sets one, and <body>'s otherwise, as Base UI's scroll lock reads it.
+function viewportHeld(): boolean {
+  const html = getComputedStyle(document.documentElement).overflowY;
+  return /hidden|clip/.test(html === "visible" ? getComputedStyle(document.body).overflowY : html);
+}
+
+// A transparent box over the viewport, which no pointer, hit test or assistive technology meets.
+function viewportFrame(): HTMLElement {
+  const frame = document.createElement("div");
+  frame.setAttribute("aria-hidden", "true");
+  frame.setAttribute("data-ouro-measure-frame", "");
+  frame.style.cssText = "position:fixed;inset:0;pointer-events:none;background:transparent;z-index:-1";
+  return frame;
+}
+
+// Whether a box on the screen covers the centre of a screen pixel: a sliver of text at the edge
+// of a held page, short of any pixel's centre, shows nothing to measure.
+function onScreenBox(left: number, top: number, right: number, bottom: number): boolean {
+  const covers = (start: number, end: number, size: number) => Math.ceil(Math.max(0, start) - 0.5) + 0.5 < Math.min(size, end);
+  return covers(left, right, window.innerWidth) && covers(top, bottom, window.innerHeight);
+}
+
+// Whether any of an element's text is on the screen now. Text the page did not scroll onto the
+// screen has no picture to be measured in.
+function onScreen(element: Element): boolean {
+  return textBoxes(element).some((box) => onScreenBox(box.left, box.top, box.right, box.bottom));
+}
+
+// The part of the screen an element's text inside `root` can show through: the screen, cut by every
+// box below `root` that clips it.
+function clipAround(element: Element, root: Element): DOMRect {
   let clip = new DOMRect(0, 0, window.innerWidth, window.innerHeight);
   for (let parent = element.parentElement; parent; parent = parent === root ? null : parent.parentElement) {
     const style = getComputedStyle(parent);
@@ -879,8 +924,100 @@ function inView(element: Element, root: Element): boolean {
     const top = Math.max(clip.top, box.top);
     clip = new DOMRect(left, top, Math.min(clip.right, box.right) - left, Math.min(clip.bottom, box.bottom) - top);
   }
-  return textBoxes(element).every((box) => box.left >= clip.left - 1 && box.right <= clip.right + 1 && box.top >= clip.top - 1 && box.bottom <= clip.bottom + 1);
+  return clip;
 }
+
+// Whether a box lies within a clip, whole.
+const within = (box: DOMRect, clip: DOMRect) => box.left >= clip.left && box.right <= clip.right && box.top >= clip.top && box.bottom <= clip.bottom;
+
+// Scrolls the line `line` returns to the centre of what shows it: each box around `element` that
+// scrolls, innermost first, and then the window.
+function scrollLineToCentre(element: Element, line: () => DOMRect): void {
+  for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
+    const { overflowX, overflowY } = getComputedStyle(node);
+    if (![overflowX, overflowY].some((overflow) => overflow === "auto" || overflow === "scroll")) continue;
+    const box = line();
+    const frame = node.getBoundingClientRect();
+    node.scrollTo({
+      left: node.scrollLeft + box.left + box.width / 2 - frame.left - node.clientLeft - node.clientWidth / 2,
+      top: node.scrollTop + box.top + box.height / 2 - frame.top - node.clientTop - node.clientHeight / 2,
+      behavior: "instant",
+    });
+  }
+  const box = line();
+  window.scrollTo({
+    left: window.scrollX + box.left + box.width / 2 - window.innerWidth / 2,
+    top: window.scrollY + box.top + box.height / 2 - window.innerHeight / 2,
+    behavior: "instant",
+  });
+}
+
+// Where the centre of the screen falls in an element's text: the offset from the element's top of
+// the line nearest it.
+function centreOffset(element: Element): number {
+  const middle = (box: DOMRect) => Math.abs(box.top + box.height / 2 - window.innerHeight / 2);
+  const nearest = textBoxes(element).reduce((best, box) => (middle(box) < middle(best) ? box : best));
+  return Math.round(nearest.top - element.getBoundingClientRect().top);
+}
+
+// The part of the screen a picture of `root` shows an element's text through: the screen, cut by the
+// boxes that clip the text below `root`, and by `root`'s own box, which the picture takes.
+function regionOf(element: Element, root: Element): DOMRect {
+  const clip = clipAround(element, root);
+  const rect = root.getBoundingClientRect();
+  const left = Math.max(clip.left, rect.left);
+  const top = Math.max(clip.top, rect.top);
+  return new DOMRect(left, top, Math.min(clip.right, rect.right) - left, Math.min(clip.bottom, rect.bottom) - top);
+}
+
+// Whether a box covers at least a pixel of a region, in both directions.
+const overlaps = (box: DOMRect, region: DOMRect) => Math.min(box.right, region.right) - Math.max(box.left, region.left) >= 1 && Math.min(box.bottom, region.bottom) - Math.max(box.top, region.top) >= 1;
+
+// Measures the parts of each passing item's text that the first picture did not show whole, one
+// line at a time: the line is scrolled to the centre of the screen and the screen is shot again,
+// measuring every item still passing, so a line is measured against the pixels behind it. A part
+// that fails replaces the verdict with the line it is centred on. A line no scroll brings whole into
+// its region gives up its item's other lines too, as text no scroll reaches stays out. A held page's
+// scrolls do not stick (#1965), so there the first picture is the whole measurement.
+async function measureParts(root: Element, items: Measured[], verdicts: Map<Measured, Verdict>, last: boolean): Promise<void> {
+  if (viewportHeld()) return;
+  const tried = new Map<Measured, Set<number>>(items.map((item) => [item, new Set<number>()]));
+  for (;;) {
+    let next: { item: Measured; index: number } | undefined;
+    for (const item of items) {
+      if (!verdicts.get(item)!.pass) continue;
+      const region = regionOf(item.element, root);
+      const seen = tried.get(item)!;
+      // A line the last picture showed whole is measured, so a later scroll that takes it off the screen
+      // does not bring it back: a screenful of lines costs one picture, not one each.
+      const boxes = textBoxes(item.element);
+      boxes.forEach((box, i) => within(box, region) && seen.add(i));
+      const index = boxes.findIndex((_, i) => !seen.has(i));
+      if (index >= 0) {
+        next = { item, index };
+        break;
+      }
+    }
+    if (!next) return;
+    const { item, index } = next;
+    const seen = tried.get(item)!;
+    seen.add(index);
+    scrollLineToCentre(item.element, () => textBoxes(item.element)[index]!);
+    // The scroll lands within two frames, and only then is the line checked.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    if (!textBoxes(item.element).some((box, i) => i === index && within(box, regionOf(item.element, root)))) textBoxes(item.element).forEach((_, i) => seen.add(i));
+    // An item is measured only where its text shows: a line a box clips is not on the screen to a
+    // reader, whatever the page behind it shows.
+    const regions = new Map<Element, DOMRect>(items.map((other) => [other.element, regionOf(other.element, root)]));
+    const group = items.filter((other) => verdicts.get(other)!.pass && textBoxes(other.element).some((box) => overlaps(box, regions.get(other.element)!)));
+    const results = await shoot(root, group, last, regions);
+    group.forEach((other, i) => {
+      const verdict = results[i]!;
+      if (!verdict.pass) verdicts.set(other, { pass: false, reason: `${verdict.reason}, in the part of its text centred ${centreOffset(other.element)}px below its top, scrolled onto the screen` });
+    });
+  }
+}
+
 
 // Measures each element's text against screenshots of `root`, which holds them all: one, as a
 // chart's many axis labels share one picture, unless some text is scrolled out of a box inside it
@@ -902,9 +1039,22 @@ async function measureTexts(root: Element, items: Measured[], last: boolean): Pr
       const scroller = scrollerAround(first.element);
       if (scroller && root.contains(scroller)) scroller.scrollTop += first.element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
     }
+    // A held page can put a scroll back once it lands, so where the text is counts only after that.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    // Text the scroll did not bring onto the screen (a page held still, as a popup's scroll lock can
+    // hold it) is in no picture the screen takes: WebKit draws nothing below the fold of a held page.
+    // No one sees it while the page is held, and a scan with the popup closed measures it, so it is
+    // left out here rather than measured against pixels that are not behind it.
+    if (first.element.isConnected && !onScreen(first.element)) {
+      verdicts.set(first, { pass: true });
+      pending = pending.slice(1);
+      continue;
+    }
     const batch = [first, ...pending.slice(1).filter(({ element }) => element.isConnected && inView(element, root))];
     const results = await shoot(root, batch, last);
     for (const [index, item] of batch.entries()) verdicts.set(item, results[index]!);
+    // A placeholder is one line, which the first picture measures whole.
+    await measureParts(root, batch.filter((item) => !item.placeholder), verdicts, last);
     pending = pending.filter((item) => !batch.includes(item));
   }
   return items.map((item) => verdicts.get(item)!);
@@ -1062,26 +1212,37 @@ async function measureLinkInText(link: Element, block: Element): Promise<Verdict
 const hiddenFromAt = '[aria-hidden="true"], [inert]';
 
 // Measures each element's text against one screenshot of `root` as it is scrolled now.
-async function shoot(root: Element, items: Measured[], last: boolean): Promise<Verdict[]> {
+async function shoot(root: Element, items: Measured[], last: boolean, regions = new Map<Element, DOMRect>()): Promise<Verdict[]> {
   if (!root.isConnected || items.some(({ element }) => !element.isConnected)) {
     if (!last) throw new PageChanged();
     return items.map(() => ({ pass: false, reason: keptChanging }));
   }
   // The boxes within the root, not on the screen: taking the screenshot can scroll the page.
   const start = root.getBoundingClientRect();
+  // A held page (its viewport's overflow hidden, as a popup's scroll lock holds it) can put back a
+  // scroll the screenshot makes, so the picture would not be where the root then is. A root that reaches
+  // past the screen is pictured beyond it differently by each engine: blank in Chromium, and in WebKit
+  // on Linux out of line with its text. In both, the picture is the screen as it shows, of a box over the
+  // viewport that the screenshot never scrolls to, and the parts past the screen are measured scrolled on.
+  const held = viewportHeld();
+  const pastScreen = start.top < 0 || start.left < 0 || start.bottom > window.innerHeight || start.right > window.innerWidth;
+  const frame = held || pastScreen ? document.body.appendChild(viewportFrame()) : null;
+  // The frame's own box: a gutter the scroll lock keeps for the scrollbar, or a transformed page, can
+  // leave it short of the window or away from its corner.
+  const base = frame ? frame.getBoundingClientRect() : start;
   const texts = items.map(({ element, required, placeholder }) => {
     // Within the root: each line's box, or each letter's cell for SVG text.
     const boxes = placeholder ? placeholderBoxes(element as HTMLInputElement | HTMLTextAreaElement) : textBoxes(element);
     const cells = (letterCells(element) ?? boxes.map((box) => ({ box, corners: null }))).map(({ box, corners }) => ({
-      box: new DOMRect(box.left - start.left, box.top - start.top, box.width, box.height),
-      corners: corners?.map((corner) => ({ x: corner.x - start.left, y: corner.y - start.top })) ?? null,
+      box: new DOMRect(box.left - base.left, box.top - base.top, box.width, box.height),
+      corners: corners?.map((corner) => ({ x: corner.x - base.left, y: corner.y - base.top })) ?? null,
     }));
     // SVG text, such as a chart's axis labels, is painted with its fill; a placeholder with its own
     // color and opacity.
     const style = getComputedStyle(element, placeholder ? "::placeholder" : null);
     const color = toRgba(element instanceof SVGElement ? style.fill : style.color);
     const ownOpacity = element instanceof SVGElement ? Number.parseFloat(style.fillOpacity) : placeholder ? Number.parseFloat(style.opacity) : 1;
-    return { element, required, placeholder, cells, text: { ...color, a: color.a * ownOpacity * paintedOpacity(element) } };
+    return { element, required, placeholder, cells, region: regions.get(element), text: { ...color, a: color.a * ownOpacity * paintedOpacity(element) } };
   });
   // The open popups' layers (Base UI portals) the text is not in: whatever they paint over the text,
   // shadows included, is theirs. A second screenshot without them shows which pixels those are.
@@ -1102,10 +1263,10 @@ async function shoot(root: Element, items: Measured[], last: boolean): Promise<V
   let context: CanvasRenderingContext2D;
   let bare: CanvasRenderingContext2D | null = null;
   try {
-    context = await screenshot(root);
+    context = await screenshot(frame ?? root);
     if (layers.length > 0) {
       for (const layer of layers) layer.setAttribute("data-ouro-measure-layer", "");
-      bare = await screenshot(root);
+      bare = await screenshot(frame ?? root);
     }
   } catch (error) {
     // The browser takes a picture only of a box that stays still and shows.
@@ -1119,6 +1280,7 @@ async function shoot(root: Element, items: Measured[], last: boolean): Promise<V
     for (const { element } of items) element.removeAttribute("data-ouro-measure");
     for (const element of kept) element.removeAttribute("data-ouro-measure-keep");
     for (const layer of layers) layer.removeAttribute("data-ouro-measure-layer");
+    frame?.remove();
     lift(hide);
   }
   // A screenshot taken by selector can find a new element in the place of one that left the page.
@@ -1126,13 +1288,13 @@ async function shoot(root: Element, items: Measured[], last: boolean): Promise<V
     if (!last) throw new PageChanged();
     return items.map(() => ({ pass: false, reason: keptChanging }));
   }
-  const origin = root.getBoundingClientRect();
+  const origin = frame ? base : root.getBoundingClientRect();
   const scale = context.canvas.width / origin.width;
   // The page's elements exposed to assistive technology, with their boxes as the page is scrolled now.
   let exposed: { other: Element; box: DOMRect }[] | undefined;
   const exposedBoxes = () =>
     (exposed ??= [...document.body.querySelectorAll("*")].filter((other) => !other.closest(hiddenFromAt)).map((other) => ({ other, box: other.getBoundingClientRect() })));
-  return texts.map(({ element, required, placeholder, cells, text }) => {
+  return texts.map(({ element, required, placeholder, cells, region, text }) => {
     if (cells.length === 0) return { pass: false, reason: placeholder ? "its placeholder has no box on the screen to measure" : "axe left its contrast undecided, and it has no text of its own to measure" };
     // Where an open popup covers the text, those pixels are the popup's, measured as its own text:
     // what a popup's layer paints, or any exposed layer over text the popup shuts off from assistive
@@ -1148,18 +1310,42 @@ async function shoot(root: Element, items: Measured[], last: boolean): Promise<V
     let worst = Number.POSITIVE_INFINITY;
     let measured = 0;
     let covered = 0;
+    let offScreen = 0;
     for (const { box, corners } of cells) {
       const left = Math.max(0, Math.floor(box.left * scale));
       const top = Math.max(0, Math.floor(box.top * scale));
       const right = Math.min(context.canvas.width, Math.ceil(box.right * scale));
       const bottom = Math.min(context.canvas.height, Math.ceil(box.bottom * scale));
-      if (right <= left || bottom <= top) continue;
+      // A cell the picture of the screen does not reach shows nothing.
+      // The picture Vitest's frame takes of a box taller than the screen is blank beyond the screen, so
+      // only what is on the screen is measured, held page or not.
+      if (right <= left || bottom <= top || !onScreenBox(origin.left + box.left, origin.top + box.top, origin.left + box.right, origin.top + box.bottom)) {
+        offScreen++;
+        continue;
+      }
       const width = right - left;
       const pixels = context.getImageData(left, top, width, bottom - top).data;
       const under = bare?.getImageData(left, top, width, bottom - top).data;
       for (let index = 0; index < pixels.length; index += 4) {
         const pixel = index / 4;
         if (corners && !insideCell(corners, (left + (pixel % width) + 0.5) / scale, (top + Math.floor(pixel / width) + 0.5) / scale)) continue;
+        // Only what the screen shows: below the fold of a held page WebKit draws nothing at all.
+        const screenX = origin.left + (left + (pixel % width) + 0.5) / scale;
+        const screenY = origin.top + (top + Math.floor(pixel / width) + 0.5) / scale;
+        if (screenX < 0 || screenY < 0 || screenX >= window.innerWidth || screenY >= window.innerHeight) {
+          offScreen++;
+          continue;
+        }
+        // WebKit on Linux paints no page at the screen's top-left pixel: the widget behind it shows there,
+        // grey, whatever the page is, so that pixel is not measured.
+        if (screenX < 1 && screenY < 1) {
+          offScreen++;
+          continue;
+        }
+        if (region && !(screenX >= region.left && screenX < region.right && screenY >= region.top && screenY < region.bottom)) {
+          offScreen++;
+          continue;
+        }
         const painted = under !== undefined && [0, 1, 2].some((channel) => Math.abs(pixels[index + channel]! - under[index + channel]!) > 2);
         if (painted || coveredAt(origin.left + (left + (pixel % width) + 0.5) / scale, origin.top + (top + Math.floor(pixel / width) + 0.5) / scale)) {
           covered++;
@@ -1171,6 +1357,9 @@ async function shoot(root: Element, items: Measured[], last: boolean): Promise<V
       }
     }
     if (measured === 0 && covered > 0) return { pass: true };
+    // Text a held page shows none of is left out, as text it cannot scroll to is; on a page that can
+    // scroll it fails here, and audit measures it again on its own, scrolled onto the screen.
+    if (measured === 0 && offScreen > 0 && held) return { pass: true };
     if (worst === Number.POSITIVE_INFINITY) return { pass: false, reason: "axe left its contrast undecided, and its text is off the screen" };
     if (worst >= required) return { pass: true };
     if (placeholder) return { pass: false, reason: `its placeholder measured ${worst.toFixed(2)}:1 against the worst pixel behind it, needs ${required}:1` };

@@ -86,7 +86,6 @@ export function formatQuantity(quantity: number): string {
   // Get the fraction string (e.g., "1 1/2" or "1/4")
   const fractionStr = fraction.toFraction(true) // true = mixed fractions
 
-  // Handle zero
   if (fractionStr === '0') {
     return '0'
   }
@@ -108,7 +107,6 @@ export function formatQuantity(quantity: number): string {
     result = parts[0]
   }
 
-  // Add negative sign if needed
   if (isNegative && result !== '0') {
     result = `-${result}`
   }
@@ -128,7 +126,6 @@ export function formatQuantity(quantity: number): string {
  * scaleQuantity(0.5, 2) // 1
  */
 export function scaleQuantity(quantity: number, scaleFactor: number): number {
-  // Handle null/undefined
   if (quantity == null || scaleFactor == null) {
     return 0
   }
@@ -148,7 +145,6 @@ export function scaleQuantity(quantity: number, scaleFactor: number): number {
  * scaleServingsText("Feeds 2-4 people", 2) // "Feeds 4-8 people"
  */
 export function scaleServingsText(text: string, scaleFactor: number): string {
-  // Handle null/undefined
   if (text == null) {
     return ''
   }

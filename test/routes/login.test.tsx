@@ -420,7 +420,7 @@ describe("Login Route", () => {
     it("hides it where no mail can be sent", async () => {
       const Stub = createTestRoutesStub([{ path: "/login", Component: Login, loader: () => ({ oauthProviders: [], passwordReset: false }) }]);
       render(<Stub initialEntries={["/login"]} />);
-      expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Forgot password?" })).toBeNull();
     });
   });
@@ -447,10 +447,10 @@ describe("Login Route", () => {
 
       render(<Stub initialEntries={["/login"]} />);
 
-      expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
       expect(screen.getByLabelText(requiredLabel("Username or email"))).toBeInTheDocument();
       expect(screen.getByLabelText(requiredLabel("Password"))).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Log in" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
       expect(screen.getByText("Don't have an account?")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Sign up" })).toHaveAttribute("href", "/signup");
     });
@@ -548,7 +548,7 @@ describe("Login Route", () => {
 
       render(<Stub initialEntries={["/login"]} />);
 
-      const form = (await screen.findByRole("button", { name: "Log in" })).closest("form");
+      const form = (await screen.findByRole("button", { name: "Sign in" })).closest("form");
       expect(form).toHaveAttribute("method", "post");
     });
 
@@ -564,7 +564,7 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
         expect(screen.getByRole("link", { name: /continue with google/i })).toBeInTheDocument();
       });
 
@@ -579,7 +579,7 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
         expect(screen.getByRole("link", { name: /continue with apple/i })).toBeInTheDocument();
       });
 
@@ -594,7 +594,7 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
         expect(screen.getByRole("link", { name: /continue with github/i })).toBeInTheDocument();
       });
 
@@ -609,7 +609,7 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
         const googleLink = screen.getByRole("link", { name: /continue with google/i });
         expect(googleLink).toHaveAttribute("href", "/auth/google");
         expect(googleLink.closest("form")).toBeNull();
@@ -626,7 +626,7 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
         const appleLink = screen.getByRole("link", { name: /continue with apple/i });
         expect(appleLink).toHaveAttribute("href", "/auth/apple");
         expect(appleLink.closest("form")).toBeNull();
@@ -643,7 +643,7 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
         const githubLink = screen.getByRole("link", { name: /continue with github/i });
         expect(githubLink).toHaveAttribute("href", "/auth/github");
         expect(githubLink.closest("form")).toBeNull();
@@ -661,7 +661,7 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={[`/login?redirectTo=${encodeURIComponent(returnTo)}`]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
         expect(screen.getByRole("link", { name: /continue with google/i })).toHaveAttribute(
           "href",
           `/auth/google?redirectTo=${encodeURIComponent(returnTo)}`,
@@ -683,7 +683,7 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login?redirectTo="]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
         expect(screen.getByRole("link", { name: /continue with google/i })).toHaveAttribute("href", "/auth/google");
         expect(screen.getByRole("link", { name: /continue with github/i })).toHaveAttribute("href", "/auth/github");
         expect(screen.getByRole("link", { name: /continue with apple/i })).toHaveAttribute("href", "/auth/apple");
@@ -700,7 +700,7 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
         // Look for a separator element or text that says "or" as a standalone element
         expect(screen.getByTestId("oauth-separator")).toBeInTheDocument();
         // HX Separator with its label, not a hand-rolled rule.
@@ -719,7 +719,7 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
         expect(screen.queryByTestId("oauth-separator")).not.toBeInTheDocument();
         expect(screen.queryByRole("link", { name: /continue with google/i })).not.toBeInTheDocument();
         expect(screen.queryByRole("link", { name: /continue with apple/i })).not.toBeInTheDocument();
@@ -738,7 +738,7 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
         expect(screen.getByText(/an account with this email already exists/i)).toBeInTheDocument();
         expect(screen.getByText(/log in.*to link/i)).toBeInTheDocument();
       });
@@ -754,7 +754,7 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
         expect(screen.getByText(/Sign-in stopped with an answer Spoonjoy doesn't recognise/)).toBeInTheDocument();
       });
     });
@@ -771,9 +771,9 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        const heading = await screen.findByRole("heading", { level: 1, name: "Log in" });
+        const heading = await screen.findByRole("heading", { level: 1, name: "Sign in" });
         expect(heading).toBeInTheDocument();
-        expect(heading).toHaveTextContent("Log in");
+        expect(heading).toHaveTextContent("Sign in");
       });
 
       it("should leave inline styles off the form fields", async () => {
@@ -787,7 +787,7 @@ describe("Login Route", () => {
 
         const { container } = render(<Stub initialEntries={["/login"]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
 
         // Inputs should not have inline styles
         const inputs = container.querySelectorAll('input');
@@ -807,7 +807,7 @@ describe("Login Route", () => {
 
         const { container } = render(<Stub initialEntries={["/login"]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
 
         // Buttons should not have inline styles
         const buttons = container.querySelectorAll('button');
@@ -827,7 +827,7 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        await screen.findByRole("heading", { name: "Log in" });
+        await screen.findByRole("heading", { name: "Sign in" });
 
         expect(screen.getByLabelText(requiredLabel("Username or email"))).toBeInTheDocument();
         expect(screen.getByLabelText(requiredLabel("Password"))).toBeInTheDocument();
@@ -848,7 +848,7 @@ describe("Login Route", () => {
 
         await user.type(await screen.findByLabelText(requiredLabel("Username or email")), "chef_test");
         await user.type(screen.getByLabelText(requiredLabel("Password")), "wrong-password");
-        await user.click(screen.getByRole("button", { name: "Log in" }));
+        await user.click(screen.getByRole("button", { name: "Sign in" }));
 
         // A message about the whole form shows in the alert at the top of the form.
         expect(await screen.findByRole("alert")).toHaveTextContent("Invalid username, email, or password");
@@ -870,7 +870,7 @@ describe("Login Route", () => {
         const identifierInput = await screen.findByLabelText(requiredLabel("Username or email"));
         await user.type(identifierInput, "  ");
         await user.type(screen.getByLabelText(requiredLabel("Password")), "some-password");
-        await user.click(screen.getByRole("button", { name: "Log in" }));
+        await user.click(screen.getByRole("button", { name: "Sign in" }));
 
         expect(await screen.findByText("Enter your username or email")).toBeInTheDocument();
         expect(identifierInput).toHaveAttribute("aria-invalid", "true");

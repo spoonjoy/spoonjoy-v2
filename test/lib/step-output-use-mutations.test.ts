@@ -19,7 +19,6 @@ describe("step-output-use-mutations", () => {
     const user = await createUser(db, email, username, "testPassword123");
     testUserId = user.id;
 
-    // Create a recipe for testing
     const recipe = await db.recipe.create({
       data: {
         title: "Test Recipe " + faker.string.alphanumeric(6),
@@ -35,7 +34,6 @@ describe("step-output-use-mutations", () => {
 
   describe("deleteExistingStepOutputUses", () => {
     it("should delete all StepOutputUse records for a specific step (inputStepNum)", async () => {
-      // Create steps 1, 2, and 3
       await db.recipeStep.create({
         data: { recipeId, stepNum: 1, description: "Step 1" },
       });
@@ -60,7 +58,6 @@ describe("step-output-use-mutations", () => {
       });
       expect(beforeCount).toBe(2);
 
-      // Delete all step output uses for step 3
       await deleteExistingStepOutputUses(db, recipeId, 3);
 
       // Verify all records were deleted
@@ -71,7 +68,6 @@ describe("step-output-use-mutations", () => {
     });
 
     it("should return the count of deleted records", async () => {
-      // Create steps 1, 2, and 3
       await db.recipeStep.create({
         data: { recipeId, stepNum: 1, description: "Step 1" },
       });
@@ -109,7 +105,6 @@ describe("step-output-use-mutations", () => {
     });
 
     it("should not delete StepOutputUse records for other steps", async () => {
-      // Create steps 1, 2, 3, and 4
       await db.recipeStep.create({
         data: { recipeId, stepNum: 1, description: "Step 1" },
       });
@@ -161,7 +156,6 @@ describe("step-output-use-mutations", () => {
     });
 
     it("should not delete StepOutputUse records from other recipes", async () => {
-      // Create another recipe
       const otherRecipe = await db.recipe.create({
         data: {
           title: "Other Recipe " + faker.string.alphanumeric(6),
@@ -211,7 +205,6 @@ describe("step-output-use-mutations", () => {
     });
 
     it("should delete single StepOutputUse record when step uses only one previous step", async () => {
-      // Create steps 1 and 2
       await db.recipeStep.create({
         data: { recipeId, stepNum: 1, description: "Step 1" },
       });
@@ -267,7 +260,6 @@ describe("step-output-use-mutations", () => {
 
   describe("createStepOutputUses", () => {
     it("should create StepOutputUse records for each outputStepNum in array", async () => {
-      // Create steps 1, 2, and 3
       await db.recipeStep.create({
         data: { recipeId, stepNum: 1, description: "Step 1" },
       });
@@ -295,7 +287,6 @@ describe("step-output-use-mutations", () => {
     });
 
     it("should return count of 0 when outputStepNums array is empty", async () => {
-      // Create step 1
       await db.recipeStep.create({
         data: { recipeId, stepNum: 1, description: "Step 1" },
       });
@@ -313,7 +304,6 @@ describe("step-output-use-mutations", () => {
     });
 
     it("should create single StepOutputUse record when array has one element", async () => {
-      // Create steps 1 and 2
       await db.recipeStep.create({
         data: { recipeId, stepNum: 1, description: "Step 1" },
       });
@@ -357,7 +347,6 @@ describe("step-output-use-mutations", () => {
     });
 
     it("should create records with correct recipeId and inputStepNum", async () => {
-      // Create steps 1, 2, 3, and 4
       for (let i = 1; i <= 4; i++) {
         await db.recipeStep.create({
           data: { recipeId, stepNum: i, description: `Step ${i}` },
@@ -401,7 +390,6 @@ describe("step-output-use-mutations", () => {
     });
 
     it("should not affect StepOutputUse records for other steps", async () => {
-      // Create steps 1, 2, 3, and 4
       for (let i = 1; i <= 4; i++) {
         await db.recipeStep.create({
           data: { recipeId, stepNum: i, description: `Step ${i}` },
@@ -413,7 +401,6 @@ describe("step-output-use-mutations", () => {
         data: { recipeId, outputStepNum: 1, inputStepNum: 2 },
       });
 
-      // Create new records for step 4
       await createStepOutputUses(db, recipeId, 4, [1, 3]);
 
       // Verify step 2's record is still there
@@ -430,7 +417,6 @@ describe("step-output-use-mutations", () => {
     });
 
     it("should not affect StepOutputUse records for other recipes", async () => {
-      // Create another recipe
       const otherRecipe = await db.recipe.create({
         data: {
           title: "Other Recipe " + faker.string.alphanumeric(6),
@@ -458,7 +444,6 @@ describe("step-output-use-mutations", () => {
         data: { recipeId: otherRecipe.id, outputStepNum: 1, inputStepNum: 2 },
       });
 
-      // Create record for first recipe
       await createStepOutputUses(db, recipeId, 2, [1]);
 
       // Verify other recipe's record is still there

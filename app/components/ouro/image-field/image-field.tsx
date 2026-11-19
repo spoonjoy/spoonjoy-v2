@@ -350,7 +350,7 @@ export function ImageField(props: ImageFieldProps): JSX.Element {
           "relative flex items-center justify-center overflow-hidden border border-solid bg-muted text-muted-foreground",
           invalid ? "border-destructive" : "border-border",
           "transition-colors duration-(--ouro-duration-fast) ease-[ease] data-dragging:border-primary data-dragging:bg-primary/10 forced-colors:data-dragging:border-[Highlight]",
-          shape === "circle" ? "w-32 rounded-full" : "w-full max-w-xs rounded-lg",
+          shape === "circle" ? "w-32 rounded-full" : "w-full max-w-xs rounded-ouro-lg",
         )}
       >
         {dragging ? (

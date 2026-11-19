@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { commands } from "vitest/browser";
 import { loadFonts } from "./fonts.ts";
+import { trackUserEventCommands } from "./command-deadline.ts";
 
 // Vitest setup for Ouro UI's browser tests: test output stays clean, so anything a test
 // writes to the console fails that test: a React act() warning, a development message from
@@ -11,6 +12,13 @@ import { loadFonts } from "./fonts.ts";
 // is a separate setup file (testing/vitest.ts).
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+
+// A userEvent command that never answers fails its test naming the command (command-deadline.ts).
+trackUserEventCommands();
+
+// Ouro UI stays silent where navigator.webdriver is true, which the automated browser these tests
+// run in sets. The tests of sound turn it back to false; they stub the audio they check.
+Object.defineProperty(navigator, "webdriver", { value: false, configurable: true });
 
 // Media emulation (reduced motion, forced colours, colour scheme, contrast) stays on the page after
 // the test that set it. So each file starts from the browser's defaults, and each test puts back the

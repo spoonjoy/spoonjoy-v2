@@ -112,7 +112,7 @@ const sheetQuery = "(max-width: 639.98px) and (pointer: coarse)";
 const triggerClass =
   "relative m-0 box-border flex w-full min-w-0 items-center justify-between gap-2 h-(--ouro-control-h) px-3 py-0 " +
   "[--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] " +
-  "rounded-md border border-solid border-input bg-transparent text-start text-base text-foreground sm:pointer-fine:text-sm " +
+  "rounded-ouro-control-md border border-solid border-input bg-transparent text-start text-base text-foreground sm:pointer-fine:text-sm " +
   "font-[inherit] cursor-pointer select-none [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "transition-[border-color,background-color] duration-(--ouro-duration-fast) ease-[ease] " +
@@ -140,14 +140,14 @@ const positionerClass =
  */
 const popupClass =
   "box-border flex max-h-(--available-height) min-w-(--anchor-width) flex-col overflow-hidden outline-none " +
-  "rounded-md border border-solid border-border bg-popover p-1 text-popover-foreground " +
+  "rounded-ouro-md border border-solid border-border bg-popover p-1 text-popover-foreground " +
   "shadow-(--shadow-lg) origin-(--transform-origin) " +
   "[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out),scale_var(--ouro-duration-base)_var(--ouro-ease-out)] data-ending-style:duration-(--ouro-duration-fast) " +
   "data-starting-style:opacity-0 data-starting-style:scale-95 data-ending-style:opacity-0 data-ending-style:scale-95 " +
   "data-[side=none]:data-starting-style:scale-100 data-[side=none]:data-starting-style:opacity-100 " +
   "motion-reduce:data-starting-style:scale-100 motion-reduce:data-ending-style:scale-100 " +
   "data-[ouro-presentation=sheet]:max-h-[min(70dvh,calc(100dvh-4rem))] data-[ouro-presentation=sheet]:min-w-0 " +
-  "data-[ouro-presentation=sheet]:rounded-none data-[ouro-presentation=sheet]:rounded-t-xl data-[ouro-presentation=sheet]:border-x-0 " +
+  "data-[ouro-presentation=sheet]:rounded-none data-[ouro-presentation=sheet]:rounded-t-ouro-xl data-[ouro-presentation=sheet]:border-x-0 " +
   "data-[ouro-presentation=sheet]:border-b-0 data-[ouro-presentation=sheet]:px-2 data-[ouro-presentation=sheet]:pt-2 " +
   "data-[ouro-presentation=sheet]:pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] " +
   "data-[ouro-presentation=sheet]:[transition:translate_var(--ouro-duration-sheet)_var(--ouro-ease-drawer),opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
@@ -184,7 +184,7 @@ const sheetTitleClass = "m-0 shrink-0 px-3 pt-1 pb-2 text-base leading-6 font-se
  * @claim "An option: 44px tall on coarse" registry/ouro/components/ouro/select/select.touch.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.touch.test.tsx::chooses an option with a tap and closes, with 44px rows)
  */
 const itemClass =
-  "relative box-border grid min-h-11 cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-sm px-2 py-1.5 " +
+  "relative box-border grid min-h-11 cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-ouro-sm px-2 py-1.5 " +
   "text-base leading-6 outline-none select-none pointer-fine:min-h-8 sm:pointer-fine:text-sm sm:pointer-fine:leading-5 " +
   "scroll-my-1 [-webkit-tap-highlight-color:transparent] data-highlighted:bg-accent data-highlighted:text-accent-foreground " +
   // Forced colours drop the fill, so the highlight takes the system's pair.

@@ -57,7 +57,6 @@ describe("Recipes $id Steps New Route", () => {
     const otherUser = await createUser(db, otherEmail, otherUsername, "testPassword123");
     otherUserId = otherUser.id;
 
-    // Create a recipe for testing
     const recipe = await db.recipe.create({
       data: {
         title: "Test Recipe " + faker.string.alphanumeric(6),
@@ -191,7 +190,6 @@ describe("Recipes $id Steps New Route", () => {
     });
 
     it("should calculate correct nextStepNum with existing steps", async () => {
-      // Create existing steps
       await db.recipeStep.create({
         data: {
           recipeId,
@@ -249,7 +247,6 @@ describe("Recipes $id Steps New Route", () => {
     });
 
     it("should return availableSteps when nextStepNum > 1", async () => {
-      // Create existing steps
       await db.recipeStep.create({
         data: {
           recipeId,
@@ -830,7 +827,6 @@ describe("Recipes $id Steps New Route", () => {
     });
 
     it("should assign correct step number when adding to existing steps", async () => {
-      // Create existing step
       await db.recipeStep.create({
         data: {
           recipeId,
@@ -893,7 +889,6 @@ describe("Recipes $id Steps New Route", () => {
 
     describe("step output uses", () => {
       it("should create an empty step when no ingredients and no step output uses are provided", async () => {
-        // Create existing step
         await db.recipeStep.create({
           data: {
             recipeId,
@@ -930,7 +925,6 @@ describe("Recipes $id Steps New Route", () => {
       });
 
       it("should create step with single step output use", async () => {
-        // Create existing step
         await db.recipeStep.create({
           data: {
             recipeId,
@@ -964,7 +958,6 @@ describe("Recipes $id Steps New Route", () => {
       });
 
       it("should create step with multiple step output uses", async () => {
-        // Create existing steps
         await db.recipeStep.create({
           data: {
             recipeId,
@@ -1009,7 +1002,6 @@ describe("Recipes $id Steps New Route", () => {
       });
 
       it("should return validation error when referencing non-existent future step", async () => {
-        // Create existing step
         await db.recipeStep.create({
           data: {
             recipeId,
@@ -1038,7 +1030,6 @@ describe("Recipes $id Steps New Route", () => {
       });
 
       it("should treat an explicit empty usesSteps array as empty step creation", async () => {
-        // Create existing step
         await db.recipeStep.create({
           data: {
             recipeId,
@@ -1076,7 +1067,6 @@ describe("Recipes $id Steps New Route", () => {
       });
 
       it("should return validation error when selecting current step (self-reference)", async () => {
-        // Create existing step
         await db.recipeStep.create({
           data: {
             recipeId,
@@ -1104,7 +1094,6 @@ describe("Recipes $id Steps New Route", () => {
       });
 
       it("should return validation error when selecting future step (forward reference)", async () => {
-        // Create existing step
         await db.recipeStep.create({
           data: {
             recipeId,
@@ -1132,7 +1121,6 @@ describe("Recipes $id Steps New Route", () => {
       });
 
       it("should return validation error for invalid step number (zero)", async () => {
-        // Create existing step
         await db.recipeStep.create({
           data: {
             recipeId,
@@ -1159,7 +1147,6 @@ describe("Recipes $id Steps New Route", () => {
       });
 
       it("should return validation error for negative step number", async () => {
-        // Create existing step
         await db.recipeStep.create({
           data: {
             recipeId,
@@ -1186,7 +1173,6 @@ describe("Recipes $id Steps New Route", () => {
       });
 
       it("should return validation error with multiple invalid step references", async () => {
-        // Create existing step
         await db.recipeStep.create({
           data: {
             recipeId,
@@ -1215,7 +1201,6 @@ describe("Recipes $id Steps New Route", () => {
       });
 
       it("should allow valid step reference alongside ignored invalid ones when valid comes first", async () => {
-        // Create existing step
         await db.recipeStep.create({
           data: {
             recipeId,

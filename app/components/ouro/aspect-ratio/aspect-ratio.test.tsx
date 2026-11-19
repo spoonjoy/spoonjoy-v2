@@ -119,12 +119,12 @@ describe("AspectRatio development messages", () => {
 
   it("checks the className", async () => {
     await render(
-      <AspectRatio ratio={1} className="rounded-lg">
+      <AspectRatio ratio={1} className="rounded-ouro-lg">
         <img src={pixel} alt="" />
       </AspectRatio>,
     );
     expect(warn).toHaveBeenCalledWith(
-      '[ouro-ui] AspectRatio: "rounded-lg" sets appearance, and className is for layout only. Fix: put the AspectRatio in a <Card media={…}>, which rounds it, or wrap it in an element of your own.',
+      '[ouro-ui] AspectRatio: "rounded-ouro-lg" sets appearance, and className is for layout only. Fix: put the AspectRatio in a <Card media={…}>, which rounds it, or wrap it in an element of your own.',
     );
   });
 

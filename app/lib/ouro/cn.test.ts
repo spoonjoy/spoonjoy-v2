@@ -19,3 +19,21 @@ it("keeps classes that set different properties, or the same property under anot
   );
   expect(cn("text-base text-primary", "text-sm")).toBe("text-primary text-sm");
 });
+
+it("resolves Ouro's radius steps as rounded-* classes, so a later radius or rounded-none wins", () => {
+  expect(cn("rounded-ouro-lg", "rounded-none")).toBe("rounded-none");
+  expect(cn("rounded-none", "rounded-ouro-lg")).toBe("rounded-ouro-lg");
+  expect(cn("rounded-ouro-lg", "rounded-lg")).toBe("rounded-lg");
+});
+
+it("keeps a side's radius beside a corner radius, and a later whole radius replaces it", () => {
+  expect(cn("rounded-t-ouro-lg", "rounded-ouro-md")).toBe("rounded-ouro-md");
+  expect(cn("rounded-ouro-md", "rounded-t-ouro-lg")).toBe("rounded-ouro-md rounded-t-ouro-lg");
+});
+
+it("resolves every one of Ouro's radius steps, sm to 4xl, as a rounded-* class", () => {
+  for (const step of ["sm", "md", "lg", "xl", "2xl", "3xl", "4xl"]) {
+    expect(cn(`rounded-ouro-${step}`, "rounded-none")).toBe("rounded-none");
+    expect(cn(`rounded-t-ouro-${step}`, "rounded-ouro-lg")).toBe("rounded-ouro-lg");
+  }
+});

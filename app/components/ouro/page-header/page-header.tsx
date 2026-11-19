@@ -134,7 +134,7 @@ export function PageHeader(props: PageHeaderProps): JSX.Element {
         </div>
       ) : null}
       {media != null ? (
-        <div data-slot="media" className="min-w-0 overflow-hidden rounded-lg bg-muted [&>img]:block [&>img]:h-full [&>img]:w-full [&>img]:object-cover">
+        <div data-slot="media" className="min-w-0 overflow-hidden rounded-ouro-lg bg-muted [&>img]:block [&>img]:h-full [&>img]:w-full [&>img]:object-cover">
           {media}
         </div>
       ) : null}

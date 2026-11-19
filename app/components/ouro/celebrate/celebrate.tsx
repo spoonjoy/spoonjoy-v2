@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type JSX, type Ref } from "react";
-import { announce } from "~/lib/ouro/announce";
+import { AFTER_ACTION_MS, announce } from "~/lib/ouro/announce";
 import { canCelebrate, celebrationPeriods, recordCelebration, type CelebrationPeriod } from "~/lib/ouro/celebration-cap";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
@@ -57,8 +57,6 @@ export interface CelebrateCap {
 /** Props for {@link Celebrate}: its own props and the `<span>` attributes it passes through. */
 export type CelebrateProps = Omit<HTMLAttributes<HTMLSpanElement>, keyof CelebrateOwnProps> & CelebrateOwnProps;
 
-/** Leaves time for the triggering control's state announcement before the celebration message. This fixed delay cannot detect when a screen reader has finished speaking; the badge and confetti show immediately. */
-const SPEAK_DELAY_MS = 1500;
 
 // Twelve pieces around the circle, at two distances, in the theme's tones. Each lands inside
 // Celebrate's own box, a share of its width and height out from the middle, so the burst never
@@ -139,7 +137,7 @@ export function Celebrate(props: CelebrateProps): JSX.Element {
   // Spoken when the moment starts, not when a page renders with it already shown.
   const shown = useRef(show);
   useEffect(() => {
-    if (show && !shown.current) announce(message, { delayMs: SPEAK_DELAY_MS });
+    if (show && !shown.current) announce(message, { delayMs: AFTER_ACTION_MS });
     shown.current = show;
   }, [show, message]);
 

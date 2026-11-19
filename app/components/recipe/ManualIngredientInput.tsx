@@ -37,7 +37,6 @@ export function ManualIngredientInput({
     const trimmedIngredientName = ingredientName.trim()
     const parsedQuantity = parseFloat(quantity)
 
-    // Validate all fields are present
     if (!quantity || !trimmedUnit || !trimmedIngredientName) {
       return
     }

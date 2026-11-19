@@ -18,7 +18,7 @@ export { groupClass, inputClass, scrubClass, stepperClass };
 const groupClass =
   "relative m-0 box-border flex w-full min-w-0 items-stretch h-(--ouro-control-h) p-0 " +
   "[--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] " +
-  "rounded-md border border-solid border-input bg-transparent text-base text-foreground sm:pointer-fine:text-sm " +
+  "rounded-ouro-control-md border border-solid border-input bg-transparent text-base text-foreground sm:pointer-fine:text-sm " +
   "outline-ring outline-offset-2 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-solid " +
   "transition-[border-color] duration-(--ouro-duration-fast) ease-[ease] " +
   "has-[input[aria-invalid=true]]:border-destructive has-[input:disabled]:opacity-50 " +
@@ -47,7 +47,7 @@ const stepperClass =
   "bg-transparent text-muted-foreground cursor-pointer select-none [-webkit-tap-highlight-color:transparent] " +
   "not-active:pointer-fine:hover:bg-accent pointer-fine:hover:text-accent-foreground not-data-disabled:active:bg-[color-mix(in_oklab,var(--accent)_85%,var(--foreground))] not-data-disabled:active:text-accent-foreground " +
   "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid " +
-  "first:rounded-s-[calc(var(--radius-md)-1px)] last:rounded-e-[calc(var(--radius-md)-1px)] " +
+  "first:rounded-s-[calc(var(--ouro-control-r)-1px)] last:rounded-e-[calc(var(--ouro-control-r)-1px)] " +
   "data-disabled:cursor-not-allowed data-disabled:opacity-50 data-disabled:pointer-fine:hover:bg-transparent [&_svg]:size-4";
 
 /**
