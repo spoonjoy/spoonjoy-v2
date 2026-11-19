@@ -237,6 +237,24 @@ describe("Cookbooks drawer route", () => {
     expect(screen.getByText("2 cookbooks")).toBeInTheDocument();
   });
 
+  it("counts a shelf of one as 1 cookbook", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/cookbooks",
+        Component: CookbooksIndexRedirect,
+        loader: () => ({
+          query: "",
+          cookbooks: [
+            { id: "cookbook-1", title: "Only Book", _count: { recipes: 0 }, searchableRecipeTitles: [], recipes: [] },
+          ],
+        }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/cookbooks"]} />);
+    expect(await screen.findByText("1 cookbook")).toBeInTheDocument();
+  });
+
   it("renders cookbook empty states for new and filtered shelves", async () => {
     const Stub = createTestRoutesStub([
       {
