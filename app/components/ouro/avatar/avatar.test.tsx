@@ -44,6 +44,28 @@ function loaded(src: string): Promise<void> {
   return done;
 }
 
+/**
+ * Resolves the moment the avatar shows its picture: its `data-image` changing to `loaded` is what wakes it, so no poll
+ * interval is spent between a load and the check. Rejects after 10 s, as a poll would, if it never does.
+ */
+function whenLoaded(avatar: HTMLElement): Promise<void> {
+  const shown = () => avatar.getAttribute("data-image") === "loaded";
+  return new Promise((resolve, reject) => {
+    if (shown()) return resolve();
+    const observer = new MutationObserver(() => {
+      if (!shown()) return;
+      clearTimeout(timer);
+      observer.disconnect();
+      resolve();
+    });
+    const timer = setTimeout(() => {
+      observer.disconnect();
+      reject(new Error(`the avatar stayed "${avatar.getAttribute("data-image")}", not "loaded", for 10 s`));
+    }, 10_000);
+    observer.observe(avatar, { attributes: true, attributeFilter: ["data-image"] });
+  });
+}
+
 /** Resolves once the browser has failed to load the picture. */
 function failed(src: string): Promise<void> {
   const image = new Image();
@@ -260,7 +282,7 @@ describe("Avatar", () => {
     const { rerender, avatar } = await render(<Avatar name="Ana Lind" src={pictures[0]} />);
     for (const picture of pictures) {
       await rerender(<Avatar name="Ana Lind" src={picture} />);
-      await expect.poll(() => avatar.getAttribute("data-image")).toBe("loaded");
+      await whenLoaded(avatar);
     }
     // The first is no longer held, so an avatar of it takes a second render; the second still is.
     expect((await mountCounted(pictures[0]!)).commits).toBe(2);
@@ -1178,7 +1200,7 @@ describe("Avatar development messages", () => {
   });
 
   it.each([
-    ["rounded-md", 'shape="square"'],
+    ["rounded-ouro-md", 'shape="square"'],
     ["rounded-none", 'shape="square"'],
     ["bg-blue-500", 'remove "bg-blue-500"; Avatar colors its initials from the name, or pass color="neutral"'],
     ["text-lg", 'size="lg"'],

@@ -368,7 +368,6 @@ describe("google-oauth-callback.server", () => {
         });
         if (firstUserResult.userId) testUserIds.push(firstUserResult.userId);
 
-        // Create second user
         const secondUserData = createTestUser();
         const secondUser = await db.user.create({
           data: secondUserData,
@@ -486,7 +485,6 @@ describe("google-oauth-callback.server", () => {
       });
 
       it("should restore a missing Google OAuth row when verified email exists", async () => {
-        // Create existing user with a verified email
         const testUserData = createTestUser();
         const existingUser = await db.user.create({
           data: { ...testUserData, emailVerifiedAt: new Date() },
@@ -522,7 +520,6 @@ describe("google-oauth-callback.server", () => {
       });
 
       it("should restore by verified email case-insensitively", async () => {
-        // Create existing user with email
         const testUserData = createTestUser();
         testUserData.email = "Test@Example.COM";
         const existingUser = await db.user.create({
@@ -626,7 +623,6 @@ describe("google-oauth-callback.server", () => {
       });
 
       it("should return userId on successful login for session", async () => {
-        // Create user first
         const mockGoogleUser = createMockGoogleUser();
         const createResult = await handleGoogleOAuthCallback({
           db,

@@ -185,3 +185,58 @@ export const WithActions: Story = {
     </Surface>
   ),
 };
+
+const pot: ChecklistItemData[] = [
+  { id: "boil", label: "Boil the water", checked: false },
+  { id: "warm", label: "Warm the pot", checked: false },
+  { id: "leaves", label: "Add the leaves", checked: true },
+  { id: "pour", label: "Pour on the water", checked: false },
+  { id: "steep", label: "Let it steep", value: "4 min", checked: false },
+];
+
+function TeaSteps() {
+  const state = useItems(pot);
+  return <Checklist label="Make a pot of tea" description="Tick each step as you do it." ordered items={state.items} onCheckedChange={state.onCheckedChange} onClearChecked={state.onClearChecked} clearLabel="Start over" />;
+}
+
+/** Steps to do in order: the leaves went in first, so they wait for the water and the pot, and turn done on their own once those are ticked. */
+export const Ordered: Story = {
+  parameters: { screenshot: { name: "checklist-ordered" } },
+  render: () => (
+    <Surface>
+      <TeaSteps />
+    </Surface>
+  ),
+};
+
+/** A step's picture: one stroke path, drawn in the row's tile with the text colour. */
+function StepIcon({ d }: { d: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={d} />
+    </svg>
+  );
+}
+
+const potWithPictures: ChecklistItemData[] = [
+  { id: "boil", label: "Boil the water", media: <StepIcon d="M6 19h12M7 19l1-8h8l1 8M9 11V9a3 3 0 0 1 6 0v2" />, checked: true },
+  { id: "warm", label: "Warm the pot", media: <StepIcon d="M5 12h12v3a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5zM17 13h1.5a2 2 0 0 1 0 4H16" />, checked: false },
+  { id: "leaves", label: "Add the leaves", media: <StepIcon d="M6 18c0-7 5-12 13-12c0 8-5 13-12 13zM6 18l7-7" />, checked: true },
+  { id: "pour", label: "Pour on the water", media: <StepIcon d="M4 9h9l-1 9H5zM13 11h2a2 2 0 0 1 0 4h-2" />, checked: false },
+  { id: "steep", label: "Let it steep", media: <StepIcon d="M12 8v4l2.5 2.5M12 21a8 8 0 1 0 0-16a8 8 0 0 0 0 16z" />, checked: false },
+];
+
+function OutlinedSteps() {
+  const state = useItems(potWithPictures);
+  return <Checklist label="Make a pot of tea" description="Tick each step as you do it." variant="outline" ordered items={state.items} onCheckedChange={state.onCheckedChange} onClearChecked={state.onClearChecked} clearLabel="Start over" />;
+}
+
+/** Outlined steps with pictures: each a card with its icon in a soft tile and a round tick at its end. The water is boiled; the leaves went in before the pot was warmed. */
+export const Outlined: Story = {
+  parameters: { screenshot: { name: "checklist-outlined" } },
+  render: () => (
+    <Surface>
+      <OutlinedSteps />
+    </Surface>
+  ),
+};

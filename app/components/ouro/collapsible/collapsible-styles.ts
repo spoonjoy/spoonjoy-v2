@@ -46,7 +46,7 @@ const rootClass = "box-border grid min-w-0 justify-items-start text-foreground";
  */
 const triggerClass =
   "group/trigger press relative m-0 box-border inline-flex cursor-pointer items-center gap-2 " +
-  "min-h-11 sm:pointer-fine:min-h-9 px-0 py-2 rounded-md border-0 bg-transparent text-start forced-colors:border forced-colors:border-solid " +
+  "min-h-11 sm:pointer-fine:min-h-9 px-0 py-2 rounded-ouro-md border-0 bg-transparent text-start forced-colors:border forced-colors:border-solid " +
   "font-[inherit] text-base font-medium text-foreground sm:pointer-fine:text-sm " +
   "select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "underline-offset-4 not-data-disabled:pointer-fine:hover:underline not-data-disabled:active:opacity-70 " +
@@ -79,7 +79,7 @@ const listClass = "m-0 box-border grid w-full list-none gap-0 p-0";
  *
  * @internal
  */
-const itemClass = "m-0 rounded-sm p-0 outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";
+const itemClass = "m-0 rounded-ouro-sm p-0 outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";
 
 /**
  * Content folded to `--ouro-show-more-height`: once measured as too tall, its last 3rem fades

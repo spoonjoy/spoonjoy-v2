@@ -147,7 +147,6 @@ describe("Recipes $id Route", () => {
     const otherUser = await createUser(db, otherEmail, otherUsername, "testPassword123");
     otherUserId = otherUser.id;
 
-    // Create a recipe for testing
     const recipe = await db.recipe.create({
       data: {
         title: "Test Recipe " + faker.string.alphanumeric(6),
@@ -940,7 +939,6 @@ describe("Recipes $id Route", () => {
     });
 
     it("should include recipe steps and ingredients", async () => {
-      // Create a step with an ingredient
       const unit = await db.unit.create({ data: { name: "cup_" + faker.string.alphanumeric(6) } });
       const ingredientRef = await db.ingredientRef.create({ data: { name: "flour_" + faker.string.alphanumeric(6) } });
 
@@ -986,7 +984,6 @@ describe("Recipes $id Route", () => {
     });
 
     it("should include step output uses (usingSteps) in recipe data", async () => {
-      // Create step 1
       await db.recipeStep.create({
         data: {
           recipeId,
@@ -1044,7 +1041,6 @@ describe("Recipes $id Route", () => {
     });
 
     it("should include multiple step output uses when a step depends on multiple previous steps", async () => {
-      // Create step 1
       await db.recipeStep.create({
         data: {
           recipeId,
@@ -1054,7 +1050,6 @@ describe("Recipes $id Route", () => {
         },
       });
 
-      // Create step 2
       await db.recipeStep.create({
         data: {
           recipeId,
@@ -3324,7 +3319,7 @@ describe("Recipes $id Route", () => {
       expect(within(within(cookMode).getByRole("article")).getByText("Step 2 of 2")).toBeInTheDocument();
       expect(within(cookMode).getByRole("heading", { name: "Cook" })).toBeInTheDocument();
       expect(within(cookMode).getByRole("checkbox", { name: "Step 1: Prep" })).toBeInTheDocument();
-      expect(within(cookMode).getByText("0 of 2 checked")).toBeInTheDocument();
+      expect(within(cookMode).getByRole("heading", { level: 3, name: "For this step · 0 of 2" })).toBeInTheDocument();
       await user.click(within(cookMode).getByRole("checkbox", { name: "Step 1: Prep" }));
       expect(within(cookMode).getByText("2 of 3 checked")).toBeInTheDocument();
 
@@ -5438,7 +5433,6 @@ describe("Recipes $id Route", () => {
       // Wait for recipe to render
       await screen.findByRole("heading", { name: "Recipe with Ingredients" });
 
-      // Find ingredient checkboxes
       const checkboxes = screen.getAllByRole("checkbox");
       expect(checkboxes.length).toBeGreaterThanOrEqual(2);
 
@@ -5905,7 +5899,6 @@ describe("Recipes $id Route", () => {
     });
 
     it("should throw 403 when trying to add to someone elses cookbook", async () => {
-      // Create cookbook for other user
       const otherCookbook = await db.cookbook.create({
         data: {
           title: "Other User Cookbook " + faker.string.alphanumeric(6),
@@ -5951,7 +5944,6 @@ describe("Recipes $id Route", () => {
     });
 
     it("should allow non-owner to add recipe to their own cookbook", async () => {
-      // Create cookbook for other user
       const otherUserCookbook = await db.cookbook.create({
         data: {
           title: "Other User Own Cookbook " + faker.string.alphanumeric(6),

@@ -166,6 +166,14 @@ describe("NumberField", () => {
     expect(ref.current).toBe(input);
   });
 
+  it("marks the hidden input Base UI submits the number with as its own part", async () => {
+    const { host, input } = await render(<NumberField label="Servings" name="servings" />);
+    const hidden = host.querySelector<HTMLInputElement>('[data-ouro-part="hidden-input"]');
+    expect(hidden).not.toBeNull();
+    expect(hidden).not.toBe(input);
+    expect(hidden!.getAttribute("data-ouro-control")).toBe("number-field");
+  });
+
   it("lets app layout classes win on the root", async () => {
     const { root } = await render(<NumberField label="Servings" className="mt-6" />);
     expect(getComputedStyle(root).marginTop).toBe("24px");

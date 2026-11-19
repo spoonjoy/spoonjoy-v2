@@ -20,7 +20,6 @@ const SALT_ROUNDS = 10;
 const DECOY_PASSWORD_HASH =
   "$2b$10$C1PTchFvumkBU2.pJKCp1.tuWM.G5WH2tmIs.Cs1tSK4eYCyDQ0oi";
 
-// Hash password with bcrypt
 export async function hashPassword(password: string): Promise<{ hashedPassword: string; salt: string }> {
   const salt = bcrypt.genSaltSync(SALT_ROUNDS);
   const hashedPassword = bcrypt.hashSync(password, salt);
@@ -290,7 +289,6 @@ export async function resolveIdentifierToEmail(db: PrismaClient, identifier: str
   return user?.email ?? identifier;
 }
 
-// Get user by ID
 export async function getUserById(db: PrismaClient, id: string) {
   return db.user.findUnique({
     where: { id },
@@ -303,7 +301,6 @@ export async function getUserById(db: PrismaClient, id: string) {
   });
 }
 
-// Check if email exists
 export async function emailExists(db: PrismaClient, email: string): Promise<boolean> {
   const user = await db.user.findUnique({
     where: { email: email.toLowerCase() },
@@ -312,7 +309,6 @@ export async function emailExists(db: PrismaClient, email: string): Promise<bool
   return !!user;
 }
 
-// Check if username exists
 export async function usernameExists(db: PrismaClient, username: string): Promise<boolean> {
   const user = await db.user.findUnique({
     where: { username },

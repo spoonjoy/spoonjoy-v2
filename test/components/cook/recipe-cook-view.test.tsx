@@ -119,14 +119,14 @@ describe("RecipeCookView", () => {
     expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument();
   });
 
-  it("sets the cook step's instruction at step size on a phone and display size from md up", () => {
+  it("sets the cook step's instruction at display size on every screen, as the Apple app does", () => {
     render(<RecipeCookView controller={fakeController(BARE_RECIPE, { cookMode: true })} />);
 
     const panel = screen.getByTestId("cook-mode-panel");
     const instruction = within(panel).getByText("Toast the bread.");
-    // Below md the instruction stays under the step title; from md up it is native's display-size cook step.
-    expect(instruction).toHaveClass("sj-type-step", "md:sj-type-display");
-    expect(instruction).not.toHaveClass("sj-type-display");
+    // The instruction is the step's focus, in Fraunces at display size from a phone up (desk target.md, Cook step).
+    expect(instruction).toHaveClass("sj-type-display");
+    expect(instruction).not.toHaveClass("sj-type-step");
   });
 
   it("shows steps whose checklists are missing from the recipe as having none", () => {

@@ -128,7 +128,7 @@ async function captureAll(browser: Browser, testInfo: TestInfo, device: Device, 
 
   await withContext(browser, device, scheme, { cookies: [], origins: [] }, async (page) => {
     await open(page, "/login");
-    await expect(page.locator("#main").getByRole("button", { name: "Log in", exact: true })).toBeVisible();
+    await expect(page.locator("#main").getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
     await shoot(page, testInfo, "sign-in", device, scheme);
   });
 }

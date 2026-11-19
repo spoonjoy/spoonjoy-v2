@@ -81,9 +81,11 @@ const outlines = () => [...document.querySelectorAll<HTMLElement>("[data-ouro-in
 const tags = () => [...document.querySelectorAll<HTMLAnchorElement>('[data-ouro-control="inspector"][data-ouro-part="tag"]')];
 const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 
-/** Waits until X-ray has measured the page and drawn an outline per component. */
+/** Waits until X-ray has measured the page and drawn an outline per component, and its opening scan has shown them all. */
 async function drawn(count: number) {
   await expect.poll(() => outlines().length).toBe(count);
+  // Until the scan has passed, the outlines below it are cut away, tags and all, and take no pointer.
+  await expect.poll(() => document.querySelector('[data-ouro="inspector"] [data-ouro-part="outlines"]')?.getAnimations().length ?? 0).toBe(0);
   await frame();
   await frame();
 }
@@ -1153,6 +1155,40 @@ describe("Inspector", () => {
       }
       await expect.poll(() => opened.hasAttribute("data-starting-style")).toBe(false);
       expect(getComputedStyle(opened).opacity).toBe("1");
+      await act(() => setOpen(false));
+    }
+  }, 15_000);
+
+  it("opens with a scan down the screen that shows the outlines as it passes, and at once with reduced motion", async () => {
+    const sweep = 2 * parseDuration(getComputedStyle(document.documentElement).getPropertyValue("--ouro-duration-slow"));
+    await render(<Page open={false} />);
+    for (const reduced of [false, true]) {
+      await commands.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
+      flushSync(() => setOpen(true));
+      const opened = layer()!;
+      const outlines = opened.querySelector<HTMLElement>('[data-ouro-part="outlines"]')!;
+      const scan = opened.querySelector<HTMLElement>('[data-ouro-part="scan"]')!;
+      if (reduced) {
+        await Promise.all([
+          expectNoMotion(outlines, { stem: "inspector", state: "data-starting-style", reduced }),
+          expectNoMotion(scan, { stem: "inspector", state: "data-starting-style", reduced }),
+        ]);
+        // No scan at all: nothing moves.
+        expect(getComputedStyle(scan).display).toBe("none");
+      } else {
+        await Promise.all([
+          expectMotion(outlines, { stem: "inspector", state: "data-starting-style", properties: { "clip-path": sweep }, reduced }),
+          expectMotion(scan, { stem: "inspector", state: "data-starting-style", properties: { translate: sweep }, reduced }),
+        ]);
+        // The scan has gone below the screen, and every outline shows.
+        expect(scan.getBoundingClientRect().top).toBeGreaterThanOrEqual(innerHeight);
+      }
+      // Every outline shows: the clip ends as the whole screen, and the tags take the pointer where they sit.
+      expect(getComputedStyle(outlines).clipPath).toBe("inset(0px)");
+      expect(outlines.getBoundingClientRect()).toMatchObject({ top: 0, left: 0, width: innerWidth, height: innerHeight });
+      await drawn(3);
+      const tag = tags()[0]!.getBoundingClientRect();
+      expect(document.elementFromPoint(tag.left + tag.width / 2, tag.top + tag.height / 2)).toBe(tags()[0]);
       await act(() => setOpen(false));
     }
   }, 15_000);

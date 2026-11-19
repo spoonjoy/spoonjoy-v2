@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type HTMLAttributes, type JSX, type ReactNode, type Ref } from "react";
 import { Button } from "~/components/ouro/button/button";
 import {
+  artArriveClass,
   artFrameClass,
   haloClass,
   dismissPeriods,
@@ -65,14 +66,32 @@ export interface MomentOwnProps {
    * motion, its CSS animations stop and its SVG animations pause. Its motion has a budget too:
    * its loops settle at the end of their turn about 5 s after it appears, and with a `dismissKey`
    * or `id` its entrance plays once a session, so a moment that comes back as people switch
-   * views or filters arrives still.
+   * views or filters appears at once. Art that is ready when the moment first renders is drawn
+   * at full opacity from its first frame. The arrival runs when content comes in after that: the
+   * moment first shows, its art loads, or its kind changes. It fades in, rising 10px and growing
+   * from 96% over `--ouro-duration-sheet`. With reduced motion it is just there.
    * @claim "Its motion has a budget too:" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment motion budget > settles the art's loops at the end of their turn within 5 s, SVG animations too, and leaves other motion alone)
    * @claim "Its motion has a budget too:" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment motion budget > plays the art's entrance once a session for a moment with a key, and every time without one)
+   * @claim "Art that is ready when the moment first" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment arrival > draws a moment that is ready at mount at full opacity in its first frame, with no arrival)
+   * @claim "The arrival runs when content comes in" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment arrival > arrives when content comes in after mount, whether or not appear is set)
+   * @claim "The arrival runs when content comes in" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment arrival > arrives when a dismissed moment comes back, which shows it after mount)
+   * @claim "It fades in, rising 10px and growing" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment arrival > arrives once when the moment first shows with appear, from the declared keyframes over the sheet duration and easing)
+   * @claim "With reduced motion it is just there." registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment arrival > has no arrival under reduced motion, or under OuroProvider's reduced motion)
    * @claim "which fills the art's height (160px," registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment sizes > gives the art 160px, 96px in a pane narrower than 24rem, and 24px inline)
    * @claim "It is decorative and hidden from" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment > hides the art from screen readers, or names it with artLabel)
    * @claim "With reduced motion, its CSS animations" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment motion > stops the art's CSS animations and pauses its SVG animations with reduced motion, and lets them run again after)
    */
   art?: ReactNode;
+  /**
+   * Plays the art's arrival when the moment first renders, not only when content comes in after it.
+   * Use it for a moment that should arrive as the page opens; by default art that is ready at mount is
+   * drawn at full opacity from its first frame.
+   * @default false
+   * @claim "Plays the art's arrival when the moment first" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment arrival > with appear, runs the arrival from opacity 0 when a moment that is ready at mount first shows)
+   * @claim "by default art that is ready at mount is" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment arrival > draws a moment that is ready at mount at full opacity in its first frame, with no arrival)
+   */
+  appear?: boolean | undefined;
+
   /** Names the art for screen readers (`role="img"`), for a picture that says something the title does not. */
   artLabel?: string | undefined;
   /**
@@ -276,6 +295,7 @@ function CloseIcon(): JSX.Element {
  *   action={<Button onClick={compose}>New message</Button>}
  * />
  * <Moment kind="success" art={<Done />} title="All caught up" dismissKey="caught-up" cap={{ times: 1, per: "day" }} />
+ * <Moment appear art={<Welcome />} title="Welcome aboard" />
  */
 export function Moment(props: MomentProps): JSX.Element | null {
   const {
@@ -285,6 +305,7 @@ export function Moment(props: MomentProps): JSX.Element | null {
     art,
     artLabel,
     artName,
+    appear,
     action,
     secondaryAction,
     headingLevel,
@@ -396,20 +417,23 @@ export function Moment(props: MomentProps): JSX.Element | null {
     const svgs = [...host.querySelectorAll("svg")];
     for (const svg of svgs) svg.pauseAnimations();
     return () => svgs.forEach((svg) => svg.unpauseAnimations());
-  }, [reduced, art]);
+  }, [reduced, art, kind]);
 
   // The art's own motion has a budget: its entrance plays once a session for a moment with a key,
   // and its loops settle, at the end of the turn they are on, a few seconds after it appears.
-  // Whether this moment's key had already appeared is asked once per key, so a second run of the
-  // effect, as React's StrictMode makes in development, does not count as a second showing.
-  const repeat = useRef<{ key: string; seen: boolean }>(undefined);
+  // Whether this moment's key had already appeared is asked once per key and kind, so a second run of the
+  // effect, as React's StrictMode makes in development, does not count as a second showing. A change of
+  // kind is a different moment, so its arrival plays.
+  const repeat = useRef<{ key: string; kind: MomentKind; seen: boolean }>(undefined);
   useLayoutEffect(() => {
     const host = artRef.current;
     if (!host || key === undefined) return;
-    if (repeat.current?.key !== key) repeat.current = { key, seen: seenThisSession(key) };
+    if (repeat.current?.key !== key) repeat.current = { key, kind, seen: seenThisSession(key) };
+    else if (repeat.current.kind !== kind) repeat.current = { key, kind, seen: false };
     if (!repeat.current.seen) return;
     for (const animation of host.getAnimations({ subtree: true })) if (animation.effect!.getComputedTiming().endTime !== Infinity) animation.finish();
-  }, [art, key]);
+  }, [art, key, kind]);
+
   useEffect(() => {
     const host = artRef.current;
     if (!host) return;
@@ -427,6 +451,15 @@ export function Moment(props: MomentProps): JSX.Element | null {
   }, [art, kind]);
 
   const merged = useMergedRef(ref, useFocusHandoff<HTMLDivElement>());
+  const hasArt = present(art) && !quiet;
+  // The art arrives when content comes in after the moment first rendered, or at mount with `appear`. Art ready at
+  // mount is drawn at once. The art element is identified by its kind while it shows, so a change of this token is a
+  // new element: its class is decided then, and never changes while the element is on the page, where a new class
+  // would start the arrival there.
+  const token = hasArt && visible ? kind : undefined;
+  const [arrival, setArrival] = useState({ token, arrives: appear === true });
+  const arrives = arrival.arrives || token !== arrival.token;
+  if (token !== arrival.token) setArrival({ token, arrives });
   if (!visible) return null;
 
   const dismissible = onDismiss !== undefined || dismissKey !== undefined;
@@ -435,7 +468,6 @@ export function Moment(props: MomentProps): JSX.Element | null {
     if (dismissKey !== undefined) keepDismissed(dismissKey, forMs === undefined ? undefined : Date.now());
     onDismiss?.();
   };
-  const hasArt = present(art) && !quiet;
   const spinner = !hasArt && kind === "loading";
 
   const titleNode =
@@ -484,11 +516,12 @@ export function Moment(props: MomentProps): JSX.Element | null {
               </svg>
             ))}
           <div
+            key={kind}
             ref={artRef}
             {...(artLabel ? { role: "img", "aria-label": artLabel } : { "aria-hidden": true })}
             data-ouro-moment-art=""
             data-moment-art={artName ?? ""}
-            className="relative flex h-(--ouro-moment-art) max-w-full items-center justify-center *:h-(--ouro-moment-art) *:w-auto *:max-w-full motion-reduce:**:[animation:none]!"
+            className={`relative flex h-(--ouro-moment-art) max-w-full items-center justify-center *:h-(--ouro-moment-art) *:w-auto *:max-w-full motion-reduce:**:[animation:none]! ${arrives ? artArriveClass : ""}`}
           >
             {art}
           </div>

@@ -7,22 +7,26 @@ export { thumbClass, trackClass };
 /**
  * The track: 40x24 on touch screens, beside a 24px label line, stepping down to 36x20 beside
  * a 20px line from the `sm` breakpoint with a fine pointer, so a landscape phone keeps the
- * phone size. Off, it is an outline: a `muted-foreground` border that keeps 3:1 against the
- * page (WCAG 1.4.11) around the page color. On, it fills with the primary color, so on and
- * off differ by fill, not only by hue. Its hit area is 44px on touch screens.
+ * phone size. Off, it is the muted surface inside a 1px `muted-foreground` hairline, which keeps
+ * 3:1 against the page (WCAG 1.4.11); with more contrast the hairline is 2px. On, it fills with
+ * the primary color, so on and off differ by fill, not only by hue. Its hit area is 44px on
+ * touch screens.
  * `--ouro-switch-thumb` is the thumb's size at each density.
  *
  * @internal
- * @claim "Off, it is an outline: a" registry/ouro/components/ouro/switch/switch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.test.tsx::Switch look and motion > tells on from off without hue, with an off outline at 3:1 against the page, in light and dark)
+ * @claim "Off, it is the muted surface" registry/ouro/components/ouro/switch/switch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.test.tsx::Switch look and motion > tells on from off without hue, with a 1px off hairline at 3:1 against the page, in light and dark)
+ * @claim "with more contrast the hairline is" registry/ouro/components/ouro/switch/switch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.test.tsx::Switch look and motion > draws the off hairline 1px, and 2px with more contrast, with the thumb in the same place)
  * @claim "Its hit area is 44px on" registry/ouro/components/ouro/switch/switch.touch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.touch.test.tsx::gives the switch a 44px hit area, though it is 24px tall)
  * @claim "The track: 40x24 on touch screens" registry/ouro/components/ouro/switch/switch.touch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.touch.test.tsx::keeps the phone size and 16px label on a landscape phone, past the sm breakpoint)
- * @claim "Off, it is an outline" https://www.w3.org/TR/WCAG22/#non-text-contrast verify:urlOk(https://www.w3.org/TR/WCAG22/#non-text-contrast)
+ * @claim "which keeps 3:1 against the page" https://www.w3.org/TR/WCAG22/#non-text-contrast verify:urlOk(https://www.w3.org/TR/WCAG22/#non-text-contrast)
  * @claim "`--ouro-switch-thumb` is the thumb's size at" registry/ouro/components/ouro/switch/switch-styles.ts verify:fileLine(registry/ouro/components/ouro/switch/switch-styles.ts, /\[--ouro-switch-thumb:calc\(var\(--spacing\)\*5\)\]\ssm:pointer-fine:\[--ouro-switch-thumb:calc\(var\(--spacing\)\*4\)\]/)
  */
 const trackClass =
-  "group relative m-0 box-border inline-flex h-6 w-10 shrink-0 items-center p-0 sm:pointer-fine:h-5 sm:pointer-fine:w-9 " +
+  "group relative m-0 box-border inline-flex h-6 w-10 shrink-0 items-center p-px sm:pointer-fine:h-5 sm:pointer-fine:w-9 " +
   "[--ouro-switch-thumb:calc(var(--spacing)*5)] sm:pointer-fine:[--ouro-switch-thumb:calc(var(--spacing)*4)] " +
-  "[--corner-shape:round] [corner-shape:round] rounded-full border-2 border-solid border-muted-foreground bg-transparent data-checked:border-primary data-checked:bg-primary " +
+  "[--corner-shape:round] [corner-shape:round] rounded-full border border-solid border-muted-foreground bg-muted data-checked:border-primary data-checked:bg-primary " +
+  // More contrast trades the padding for a 2px hairline, so the thumb keeps its place.
+  "contrast-more:border-2 contrast-more:p-0 " +
   "transition-[background-color,border-color] duration-(--ouro-duration-fast) ease-[ease] " +
   "cursor-default select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
@@ -47,8 +51,8 @@ const thumbClass =
   "pointer-events-none block size-(--ouro-switch-thumb) [--corner-shape:round] [corner-shape:round] rounded-full " +
   // The Quiet switch's lens: the glass tint over the track with a rim inside, a hairline outside and the theme's small shadow.
   // No backdrop filter, which made every large repaint slower in WebKit without a GPU (ourostack/ouro-ui#728): the thumb only
-  // ever lies over its own track, so the lens is drawn. Off, the tint shows the page through the outlined track, with the
-  // outline's colour fading in from the near edge as the filter's blur drew it; on, the tint is mixed into the primary fill,
+  // ever lies over its own track, so the lens is drawn. Off, the tint shows the track's muted fill, with the hairline's
+  // colour fading in from the near edge as the filter's blur drew it; on, the tint is mixed into the primary fill,
   // saturated by the matrix saturate(1.6) applies.
   "bg-[color-mix(in_oklab,var(--ouro-glass)_var(--ouro-glass-tint),transparent)] " +
   "[box-shadow:inset_0_0_0_.75px_var(--ouro-glass-rim),0_0_0_.5px_var(--ouro-glass-edge),var(--shadow-sm)] " +

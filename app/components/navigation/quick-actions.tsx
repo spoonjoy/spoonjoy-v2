@@ -33,7 +33,6 @@ export interface AddToListResult {
 export async function addToShoppingList(options: AddToListOptions): Promise<AddToListResult> {
   const { recipeId, ingredientIds } = options
 
-  // Validate recipe ID
   if (!recipeId || recipeId === 'non-existent') {
     return {
       success: false,

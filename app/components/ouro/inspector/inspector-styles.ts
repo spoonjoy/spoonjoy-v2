@@ -1,4 +1,4 @@
-export { actionsClass, frameClass, isPartOf, itemFor, labelClass, layerClass, linkClass, listClass, outlineClass, pillClass, statusClass, tagClass };
+export { actionsClass, frameClass, isPartOf, itemFor, labelClass, layerClass, linkClass, listClass, outlineClass, outlinesClass, pillClass, scanClass, statusClass, tagClass };
 
 // Class strings and names for Inspector, apart from the component so its file exports only
 // components (React Fast Refresh). Class strings are literal so the app's Tailwind finds them.
@@ -66,6 +66,30 @@ const layerClass =
   "[body:has([data-ouro-inspector-list])_&]:invisible";
 
 /**
+ * The outlines, together: as X-ray opens they show from the top of the screen down, as the scan passes over them, over
+ * twice `--ouro-duration-slow`; with reduced motion they show at once, with the layer. @internal
+ *
+ * @claim "The outlines, together: as X-ray opens" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > opens with a scan down the screen that shows the outlines as it passes, and at once with reduced motion)
+ */
+// It covers the layer, so the outlines keep the layer's corner as their origin and the clip has a box to cut.
+const outlinesClass =
+  "absolute inset-0 [clip-path:inset(0)] motion-safe:[transition:clip-path_calc(var(--ouro-duration-slow)*2)_var(--ouro-ease-in-out),translate_calc(var(--ouro-duration-slow)*2)_var(--ouro-ease-in-out)] " +
+  "starting:in-data-starting-style:[clip-path:inset(0_0_100%_0)]";
+
+/**
+ * The scan: a band tinted with the primary color, with a line at its lower edge, that sweeps down the screen once as X-ray opens,
+ * on the outlines' timing, and then rests below it. With reduced motion there is no scan. @internal
+ *
+ * @claim "With reduced motion there is no" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > opens with a scan down the screen that shows the outlines as it passes, and at once with reduced motion)
+ * @claim "The scan: a band tinted with" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > opens with a scan down the screen that shows the outlines as it passes, and at once with reduced motion)
+ */
+const scanClass =
+  "absolute inset-x-0 top-0 h-16 [translate:0_100vh] border-b-2 border-primary bg-primary/5 " +
+  // The outlines' transition, the one class for both: each part changes only its own property.
+  "motion-safe:[transition:clip-path_calc(var(--ouro-duration-slow)*2)_var(--ouro-ease-in-out),translate_calc(var(--ouro-duration-slow)*2)_var(--ouro-ease-in-out)] " +
+  "starting:in-data-starting-style:[translate:0_-100%] motion-reduce:hidden";
+
+/**
  * One outline: placed by `transform` from its component's box, and hidden, tag and all, while nothing of it shows. @internal
  *
  * @claim "One outline: placed by `transform` from" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > hides the outline and tag of a component scrolled out of view inside a box, and clips one partly out)
@@ -97,7 +121,7 @@ const frameClass =
  * @claim "where it covers no text and" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > leaves every line of the page's text as readable as it was, in light and dark: outlines step around text, and tags sit clear of text and of each other)
  */
 const tagClass =
-  "pointer-events-auto absolute top-0 left-0 z-1 inline-flex max-w-48 items-center truncate rounded-sm px-1.5 " +
+  "pointer-events-auto absolute top-0 left-0 z-1 inline-flex max-w-48 items-center truncate rounded-ouro-sm px-1.5 " +
   "font-mono text-[11px] leading-4 font-medium text-primary-foreground no-underline bg-primary " +
   "data-covered:invisible data-crowded:invisible " +
   "outline-ring outline-offset-1 focus-visible:outline-2 focus-visible:outline-solid pointer-fine:hover:underline";
@@ -113,7 +137,7 @@ const tagClass =
 const pillClass =
   "pointer-events-auto in-data-modal:invisible fixed inset-x-0 mx-auto flex w-fit max-w-[calc(100%-2rem)] flex-wrap items-center gap-1 " +
   "bottom-[max(1rem,env(safe-area-inset-bottom),var(--ouro-inspector-bottom,0px),var(--ouro-inspector-tab-bar,0px))] " +
-  "rounded-3xl bg-popover p-1 ps-4 text-sm leading-5 text-popover-foreground shadow-(--shadow-lg) ring-1 ring-border/60";
+  "rounded-ouro-3xl bg-popover p-1 ps-4 text-sm leading-5 text-popover-foreground shadow-(--shadow-lg) ring-1 ring-border/60";
 
 /** X-ray's label, on one line. @internal */
 const labelClass = "shrink-0 py-1.5 font-medium whitespace-nowrap";
@@ -134,5 +158,5 @@ const listClass = "m-0 grid list-none gap-1 p-0";
 
 /** A Docs or Source link in the list. @internal */
 const linkClass =
-  "rounded-sm px-1 text-sm leading-5 font-medium text-foreground underline underline-offset-4 " +
+  "rounded-ouro-sm px-1 text-sm leading-5 font-medium text-foreground underline underline-offset-4 " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";

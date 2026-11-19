@@ -35,6 +35,17 @@ afterEach(async () => {
 const tokens = ["CLI", "Sync", "Backup"];
 
 describe("ItemGroup", () => {
+  it("lines its label up with rows a person chooses, in a divided or plain group, and leaves it in an outlined group or one with none", async () => {
+    const pad = async (variant: "divided" | "plain" | "outline", node: ReactNode) => {
+      const { group } = await render(<ItemGroup label="Recipes" variant={variant}>{node}</ItemGroup>);
+      return getComputedStyle(group.querySelector("[id]")!).paddingInlineStart;
+    };
+    expect(await pad("divided", <Item onSelect={() => {}} title="Short ribs" />)).toBe("12px");
+    expect(await pad("plain", <Item onSelect={() => {}} title="Short ribs" />)).toBe("12px");
+    expect(await pad("outline", <Item onSelect={() => {}} title="Short ribs" />)).toBe("0px");
+    expect(await pad("divided", <Item title="Lentil soup" />)).toBe("0px");
+  });
+
   it("is a list labelled by its label, with each Item a list item", async () => {
     await render(
       <ItemGroup label="Bearer credentials">

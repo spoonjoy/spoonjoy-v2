@@ -38,13 +38,14 @@ export interface EmptyOwnProps {
   variant?: "outline" | "plain" | (string & { 'Use "outline" or "plain"': never }) | undefined;
   /**
    * `center` centers everything, for a page or panel; `start` lines it up with the text
-   * around it.
+   * around it (flush with it when `variant="plain"`, with no room at its sides).
    * @default "center"
+   * @claim "`center` centers everything, for a page" registry/ouro/components/ouro/empty/empty.test.tsx verify:testExists(registry/ouro/components/ouro/empty/empty.test.tsx::Empty > lines its text up with the text around it with variant=plain and align=start, in either direction)
    * @claim "`center` centers everything, for a page" registry/ouro/components/ouro/empty/empty.test.tsx verify:testExists(registry/ouro/components/ouro/empty/empty.test.tsx::Empty > centers its content and draws a dashed outline by default)
    * @claim "`center` centers everything, for a page" registry/ouro/components/ouro/empty/empty.test.tsx verify:testExists(registry/ouro/components/ouro/empty/empty.test.tsx::Empty > has no outline with variant=plain, and aligns to the start with align=start)
    */
   align?: "center" | "start" | (string & { 'Use "center" or "start": left is "start"': never }) | undefined;
-  /** Layout only: margins, width, grid placement (`mt-6`). Appearance classes warn in development; use `variant`. */
+  /** Layout only: margins, width (`max-w-md` holds the whole Empty to a column), grid placement (`mt-6`). Appearance classes warn in development; use `variant`. */
   className?: string | undefined;
   ref?: Ref<HTMLDivElement> | undefined;
 
@@ -61,7 +62,7 @@ export interface EmptyOwnProps {
 /** Props for {@link Empty}: its own props and the div attributes it passes through. */
 export type EmptyProps = Omit<HTMLAttributes<HTMLDivElement>, keyof EmptyOwnProps> & EmptyOwnProps;
 
-const variants = { outline: "border border-dashed border-border rounded-xl", plain: "" } as const;
+const variants = { outline: "border border-dashed border-border rounded-ouro-xl", plain: "" } as const;
 const aligns = { center: "items-center text-center", start: "items-start text-start" } as const;
 const levels = [2, 3, 4, 5, 6] as const;
 
@@ -73,6 +74,13 @@ const levels = [2, 3, 4, 5, 6] as const;
  * still loading, and `Moment` for a state with art of its own, a first run, a success that
  * celebrates, or one the person can dismiss.
  *
+ * Signed out, show the way in (a "You're signed out" title and a Sign in action) instead of
+ * the empty state a signed-in person would see, which tells a signed-out person nothing is
+ * wrong. Mark the app's shell `data-ouro-session="signed-out"` and Ouro check's
+ * `signed-out-empty` fails an Empty, or words that say there is nothing, under it, unless the
+ * Empty holds the way in: `<Empty title="You're signed out" action={<Button>Sign in</Button>} />` passes.
+ *
+ * @claim "Ouro check's `signed-out-empty` fails an Empty" test/check-first-run-in-page.test.ts verify:testExists(test/check-first-run-in-page.test.ts::findFirstRunIssues: signed-out-empty > finds an Ouro Empty or words that say there is nothing, on a signed-out page, once per empty state)
  * @group Display
  * @see https://ui.ouroboros.bot/docs/empty
  *
@@ -129,7 +137,14 @@ export function Empty(props: EmptyProps): JSX.Element {
     <div
       {...rest}
       data-ouro="empty"
-      className={cn("flex min-w-0 flex-col gap-4 px-6 py-10 text-balance", variants[variant], aligns[align], className)}
+      className={cn(
+        "flex min-w-0 flex-col gap-4 py-10 text-balance",
+        // With no edge and its text at the start, it lines up with the text around it; otherwise it keeps room at its sides.
+        !(variant === "plain" && align === "start") && "px-6",
+        variants[variant],
+        aligns[align],
+        className,
+      )}
     >
       {icon && (
         <div
@@ -139,7 +154,7 @@ export function Empty(props: EmptyProps): JSX.Element {
           {icon}
         </div>
       )}
-      <div className={cn("flex max-w-md flex-col gap-1.5", aligns[align])}>
+      <div className={cn("flex flex-col gap-1.5", aligns[align])}>
         <Heading level={level} size="md">
           {title}
         </Heading>
@@ -150,7 +165,7 @@ export function Empty(props: EmptyProps): JSX.Element {
         )}
       </div>
       {action && <div className="flex flex-wrap gap-2">{action}</div>}
-      {children && <div className="w-full max-w-md">{children}</div>}
+      {children && <div className="w-full">{children}</div>}
     </div>
   );
 }

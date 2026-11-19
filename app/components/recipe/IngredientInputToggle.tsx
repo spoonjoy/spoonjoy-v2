@@ -81,7 +81,6 @@ export function IngredientInputToggle({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Only on mount
 
-  // Handle toggle change
   const handleChange = useCallback(
     (checked: boolean) => {
       const newMode: IngredientInputMode = checked ? 'ai' : 'manual'

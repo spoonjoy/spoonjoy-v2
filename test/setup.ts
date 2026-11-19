@@ -195,7 +195,6 @@ expect.extend({
     const hasNativeDisabled = element.hasAttribute('disabled');
     // Also check aria-disabled="true"
     const hasAriaDisabled = element.getAttribute('aria-disabled') === 'true';
-    // Check if parent fieldset is disabled
     const isInDisabledFieldset = element.closest('fieldset[disabled]') !== null;
 
     const isDisabled = hasNativeDisabled || hasAriaDisabled || isInDisabledFieldset;

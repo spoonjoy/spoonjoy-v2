@@ -160,7 +160,7 @@ export default function Login() {
   const identifierRef = useRef<HTMLInputElement>(null);
 
   return (
-    <AuthPage formTitle="Log in">
+    <AuthPage formTitle="Sign in">
       <div className="w-full max-w-sm">
 
         {/* OAuth error messages */}
@@ -198,7 +198,7 @@ export default function Login() {
           ) : null}
 
           <Button type="submit" className="w-full">
-            Log in
+            Sign in
           </Button>
         </Form>
 

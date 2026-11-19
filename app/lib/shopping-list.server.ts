@@ -331,7 +331,6 @@ async function d1ShoppingListWrites(d1: D1ReadDatabase, userId: string): Promise
 }
 
 async function prismaShoppingListWrites(database: PrismaClient, userId: string): Promise<ShoppingListWrites> {
-  // Get or create shopping list
   let shoppingList = await database.shoppingList.findUnique({
     where: { authorId: userId },
   });
@@ -345,7 +344,6 @@ async function prismaShoppingListWrites(database: PrismaClient, userId: string):
 
   return {
     async addItem(item) {
-      // Get or create ingredient ref
       let ingredientRef = await database.ingredientRef.findUnique({
         where: { name: item.ingredientName },
       });
@@ -360,7 +358,6 @@ async function prismaShoppingListWrites(database: PrismaClient, userId: string):
 
       /* istanbul ignore else -- @preserve unit name is usually provided */
       if (item.unitName) {
-        // Get or create unit
         let unit = await database.unit.findUnique({
           where: { name: item.unitName },
         });

@@ -75,6 +75,15 @@ describe("createChimeContext", () => {
     expect(createChimeContext()).toBe(made[0]);
   });
 
+  it("returns null in an automated browser, where navigator.webdriver is true", () => {
+    Object.defineProperty(navigator, "webdriver", { value: true, configurable: true });
+    try {
+      expect(createChimeContext()).toBeNull();
+    } finally {
+      Object.defineProperty(navigator, "webdriver", { value: false, configurable: true });
+    }
+  });
+
   it("returns null without Web Audio, or when the browser refuses one", () => {
     useConstructor(undefined, undefined);
     expect(createChimeContext()).toBeNull();

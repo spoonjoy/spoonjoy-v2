@@ -352,12 +352,12 @@ describe("Collapsible development messages", () => {
 
   it("checks the className", async () => {
     await render(
-      <Collapsible title="Nutrition facts" className="rounded-lg">
+      <Collapsible title="Nutrition facts" className="rounded-ouro-lg">
         {facts}
       </Collapsible>,
     );
     expect(warn).toHaveBeenCalledWith(
-      '[ouro-ui] Collapsible: "rounded-lg" sets appearance, and className is for layout only. Fix: remove "rounded-lg"; Collapsible sets its own look.',
+      '[ouro-ui] Collapsible: "rounded-ouro-lg" sets appearance, and className is for layout only. Fix: remove "rounded-ouro-lg"; Collapsible sets its own look.',
     );
   });
 
