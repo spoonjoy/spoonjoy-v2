@@ -859,7 +859,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Share\" [share-button/trigger] in main",
+          "identity": "button \"Share cookbook\" [share-button/trigger] in main",
           "count": 1
         },
         {
@@ -891,7 +891,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Lemon Herb Rice\" [item/link] in region \"Recipes\"",
+          "identity": "link \"Lemon Herb Rice\" [item/link] in region \"Contents\"",
           "count": 1
         },
         {
@@ -903,7 +903,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Saffron Risotto\" [item/link] in region \"Recipes\"",
+          "identity": "link \"Saffron Risotto\" [item/link] in region \"Contents\"",
           "count": 1
         },
         {
@@ -973,7 +973,7 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [item/link] in main",
+          "identity": "link \"\" [item/link] in region \"Contents\"",
           "count": 2
         },
         {
@@ -1035,7 +1035,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Share\" [share-button/trigger] in main",
+          "identity": "button \"Share cookbook\" [share-button/trigger] in main",
           "count": 1
         },
         {
@@ -1067,7 +1067,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Lemon Herb Rice\" [item/link] in region \"Recipes\"",
+          "identity": "link \"Lemon Herb Rice\" [item/link] in region \"Contents\"",
           "count": 1
         },
         {
@@ -1079,7 +1079,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Saffron Risotto\" [item/link] in region \"Recipes\"",
+          "identity": "link \"Saffron Risotto\" [item/link] in region \"Contents\"",
           "count": 1
         },
         {
@@ -1149,7 +1149,7 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [item/link] in main",
+          "identity": "link \"\" [item/link] in region \"Contents\"",
           "count": 2
         },
         {
@@ -8321,7 +8321,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Share\" [share-button/trigger] in main",
+          "identity": "button \"Share cookbook\" [share-button/trigger] in main",
           "count": 1
         },
         {
@@ -8341,7 +8341,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Lemon Herb Rice\" [item/link] in region \"Recipes\"",
+          "identity": "link \"Lemon Herb Rice\" [item/link] in region \"Contents\"",
           "count": 1
         },
         {
@@ -8349,7 +8349,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Saffron Risotto\" [item/link] in region \"Recipes\"",
+          "identity": "link \"Saffron Risotto\" [item/link] in region \"Contents\"",
           "count": 1
         },
         {
@@ -8403,7 +8403,7 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [item/link] in main",
+          "identity": "link \"\" [item/link] in region \"Contents\"",
           "count": 2
         },
         {
@@ -8457,7 +8457,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Share\" [share-button/trigger] in main",
+          "identity": "button \"Share cookbook\" [share-button/trigger] in main",
           "count": 1
         },
         {
@@ -8477,7 +8477,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Lemon Herb Rice\" [item/link] in region \"Recipes\"",
+          "identity": "link \"Lemon Herb Rice\" [item/link] in region \"Contents\"",
           "count": 1
         },
         {
@@ -8485,7 +8485,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Saffron Risotto\" [item/link] in region \"Recipes\"",
+          "identity": "link \"Saffron Risotto\" [item/link] in region \"Contents\"",
           "count": 1
         },
         {
@@ -8539,7 +8539,7 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [item/link] in main",
+          "identity": "link \"\" [item/link] in region \"Contents\"",
           "count": 2
         },
         {
