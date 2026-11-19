@@ -1064,6 +1064,275 @@ describe("Avatar presence", () => {
   });
 });
 
+describe("Avatar group chats", () => {
+  const crew = [
+    { name: "Captain Nemo" },
+    { name: "Professor Aronnax" },
+    { name: "Conseil" },
+    { name: "Ned Land" },
+  ];
+  const all = ["xs", "sm", "md", "lg", "xl", "2xl", "3xl"] as const;
+  const slicesOf = (avatar: Element) => [...avatar.querySelectorAll<HTMLElement>("[data-ouro-avatar-slice]")];
+  afterEach(() => document.documentElement.classList.remove("dark"));
+
+  it("cuts the avatar into two slices below 40px and three from 40px, at every size", async () => {
+    for (const size of all) {
+      const person = (await render(<Avatar name="Ana Lind" size={size} />)).avatar.getBoundingClientRect();
+      const { avatar } = await render(<Avatar name="The whole crew" members={crew} size={size} />);
+      const box = avatar.getBoundingClientRect();
+      // The same box as a person's avatar, and the person's rounder squircle, not a team's tile.
+      expect([box.width, box.height]).toEqual([person.width, person.height]);
+      expect(avatar.getAttribute("data-shape")).toBe("group");
+      expect(surface(avatar).className).toContain("[--ouro-sq-r:44%]");
+      expect(getComputedStyle(avatar).boxShadow).toBe("none");
+      const slices = slicesOf(avatar);
+      const small = size === "xs" || size === "sm";
+      expect(slices).toHaveLength(small ? 2 : 3);
+      const [first, ...rest] = slices.map((slice) => slice.getBoundingClientRect());
+      // The first member's slice is a half, full height, on the start side.
+      expect(first!.left).toBeCloseTo(box.left, 0);
+      expect(first!.height).toBeCloseTo(box.height, 0);
+      expect(first!.width).toBeLessThan(box.width / 2);
+      expect(first!.width).toBeGreaterThan(box.width / 2 - 3);
+      if (small) {
+        expect(rest[0]!.height).toBeCloseTo(box.height, 0);
+        expect(rest[0]!.right).toBeCloseTo(box.right, 0);
+        // Two halves draw their letters at one size.
+        expect(getComputedStyle(slices[1]!).fontSize).toBe(getComputedStyle(slices[0]!).fontSize);
+      } else {
+        // The next two are quarters, stacked on the end side, with smaller letters.
+        for (const quarter of rest) {
+          expect(quarter.right).toBeCloseTo(box.right, 0);
+          expect(quarter.height).toBeLessThan(box.height / 2);
+          expect(quarter.width).toBeCloseTo(first!.width, 0);
+        }
+        expect(rest[0]!.top).toBeCloseTo(box.top, 0);
+        expect(rest[1]!.bottom).toBeCloseTo(box.bottom, 0);
+        expect(parseFloat(getComputedStyle(slices[1]!).fontSize)).toBeLessThan(parseFloat(getComputedStyle(slices[0]!).fontSize));
+      }
+      // One letter per slice, the member's first.
+      expect(slices.map((slice) => drawn(slice))).toEqual(["C", "P", "C"].slice(0, slices.length));
+    }
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("keeps the slices inside the person's squircle, its corners cut away", async () => {
+    const { host } = await render(
+      <div style={{ background: "rgb(255, 0, 0)", padding: 8, width: "max-content" }}>
+        <Avatar name="The whole crew" members={crew} size="xl" />
+      </div>,
+    );
+    const frame = host.firstElementChild as HTMLElement;
+    const avatar = frame.querySelector<HTMLElement>('[data-ouro="avatar"]')!;
+    const shot = new Image();
+    shot.src = `data:image/png;base64,${await page.screenshot({ element: frame, base64: true, save: false })}`;
+    await shot.decode();
+    const scale = shot.naturalWidth / frame.getBoundingClientRect().width;
+    const paint = document.createElement("canvas");
+    [paint.width, paint.height] = [shot.naturalWidth, shot.naturalHeight];
+    const pen = paint.getContext("2d", { willReadFrequently: true })!;
+    pen.drawImage(shot, 0, 0);
+    const at = (x: number, y: number) => [...pen.getImageData(Math.round(x * scale), Math.round(y * scale), 1, 1).data.slice(0, 3)];
+    const [from, box] = [frame.getBoundingClientRect(), avatar.getBoundingClientRect()];
+    const [left, top] = [box.left - from.left, box.top - from.top];
+    // Each corner shows what lies behind; the slices' middles show the slices.
+    for (const [x, y] of [[left + 2, top + 2], [left + box.width - 2, top + 2], [left + 2, top + box.height - 2], [left + box.width - 2, top + box.height - 2]] as const) {
+      expect(at(x, y)).toEqual([255, 0, 0]);
+    }
+    expect(at(left + box.width / 4, top + box.height / 2)).not.toEqual([255, 0, 0]);
+  });
+
+  it("leaves a gap between the slices that shows what lies behind", async () => {
+    for (const size of all) {
+      const { avatar } = await render(
+        <div style={{ background: "rgb(255, 0, 0)" }}>
+          <Avatar name="The whole crew" members={crew} size={size} />
+        </div>,
+      ).then(({ host }) => ({ avatar: host.querySelector<HTMLElement>('[data-ouro="avatar"]')! }));
+      // Nothing behind the slices paints: the gap is a hole, so a photo or gradient behind shows through.
+      expect(getComputedStyle(surface(avatar)).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      expect(getComputedStyle(avatar).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      const [first, second, third] = slicesOf(avatar).map((slice) => slice.getBoundingClientRect());
+      const gap = second!.left - first!.right;
+      expect(gap).toBeGreaterThanOrEqual(1);
+      expect(gap).toBeLessThan(avatar.getBoundingClientRect().width * 0.06);
+      if (third) expect(third.top - second!.bottom).toBeCloseTo(gap, 1);
+    }
+  });
+
+  it("shows each member's picture, or their initial in their own hue until it loads", async () => {
+    const { avatar } = await render(<Avatar name="Pair" members={[{ name: "Ana Lind", src: photo }, { name: "Ben Ito", src: broken }, { name: "Cy Ode", initials: "Zed" }]} size="lg" />);
+    await expect.poll(() => slicesOf(avatar)[0]!.querySelector("img")).not.toBeNull();
+    const [ana, ben, cy] = slicesOf(avatar);
+    expect(ana!.querySelector("img")!.getAttribute("alt")).toBe("");
+    expect(getComputedStyle(ana!.querySelector("img")!).objectFit).toBe("cover");
+    expect(ana!.getAttribute("data-image")).toBe("loaded");
+    await expect.poll(() => ben!.getAttribute("data-image")).toBe("error");
+    expect(drawn(ben!)).toBe("B");
+    expect(drawn(cy!)).toBe("Z");
+    // Each member keeps the hue their own avatar has, so a person looks the same in a group as alone.
+    const own = (name: string) => getComputedStyle(surface(document.querySelector(`[aria-label="${name}"]`)!)).backgroundColor;
+    await render(
+      <>
+        <Avatar name="Ben Ito" />
+        <Avatar name="Cy Ode" />
+      </>,
+    );
+    expect(getComputedStyle(ben!).backgroundColor).toBe(own("Ben Ito"));
+    expect(getComputedStyle(cy!).backgroundColor).toBe(own("Cy Ode"));
+    expect(getComputedStyle(ben!).backgroundColor).not.toBe(getComputedStyle(cy!).backgroundColor);
+  });
+
+  it.each(["light", "dark"] as const)("keeps each slice's initial at least 4.5:1 on its hue (%s)", async (mode) => {
+    if (mode === "dark") document.documentElement.classList.add("dark");
+    const { avatar } = await render(<Avatar name="Everyone" members={names.slice(0, 3).map((name) => ({ name }))} size="xl" />);
+    for (const slice of slicesOf(avatar)) {
+      const style = getComputedStyle(slice);
+      expect(ratio(toRgb(style.color), toRgb(style.backgroundColor))).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("fills the whole avatar with one member", async () => {
+    const { avatar } = await render(<Avatar name="Just us" members={[{ name: "Ana Lind" }]} size="lg" />);
+    const [slice] = slicesOf(avatar);
+    expect(slicesOf(avatar)).toHaveLength(1);
+    const [box, at] = [avatar.getBoundingClientRect(), slice!.getBoundingClientRect()];
+    expect([at.width, at.height]).toEqual([box.width, box.height]);
+    expect(drawn(slice!)).toBe("A");
+    expect(avatar.getAttribute("aria-label")).toBe("Just us, group chat with Ana Lind");
+  });
+
+  it("draws no presence and takes no shape, and names the fix", async () => {
+    const props = { name: "Crew", members: crew, presence: "busy", presenceLabel: "Busy", shape: "square" } as unknown as Parameters<typeof Avatar>[0];
+    const { avatar } = await render(<Avatar {...props} />);
+    expect(avatar.getAttribute("data-shape")).toBe("group");
+    expect(avatar.hasAttribute("data-presence")).toBe(false);
+    expect(avatar.querySelector("[data-ouro-avatar-presence]")).toBeNull();
+    expect(getComputedStyle(avatar).boxShadow).toBe("none");
+    expect(warn).toHaveBeenCalledWith("[ouro-ui] Avatar: a group chat shows no presence, so members draws no dot. Fix: <Avatar name=\"Crew\" members={members} />.");
+    expect(warn).toHaveBeenCalledWith(
+      '[ouro-ui] Avatar: a group chat is drawn from its members, so shape="square" does nothing; a channel or team is shape="square" with no members. Fix: <Avatar name="Crew" members={members} />.',
+    );
+  });
+
+  it("names the one fix for shape=\"group\" with members, which a group needs no shape beside", async () => {
+    const props = { name: "Crew", members: crew, shape: "group" } as unknown as Parameters<typeof Avatar>[0];
+    const { avatar } = await render(<Avatar {...props} />);
+    expect(avatar.getAttribute("data-shape")).toBe("group");
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      '[ouro-ui] Avatar: a group chat is drawn from its members, so shape="group" does nothing; a channel or team is shape="square" with no members. Fix: <Avatar name="Crew" members={members} />.',
+    );
+  });
+
+  it("paints every slice neutral or in the brand tint when the group's color says so", async () => {
+    const tone = async (color: "neutral" | "brand") => {
+      const one = (await render(<Avatar name="Solo" color={color} />)).avatar;
+      const group = (await render(<Avatar name="Crew" members={crew} color={color} size="lg" />)).avatar;
+      const fill = getComputedStyle(surface(one)).backgroundColor;
+      return slicesOf(group).map((slice) => getComputedStyle(slice).backgroundColor === fill && getComputedStyle(slice).color === getComputedStyle(one).color);
+    };
+    expect(await tone("neutral")).toEqual([true, true, true]);
+    expect(await tone("brand")).toEqual([true, true, true]);
+    // Colorful, the default, gives each member their own hue.
+    const colorful = (await render(<Avatar name="Crew" members={crew} size="lg" />)).avatar;
+    expect(new Set(slicesOf(colorful).map((slice) => getComputedStyle(slice).backgroundColor)).size).toBeGreaterThan(1);
+  });
+
+  it("says the group's name and who is in it", async () => {
+    const said = async (members: typeof crew, extra: Partial<Parameters<typeof Avatar>[0]> = {}) =>
+      (await render(<Avatar name="The whole crew" members={members} {...(extra as object)} />)).avatar.getAttribute("aria-label");
+    expect(await said(crew)).toBe("The whole crew, group chat with Captain Nemo, Professor Aronnax and 2 others");
+    expect(await said(crew.slice(0, 3))).toBe("The whole crew, group chat with Captain Nemo, Professor Aronnax and Conseil");
+    expect(await said(crew.slice(0, 2))).toBe("The whole crew, group chat with Captain Nemo and Professor Aronnax");
+    expect(await said(crew, { membersLabel: (names) => `discussion avec ${names.length} personnes` })).toBe("The whole crew, discussion avec 4 personnes");
+    expect(await said(crew, { alt: "Crew chat" })).toBe("Crew chat");
+    await expect.element(page.getByRole("img", { name: "The whole crew, group chat with Captain Nemo, Professor Aronnax and 2 others" })).toBeVisible();
+    const hidden = (await render(<Avatar name="The whole crew" members={crew} alt="" />)).avatar;
+    expect(hidden.getAttribute("aria-hidden")).toBe("true");
+    // Server HTML holds the slices and the name, so the group is drawn before hydration.
+    const html = renderToString(<Avatar name="The whole crew" members={crew} />);
+    expect(html).toContain('aria-label="The whole crew, group chat with Captain Nemo, Professor Aronnax and 2 others"');
+    expect(html.match(/data-ouro-avatar-slice/g)).toHaveLength(3);
+  });
+
+  it("shows the group's own picture in place of the slices once it loads", async () => {
+    const src = await freshPicture();
+    const { avatar } = await render(<Avatar name="The whole crew" src={src} members={crew} />);
+    await whenLoaded(avatar);
+    expect(slicesOf(avatar)).toHaveLength(0);
+    const picture = surface(avatar).querySelector("img")!;
+    expect(picture.getAttribute("src")).toBe(src);
+    const [box, at] = [avatar.getBoundingClientRect(), picture.getBoundingClientRect()];
+    expect([at.left, at.top, at.width, at.height]).toEqual([box.left, box.top, box.width, box.height]);
+    expect(avatar.getAttribute("aria-label")).toBe("The whole crew, group chat with Captain Nemo, Professor Aronnax and 2 others");
+    const failing = (await render(<Avatar name="The whole crew" src={broken} members={crew} />)).avatar;
+    await expect.poll(() => failing.getAttribute("data-image")).toBe("error");
+    expect(slicesOf(failing)).toHaveLength(3);
+  });
+
+  it("puts the first member on the start side, right to left too", async () => {
+    const { host } = await render(
+      <div dir="rtl">
+        <Avatar name="The whole crew" members={crew} size="lg" />
+      </div>,
+    );
+    const avatar = host.querySelector<HTMLElement>('[data-ouro="avatar"]')!;
+    const [first, second] = slicesOf(avatar).map((slice) => slice.getBoundingClientRect());
+    expect(first!.right).toBeCloseTo(avatar.getBoundingClientRect().right, 0);
+    expect(second!.right).toBeLessThan(first!.left);
+  });
+
+  it("keeps each slice's edge in forced colours, and nothing moves under reduced motion", async () => {
+    await commands.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+    try {
+      const { avatar } = await render(<Avatar name="The whole crew" members={[{ name: "Ana Lind", src: photo }, ...crew]} size="lg" />);
+      for (const slice of slicesOf(avatar)) {
+        expect(getComputedStyle(slice).borderStyle).toBe("solid");
+        expect(getComputedStyle(slice).borderWidth).toBe("1px");
+      }
+      await expect.poll(() => slicesOf(avatar)[0]!.getAttribute("data-image")).toBe("loaded");
+      expect(avatar.getAnimations({ subtree: true })).toEqual([]);
+      for (const slice of slicesOf(avatar)) expect(getComputedStyle(slice).transitionDuration).toBe("0s");
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none", reducedMotion: "no-preference" });
+    }
+  });
+
+  it("shimmers as one avatar while the group's name loads", async () => {
+    const { avatar } = await render(<Avatar name={null} members={crew} />);
+    expect(avatar.querySelector('[data-ouro="skeleton"]')).not.toBeNull();
+    expect(slicesOf(avatar)).toHaveLength(0);
+    expect(avatar.getAttribute("aria-label")).toBe("Name loading");
+  });
+
+  it.each([
+    ["participants", { participants: crew }, "participants is not a prop; a group chat's people are members", '<Avatar name="Crew" members={[{ name: "Ana Lind", src: ana }]} />'],
+    ["people", { people: crew }, "people is not a prop; a group chat's people are members", '<Avatar name="Crew" members={[{ name: "Ana Lind", src: ana }]} />'],
+    ["users", { users: crew }, "users is not a prop; a group chat's people are members", '<Avatar name="Crew" members={[{ name: "Ana Lind", src: ana }]} />'],
+    [
+      'shape="group"',
+      { shape: "group" },
+      'shape="group" is not a shape; a group chat is drawn from its members',
+      '<Avatar name="Crew" members={[{ name: "Ana Lind", src: ana }, { name: "Ben Ito" }]} />',
+    ],
+    [
+      "empty members",
+      { members: [] },
+      "members is empty, so the avatar shows the group's initials",
+      '<Avatar name="Crew" members={[{ name: "Ana Lind", src: ana }, { name: "Ben Ito" }]} />',
+    ],
+  ])("names members for %s, and draws the group's initials", async (_name, extra, problem, fix) => {
+    const props = { name: "Crew", ...extra } as unknown as Parameters<typeof Avatar>[0];
+    const { avatar } = await render(<Avatar {...props} />);
+    expect(warn).toHaveBeenCalledWith(`[ouro-ui] Avatar: ${problem}. Fix: ${fix}.`);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(avatar.getAttribute("data-shape")).toBe("circle");
+    expect(drawn(avatar)).toBe("C");
+    expect(avatar.hasAttribute("participants")).toBe(false);
+  });
+});
+
 describe("AvatarGroup", () => {
   const cooks = ["Ana Lind", "Grace Hopper", "Alan Turing", "Katherine Johnson", "Edsger Dijkstra"];
 

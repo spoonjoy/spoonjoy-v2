@@ -1,6 +1,6 @@
 import { createElement, type ComponentProps } from "react";
 import { expectTypeOf } from "vitest";
-import { Avatar, AvatarGroup, type AvatarGroupProps, type AvatarPresence, type AvatarProps } from "~/components/ouro/avatar/avatar";
+import { Avatar, AvatarGroup, type AvatarGroupProps, type AvatarMember, type AvatarPresence, type AvatarProps } from "~/components/ouro/avatar/avatar";
 
 // Type tests: `pnpm typecheck` compiles this file.
 
@@ -36,3 +36,12 @@ expectTypeOf<{ children: null }>().not.toExtend<AvatarGroupProps>();
 createElement(Avatar, { src: "/ana.jpg" });
 // @ts-expect-error presence needs presenceLabel.
 createElement(Avatar, { name: "Ana", presence: "busy" });
+
+// A group chat takes its members; the names agents guess for them name the fix.
+expectTypeOf<{ name: "Crew"; members: [{ name: "Ana Lind"; src: "/ana.jpg" }, { name: "Ben Ito" }]; membersLabel: (names: readonly string[]) => string }>().toExtend<AvatarProps>();
+expectTypeOf<{ name: "Crew"; members: readonly AvatarMember[] }>().toExtend<AvatarProps>();
+expectTypeOf<{ name: "Crew"; members: [{ src: "/ana.jpg" }] }>().not.toExtend<AvatarProps>();
+expectTypeOf<{ name: "Crew"; participants: [{ name: "Ana Lind" }] }>().not.toExtend<AvatarProps>();
+expectTypeOf<{ name: "Crew"; people: [{ name: "Ana Lind" }] }>().not.toExtend<AvatarProps>();
+expectTypeOf<{ name: "Crew"; users: [{ name: "Ana Lind" }] }>().not.toExtend<AvatarProps>();
+expectTypeOf<{ name: "Crew"; shape: "group" }>().not.toExtend<AvatarProps>();
