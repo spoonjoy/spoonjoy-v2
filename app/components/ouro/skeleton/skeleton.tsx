@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { HTMLAttributes, JSX, Ref } from "react";
+import { useLayoutEffect, useState } from "react";
+import type { CSSProperties, HTMLAttributes, JSX, Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
+import { joinWave } from "~/components/ouro/skeleton/skeleton-styles";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
 /** Avatar's sizes, for `<Skeleton shape="circle" size>`. */
@@ -136,7 +137,7 @@ export type SkeletonProps = SkeletonRectProps | SkeletonTextProps | SkeletonCirc
 // Opacity runs on the compositor and nothing repaints. With reduced motion it holds still.
 const fill =
   "relative block overflow-hidden bg-muted " +
-  "animate-[ouro-skeleton-breathe_2.4s_ease-in-out_1s_infinite] motion-reduce:animate-none " +
+  "animate-[ouro-skeleton-breathe_2.4s_ease-in-out_var(--ouro-skeleton-delay,1s)_infinite] motion-reduce:animate-none " +
   // Forced colours paint the fill as the page's own Canvas, so an outline in the text colour keeps the shape.
   "forced-colors:outline forced-colors:outline-1 forced-colors:-outline-offset-1 forced-colors:outline-[CanvasText]";
 
@@ -149,20 +150,38 @@ const still = "animate-none";
 const breatheLimit = 24;
 let breathing = 0;
 
-function useBreathes(shimmer: boolean): boolean {
-  const [breathes, setBreathes] = useState(true);
-  useEffect(() => {
+// Every placeholder on the page breathes as one wave. A CSS animation starts when its element is first drawn, so one
+// drawn later (a remount, a pane that opens while the others breathe) would start its breath over, out of step with the
+// rest. So each one sets its own delay, from the wave's start, before its first frame: still for what remains of the
+// first second, then partway through a breath. The wave starts with the first placeholder of a load and ends once
+// none has breathed for a second; the next starts a new one. This writes a custom property and reads no layout.
+let waveStart = 0;
+let emptiedAt = Number.NEGATIVE_INFINITY;
+
+function useBreathes(shimmer: boolean): { breathes: boolean; style: CSSProperties | undefined } {
+  const [claim, setClaim] = useState<{ breathes: boolean; delay: string | undefined }>({ breathes: true, delay: undefined });
+  // A layout effect, so a placeholder past the limit is still, and one that breathes is on the wave, on its first frame.
+  useLayoutEffect(() => {
     if (!shimmer) return;
     const place = breathing < breatheLimit;
-    breathing += place ? 1 : 0;
     // Claiming a place is shared module state, so it can only be read once mounted.
+    let delay: string | undefined;
+    if (place) {
+      const joined = joinWave(performance.now(), breathing, emptiedAt, waveStart);
+      waveStart = joined.start;
+      delay = joined.delay;
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setBreathes(place);
+    setClaim({ breathes: place, delay });
+    breathing += place ? 1 : 0;
     return () => {
       breathing -= place ? 1 : 0;
+      // Stryker disable next-line ConditionalExpression,EqualityOperator: a later cleanup that finds none left sets it again, and a new wave starts only when none breathes, so setting it early changes nothing.
+      if (breathing === 0) emptiedAt = performance.now();
     };
   }, [shimmer]);
-  return shimmer && breathes;
+  // Stryker disable next-line ConditionalExpression: a style object whose only value is undefined draws the same as none.
+  return { breathes: shimmer && claim.breathes, style: claim.delay === undefined ? undefined : ({ "--ouro-skeleton-delay": claim.delay } as CSSProperties) };
 }
 
 const shapes = {
@@ -218,7 +237,9 @@ function Bar({ className, shimmer }: { className: string | undefined; shimmer: b
 /**
  * A placeholder that breathes after a second in the shape and size of content that is still loading, so the
  * content takes its place without moving anything. Screen readers skip it, so mark the region
- * that is loading with `aria-busy` while it shows. With reduced motion, or `shimmer={false}`, it holds still.
+ * that is loading with `aria-busy` while it shows. Placeholders on the page breathe in the same step, so one that
+ * mounts or remounts later joins the others mid-breath instead of starting over. With reduced motion, or
+ * `shimmer={false}`, it holds still.
  *
  * Pick the shape of what is coming: `shape="text"` with `lines` and Text's `size` for a
  * paragraph, `shape="circle"` with Avatar's `size` for an avatar, `shape="row"` with `count`
@@ -245,7 +266,7 @@ export function Skeleton(props: SkeletonProps): JSX.Element {
   const { shape: shapeProp = "rect", size: sizeProp, lines: linesProp, count: countProp, className, shimmer: shimmerProp = true, variant, animation, width, height, ref, ...rest } =
     props as SkeletonCommonProps &
       Omit<HTMLAttributes<HTMLSpanElement>, "children"> & { shape?: string; size?: string; lines?: number; count?: number };
-  const shimmer = useBreathes(shimmerProp);
+  const { breathes: shimmer, style: waveStyle } = useBreathes(shimmerProp);
   // A shape that is not one of Ouro UI's (a type error) warns and renders the default.
   const shape: Shape = shapeNames.includes(shapeProp) ? (shapeProp as Shape) : "rect";
   const sizes: object = sizesFor[shape];
@@ -286,12 +307,12 @@ export function Skeleton(props: SkeletonProps): JSX.Element {
 
   if (shape === "rect" || shape === "circle") {
     const shapeClass = shape === "circle" ? cn(shapes.circle, avatarSizes[(size ?? "md") as SkeletonAvatarSize]) : shapes.rect;
-    return <span {...rest} {...common} ref={ref} className={cn(fill, !shimmer && still, shapeClass, className)} />;
+    return <span {...rest} {...common} ref={ref} style={waveStyle ? { ...rest.style, ...waveStyle } : rest.style} className={cn(fill, !shimmer && still, shapeClass, className)} />;
   }
   if (shape === "text") {
     const lines = atLeastOne(linesProp);
     return (
-      <span {...rest} {...common} ref={ref} className={cn("block w-full", size && textSizes[size as keyof typeof textSizes], className)}>
+      <span {...rest} {...common} ref={ref} style={waveStyle ? { ...rest.style, ...waveStyle } : rest.style} className={cn("block w-full", size && textSizes[size as keyof typeof textSizes], className)}>
         {Array.from({ length: lines }, (_, index) => (
           <span key={index} className={line}>
             <Bar shimmer={shimmer} className={lines > 1 && index === lines - 1 ? "w-2/3" : "w-full"} />
@@ -310,7 +331,7 @@ export function Skeleton(props: SkeletonProps): JSX.Element {
         const detail = detailWidths[index % detailWidths.length];
         if (shape === "row") {
           return (
-            <span key={index} {...own} {...common} className={cn("grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4", rowSizes[frame], className)}>
+            <span key={index} {...own} {...common} style={waveStyle ? { ...own.style, ...waveStyle } : own.style} className={cn("grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4", rowSizes[frame], className)}>
               <Bar shimmer={shimmer} className="mt-0.75 size-10 self-start rounded-ouro-md" />
               <span className="flex min-w-0 flex-col gap-0.5">
                 <span className={cn(line, "text-base")}>
@@ -329,6 +350,7 @@ export function Skeleton(props: SkeletonProps): JSX.Element {
             key={index}
             {...own}
             {...common}
+            style={waveStyle ? { ...own.style, ...waveStyle } : own.style}
             className={cn("flex min-w-0 flex-col overflow-hidden rounded-ouro-xl border border-border bg-card", card.root, className)}
           >
             <span className={cn("flex min-w-0 flex-col gap-1", card.pad)}>
