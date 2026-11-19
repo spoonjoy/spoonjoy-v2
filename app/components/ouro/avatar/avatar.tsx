@@ -376,10 +376,13 @@ function initialsOf(name: string): string {
 function GroupSlice({ member, tint, quarter }: { member: AvatarMember; tint: string | undefined; quarter: boolean }): JSX.Element {
   const image = useImageStatus(member.src);
   const [fill, ink] = (tint ?? hueOf(member.idForColor ?? member.name)).split(" ") as [string, string];
+  const loaded = image === "loaded";
   return (
     <span
       data-ouro-avatar-slice=""
       data-image={image}
+      // Its initial is drawn from this element's own attribute, so an unloaded slice is one element, not two.
+      data-ouro-avatar-initials={loaded ? undefined : Array.from(member.initials ?? initialsOf(member.name))[0]}
       className={cn(
         "relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden",
         fill,
@@ -387,16 +390,10 @@ function GroupSlice({ member, tint, quarter }: { member: AvatarMember; tint: str
         quarter ? "text-[0.75em]" : "row-span-2",
         // Forced colours paint every fill as the page, so each slice keeps an edge of its own (in CanvasText, as forced colours draw every border).
         "forced-colors:border",
+        !loaded && "before:block before:whitespace-nowrap before:content-[attr(data-ouro-avatar-initials)] before:[text-box:trim-both_cap_alphabetic]",
       )}
     >
-      {image === "loaded" ? (
-        <img src={member.src} alt="" className="size-full object-cover" />
-      ) : (
-        <span
-          data-ouro-avatar-initials={Array.from(member.initials ?? initialsOf(member.name))[0]}
-          className="block whitespace-nowrap [text-box:trim-both_cap_alphabetic] before:content-[attr(data-ouro-avatar-initials)]"
-        />
-      )}
+      {loaded && <img src={member.src} alt="" className="size-full object-cover" />}
     </span>
   );
 }

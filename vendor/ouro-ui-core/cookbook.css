@@ -254,5 +254,9 @@
   --shadow-lg: var(--sj-shadow-soft);
   --shadow-xl: var(--sj-shadow);
   --ouro-action: var(--sj-action);
+  --ouro-control-radius: 9999px;
+  --ouro-control-corner-shape: round;
+  --ouro-check-radius: 9999px;
+  --ouro-check-corner-shape: round;
   --ouro-action-foreground: var(--sj-on-action);
 }
