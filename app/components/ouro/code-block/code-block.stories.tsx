@@ -78,3 +78,23 @@ export const EmojiInCode: Story = {
     code: `const banner = "Release day 🚀🎉";\n// :party: stays as typed\nnotify(banner);`,
   },
 };
+
+// A step of an agent's run as `tmux capture-pane -e` saves it: the model's thinking dim, its reply plain.
+const esc = "\x1b";
+const capture = [
+  `${esc}[1m$ ${esc}[0mnode agent.ts "what's in this folder?"`,
+  `${esc}[2mthinking: the person wants a listing, so I'll call list_files on "."${esc}[0m`,
+  `${esc}[36m→ list_files${esc}[39m ${esc}[90m{ "path": "." }${esc}[0m`,
+  `${esc}[32m✓${esc}[0m 3 files`,
+  `There are three files here: agent.ts, package.json and README.md.`,
+  `${esc}[33mwarning:${esc}[0m ${esc}[2mOPENAI_API_KEY is set from .env${esc}[0m`,
+  `${esc}[31merror:${esc}[0m ${esc}[91mnothing went wrong, this is a demo${esc}[0m`,
+].join("\n");
+
+/**
+ * Terminal output with `language="ansi"`: its escape codes style the text, so the model's
+ * thinking shows dim, and copying gives the text without them.
+ */
+export const TerminalOutput: Story = {
+  args: { language: "ansi", title: "What I saw", code: capture, copy: false, wrap: true },
+};

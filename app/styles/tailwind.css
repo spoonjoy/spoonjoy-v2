@@ -851,6 +851,16 @@ body:has(#cook) .sj-site-footer {
   [data-ouro-surface] {
     display: none;
   }
+  @media (width >= 200rem) {
+    html {
+      font-size: 125%;
+    }
+  }
+  @media (width >= 150rem) {
+    html {
+      font-size: 112.5%;
+    }
+  }
 }
 
 @supports not (corner-shape: squircle) {

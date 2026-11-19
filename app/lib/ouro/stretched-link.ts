@@ -61,19 +61,24 @@ const ownClick = "a,button,input,select,textarea,label,summary,[tabindex]:not([t
  * click, or a click with Cmd, Ctrl or Shift, opens the link's address in a new tab, since Safari
  * ignores the keys on a click a script hands on and would open it in place. The keyboard is
  * untouched: the link stays the one tab stop. A click that ends a text selection in the root
- * selects, and opens nothing.
+ * selects, and opens nothing, as does a click React hands up from a portal outside the root (a menu
+ * of its actions).
  *
  * @internal
  * @example
  * <div data-linked="" onClick={followStretchedLink} onAuxClick={followStretchedLink}>…</div>
  * @claim "a click anywhere on it that no" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href > opens its link from a click anywhere on it, though the app positions its body over the media, with the same button and keys)
  * @claim "A middle click, or a click with" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href > opens its link from a click anywhere on it, though the app positions its body over the media, with the same button and keys)
+ * @claim "as does a click React hands" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item with href > opens nothing from a choice in its actions' menu, which React hands up from the menu's portal outside the row)
  * @claim "A click that ends a text" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href > opens nothing from a click that ends a text selection, or one a control of its own takes)
  */
 function followStretchedLink(event: StretchedClick): void {
   // A main click, or a middle click, which browsers send as auxclick.
   if (event.defaultPrevented || event.button !== (event.type === "auxclick" ? 1 : 0)) return;
   const root = event.currentTarget;
+  // React hands a click up from a portal (an open Menu or Popover of the row's actions) to the root, though it
+  // lands outside it: it is the portal's own, never the row's.
+  if (!root.contains(event.target as Node)) return;
   // The root's own link: one a linked row inside it (an Item in a Card) has is that row's.
   const link = root.querySelector<HTMLElement>(":scope [data-stretched-link]:not(:scope [data-linked] [data-stretched-link])");
   // A mouse event's target is an element.
