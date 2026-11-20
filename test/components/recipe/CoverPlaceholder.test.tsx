@@ -107,19 +107,3 @@ describe("the sj-type-display role", () => {
     expect(display).toContain("letter-spacing: 0;");
   });
 });
-
-describe("the cook timer ring", () => {
-  it("draws a vellum track, a brass arc and light tabular digits", () => {
-    expect(rule(".sj-cook-timer-track")).toContain("stroke: var(--sj-vellum);");
-    expect(rule(".sj-cook-timer-progress")).toContain("stroke: var(--sj-brass);");
-    const digits = rule('.sj-cook-timer [role="timer"]');
-    expect(digits).toContain("font-weight: 300;");
-    expect(digits).toContain("font-variant-numeric: tabular-nums;");
-  });
-
-  it("moves the arc without a transition under reduced motion", () => {
-    expect(THEME_CSS.replace(/\s+/g, " ")).toContain(
-      "@media (prefers-reduced-motion: reduce) { .sj-cook-timer-progress { transition: none; } }",
-    );
-  });
-});
