@@ -331,12 +331,16 @@ for (const theme of ["light", "dark"] as const) {
     expect(focus.outlineOffset).toBe("2px");
     expect(contrast(rgba(focus.outlineColor), rgba(getComputedStyle(document.body).backgroundColor))).toBeGreaterThanOrEqual(3);
     states.focus = measure(primary);
+    // The hover and press washes are the theme's --ouro-state-hover and --ouro-state-pressed (Ouro UI v1.3.378), as
+    // percentages; the Cookbook theme sets its own, so read them rather than Ouro's 8% and 14% defaults.
+    const stateToken = (name: string) =>
+      String(Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) / 100);
     await userEvent.hover(primary);
-    await expect.poll(() => getComputedStyle(primary, "::before").opacity).toBe("0.08");
+    await expect.poll(() => getComputedStyle(primary, "::before").opacity).toBe(stateToken("--ouro-state-hover"));
     states.hover = measure(primary);
     await commands.pointerPress({ selector: "[data-type-action]", action: "down" });
     try {
-      await expect.poll(() => getComputedStyle(primary, "::before").opacity).toBe("0.14");
+      await expect.poll(() => getComputedStyle(primary, "::before").opacity).toBe(stateToken("--ouro-state-pressed"));
       states.pressed = measure(primary);
     } finally {
       await commands.pointerPress({ action: "up" });
