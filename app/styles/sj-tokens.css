@@ -53,6 +53,10 @@
   --sj-radius-surface: 0.5rem;
   --sj-radius-photo: 0.5rem;
   --sj-radius-hero: 0.5rem;
+  --ouro-control-radius: 9999px;
+  --ouro-control-corner-shape: round;
+  --ouro-check-radius: 9999px;
+  --ouro-check-corner-shape: round;
 }
 
 .dark {
@@ -92,4 +96,8 @@
   --sj-photo-line: color-mix(in srgb, var(--sj-on-photo) 22%, transparent);
   --sj-shadow: 0 28px 90px color-mix(in srgb, var(--sj-photo-charcoal) 56%, transparent);
   --sj-shadow-soft: 0 16px 44px color-mix(in srgb, var(--sj-photo-charcoal) 42%, transparent);
+  --ouro-control-radius: 9999px;
+  --ouro-control-corner-shape: round;
+  --ouro-check-radius: 9999px;
+  --ouro-check-corner-shape: round;
 }

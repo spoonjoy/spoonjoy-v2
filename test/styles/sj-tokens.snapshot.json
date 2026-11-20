@@ -1,5 +1,5 @@
 {
-  "source": "app/styles/tailwind.css at spoonjoy-v2 493f42d7, before the tokens moved to app/styles/sj-tokens.css",
+  "source": "app/styles/sj-tokens.css from ouro-ui-core v1.1.0",
   "light": {
     "--font-sj-display": "\"Fraunces\", Georgia, \"Times New Roman\", serif",
     "--font-sj-body": "\"Source Serif 4\", Georgia, \"Times New Roman\", serif",
@@ -46,7 +46,11 @@
     "--sj-radius-small": "0.25rem",
     "--sj-radius-surface": "0.5rem",
     "--sj-radius-photo": "0.5rem",
-    "--sj-radius-hero": "0.5rem"
+    "--sj-radius-hero": "0.5rem",
+    "--ouro-control-radius": "9999px",
+    "--ouro-control-corner-shape": "round",
+    "--ouro-check-radius": "9999px",
+    "--ouro-check-corner-shape": "round"
   },
   "dark": {
     "--sj-bone": "#f2eee6",
@@ -83,6 +87,10 @@
     "--sj-photo-glass": "color-mix(in srgb, var(--sj-on-photo) 10%, transparent)",
     "--sj-photo-line": "color-mix(in srgb, var(--sj-on-photo) 22%, transparent)",
     "--sj-shadow": "0 28px 90px color-mix(in srgb, var(--sj-photo-charcoal) 56%, transparent)",
-    "--sj-shadow-soft": "0 16px 44px color-mix(in srgb, var(--sj-photo-charcoal) 42%, transparent)"
+    "--sj-shadow-soft": "0 16px 44px color-mix(in srgb, var(--sj-photo-charcoal) 42%, transparent)",
+    "--ouro-control-radius": "9999px",
+    "--ouro-control-corner-shape": "round",
+    "--ouro-check-radius": "9999px",
+    "--ouro-check-corner-shape": "round"
   }
 }

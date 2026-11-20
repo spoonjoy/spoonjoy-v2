@@ -12,7 +12,7 @@ import snapshot from "./sj-tokens.snapshot.json";
 const ROOT = resolve(__dirname, "../..");
 const TOKENS = readFileSync(resolve(ROOT, "app/styles/sj-tokens.css"), "utf8");
 const TAILWIND = readFileSync(resolve(ROOT, "app/styles/tailwind.css"), "utf8");
-const SJ_TOKEN = /^--(?:sj|font-sj)-/;
+const SJ_TOKEN = /^--(?:sj|font-sj|ouro-control|ouro-check)-/;
 
 const REGENERATE =
   "Spoonjoy's tokens no longer match test/styles/sj-tokens.snapshot.json. If the new ouro-ui-core " +
