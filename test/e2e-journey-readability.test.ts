@@ -106,6 +106,13 @@ describe("edgeContrast", () => {
     }
   });
 
+  it("measures a capsule's long edges, whose 9999px corners draw as half its height", () => {
+    const result = edgeContrast(grid(1, (x, y) => (inBox(x, y) ? amber : photo)), box, 1, 9999);
+    expect(result.minimum).toBeCloseTo(contrastRatio(amber, photo), 5);
+    // Corners of 5px (half the 10px height): the top and bottom keep 30 - 2 * 6 px of straight edge.
+    expect(result.points).toBe(2 * (30 - 12));
+  });
+
   it("reads a 1px border on a clear button, not the photo inside it", () => {
     const paint = (x: number, y: number) => (inBox(x, y) && !inBox(x, y, 1) ? line : photo);
     expect(edgeContrast(grid(3, paint), box, 1, 0).minimum).toBeCloseTo(contrastRatio(line, photo), 5);

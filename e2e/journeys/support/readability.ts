@@ -360,7 +360,9 @@ export function edgeContrast(pixels: PixelGrid, box: Box, borderWidth: number, r
   const band = Math.max(1, borderWidth);
   const depths: number[] = [];
   for (let depth = step / 2; depth < band; depth += step) depths.push(depth);
-  const skip = radius + 1;
+  // CSS draws a corner no larger than half the box's shorter side, so a capsule's 9999px corners
+  // are half its height and its long edges stay straight.
+  const skip = Math.min(radius, box.width / 2, box.height / 2) + 1;
   const right = box.x + box.width;
   const bottom = box.y + box.height;
   // Each edge: a point on it at `t` along its length, and its outward normal.

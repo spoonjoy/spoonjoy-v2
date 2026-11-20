@@ -108,6 +108,17 @@ function installHelpers(): void {
     const bottom = box.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom);
     return new DOMRect(left, top, right - left, bottom - top);
   };
+  // A one-line field draws its text on one line, centred in its content box. Only that line is
+  // measured: a capsule field's border curves into the corners of its content box, and those
+  // corners hold no text.
+  const lineBox = (element: Element) => {
+    const box = contentBox(element);
+    if (element instanceof HTMLTextAreaElement) return box;
+    const style = getComputedStyle(element);
+    const line = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.2;
+    if (!(line < box.height)) return box;
+    return new DOMRect(box.left, box.top + (box.height - line) / 2, box.width, line);
+  };
   // Date and time fields draw their parts (or blanks) even with no value.
   const DRAWN_WHEN_EMPTY = new Set(["date", "datetime-local", "month", "time", "week"]);
   const fieldText = (element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): "value" | "placeholder" | "empty" => {
@@ -120,7 +131,7 @@ function installHelpers(): void {
     if (isField(element)) {
       const shown = fieldText(element);
       if (shown === "empty" || getComputedStyle(element).visibility !== "visible") return [];
-      const rects = () => [contentBox(element)].filter((rect) => rect.width > 0 && rect.height > 0);
+      const rects = () => [lineBox(element)].filter((rect) => rect.width > 0 && rect.height > 0);
       return [{ styled: element, pseudo: shown === "placeholder" ? "::placeholder" : undefined, rects }];
     }
     return textNodes(element).map((node) => ({ styled: node.parentElement as Element, rects: () => rectsOf(node) }));
