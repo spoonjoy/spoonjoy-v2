@@ -60,7 +60,7 @@
     "app/components/ouro/checklist/checklist-styles.ts": "9a0d1f0160803cf569b629b46a51627b11dd7b1702bde3dbfd11b0275cf3855f",
     "app/components/ouro/checklist/checklist.stories.tsx": "9af88f31b567f162ef2c91abaa0d210a16f3570f5c12fb20e9a503ce8be38abb",
     "app/components/ouro/checklist/checklist.test-d.ts": "df21c1d18dd94d0ab87ae23023d7d3daecddba9613ae47c6d84a3f4f9a572075",
-    "app/components/ouro/checklist/checklist.test.tsx": "c9af563d7319b473915ff7da333a9be6b412fcbdf0b6beaf32d63b232aadb0ea",
+    "app/components/ouro/checklist/checklist.test.tsx": "2f9219c5ce900ae312cf35ff9a487d494eb017d23f2f92b4a34868a4bcfbd974",
     "app/components/ouro/checklist/checklist.touch.test.tsx": "d1c01109b108215d90493c39bb05a6d05dc487771a5733b82e3e9c57e504ddf2",
     "app/components/ouro/checklist/checklist.tsx": "790dfab550f52e2aa999872f7d2da93fb7d64d44944b6bac1f1923d16435d3e8",
     "app/components/ouro/choice-card/choice-card.stories.tsx": "e5743b6cd3328a903c395c30b701b2e0a9379c9a610f97f0ddf36e49493fd305",

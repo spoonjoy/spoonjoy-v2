@@ -651,6 +651,7 @@ describe("Checklist ordered", () => {
     const root = createRoot(host);
     const steps = (warm: boolean) => tea.map((step) => (step.id === "warm" ? { ...step, checked: warm } : step));
     const list = (warm: boolean) => <Checklist label="Steps" ordered items={steps(warm)} onCheckedChange={() => {}} />;
+    const announcements = watchAnnouncements();
     try {
       const note = () => host.querySelector<HTMLElement>('[data-ouro-part="note"]')!;
       flushSync(() => root.render(list(true)));
@@ -659,7 +660,11 @@ describe("Checklist ordered", () => {
       flushSync(() => root.render(list(false)));
       flushSync(() => root.render(list(true)));
       expect(note().getAnimations().some((a) => a instanceof CSSTransition && a.transitionProperty === "opacity")).toBe(true);
+      // The row going out of order again announces it, and the shared announcer writes about 100ms later: waiting here keeps
+      // it from landing in the next test's watch (#2469).
+      await expect.poll(() => announcements.count("Boil the water comes first.")).toBe(1);
     } finally {
+      announcements.stop();
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       root.unmount();
       host.remove();
