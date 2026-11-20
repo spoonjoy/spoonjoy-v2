@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { CookStepTimer, CookTimerTray, notifyTimeUp } from "~/components/recipe/CookTimers";
 import { cookTimers } from "~/lib/cook-timers";
+import { readFileSync } from "node:fs";
 
 const NOW = 5_000_000;
 const [pasta, sauce] = cookTimers("cook-timers-test", [
@@ -121,6 +122,21 @@ describe("cook-mode timers", () => {
     }
   });
 
+  it("draws the step's ring at the Apple app's size, with light tabular figures and a ▶ Start", () => {
+    render(<CookStepTimer timer={pasta} />);
+    const timer = screen.getByTestId("cook-mode-timer");
+    // About 45% of a phone's width (11rem of 390pt), so the step's ingredients stay above the fold.
+    expect(timer).toHaveClass("sj-cook-timer", "max-w-44");
+    expect(timer).toHaveAttribute("data-status", "idle");
+    expect(within(timer).getByRole("button", { name: "Start" })).toHaveTextContent(/^Start$/);
+    const css = readFileSync("app/styles/tailwind.css", "utf8");
+    expect(css).toMatch(/\.sj-cook-timer \[role="timer"\] \{\s*font-family: var\(--font-sj-ui\);\s*font-weight: 300;\s*font-variant-numeric: tabular-nums;/);
+    // The ▶ is drawn by CSS with empty alternative text, so a screen reader hears only "Start".
+    expect(css).toMatch(/\.sj-cook-timer\[data-status="idle"\] \[data-ouro-part="primary"\]::before \{\s*content: "\\25B6\\FE0E" \/ "";/);
+    // Plex is loaded at 300, or the light figures would fall back to 400.
+    expect(readFileSync("app/root.tsx", "utf8")).toContain("IBM+Plex+Sans+Condensed:wght@300;");
+  });
+
   it("runs a step's timer with Spoonjoy's words, and the tray follows it on another step", () => {
     const onGoToStep = vi.fn();
     render(
@@ -131,7 +147,7 @@ describe("cook-mode timers", () => {
     );
     const step = screen.getByTestId("cook-mode-timer");
     expect(step).toHaveTextContent("Step 1 · Boil pasta · 1 min");
-    fireEvent.click(within(step).getByRole("button", { name: "Start timer" }));
+    fireEvent.click(within(step).getByRole("button", { name: "Start" }));
     expect(within(step).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
 
     const tray = screen.getByRole("region", { name: "Running timers" });
@@ -151,7 +167,7 @@ describe("cook-mode timers", () => {
         <CookTimerTray timers={[pasta]} />
       </>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
     const tray = screen.getByRole("region", { name: "Running timers" });
     expect(within(tray).queryByRole("link")).not.toBeInTheDocument();
 
@@ -172,7 +188,7 @@ describe("cook-mode timers", () => {
     Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
     try {
       render(<CookStepTimer timer={pasta} />);
-      fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+      fireEvent.click(screen.getByRole("button", { name: "Start" }));
       await act(async () => {
         await vi.advanceTimersByTimeAsync(65_000);
       });
@@ -196,7 +212,7 @@ describe("cook-mode timers", () => {
         <CookTimerTray timers={[pasta]} />
       </>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);
     });
@@ -224,7 +240,7 @@ describe("cook-mode timers", () => {
         <CookTimerTray timers={[pasta]} />
       </>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);
     });
@@ -257,7 +273,7 @@ describe("cook-mode timers", () => {
     const vibrate = vi.fn(() => true);
     Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
     const { unmount } = render(<CookStepTimer timer={sauce} />);
-    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
     unmount();
     render(<CookTimerTray timers={[sauce]} />);
     await act(async () => {
@@ -277,7 +293,7 @@ describe("cook-mode timers", () => {
           <CookTimerTray timers={[pasta, sauce]} currentStepNum={1} />
         </>,
       );
-      fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+      fireEvent.click(screen.getByRole("button", { name: "Start" }));
       rerender(
         <>
           <CookStepTimer timer={sauce} />
@@ -309,7 +325,7 @@ describe("cook-mode timers", () => {
           <CookTimerTray timers={[pasta, sauce]} currentStepNum={1} />
         </>,
       );
-      fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+      fireEvent.click(screen.getByRole("button", { name: "Start" }));
       await act(async () => {
         await vi.advanceTimersByTimeAsync(60_000);
       });
@@ -347,7 +363,7 @@ describe("cook-mode timers", () => {
         <CookTimerTray timers={[pasta, sauce]} currentStepNum={1} />
       </>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
     if (view === "tray") {
       rerender(
         <>

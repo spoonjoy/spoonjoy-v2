@@ -162,7 +162,7 @@ describe("Test Kitchen", () => {
     try {
       render(page());
       fireEvent.click(screen.getByRole("button", { name: "Start cooking" }));
-      fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+      fireEvent.click(screen.getByRole("button", { name: "Start" }));
       fireEvent.click(screen.getByRole("button", { name: "Exit cook mode" }));
       expect(screen.getByRole("heading", { name: "Spoonjoy Test Kitchen" })).toBeInTheDocument();
 
@@ -181,7 +181,7 @@ describe("Test Kitchen", () => {
   it("resets a paused timer with the rest of the kitchen", () => {
     render(page());
     fireEvent.click(screen.getByRole("button", { name: "Start cooking" }));
-    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
     fireEvent.click(screen.getByRole("button", { name: "Pause timer" }));
     fireEvent.click(screen.getByRole("button", { name: "Exit cook mode" }));
     fireEvent.click(screen.getByRole("button", { name: "Reset the kitchen" }));
@@ -189,13 +189,13 @@ describe("Test Kitchen", () => {
 
     const timer = screen.getByTestId("cook-mode-timer");
     expect(within(timer).queryByRole("button", { name: "Resume timer" })).not.toBeInTheDocument();
-    expect(within(timer).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
+    expect(within(timer).getByRole("button", { name: "Start" })).toBeInTheDocument();
   });
 
   it("warns when the browser cannot persist a timer reset", () => {
     render(page());
     fireEvent.click(screen.getByRole("button", { name: "Start cooking" }));
-    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
     fireEvent.click(screen.getByRole("button", { name: "Pause timer" }));
     fireEvent.click(screen.getByRole("button", { name: "Exit cook mode" }));
     const remove = window.localStorage.removeItem;
@@ -207,7 +207,7 @@ describe("Test Kitchen", () => {
       fireEvent.click(screen.getByRole("button", { name: "Reset the kitchen" }));
       expect(screen.getByRole("alert")).toHaveTextContent("Spoonjoy didn't save some timer resets, so those timers may come back after a reload.");
       fireEvent.click(screen.getByRole("button", { name: "Start cooking" }));
-      expect(within(screen.getByTestId("cook-mode-timer")).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
+      expect(within(screen.getByTestId("cook-mode-timer")).getByRole("button", { name: "Start" })).toBeInTheDocument();
     } finally {
       blocked.mockRestore();
     }

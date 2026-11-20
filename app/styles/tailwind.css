@@ -362,6 +362,19 @@ select {
   transition: none;
 }
 
+/* The cook step's timer, as the Apple app draws it: light, tabular figures in the UI face (Plex at
+   300, not the body serif), and a ▶ before an idle timer's Start, hidden from screen readers. */
+.sj-cook-timer [role="timer"] {
+  font-family: var(--font-sj-ui);
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+}
+
+.sj-cook-timer[data-status="idle"] [data-ouro-part="primary"]::before {
+  content: "\25B6\FE0E" / "";
+  font-size: 0.75em;
+}
+
 .font-sj-display {
   font-family: var(--font-sj-display);
 }
