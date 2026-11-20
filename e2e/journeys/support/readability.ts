@@ -292,7 +292,7 @@ export async function measureFocusIndicator(page: Page, locator: Locator, label:
 
   // The outline's middle line, in CSS px, skipping the rounded corners.
   const middle = style.outlineOffset + style.outlineWidth / 2;
-  const corner = style.radius + reach;
+  const corner = drawnCorner(style.radius, style.box) + reach;
   const left = style.box.x - middle;
   const right = style.box.x + style.box.width + middle;
   const top = style.box.y - middle;
@@ -346,6 +346,14 @@ const OUTLINE_CLEARANCE = OUTSIDE_DISTANCE + 0.5;
  * 1 CSS px: the border if it is painted, else the fill under it) that contrasts most with the
  * pixel OUTSIDE_DISTANCE outside the edge; the result is the worst such point.
  */
+/**
+ * The corner CSS draws for a border radius: no larger than half the box's shorter side, so a
+ * capsule's 9999px corners are half its height and its long edges stay straight.
+ */
+export function drawnCorner(radius: number, box: { width: number; height: number }): number {
+  return Math.min(radius, box.width / 2, box.height / 2);
+}
+
 export function edgeContrast(pixels: PixelGrid, box: Box, borderWidth: number, radius: number): EdgeContrast {
   const at = (x: number, y: number): Rgb => {
     const column = Math.floor((x - pixels.clip.x) * pixels.scale);
@@ -360,9 +368,7 @@ export function edgeContrast(pixels: PixelGrid, box: Box, borderWidth: number, r
   const band = Math.max(1, borderWidth);
   const depths: number[] = [];
   for (let depth = step / 2; depth < band; depth += step) depths.push(depth);
-  // CSS draws a corner no larger than half the box's shorter side, so a capsule's 9999px corners
-  // are half its height and its long edges stay straight.
-  const skip = Math.min(radius, box.width / 2, box.height / 2) + 1;
+  const skip = drawnCorner(radius, box) + 1;
   const right = box.x + box.width;
   const bottom = box.y + box.height;
   // Each edge: a point on it at `t` along its length, and its outward normal.

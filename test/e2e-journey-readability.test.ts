@@ -2,7 +2,7 @@
 // computed colours parse exactly, an unknown format fails instead of passing, and contrast follows
 // WCAG 2.2's relative luminance, and a control's edge is compared with the pixels just outside it.
 import { describe, expect, it } from "vitest";
-import { OUTSIDE_DISTANCE, composite, contrastRatio, edgeContrast, glyphCoverage, parseCssColor, relativeLuminance, type PixelGrid, type Rgb } from "../e2e/journeys/support/readability";
+import { OUTSIDE_DISTANCE, composite, contrastRatio, drawnCorner, edgeContrast, glyphCoverage, parseCssColor, relativeLuminance, type PixelGrid, type Rgb } from "../e2e/journeys/support/readability";
 
 describe("parseCssColor", () => {
   it("reads the rgb() and rgba() forms browsers compute", () => {
@@ -111,6 +111,12 @@ describe("edgeContrast", () => {
     expect(result.minimum).toBeCloseTo(contrastRatio(amber, photo), 5);
     // Corners of 5px (half the 10px height): the top and bottom keep 30 - 2 * 6 px of straight edge.
     expect(result.points).toBe(2 * (30 - 12));
+  });
+
+  it("draws a corner no larger than half the box's shorter side, as CSS does", () => {
+    expect(drawnCorner(9999, { width: 120, height: 44 })).toBe(22);
+    expect(drawnCorner(9999, { width: 30, height: 60 })).toBe(15);
+    expect(drawnCorner(6, { width: 120, height: 44 })).toBe(6);
   });
 
   it("reads a 1px border on a clear button, not the photo inside it", () => {
