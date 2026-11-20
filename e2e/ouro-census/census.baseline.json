@@ -3443,15 +3443,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Decrease scale\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Fork\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Increase scale\" [number-field/increment] in main",
           "count": 1
         },
         {
@@ -3472,6 +3464,10 @@
         },
         {
           "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Scale 1×\" [button/root] in main",
           "count": 1
         },
         {
@@ -3569,14 +3565,6 @@
         {
           "identity": "link \"qa_kitchen_chef\" [link/root] in main",
           "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Scale\" [number-field/input] in main",
-          "count": 1
         }
       ],
       "fork-dialog": [
@@ -3590,18 +3578,10 @@
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 6
+          "count": 7
         },
         {
           "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/increment] in main",
           "count": 1
         },
         {
@@ -3654,14 +3634,6 @@
         },
         {
           "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [number-field/input] in main",
           "count": 1
         }
       ]
@@ -4103,14 +4075,6 @@
           "count": 1
         },
         {
-          "identity": "button \"Decrease scale\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Increase scale\" [number-field/increment] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
@@ -4128,6 +4092,10 @@
         },
         {
           "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Scale 1×\" [button/root] in main",
           "count": 1
         },
         {
@@ -4243,16 +4211,8 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"\" [text-field/input] in main",
           "count": 2
-        },
-        {
-          "identity": "textbox \"Scale\" [number-field/input] in main",
-          "count": 1
         }
       ],
       "delete-dialog": [
@@ -4266,7 +4226,7 @@
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 10
+          "count": 11
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
@@ -4278,14 +4238,6 @@
         },
         {
           "identity": "button \"\" [file-field/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/increment] in main",
           "count": 1
         },
         {
@@ -4349,14 +4301,6 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [number-field/input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"\" [text-field/input] in main",
           "count": 2
         }
@@ -4372,7 +4316,7 @@
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 10
+          "count": 11
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
@@ -4384,14 +4328,6 @@
         },
         {
           "identity": "button \"\" [file-field/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/increment] in main",
           "count": 1
         },
         {
@@ -4463,14 +4399,6 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [number-field/input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"\" [text-field/input] in main",
           "count": 2
         },
@@ -4497,19 +4425,11 @@
           "count": 1
         },
         {
-          "identity": "button \"Decrease scale\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Delete\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "button \"Generate placeholder cover\" [button/root] in region \"Recipe covers\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Increase scale\" [number-field/increment] in main",
           "count": 1
         },
         {
@@ -4546,6 +4466,10 @@
         },
         {
           "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Scale 1×\" [button/root] in main",
           "count": 1
         },
         {
@@ -4669,19 +4593,11 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Editorial direction\" [text-field/input] in region \"Photos\"",
           "count": 1
         },
         {
           "identity": "textbox \"Placeholder direction\" [text-field/input] in region \"Recipe covers\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Scale\" [number-field/input] in main",
           "count": 1
         }
       ],
@@ -4696,7 +4612,7 @@
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 10
+          "count": 11
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
@@ -4708,14 +4624,6 @@
         },
         {
           "identity": "button \"\" [file-field/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/increment] in main",
           "count": 1
         },
         {
@@ -4787,14 +4695,6 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [number-field/input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"\" [text-field/input] in main",
           "count": 2
         },
@@ -4814,7 +4714,7 @@
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 10
+          "count": 11
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
@@ -4826,14 +4726,6 @@
         },
         {
           "identity": "button \"\" [file-field/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/increment] in main",
           "count": 1
         },
         {
@@ -4898,14 +4790,6 @@
         },
         {
           "identity": "radio \"\" [choice-card/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [number-field/input] in main",
           "count": 1
         },
         {
@@ -5045,14 +4929,6 @@
           "count": 1
         },
         {
-          "identity": "button \"Decrease scale\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Increase scale\" [number-field/increment] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
@@ -5062,6 +4938,10 @@
         },
         {
           "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Scale 1×\" [button/root] in main",
           "count": 1
         },
         {
@@ -5146,14 +5026,6 @@
         },
         {
           "identity": "link \"qa_kitchen_chef\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Scale\" [number-field/input] in main",
           "count": 1
         }
       ]
@@ -7583,7 +7455,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"25 components\" [inspector/list] in region \"X-ray\"",
+          "identity": "button \"26 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {
@@ -10457,15 +10329,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Decrease scale\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Fork\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Increase scale\" [number-field/increment] in main",
           "count": 1
         },
         {
@@ -10482,6 +10346,10 @@
         },
         {
           "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Scale 1×\" [button/root] in main",
           "count": 1
         },
         {
@@ -10559,14 +10427,6 @@
         {
           "identity": "link \"qa_kitchen_chef\" [link/root] in main",
           "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Scale\" [number-field/input] in main",
-          "count": 1
         }
       ],
       "fork-dialog": [
@@ -10576,15 +10436,7 @@
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 6
-        },
-        {
-          "identity": "button \"\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/increment] in main",
-          "count": 1
+          "count": 7
         },
         {
           "identity": "button \"\" [share-button/trigger] in main",
@@ -10633,14 +10485,6 @@
         {
           "identity": "link \"\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 4
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [number-field/input] in main",
-          "count": 1
         }
       ]
     },
@@ -10921,14 +10765,6 @@
           "count": 1
         },
         {
-          "identity": "button \"Decrease scale\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Increase scale\" [number-field/increment] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Log the first cook\" [button/root] in main",
           "count": 1
         },
@@ -10942,6 +10778,10 @@
         },
         {
           "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Scale 1×\" [button/root] in main",
           "count": 1
         },
         {
@@ -11037,16 +10877,8 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"\" [text-field/input] in main",
           "count": 2
-        },
-        {
-          "identity": "textbox \"Scale\" [number-field/input] in main",
-          "count": 1
         }
       ],
       "delete-dialog": [
@@ -11056,7 +10888,7 @@
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 10
+          "count": 11
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
@@ -11064,14 +10896,6 @@
         },
         {
           "identity": "button \"\" [file-field/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/increment] in main",
           "count": 1
         },
         {
@@ -11123,14 +10947,6 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [number-field/input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"\" [text-field/input] in main",
           "count": 2
         }
@@ -11142,7 +10958,7 @@
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 10
+          "count": 11
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
@@ -11150,14 +10966,6 @@
         },
         {
           "identity": "button \"\" [file-field/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/increment] in main",
           "count": 1
         },
         {
@@ -11229,14 +11037,6 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [number-field/input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"\" [text-field/input] in main",
           "count": 2
         },
@@ -11259,19 +11059,11 @@
           "count": 1
         },
         {
-          "identity": "button \"Decrease scale\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Delete\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "button \"Generate placeholder cover\" [button/root] in region \"Recipe covers\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Increase scale\" [number-field/increment] in main",
           "count": 1
         },
         {
@@ -11304,6 +11096,10 @@
         },
         {
           "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Scale 1×\" [button/root] in main",
           "count": 1
         },
         {
@@ -11387,19 +11183,11 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Editorial direction\" [text-field/input] in region \"Photos\"",
           "count": 1
         },
         {
           "identity": "textbox \"Placeholder direction\" [text-field/input] in region \"Recipe covers\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Scale\" [number-field/input] in main",
           "count": 1
         }
       ],
@@ -11410,7 +11198,7 @@
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 10
+          "count": 11
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
@@ -11418,14 +11206,6 @@
         },
         {
           "identity": "button \"\" [file-field/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/increment] in main",
           "count": 1
         },
         {
@@ -11493,14 +11273,6 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [number-field/input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"\" [text-field/input] in main",
           "count": 2
         },
@@ -11516,7 +11288,7 @@
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 10
+          "count": 11
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
@@ -11524,14 +11296,6 @@
         },
         {
           "identity": "button \"\" [file-field/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [number-field/increment] in main",
           "count": 1
         },
         {
@@ -11584,14 +11348,6 @@
         },
         {
           "identity": "radio \"\" [choice-card/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [number-field/input] in main",
           "count": 1
         },
         {
@@ -11703,19 +11459,15 @@
           "count": 1
         },
         {
-          "identity": "button \"Decrease scale\" [number-field/decrement] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Increase scale\" [number-field/increment] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Recipe actions\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Scale 1×\" [button/root] in main",
           "count": 1
         },
         {
@@ -11804,14 +11556,6 @@
         },
         {
           "identity": "link \"qa_kitchen_chef\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Scale\" [number-field/input] in main",
           "count": 1
         }
       ]
@@ -13697,7 +13441,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"21 components\" [inspector/list] in region \"X-ray\"",
+          "identity": "button \"22 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {
