@@ -32,6 +32,9 @@ test.describe("Chef profile paging", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
   test("Show more appends each page in place, then disappears at the last one", async ({ page, expectAccessible }, testInfo) => {
+    // Two accessibility audits of a 60-row page in both colour schemes, six frames and a round trip: 48 s on
+    // iPhone WebKit before the one-book chef page, and over the default 60 s with its stats and cookbook rows.
+    test.setTimeout(120_000);
     await page.setViewportSize(viewportFor(testInfo));
     const main = page.getByRole("main");
     const recipesSection = main.locator("section").filter({ has: page.getByRole("heading", { name: "Recipes", exact: true }) }).last();
