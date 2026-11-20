@@ -62,7 +62,8 @@ function logCookDialog(page: Page) {
 
 // Opens "Log a cook" and checks that "Log cook" waits for something to save.
 async function openLogCook(page: Page) {
-  await page.getByTestId("recipe-header-log-cook-action").click();
+  await page.getByTestId("recipe-header-more-action").click();
+  await page.getByRole("menuitem", { name: "Log cook", exact: true }).click();
   const dialog = logCookDialog(page);
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Log cook", exact: true })).toBeDisabled();

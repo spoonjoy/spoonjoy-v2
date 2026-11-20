@@ -49,16 +49,18 @@ test.describe("Recipe list action on iPhone", () => {
     await expect(page).not.toHaveURL(pathUrl(LEMON_RICE));
     await expect(page).toHaveURL(/\/recipes\/[^/?#]+$/);
     await expect(page.getByRole("heading", { level: 1, name: "Lemon Herb Rice", exact: true })).toBeVisible();
-    await expect(page.getByTestId("recipe-header-edit-action")).toBeVisible();
+    await page.getByTestId("recipe-header-more-action").click();
+    await expect(page.getByRole("menuitem", { name: "Edit", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
 
     // 1.25×, one press of 0.25, so the list gets fractional amounts to write out.
     await increaseScale.click();
     await expect(scaleDisplay).toHaveValue("1.25");
 
-    await expect(listAction).toHaveText("Add to list");
+    await expect(listAction).toHaveAccessibleName("Add to list");
     await listAction.click();
     await expect(page.getByRole("region", { name: "Notifications" }).getByRole("dialog", { name: "4 items added at 1.25x", exact: true })).toBeVisible();
-    await expect(listAction).toHaveText("In list");
+    await expect(listAction).toHaveAccessibleName("In list");
     await expect(listAction).toHaveAttribute("aria-pressed", "true");
     await expectAccessible();
 

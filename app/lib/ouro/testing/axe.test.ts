@@ -238,8 +238,8 @@ describe("audit", () => {
       '<svg role="img" aria-label="Plan" width="300" height="80"><defs><linearGradient id="paper"><stop offset="0" stop-color="#fff" /><stop offset="1" stop-color="#eee" /></linearGradient></defs>' +
         '<rect width="300" height="80" fill="url(#paper)" /><text id="dark-label" x="10" y="30" fill="#111">232 FEET</text><text id="faint-label" x="10" y="60" fill="#aaa">26 FT</text></svg>',
     );
-    // The pictures the kit got. A try that ran out of time is no picture: on a box that holds still
-    // the kit tries once more, as when Vitest's own process stalled on a loaded runner.
+    // The pictures the kit got: one try each, long enough on a box that holds still to wait out a
+    // stall of Vitest's own process on a loaded runner.
     const take = page.screenshot.bind(page);
     const pictures: Element[] = [];
     const shots = vi.spyOn(page, "screenshot").mockImplementation((options) =>
@@ -554,50 +554,34 @@ describe("audit", () => {
     expect(document.getAnimations().map((animation) => (animation as CSSTransition).transitionProperty)).toEqual([]);
   });
 
-  it("tries a screenshot once more when it ran out of time on a box that shows and holds still, as when Vitest's own process stalled", async () => {
+  it("gives a box that shows and holds still one screenshot try long enough to wait out a stall of Vitest's own process", async () => {
     mountPage('<p id="text" style="margin:0;padding:8px;color:#111;background:linear-gradient(90deg,#fff,#eee)">Text on a gradient</p>');
-    // The second shot is drawn here rather than taken, so a stall of the runner, the one the retry is for, cannot fail
-    // the test that proves it: a white box the size of the element, as the page shows it with its glyphs hidden.
-    const drawn = (element: Element) => {
-      const box = element.getBoundingClientRect();
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(box.width * devicePixelRatio);
-      canvas.height = Math.round(box.height * devicePixelRatio);
-      const context = canvas.getContext("2d")!;
-      context.fillStyle = "#fff";
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      return canvas.toDataURL("image/png").slice("data:image/png;base64,".length);
-    };
-    const shots = vi
-      .spyOn(page, "screenshot")
-      .mockRejectedValueOnce(new Error("locator.screenshot: Timeout 555ms exceeded."))
-      .mockImplementation(async (options) => drawn(options!.element as Element));
+    const shots = vi.spyOn(page, "screenshot");
     try {
       expect(await measureTextContrast(document.querySelector("#text")!, 4.5)).toEqual({ pass: true });
-      expect(shots).toHaveBeenCalledTimes(2);
-      expect(shots.mock.calls.map(([options]) => options?.timeout)).toEqual([5000, 15_000]);
+      expect(shots.mock.calls.map(([options]) => options?.timeout)).toEqual([20_000]);
     } finally {
       shots.mockRestore();
     }
   });
 
-  it("does not try a screenshot again on a box with no area, which never shows", async () => {
+  it("gives a box with no area, which never shows, one short screenshot try", async () => {
     mountPage('<p id="flat" style="margin:0;height:0;color:#111;background:#fff">Text over a box with no height</p>');
     const shots = vi.spyOn(page, "screenshot").mockRejectedValue(new Error("locator.screenshot: Timeout 5000ms exceeded."));
     try {
       expect(await measureTextContrast(document.querySelector("#flat")!, 4.5)).toEqual({ pass: false, reason: expect.stringMatching(/the screenshot to measure it threw: locator\.screenshot: Timeout 5000ms exceeded\.$/) });
-      expect(shots).toHaveBeenCalledTimes(1);
+      expect(shots.mock.calls.map(([options]) => options?.timeout)).toEqual([5000]);
     } finally {
       shots.mockRestore();
     }
   });
 
-  it("does not try a screenshot again on a box hidden with visibility, which Playwright never takes", async () => {
+  it("gives a box hidden with visibility, which Playwright never takes, one short screenshot try", async () => {
     mountPage('<p id="hidden" style="margin:0;padding:8px;visibility:hidden;color:#111;background:#fff">Text in a hidden box</p>');
     const shots = vi.spyOn(page, "screenshot").mockRejectedValue(new Error("locator.screenshot: Timeout 5000ms exceeded."));
     try {
       await measureTextContrast(document.querySelector("#hidden")!, 4.5);
-      expect(shots).toHaveBeenCalledTimes(1);
+      expect(shots.mock.calls.map(([options]) => options?.timeout)).toEqual([5000]);
     } finally {
       shots.mockRestore();
     }

@@ -229,7 +229,10 @@ export function CodeBlock(props: CodeBlockProps): JSX.Element {
       data-ouro="code-block"
       data-language={language}
       className={cn(
-        "[@layer_ouro-reset]:m-0 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] overflow-hidden rounded-ouro-lg border border-solid border-border bg-muted text-foreground outline-ring outline-offset-2 has-[>[data-ouro-part=code]:focus-visible]:outline-2 has-[>[data-ouro-part=code]:focus-visible]:outline-solid",
+        // The figure doesn't clip what is in it (#2349): a squircle clip repaints the whole block as the code scrolls. The code
+        // area, the one part that runs edge to edge, rounds its own corners, inside a plain rectangular clip, which is cheap and
+        // which axe reads as the edge of the code's text, so it can measure that text's contrast without a screenshot.
+        "[@layer_ouro-reset]:m-0 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] rounded-ouro-lg border border-solid border-border bg-muted text-foreground outline-ring outline-offset-2 has-[[data-ouro-part=code]:focus-visible]:outline-2 has-[[data-ouro-part=code]:focus-visible]:outline-solid",
         bar ? "grid-rows-[minmax(calc(var(--spacing)*11),auto)_minmax(0,1fr)]" : "grid-rows-[minmax(0,1fr)]",
         className,
       )}
@@ -258,19 +261,21 @@ export function CodeBlock(props: CodeBlockProps): JSX.Element {
         // The code's fade would fade a hairline drawn on the code, so it sits beside the code, under its transparent top border (#530).
         <span aria-hidden="true" data-slot="rule" className="pointer-events-none col-span-2 col-start-1 row-start-2 h-px self-start border-0 border-t border-solid border-border" />
       ) : null}
-      <pre
-        ref={scrollable}
-        data-ouro-control="code-block"
-        data-ouro-part="code"
-        className={cn(
-          "col-span-2 col-start-1 m-0 min-h-0 overflow-auto p-4 font-mono text-sm leading-6 outline-none",
-          scrollFadeClass,
-          bar ? "row-start-2 border-0 border-t border-solid border-transparent" : "row-start-1",
-          wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
-        )}
-      >
-        <code className={cn("[font-family:inherit]", wrap ? "block" : "block w-max min-w-full")}>{ansi ? <AnsiCode code={code} catalogue={catalogue} /> : catalogue ? <CodeWithEmoji code={code} catalogue={catalogue} /> : code}</code>
-      </pre>
+      <div data-slot="code-clip" className={cn("col-span-2 col-start-1 grid min-h-0 min-w-0 overflow-hidden", bar ? "row-start-2" : "row-start-1")}>
+        <pre
+          ref={scrollable}
+          data-ouro-control="code-block"
+          data-ouro-part="code"
+          className={cn(
+            "m-0 min-h-0 min-w-0 overflow-auto p-4 font-mono text-sm leading-6 outline-none",
+            scrollFadeClass,
+            bar ? "rounded-b-[calc(var(--radius-ouro-lg)-1px)] border-0 border-t border-solid border-transparent" : "rounded-[calc(var(--radius-ouro-lg)-1px)]",
+            wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
+          )}
+        >
+          <code className={cn("[font-family:inherit]", wrap ? "block" : "block w-max min-w-full")}>{ansi ? <AnsiCode code={code} catalogue={catalogue} /> : catalogue ? <CodeWithEmoji code={code} catalogue={catalogue} /> : code}</code>
+        </pre>
+      </div>
     </figure>
   );
 }

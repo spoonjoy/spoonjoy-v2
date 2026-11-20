@@ -13,7 +13,10 @@
 // behind the dialog) is inactive, which WCAG 1.4.3 exempts. So is a line an open popup covers (a
 // Select's list, a Menu, a Popover), as Ouro UI's audit hides it: what a popup paints over the
 // text is the popup's own. A line it covers only partly is inactive only while the popup also hides
-// the text from assistive technology; otherwise it is measured with the popup hidden. An inactive
+// the text from assistive technology; otherwise it is measured with the popup hidden. So is text
+// hidden from assistive technology below the fold while an open popup holds the page still. A
+// faint wash over the text (a hovered row's tint) covers nothing: the screenshot measures through
+// it. An inactive
 // line is skipped: the element is judged by its other lines, and passes as inactive only when it
 // has no other line.
 import type { Locator, Page } from "@playwright/test";
@@ -232,12 +235,22 @@ function installHelpers(): void {
   // A colour with zero alpha. Stricter than transparent(), which also takes opaque black, rgb(0, 0, 0).
   const noAlpha = (color: string) => /^rgba\([^,]+,[^,]+,[^,]+,\s*0(?:\.0+)?\)$|^transparent$|\/\s*0\)$/.test(color.trim());
   const transparent = (color: string) => /^rgba?\(.*,\s*0\)$|^transparent$|\/\s*0\)$/.test(color.trim());
+  // A colour's alpha: the fourth value of rgba(), or the value after "/" (oklab, oklch, color()), as
+  // a number or a percentage; 1 when it names none.
+  const alphaOf = (color: string) => {
+    const match = color.trim().match(/(?:,\s*|\/\s*)([\d.]+)(%?)\s*\)$/);
+    if (!match || (!color.includes("/") && !/^rgba\(/.test(color.trim()))) return 1;
+    return Number(match[1]) / (match[2] ? 100 : 1);
+  };
+  // A wash this faint (a row's hover tint, for one) leaves the text plainly readable through it, and
+  // the screenshot measures the text with the wash on it; a veil or a dialog's backdrop is thicker.
+  const FAINT_WASH = 0.1;
   const paintsAt = (layer: Element, x: number, y: number) => {
     if (layer instanceof HTMLImageElement || layer instanceof HTMLVideoElement || layer instanceof HTMLCanvasElement || layer instanceof SVGElement || layer instanceof HTMLIFrameElement) return true;
     for (const pseudo of [undefined, "::before", "::after"]) {
       const style = getComputedStyle(layer, pseudo);
       if (pseudo && (style.content === "none" || style.content === "normal")) continue;
-      if (!transparent(style.backgroundColor) || style.backgroundImage !== "none") return true;
+      if ((!transparent(style.backgroundColor) && alphaOf(style.backgroundColor) > FAINT_WASH) || style.backgroundImage !== "none") return true;
       if ((style.getPropertyValue("backdrop-filter") || "none") !== "none") return true;
       if (pseudo && style.content !== '""' && style.content !== "''") return true;
     }
@@ -427,6 +440,17 @@ async function lineInView(locator: Locator, index: number): Promise<LineResult> 
     if (!loaded) return { blocker: `an image behind line ${index + 1} did not load in ${timeout / 1000} s: ${waiting.map((src) => new URL(src, location.href).pathname).join(", ")}` };
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     line = helpers.lines(element)[index];
+    if (line && !inside(line.rect)) {
+      // An open modal popup (Base UI's Menu, Select, Popover) locks the page's scrolling and puts it
+      // back where it was, so a line below the fold cannot be shown while it is open, to the cook or
+      // to this check. With the text also hidden from assistive technology it is inactive, as text
+      // behind an open dialog is.
+      const hidden = element.closest('[aria-hidden="true"], [inert]');
+      const popup = Array.from(document.querySelectorAll("[data-base-ui-portal]")).find(
+        (portal) => !portal.contains(element) && portal.querySelector("[data-open]")?.checkVisibility({ visibilityProperty: true }),
+      );
+      if (hidden && popup) return { inactive: `out of view while ${helpers.describe(popup)} is open and holds the page still, and hidden from assistive technology by ${helpers.describe(hidden)}` };
+    }
     if (!line || !inside(line.rect)) return { blocker: `line ${index + 1} moved out of view` };
     return { box: { x: line.rect.x, y: line.rect.y, width: line.rect.width, height: line.rect.height }, run: line.run };
   }, { index, timeout: IMAGE_TIMEOUT_MS });

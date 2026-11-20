@@ -17,7 +17,7 @@ import { RouteErrorContent } from "~/components/errors/route-error";
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { MouseEvent } from "react";
 import { usePostHog } from "~/lib/use-posthog";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Bookmark, Ellipsis, Play, ShoppingCart } from "lucide-react";
 import {
   handleRecipeDetailAction,
   loadRecipeDetail,
@@ -32,6 +32,7 @@ import { useFormErrors, useFormMessage } from "~/hooks/use-form-errors";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/ouro/link/link";
+import { Menu, MenuItem } from "~/components/ouro/menu/menu";
 import { Text } from "~/components/ouro/text/text";
 import { Toggle } from "~/components/ouro/toggle/toggle";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
@@ -412,22 +413,15 @@ export default function RecipeDetail() {
     />
   ) : null;
 
+  // The one-book recipe page (desk target.md, Recipe): Back, then Share and a ⋯ menu beside it at
+  // the top; Cook, Save and Add to list as one row under the description.
   const headerMasthead = (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-wrap items-center justify-between gap-3">
       <Link href="/recipes" onClick={handleBackToRecipes} tone="secondary">
         <ArrowLeft className="size-4" aria-hidden="true" />
         Recipes
       </Link>
       <div className="flex flex-wrap items-center gap-2" data-testid="recipe-header-actions">
-        <Button ref={cookActionRef} href="#cook" onClick={handleEnterCookMode} data-testid="recipe-header-cook-action">
-          Cook mode
-        </Button>
-        <Button variant="outline" tone="secondary" onClick={handleOpenSaveModal} data-testid="recipe-header-save-action">
-          Save
-        </Button>
-        <Button variant="outline" tone="secondary" onClick={handleAddToList} aria-pressed={isAlreadyInList} data-testid="recipe-header-list-action">
-          {addToListLabel}
-        </Button>
         <ShareButton
           variant="plain"
           data-testid="recipe-header-share-action"
@@ -435,20 +429,6 @@ export default function RecipeDetail() {
           text={recipe.description ?? `Check out this recipe: ${recipe.title}`}
           onShare={handleShared}
         />
-        {isOwner ? (
-          <Button href={`/recipes/${recipe.id}/edit`} variant="outline" tone="secondary" data-testid="recipe-header-edit-action">
-            Edit
-          </Button>
-        ) : null}
-        {isAuthenticated ? (
-          <Button variant="outline" tone="secondary" onClick={openSpoonDialog} data-testid="recipe-header-log-cook-action">
-            Log cook
-          </Button>
-        ) : (
-          <Button href={loginRedirect} variant="outline" tone="secondary" data-testid="recipe-header-log-cook-action">
-            Log cook
-          </Button>
-        )}
         {!isOwner && (
           isAuthenticated ? (
             <ForkRecipeButton
@@ -474,7 +454,45 @@ export default function RecipeDetail() {
             triggerTestId="recipe-header-report-action"
           />
         ) : null}
+        <Menu
+          trigger={(
+            <Button variant="outline" tone="secondary" aria-label="Recipe actions" data-testid="recipe-header-more-action">
+              <Ellipsis />
+            </Button>
+          )}
+        >
+          {isOwner ? (
+            <MenuItem href={`/recipes/${recipe.id}/edit`}>Edit</MenuItem>
+          ) : null}
+          {isAuthenticated ? (
+            <MenuItem onClick={openSpoonDialog}>Log cook</MenuItem>
+          ) : (
+            <MenuItem href={loginRedirect}>Log cook</MenuItem>
+          )}
+        </Menu>
       </div>
+    </div>
+  );
+
+  const headerActions = (
+    <div className="flex items-center gap-3" data-testid="recipe-header-primary-actions">
+      <Button
+        ref={cookActionRef}
+        href="#cook"
+        onClick={handleEnterCookMode}
+        startIcon={Play}
+        aria-label="Cook mode"
+        className="grow sm:grow-0 sm:min-w-48"
+        data-testid="recipe-header-cook-action"
+      >
+        Cook
+      </Button>
+      <Button variant="outline" tone="secondary" aria-label="Save" onClick={handleOpenSaveModal} data-testid="recipe-header-save-action">
+        <Bookmark />
+      </Button>
+      <Button variant="outline" tone="secondary" aria-label={addToListLabel} onClick={handleAddToList} aria-pressed={isAlreadyInList} data-testid="recipe-header-list-action">
+        <ShoppingCart />
+      </Button>
     </div>
   );
 
@@ -619,6 +637,7 @@ export default function RecipeDetail() {
         onScaleChange={handleScaleChange}
         progressSyncStatus={cookController.syncStatus}
         masthead={headerMasthead}
+        actions={headerActions}
         provenance={headerProvenance}
       />
 

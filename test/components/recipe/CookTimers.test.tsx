@@ -29,24 +29,24 @@ describe("cook-mode timers", () => {
     Reflect.deleteProperty(document, "visibilityState");
   });
 
-  it("rings the step's timer: the brass arc shows the time left, over a vellum track", async () => {
+  it("rings the step's timer with Ouro UI's ring: the arc shows the time left, with the time and Pause inside", async () => {
     window.localStorage.setItem("ouro-timer:spoonjoy-cook-timer:cook-timers-test:1", JSON.stringify({
       status: "running", duration: 60, endsAt: NOW + 30_000,
     }));
     render(<CookStepTimer timer={pasta} />);
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 
-    const ring = screen.getByTestId("cook-timer-ring");
-    expect(ring).toHaveAttribute("aria-hidden", "true");
-    expect(ring.querySelector(".sj-cook-timer-track")).not.toBeNull();
-    const arc = ring.querySelector(".sj-cook-timer-progress")!;
+    const timer = screen.getByTestId("cook-mode-timer");
+    expect(timer).toHaveAttribute("data-variant", "ring");
+    const arc = timer.querySelector("[data-ouro-timer-arc]")!;
     expect(Number(arc.getAttribute("stroke-dashoffset"))).toBeCloseTo(0.5, 2);
-    expect(screen.getByTestId("cook-mode-timer").closest(".sj-cook-timer")).not.toBeNull();
+    // The time and its main button sit inside the ring.
+    expect(within(timer).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
   });
 
   it("leaves the arc empty before the timer starts", () => {
     render(<CookStepTimer timer={pasta} />);
-    const arc = screen.getByTestId("cook-timer-ring").querySelector(".sj-cook-timer-progress")!;
+    const arc = screen.getByTestId("cook-mode-timer").querySelector("[data-ouro-timer-arc]")!;
     expect(arc.getAttribute("stroke-dashoffset")).toBe("1");
   });
 

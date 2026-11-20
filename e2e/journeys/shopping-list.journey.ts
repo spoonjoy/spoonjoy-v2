@@ -274,7 +274,7 @@ test.describe("Shopping list", () => {
     await waitForHydration(page);
     await expect(page).toHaveURL(pathUrl(TOMATO_SOUP));
     await expect(page.getByRole("heading", { level: 1, name: "Roasted Tomato Soup", exact: true })).toBeVisible();
-    await expect(listAction).toHaveText("Add to list");
+    await expect(listAction).toHaveAccessibleName("Add to list");
 
     // 2x, four presses of 0.25.
     await increaseScale.click();
@@ -288,7 +288,7 @@ test.describe("Shopping list", () => {
 
     await listAction.click();
     await expect(page.getByRole("region", { name: "Notifications" }).getByRole("dialog", { name: "3 items added at 2x", exact: true })).toBeVisible();
-    await expect(listAction).toHaveText("In list");
+    await expect(listAction).toHaveAccessibleName("In list");
     await expect(listAction).toHaveAttribute("aria-pressed", "true");
     await expectAccessible();
 
@@ -312,7 +312,7 @@ test.describe("Shopping list", () => {
 
     // Back on the recipe, it reads as already on the list.
     await page.goto(TOMATO_SOUP);
-    await expect(listAction).toHaveText("In list");
+    await expect(listAction).toHaveAccessibleName("In list");
     await expect(listAction).toHaveAttribute("aria-pressed", "true");
   });
 

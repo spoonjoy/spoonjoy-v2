@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, meta } from "~/routes/cookbooks._index";
@@ -224,11 +224,35 @@ describe("Cookbooks drawer route", () => {
 
     render(<Stub initialEntries={["/cookbooks"]} />);
     expect(await screen.findByRole("heading", { name: /cookbooks/i })).toBeInTheDocument();
-    expect(screen.getByText("Grandma Weeknight Book")).toBeInTheDocument();
-    expect(screen.getByText("No Photo Book")).toBeInTheDocument();
-    expect(screen.getByText("1 recipe")).toBeInTheDocument();
-    expect(screen.getByText("2 recipes")).toBeInTheDocument();
-    expect(document.querySelector('img[src="/photos/grandma-book.jpg"]')).toBeInTheDocument();
+    const shelf = screen.getByRole("list", { name: "Cookbooks" });
+    const [photo, drawn] = within(shelf).getAllByRole("listitem");
+    expect(within(photo).getByRole("link", { name: /^Grandma Weeknight Book/ })).toHaveAttribute("href", "/cookbooks/cookbook-1");
+    expect(photo).toHaveTextContent("1 recipe");
+    expect(photo.querySelector('img[src="/photos/grandma-book.jpg"]')).toBeInTheDocument();
+    // A photo cover carries no caption: the name and count sit once, under it.
+    expect(within(photo).getAllByText("Grandma Weeknight Book")).toHaveLength(1);
+    // A cookbook with no photo shows the drawn book cover, with its title on it.
+    expect(within(drawn).getByRole("link", { name: /^No Photo Book/ })).toHaveAttribute("href", "/cookbooks/cookbook-2");
+    expect(drawn).toHaveTextContent("2 recipes");
+    expect(screen.getByText("2 cookbooks")).toBeInTheDocument();
+  });
+
+  it("counts a shelf of one as 1 cookbook", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/cookbooks",
+        Component: CookbooksIndexRedirect,
+        loader: () => ({
+          query: "",
+          cookbooks: [
+            { id: "cookbook-1", title: "Only Book", _count: { recipes: 0 }, searchableRecipeTitles: [], recipes: [] },
+          ],
+        }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/cookbooks"]} />);
+    expect(await screen.findByText("1 cookbook")).toBeInTheDocument();
   });
 
   it("renders cookbook empty states for new and filtered shelves", async () => {

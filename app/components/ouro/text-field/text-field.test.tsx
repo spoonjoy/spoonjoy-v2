@@ -8,6 +8,7 @@ import { Field } from "~/components/ouro/field/field";
 import { FieldControl } from "~/components/ouro/field/field-parts";
 import { TextField, type TextFieldProps } from "~/components/ouro/text-field/text-field";
 import { act } from "~/lib/ouro/testing/act";
+import { watchAnnouncements } from "~/lib/ouro/testing/announcements";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -719,5 +720,22 @@ describe("TextField under a parent's spacing", () => {
     const button = host.querySelector<HTMLElement>('[data-ouro="button"]')!;
     expect(getComputedStyle(root).marginBottom).toBe("16px");
     expect(Math.abs(button.getBoundingClientRect().top - root.getBoundingClientRect().bottom - 16)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("TextField's error slot", () => {
+  it("draws none while the field cannot fail the browser's validation, and wires the error in when one arrives", async () => {
+    const { host, rerender, input } = await render(<TextField label="Name" description="As on your card." />);
+    expect(host.querySelector('[id$="-description"]')?.id).toBe(input.getAttribute("aria-describedby"));
+    expect(input).toHaveAttribute("aria-invalid", "false");
+    const watch = watchAnnouncements();
+    await rerender(<TextField label="Name" description="As on your card." error="Enter a name." />);
+    const message = [...host.querySelectorAll("[data-ouro-text]")].find((node) => node.textContent === "Enter a name.")!;
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input.getAttribute("aria-describedby")!.split(" ")).toContain(message.id);
+    expect(input).toHaveAccessibleDescription("As on your card. Enter a name.");
+    // The error is the control's description, not a live region, so nothing is announced either way.
+    expect(watch.count("Enter a name.")).toBe(0);
+    watch.stop();
   });
 });

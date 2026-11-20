@@ -6,6 +6,7 @@ import { commands } from "vitest/browser";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Card } from "~/components/ouro/card/card";
 import { Item } from "~/components/ouro/item/item";
+import { breathMs, joinWave, stillMs } from "~/components/ouro/skeleton/skeleton-styles";
 import { Skeleton, type SkeletonProps } from "~/components/ouro/skeleton/skeleton";
 import { Text } from "~/components/ouro/text/text";
 import { act } from "~/lib/ouro/testing/act";
@@ -23,6 +24,12 @@ async function render(node: ReactNode) {
   roots.push(root);
   await act(async () => root.render(node));
   return host.querySelector<HTMLElement>('[data-ouro="skeleton"]')!;
+}
+
+/** Milliseconds into the wave: the animation's time less its delay, so a placeholder joined mid-breath reads where it is, and one still waiting reads below zero. */
+function animationPhase(el: Element): number {
+  const effect = el.getAnimations()[0]!.effect!;
+  return Number(effect.getComputedTiming().localTime) - Number(effect.getTiming().delay);
 }
 
 let warn: ReturnType<typeof vi.spyOn>;
@@ -192,7 +199,8 @@ describe("Skeleton", () => {
     const skeleton = await render(<Skeleton />);
     const style = getComputedStyle(skeleton);
     expect(style.animationName).toBe("ouro-skeleton-breathe");
-    expect(style.animationDelay).toBe("1s");
+    // At most the first second: a placeholder that joins a wave begun a moment ago waits only for what remains of it.
+    expect(parseFloat(style.animationDelay)).toBeLessThanOrEqual(1);
     expect(style.animationTimingFunction).toBe("ease-in-out");
     expect(style.animationIterationCount).toBe("infinite");
     const effect = skeleton.getAnimations()[0]!.effect as KeyframeEffect;
@@ -203,6 +211,57 @@ describe("Skeleton", () => {
     await commands.emulateMedia({ reducedMotion: "reduce" });
     expect(getComputedStyle(skeleton).animationName).toBe("none");
     expect(skeleton.getAnimations({ subtree: true })).toEqual([]);
+  });
+
+  it("joins one shared phase: a placeholder mounted mid-breath, or remounted, is where the others are, and reduced motion draws none", async () => {
+    const phase = animationPhase;
+    const first = await render(<Skeleton />);
+    const root = roots.at(-1)!;
+    await expect.poll(() => phase(first)).toBeGreaterThan(1300);
+    const late = await render(<Skeleton />);
+    // Both are read in one task, so they share a frame's time.
+    const [a, b] = [phase(first), phase(late)];
+    expect(Math.abs(a - b)).toBeLessThan(150);
+    // A remount (a new key) while the others breathe keeps the phase.
+    await act(async () => root.render(<Skeleton key="again" />));
+    const again = mounted.at(-2)!.querySelector<HTMLElement>('[data-ouro="skeleton"]')!;
+    expect(Math.abs(phase(again) - phase(late))).toBeLessThan(150);
+    await commands.emulateMedia({ reducedMotion: "reduce" });
+    expect(getComputedStyle(late).animationName).toBe("none");
+    expect(late.getAnimations()).toEqual([]);
+  });
+
+  it("places a placeholder in the wave: a new wave after a quiet gap of more than a second, else the running one", () => {
+    expect(joinWave(5000, 0, 3999, 100)).toEqual({ start: 5000, delay: "1000ms" });
+    expect(joinWave(5000, 0, 4000, 100)).toEqual({ start: 100, delay: `${-((4900 - stillMs) % breathMs)}ms` });
+    expect(joinWave(5000, 1, Number.NEGATIVE_INFINITY, 4001)).toEqual({ start: 4001, delay: "1ms" });
+    expect(joinWave(5000, 1, 0, 4000).delay).toBe("0ms");
+    expect(joinWave(5000, 1, 0, 3999).delay).toBe("-1ms");
+    expect(joinWave(9000, 2, 0, 1000).delay).toBe(`${-((8000 - stillMs) % breathMs)}ms`);
+  });
+
+  it("keeps the app's own style beside the wave's phase, on every shape", async () => {
+    const own = { marginTop: "7px" };
+    const shapes = [
+      await render(<Skeleton style={own} />),
+      await render(<Skeleton shape="text" style={own} />),
+      (await render(<Skeleton shape="row" style={own} />)),
+      (await render(<Skeleton shape="card" style={own} />)),
+    ];
+    for (const shape of shapes) {
+      const holder = [shape, ...shape.querySelectorAll<HTMLElement>("[style]")].find((el) => el.style.marginTop === "7px");
+      expect(holder, "the app's style survives").toBeDefined();
+    }
+  });
+
+  it("starts a new wave, still for its first second, once none has been mounted for a second", async () => {
+    const first = await render(<Skeleton />);
+    await expect.poll(() => animationPhase(first)).toBeGreaterThan(1300);
+    await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    // real clock: the wave's own one-second gap, which no state in the page reports.
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    const fresh = await render(<Skeleton />);
+    expect(animationPhase(fresh)).toBeLessThan(500);
   });
 
   it("breathes only the first 24 of a long list, and a later list finds the places taken", async () => {
@@ -216,6 +275,8 @@ describe("Skeleton", () => {
     const host = (await render(list(131))).parentElement!;
     const animated = () => [...host.querySelectorAll("[data-ouro=skeleton]")].filter((el) => getComputedStyle(el).animationName === "ouro-skeleton-breathe").length;
     expect(animated()).toBe(24);
+    const phased = [...host.querySelectorAll<HTMLElement>("[data-ouro=skeleton]")].filter((el) => el.style.getPropertyValue("--ouro-skeleton-delay") !== "").length;
+    expect(phased, "only the placeholders that breathe join the wave").toBe(24);
     const again = (await render(list(5))).parentElement!;
     expect(animated()).toBe(24);
     expect([...again.querySelectorAll("[data-ouro=skeleton]")].filter((el) => getComputedStyle(el).animationName === "ouro-skeleton-breathe")).toHaveLength(0);

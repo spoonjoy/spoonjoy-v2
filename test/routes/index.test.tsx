@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Request as UndiciRequest } from "undici";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { HOMEPAGE_JSON_LD, absoluteKitchenUrl, loader, meta } from "~/routes/_index";
@@ -12,6 +12,13 @@ import { getUserId, sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 import { share } from "~/lib/ouro/share";
+import userEvent from "@testing-library/user-event";
+
+/** Share lives in each row's ⋯ menu (one-book G6): open the menu for `title`, then press Share. */
+async function shareFromMenu(title: string) {
+  await userEvent.click(screen.getByRole("button", { name: `More for ${title}` }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: "Share" }));
+}
 
 vi.mock("~/lib/ouro/share", async () => {
   const actual = await vi.importActual<typeof import("~/lib/ouro/share")>("~/lib/ouro/share");
@@ -518,17 +525,23 @@ describe("Kitchen Index Route", () => {
 
       render(<Stub initialEntries={["/"]} />);
 
-      const index = await screen.findByRole("region", { name: "Recipe index" });
+      const index = await screen.findByRole("region", { name: "Your recipes" });
       const rows = within(index).getAllByRole("article");
       expect(rows.map((row) => row.textContent)).toEqual([
         expect.stringContaining("Newest Without Cover"),
         expect.stringContaining("Older With Cover"),
       ]);
-      expect(within(index).getByRole("list", { name: "Recipe index" }).tagName).toBe("OL");
+      expect(within(index).getByRole("list", { name: "Your recipes" }).tagName).toBe("OL");
       expect(screen.queryByRole("region", { name: "Recently Updated" })).not.toBeInTheDocument();
       expect(screen.queryByText("Recently Updated")).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Open Recipe" })).not.toBeInTheDocument();
-      expect(screen.getAllByText("Newest Without Cover")).toHaveLength(1);
+      // The newest recipe also leads the page on the counter, so its title shows twice: once there,
+      // once as the first row.
+      const counter = screen.getByRole("region", { name: "On the counter" });
+      expect(within(counter).getByRole("heading", { level: 2, name: "Newest Without Cover" })).toBeInTheDocument();
+      expect(within(counter).getByRole("link", { name: "Start cooking" })).toHaveAttribute("href", "/recipes/recipe-new#cook");
+      expect(within(counter).getByRole("link", { name: "Recipe: Newest Without Cover" })).toHaveAttribute("href", "/recipes/recipe-new");
+      expect(within(index).getAllByText("Newest Without Cover")).toHaveLength(1);
     });
 
     it("renders owner kitchen as a cookbook spread with settings and admin controls", async () => {
@@ -580,25 +593,30 @@ describe("Kitchen Index Route", () => {
       const { container } = render(<Stub initialEntries={["/"]} />);
 
       expect(await screen.findByText("My Kitchen")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Create recipe" })).toHaveAttribute("href", "/recipes/new");
+      expect(screen.getByRole("link", { name: "Add a recipe" })).toHaveAttribute("href", "/recipes/new");
+      expect(screen.getByRole("link", { name: "Chefs" })).toHaveAttribute("href", "/chefs");
       expect(screen.getByRole("link", { name: "Kitchen settings" })).toHaveAttribute("href", "/account/settings");
       expect(screen.queryByRole("button", { name: "Log out" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "New Recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
       expect(screen.queryByRole("region", { name: "Recently Updated" })).not.toBeInTheDocument();
       expect(screen.queryByText("Latest from the kitchen")).not.toBeInTheDocument();
-      expect(screen.queryByText("On the Counter")).not.toBeInTheDocument();
+      expect(screen.getByText("On the counter")).toBeInTheDocument();
       // The recipe index sits inside root.tsx's <main>, so it's a labelled region rather than
       // a complementary landmark (which must be top level) — see
       // landmark-complementary-is-top-level.
       expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
-      expect(screen.getByRole("region", { name: "Recipe index" })).toBeInTheDocument();
-      expect(screen.getByRole("region", { name: "Cookbooks" })).toBeInTheDocument();
+      const recipeIndex = screen.getByRole("region", { name: "Your recipes" });
+      expect(within(recipeIndex).getByRole("heading", { name: "Your recipes" })).toBeInTheDocument();
+      expect(within(recipeIndex).getByText("3 recipes · 1 cookbook")).toBeInTheDocument();
+      expect(within(recipeIndex).getByRole("link", { name: "See all" })).toHaveAttribute("href", "/recipes");
+      expect(screen.getByRole("region", { name: "Cookbook shelf" })).toBeInTheDocument();
       expect(screen.getByText("3 recipes and 1 cookbook")).toBeInTheDocument();
       expect(screen.getAllByText("Cheese Night").length).toBeGreaterThan(0);
       expect(screen.getByText("Original photo")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /Fondue/ })).toHaveAttribute("href", "/recipes/recipe-1");
-      fireEvent.click(screen.getByRole("button", { name: "Share Fondue" }));
+      expect(within(recipeIndex).getByRole("link", { name: /Fondue/ })).toHaveAttribute("href", "/recipes/recipe-1");
+      expect(screen.queryByRole("button", { name: "Share Fondue" })).not.toBeInTheDocument();
+      await shareFromMenu("Fondue");
       await waitFor(() => {
         expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           title: "Fondue",
@@ -607,8 +625,7 @@ describe("Kitchen Index Route", () => {
       });
       expect(screen.getByRole("link", { name: /Rosti/ })).toHaveAttribute("href", "/recipes/recipe-2");
       expect(container.querySelector('img[src="https://example.com/rosti.jpg"]')).not.toBeNull();
-      expect(screen.getByRole("button", { name: "Share Rosti" })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Share Rosti" }));
+      await shareFromMenu("Rosti");
       await waitFor(() => {
         expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           title: "Rosti",
@@ -618,7 +635,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByText("Crisp potatoes")).toBeInTheDocument();
       expect(screen.getByText("Serves 2")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /Broth/ })).toHaveAttribute("href", "/recipes/recipe-3");
-      fireEvent.click(screen.getByRole("button", { name: "Share Broth" }));
+      await shareFromMenu("Broth");
       await waitFor(() => {
         expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           text: "Open this Spoonjoy recipe: Broth",
@@ -652,12 +669,13 @@ describe("Kitchen Index Route", () => {
       render(<Stub initialEntries={["/"]} />);
 
       expect(await screen.findByText("0 recipes and 0 cookbooks")).toBeInTheDocument();
-      expect(screen.getByText("Create your first recipe")).toBeInTheDocument();
-      expect(screen.getByText(/the family classic everyone asks about/i)).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Create first recipe" })).toHaveAttribute("href", "/recipes/new");
-      expect(screen.getByText("Build your first cookbook")).toBeInTheDocument();
-      expect(screen.getByText(/a family collection that grows/i)).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Create first cookbook", hidden: true })).toHaveAttribute("href", "/cookbooks/new");
+      // An empty kitchen is the Apple app's "The table is set", with Add a recipe and Import.
+      const table = screen.getByRole("region", { name: "The table is set" });
+      expect(within(table).getByRole("heading", { level: 2, name: "The table is set" })).toBeInTheDocument();
+      expect(within(table).getByRole("link", { name: "Add a recipe" })).toHaveAttribute("href", "/recipes/new");
+      expect(within(table).getByRole("link", { name: "Import" })).toHaveAttribute("href", "/recipes/new#import");
+      expect(screen.queryByText("Create your first recipe")).not.toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "Your recipes" })).not.toBeInTheDocument();
     });
 
     it("renders recipe images when recipes have displayable image URLs", async () => {
@@ -718,6 +736,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.queryByRole("link", { name: "Create first cookbook", hidden: true })).not.toBeInTheDocument();
       expect(screen.getAllByText("No public recipes yet.").length).toBeGreaterThan(0);
       expect(screen.getByText("No public cookbooks yet.")).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "On the counter" })).not.toBeInTheDocument();
     });
 
     it("renders recipes and cookbooks together instead of hiding content behind tabs", async () => {
@@ -765,18 +784,18 @@ describe("Kitchen Index Route", () => {
 
       render(<Stub initialEntries={["/?tab=cookbooks"]} />);
 
-      expect(await screen.findByText("Visible Recipe")).toBeInTheDocument();
+      expect((await screen.findAllByText("Visible Recipe")).length).toBeGreaterThan(0);
       expect(screen.getByRole("link", { name: "New cookbook" })).toHaveAttribute("href", "/cookbooks/new");
       expect(screen.getAllByText("Swiss Weeknight").length).toBeGreaterThan(0);
       expect(screen.getAllByText("No Photo Book").length).toBeGreaterThan(0);
-      fireEvent.click(screen.getByRole("button", { name: "Share Swiss Weeknight" }));
+      await shareFromMenu("Swiss Weeknight");
       await waitFor(() => {
         expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           title: "Swiss Weeknight",
           url: expect.stringContaining("/cookbooks/cookbook-1"),
         }));
       });
-      fireEvent.click(screen.getByRole("button", { name: "Share No Photo Book" }));
+      await shareFromMenu("No Photo Book");
       await waitFor(() => {
         expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           text: "No Photo Book has 2 recipes on Spoonjoy.",
@@ -808,7 +827,7 @@ describe("Kitchen Index Route", () => {
 
       expect(await screen.findByText("alpinechef's Kitchen")).toBeInTheDocument();
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-      expect(screen.getByRole("region", { name: "Cookbooks" })).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Cookbook shelf" })).toBeInTheDocument();
     });
 
     it("does not hide QA-looking recipe titles in the production kitchen UI", async () => {
@@ -844,8 +863,8 @@ describe("Kitchen Index Route", () => {
 
       render(<Stub initialEntries={["/"]} />);
 
-      await screen.findByText("e2e Chocolate Cake");
-      expect(screen.getByRole("link", { name: /e2e Chocolate Cake/ })).toHaveAttribute("href", "/recipes/recipe-qa-title");
+      const index = await screen.findByRole("region", { name: "Your recipes" });
+      expect(within(index).getByRole("link", { name: /e2e Chocolate Cake/ })).toHaveAttribute("href", "/recipes/recipe-qa-title");
       expect(screen.getByRole("link", { name: /Pasta \(variation 2\)/ })).toHaveAttribute("href", "/recipes/recipe-variation");
     });
   });

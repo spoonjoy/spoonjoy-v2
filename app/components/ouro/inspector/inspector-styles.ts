@@ -17,6 +17,7 @@ const aliases: Readonly<Record<string, string>> = {
   "form-message": "form",
   "menu-bar": "menu",
   "navigation-menu-popup": "navigation-menu",
+  "page-section": "page-shell",
   radio: "radio-group",
   "resizable-handle": "resizable",
   "resizable-panel": "resizable",

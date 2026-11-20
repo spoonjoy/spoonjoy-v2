@@ -14,6 +14,7 @@ const variants: { variant: string; avatar: ReactElement; loaded?: true; elements
   { variant: "a picture, once it has loaded", avatar: <Avatar name="Ana Lind" src={picture} />, loaded: true, elements: 3, components: 1 },
   { variant: "a presence dot", avatar: <Avatar name="Ana Lind" presence="busy" presenceLabel="Busy" />, elements: 6, components: 2 },
   { variant: "a name still loading", avatar: <Avatar name={null} />, elements: 3, components: 2 },
+  { variant: "a group chat of three", avatar: <Avatar name="Crew" members={[{ name: "Ana Lind" }, { name: "Ben Ito" }, { name: "Cy Voss" }]} size="lg" />, elements: 5, components: 8 },
   { variant: "an agent's glyph", avatar: <Avatar name="Halden" shape="agent" />, elements: 5, components: 2 },
 ];
 
@@ -41,5 +42,33 @@ describe("Avatar's weight", () => {
     host.remove();
     expect(drawnElements, "elements").toBeLessThanOrEqual(elements);
     expect(drawnComponents, "components").toBeLessThanOrEqual(components);
+  });
+});
+
+// Mounting is timed against bare spans drawn the same way, so the ratio holds on a slow or busy host.
+const RATIO = 60;
+const crew = [{ name: "Ana Lind" }, { name: "Ben Ito" }, { name: "Cy Voss" }];
+
+async function mountMs(render: () => ReactElement, count: number): Promise<number> {
+  const host = document.createElement("div");
+  host.dataset["testHarness"] = "";
+  document.body.append(host);
+  const root = createRoot(host);
+  const start = performance.now();
+  await act(async () => root.render(<>{Array.from({ length: count }, (_, index) => <div key={index}>{render()}</div>)}</>));
+  const took = performance.now() - start;
+  await act(async () => root.unmount());
+  host.remove();
+  return took;
+}
+
+describe("Avatar's mount time", () => {
+  it("mounts 40 group chat avatars in a bounded multiple of the time 40 bare spans take", async () => {
+    await mountMs(() => <Avatar name="Crew" members={crew} />, 40);
+    const runs: number[] = [];
+    for (let run = 0; run < 3; run++) runs.push(await mountMs(() => <Avatar name="Crew" members={crew} />, 40));
+    const group = Math.min(...runs);
+    const bare = Math.max(1, await mountMs(() => <span>Crew</span>, 40));
+    expect(group / bare, `ratio (group ${group.toFixed(1)} ms, bare ${bare.toFixed(1)} ms)`).toBeLessThan(RATIO);
   });
 });

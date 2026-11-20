@@ -94,6 +94,44 @@ describe("ItemGroup", () => {
     expect(getComputedStyle(item).borderTopWidth).toBe("0px");
   });
 
+  it("does not clip an outlined list: its first and last rows round its corners and clip only their own highlight", async () => {
+    const { group } = await render(
+      <ItemGroup aria-label="Tokens" variant="outline">
+        {tokens.map((name) => (
+          <Item key={name} title={name} onSelect={() => {}} />
+        ))}
+      </ItemGroup>,
+    );
+    const list = group.querySelector<HTMLElement>("ul")!;
+    const outer = parseFloat(getComputedStyle(list).borderTopLeftRadius);
+    expect(outer).toBeGreaterThan(1);
+    expect(getComputedStyle(list).overflow).toBe("visible");
+    const [first, middle, last] = [...group.querySelectorAll<HTMLElement>("li")];
+    expect(getComputedStyle(first!).overflow).toBe("clip");
+    expect(parseFloat(getComputedStyle(first!).borderTopLeftRadius)).toBeCloseTo(outer - 1, 2);
+    expect(parseFloat(getComputedStyle(first!).borderTopRightRadius)).toBeCloseTo(outer - 1, 2);
+    expect(getComputedStyle(first!).borderBottomLeftRadius).toBe("0px");
+    expect(getComputedStyle(middle!).overflow).toBe("visible");
+    expect(getComputedStyle(middle!).borderTopLeftRadius).toBe("0px");
+    expect(getComputedStyle(last!).overflow).toBe("clip");
+    expect(parseFloat(getComputedStyle(last!).borderBottomLeftRadius)).toBeCloseTo(outer - 1, 2);
+    expect(parseFloat(getComputedStyle(last!).borderBottomRightRadius)).toBeCloseTo(outer - 1, 2);
+    expect(getComputedStyle(last!).borderTopLeftRadius).toBe("0px");
+  });
+
+  it("rounds all four corners of the one row of an outlined list", async () => {
+    const { group } = await render(
+      <ItemGroup aria-label="Tokens" variant="outline">
+        <Item title="Only" onSelect={() => {}} />
+      </ItemGroup>,
+    );
+    const outer = parseFloat(getComputedStyle(group.querySelector("ul")!).borderTopLeftRadius);
+    const row = group.querySelector<HTMLElement>("li")!;
+    expect(getComputedStyle(row).overflow).toBe("clip");
+    expect(parseFloat(getComputedStyle(row).borderTopLeftRadius)).toBeCloseTo(outer - 1, 2);
+    expect(parseFloat(getComputedStyle(row).borderBottomRightRadius)).toBeCloseTo(outer - 1, 2);
+  });
+
   it("has no lines with variant=plain", async () => {
     const { group } = await render(
       <ItemGroup aria-label="Tokens" variant="plain">

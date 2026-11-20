@@ -8,6 +8,12 @@ import { createUser } from "~/lib/auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 
+/** Log cook and Edit live in the recipe's ⋯ menu: open it and return the item. */
+async function recipeMenuItem(name: string | RegExp) {
+  await userEvent.click(await screen.findByRole("button", { name: "Recipe actions" }));
+  return screen.findByRole("menuitem", { name });
+}
+
 /**
  * Integration tests for recipe view scaling functionality.
  * Tests the new RecipeHeader + StepCard components with scale state management.
@@ -468,8 +474,9 @@ describe("Recipe View Scaling Integration", () => {
 
       await screen.findByRole("heading", { name: "My Recipe" });
 
-      // Edit is one tap away in the masthead; the rest of maintenance stays collapsed.
-      expect(screen.getByTestId("recipe-header-edit-action")).toHaveAttribute("href", "/recipes/recipe-1/edit");
+      // Edit is in the masthead's ⋯ menu; the rest of maintenance stays collapsed.
+      expect(await recipeMenuItem("Edit")).toHaveAttribute("href", "/recipes/recipe-1/edit");
+      await userEvent.keyboard("{Escape}");
       expect(screen.queryByRole("link", { name: "Edit recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
     });
