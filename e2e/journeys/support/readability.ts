@@ -340,13 +340,6 @@ export const OUTSIDE_DISTANCE = 1.5;
 const OUTLINE_CLEARANCE = OUTSIDE_DISTANCE + 0.5;
 
 /**
- * The contrast between a component's boundary and the pixels around it (WCAG 1.4.11), for a box
- * drawn into `pixels`. At each image pixel along the middle of each straight edge (the rounded
- * corners are skipped), the boundary is the pixel in the edge band (the border width, at least
- * 1 CSS px: the border if it is painted, else the fill under it) that contrasts most with the
- * pixel OUTSIDE_DISTANCE outside the edge; the result is the worst such point.
- */
-/**
  * The corner CSS draws for a border radius: no larger than half the box's shorter side, so a
  * capsule's 9999px corners are half its height and its long edges stay straight.
  */
@@ -354,6 +347,13 @@ export function drawnCorner(radius: number, box: { width: number; height: number
   return Math.min(radius, box.width / 2, box.height / 2);
 }
 
+/**
+ * The contrast between a component's boundary and the pixels around it (WCAG 1.4.11), for a box
+ * drawn into `pixels`. At each image pixel along the middle of each straight edge (the rounded
+ * corners are skipped), the boundary is the pixel in the edge band (the border width, at least
+ * 1 CSS px: the border if it is painted, else the fill under it) that contrasts most with the
+ * pixel OUTSIDE_DISTANCE outside the edge; the result is the worst such point.
+ */
 export function edgeContrast(pixels: PixelGrid, box: Box, borderWidth: number, radius: number): EdgeContrast {
   const at = (x: number, y: number): Rgb => {
     const column = Math.floor((x - pixels.clip.x) * pixels.scale);
@@ -464,21 +464,27 @@ export async function measureBoundaryContrast(page: Page, locator: Locator, labe
 }
 
 /**
- * What is painted on top of the element at its centre, just inside each corner and at the middle
- * of each edge, described by
- * tag, id, class and label. An empty list means nothing covers it. A point outside the viewport
+ * What is painted on top of the element at its centre, just inside each corner (inside the curve
+ * of a rounded one) and at the middle of each edge, described by tag, id, class and label. An empty list means nothing covers it. A point outside the viewport
  * counts as covered: the person can't see it there.
  */
 export async function coveringElements(locator: Locator): Promise<string[]> {
   return locator.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     const inset = 2;
+    // A rounded corner leaves its box's corner empty, so step in along the diagonal to just inside
+    // the curve: (1 - 1/√2) of the corner as drawn, which CSS caps at half the shorter side.
+    const style = getComputedStyle(element);
+    const radius = Math.max(
+      ...["top-left", "top-right", "bottom-left", "bottom-right"].map((corner) => parseFloat(style.getPropertyValue(`border-${corner}-radius`)) || 0),
+    );
+    const corner = inset + Math.min(radius, rect.width / 2, rect.height / 2) * (1 - Math.SQRT1_2);
     const points: Array<[string, number, number]> = [
       ["centre", rect.x + rect.width / 2, rect.y + rect.height / 2],
-      ["top left", rect.left + inset, rect.top + inset],
-      ["top right", rect.right - inset, rect.top + inset],
-      ["bottom left", rect.left + inset, rect.bottom - inset],
-      ["bottom right", rect.right - inset, rect.bottom - inset],
+      ["top left", rect.left + corner, rect.top + corner],
+      ["top right", rect.right - corner, rect.top + corner],
+      ["bottom left", rect.left + corner, rect.bottom - corner],
+      ["bottom right", rect.right - corner, rect.bottom - corner],
       ["top edge", rect.x + rect.width / 2, rect.top + inset],
       ["bottom edge", rect.x + rect.width / 2, rect.bottom - inset],
       ["left edge", rect.left + inset, rect.y + rect.height / 2],
