@@ -57,13 +57,24 @@ export const Finished: Story = {
 };
 
 /** `variant="ring"`: the time and Start inside a ring, for a screen where the timer is the focus, such as a cooking step. */
-export const Ring: Story = { args: { label: "Rice", duration: 900, variant: "ring", size: "lg" } };
+export const Ring: Story = {
+  args: { label: "Rice", duration: 900, variant: "ring", size: "lg" },
+  render: (args) => (
+    <div data-ouro-allow="overlap" data-ouro-allow-why="The time and its controls sit inside the progress ring on purpose: the ring is the timer's face.">
+      <Timer {...args} />
+    </div>
+  ),
+};
 
 /** The ring part way: its arc is the time left, with Resume inside and Cancel under it. */
 export const RingPaused: Story = {
   render: () => {
     stored("story-ring", { status: "paused", duration: 900, remainingMs: 600_000 });
-    return <Timer label="Rice" duration={900} timerId="story-ring" variant="ring" size="lg" />;
+    return (
+      <div data-ouro-allow="overlap" data-ouro-allow-why="The time and its controls sit inside the progress ring on purpose: the ring is the timer's face.">
+        <Timer label="Rice" duration={900} timerId="story-ring" variant="ring" size="lg" />
+      </div>
+    );
   },
 };
 

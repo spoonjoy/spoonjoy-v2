@@ -77,7 +77,7 @@ const typeDefaults: Readonly<Record<TextFieldType, TypeDefaults>> = {
 const groupBaseClass =
   "relative m-0 box-border flex w-full min-w-0 items-center gap-2 h-(--ouro-control-h) py-0 cursor-text " +
   "rounded-ouro-control-md text-foreground " +
-  "outline-ring outline-offset-2 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-solid " +
+  "ouro-field-cue outline-ring outline-offset-2 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-solid " +
   "has-[input:disabled]:cursor-not-allowed has-[input:disabled]:opacity-50";
 
 /**
@@ -90,7 +90,7 @@ const groupBaseClass =
  */
 const groupVariants = {
   outline:
-    "isolate px-3 border border-solid border-(--ouro-bd) bg-(--ouro-bg) " +
+    "isolate px-(--ouro-control-px) [--ouro-control-px:calc(var(--spacing)*3)] border border-solid border-(--ouro-bd) bg-(--ouro-bg) " +
     "[--ouro-bg:transparent] dark:[--ouro-bg:color-mix(in_oklab,var(--input)_30%,transparent)] [--ouro-bd:var(--input)] " +
     "has-[input[aria-invalid=true]]:[--ouro-bd:var(--destructive)] [--ouro-sq-w:1px] " +
     "" +
@@ -99,7 +99,8 @@ const groupVariants = {
 } as const;
 
 /**
- * The box's height and font size. `md` is 44px tall with a 16px font on phones, stepping down
+ * The box's height and font size. `sm` takes Button's `sm` height, padding and type, and
+ * keeps a coarse pointer's touch box; its icons are sized in em, as Button's. `md` is 44px tall with a 16px font on phones, stepping down
  * from `sm` with a fine pointer. `lg` is 56px tall, 48px from `sm` with a fine pointer, with
  * a 20px font and 20px icons at every width.
  *
@@ -108,10 +109,12 @@ const groupVariants = {
  * @claim "`lg` is 56px tall, 48px from" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField variant and size > sets 20px text in a taller box with size lg, at phone and desktop widths)
  */
 const groupSizes = {
-  md: "[--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] text-base sm:pointer-fine:text-sm",
+  sm:
+    "[--ouro-control-h:calc(var(--spacing)*9)] sm:[--ouro-control-h:calc(var(--spacing)*8)] pointer-coarse:min-h-11 " +
+    "sm:[--ouro-control-px:calc(var(--spacing)*2.5)] text-sm [--ouro-field-icon:1.25em]",
+  md: "[--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] text-base sm:pointer-fine:text-sm [--ouro-field-icon:1rem]",
   lg:
-    "[--ouro-control-h:calc(var(--spacing)*14)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*12)] text-xl " +
-    "[&_[data-ouro-adornment]_svg]:size-5",
+    "[--ouro-control-h:calc(var(--spacing)*14)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*12)] text-xl [--ouro-field-icon:1.25rem]",
 } as const;
 
 /**
@@ -145,7 +148,7 @@ const nativeClearClass = "[&::-webkit-search-cancel-button]:appearance-none";
  *
  * @internal
  */
-const adornmentClass = "flex shrink-0 items-center whitespace-nowrap text-muted-foreground select-none [&_svg]:size-4 [&_svg]:shrink-0";
+const adornmentClass = "flex shrink-0 items-center whitespace-nowrap text-muted-foreground select-none [&_svg]:size-(--ouro-field-icon) [&_svg]:shrink-0";
 
 /**
  * The trailing buttons (clear, show password) sit close to the box's end edge. On a coarse
@@ -205,9 +208,9 @@ function controlVariantWarning(component: string, variant: string): readonly [st
  *
  * @internal
  */
-function controlSizeWarning(component: string, size: unknown): readonly [string, string] {
+function controlSizeWarning(component: string, size: unknown, sizes = '"md" or "lg"'): readonly [string, string] {
   if (typeof size === "number") {
     return [`size={${size}} is not a size; a width in characters is not supported, so set the width with className`, `<${component} className="w-40">`];
   }
-  return [`size="${String(size)}" is not a size; use "md" or "lg"`, `<${component} size="md">`];
+  return [`size="${String(size)}" is not a size; use ${sizes}`, `<${component} size="md">`];
 }

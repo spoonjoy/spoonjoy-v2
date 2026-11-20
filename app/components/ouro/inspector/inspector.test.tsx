@@ -566,6 +566,9 @@ describe("Inspector", () => {
     for (const scheme of ["light", "dark"]) {
       document.documentElement.classList.toggle("dark", scheme === "dark");
       await act(() => setOpen(false));
+      // The switch to dark eases each control's colours, and X-ray's outlines fade as it closes: measure once they have
+      // landed, not a frame in between, which a loaded runner can catch (#483).
+      await settled();
       for (const text of texts) expect(await measureTextContrast(text, required(text)), `${scheme}, before X-ray: ${text.textContent}`).toEqual({ pass: true });
       await act(() => setOpen(true));
       await drawn(pageRoots(host).length);

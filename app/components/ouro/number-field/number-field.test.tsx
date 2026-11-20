@@ -288,6 +288,7 @@ describe("NumberField looks", () => {
   it("outlines the box when the input has keyboard focus", async () => {
     const { group, input } = await render(<NumberField label="Servings" />);
     expect(getComputedStyle(group).outlineStyle).toBe("none");
+    await userEvent.keyboard("{ArrowDown}");
     input.focus();
     await expect.poll(() => getComputedStyle(group).outlineStyle).toBe("solid");
   });

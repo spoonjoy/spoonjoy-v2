@@ -483,7 +483,7 @@ describe("Toggle under forced colours", () => {
     const surface = rect!.querySelector<HTMLElement>("[data-ouro-surface]")!;
     expect(rect!.getAttribute("data-ouro-squircle")).toBe("");
     expect(rect!.className).toContain("press relative isolate");
-    expect(rect!.className).toContain("[--ouro-state:0.08]");
+    expect(rect!.className).toContain("[--ouro-state:var(--ouro-state-hover,8%)]");
     expect(surface.getAttribute("aria-hidden")).toBe("true");
     expect(surface.style.zIndex).toBe("-1");
     expect(surface.previousElementSibling?.className).toContain("pointer-coarse:block");

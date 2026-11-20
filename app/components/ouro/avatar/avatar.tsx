@@ -235,6 +235,18 @@ const sizes = {
   "3xl": "size-28 [--ouro-edge:0.49rem] text-4xl",
 } as const;
 
+// How far each avatar after the first slides under the one before, by the group's size: 4px for 24 to 47px,
+// 8px for 48 to 95px and 12px from 96px, the common design-system scale.
+const overlaps = {
+  xs: "*:not-first:-ms-1",
+  sm: "*:not-first:-ms-1",
+  md: "*:not-first:-ms-1",
+  lg: "*:not-first:-ms-2",
+  xl: "*:not-first:-ms-2",
+  "2xl": "*:not-first:-ms-2",
+  "3xl": "*:not-first:-ms-3",
+} as const;
+
 const sizeNames = Object.keys(sizes).map((name) => `"${name}"`).join(", ");
 
 // A team's second edge peeks out behind it, up and to the end, cut off by a gap in the
@@ -697,7 +709,8 @@ export function Avatar(props: AvatarProps): JSX.Element {
 /**
  * Avatars stacked with a slight overlap, such as the cooks on a recipe, with a "+N"
  * count after `max`. Its `label` names the group for screen readers, and its `size`
- * applies to every avatar in it.
+ * applies to every avatar in it. The overlap grows with the size: 4px for avatars from 24 to 47px,
+ * 8px from 48 to 95px and 12px from 96px.
  *
  * Use a list of `Avatar`s with names beside them instead when readers need to see who
  * each person is, and `<Avatar members>` for a group chat's avatar, which keeps to one avatar's size.
@@ -712,6 +725,7 @@ export function Avatar(props: AvatarProps): JSX.Element {
  * <AvatarGroup label="Cooks" max={3} size="sm">
  *   {cooks.map((cook) => <Avatar key={cook.id} name={cook.name} src={cook.photoUrl} />)}
  * </AvatarGroup>
+ * @claim "The overlap grows with the size: 4px for avatars from 24 to 47px, 8px from 48 to 95px and 12px from 96px." registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::AvatarGroup > overlaps by a step that grows with the size)
  * @claim "Its `label` names the group for" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar > shows initials from the name, and the name to screen readers)
  * @claim "Its `label` names the group for" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::AvatarGroup > stacks avatars in a labeled group, overlapping)
  * @claim "count is drawn like Avatar's initials" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar inside a link or button that has its own name > a button named for the group around an AvatarGroup and its +N count has no label-content-name-mismatch)
@@ -752,7 +766,7 @@ export function AvatarGroup(props: AvatarGroupProps): JSX.Element {
       role="group"
       aria-label={label}
       data-ouro="avatar-group"
-      className={cn("flex items-center *:shadow-[0_0_0_2px_var(--ouro-avatar-ring,var(--background))] *:not-first:-ms-2", className)}
+      className={cn("flex items-center *:shadow-[0_0_0_2px_var(--ouro-avatar-ring,var(--background))]", overlaps[size], className)}
     >
       <GroupSize value={size}>{shown}</GroupSize>
       {more > 0 && (

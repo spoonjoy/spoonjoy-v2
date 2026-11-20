@@ -19,7 +19,7 @@ const groupClass =
   "relative m-0 box-border flex w-full min-w-0 items-stretch h-(--ouro-control-h) p-0 " +
   "[--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] " +
   "rounded-ouro-control-md border border-solid border-input bg-transparent text-base text-foreground sm:pointer-fine:text-sm " +
-  "outline-ring outline-offset-2 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-solid " +
+  "ouro-field-cue outline-ring outline-offset-2 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-solid " +
   "transition-[border-color] duration-(--ouro-duration-fast) ease-[ease] " +
   "has-[input[aria-invalid=true]]:border-destructive has-[input:disabled]:opacity-50 " +
   "dark:bg-input/30";

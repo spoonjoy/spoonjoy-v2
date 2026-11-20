@@ -1331,8 +1331,11 @@ describe("ShowMore as a row mounts again", () => {
     </ShowMore>
   );
 
-  /** Mounts `node` in a fresh host and counts the writes the page sees after the commit: attributes, text and buttons coming and going. */
-  async function writesAfterMount(node: ReactElement): Promise<{ writes: number; buttons: number; host: HTMLElement }> {
+  /**
+   * Mounts `node` in a fresh host and counts the writes the page sees after the commit: attributes, text and buttons coming
+   * and going. `untilWritten` waits for the first write instead of a set window, for a mount that must measure again.
+   */
+  async function writesAfterMount(node: ReactElement, untilWritten = false): Promise<{ writes: number; buttons: number; host: HTMLElement }> {
     const host = document.createElement("div");
     host.style.width = "360px";
     document.body.append(host);
@@ -1350,6 +1353,8 @@ describe("ShowMore as a row mounts again", () => {
     // Two frames are enough for the resize observer to have measured.
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     await new Promise((resolve) => setTimeout(resolve, 50));
+    // A page a thousand clamped rows tall can take WebKit's observer past that window on a loaded runner (#808).
+    if (untilWritten) await expect.poll(() => writes).toBeGreaterThan(0);
     watch.disconnect();
     expect(startedWith).toBeLessThanOrEqual(1);
     return { writes, buttons: buttons(), host };
@@ -1411,7 +1416,7 @@ describe("ShowMore as a row mounts again", () => {
     roots.push(root);
     flushSync(() => root.render(<>{Array.from({ length: 1000 }, (_, index) => <ShowMore key={index} lines={2} measureKey={`bulk-${index}`}>{`${index}: ${longText}`}</ShowMore>)}</>));
     await expect.poll(() => many.querySelectorAll("[data-ouro-show-more-toggle]").length).toBe(1000);
-    expect((await writesAfterMount(clamped(900))).writes).toBeGreaterThan(0);
+    expect((await writesAfterMount(clamped(900), true)).writes).toBeGreaterThan(0);
     const newest = document.createElement("div");
     newest.style.width = "360px";
     document.body.append(newest);

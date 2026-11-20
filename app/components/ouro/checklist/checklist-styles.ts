@@ -11,6 +11,7 @@ export {
   labelClass,
   mediaClass,
   noteClass,
+  noteFadeClass,
   outOfOrderBoxClass,
   outlineCardClass,
   outlineRowInnerClass,
@@ -189,7 +190,10 @@ const outOfOrderBoxClass =
  * @claim "the warning tone mixed 20% toward" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist ordered > keeps 4.5:1 for the out-of-order note in light and dark)
  */
 const noteClass =
-  "text-sm leading-5 font-medium text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))] opacity-100 starting:opacity-0 [transition:opacity_var(--ouro-duration-fast)_ease]";
+  "text-sm leading-5 font-medium text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))] opacity-100 [transition:opacity_var(--ouro-duration-fast)_ease]";
+
+/** What fades the note in, for a note that comes after the row is on screen; one there at mount is drawn at once. @internal */
+const noteFadeClass = "starting:opacity-0";
 
 /** A row's description, under its label. @internal */
 const descriptionClass = "text-sm leading-5 text-muted-foreground";

@@ -2,6 +2,7 @@
 
 import { Switch as BaseSwitch } from "@base-ui/react/switch";
 import type { JSX, ReactNode, Ref } from "react";
+import { cn } from "~/lib/ouro/cn";
 import { Field } from "~/components/ouro/field/field";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
 import { devThrow } from "~/lib/ouro/dev";
@@ -42,6 +43,12 @@ export interface SwitchProps {
   defaultChecked?: boolean | undefined;
   /** Called with the new state when it turns on or off. */
   onCheckedChange?: ((checked: boolean) => void) | undefined;
+  /**
+   * Ids of other elements that describe the switch, a hint elsewhere on the page. They join the
+   * switch's own description and error, each id once, and never replace them.
+   * @claim "They join the switch's own description" registry/ouro/components/ouro/switch/switch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.test.tsx::Switch in a row > merges a given aria-describedby with its own description, each id once, and passes an accessibility audit)
+   */
+  "aria-describedby"?: string | undefined;
   /** Shows the state but ignores clicks and keys, unlike `disabled`, which also fades it. */
   readOnly?: boolean | undefined;
   /**
@@ -77,16 +84,24 @@ const owner = { name: "Switch", data: "switch", layout: "inline" } as const;
 /** Marks the hidden input Base UI submits the switch with. */
 const markInput = controlRef("switch", "hidden-input");
 
-/** The track and thumb, inside the Field: they take their name, description and error ids from the field. */
+/** Joins the ids of the given lists into one space-separated value, leaving out repeats and blanks. */
+function mergeIds(...lists: (string | undefined)[]): string | undefined {
+  // Stryker disable next-line Regex: the empty strings a looser split leaves are deleted on the next line
+  const ids = new Set(lists.join(" ").split(/\s+/));
+  ids.delete("");
+  return [...ids].join(" ") || undefined;
+}
+
 function SwitchTrack(props: {
   value: string | undefined;
   checked: boolean | undefined;
   defaultChecked: boolean | undefined;
   onCheckedChange: ((checked: boolean) => void) | undefined;
   readOnly: boolean | undefined;
+  describedBy: string | undefined;
   ref: Ref<HTMLElement> | undefined;
 }): JSX.Element {
-  const { onCheckedChange, ...rest } = props;
+  const { onCheckedChange, describedBy, ...rest } = props;
   const field = useField()!;
   return (
     <BaseSwitch.Root
@@ -101,7 +116,7 @@ function SwitchTrack(props: {
       required={field.required}
       // Set here, not left to Base UI's effects, so the server HTML names and describes the switch.
       aria-labelledby={field.labelId}
-      aria-describedby={field.describedBy}
+      aria-describedby={mergeIds(field.describedBy, describedBy)}
       aria-invalid={field.invalid || undefined}
       className={trackClass}
     >
@@ -141,6 +156,7 @@ export function Switch(props: SwitchProps): JSX.Element {
     defaultChecked,
     onCheckedChange,
     readOnly,
+    "aria-describedby": describedBy,
     className,
     ref,
     // Guard props (hint types), dropped here so they never reach the DOM.
@@ -189,9 +205,10 @@ export function Switch(props: SwitchProps): JSX.Element {
         required={required}
         disabled={disabled}
         name={name}
-        className={className}
+        // A hidden label takes no room beside the track, so the gap that separated them goes too.
+        className={cn(hideLabel && "gap-x-0", className)}
       >
-        <SwitchTrack value={value} checked={checked} defaultChecked={defaultChecked} onCheckedChange={onCheckedChange} readOnly={readOnly} ref={ref} />
+        <SwitchTrack value={value} checked={checked} defaultChecked={defaultChecked} onCheckedChange={onCheckedChange} readOnly={readOnly} describedBy={describedBy} ref={ref} />
       </Field>
     </FieldOwnerContext.Provider>
   );

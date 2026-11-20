@@ -7,6 +7,7 @@ import { Button } from "~/components/ouro/button/button";
 import { Switch, type SwitchProps } from "~/components/ouro/switch/switch";
 import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
+import { audit, describeFindings } from "~/lib/ouro/testing/axe";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -592,5 +593,43 @@ describe("Switch corners under the squircle polyfill's bridge", () => {
     } finally {
       bridge.remove();
     }
+  });
+
+});
+
+describe("Switch in a row", () => {
+  it("with a hidden label is as wide as its track, so it lines up with the end of a row", async () => {
+    const { root, track } = await render(<div style={{ display: "flex", justifyContent: "flex-end" }}><Switch label="Wi-Fi" hideLabel /></div>);
+    expect(root.getBoundingClientRect().width).toBeCloseTo(track.getBoundingClientRect().width, 1);
+  });
+
+  it("merges a given aria-describedby with its own description, each id once, and passes an accessibility audit", async () => {
+    const { host, track } = await render(
+      <>
+        <p id="hint">Applies at once.</p>
+        <Switch label="Wi-Fi" description="Uses the router." aria-describedby="hint hint" />
+      </>,
+    );
+    const ids = describedBy(track);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    expect(ids).toContain("hint");
+    expect(host.querySelector(`#${CSS.escape(ids.find((id) => id !== "hint")!)}`)!.textContent).toBe("Uses the router.");
+    expect(describeFindings(await audit({ include: [host] }))).toBe("");
+  });
+
+  it("reads ids split by any whitespace, and adds no id when none is given", async () => {
+    const { track } = await render(
+      <>
+        <p id="a">A</p>
+        <p id="b">B</p>
+        <p id="c">C</p>
+        <Switch label="Wi-Fi" aria-describedby={" a\tb\n c  a "} />
+      </>,
+    );
+    expect(describedBy(track)).toEqual(["a", "b", "c"]);
+    expect(track.getAttribute("aria-describedby")).toBe("a b c");
+    const none = await render(<Switch label="Bluetooth" />);
+    expect(none.track.hasAttribute("aria-describedby")).toBe(false);
   });
 });
