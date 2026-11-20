@@ -188,7 +188,7 @@ export const Steps: Story = {
 };
 
 const inbox = [
-  { id: "ribs", title: "Braised short ribs", description: "Four hours, mostly hands-off" },
+  { id: "ribs", title: "Braised short ribs", description: "Four hours braising" },
   { id: "cake", title: "Lemon olive oil cake", description: "One hour" },
   { id: "soup", title: "Lentil soup", description: "Forty minutes" },
 ];

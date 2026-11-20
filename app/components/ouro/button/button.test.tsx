@@ -1,4 +1,5 @@
 import { type ReactNode, type SVGProps } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -306,6 +307,25 @@ describe("loading", () => {
     expect(onClick).not.toHaveBeenCalled();
     // Not faded like a disabled button: loading is still the primary action.
     expect(getComputedStyle(button).opacity).toBe("1");
+  });
+
+  it("draws the spinner at once when the button mounts loading, and fades it in when loading turns on later", async () => {
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      const spinnerBox = () => host.querySelector("[data-ouro-spinner]")!.parentElement!;
+      flushSync(() => root.render(<Button loading>Save</Button>));
+      expect(getComputedStyle(spinnerBox()).opacity).toBe("1");
+      expect(spinnerBox().getAnimations()).toEqual([]);
+      flushSync(() => root.render(<Button>Save</Button>));
+      flushSync(() => root.render(<Button loading>Save</Button>));
+      expect(spinnerBox().getAnimations().some((a) => a instanceof CSSTransition && a.transitionProperty === "opacity")).toBe(true);
+    } finally {
+      root.unmount();
+      host.remove();
+    }
   });
 
   it("keeps the accessible name and centers the spinner", async () => {

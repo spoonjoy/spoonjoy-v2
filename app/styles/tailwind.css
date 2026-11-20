@@ -877,6 +877,15 @@ body:has(#cook) .sj-site-footer {
       font-size: 125%;
     }
   }
+  [data-ouro="message-list"] :is([data-ouro], [role="heading"]) {
+    text-wrap-style: auto;
+  }
+  [data-ouro] :is(h1, h2, h3, h4, h5, h6, [role="heading"]), :is(h1, h2, h3, h4, h5, h6, [role="heading"])[data-ouro] {
+    text-wrap-style: balance;
+  }
+  [data-ouro] {
+    text-wrap-style: pretty;
+  }
 }
 
 /* Where the engine has no corner-shape, a circular corner at 0.7 of the squircle's radius stays within 6% of it, so box-shadow, outline and the element's own box follow the squircle closely. */
