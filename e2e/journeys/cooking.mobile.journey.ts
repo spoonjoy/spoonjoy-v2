@@ -7,6 +7,7 @@ import { expectNoHydrationErrors } from "./support/hydration";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { createDisposableJourneyUser, fillSecret } from "./support/secret";
 import { requiredLabel } from "./support/forms";
+import { stepScaleUp } from "./support/recipe-scale";
 
 const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
 
@@ -16,8 +17,6 @@ test.describe("Recipe list action on iPhone", () => {
   test("Add to list adds ingredients at the current scale and then reads as already on the list @mutates", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
     const user = createDisposableJourneyUser();
     const listAction = page.getByTestId("recipe-header-list-action");
-    const scaleDisplay = page.getByRole("textbox", { name: "Scale", exact: true });
-    const increaseScale = page.getByRole("button", { name: "Increase scale" });
 
     // Sign up as the throwaway user.
     await page.goto("/signup");
@@ -54,8 +53,7 @@ test.describe("Recipe list action on iPhone", () => {
     await page.keyboard.press("Escape");
 
     // 1.25×, one press of 0.25, so the list gets fractional amounts to write out.
-    await increaseScale.click();
-    await expect(scaleDisplay).toHaveValue("1.25");
+    await stepScaleUp(page, "1.25");
 
     await expect(listAction).toHaveAccessibleName("Add to list");
     await listAction.click();

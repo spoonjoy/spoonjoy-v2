@@ -1,6 +1,9 @@
 import { Badge } from '~/components/ouro/badge/badge'
 import { Spinner } from '~/components/ouro/spinner/spinner'
 import type { ReactNode } from 'react'
+import { ChevronDown } from 'lucide-react'
+import { Button } from '~/components/ouro/button/button'
+import { Popover } from '~/components/ouro/popover/popover'
 import { Link } from '~/components/ouro/link/link'
 import { Avatar } from '../ouro/avatar/avatar'
 import { NumberField } from '~/components/ouro/number-field/number-field'
@@ -59,6 +62,8 @@ export interface RecipeHeaderProps {
   actions?: ReactNode
   /** Source/import/fork attribution when this recipe has one */
   provenance?: ReactNode
+  /** The timed steps added up ("23 min"), first in the meta row; left out when no step is timed. */
+  cookTime?: string
 }
 
 /**
@@ -67,7 +72,7 @@ export interface RecipeHeaderProps {
  * Features:
  * - PROMINENT hero-style recipe image (or placeholder)
  * - Mobile-first design for kitchen use
- * - The scale, as Ouro HX's NumberField, with the scaled servings under it
+ * - The meta row: the cook time, then the Serves capsule, which opens the scale
  * - Optional masthead actions for desktop and first-viewport clarity
  */
 // On paper the scale control is gone, so the printed page says what the quantities are for: the
@@ -97,6 +102,7 @@ export function RecipeHeader({
   masthead,
   actions,
   provenance,
+  cookTime,
 }: RecipeHeaderProps) {
   // Scale the servings text based on the scale factor
   const scaledServings = servings ? scaleServingsText(servings, scaleFactor) : undefined
@@ -198,33 +204,52 @@ export function RecipeHeader({
             )}
           </div>
 
-          {actions ? <div className="mt-8 max-w-[43rem] print:hidden">{actions}</div> : null}
+          {/* The meta row, as the Apple app sets it (desk target.md, Recipe): the cook time, then a
+              "Serves 4" capsule that opens the scale. */}
+          <div className="mt-8 flex max-w-[43rem] flex-wrap items-center gap-2 print:hidden" data-testid="recipe-header-controls">
+            {cookTime ? (
+              <>
+                <span className="font-sj-ui text-sm font-semibold text-[var(--sj-ink-soft)]">{cookTime}</span>
+                <span aria-hidden="true" className="text-[var(--sj-ink-soft)]">·</span>
+              </>
+            ) : null}
+            <Popover
+              title="Scale the recipe"
+              hideTitle
+              align="start"
+              trigger={(
+                <Button variant="soft" tone="secondary" size="sm" endIcon={ChevronDown} data-testid="recipe-serves-trigger">
+                  {scaledServingsLabel ?? `Scale ${Number(scaleFactor.toFixed(2))}×`}
+                </Button>
+              )}
+            >
+              <div className="w-64 max-w-full">
+                <NumberField
+                  label="Scale"
+                  description={scaledServingsLabel}
+                  value={scaleFactor}
+                  {...SCALE_RANGE}
+                  format={{ maximumFractionDigits: 2 }}
+                  decrementLabel="Decrease scale"
+                  incrementLabel="Increase scale"
+                  onValueChange={(next) => {
+                    if (next !== null) onScaleChange(next)
+                  }}
+                />
+              </div>
+            </Popover>
+          </div>
+          {progressSyncStatus ? (
+            <SyncStatus className="mt-3 print:hidden" data-testid="cook-sync-status" {...cookSyncStatusProps(progressSyncStatus)} />
+          ) : null}
+
+          {actions ? <div className="mt-6 max-w-[43rem] print:hidden">{actions}</div> : null}
 
           {printYield ? (
             <p className="hidden font-sj-ui text-sm font-semibold text-[var(--sj-ink)] print:mt-4 print:block" data-testid="recipe-print-yield">
               {printYield}
             </p>
           ) : null}
-
-          <div className="mt-8 max-w-[43rem] print:hidden" data-testid="recipe-header-controls">
-            <div className="sm:max-w-[26rem]">
-              <NumberField
-                label="Scale"
-                description={scaledServingsLabel}
-                value={scaleFactor}
-                {...SCALE_RANGE}
-                format={{ maximumFractionDigits: 2 }}
-                decrementLabel="Decrease scale"
-                incrementLabel="Increase scale"
-                onValueChange={(next) => {
-                  if (next !== null) onScaleChange(next)
-                }}
-              />
-            </div>
-            {progressSyncStatus ? (
-              <SyncStatus className="mt-3" data-testid="cook-sync-status" {...cookSyncStatusProps(progressSyncStatus)} />
-            ) : null}
-          </div>
         </div>
       </div>
     </header>

@@ -13,6 +13,7 @@ import { cookProgressSaved, resetCookProgress } from "./support/cook-progress";
 import { expectNoHydrationErrors } from "./support/hydration";
 import { waitForHydration } from "./support/navigation";
 import { scratchForProject, scratchStorageStateForProject } from "./support/personas";
+import { expectScale, stepScaleUp } from "./support/recipe-scale";
 
 const SCRATCH_INDEX = 8;
 const LEMON_RICE_ID = "qa-kitchen-recipe-lemon-rice";
@@ -39,7 +40,6 @@ test.describe("Cook progress across devices", () => {
   test.use({ storageState: scratchStorageStateForProject(SCRATCH_INDEX) });
 
   test("an ingredient checked on one device is checked on the other, and clearing it there clears it here @mutates", async ({ page, browser, verifyAfterReload, expectAccessible }, testInfo) => {
-    const scaleDisplay = page.getByRole("textbox", { name: "Scale", exact: true });
     await resetCookProgress(page, LEMON_RICE_ID, scratchForProject(SCRATCH_INDEX, testInfo.project.name).id);
 
     // Browser A checks the jasmine rice and scales up, and the account answers with both.
@@ -49,8 +49,7 @@ test.describe("Cook progress across devices", () => {
       progress.scaleFactor === 1.25 && progress.checkedIngredientIds.includes(JASMINE_RICE_ID));
     await jasmineRice(page).click();
     await expect(jasmineRice(page)).toHaveAttribute("aria-checked", "true");
-    await page.getByRole("button", { name: "Increase scale" }).click();
-    await expect(scaleDisplay).toHaveValue("1.25");
+    await stepScaleUp(page, "1.25");
     await checkedAndScaled;
     await expect(page.getByTestId("cook-sync-status").locator("p:not([aria-hidden])")).toHaveText("Progress synced");
     await expectAccessible();
@@ -67,7 +66,7 @@ test.describe("Cook progress across devices", () => {
       // B sees A's check and scale, and still does after a reload.
       await openLemonRice(otherPage);
       await expect(jasmineRice(otherPage)).toHaveAttribute("aria-checked", "true");
-      await expect(otherPage.getByRole("textbox", { name: "Scale", exact: true })).toHaveValue("1.25");
+      await expectScale(otherPage, "1.25");
       await otherPage.reload();
       await waitForHydration(otherPage);
       await expect(otherPage.getByTestId("cook-sync-status").locator("p:not([aria-hidden])")).toHaveText("Progress synced");
@@ -95,7 +94,7 @@ test.describe("Cook progress across devices", () => {
     await verifyAfterReload(async () => {
       await expect(page.getByTestId("cook-sync-status").locator("p:not([aria-hidden])")).toHaveText("Progress synced");
       await expect(jasmineRice(page)).toHaveAttribute("aria-checked", "false");
-      await expect(scaleDisplay).toHaveValue("1.25");
+      await expectScale(page, "1.25");
     });
     await expectAccessible();
   });

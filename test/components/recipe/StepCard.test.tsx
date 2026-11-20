@@ -20,6 +20,16 @@ describe('StepCard', () => {
     expect(screen.queryByTestId('step-ingredients-block')).toBeNull()
   })
 
+  it('shows the step\'s time as a timer chip beside the step number, and no chip for an untimed step', () => {
+    const { rerender } = render(<StepCard {...progress} stepNumber={1} title="Simmer" description="Simmer" duration={75} ingredients={[]} stepOutputUses={[]} />)
+    const chip = screen.getByTestId('step-time')
+    expect(chip).toHaveTextContent('1 hr 15 min')
+    expect(chip).toHaveAttribute('data-ouro', 'badge')
+    expect(chip.querySelector('svg')).not.toBeNull()
+    rerender(<StepCard {...progress} stepNumber={1} title="Simmer" description="Simmer" duration={null} ingredients={[]} stepOutputUses={[]} />)
+    expect(screen.queryByTestId('step-time')).toBeNull()
+  })
+
   it('renders accessible fallback heading when title is missing', () => {
     render(<StepCard {...progress} stepNumber={2} description="No explicit title" ingredients={[]} stepOutputUses={[]} />)
 
