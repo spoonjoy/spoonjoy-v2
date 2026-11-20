@@ -134,7 +134,7 @@ export function Heading(props: HeadingProps): JSX.Element {
   const Tag = `h${level}` as const;
   const classes = cn(
     "[@layer_ouro-reset]:m-0 font-[family-name:var(--font-heading,inherit)] font-semibold text-foreground",
-    truncate ? "truncate" : "text-balance",
+    truncate ? "truncate [text-wrap-style:auto]" : "text-balance",
     sizes[size],
     align && alignClasses[align],
     className,

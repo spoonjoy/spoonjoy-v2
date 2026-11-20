@@ -38,6 +38,14 @@ export interface InspectorProps {
    * @claim "Its bar says which item it" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > says when the page has no spotlit item, and points one out when it appears)
    */
   spotlight?: string | undefined;
+  /**
+   * Also outline the page's own controls (buttons, links, fields, checkboxes, switches, tabs and menu items outside Ouro components), whichever library draws them.
+   * A tag says the control's role and accessible name, and the action it is bound to (its `data-ax-action`) where it has one; it is a plain label, since the control is not an Ouro item.
+   * Use it on a page of another library's components, or to see which controls an agent's actions reach. Leave it off to outline Ouro components only.
+   * @default false
+   * @claim "Also outline the page's own controls" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > outlines a page's own controls by role and accessible name, with the action each is bound to, only when controls is set)
+   */
+  controls?: boolean | undefined;
 
   /** Not a prop. Ouro UI uses `open` with `onOpenChange`: `<Inspector open={xray} onOpenChange={setXray}>`. */
   isOpen?: { 'Use <Inspector open={xray} onOpenChange={setXray}>': never };
@@ -50,6 +58,8 @@ interface Found {
   key: number;
   item: string;
   element: Element;
+  /** For a control the page draws itself: its role, accessible name and the AX action it is bound to. */
+  control?: { role: string; name: string; action: string | null };
 }
 
 const keys = new WeakMap<Element, number>();
@@ -132,12 +142,58 @@ function findComponents(own: Element, modal: boolean): Found[] {
   return found;
 }
 
+const controlSelector =
+  'button, a[href], input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [role="checkbox"], [role="switch"], [role="tab"], [role="menuitem"], [role="radio"], [role="combobox"], [role="slider"], [role="textbox"], [data-ax-action]';
+const inputRoles: Record<string, string> = { checkbox: "checkbox", radio: "radio", range: "slider", button: "button", submit: "button", reset: "button", image: "button" };
+
+/** A control's role: the one it declares, or the one its element has. */
+function roleOf(element: Element): string {
+  // Stryker disable next-line Regex: only the first word is kept, and it is the same whether the split is on each space or on a run of them.
+  const declared = element.getAttribute("role")?.split(/\s+/)[0];
+  if (declared) return declared;
+  const tag = element.tagName.toLowerCase();
+  if (tag === "a") return "link";
+  if (tag === "select") return "combobox";
+  if (tag === "input") return inputRoles[(element as HTMLInputElement).type] ?? "textbox";
+  if (tag === "textarea") return "textbox";
+  return "button";
+}
+
+/** A control's accessible name, the way a person's assistive technology reads it: aria-labelledby, aria-label, a label, its content, a button input's value, then title and placeholder. */
+function nameOf(element: Element): string {
+  const text = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
+  const by = element.getAttribute("aria-labelledby");
+  if (by) {
+    // Stryker disable next-line Regex: an empty id names no element, so splitting on each space or on runs of them joins the same text.
+    const joined = text(by.split(/\s+/).map((id) => document.getElementById(id)?.textContent).join(" "));
+    if (joined) return joined;
+  }
+  const labelled = text(element.getAttribute("aria-label"));
+  if (labelled) return labelled;
+  // Stryker disable next-line ArrayDeclaration: a form-less element has no labels, and a stand-in text node has no textContent, so it joins to nothing either way.
+  const fromLabel = text([...((element as HTMLInputElement).labels ?? [])].map((label) => label.textContent).join(" "));
+  return fromLabel || text(element.textContent) || text(element instanceof HTMLInputElement && ["submit", "reset", "button"].includes(element.type) ? element.value : "") || text(element.getAttribute("title")) || text(element.getAttribute("placeholder")) || text(element.getAttribute("data-ax-action"));
+}
+
+/** The visible controls on the page outside Ouro components, in document order, skipping what `findComponents` skips. */
+function findControls(own: Element, modal: boolean): Found[] {
+  const found: Found[] = [];
+  for (const element of document.querySelectorAll(controlSelector)) {
+    if (own.contains(element) || element.closest("[data-ouro]") || (modal && element.closest(shutOff)) || !seen(element)) continue;
+    const box = shownBox(element);
+    if (!box || (box.width <= 1 && box.height <= 1)) continue;
+    const role = roleOf(element);
+    found.push({ key: keyOf(element), item: role, element, control: { role, name: nameOf(element), action: element.getAttribute("data-ax-action") } });
+  }
+  return found;
+}
+
 /**
  * The component X-ray points out: the first of the item in the page's main content, so a page's
  * own Switch comes before the one in its header, or else the first anywhere.
  */
 function spotlitOf(components: Found[], spotlight: string | undefined): Found | undefined {
-  const all = components.filter((component) => component.item === spotlight);
+  const all = components.filter((component) => !component.control && component.item === spotlight);
   return all.find((component) => component.element.closest("main")) ?? all[0];
 }
 
@@ -365,7 +421,11 @@ function tagPlace(box: DOMRect, part: Edges, rtl: boolean, size: [number, number
   return null;
 }
 
-const sameComponents = (a: Found[], b: Found[]) => a.length === b.length && a.every((entry, index) => entry.key === b[index]!.key && entry.item === b[index]!.item);
+// Stryker disable next-line all: it only decides whether to set the list again, and the next frame reads the same elements either way.
+const sameComponents = (a: Found[], b: Found[]) => a.length === b.length && a.every((entry, index) => entry.key === b[index]!.key && entry.item === b[index]!.item && entry.control?.name === b[index]!.control?.name && entry.control?.action === b[index]!.control?.action);
+
+/** What a control's tag and list row say: its role and name, and the action it is bound to. */
+const controlText = (control: NonNullable<Found["control"]>) => `${control.role}${control.name ? `: ${control.name}` : ""}${control.action ? ` → ${control.action}` : ""}`;
 
 /** Whether anything in the page outside X-ray is still moving, so its outline follows it frame by frame. */
 const moving = (own: Element) =>
@@ -434,6 +494,7 @@ export function Inspector(props: InspectorProps): JSX.Element | null {
     sourceHref,
     label = "X-ray",
     spotlight,
+    controls = false,
     // Guard props (hint types), dropped here so they never reach the DOM.
     isOpen,
     onClose,
@@ -455,7 +516,7 @@ export function Inspector(props: InspectorProps): JSX.Element | null {
     () => false,
   );
   if (!open || !client) return null;
-  return createPortal(<InspectorLayer onOpenChange={onOpenChange} docsHref={docsHref} sourceHref={sourceHref} label={label} spotlight={spotlight} />, document.body);
+  return createPortal(<InspectorLayer key={String(controls)} onOpenChange={onOpenChange} docsHref={docsHref} sourceHref={sourceHref} label={label} spotlight={spotlight} controls={controls} />, document.body);
 }
 
 /** X-ray while it is on: the outlines, the bar and its list. */
@@ -465,7 +526,8 @@ function InspectorLayer({
   sourceHref,
   label,
   spotlight,
-}: Pick<InspectorProps, "onOpenChange" | "sourceHref" | "spotlight"> & { docsHref: (item: string) => string; label: string }): JSX.Element {
+  controls,
+}: Pick<InspectorProps, "onOpenChange" | "sourceHref" | "spotlight" | "controls"> & { docsHref: (item: string) => string; label: string }): JSX.Element {
   const layer = useRef<HTMLDivElement>(null);
   const [outlines] = useState(() => new Map<number, HTMLElement>());
   const [found, setFound] = useState<Found[]>([]);
@@ -560,7 +622,7 @@ function InspectorLayer({
         .find((box) => box.height > 0);
       if (tabBar) own.style.setProperty("--ouro-inspector-tab-bar", `${own.getBoundingClientRect().bottom - tabBar.top + 8}px`);
       else own.style.removeProperty("--ouro-inspector-tab-bar");
-      const next = findComponents(own, modal);
+      const next = controls ? [...findComponents(own, modal), ...findControls(own, modal)] : findComponents(own, modal);
       for (const component of next) {
         if (observed.has(component.element)) continue;
         observed.add(component.element);
@@ -671,9 +733,15 @@ function InspectorLayer({
                 <path d="" />
               </svg>
             </div>
-            <a data-ouro-control="inspector" data-ouro-part="tag" href={docsHref(component.item)} target="_blank" rel="noreferrer" tabIndex={-1} className={tagClass}>
-              {component.item}
-            </a>
+            {component.control ? (
+              <span data-ouro-control="inspector" data-ouro-part="tag" className={tagClass}>
+                {controlText(component.control)}
+              </span>
+            ) : (
+              <a data-ouro-control="inspector" data-ouro-part="tag" href={docsHref(component.item)} target="_blank" rel="noreferrer" tabIndex={-1} className={tagClass}>
+                {component.item}
+              </a>
+            )}
           </div>
         ))}
       </div>
@@ -689,7 +757,7 @@ function InspectorLayer({
         <span className={actionsClass}>
           <Sheet
             title={label}
-            description="Every Ouro HX component on this page, in order."
+            description={controls ? "Every Ouro HX component and every other control on this page, in order." : "Every Ouro HX component on this page, in order."}
             trigger={
               <Button variant="plain" size="sm" data-ouro-control="inspector" data-ouro-part="list">
                 {count}
@@ -698,6 +766,13 @@ function InspectorLayer({
           >
             <ol data-ouro-inspector-list="" className={listClass}>
               {found.map((component) => {
+                if (component.control) {
+                  return (
+                    <li key={component.key} className="flex min-h-9 items-center justify-between gap-3">
+                      <code className="font-mono text-sm leading-5 text-foreground">{controlText(component.control)}</code>
+                    </li>
+                  );
+                }
                 const source = sourceHref?.(component.item, component.element);
                 return (
                   <li key={component.key} className="flex min-h-9 items-center justify-between gap-3">
