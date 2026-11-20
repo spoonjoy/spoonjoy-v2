@@ -18,8 +18,10 @@ export const KITCHEN = Object.freeze({
   friend: { id: "qa-kitchen-friend", username: "qa_kitchen_friend", email: "qa-kitchen-friend@example.com" },
   newbie: { id: "qa-kitchen-newbie", username: "qa_kitchen_newbie", email: "qa-kitchen-newbie@example.com" },
   recipes: {
-    lemonRice: { id: "qa-kitchen-recipe-lemon-rice", chef: "chef", title: "Lemon Herb Rice" },
-    tomatoSoup: { id: "qa-kitchen-recipe-tomato-soup", chef: "chef", title: "Roasted Tomato Soup" },
+    // The chef's two recipes serve 4, as the Apple app's parity kitchen seeds them (spoonjoy-apple
+    // Apps/Spoonjoy/Journeys/Support/ParityCapture.swift), so both apps' meta rows read "Serves 4".
+    lemonRice: { id: "qa-kitchen-recipe-lemon-rice", chef: "chef", title: "Lemon Herb Rice", servings: "4" },
+    tomatoSoup: { id: "qa-kitchen-recipe-tomato-soup", chef: "chef", title: "Roasted Tomato Soup", servings: "4" },
     risotto: { id: "qa-kitchen-recipe-risotto", chef: "friend", title: "Saffron Risotto" },
     salmon: { id: "qa-kitchen-recipe-salmon", chef: "friend", title: "Miso Glazed Salmon" },
   },
@@ -405,7 +407,7 @@ export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.ha
     const content = RECIPE_CONTENT[key];
     const chefId = KITCHEN[recipe.chef].id;
     statements.push(
-      `INSERT INTO Recipe (id, title, description, servings, chefId, deletedAt, sourceRecipeId, sourceUrl, activeCoverId, activeCoverVariant, coverMode, createdAt, updatedAt) VALUES (${sqlString(recipe.id)}, ${sqlString(recipe.title)}, NULL, NULL, ${sqlString(chefId)}, NULL, NULL, NULL, NULL, NULL, ${sqlString("auto")}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+      `INSERT INTO Recipe (id, title, description, servings, chefId, deletedAt, sourceRecipeId, sourceUrl, activeCoverId, activeCoverVariant, coverMode, createdAt, updatedAt) VALUES (${sqlString(recipe.id)}, ${sqlString(recipe.title)}, NULL, ${recipe.servings ? sqlString(recipe.servings) : "NULL"}, ${sqlString(chefId)}, NULL, NULL, NULL, NULL, NULL, ${sqlString("auto")}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
     );
 
     for (const step of content.steps) {

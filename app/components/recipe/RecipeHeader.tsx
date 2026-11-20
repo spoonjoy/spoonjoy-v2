@@ -66,6 +66,9 @@ export interface RecipeHeaderProps {
   cookTime?: string
 }
 
+/** Sync states that need nothing from the cook, so the page doesn't show them. */
+const QUIET_SYNC: ReadonlySet<CookSyncStatus> = new Set(['syncing', 'synced'])
+
 /**
  * Recipe header with prominent image, title, chef info, and scaling controls.
  *
@@ -239,8 +242,14 @@ export function RecipeHeader({
               </div>
             </Popover>
           </div>
+          {/* The Apple app shows nothing here while progress syncs. Syncing and synced stay in the page for
+              screen readers and take no room; a problem (offline, signed out, reload) shows under the meta row. */}
           {progressSyncStatus ? (
-            <SyncStatus className="mt-3 print:hidden" data-testid="cook-sync-status" {...cookSyncStatusProps(progressSyncStatus)} />
+            <SyncStatus
+              className={QUIET_SYNC.has(progressSyncStatus) ? 'sr-only' : 'mt-3 print:hidden'}
+              data-testid="cook-sync-status"
+              {...cookSyncStatusProps(progressSyncStatus)}
+            />
           ) : null}
 
           {actions ? <div className="mt-6 max-w-[43rem] print:hidden">{actions}</div> : null}

@@ -338,9 +338,22 @@ describe('RecipeHeader', () => {
       expect(screen.queryByTestId('clear-progress-button')).toBeNull()
     })
 
-    it('shows the cook progress sync status when progress syncs to the account', () => {
-      renderWithRouter(<RecipeHeader {...defaultProps} progressSyncStatus="synced" />)
-      expect(screen.getByTestId('cook-sync-status')).toHaveTextContent('Progress synced')
+    it('keeps syncing and synced for screen readers only, taking no room under the meta row', () => {
+      for (const status of ['syncing', 'synced'] as const) {
+        const { unmount } = renderWithRouter(<RecipeHeader {...defaultProps} progressSyncStatus={status} />)
+        const line = screen.getByTestId('cook-sync-status')
+        expect(line).toHaveTextContent(status === 'synced' ? 'Progress synced' : 'Syncing progress…')
+        expect(line).toHaveClass('sr-only')
+        unmount()
+      }
+    })
+
+    it('shows a sync problem under the meta row', () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} progressSyncStatus="offline" />)
+      const line = screen.getByTestId('cook-sync-status')
+      expect(line).toHaveTextContent('Progress saved on this device')
+      expect(line).not.toHaveClass('sr-only')
+      expect(line).toHaveClass('mt-3')
     })
 
     it('shows no sync status when progress stays on this device', () => {
