@@ -287,7 +287,7 @@
     "eslint(no-empty-pattern)": 1,
     "react(only-export-components)": 6,
     "react(refs)": 1,
-    "react(set-state-in-effect)": 2
+    "react(set-state-in-effect)": 1
   },
   "app/routes/signup.tsx": {
     "eslint(no-empty-pattern)": 1

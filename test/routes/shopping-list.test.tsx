@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { cleanup, act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { cleanup, act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
@@ -55,6 +55,13 @@ import ShoppingList, { action } from "~/routes/shopping-list";
 import { getOrCreateUnit, getOrCreateIngredientRef, createTestUser } from "../utils";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+
+/** Opens the list's ⋯ menu and returns the item named `name` in it. */
+async function listAction(name: string) {
+  await userEvent.setup().click(await screen.findByRole("button", { name: "List actions" }));
+  return screen.findByRole("menuitem", { name });
+}
+
 
 describe("Shopping List Routes", () => {
   let testUserId: string;
@@ -635,8 +642,8 @@ describe("Shopping List Routes", () => {
 
       expect(await screen.findByText("3 items")).toBeInTheDocument();
       expect(screen.getByText("2 checked, 1 remaining")).toBeInTheDocument();
-      // Should show Clear Completed button when there are checked items
-      expect(screen.getByRole("button", { name: "Clear checked" })).toBeInTheDocument();
+      // The list's menu offers Clear checked when there are checked items
+      expect(await listAction("Clear checked")).toBeInTheDocument();
     });
 
     it("should show Clear All button when items exist", async () => {
@@ -666,7 +673,7 @@ describe("Shopping List Routes", () => {
 
       render(<Stub initialEntries={["/shopping-list"]} />);
 
-      expect(await screen.findByRole("button", { name: "Clear all" })).toBeInTheDocument();
+      expect(await listAction("Clear all")).toBeInTheDocument();
     });
 
     it("should show add from recipe form when recipes exist", async () => {
@@ -741,11 +748,9 @@ describe("Shopping List Routes", () => {
 
       render(<Stub initialEntries={["/shopping-list"]} />);
 
-      expect(await screen.findByText("Add item")).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: "Add to list" })).toBeInTheDocument();
       expect(screen.getByLabelText(requiredLabel("Item"))).toBeInTheDocument();
-      expect(
-        screen.getByPlaceholderText("e.g., 2 lbs chicken breast or a dozen eggs")
-      ).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("Add an item")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Add to list" })).toBeInTheDocument();
     });
 
@@ -963,14 +968,6 @@ describe("Shopping List Routes", () => {
       render(<Stub initialEntries={["/shopping-list"]} />);
 
       expect(await screen.findByText("chicken thigh")).toBeInTheDocument();
-      const aisles = screen.getByRole("radiogroup", { name: "Aisle" });
-      fireEvent.click(within(aisles).getByRole("radio", { name: "Protein" }));
-
-      await waitFor(() => {
-        expect(within(aisles).getByRole("radio", { name: "Protein" })).toHaveAttribute("aria-checked", "true");
-        expect(screen.queryByText("milk")).not.toBeInTheDocument();
-      });
-
       const user = userEvent.setup();
       await user.click(screen.getByRole("button", { name: "Actions for chicken thigh" }));
       await user.click(await screen.findByRole("menuitem", { name: "Delete chicken thigh" }));
@@ -978,8 +975,7 @@ describe("Shopping List Routes", () => {
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Remove" })); });
 
       await waitFor(() => {
-        expect(within(aisles).queryByRole("radio", { name: "Protein" })).not.toBeInTheDocument();
-        expect(within(aisles).getByRole("radio", { name: "All aisles" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.queryByText("chicken thigh")).not.toBeInTheDocument();
         expect(screen.getByText("milk")).toBeInTheDocument();
       });
       await waitFor(() => expect(screen.getByRole("heading", { name: "Shopping list" })).toHaveFocus());
@@ -1211,8 +1207,7 @@ describe("Shopping List Routes", () => {
       render(<Stub initialEntries={["/shopping-list"]} />);
 
       // Click clear all button
-      const clearAllButton = await screen.findByRole("button", { name: "Clear all" });
-      fireEvent.click(clearAllButton);
+      fireEvent.click(await listAction("Clear all"));
 
       // Dialog should be open
       expect(await screen.findByText("Start fresh?")).toBeInTheDocument();
@@ -1256,8 +1251,7 @@ describe("Shopping List Routes", () => {
       render(<Stub initialEntries={["/shopping-list"]} />);
 
       // Click clear all button
-      const clearAllButton = await screen.findByRole("button", { name: "Clear all" });
-      fireEvent.click(clearAllButton);
+      fireEvent.click(await listAction("Clear all"));
 
       // Click cancel
       const cancelButton = screen.getByRole("button", { name: "Keep list" });

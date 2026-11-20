@@ -87,8 +87,14 @@ async function addByHand(page: Page, text: string, name: string, amount: string 
   await expect(itemField(page)).toHaveValue("");
 }
 
+// Clear checked and Clear all live in the list's ⋯ menu.
+async function listAction(page: Page, name: "Clear checked" | "Clear all") {
+  await page.getByRole("button", { name: "List actions", exact: true }).click();
+  await page.getByRole("menuitem", { name, exact: true }).click();
+}
+
 async function clearAll(page: Page) {
-  await page.getByRole("button", { name: "Clear all", exact: true }).click();
+  await listAction(page, "Clear all");
   const dialog = page.getByRole("alertdialog", { name: "Start fresh?" });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Clear all", exact: true }).click();
@@ -413,7 +419,7 @@ test.describe("Shopping list", () => {
     await onions.click();
     await expect(onions).toHaveAttribute("aria-checked", "true");
     expect((await checked).status()).toBe(200);
-    await page.getByRole("button", { name: "Clear checked", exact: true }).click();
+    await listAction(page, "Clear checked");
     await expect(onions).toBeHidden();
     await expect(carrots, FALLBACK_PARSER).toHaveAccessibleDescription(counted(3));
     await expect(view(page, "All", 1)).toBeVisible();
@@ -426,7 +432,7 @@ test.describe("Shopping list", () => {
 
     // Clear all asks first; "Keep list" keeps it.
     await waitForHydration(page);
-    await page.getByRole("button", { name: "Clear all", exact: true }).click();
+    await listAction(page, "Clear all");
     const dialog = page.getByRole("alertdialog", { name: "Start fresh?" });
     await expect(dialog).toBeVisible();
     // Visibility includes an entering translucent dialog. Axe must measure the
