@@ -17,7 +17,7 @@ import type { Page, Response } from "@playwright/test";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStateForProject } from "./support/personas";
 import { requiredLabel } from "./support/forms";
-import { openScale } from "./support/recipe-scale";
+import { stepScaleUp } from "./support/recipe-scale";
 
 const SHOPPING_LIST = "/shopping-list";
 const SHOPPING_LIST_ACTION = "/shopping-list.data";
@@ -266,8 +266,6 @@ test.describe("Shopping list", () => {
     test.setTimeout(120_000);
     await startWithAnEmptyList(page);
     const listAction = page.getByTestId("recipe-header-list-action");
-    const scaleDisplay = page.getByRole("textbox", { name: "Scale", exact: true });
-    const increaseScale = page.getByRole("button", { name: "Increase scale" });
 
     // qa_kitchen_chef's seeded Roasted Tomato Soup: 6 whole tomato, 4 clove garlic, 2 cup vegetable
     // stock. Its seeded URL and title together, since a fork can share the title.
@@ -278,22 +276,10 @@ test.describe("Shopping list", () => {
     await expect(listAction).toHaveAccessibleName("Add to list");
 
     // 2x, four presses of 0.25.
-    await openScale(page);
-    await increaseScale.click();
-    await openScale(page);
-    await expect(scaleDisplay).toHaveValue("1.25");
-    await openScale(page);
-    await increaseScale.click();
-    await openScale(page);
-    await expect(scaleDisplay).toHaveValue("1.5");
-    await openScale(page);
-    await increaseScale.click();
-    await openScale(page);
-    await expect(scaleDisplay).toHaveValue("1.75");
-    await openScale(page);
-    await increaseScale.click();
-    await openScale(page);
-    await expect(scaleDisplay).toHaveValue("2");
+    await stepScaleUp(page, "1.25");
+    await stepScaleUp(page, "1.5");
+    await stepScaleUp(page, "1.75");
+    await stepScaleUp(page, "2");
 
     await listAction.click();
     await expect(page.getByRole("region", { name: "Notifications" }).getByRole("dialog", { name: "3 items added at 2x", exact: true })).toBeVisible();
