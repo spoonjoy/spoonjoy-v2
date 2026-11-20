@@ -65,13 +65,14 @@ describe('RecipeGrid', () => {
     expect(screen.getAllByText('Recipes')).toHaveLength(1)
   })
 
-  it('separates the rows of a growing list, as the divided list does', () => {
-    renderWithRouter(<RecipeGrid recipes={recipes} totalCount={55} loadMore={{
+  it('lists a growing list as plain rows with a hairline between them, as the divided list does', () => {
+    const { container } = renderWithRouter(<RecipeGrid recipes={recipes} totalCount={55} loadMore={{
       hasMore: true, loading: false, href: '/users/ari?after=r-2', onShowMore: vi.fn(),
     }} />)
     for (const name of [/Lemon Pasta/, /Spiced Chickpea Bowl/]) {
-      expect(screen.getByRole('link', { name }).closest('[data-ouro="item"]')).toHaveClass('border')
+      expect(screen.getByRole('link', { name }).closest('[data-ouro="item"]')).not.toHaveClass('border')
     }
+    expect(container.querySelector('[data-ouro="show-more"]')).toHaveClass('sj-hairline-rows')
   })
 
   it('shows the initial tile when a recipe has no photo, not a dark "Cover coming soon" box', () => {

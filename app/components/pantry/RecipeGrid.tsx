@@ -63,8 +63,6 @@ export function RecipeGrid({
       <Item
         key={recipe.id}
         as="article"
-        // HX ShowMore lists rows without lines between them, so a growing list outlines each row.
-        variant={loadMore ? 'outline' : undefined}
         href={`/recipes/${recipe.id}`}
         title={recipe.title}
         description={servings ? <Text size="sm">{servings}</Text> : undefined}
@@ -85,6 +83,9 @@ export function RecipeGrid({
       {loadMore ? (
         <ShowMore
           {...loadMore}
+          // HX ShowMore lists rows without lines between them; draw the hairline the divided group
+          // draws, so a growing list reads as the same plain rows (desk target.md, G6).
+          className="sj-hairline-rows"
           items={rows}
           showMoreLabel="Show more recipes"
           loadedLabel={(count) => `Showing ${count} recipes`}

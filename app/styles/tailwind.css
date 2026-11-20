@@ -395,6 +395,12 @@ select {
   font-size: 0.75em;
 }
 
+/* A growing recipe list as plain rows with a hairline between them, the line ItemGroup's divided
+   list draws, since HX ShowMore draws none (desk target.md, G6). */
+.sj-hairline-rows [role="list"] > li:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+
 .font-sj-display {
   font-family: var(--font-sj-display);
 }

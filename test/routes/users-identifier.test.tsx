@@ -630,6 +630,35 @@ describe("Users $identifier Route", () => {
       expect(screen.getByRole("link", { name: /\bSolo Stew\b/ })).toHaveAttribute("href", "/recipes/recipe-3");
     });
 
+    it("sets the avatar beside the eyebrow, name and Joined, and each stat's number over its name, as the Apple app does", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/users/:identifier",
+          Component: UserProfile,
+          loader: () => ({
+            profile: { id: "user-3", username: "chef-one", photoUrl: null, joinedAt: "2026-05-15T12:00:00.000Z" },
+            isOwner: false,
+            recipes: [],
+            cookbooks: [],
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/users/chef-one"]} />);
+
+      // desk target.md, Chef: "avatar beside the name". The avatar and the name block share one row.
+      const name = await screen.findByTestId("chef-profile-name");
+      const row = name.parentElement!.parentElement!;
+      expect(row).toHaveClass("flex", "items-center");
+      expect(row.querySelector('[data-ouro="avatar"]')).not.toBeNull();
+      expect(within(name.parentElement!).getByText("Chef profile")).toBeInTheDocument();
+      expect(within(name.parentElement!).getByText(/Joined/)).toBeInTheDocument();
+      // Three stats to a row on a phone, each its number over its name.
+      const stats = screen.getByRole("navigation", { name: /kitchen relationships/ });
+      expect(stats).toHaveClass("grid");
+      expect([...stats.children].map((stat) => stat.classList.contains("flex-col"))).toEqual([true, true, true]);
+    });
+
     it("renders Fellow chefs and Kitchen visitors entry-point links with counts (owner view)", async () => {
       const Stub = createTestRoutesStub([
         {

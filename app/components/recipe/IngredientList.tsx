@@ -41,6 +41,11 @@ export interface IngredientListProps {
   stepOutputUses: StepReference[]
   /** Step output ids the cook has ticked off */
   checkedStepOutputIds: ReadonlySet<string>
+  /**
+   * Keeps the list's "Ingredients" name for screen readers only, where a heading over it already
+   * names it (cook mode's "For this step").
+   */
+  hideLabel?: boolean
   /** Called with a step output's id when it is ticked or unticked */
   onStepOutputToggle: (id: string) => void
 }
@@ -103,6 +108,7 @@ export function IngredientList({
   stepOutputUses,
   checkedStepOutputIds,
   onStepOutputToggle,
+  hideLabel = false,
 }: IngredientListProps) {
   const outputIds = useMemo(() => new Set(stepOutputUses.map((reference) => reference.id)), [stepOutputUses])
   const items: ChecklistItemData[] = uncheckedFirst([
@@ -130,6 +136,7 @@ export function IngredientList({
     <Checklist
       ref={root}
       label="Ingredients"
+      hideLabel={hideLabel}
       items={items}
       onCheckedChange={(id) => (outputIds.has(id) ? onStepOutputToggle(id) : onToggle(id))}
     />

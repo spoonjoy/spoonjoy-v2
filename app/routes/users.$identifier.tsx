@@ -233,45 +233,50 @@ export default function UserProfile() {
     <CookbookPage>
       <section className="mx-auto max-w-6xl">
         <header className="sj-rule-block flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 items-center gap-4">
-            <Avatar
-              name={chefDisplayName(profile.username)}
-              src={resolveChefAvatarUrl(profile.photoUrl)}
-              alt={chefDisplayName(profile.username)}
-              initials={profile.username.charAt(0).toUpperCase()}
-              size="2xl"
-            />
-            <div className="min-w-0">
-              <p className="sj-eyebrow">Chef profile</p>
-              {/* Usernames are one long word, so let them break anywhere instead of running off a phone screen. */}
-              <h1 data-testid="chef-profile-name" className="font-sj-display mt-2 text-3xl/9 font-semibold tracking-normal text-[var(--sj-ink)] [overflow-wrap:anywhere] sm:text-5xl/12">
-                {chefDisplayName(profile.username)}
-              </h1>
-              <Text tone="muted" size="sm" className="mt-1">
-                Joined <LocalDate value={profile.joinedAt} format="month" />
-              </Text>
-              <p className="m-0 mt-2 text-sm">
-                <Link href={`/?chef=${profile.username}`} className="inline-flex min-h-11 items-center">
-                  Open kitchen view
-                </Link>
-              </p>
-              {/* The Apple app's stats row: recipes, fellow chefs and kitchen visitors, each a large
-                  number over its name; the last two open their lists. */}
-              <nav className="mt-3 flex flex-wrap gap-x-8 gap-y-2" aria-label={`${profile.username} kitchen relationships`}>
-                <p className="m-0 grid">
-                  <span className="font-sj-display text-3xl/9 font-semibold text-[var(--sj-ink)]">{recipeCount}</span>{" "}
-                  <span className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">{recipeCount === 1 ? "recipe" : "recipes"}</span>
-                </p>
-                <Link href={`${profileHref}/fellow-chefs`} inline={false} tone="secondary" className="grid min-h-11 no-underline">
-                  <span className="font-sj-display text-3xl/9 font-semibold text-[var(--sj-ink)]">{fellowChefsCount}</span>{" "}
-                  <span className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">{fellowChefsCount === 1 ? "fellow chef" : "fellow chefs"}</span>
-                </Link>
-                <Link href={`${profileHref}/kitchen-visitors`} inline={false} tone="secondary" className="grid min-h-11 no-underline">
-                  <span className="font-sj-display text-3xl/9 font-semibold text-[var(--sj-ink)]">{kitchenVisitorsCount}</span>{" "}
-                  <span className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">{kitchenVisitorsCount === 1 ? "kitchen visitor" : "kitchen visitors"}</span>
-                </Link>
-              </nav>
+          <div className="min-w-0 flex-1">
+            {/* The Apple app's header (desk target.md, Chef): the avatar beside the eyebrow, name and
+                "Joined", then the kitchen link and the stats row under them. */}
+            <div className="flex min-w-0 items-center gap-4">
+              <Avatar
+                name={chefDisplayName(profile.username)}
+                src={resolveChefAvatarUrl(profile.photoUrl)}
+                alt={chefDisplayName(profile.username)}
+                initials={profile.username.charAt(0).toUpperCase()}
+                size="2xl"
+              />
+              <div className="min-w-0">
+                <p className="sj-eyebrow">Chef profile</p>
+                {/* Usernames are one long word, so let them break anywhere instead of running off a phone screen. */}
+                <h1 data-testid="chef-profile-name" className="font-sj-display mt-2 text-3xl/9 font-semibold tracking-normal text-[var(--sj-ink)] [overflow-wrap:anywhere] sm:text-5xl/12">
+                  {chefDisplayName(profile.username)}
+                </h1>
+                <Text tone="muted" size="sm" className="mt-1">
+                  Joined <LocalDate value={profile.joinedAt} format="month" />
+                </Text>
+              </div>
             </div>
+            <p className="m-0 mt-3 text-sm">
+              <Link href={`/?chef=${profile.username}`} className="inline-flex min-h-11 items-center">
+                Open kitchen view
+              </Link>
+            </p>
+            {/* The Apple app's stats row: recipes, fellow chefs and kitchen visitors, each a large
+                number over its name, three to a row on a phone; at large text sizes they wrap whole.
+                The last two open their lists. */}
+            <nav className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-x-4 gap-y-2" aria-label={`${profile.username} kitchen relationships`}>
+              <p className="m-0 flex flex-col">
+                <span className="font-sj-display text-3xl/9 font-semibold text-[var(--sj-ink)]">{recipeCount}</span>{" "}
+                <span className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">{recipeCount === 1 ? "recipe" : "recipes"}</span>
+              </p>
+              <Link href={`${profileHref}/fellow-chefs`} inline={false} tone="secondary" className="flex min-h-11 flex-col items-start no-underline">
+                <span className="font-sj-display text-3xl/9 font-semibold text-[var(--sj-ink)]">{fellowChefsCount}</span>{" "}
+                <span className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">{fellowChefsCount === 1 ? "fellow chef" : "fellow chefs"}</span>
+              </Link>
+              <Link href={`${profileHref}/kitchen-visitors`} inline={false} tone="secondary" className="flex min-h-11 flex-col items-start no-underline">
+                <span className="font-sj-display text-3xl/9 font-semibold text-[var(--sj-ink)]">{kitchenVisitorsCount}</span>{" "}
+                <span className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">{kitchenVisitorsCount === 1 ? "kitchen visitor" : "kitchen visitors"}</span>
+              </Link>
+            </nav>
           </div>
 
           {isOwner ? (
