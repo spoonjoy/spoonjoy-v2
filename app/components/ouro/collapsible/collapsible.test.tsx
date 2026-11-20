@@ -336,6 +336,33 @@ describe("Collapsible", () => {
   });
 });
 
+describe("Collapsible's title width", () => {
+  it("keeps the title button within its root, so a title that shortens does, and what follows it stays in view (#2501)", async () => {
+    const long = "A very long team name that should shorten rather than push the count and chevron out of view";
+    const view = await render(
+      <div style={{ width: "300px" }}>
+        <Collapsible
+          title={
+            <span className="flex min-w-0 flex-1">
+              <span className="min-w-0 truncate">{long}</span>
+              <span className="shrink-0" data-test-count="">
+                3
+              </span>
+            </span>
+          }
+        >
+          Members
+        </Collapsible>
+      </div>,
+    );
+    const root = view.root.getBoundingClientRect();
+    const trigger = view.trigger.getBoundingClientRect();
+    expect(trigger.width).toBeLessThanOrEqual(root.width);
+    const count = view.host.querySelector("[data-test-count]")!.getBoundingClientRect();
+    expect(count.right).toBeLessThanOrEqual(root.right);
+  });
+});
+
 describe("Collapsible development messages", () => {
   it.each([
     ["trigger", { trigger: <button>Open</button> }, "trigger is not a prop", '<Collapsible title="Nutrition facts">'],

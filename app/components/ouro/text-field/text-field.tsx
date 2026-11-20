@@ -1,5 +1,6 @@
 "use client";
 
+import "~/lib/ouro/last-input";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { JSX, MouseEvent, ReactNode, Ref } from "react";
@@ -86,17 +87,20 @@ export interface TextFieldOwnProps {
    */
   variant?: "outline" | "plain" | (string & { 'default is "outline"; ghost, unstyled and borderless are "plain"': never }) | undefined;
   /**
-   * Control size. `md` is 44px tall with 16px text on phones and steps down to desktop
+   * Control size. `sm` matches Button's `sm`: 36px tall (32px from the `sm` breakpoint) with
+   * 14px text and 12px side padding (10px), and a coarse pointer keeps a 44px box; adornment
+   * icons size to the field (1.25em at `sm`, 16px at `md`, 20px at `lg`). `md` is 44px tall with 16px text on phones and steps down to desktop
    * density from the `sm` breakpoint (640px). `lg` is 56px tall (48px on desktop) with 20px
    * text at every width, for a page's main search. The font family is inherited, so set a
    * display font on a parent. It replaces the input's own `size` attribute (a width in
    * characters); set the width with `className`. @default "md"
+   * @claim "`sm` matches Button's `sm`: 36px tall (32px" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField variant and size > sizes sm like Button sm and keeps md, icons following each size)
    * @claim "`md` is 44px tall with 16px" registry/ouro/components/ouro/text-field/text-field.touch.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.touch.test.tsx::keeps 16px text and a 44px box on a landscape phone, past the sm breakpoint)
    * @claim "`lg` is 56px tall (48px on" registry/ouro/components/ouro/text-field/text-area.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.test.tsx::TextArea variant and size > sets 20px text on 28px lines with size lg, at phone and desktop widths)
    * @claim "`md` is 44px tall with 16px" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField looks > uses a 16px font on phones, so iOS does not zoom on focus, and a 44px box)
    * @claim "`lg` is 56px tall (48px on" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField variant and size > sets 20px text in a taller box with size lg, at phone and desktop widths)
    */
-  size?: "md" | "lg" | (string & { 'default is "md"; "lg" is 20px text. For a width, use className="w-40"': never }) | undefined;
+  size?: "sm" | "md" | "lg" | (string & { 'default is "md"; "sm" matches Button sm; "lg" is 20px text. For a width, use className="w-40"': never }) | undefined;
   /**
    * Text or an icon inside the box, before the input: `"$"`, `<SearchIcon />`. Text is also
    * read as part of the field's description. Replaces shadcn's InputGroup.
@@ -311,7 +315,7 @@ export function TextField(props: TextFieldProps): JSX.Element {
       ? () => [
           type !== typeProp && typeWarning(String(typeProp), label),
           variant !== variantProp && controlVariantWarning("TextField", String(variantProp)),
-          size !== sizeProp && controlSizeWarning("TextField", sizeProp),
+          size !== sizeProp && controlSizeWarning("TextField", sizeProp, '"sm", "md" or "lg"'),
           ...contractWarnings("TextField", { errorMessage, helperText, isInvalid, invalid, isRequired, isDisabled }),
           startIcon !== undefined && ["startIcon is not a prop", "<TextField startAdornment={<SearchIcon />}>"],
           leftIcon !== undefined && ["leftIcon is not a prop", "<TextField startAdornment={<SearchIcon />}>"],

@@ -41,9 +41,10 @@ const caption: CSSProperties = {
 };
 
 /** A themed panel. It follows the page's scheme (the `.dark` class on the root). */
-function Surface({ children }: { children: ReactNode }) {
+function Surface({ children, allow }: { children: ReactNode; allow?: Record<`data-${string}`, string> }) {
   return (
     <div
+      {...allow}
       style={{
         background: "var(--background)",
         color: "var(--foreground)",
@@ -87,7 +88,7 @@ export const Playground: Story = {
 export const TonesAndVariants: Story = {
   parameters: { screenshot: { name: "button-variants" } },
   render: () => (
-    <Surface>
+    <Surface allow={{ "data-ouro-allow": "duplicate-control", "data-ouro-allow-why": "each variant is its own row of the same tones, so a tone name repeats across rows; no row has it twice" }}>
       {variants.map((variant) => (
         <div key={variant} style={stack}>
           <span style={caption}>{variant}</span>
@@ -110,7 +111,7 @@ export const TonesAndVariants: Story = {
  */
 export const Sizes: Story = {
   render: () => (
-    <Surface>
+    <Surface allow={{ "data-ouro-allow": "duplicate-control", "data-ouro-allow-why": "each size is its own row of the same four buttons, so a label repeats across rows; no row has it twice" }}>
       {(["sm", "md", "lg"] as const).map((size) => (
         <div key={size} style={row}>
           <Button size={size} startIcon={PlusIcon}>
@@ -177,7 +178,7 @@ function SaveDemo({ variant }: { variant: (typeof variants)[number] }) {
  */
 export const Loading: Story = {
   render: () => (
-    <Surface>
+    <Surface allow={{ "data-ouro-allow": "duplicate-control", "data-ouro-allow-why": "each variant and size is its own cell, so the same label repeats across cells; no cell has it twice" }}>
       <div style={row}>
         {variants.map((variant) => (
           <SaveDemo key={variant} variant={variant} />

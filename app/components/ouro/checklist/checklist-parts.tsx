@@ -1,7 +1,7 @@
 "use client";
 
 import { Checkbox as BaseCheckbox } from "@base-ui/react/checkbox";
-import { createContext, useContext, useId, type JSX, type ReactNode, type Ref } from "react";
+import { createContext, useContext, useEffect, useId, useState, type JSX, type ReactNode, type Ref } from "react";
 import { boxClass, indicatorClass, tickClass } from "~/components/ouro/checkbox/checkbox-styles";
 import {
   actionClass,
@@ -15,6 +15,7 @@ import {
   labelClass,
   mediaClass,
   noteClass,
+  noteFadeClass,
   outOfOrderBoxClass,
   outlineCardClass,
   outlineRowInnerClass,
@@ -198,6 +199,16 @@ export function ChecklistRow({
   const leaving = phase === "leaving";
   const outline = variant === "outline";
   const held = checked && outOfOrder !== undefined;
+  // A note there at mount is drawn at once; the fade is for a note that comes after.
+  const [mounted, setMounted] = useState(false);
+  useEffect(
+    () => {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMounted(true);
+    },
+    // Stryker disable next-line ArrayDeclaration: an effect that only sets a flag to true runs the same whatever its list holds.
+    [],
+  );
   const describedBy = [held && `${id}-note`, description !== undefined && `${id}-description`, value !== undefined && `${id}-value`].filter(Boolean).join(" ") || undefined;
   const box = (
     <BaseCheckbox.Root
@@ -234,7 +245,7 @@ export function ChecklistRow({
             <span aria-hidden="true" data-ouro-part="strike" className={strikeClass} />
           </span>
           {held && (
-            <span id={`${id}-note`} data-ouro-part="note" className={noteClass}>
+            <span id={`${id}-note`} data-ouro-part="note" className={cn(noteClass, mounted && noteFadeClass)}>
               {outOfOrder}
             </span>
           )}

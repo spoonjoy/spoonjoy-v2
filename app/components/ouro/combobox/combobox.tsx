@@ -1,5 +1,6 @@
 "use client";
 
+import "~/lib/ouro/last-input";
 import { Autocomplete as BaseAutocomplete } from "@base-ui/react/autocomplete";
 import { Combobox as BaseCombobox } from "@base-ui/react/combobox";
 import { mergeProps } from "@base-ui/react/merge-props";

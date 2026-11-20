@@ -52,7 +52,7 @@ export const InContext: Story = {
         {...args}
         brand={
           <Text>
-            <strong>Spoonjoy</strong>
+            <strong style={{ fontWeight: 600 }}>Spoonjoy</strong>
           </Text>
         }
         actions={

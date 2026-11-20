@@ -1293,11 +1293,13 @@ describe("Button state layer", () => {
   it("shows the deeper pressed wash, not the hover wash, while a mouse presses a hovered button", async () => {
     const { button } = await render(<Button>Save</Button>);
     const wash = () => getComputedStyle(button, "::before").opacity;
+    const token = (name: string) =>
+      String(parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) / 100);
     await userEvent.hover(button);
-    await expect.poll(wash).toBe("0.08");
+    await expect.poll(wash).toBe(token("--ouro-state-hover"));
     await commands.pointerPress({ selector: "[data-ouro]", action: "down" });
     try {
-      await expect.poll(wash).toBe("0.14");
+      await expect.poll(wash).toBe(token("--ouro-state-pressed"));
     } finally {
       await commands.pointerPress({ action: "up" });
     }

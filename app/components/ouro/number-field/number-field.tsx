@@ -1,5 +1,6 @@
 "use client";
 
+import "~/lib/ouro/last-input";
 import { NumberField as BaseNumberField } from "@base-ui/react/number-field";
 import type { JSX, ReactElement, ReactNode, Ref } from "react";
 import { Field } from "~/components/ouro/field/field";

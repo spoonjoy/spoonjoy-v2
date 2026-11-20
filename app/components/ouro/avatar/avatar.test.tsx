@@ -1356,6 +1356,22 @@ describe("AvatarGroup", () => {
     expect(group.querySelector("[data-ouro-avatar-more]")).toBeNull();
   });
 
+  it("overlaps by a step that grows with the size", async () => {
+    const overlaps = new Map<string, number>();
+    for (const size of ["xs", "sm", "md", "lg", "xl", "2xl", "3xl"] as const) {
+      const { group } = await render(
+        <AvatarGroup label="Cooks" size={size}>
+          {cooks.slice(0, 2).map((name) => (
+            <Avatar key={name} name={name} />
+          ))}
+        </AvatarGroup>,
+      );
+      const [first, second] = [...group.querySelectorAll<HTMLElement>('[data-ouro="avatar"]')].map((avatar) => avatar.getBoundingClientRect());
+      overlaps.set(size, Math.round(first!.right - second!.left));
+    }
+    expect(Object.fromEntries(overlaps)).toEqual({ xs: 4, sm: 4, md: 4, lg: 8, xl: 8, "2xl": 8, "3xl": 12 });
+  });
+
   it("shows max avatars and a +N count with a spoken label", async () => {
     const { group } = await render(
       <AvatarGroup label="Cooks" max={3}>

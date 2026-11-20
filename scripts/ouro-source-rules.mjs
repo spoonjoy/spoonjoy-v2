@@ -262,6 +262,9 @@ export const BARE_FAILURE = /^[^\p{L}\p{N}]*(?:(?:\p{L}[\p{L}'’-]*\s+){0,2}(?:
 // state no cause. "Error: …" and "Upload failed: …" (LEAD_FAILURE) are held to the same test.
 export const CAUSE_MARKER = /:|\s[—–-]\s|\bbecause\b/iu;
 export const NOT_A_CAUSE = ["try", "please", "retry", "contact", "see", "error", "errors", "unknown", "failed", "failure"];
+// A cause that names nothing ("it broke", "it didn't work", "there was a problem", "an issue
+// occurred"): the whole cause, so "it failed because the disk is full" names something and passes.
+export const VAGUE_CAUSE = /^[^\p{L}\p{N}]*(?:(?:it|this|that|something)\s+(?:broke|failed|crashed|errored|stopped(?:\s+working)?|went\s+wrong|(?:didn[’']?t|did\s+not|doesn[’']?t|does\s+not)\s+work|(?:isn[’']?t|is\s+not)\s+working)|there\s+(?:was|is)\s+(?:an?\s+)?(?:problem|issue|error)|an?\s+(?:problem|issue|error)\s+(?:has\s+)?(?:occurred|happened))[^\p{L}\p{N}]*$/iu;
 export const LEAD_FAILURE = /^[^\p{L}\p{N}]*(?:\p{L}[\p{L}'’-]*\s+){0,2}(?:error|errors|failed|failure)\s*(:|\s[—–-]\s)/iu;
 // Words before "error" or "failed" that make the text other than a failure: a negation ("No errors",
 // "Nothing failed") or an action ("Show errors", "Retry failed").
@@ -285,7 +288,7 @@ export function statesCause(rest) {
   const cause = sentence.slice(marker.index + marker[0].length);
   if (cause.includes("${…}")) return true;
   const words = cause.match(WORD) ?? [];
-  return words.length >= 2 && !NOT_A_CAUSE.includes(words[0].toLowerCase()) && !VAGUE_FAILURE_PHRASES.some(([, pattern]) => pattern.test(cause));
+  return words.length >= 2 && !NOT_A_CAUSE.includes(words[0].toLowerCase()) && !VAGUE_CAUSE.test(cause) && !VAGUE_FAILURE_PHRASES.some(([, pattern]) => pattern.test(cause));
 }
 
 const leadWords = (text) => [...text.toLowerCase().matchAll(WORD)].map((match) => match[0]);

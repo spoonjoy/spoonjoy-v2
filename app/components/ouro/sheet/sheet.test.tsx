@@ -1300,6 +1300,8 @@ describe("Sheet parts", () => {
     );
     await userEvent.click(trigger());
     await expect.element(page.getByRole("dialog", { name: "Parts" })).toBeVisible();
+    // Visible is not still: a press while the sheet rises lands where Done was, and Done receives nothing (#1756).
+    await settled();
     expect(popup()!.getAttribute("data-side")).toBe("bottom");
     expect(document.querySelector("[data-ouro-sheet-handle]")!.getAttribute("aria-hidden")).toBe("true");
     const done = page.getByRole("button", { name: "Done" });

@@ -33,6 +33,12 @@ export interface ToggleGroupItem {
   hideLabel?: boolean | undefined;
   /** Shows the toggle but keeps it from being pressed. */
   disabled?: boolean | undefined;
+  /**
+   * `data-*` attributes for the item's button (`"data-testid": "bold"`), for an app's own hooks. The
+   * markers Ouro UI sets itself (`data-ouro-control`, `data-ouro-part`) keep their values.
+   * @claim "The markers Ouro UI sets itself" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > passes an item's data attributes to its button and keeps Ouro's own markers)
+   */
+  [attribute: `data-${string}`]: string | number | boolean | undefined;
 }
 
 /** Props both modes of {@link ToggleGroup} take. */
@@ -305,10 +311,12 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
         onKeyDown={move}
         className="m-0 box-border inline-flex max-w-full flex-wrap items-center gap-1"
       >
-        {items.map(({ value: itemValue, label: itemLabel, icon: Icon, hideLabel: iconOnlyItem, disabled: itemDisabled }) => {
+        {items.map(({ value: itemValue, label: itemLabel, icon: Icon, hideLabel: iconOnlyItem, disabled: itemDisabled, ...itemRest }) => {
+          const dataAttributes = Object.fromEntries(Object.entries(itemRest).filter(([name]) => name.startsWith("data-")));
           const iconOnly = Boolean(iconOnlyItem && Icon);
           return (
             <BaseToggle
+              {...dataAttributes}
               key={itemValue}
               pressed={pressed.includes(itemValue)}
               onPressedChange={(next) => press(itemValue, next)}

@@ -16,8 +16,15 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Try every prop. The bar runs across the top of the frame. */
-export const Playground: Story = {};
+/** Try every prop. The bar runs along the top of the page it is loading over. */
+export const Playground: Story = {
+  render: (args) => (
+    <div style={{ display: "grid", gap: 12, color: "var(--foreground)" }}>
+      <RouteProgress {...args} />
+      <Text>The page you are on stays in place while the next one loads.</Text>
+    </div>
+  ),
+};
 
 /** A navigation that starts and ends: turn the switch on, as a router would while it loads the next page. */
 export const InContext: Story = {

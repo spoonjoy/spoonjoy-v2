@@ -18,9 +18,10 @@ const ItalicIcon = icon(<path d="M14 5h-4M14 19h-4M14 5l-4 14" />);
 const StarIcon = icon(<path d="M12 4l2.4 5 5.6.8-4 3.9.9 5.5L12 16.6 7.1 19.2l.9-5.5-4-3.9 5.6-.8z" />);
 
 /** A themed panel. It follows the page's scheme (the `.dark` class on the root). */
-function Surface({ children }: { children: ReactNode }) {
+function Surface({ children, allow }: { children: ReactNode; allow?: Record<`data-${string}`, string> }) {
   return (
     <div
+      {...allow}
       style={{
         background: "var(--background)",
         color: "var(--foreground)",
@@ -61,7 +62,7 @@ export const Playground: Story = { args: { icon: BoldIcon } };
 export const States: Story = {
   parameters: { screenshot: { name: "toggle-states" } },
   render: () => (
-    <Surface>
+    <Surface allow={{ "data-ouro-allow": "duplicate-control", "data-ouro-allow-why": "each toggle is shown unpressed and pressed side by side, so a label repeats across those two cells; no cell has it twice" }}>
       <Toggle label="Bold" icon={BoldIcon} hideLabel />
       <Toggle label="Italic" icon={ItalicIcon} hideLabel defaultPressed />
       <Toggle label="Favorite" icon={StarIcon} variant="outline" />

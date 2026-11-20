@@ -848,7 +848,7 @@ describe("Popover trigger press", () => {
     const box = JSON.stringify(trigger().getBoundingClientRect());
     await commands.pointerPress({ selector, action: "down" });
     try {
-      await expect.poll(() => getComputedStyle(trigger(), "::before").opacity).toBe("0.14");
+      await expect.poll(() => getComputedStyle(trigger(), "::before").opacity).toBe(String(parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ouro-state-pressed")) / 100));
       // Button reads --ouro-press-scale, which the trigger sets to 1, so nothing scales.
       expect(["none","1"]).toContain(getComputedStyle(trigger()).scale);
       expect(JSON.stringify(trigger().getBoundingClientRect())).toBe(box);
@@ -877,7 +877,7 @@ describe("Popover trigger press", () => {
     requestAnimationFrame(sample);
     await commands.pointerPress({ selector, action: "down" });
     // Hold until the press has fully arrived, so a scaled trigger would be at its smallest.
-    await expect.poll(() => getComputedStyle(trigger(), "::before").opacity).toBe("0.14");
+    await expect.poll(() => getComputedStyle(trigger(), "::before").opacity).toBe(String(parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ouro-state-pressed")) / 100));
     await commands.pointerPress({ selector, action: "up" });
     await settled();
     await nextFrame();

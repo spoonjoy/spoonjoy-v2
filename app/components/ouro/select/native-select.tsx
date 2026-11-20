@@ -1,5 +1,6 @@
 "use client";
 
+import "~/lib/ouro/last-input";
 import type { JSX, ReactNode, Ref, SelectHTMLAttributes } from "react";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl, type FieldControlProps } from "~/components/ouro/field/field-parts";
@@ -116,7 +117,7 @@ const selectClass =
   "[--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] " +
   "rounded-ouro-control-md border border-solid border-input bg-transparent text-base text-foreground sm:pointer-fine:text-sm " +
   "font-[inherit] cursor-pointer [-webkit-tap-highlight-color:transparent] " +
-  "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
+  "ouro-field-cue outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "transition-[border-color] duration-(--ouro-duration-fast) ease-[ease] " +
   "pointer-fine:hover:not-disabled:border-ring/60 aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-50 " +
   "dark:bg-input/30 [&:has(option[value='']:checked)]:text-muted-foreground [&_option]:bg-popover [&_option]:text-popover-foreground dark:scheme-dark";

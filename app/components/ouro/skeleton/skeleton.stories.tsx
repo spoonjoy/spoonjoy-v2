@@ -33,8 +33,14 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Try every prop. */
-export const Playground: Story = {};
+/** Try every prop. The placeholder sits in a region that says what is loading, as an app's does. */
+export const Playground: Story = {
+  render: (args) => (
+    <div role="group" aria-busy="true" aria-label="Loading recipe">
+      <Skeleton {...args} />
+    </div>
+  ),
+};
 
 /** A recipe card while it loads: an avatar, two lines of text and a photo. */
 export const RecipeCard: Story = {

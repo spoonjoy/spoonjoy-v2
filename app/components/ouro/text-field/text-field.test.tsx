@@ -509,6 +509,7 @@ describe("TextField looks", () => {
   it("outlines the box when the input has keyboard focus", async () => {
     const { group, input } = await render(<TextField label="Name" />);
     expect(getComputedStyle(group).outlineStyle).toBe("none");
+    await userEvent.keyboard("{ArrowDown}");
     input.focus();
     await expect.poll(() => getComputedStyle(group).outlineStyle).toBe("solid");
   });
@@ -536,6 +537,7 @@ describe("TextField variant and size", () => {
     expect(box.paddingLeft).toBe("0px");
     expect(box.paddingRight).toBe("0px");
     expect(box.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    await userEvent.keyboard("{ArrowDown}");
     input.focus();
     await expect.poll(() => getComputedStyle(group).outlineStyle).toBe("solid");
     expect(warn).not.toHaveBeenCalled();
@@ -570,6 +572,26 @@ describe("TextField variant and size", () => {
     expect(getComputedStyle(input).fontSize).toBe("20px");
   });
 
+  it("sizes sm like Button sm and keeps md, icons following each size", async () => {
+    await page.viewport(390, 844);
+    const icon = <svg aria-hidden="true" />;
+    const sm = await render(<TextField label="Filter" size="sm" startAdornment={icon} />);
+    const button = await render(<Button size="sm">Go</Button>);
+    const smBox = getComputedStyle(sm.group);
+    const btn = getComputedStyle(button.host.querySelector("button")!);
+    expect(sm.group.dataset.size).toBe("sm");
+    expect(smBox.height).toBe(btn.height);
+    expect(smBox.fontSize).toBe(btn.fontSize);
+    expect(smBox.paddingLeft).toBe(btn.paddingLeft);
+    expect(sm.group.querySelector("svg")!.getBoundingClientRect().width).toBeCloseTo(parseFloat(smBox.fontSize) * 1.25, 1);
+    const md = await render(<TextField label="Filter" startAdornment={icon} />);
+    expect(md.group.getBoundingClientRect().height).toBe(44);
+    expect(md.group.querySelector("svg")!.getBoundingClientRect().width).toBe(16);
+    await page.viewport(1280, 800);
+    await expect.poll(() => sm.group.getBoundingClientRect().height).toBe(32);
+    expect(getComputedStyle(sm.group).paddingLeft).toBe("10px");
+  });
+
   it("is outlined at the medium size by default", async () => {
     const { group } = await render(<TextField label="Name" />);
     expect(group.dataset.variant).toBe("outline");
@@ -592,7 +614,7 @@ describe("TextField variant and size", () => {
     ["a filled variant", { variant: "filled" }, 'variant="filled" is not a variant; use "outline" or "plain"', '<TextField variant="outline">'],
     ["shadcn's ghost", { variant: "ghost" }, 'variant="ghost" is not a variant; use "outline" or "plain"', '<TextField variant="plain">'],
     ["an unstyled variant", { variant: "unstyled" }, 'variant="unstyled" is not a variant; use "outline" or "plain"', '<TextField variant="plain">'],
-    ["an unknown size", { size: "xl" }, 'size="xl" is not a size; use "md" or "lg"', '<TextField size="md">'],
+    ["an unknown size", { size: "xl" }, 'size="xl" is not a size; use "sm", "md" or "lg"', '<TextField size="md">'],
     ["the input's size attribute", { size: 20 }, "size={20} is not a size; a width in characters is not supported, so set the width with className", '<TextField className="w-40">'],
   ] as const)("renders the default and names the fix for %s", async (_name, wrong, problem, fix) => {
     const props = { label: "Name", ...wrong } as unknown as TextFieldProps;

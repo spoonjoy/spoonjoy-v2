@@ -25,7 +25,10 @@ export const Playground: Story = {};
 /** Every state, with Retry where there is a problem. */
 export const States: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 12, color: "var(--foreground)" }}>
+    <div
+      style={{ display: "grid", gap: 12, color: "var(--foreground)" }}
+      data-ouro-allow="duplicate-control" data-ouro-allow-why="each status is its own cell, and the offline and error cells both offer Retry, so the name repeats across cells; no cell has it twice"
+    >
       {(["saved", "saving", "offline", "error"] as const).map((status) => (
         <SyncStatus key={status} status={status} onRetry={() => {}} />
       ))}

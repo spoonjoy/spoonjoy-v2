@@ -45,7 +45,7 @@ const rootClass = "box-border grid min-w-0 justify-items-start text-foreground";
  * @claim "The title button: 44px tall on" registry/ouro/components/ouro/collapsible/collapsible.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/collapsible.test.tsx::Collapsible > gives the title a 44px row on a coarse pointer, or 36px otherwise)
  */
 const triggerClass =
-  "group/trigger press relative m-0 box-border inline-flex cursor-pointer items-center gap-2 " +
+  "group/trigger press relative m-0 box-border inline-flex min-w-0 max-w-full cursor-pointer items-center gap-2 " +
   "min-h-11 sm:pointer-fine:min-h-9 px-0 py-2 rounded-ouro-md border-0 bg-transparent text-start forced-colors:border forced-colors:border-solid " +
   "font-[inherit] text-base font-medium text-foreground sm:pointer-fine:text-sm " +
   "select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +

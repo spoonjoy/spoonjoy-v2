@@ -96,6 +96,14 @@ it("keeps 16px text and a 44px box on a landscape phone, past the sm breakpoint"
   expect(host.querySelectorAll("input")[1]!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
 });
 
+it("keeps a 44px box for size sm on a coarse pointer, at phone and landscape widths", async () => {
+  const host = await render(<TextField label="Filter" size="sm" />);
+  const group = host.querySelector<HTMLElement>("[data-ouro-input-group]")!;
+  expect(group.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  await rotate(844, 390);
+  expect(group.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+});
+
 it("keeps the clear button's and the toggle's touch areas apart", async () => {
   const host = await render(<TextField label="PIN" type="password" clearable defaultValue="1234" />);
   const clear = host.querySelector<HTMLElement>('button[data-ouro-clear]')!;
