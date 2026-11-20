@@ -1,33 +1,28 @@
-// The shopping list's "New item" on iPhone brings the Item field, which sits below the list, into
-// view with focus, ready to type. Read-only, so it can run alongside shopping-list.journey.ts, which uses the same
-// account on iPhone (scratch 3's base account; see that file for why each device has its own).
+// The shopping list on iPhone leads with its Item field and the + circle beside it, in view on load
+// (one-book target, Shopping), and opening the page at #add-item focuses the field, ready to type.
+// Read-only, so it can run alongside shopping-list.journey.ts, which uses the same account on iPhone
+// (scratch 3's base account; see that file for why each device has its own).
 import { test, expect } from "./support/journey";
-import { pathUrl, waitForHydration } from "./support/navigation";
+import { waitForHydration } from "./support/navigation";
 import { scratchStorageStateForProject } from "./support/personas";
 import { requiredLabel } from "./support/forms";
 
-test.describe("Shopping list New item on iPhone", () => {
+test.describe("Shopping list Item field on iPhone", () => {
   test.use({ storageState: scratchStorageStateForProject(3) });
 
-  test("New item scrolls to the Item field and focuses it", async ({ page, expectAccessible }) => {
+  test("the Item field and its + circle are in view on load, and #add-item focuses the field", async ({ page, expectAccessible }) => {
     const itemField = page.getByLabel(requiredLabel("Item"), { exact: true });
+    const add = page.getByRole("button", { name: "Add to list", exact: true });
 
     await page.goto("/shopping-list");
     await waitForHydration(page);
     await expect(page.getByRole("heading", { level: 1, name: "Shopping list", exact: true })).toBeVisible();
-    await expect(itemField).not.toBeFocused();
-
-    await page.getByRole("main").getByRole("link", { name: "New item", exact: true }).click();
-    await expect(page).toHaveURL(/\/shopping-list#add-item$/);
-    await expect(itemField).toBeFocused();
     await expect(itemField).toBeInViewport();
+    await expect(add).toBeInViewport();
     await expectAccessible();
 
-    // Following it again focuses the field again.
-    await itemField.blur();
-    await expect(itemField).not.toBeFocused();
-    await page.getByRole("main").getByRole("link", { name: "New item", exact: true }).click();
+    await page.goto("/shopping-list#add-item");
+    await waitForHydration(page);
     await expect(itemField).toBeFocused();
-    await expect(page).toHaveURL(pathUrl("/shopping-list"));
   });
 });

@@ -295,7 +295,10 @@ export const census: Journey[] = [
       DEFAULT,
       {
         id: "clear-all-dialog",
-        action: (page) => openDialog(page.getByRole("button", { name: "Clear all", exact: true }), page.getByRole("alertdialog", { name: "Start fresh?" })),
+        action: async (page) => {
+          await page.getByRole("button", { name: "List actions", exact: true }).click();
+          await openDialog(page.getByRole("menuitem", { name: "Clear all", exact: true }), page.getByRole("alertdialog", { name: "Start fresh?" }));
+        },
       },
       {
         id: "item-actions-menu",

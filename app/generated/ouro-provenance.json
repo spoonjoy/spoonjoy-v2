@@ -3154,6 +3154,7 @@
         "field",
         "heading",
         "link",
+        "menu",
         "native-select",
         "segmented-control",
         "swipe-actions",
@@ -3180,6 +3181,9 @@
           "app/routes/shopping-list.tsx"
         ],
         "link": [
+          "app/routes/shopping-list.tsx"
+        ],
+        "menu": [
           "app/routes/shopping-list.tsx"
         ],
         "native-select": [

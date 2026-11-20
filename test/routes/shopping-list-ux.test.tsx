@@ -11,6 +11,13 @@ import ShoppingList, {
   shoppingSections,
 } from "~/routes/shopping-list";
 
+/** Opens the list's ⋯ menu and returns the item named `name` in it. */
+async function listAction(name: string) {
+  await userEvent.setup().click(await screen.findByRole("button", { name: "List actions" }));
+  return screen.findByRole("menuitem", { name });
+}
+
+
 /** Opens a row's delete confirmation the way a keyboard or screen reader user does: its actions menu. */
 async function requestDelete(name: string) {
   const user = userEvent.setup();
@@ -665,7 +672,7 @@ describe("shopping list UX updates", () => {
     render(<Stub initialEntries={["/shopping-list"]} />);
 
     expect(await screen.findByText("chicken thigh")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    fireEvent.click(await listAction("Clear all"));
     fireEvent.click(await screen.findByRole("button", { name: "Clear all" }));
 
     await waitFor(() => expect(submittedIntents).toContain("clearAll"));

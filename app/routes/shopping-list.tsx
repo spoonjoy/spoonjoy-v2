@@ -20,7 +20,8 @@ import {
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/ouro/button/button";
-import { Plus } from "lucide-react";
+import { Ellipsis, Plus } from "lucide-react";
+import { Menu, MenuItem } from "~/components/ouro/menu/menu";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl } from "~/components/ouro/field/field-parts";
 import { NativeSelect } from "~/components/ouro/select/native-select";
@@ -156,7 +157,6 @@ export default function ShoppingList() {
   const resendingLostSubmission = useResendLostSubmission(actionData);
   const { shoppingList, recipes } = useLoaderData<typeof loader>();
   const [showClearDialog, setShowClearDialog] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("all");
   const [viewMode, setViewMode] = useState<ShoppingListViewMode>("all");
   const submit = useSubmit();
   const fetchers = useFetchers();
@@ -252,15 +252,7 @@ export default function ShoppingList() {
     { value: "basket", label: `Basket ${checkedCount}` },
     { value: "all", label: `All ${displayItems.length}` },
   ];
-  const categoryOptions = useMemo(() => {
-    const uniqueLabels = Array.from(new Set(visibleItems.map((item) => item.categoryLabel)));
-    return ["all", ...uniqueLabels];
-  }, [visibleItems]);
-  // A chosen aisle with nothing left in this view falls back to every aisle.
-  const selectedCategory = categoryOptions.includes(activeCategory) ? activeCategory : "all";
-  const filteredItems = selectedCategory === "all"
-    ? visibleItems
-    : visibleItems.filter((item) => item.categoryLabel === selectedCategory);
+  const filteredItems = visibleItems;
 
   // A hidden/deleted selection or a different Router entry has no remaining authority.
   // Keep its descriptor for the released dialog's exit animation; never retarget it.
@@ -270,12 +262,6 @@ export default function ShoppingList() {
       setRemovalOpen(false);
     }
   }, [removalOpen, removal, location.key, filteredItems]);
-
-  useEffect(() => {
-    if (!categoryOptions.includes(activeCategory)) {
-      setActiveCategory("all");
-    }
-  }, [activeCategory, categoryOptions]);
 
   const handleClearAllConfirm = () => {
     setShowClearDialog(false);
@@ -334,157 +320,48 @@ export default function ShoppingList() {
     <CookbookPage>
       <div className="mx-auto max-w-4xl">
         <header className="pb-6" data-testid="shopping-list-page-header">
-          <div className="flex items-center justify-between gap-4 font-sj-ui text-sm font-bold">
+          <div className="flex min-h-11 items-center justify-between gap-4 font-sj-ui text-sm font-bold">
             <Link href="/" tone="secondary">Kitchen</Link>
-            <span className="text-[var(--sj-ink-soft)]">
-              {displayItems.length} {displayItems.length === 1 ? "item" : "items"}
-            </span>
+            {/* Clearing lives in the list's menu, as on the Apple app (one-book target, Shopping). */}
+            {/* istanbul ignore next -- @preserve */ displayItems.length > 0 ? (
+              <Menu trigger={<Button variant="outline" tone="secondary" aria-label="List actions"><Ellipsis /></Button>}>
+                {checkedCount > 0 ? (
+                  <MenuItem onClick={() => submit({ intent: "clearCompleted" }, { method: "post" })}>Clear checked</MenuItem>
+                ) : null}
+                <MenuItem tone="destructive" onClick={() => setShowClearDialog(true)}>Clear all</MenuItem>
+              </Menu>
+            ) : null}
           </div>
-          <h1 ref={headingRef} tabIndex={-1} className="sj-type-display mt-7 text-[var(--sj-ink)]">
+          <h1 ref={headingRef} tabIndex={-1} className="sj-type-display mt-5 text-[var(--sj-ink)]">
             <span className="sr-only">Shopping list</span>
             <span aria-hidden="true">Shopping List</span>
           </h1>
-          <Text tone="muted" className="mt-3">
-            {checkedCount > 0 ? `${checkedCount} checked, ${uncheckedCount} remaining` : "Grouped for the aisle, built for one thumb."}
+          <Text tone="muted" size="sm" className="mt-1">
+            <span>{displayItems.length} {displayItems.length === 1 ? "item" : "items"}</span>
+            {checkedCount > 0 ? <span>{" · "}<span>{`${checkedCount} checked, ${uncheckedCount} remaining`}</span></span> : null}
           </Text>
-          {/* The Item field sits below the list, so a long list needs a way straight to it. */}
-          <Button href="#add-item" className="mt-5" data-testid="shopping-list-add-item-link">
-            <Plus data-slot="icon" className="size-4" />
-            New item
-          </Button>
-          {actionData?.error && !resendingLostSubmission ? (
-            <p role="alert" className="mt-4 text-sm text-[var(--sj-tomato)]" data-testid="shopping-list-action-error">
-              {actionData.error}
-            </p>
-          ) : null}
-        </header>
-      </div>
-
-      <div className="mx-auto lg:max-w-[40rem]" data-testid="shopping-list-checklist-board">
-        <SegmentedControl
-          label="View"
-          hideLabel
-          fullWidth
-          items={viewOptions}
-          value={viewMode}
-          onValueChange={(mode) => setViewMode(mode as ShoppingListViewMode)}
-        />
-        {/* A long list has more aisles than a phone is wide: the aisles scroll sideways. */}
-        <div className="mt-5 overflow-x-auto pb-1">
-          <SegmentedControl
-            label="Aisle"
-            hideLabel
-            items={categoryOptions.map((category) => ({ value: category, label: category === "all" ? "All aisles" : category }))}
-            value={selectedCategory}
-            onValueChange={setActiveCategory}
-          />
-        </div>
-        <div className="mt-5 flex flex-wrap gap-2">
-          {/* istanbul ignore next -- @preserve */ checkedCount > 0 && (
-            <Form method="post">
-              <input type="hidden" name="intent" value="clearCompleted" />
-              <Button type="submit" variant="outline" tone="secondary">
-                Clear checked
+          {/* The add field leads the page, with its + circle beside it, as on the Apple app. */}
+          <Form method="post" className="mt-6" ref={addItemFormRef} id="add-item">
+            <input type="hidden" name="intent" value="addItem" />
+            <input type="hidden" name="writeToken" value={addItemToken} />
+            <div className="flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <TextField
+                  ref={addItemInputRef}
+                  label="Item"
+                  hideLabel
+                  name="ingredientText"
+                  required
+                  placeholder="Add an item"
+                  defaultValue={actionData?.parseDraft?.originalText || ""}
+                />
+              </div>
+              <Button type="submit" {...controls["add-shopping-list-item"].props} aria-label={controls["add-shopping-list-item"].label}>
+                <Plus />
               </Button>
-            </Form>
-          )}
-          {/* istanbul ignore next -- @preserve */ displayItems.length > 0 && (
-            <>
-              <Button
-                variant="soft" tone="destructive"
-                onClick={() => setShowClearDialog(true)}
-              >
-                Clear all
-              </Button>
-              <ConfirmDialog
-                open={showClearDialog}
-                onOpenChange={() => setShowClearDialog(false)}
-                onConfirm={handleClearAllConfirm}
-                title="Start fresh?"
-                description="All items will be cleared from your shopping list."
-                confirmLabel="Clear all"
-                cancelLabel="Keep list"
-                tone="destructive"
-              />
-            </>
-          )}
-        </div>
-
-        {/* Empty State */}
-        {displayItems.length === 0 ? (
-          // "Add from recipe" below only lists the user's own recipes, so a new user gets a way
-          // to the public recipes, where any recipe's ingredients can be added. The link sits in
-          // the sentence, not in a button row, so the Add button still clears the dock on a phone.
-          <Empty headingLevel={2} align="start" description={<>
-            <Text tone="muted" className="mt-2">
-              <Link href="/recipes">Explore recipes</Link> to add a recipe&apos;s ingredients, or add items one at a time below.
-            </Text>
-          </>} title="Your shopping list is empty" />
-        ) : filteredItems.length === 0 ? (
-          <Empty headingLevel={2} align="start" description={<>
-            <Text tone="muted" className="mt-2">
-              Switch views or categories to see the rest of your shopping list.
-            </Text>
-          </>} title={viewMode === "basket" ? "Nothing in the basket yet" : "Nothing left in this view"} />
-        ) : (
-          /* One checklist per aisle; each row swipes (or opens its actions menu) to delete. */
-          <div ref={boardRef} className="mt-6 grid gap-6">
-            {shoppingSections(filteredItems).map((section) => (
-              <ChecklistRoot key={section.label} label={section.label}>
-                {section.items.map((item) => (
-                  <div key={item.id} data-testid="shopping-list-item" data-shopping-item={item.id}>
-                    <SwipeActions
-                      label={item.ingredientRef.name}
-                      trailing={[{
-                        label: `Delete ${item.ingredientRef.name}`,
-                        tone: "destructive",
-                        onClick: () => requestRemoval(item),
-                      }]}
-                    >
-                      <ChecklistItem
-                        label={item.ingredientRef.name}
-                        value={amountLabel(item) || undefined}
-                        checked={item.checked}
-                        onCheckedChange={() => toggleItem(item)}
-                      />
-                    </SwipeActions>
-                  </div>
-                ))}
-              </ChecklistRoot>
-            ))}
-          </div>
-        )}
-
-      {removal && (
-        <ConfirmDialog
-          open={removalOpen}
-          onOpenChange={closeRemoval}
-          title={`Remove "${removal.name}"?`}
-          description="It will be removed from your shopping list. This cannot be undone."
-          confirmLabel="Remove"
-          tone="destructive"
-          finalFocus={headingRef}
-          onConfirm={() => confirmRemoval(removal)}
-        />
-      )}
-
-      {/* Add Item Form */}
-      <div id="add-item" className="border-b border-[var(--sj-border)] py-6">
-        <Heading className="my-5" level={2} size="xl">Add item</Heading>
-        <Form method="post" className="mt-4" ref={addItemFormRef}>
-          <input type="hidden" name="intent" value="addItem" />
-          <input type="hidden" name="writeToken" value={addItemToken} />
-          <div className="grid gap-4">
-            <TextField
-              ref={addItemInputRef}
-              label="Item"
-              name="ingredientText"
-              required
-              placeholder="e.g., 2 lbs chicken breast or a dozen eggs"
-              defaultValue={actionData?.parseDraft?.originalText || ""}
-            />
+            </div>
             {actionData?.parseDraft && (
-              <div className="border-y border-[var(--sj-border)] py-4">
+              <div className="mt-4 border-y border-[var(--sj-border)] py-4">
                 <p className="text-sm text-[var(--sj-ink-soft)]">
                   {actionData?.errors?.parse || "Review the parsed item before adding."}
                 </p>
@@ -514,12 +391,99 @@ export default function ShoppingList() {
                 </div>
               </div>
             )}
-            <Button type="submit" className="justify-self-start" {...controls["add-shopping-list-item"].props}>
-              {controls["add-shopping-list-item"].label}
-            </Button>
-          </div>
-        </Form>
+          </Form>
+          {actionData?.error && !resendingLostSubmission ? (
+            <p role="alert" className="mt-4 text-sm text-[var(--sj-tomato)]" data-testid="shopping-list-action-error">
+              {actionData.error}
+            </p>
+          ) : null}
+        </header>
       </div>
+
+      <div className="mx-auto lg:max-w-[40rem]" data-testid="shopping-list-checklist-board">
+        <SegmentedControl
+          label="View"
+          hideLabel
+          fullWidth
+          items={viewOptions}
+          value={viewMode}
+          onValueChange={(mode) => setViewMode(mode as ShoppingListViewMode)}
+        />
+        <ConfirmDialog
+          open={showClearDialog}
+          onOpenChange={() => setShowClearDialog(false)}
+          onConfirm={handleClearAllConfirm}
+          title="Start fresh?"
+          description="All items will be cleared from your shopping list."
+          confirmLabel="Clear all"
+          cancelLabel="Keep list"
+          tone="destructive"
+        />
+
+        {/* Empty State */}
+        {displayItems.length === 0 ? (
+          // "Add from recipe" below only lists the user's own recipes, so a new user gets a way
+          // to the public recipes, where any recipe's ingredients can be added. The link sits in
+          // the sentence, not in a button row, so the Add button still clears the dock on a phone.
+          <Empty headingLevel={2} align="start" description={<>
+            <Text tone="muted" className="mt-2">
+              <Link href="/recipes">Explore recipes</Link> to add a recipe&apos;s ingredients, or add items one at a time below.
+            </Text>
+          </>} title="Your shopping list is empty" />
+        ) : filteredItems.length === 0 ? (
+          <Empty headingLevel={2} align="start" description={<>
+            <Text tone="muted" className="mt-2">
+              Switch views or categories to see the rest of your shopping list.
+            </Text>
+          </>} title={viewMode === "basket" ? "Nothing in the basket yet" : "Nothing left in this view"} />
+        ) : (
+          /* One checklist per aisle; each row swipes (or opens its actions menu) to delete. */
+          <div ref={boardRef} className="mt-6 grid gap-6">
+            {shoppingSections(filteredItems).map((section) => (
+              <div key={section.label}>
+                {/* The aisle's name in Fraunces with its count beside it, as on the Apple app. */}
+                <h2 className="font-sj-display flex items-baseline gap-2 text-2xl/8 font-semibold text-[var(--sj-ink)]" aria-hidden="true">
+                  {section.label}
+                  <span className="font-sj-ui text-xs font-semibold text-[var(--sj-ink-soft)]">{section.items.length}</span>
+                </h2>
+                <ChecklistRoot label={section.label} hideLabel className="mt-2">
+                {section.items.map((item) => (
+                  <div key={item.id} data-testid="shopping-list-item" data-shopping-item={item.id}>
+                    <SwipeActions
+                      label={item.ingredientRef.name}
+                      trailing={[{
+                        label: `Delete ${item.ingredientRef.name}`,
+                        tone: "destructive",
+                        onClick: () => requestRemoval(item),
+                      }]}
+                    >
+                      <ChecklistItem
+                        label={item.ingredientRef.name}
+                        value={amountLabel(item) || undefined}
+                        checked={item.checked}
+                        onCheckedChange={() => toggleItem(item)}
+                      />
+                    </SwipeActions>
+                  </div>
+                ))}
+                </ChecklistRoot>
+              </div>
+            ))}
+          </div>
+        )}
+
+      {removal && (
+        <ConfirmDialog
+          open={removalOpen}
+          onOpenChange={closeRemoval}
+          title={`Remove "${removal.name}"?`}
+          description="It will be removed from your shopping list. This cannot be undone."
+          confirmLabel="Remove"
+          tone="destructive"
+          finalFocus={headingRef}
+          onConfirm={() => confirmRemoval(removal)}
+        />
+      )}
 
       {/* Add from Recipe */}
       {/* istanbul ignore next -- @preserve */ recipes.length > 0 && (

@@ -5689,10 +5689,6 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"\" [link/root] in banner",
           "count": 1
         },
@@ -5714,7 +5710,7 @@
         },
         {
           "identity": "radio \"\" [segmented-control/segment] in main",
-          "count": 6
+          "count": 3
         },
         {
           "identity": "spinbutton \"\" [field/control] in main",
@@ -5755,11 +5751,11 @@
           "count": 1
         },
         {
-          "identity": "button \"Clear all\" [button/root] in main",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "identity": "button \"List actions\" [button/root] in main",
           "count": 1
         },
         {
@@ -5827,10 +5823,6 @@
           "count": 1
         },
         {
-          "identity": "link \"New item\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -5859,23 +5851,11 @@
           "count": 1
         },
         {
-          "identity": "radio \"All aisles\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
           "identity": "radio \"Basket 0\" [segmented-control/segment] in main",
           "count": 1
         },
         {
           "identity": "radio \"Need 3\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
-          "identity": "radio \"Pantry\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
-          "identity": "radio \"Produce\" [segmented-control/segment] in main",
           "count": 1
         },
         {
@@ -5917,11 +5897,11 @@
           "count": 1
         },
         {
-          "identity": "button \"Clear all\" [button/root] in main",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "identity": "button \"List actions\" [button/root] in main",
           "count": 1
         },
         {
@@ -5989,10 +5969,6 @@
           "count": 1
         },
         {
-          "identity": "link \"New item\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -6025,23 +6001,11 @@
           "count": 1
         },
         {
-          "identity": "radio \"All aisles\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
           "identity": "radio \"Basket 0\" [segmented-control/segment] in main",
           "count": 1
         },
         {
           "identity": "radio \"Need 3\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
-          "identity": "radio \"Pantry\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
-          "identity": "radio \"Produce\" [segmented-control/segment] in main",
           "count": 1
         },
         {
@@ -6103,10 +6067,6 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"\" [link/root] in banner",
           "count": 1
         },
@@ -6128,7 +6088,7 @@
         },
         {
           "identity": "radio \"\" [segmented-control/segment] in main",
-          "count": 6
+          "count": 3
         },
         {
           "identity": "spinbutton \"\" [field/control] in main",
@@ -6195,10 +6155,6 @@
           "count": 1
         },
         {
-          "identity": "link \"New item\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -6224,10 +6180,6 @@
         },
         {
           "identity": "radio \"All 0\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
-          "identity": "radio \"All aisles\" [segmented-control/segment] in main",
           "count": 1
         },
         {
@@ -12127,10 +12079,6 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"\" [link/root] in contentinfo",
           "count": 2
         },
@@ -12152,7 +12100,7 @@
         },
         {
           "identity": "radio \"\" [segmented-control/segment] in main",
-          "count": 6
+          "count": 3
         },
         {
           "identity": "spinbutton \"\" [field/control] in main",
@@ -12193,7 +12141,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Clear all\" [button/root] in main",
+          "identity": "button \"List actions\" [button/root] in main",
           "count": 1
         },
         {
@@ -12241,10 +12189,6 @@
           "count": 1
         },
         {
-          "identity": "link \"New item\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -12269,23 +12213,11 @@
           "count": 1
         },
         {
-          "identity": "radio \"All aisles\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
           "identity": "radio \"Basket 0\" [segmented-control/segment] in main",
           "count": 1
         },
         {
           "identity": "radio \"Need 3\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
-          "identity": "radio \"Pantry\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
-          "identity": "radio \"Produce\" [segmented-control/segment] in main",
           "count": 1
         },
         {
@@ -12327,7 +12259,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Clear all\" [button/root] in main",
+          "identity": "button \"List actions\" [button/root] in main",
           "count": 1
         },
         {
@@ -12375,10 +12307,6 @@
           "count": 1
         },
         {
-          "identity": "link \"New item\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -12411,23 +12339,11 @@
           "count": 1
         },
         {
-          "identity": "radio \"All aisles\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
           "identity": "radio \"Basket 0\" [segmented-control/segment] in main",
           "count": 1
         },
         {
           "identity": "radio \"Need 3\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
-          "identity": "radio \"Pantry\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
-          "identity": "radio \"Produce\" [segmented-control/segment] in main",
           "count": 1
         },
         {
@@ -12477,10 +12393,6 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"\" [link/root] in contentinfo",
           "count": 2
         },
@@ -12502,7 +12414,7 @@
         },
         {
           "identity": "radio \"\" [segmented-control/segment] in main",
-          "count": 6
+          "count": 3
         },
         {
           "identity": "spinbutton \"\" [field/control] in main",
@@ -12545,10 +12457,6 @@
           "count": 1
         },
         {
-          "identity": "link \"New item\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -12570,10 +12478,6 @@
         },
         {
           "identity": "radio \"All 0\" [segmented-control/segment] in main",
-          "count": 1
-        },
-        {
-          "identity": "radio \"All aisles\" [segmented-control/segment] in main",
           "count": 1
         },
         {
