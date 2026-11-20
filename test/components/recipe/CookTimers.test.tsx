@@ -132,7 +132,7 @@ describe("cook-mode timers", () => {
     const css = readFileSync("app/styles/tailwind.css", "utf8");
     expect(css).toMatch(/\.sj-cook-timer \[role="timer"\] \{\s*font-family: var\(--font-sj-ui\);\s*font-weight: 300;\s*font-variant-numeric: tabular-nums;/);
     // The ▶ is drawn by CSS with empty alternative text, so a screen reader hears only "Start".
-    expect(css).toMatch(/\.sj-cook-timer\[data-status="idle"\] \[data-ouro-part="primary"\]::before \{\s*content: "\\25B6\\FE0E" \/ "";/);
+    expect(css).toMatch(/\.sj-cook-timer\[data-status="idle"\] \[data-ouro-part="primary"\]::after \{\s*content: "\\25B6\\FE0E" \/ "";\s*order: -1;/);
     // Plex is loaded at 300, or the light figures would fall back to 400.
     expect(readFileSync("app/root.tsx", "utf8")).toContain("IBM+Plex+Sans+Condensed:wght@300;");
   });
