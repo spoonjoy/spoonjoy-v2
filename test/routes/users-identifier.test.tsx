@@ -694,6 +694,36 @@ describe("Users $identifier Route", () => {
       ).toHaveAttribute("href", "/users/chef-other/kitchen-visitors");
     });
 
+    it("names one fellow chef, one kitchen visitor and a one-recipe cookbook in the singular, two recipes in the plural, and draws a cookbook with no photo as its initial", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/users/:identifier",
+          Component: UserProfile,
+          loader: () => ({
+            profile: { id: "user-4", username: "chef-single", photoUrl: null, joinedAt: "2026-05-15T12:00:00.000Z" },
+            isOwner: false,
+            recipes: [],
+            cookbooks: [
+              { id: "cookbook-9", title: "Lone Loaf", _count: { recipes: 1 }, recipes: [{ recipe: { coverImageUrl: null } }] },
+              { id: "cookbook-10", title: "Two Pies", _count: { recipes: 2 }, recipes: [] },
+            ],
+            recentSpoons: [],
+            fellowChefsCount: 1,
+            kitchenVisitorsCount: 1,
+          }),
+        },
+      ]);
+      render(<Stub initialEntries={["/users/chef-single"]} />);
+      await screen.findByRole("heading", { name: "chef-single" });
+      expect(screen.getByRole("link", { name: "1 fellow chef" })).toHaveAttribute("href", "/users/chef-single/fellow-chefs");
+      expect(screen.getByRole("link", { name: "1 kitchen visitor" })).toHaveAttribute("href", "/users/chef-single/kitchen-visitors");
+      const cookbook = screen.getByRole("link", { name: /Lone Loaf/ }).closest("article")!;
+      expect(within(cookbook).getByText("1 recipe")).toBeInTheDocument();
+      expect(cookbook.querySelector("img")).toBeNull();
+      expect(cookbook).toHaveTextContent("L");
+      expect(within(screen.getByRole("link", { name: /Two Pies/ }).closest("article")!).getByText("2 recipes")).toBeInTheDocument();
+    });
+
     it("renders visitor empty states without owner calls to action", async () => {
       const Stub = createTestRoutesStub([
         {
