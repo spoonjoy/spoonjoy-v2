@@ -286,7 +286,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(panel).toContainText("Step 1 of 3");
       // Step 1 ("Cook the rice") is seeded with a 15 minute timer.
       await expect(stepTimer).toContainText("Step 1 · Cook the rice · 15 min");
-      await stepTimer.getByRole("button", { name: "Start timer", exact: true }).click();
+      await stepTimer.getByRole("button", { name: "Start", exact: true }).click();
       await expect(stepTimer.getByRole("button", { name: "Pause timer", exact: true })).toBeVisible();
       await expect(stepTimer).toContainText("14:5");
 
@@ -317,7 +317,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(panel).toContainText("Step 1 of 3");
       await expect(stepTimer.getByRole("button", { name: "Pause timer", exact: true })).toBeVisible();
       await stepTimer.getByRole("button", { name: "Cancel timer", exact: true }).click();
-      await expect(stepTimer.getByRole("button", { name: "Start timer", exact: true })).toBeVisible();
+      await expect(stepTimer.getByRole("button", { name: "Start", exact: true })).toBeVisible();
       await expect(stepTimer).toContainText("15:00");
       await expect(tray).toBeHidden();
     });

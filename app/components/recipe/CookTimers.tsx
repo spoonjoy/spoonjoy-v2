@@ -11,6 +11,8 @@ const LABELS = {
   cancel: "Cancel timer",
   restart: "Restart timer",
 };
+/** The cook step's ring says only "Start" under its ▶, as the Apple app does; the step names the timer. */
+const RING_LABELS = { ...LABELS, start: "Start" };
 const DONE = "Time's up";
 /** A finished timer notifies only when it ended a moment ago, not when a page opens long after. */
 const FRESH_MS = 60_000;
@@ -22,17 +24,18 @@ export function CookStepTimer({ timer }: { timer: CookTimer | undefined }) {
   }, [timer]);
   if (!timer) return null;
   // The one-book cook step (desk target.md, Cook step): the timer is the ring, with its time and
-  // Start, Pause or Resume inside it, as the Apple app draws it.
+  // Start, Pause or Resume inside it, as the Apple app draws it: about 45% of a phone's width, so the
+  // step's ingredients stay above the fold, with light tabular figures (see .sj-cook-timer).
   return (
     <Timer
       data-testid="cook-mode-timer"
       variant="ring"
-      size="lg"
-      className="mt-6 w-full max-w-80 self-center"
+      size="md"
+      className="sj-cook-timer mt-5 w-full max-w-44 self-center"
       label={timer.label}
       duration={timer.duration}
       timerId={timer.timerId}
-      labels={LABELS}
+      labels={RING_LABELS}
       alert="repeat"
       onDone={(event) => notifyTimeUp(timer.label, event)}
     />

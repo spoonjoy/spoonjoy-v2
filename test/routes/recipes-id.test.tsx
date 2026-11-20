@@ -3613,14 +3613,14 @@ describe("Recipes $id Route", () => {
       const cookMode = await screen.findByTestId("cook-mode-panel");
       expect(within(cookMode).getByText(/· 5 min$/)).toBeInTheDocument();
       expect(within(cookMode).getByText("5:00")).toBeInTheDocument();
-      await user.click(within(cookMode).getByRole("button", { name: "Start timer" }));
+      await user.click(within(cookMode).getByRole("button", { name: "Start" }));
       expect(within(cookMode).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
       await user.click(within(cookMode).getByRole("button", { name: "Pause timer" }));
       expect(within(cookMode).getByRole("button", { name: "Resume timer" })).toBeInTheDocument();
       await user.click(within(cookMode).getByRole("button", { name: "Resume timer" }));
       expect(within(cookMode).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
       await user.click(within(cookMode).getByRole("button", { name: "Cancel timer" }));
-      expect(within(cookMode).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
+      expect(within(cookMode).getByRole("button", { name: "Start" })).toBeInTheDocument();
       expect(within(cookMode).getByText("5:00")).toBeInTheDocument();
       await exitCookMode(cookMode);
       await settleBrowserTasks();
@@ -3715,7 +3715,7 @@ describe("Recipes $id Route", () => {
         expect(within(cookMode).getByText(/· 1 min$/)).toBeInTheDocument();
         await settleBrowserTasks();
         vi.useFakeTimers();
-        fireEvent.click(within(cookMode).getByRole("button", { name: "Start timer" }));
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Start" }));
         await act(async () => {
           await vi.advanceTimersByTimeAsync(60_000);
         });
@@ -3766,7 +3766,7 @@ describe("Recipes $id Route", () => {
       await settleBrowserTasks();
       try {
         vi.useFakeTimers();
-        fireEvent.click(within(cookMode).getByRole("button", { name: "Start timer" }));
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Start" }));
         await act(async () => {
           await vi.advanceTimersByTimeAsync(3_000);
         });
@@ -3789,7 +3789,7 @@ describe("Recipes $id Route", () => {
         fireEvent.click(within(within(cookMode).getByTestId("cook-timer-tray")).getByRole("button", { name: /^Cancel timer/ }));
         expect(within(within(cookMode).getByTestId("cook-timer-tray")).queryAllByRole("listitem")).toHaveLength(0);
         fireEvent.click(within(cookMode).getByRole("button", { name: "Previous step" }));
-        expect(within(cookMode).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
+        expect(within(cookMode).getByRole("button", { name: "Start" })).toBeInTheDocument();
         expect(within(cookMode).getByText("10:00")).toBeInTheDocument();
       } finally {
         vi.useRealTimers();
@@ -3828,7 +3828,7 @@ describe("Recipes $id Route", () => {
       await settleBrowserTasks();
       try {
         vi.useFakeTimers();
-        fireEvent.click(within(cookMode).getByRole("button", { name: "Start timer" }));
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Start" }));
         fireEvent.click(within(cookMode).getByRole("button", { name: "Next step" }));
         await act(async () => {
           await vi.advanceTimersByTimeAsync(61_000);
@@ -3841,7 +3841,7 @@ describe("Recipes $id Route", () => {
         expect(within(tray).queryAllByRole("listitem")).toHaveLength(0);
         expect(document.title).not.toContain("Time's up");
 
-        fireEvent.click(within(cookMode).getByRole("button", { name: "Start timer" }));
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Start" }));
       } finally {
         vi.useRealTimers();
         Reflect.deleteProperty(navigator, "vibrate");
