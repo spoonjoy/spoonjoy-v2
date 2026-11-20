@@ -631,28 +631,6 @@ body:has(#cook) .sj-site-footer {
   letter-spacing: 0;
 }
 
-/* The cook step's timer ring: native CookModeComponents.swift's vellum track and brass arc. */
-.sj-cook-timer-track {
-  stroke: var(--sj-vellum);
-}
-
-.sj-cook-timer-progress {
-  stroke: var(--sj-brass);
-  stroke-linecap: round;
-  transition: stroke-dashoffset 0.6s ease, opacity 0.25s ease;
-}
-
-.sj-cook-timer [role="timer"] {
-  font-weight: 300;
-  font-variant-numeric: tabular-nums;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sj-cook-timer-progress {
-    transition: none;
-  }
-}
-
 .sj-receipt {
   border: 1px solid var(--sj-border);
   background:
