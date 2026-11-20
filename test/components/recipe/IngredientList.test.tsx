@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -60,6 +60,16 @@ describe('IngredientList', () => {
     expect(list).toHaveAttribute('data-ouro', 'checklist')
     const boxes = screen.getAllByRole('checkbox')
     expect(boxes.map((box) => box.getAttribute('data-ouro-control'))).toEqual(['checklist', 'checklist', 'checklist'])
+  })
+
+  it('shows its Ingredients name, or keeps it for screen readers only with hideLabel', () => {
+    renderList()
+    expect(screen.getByText('Ingredients')).not.toHaveClass('sr-only')
+    cleanup()
+
+    renderList({ hideLabel: true })
+    expect(screen.getByRole('group', { name: 'Ingredients' })).toBeInTheDocument()
+    expect(screen.getByText('Ingredients')).toHaveClass('sr-only')
   })
 
   it('describes each ingredient by its aisle and its amount', () => {

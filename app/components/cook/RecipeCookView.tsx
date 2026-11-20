@@ -257,8 +257,11 @@ function CookModePanel({
               </h3>
 
               {(ingredients.length > 0 || stepOutputUses.length > 0) ? (
-                <div className="mt-6">
+                <div className="mt-4">
+                  {/* "For this step" names the list, so its own "Ingredients" is read but not shown,
+                      as in the Apple app (desk target.md, Cook step). */}
                   <IngredientList
+                    hideLabel
                     ingredients={ingredients}
                     stepOutputUses={stepOutputUses}
                     scaleFactor={scaleFactor}

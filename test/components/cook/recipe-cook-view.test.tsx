@@ -129,6 +129,22 @@ describe("RecipeCookView", () => {
     expect(instruction).not.toHaveClass("sj-type-step");
   });
 
+  it("heads a step's checklist with For this step alone, keeping its Ingredients name for screen readers", () => {
+    const recipe: CookRecipe = {
+      ...BARE_RECIPE,
+      ingredientsByStep: new Map([["s1", [
+        { id: "i1", quantity: 1, unit: "cup", name: "jasmine rice" },
+        { id: "i2", quantity: 2, unit: "cup", name: "chicken stock" },
+      ]]]),
+    };
+    render(<RecipeCookView controller={fakeController(recipe, { cookMode: true })} />);
+
+    const panel = screen.getByTestId("cook-mode-panel");
+    expect(within(panel).getByRole("group", { name: "Ingredients" })).toBeInTheDocument();
+    expect(within(panel).getByText("Ingredients")).toHaveClass("sr-only");
+    expect(within(panel).getAllByRole("checkbox")).toHaveLength(2);
+  });
+
   it("shows steps whose checklists are missing from the recipe as having none", () => {
     render(<RecipeCookView controller={fakeController(BARE_RECIPE)} />);
 
