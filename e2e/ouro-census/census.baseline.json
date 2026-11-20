@@ -4017,7 +4017,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Start timer\" [timer/primary] in group \"Step 1 · Cook the rice\"",
+          "identity": "button \"Start\" [timer/primary] in group \"Step 1 · Cook the rice\"",
           "count": 1
         },
         {
@@ -4821,7 +4821,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Start timer\" [timer/primary] in group \"Step 1 · Cook the rice\"",
+          "identity": "button \"Start\" [timer/primary] in group \"Step 1 · Cook the rice\"",
           "count": 1
         },
         {
@@ -7271,7 +7271,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Start timer\" [timer/primary] in group \"Step 1 · Roast the chickpeas\"",
+          "identity": "button \"Start\" [timer/primary] in group \"Step 1 · Roast the chickpeas\"",
           "count": 1
         },
         {
@@ -10723,7 +10723,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Start timer\" [timer/primary] in group \"Step 1 · Cook the rice\"",
+          "identity": "button \"Start\" [timer/primary] in group \"Step 1 · Cook the rice\"",
           "count": 1
         },
         {
@@ -11379,7 +11379,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Start timer\" [timer/primary] in group \"Step 1 · Cook the rice\"",
+          "identity": "button \"Start\" [timer/primary] in group \"Step 1 · Cook the rice\"",
           "count": 1
         },
         {
@@ -13257,7 +13257,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Start timer\" [timer/primary] in group \"Step 1 · Roast the chickpeas\"",
+          "identity": "button \"Start\" [timer/primary] in group \"Step 1 · Roast the chickpeas\"",
           "count": 1
         },
         {

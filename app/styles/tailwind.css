@@ -370,8 +370,10 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
-.sj-cook-timer[data-status="idle"] [data-ouro-part="primary"]::before {
+/* ::after, since Ouro's Button draws its hover wash with ::before; order puts it ahead of the word. */
+.sj-cook-timer[data-status="idle"] [data-ouro-part="primary"]::after {
   content: "\25B6\FE0E" / "";
+  order: -1;
   font-size: 0.75em;
 }
 
