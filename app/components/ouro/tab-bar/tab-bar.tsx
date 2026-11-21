@@ -143,6 +143,32 @@ function subscribeKeyboard(listener: () => void): () => void {
   };
 }
 
+// Reading the visual viewport lays the page out in WebKit, and React asks for the answer on every render. So it is kept while a bar
+// listens, and each event that can change it drops it; with no bar listening, nothing would.
+let keyboard: boolean | undefined;
+let listening = 0;
+
+function keptKeyboardUp(): boolean {
+  // Stryker disable next-line ConditionalExpression: the last bar to stop listening drops the answer, so one kept with none listening is only a render that never subscribed.
+  if (listening === 0) return keyboardUp();
+  keyboard ??= keyboardUp();
+  return keyboard;
+}
+
+function subscribeKept(listener: () => void): () => void {
+  listening += 1;
+  const stop = subscribeKeyboard(() => {
+    keyboard = undefined;
+    listener();
+  });
+  return () => {
+    stop();
+    listening -= 1;
+    // Stryker disable next-line ConditionalExpression: dropping the answer while another bar listens only reads the viewport once more.
+    if (listening === 0) keyboard = undefined;
+  };
+}
+
 const serverFalse = () => false;
 
 /**
@@ -257,7 +283,7 @@ export function TabBar(props: TabBarProps): JSX.Element {
   }
   const isCurrent = (index: number) => (index === current ? ("page" as const) : undefined);
   // The server cannot know, so the bar renders in place and steps aside after hydration if the keyboard is up.
-  const aside = useSyncExternalStore(subscribeKeyboard, keyboardUp, serverFalse);
+  const aside = useSyncExternalStore(subscribeKept, keptKeyboardUp, serverFalse);
 
   return (
     <div data-ouro="tab-bar" className={cn(rootClass, breakpoints[hideFrom], className)}>
