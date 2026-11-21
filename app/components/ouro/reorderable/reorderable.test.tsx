@@ -1201,7 +1201,13 @@ describe("Reorderable", () => {
         expect(handle(name).getAttribute("aria-disabled")).toBe("true");
         expect(document.getElementById(handle(name).getAttribute("aria-describedby")!)!.textContent).toBe("Saving your last move");
       }
-      await focus("Sear");
+      // By Tab, as a keyboard reaches it: a focus from script counts as focus-visible, which the tooltip opens on, only by
+      // the browser's guess from the page's last input (ourostack/ouro-ui#2663).
+      const before = document.createElement("button");
+      host.prepend(before);
+      before.focus();
+      await pressTab();
+      expect(document.activeElement).toBe(handle("Sear"));
       await press(" ");
       await press("{Enter}");
       expect(handle("Sear").hasAttribute("data-grabbed")).toBe(false);

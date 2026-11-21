@@ -345,11 +345,21 @@ describe("Navbar", () => {
       // An idle callback that comes 300 ms on, cancelled as a timer is.
       vi.stubGlobal("requestIdleCallback", idle ? (callback: () => void) => setTimeout(callback, 300) : undefined);
       vi.stubGlobal("cancelIdleCallback", idle ? (id: number) => clearTimeout(id) : undefined);
-      await page.viewport(390, 844);
-      await render(<Navbar label="Main" items={items} />);
-      await page.viewport(1024, 768);
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      expect(document.querySelector('[data-ouro="sheet"]')).toBeNull();
+      // The page's clock is held, so the build's delay cannot run out while the viewport changes on a loaded runner
+      // (ourostack/ouro-ui#2725).
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        await page.viewport(390, 844);
+        const view = await render(<Navbar label="Main" items={items} />);
+        await page.viewport(1024, 768);
+        await expect.poll(() => view.menuButton?.checkVisibility() ?? false).toBe(false);
+        // The media query reports the change as the browser draws, and the list then cancels the build it had asked for.
+        await act(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        await act(async () => vi.advanceTimersByTime(800));
+        expect(document.querySelector('[data-ouro="sheet"]')).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   }
 
