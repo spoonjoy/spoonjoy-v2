@@ -6,11 +6,6 @@
 @config "../../tailwind.config.js";
 
 :root {
-  /* The shadow under a sheet, by the side it comes from: a hairline on its open edge and a soft shadow. */
-  --ouro-shadow-sheet-bottom: 0 -1px 0 color-mix(in oklab, var(--border) 60%, transparent), 0 -8px 32px rgb(0 0 0 / 0.12);
-  --ouro-shadow-sheet-top: 0 1px 0 color-mix(in oklab, var(--border) 60%, transparent), 0 8px 32px rgb(0 0 0 / 0.12);
-  --ouro-shadow-sheet-left: 8px 0 32px rgb(0 0 0 / 0.12);
-  --ouro-shadow-sheet-right: -8px 0 32px rgb(0 0 0 / 0.12);
   --ouro-glass-blur: 6px;
 }
 
@@ -155,8 +150,8 @@
 /* Ouro UI's dialogs and sheets stack at --ouro-layer (50 by default, from ouro-base above), which ties
    with the phone tab bar (z-50). Raising it to Catalyst's dialog layer (z-60) puts them above the tab
    bar, the install card and the desktop top bar, and keeps toasts (z-80) above them. This is
-   Spoonjoy's own unlayered :root rule after the Ouro tokens, as Ouro UI's README asks; the
-   --ouro-layer: 50 line above is ouro-base's; v0.8 component adds leave this file alone. */
+   Spoonjoy's own unlayered :root rule after the ouro-base import, so it wins, and it is on
+   .github/ouro-base-overrides.json. */
 :root {
   --ouro-layer: 60;
 }

@@ -84,6 +84,7 @@
     "check:journeys": "node scripts/check-journey-rules.mjs e2e/journeys --census e2e/journeys/support/hx-census.ts --routes app/routes.ts",
     "hx:source-rules": "node scripts/ouro-source-rules.mjs",
     "lint": "node scripts/agents-md-budget.mjs && node scripts/lint.mjs",
+    "ouro:base-check": "node scripts/ouro/check/base-check.ts",
     "claims:check": "node app/lib/ouro/claims-check.mjs check",
     "claims:pr": "node scripts/claims-pr.mjs",
     "test:journeys": "node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts",
