@@ -4,6 +4,8 @@ import { Toggle } from "@base-ui/react/toggle";
 import { useEffect, useId, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
+import { Tooltip } from "~/components/ouro/tooltip/tooltip";
+import { useDisabledReason } from "~/lib/ouro/disabled-reason";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { devThrow, devWarn } from "~/lib/ouro/dev";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
@@ -25,6 +27,15 @@ export interface SegmentedControlItem {
   label: string;
   /** Shows the segment but keeps it from being pressed. */
   disabled?: boolean | undefined;
+  /**
+   * Why this segment can't be checked now. Turns it off with `aria-disabled`: it stays
+   * focusable and the arrow keys land on it without checking it, pressing it does nothing,
+   * and the reason shows as its tooltip on hover and keyboard focus and is read as its
+   * description. It wins over `disabled`. Pass `undefined` while the segment is available.
+   * @example
+   * { value: "map", label: "Map", disabledReason: offline ? "Reconnect to see the map" : undefined }
+   */
+  disabledReason?: string | undefined;
   /** Not a prop. A segment switches a view in place; to go to another page, use `Tabs` or links in a `<nav>`. */
   href?: { 'A segment switches a view in place. To navigate, use links in a <nav>': never };
 }
@@ -76,6 +87,50 @@ export interface SegmentedControlProps {
   options?: { 'Use <SegmentedControl items={[{ value, label }]}>': never };
   /** Not a prop. Ouro UI uses `onValueChange`, which gets the value: `<SegmentedControl onValueChange={(value) => …}>`. */
   onChange?: { 'Use <SegmentedControl onValueChange={(value) => ...}>': never };
+}
+
+/** One segment: a radio-like toggle, soft-disabled with a Tooltip when the item has a `disabledReason`. */
+function Segment(props: {
+  item: SegmentedControlItem;
+  selected: boolean;
+  tabStop: boolean;
+  disabled: boolean | undefined;
+  arrowedRef: { current: boolean };
+  choose: (value: string) => void;
+}): JSX.Element {
+  const { item, selected, tabStop, disabled, arrowedRef, choose } = props;
+  const reason = useDisabledReason(item);
+  const segment = (
+    <Toggle
+      pressed={selected}
+      // Pressing the checked segment would leave none checked. Keep it.
+      onPressedChange={(next) => {
+        // Stryker disable next-line ConditionalExpression: only the checked segment reports false, and choose ignores the checked value
+        if (next && !reason.off) choose(item.value);
+      }}
+      disabled={disabled || (item.disabled && !reason.off)}
+      data-ouro-segment=""
+      data-ouro-control="segmented-control"
+      data-ouro-part="segment"
+      className={segmentClass}
+      aria-describedby={reason.describedBy}
+      aria-disabled={reason.off || undefined}
+      // A radio, not a toggle button: pressing the checked one does not uncheck it.
+      render={(segmentProps, state) => <button {...segmentProps} role="radio" aria-checked={state.pressed} aria-pressed={undefined} />}
+      // The checked segment is the one Tab lands on, as in a radio group.
+      tabIndex={tabStop ? 0 : -1}
+      onFocus={() => {
+        if (!arrowedRef.current) return;
+        arrowedRef.current = false;
+        if (!reason.off) choose(item.value);
+      }}
+    >
+      <TouchTarget />
+      <span className="relative min-w-0 truncate">{item.label}</span>
+      {reason.note}
+    </Toggle>
+  );
+  return reason.wrapped ? <Tooltip content={reason.reason}>{segment}</Tooltip> : segment;
 }
 
 /** The first value that appears twice, or undefined. */
@@ -278,32 +333,15 @@ export function SegmentedControl(props: SegmentedControlProps): JSX.Element {
       >
         <span aria-hidden="true" data-ouro-segment-thumb="" className={thumbClass} style={thumbStyle} />
         {items.map((item) => (
-          <Toggle
+          <Segment
             key={item.value}
-            pressed={item.value === selected}
-            // Pressing the checked segment would leave none checked. Keep it.
-            onPressedChange={(next) => {
-              // Stryker disable next-line ConditionalExpression: only the checked segment reports false, and choose ignores the checked value
-              if (next) choose(item.value);
-            }}
-            disabled={disabled || item.disabled}
-            data-ouro-segment=""
-            data-ouro-control="segmented-control"
-            data-ouro-part="segment"
-            className={segmentClass}
-            // A radio, not a toggle button: pressing the checked one does not uncheck it.
-            render={(segmentProps, state) => <button {...segmentProps} role="radio" aria-checked={state.pressed} aria-pressed={undefined} />}
-            // The checked segment is the one Tab lands on, as in a radio group.
-            tabIndex={item.value === tabStop ? 0 : -1}
-            onFocus={() => {
-              if (!arrowed.current) return;
-              arrowed.current = false;
-              choose(item.value);
-            }}
-          >
-            <TouchTarget />
-            <span className="relative min-w-0 truncate">{item.label}</span>
-          </Toggle>
+            item={item}
+            selected={item.value === selected}
+            tabStop={item.value === tabStop}
+            disabled={disabled}
+            arrowedRef={arrowed}
+            choose={choose}
+          />
         ))}
       </div>
       {name !== undefined && <input type="hidden" name={name} value={selected ?? ""} disabled={disabled} />}

@@ -77,13 +77,13 @@ export const Horizontal: Story = {
   ),
 };
 
-/** Required with an error, the whole group disabled, and `Radio` children. */
+/** Required with an error, a choice off with a reason (`disabledReason`), and `Radio` children. */
 export const States: Story = {
   parameters: { screenshot: { name: "radio-group-states" } },
   render: () => (
     <Surface>
       <RadioGroup legend="Delivery" name="delivery" required error="Choose how you get your order." options={[{ value: "pickup", label: "Pick up" }, { value: "deliver", label: "Deliver" }]} />
-      <RadioGroup legend="Units" name="units" disabled defaultValue="metric" options={[{ value: "metric", label: "Metric" }, { value: "us", label: "US" }]} />
+      <RadioGroup legend="Units" name="units" defaultValue="metric" options={[{ value: "metric", label: "Metric" }, { value: "us", label: "US", disabledReason: "US units come with the Pro plan" }]} />
       <RadioGroup legend="Spice" name="spice" defaultValue="medium">
         <Radio value="mild" label="Mild" />
         <Radio value="medium" label="Medium" description={<>Most cooks pick <strong>this</strong>.</>} />

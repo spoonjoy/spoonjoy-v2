@@ -11,6 +11,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactElement,
   type ReactNode,
 } from "react";
 import { announce } from "~/lib/ouro/announce";
@@ -22,6 +23,7 @@ import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useDrag } from "~/lib/ouro/use-drag";
 import { useReducedMotion } from "~/lib/ouro/use-reduced-motion";
 import { Menu } from "~/components/ouro/menu/menu";
+import { Tooltip } from "~/components/ouro/tooltip/tooltip";
 import {
   contentClass,
   dropIndex,
@@ -128,6 +130,16 @@ export interface ReorderableProps {
    * @claim "A row held from the keyboard" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > disabled > puts back a row being dragged when it turns on, and reports nothing)
    */
   disabled?: boolean | undefined;
+  /**
+   * Stops reordering as `disabled` does, and says why: `disabledReason="Saving your last move"`.
+   * Handles are described by the reason, which shows as their tooltip on hover and keyboard
+   * focus. It turns reordering off by itself and wins over `disabled`; `undefined` turns
+   * reordering back on. Use it instead of `disabled` whenever the person can be told why.
+   *
+   * @example
+   * <Reorderable label="Steps" items={steps} onReorder={save} disabledReason={saving ? "Saving your last move" : undefined} />
+   */
+  disabledReason?: string | undefined;
   /** Layout only: margins, or a height with `overflow-auto` (`max-h-80 overflow-auto`) to scroll the list in place. Appearance classes warn in development. */
   className?: string | undefined;
 
@@ -248,7 +260,8 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
     movedLabel = "{label} moved. Position {n} of {total}.",
     droppedLabel = "{label} dropped. Position {n} of {total}.",
     canceledLabel = "{label} put back. Position {n} of {total}.",
-    disabled = false,
+    disabled: disabledProp = false,
+    disabledReason,
     className,
     // Guard props (hint types), dropped here so they never reach the DOM.
     values,
@@ -258,6 +271,9 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
     onDragEnd,
     axis,
   } = props;
+  const reason = disabledReason || undefined;
+  const disabled = disabledProp || reason !== undefined;
+  const reasonId = useId();
   const reduced = useReducedMotion();
 
   useAppearanceClassNameCheck(
@@ -681,6 +697,9 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
     dragProps.onPointerDown(event);
   };
 
+  // Wrapped whenever the prop is passed, even as undefined, so a handle keeps its place and focus as reordering turns off and on.
+  const withTooltip = (handle: ReactElement) => ("disabledReason" in props ? <Tooltip content={reason}>{handle}</Tooltip> : handle);
+
   return (
     <div data-ouro="reorderable" className={cn(rootClass, className)}>
       <ol ref={listRef} role="list" aria-label={label} data-ouro-reorderable-list="" data-dragging={dragging !== null ? "" : undefined} className={listClass}>
@@ -704,7 +723,7 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
                 closeLabel={closeLabel}
                 // A menu on every row: holding the page would lay out and repaint all of it on each open and close.
                 modal={false}
-                trigger={
+                trigger={withTooltip(
                   <button
                     ref={dragProps.ref}
                     type="button"
@@ -713,7 +732,7 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
                     data-ouro-part="handle"
                     aria-label={fillLabel(handleLabel, item.label, index + 1, total)}
                     // A menu button, so no `aria-pressed`: a picked-up row is said by the announcer and by the handle's description.
-                    aria-describedby={disabled ? undefined : grabbed?.id === id ? heldId : instructionsId}
+                    aria-describedby={disabled ? reason && reasonId : grabbed?.id === id ? heldId : instructionsId}
                     aria-disabled={disabled || undefined}
                     data-grabbed={grabbed?.id === id ? "" : undefined}
                     className={handleClass}
@@ -728,8 +747,8 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
                   >
                     <TouchTarget />
                     <GripIcon />
-                  </button>
-                }
+                  </button>,
+                )}
                 items={[
                   { label: moveUpLabel, disabled: index === 0, onClick: () => moveTo(id, index - 1) },
                   { label: moveDownLabel, disabled: index === total - 1, onClick: () => moveTo(id, index + 1) },
@@ -750,6 +769,11 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
       <span id={heldId} hidden>
         {heldLabel}
       </span>
+      {reason && (
+        <span id={reasonId} hidden>
+          {reason}
+        </span>
+      )}
     </div>
   );
 }

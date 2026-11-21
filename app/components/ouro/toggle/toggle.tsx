@@ -1,11 +1,13 @@
 "use client";
 
 import { Toggle as BaseToggle } from "@base-ui/react/toggle";
-import type { ButtonHTMLAttributes, JSX, Ref } from "react";
+import { useState, type ButtonHTMLAttributes, type JSX, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
+import { useDisabledReason } from "~/lib/ouro/disabled-reason";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
+import { Tooltip } from "~/components/ouro/tooltip/tooltip";
 import {
   iconClass,
   looks,
@@ -42,6 +44,16 @@ export interface ToggleOwnProps {
   onPressedChange?: ((pressed: boolean) => void) | undefined;
   /** Keeps the toggle from being pressed, and fades it. */
   disabled?: boolean | undefined;
+  /**
+   * Why the toggle can't be pressed now. Passing a reason turns the toggle off without taking it
+   * out of the tab order: it gets `aria-disabled`, pressing does nothing, focus still reaches it,
+   * and the reason shows as its tooltip on hover and focus and is read through `aria-describedby`.
+   * Pass `undefined` while it can be pressed: the toggle keeps its place and focus as it turns off
+   * and on. It wins over `disabled`. Use `disabled` alone when no reason is needed.
+   * @example
+   * <Toggle label="Bold" disabledReason={locked ? "Unlock the layer to format it" : undefined} />
+   */
+  disabledReason?: string | undefined;
   /**
    * `plain` has no border until pressed; `outline` always has one. Either way a pressed toggle
    * gets the primary tint. shadcn's `default` is `plain`.
@@ -137,6 +149,8 @@ export function Toggle(props: ToggleProps): JSX.Element {
     defaultPressed,
     onPressedChange,
     disabled,
+    disabledReason: _reason,
+    "aria-describedby": describedBy,
     variant: variantProp = "plain",
     size: sizeProp = "md",
     shape: shapeProp = "rect",
@@ -189,17 +203,31 @@ export function Toggle(props: ToggleProps): JSX.Element {
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
   const iconOnly = Boolean(hideLabel && Icon);
+  const reason = useDisabledReason(props, describedBy);
+  // With a reason key the toggle is always controlled, so a press can be ignored while it is off.
+  const [inner, setInner] = useState(defaultPressed ?? false);
+  const state = reason.wrapped ? { pressed: pressed ?? inner, defaultPressed: undefined } : { pressed, defaultPressed };
 
-  return (
+  const toggle = (
     <BaseToggle
       data-ouro-control="toggle"
       data-ouro-part="root"
       {...rest}
       ref={ref}
-      pressed={pressed}
-      defaultPressed={defaultPressed}
-      onPressedChange={onPressedChange && ((next) => onPressedChange(next))}
-      disabled={disabled}
+      pressed={state.pressed}
+      defaultPressed={state.defaultPressed}
+      onPressedChange={
+        reason.wrapped
+          ? (next) => {
+              if (reason.off) return;
+              if (pressed === undefined) setInner(next);
+              onPressedChange?.(next);
+            }
+          : onPressedChange && ((next) => onPressedChange(next))
+      }
+      disabled={Boolean(disabled && !reason.off)}
+      {...(reason.off ? { "aria-disabled": true, "data-disabled": "" } : {})}
+      aria-describedby={reason.describedBy}
       aria-label={hideLabel ? label : rest["aria-label"]}
       data-ouro="toggle"
       data-variant={variant}
@@ -211,6 +239,8 @@ export function Toggle(props: ToggleProps): JSX.Element {
       {shape === "rect" && <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />}
       {Icon && <Icon aria-hidden="true" className={cn(iconClass, "relative", !hideLabel && "-ms-0.5")} />}
       {!iconOnly && <span className={cn("relative", hideLabel && "sr-only")}>{label}</span>}
+      {reason.note}
     </BaseToggle>
   );
+  return reason.wrapped ? <Tooltip content={reason.reason}>{toggle}</Tooltip> : toggle;
 }

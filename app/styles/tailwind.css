@@ -893,6 +893,11 @@ body:has(#cook) .sj-site-footer {
   :root {
     --ouro-corner-fallback: 0.7;
   }
+  [data-card-backdrop] {
+    --ouro-card-backdrop-inset: 0;
+    border-radius: 0;
+    overflow: visible;
+  }
 }
 
 /* The squircle where corner-shape is missing: a control's surface slot (data-ouro-surface) paints the fill, the ring and the state layer through squircle clip paths, so the element keeps its box, its outline and its shadow. */

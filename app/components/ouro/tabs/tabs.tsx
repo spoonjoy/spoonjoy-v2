@@ -42,6 +42,16 @@ export interface TabsItem {
   content: ReactNode;
   /** Shows the tab but keeps it from being selected. */
   disabled?: boolean | undefined;
+  /**
+   * Why this tab can't be selected now. Turns it off with `aria-disabled`: it stays focusable,
+   * selecting it does nothing, and the reason shows as its tooltip on hover and keyboard focus
+   * and is read as its description. The arrow keys skip it, as they skip a `disabled` tab; Tab
+   * reaches it, so a keyboard user can read why. It wins over `disabled`. Pass `undefined`
+   * while the tab is available.
+   * @example
+   * { value: "sharing", label: "Sharing", content: <Sharing />, disabledReason: signedIn ? undefined : "Sign in to share" }
+   */
+  disabledReason?: string | undefined;
   /** Not set: a tab with a panel. Give every item an `href`, and no `content`, for tabs that are links. */
   href?: never;
 }
@@ -61,6 +71,8 @@ export interface TabsLinkItem {
   content?: never;
   /** A link cannot be disabled. Leave the item out instead. */
   disabled?: never;
+  /** A link cannot be disabled. Leave the item out instead. */
+  disabledReason?: never;
 }
 
 /** Props for {@link Tabs}. Items with `content` make tabs with panels; items with `href`, tabs that are links. */
@@ -267,7 +279,7 @@ export function Tabs(props: TabsProps): JSX.Element {
   const wide = useMediaQuery("(min-width: 640px)", true);
   const shown = orientation === "vertical" && !wide ? "horizontal" : orientation;
   // Start on the first enabled tab, also in server HTML, where Base UI cannot see which tabs are disabled.
-  const [own, setOwn] = useState(() => defaultValue ?? items.find((item) => !item.disabled)?.value ?? null);
+  const [own, setOwn] = useState(() => defaultValue ?? items.find((item) => !item.disabled && !item.disabledReason)?.value ?? null);
   const selected = value !== undefined ? value : own;
   // Ids from useId, so the tab and its panel name each other in server HTML too (Base UI
   // links them only after it mounts). Only the selected panel is mounted, so only the
@@ -325,6 +337,7 @@ export function Tabs(props: TabsProps): JSX.Element {
             key={item.value}
             value={item.value}
             disabled={item.disabled}
+            {...("disabledReason" in item ? { disabledReason: item.disabledReason } : {})}
             id={`${id}tab${index}`}
             aria-controls={item.value === selected ? `${id}panel${index}` : undefined}
           >

@@ -1,8 +1,13 @@
-import { createElement } from "react";
+import { type ComponentProps } from "react";
 import { expectTypeOf } from "vitest";
 import { Form, type FormErrors, type FormProps, type ReadonlyFormErrors } from "~/components/ouro/form/form";
 import { formErrors, formErrorIdentity, type FormErrorValue } from "~/lib/ouro/form-answer";
 import { errorMessages, type ErrorMessage, type ErrorMessages } from "~/lib/ouro/use-field";
+
+// A call site's props, typed as the component takes them. A case below keeps children in the props object because it
+// checks the props a call passes, children among them, and a .ts file has no JSX to put children in; an app's lint
+// (react(no-children-prop)) flags children passed in createElement's props, so the check doesn't call createElement.
+const propsOf = <P>(value: P): P => value;
 
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
 // fails the check if the line below it stops being an error.
@@ -12,9 +17,9 @@ expectTypeOf<{ name: "Required."; tags: ["Too many.", "Pick one."] }>().toExtend
 expectTypeOf<{ children: "Fields" }>().toExtend<FormProps>();
 expectTypeOf<{ children: "Fields"; errors: { name: "Required." }; method: "post"; action: "/recipes"; className: "mt-4" }>().toExtend<FormProps>();
 expectTypeOf<{ children: "Fields"; errors: null }>().toExtend<FormProps>();
-createElement(Form, { onSubmit: (event) => event.preventDefault(), children: "Fields" });
+propsOf<ComponentProps<typeof Form>>({ onSubmit: (event) => event.preventDefault(), children: "Fields" });
 expectTypeOf<FormErrorValue>().toExtend<NonNullable<FormProps["errors"]>>();
-createElement(Form, { errors: formErrors({}, { email: "Taken." }), children: "Fields" });
+propsOf<ComponentProps<typeof Form>>({ errors: formErrors({}, { email: "Taken." }), children: "Fields" });
 formErrors(undefined, { email: undefined });
 formErrors(null, null, { key: 0 });
 formErrors("cached", {}, { key: "accepted-1" });
@@ -30,7 +35,7 @@ expectTypeOf<ReadonlyFormErrors>().toExtend<NonNullable<FormProps["errors"]>>();
 formErrors("cached", readonlyErrors, { key: "accepted-2" });
 formErrorIdentity(readonlyErrors);
 formErrorIdentity(snapshot);
-createElement(Form, { errors: readonlyErrors, children: "Fields" });
+propsOf<ComponentProps<typeof Form>>({ errors: readonlyErrors, children: "Fields" });
 const normalized = errorMessages(snapshot.email);
 normalized.push("Fresh mutable copy.");
 errorMessages(readonlyErrors.email);
@@ -56,7 +61,7 @@ formErrors({}, {}, { key: undefined });
 // @ts-expect-error Values are read-only snapshots.
 formErrors({}, {}).email = "Changed.";
 // @ts-expect-error The unreleased second prop was replaced by one complete errors value.
-createElement(Form, { result: {}, children: "Fields" });
+propsOf<ComponentProps<typeof Form>>({ result: {}, children: "Fields" });
 
 // A key may hold nothing, so an object mapped from an action's answer needs no cleanup.
 expectTypeOf<{ form: string | undefined; email: string | null; name: undefined }>().toExtend<FormErrors>();
@@ -69,4 +74,4 @@ expectTypeOf<{ children: "Fields"; validationErrors: { name: "Required." } }>().
 
 // The same check through JSX.
 // @ts-expect-error validationErrors is not a prop; use errors.
-createElement(Form, { validationErrors: { name: "Required." }, children: "Fields" });
+propsOf<ComponentProps<typeof Form>>({ validationErrors: { name: "Required." }, children: "Fields" });

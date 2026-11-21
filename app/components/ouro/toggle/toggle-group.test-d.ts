@@ -49,3 +49,4 @@ expectTypeOf<{ label: "Alignment"; items: typeof items; children: "x" }>().not.t
 createElement(ToggleGroup, { label: "Style", items, type: "multiple" });
 // @ts-expect-error a list of values needs multiple.
 createElement(ToggleGroup, { label: "Style", items, value: ["left"] });
+expectTypeOf<{ label: "Alignment"; items: [{ value: "a"; label: "A"; disabledReason: "Locked" }] }>().toExtend<ToggleGroupProps>();

@@ -39,3 +39,4 @@ expectTypeOf<{ label: "Wi-Fi"; isDisabled: true }>().not.toExtend<SwitchProps>()
 createElement(Switch, { label: "Wi-Fi", onChange: () => {} });
 // @ts-expect-error label is required.
 createElement(Switch, { checked: true });
+expectTypeOf<{ label: "Wi-Fi"; disabledReason: "Offline" }>().toExtend<SwitchProps>();

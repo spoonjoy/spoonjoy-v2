@@ -1,12 +1,14 @@
 "use client";
 
 import { Toggle as BaseToggle } from "@base-ui/react/toggle";
-import { useId, useState, type JSX, type KeyboardEvent, type Ref } from "react";
+import { useId, useMemo, useState, type JSX, type KeyboardEvent, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { devThrow } from "~/lib/ouro/dev";
+import { useDisabledReason } from "~/lib/ouro/disabled-reason";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
+import { Tooltip } from "~/components/ouro/tooltip/tooltip";
 import {
   iconClass,
   looks,
@@ -34,11 +36,68 @@ export interface ToggleGroupItem {
   /** Shows the toggle but keeps it from being pressed. */
   disabled?: boolean | undefined;
   /**
+   * Why this toggle can't be pressed now. It stays in the tab order with `aria-disabled`, pressing
+   * does nothing, and the reason shows as its tooltip on hover and focus. Pass `undefined` while
+   * it can be pressed so it keeps its place and focus. It wins over `disabled` and the group's.
+   * @example
+   * { value: "bold", label: "Bold", disabledReason: locked ? "Unlock the layer first" : undefined }
+   */
+  disabledReason?: string | undefined;
+  /**
    * `data-*` attributes for the item's button (`"data-testid": "bold"`), for an app's own hooks. The
    * markers Ouro UI sets itself (`data-ouro-control`, `data-ouro-part`) keep their values.
    * @claim "The markers Ouro UI sets itself" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > passes an item's data attributes to its button and keeps Ouro's own markers)
    */
   [attribute: `data-${string}`]: string | number | boolean | undefined;
+}
+
+/** One toggle of the group: a Base UI toggle with its `disabledReason` wiring. */
+function GroupItem(props: {
+  item: ToggleGroupItem;
+  pressed: boolean;
+  onPress: (next: boolean) => void;
+  groupDisabled: boolean | undefined;
+  tabIndex: number;
+  onFocus: () => void;
+  variant: keyof typeof looks;
+  shape: keyof typeof shapes;
+  size: keyof typeof sizes;
+}): JSX.Element {
+  const { item, pressed, onPress, groupDisabled, tabIndex, onFocus, variant, shape, size } = props;
+  const { label, icon: Icon, hideLabel: iconOnlyItem, disabled: itemDisabled } = item;
+  const reason = useDisabledReason(item);
+  const dataAttributes = useMemo(() => Object.fromEntries(Object.entries(item).filter(([name]) => name.startsWith("data-"))), [item]);
+  const iconOnly = Boolean(iconOnlyItem && Icon);
+  const toggle = (
+    <BaseToggle
+      {...dataAttributes}
+      pressed={pressed}
+      onPressedChange={(next) => {
+        if (!reason.off) onPress(next);
+      }}
+      disabled={Boolean((groupDisabled || itemDisabled) && !reason.off)}
+      aria-disabled={reason.off ? true : undefined}
+      data-disabled={reason.off ? "" : undefined}
+      aria-describedby={reason.describedBy}
+      tabIndex={tabIndex}
+      onFocus={onFocus}
+      aria-label={iconOnlyItem ? label : undefined}
+      data-ouro-toggle=""
+      data-ouro-control="toggle-group"
+      data-ouro-part="item"
+      data-variant={variant}
+      data-shape={shape}
+      data-ouro-squircle={shape === "rect" ? "" : undefined}
+      className={cn(toggleBase, shapes[shape], sizes[size], looks[variant], iconOnly && squareClass)}
+    >
+      <TouchTarget />
+      {shape === "rect" && <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />}
+      {Icon && <Icon aria-hidden="true" className={cn(iconClass, "relative", !iconOnlyItem && "-ms-0.5")} />}
+      {!iconOnly && <span className={cn("relative", iconOnlyItem && "sr-only")}>{label}</span>}
+      {reason.note}
+    </BaseToggle>
+  );
+  return reason.wrapped ? <Tooltip content={reason.reason}>{toggle}</Tooltip> : toggle;
 }
 
 /** Props both modes of {@link ToggleGroup} take. */
@@ -268,7 +327,7 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
   const [inner, setInner] = useState<readonly string[]>(() => asList(defaultValue) ?? []);
   const pressed = asList(value) ?? inner;
   const [focused, setFocused] = useState<string | null>(null);
-  const enabled = items.filter((item) => !disabled && !item.disabled);
+  const enabled = items.filter((item) => item.disabledReason || (!disabled && !item.disabled));
   const stop = enabled.find((item) => item.value === focused) ?? enabled.find((item) => pressed.includes(item.value)) ?? enabled[0];
 
   const press = (itemValue: string, next: boolean): void => {
@@ -311,34 +370,20 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
         onKeyDown={move}
         className="m-0 box-border inline-flex max-w-full flex-wrap items-center gap-1"
       >
-        {items.map(({ value: itemValue, label: itemLabel, icon: Icon, hideLabel: iconOnlyItem, disabled: itemDisabled, ...itemRest }) => {
-          const dataAttributes = Object.fromEntries(Object.entries(itemRest).filter(([name]) => name.startsWith("data-")));
-          const iconOnly = Boolean(iconOnlyItem && Icon);
-          return (
-            <BaseToggle
-              {...dataAttributes}
-              key={itemValue}
-              pressed={pressed.includes(itemValue)}
-              onPressedChange={(next) => press(itemValue, next)}
-              disabled={disabled || itemDisabled}
-              tabIndex={stop?.value === itemValue ? 0 : -1}
-              onFocus={() => setFocused(itemValue)}
-              aria-label={iconOnlyItem ? itemLabel : undefined}
-              data-ouro-toggle=""
-              data-ouro-control="toggle-group"
-              data-ouro-part="item"
-              data-variant={variant}
-              data-shape={shape}
-              data-ouro-squircle={shape === "rect" ? "" : undefined}
-              className={cn(toggleBase, shapes[shape], sizes[size], looks[variant], iconOnly && squareClass)}
-            >
-              <TouchTarget />
-              {shape === "rect" && <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />}
-              {Icon && <Icon aria-hidden="true" className={cn(iconClass, "relative", !iconOnlyItem && "-ms-0.5")} />}
-              {!iconOnly && <span className={cn("relative", iconOnlyItem && "sr-only")}>{itemLabel}</span>}
-            </BaseToggle>
-          );
-        })}
+        {items.map((item) => (
+          <GroupItem
+            key={item.value}
+            item={item}
+            pressed={pressed.includes(item.value)}
+            onPress={(next) => press(item.value, next)}
+            groupDisabled={disabled}
+            tabIndex={stop?.value === item.value ? 0 : -1}
+            onFocus={() => setFocused(item.value)}
+            variant={variant}
+            shape={shape}
+            size={size}
+          />
+        ))}
       </div>
     </div>
   );

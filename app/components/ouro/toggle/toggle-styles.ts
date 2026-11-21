@@ -36,7 +36,7 @@ const toggleBase =
   // Stryker disable next-line StringLiteral: a class string in a class position; test/state-hovers.test.tsx reads its tokens, outside this file's tests
   "not-data-disabled:not-active:pointer-fine:hover:[--ouro-state:var(--ouro-state-hover,8%)] not-data-disabled:active:[--ouro-state:var(--ouro-state-pressed,14%)] " +
   "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
-  "disabled:cursor-not-allowed disabled:opacity-50 " +
+  "disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 " +
   // Pressed: the primary tone at 10% behind text mixed 20% toward the foreground, as Button's soft look.
   // Forced colours drop the tint, so a pressed toggle fills with the system highlight there. It opts
   // out of forcing, or the label's backplate would hide HighlightText; its focus ring stays a system colour.

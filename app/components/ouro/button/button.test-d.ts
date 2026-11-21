@@ -1,6 +1,11 @@
-import { createElement, type ComponentProps, type ComponentType, type SVGProps } from "react";
+import { type ComponentProps, type ComponentType, type SVGProps } from "react";
 import { expectTypeOf } from "vitest";
 import { Button, type ButtonProps } from "~/components/ouro/button/button";
+
+// A call site's props, typed as the component takes them. A case below keeps children in the props object because it
+// checks the props a call passes, children among them, and a .ts file has no JSX to put children in; an app's lint
+// (react(no-children-prop)) flags children passed in createElement's props, so the check doesn't call createElement.
+const propsOf = <P>(value: P): P => value;
 
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
 // fails the check if the line below it stops being an error.
@@ -14,7 +19,7 @@ expectTypeOf<{ children: "Go"; href: "/x"; target: "_blank"; rel: "noopener" }>(
 expectTypeOf<{ children: "Go"; href: "/auth/start"; reloadDocument: true }>().toExtend<ButtonProps>();
 expectTypeOf<{ children: "Go"; reloadDocument: true }>().not.toExtend<ButtonProps>();
 expectTypeOf<{ children: "Undo"; size: "inline"; variant: "plain" }>().toExtend<ButtonProps>();
-createElement(Button, { href: "/auth/start", reloadDocument: true, children: "Sign in" });
+propsOf<ComponentProps<typeof Button>>({ href: "/auth/start", reloadDocument: true, children: "Sign in" });
 expectTypeOf<{
   children: "Go";
   tone: "destructive";
@@ -57,6 +62,6 @@ expectTypeOf<{ type: "button" }>().not.toExtend<ButtonProps>();
 
 // The same checks through JSX.
 // @ts-expect-error isLoading is not a prop; use loading.
-createElement(Button, { isLoading: true, children: "Go" });
+propsOf<ComponentProps<typeof Button>>({ isLoading: true, children: "Go" });
 // @ts-expect-error href and type="submit" cannot be combined.
-createElement(Button, { href: "/x", type: "submit", children: "Go" });
+propsOf<ComponentProps<typeof Button>>({ href: "/x", type: "submit", children: "Go" });

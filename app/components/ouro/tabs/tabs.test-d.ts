@@ -25,6 +25,8 @@ expectTypeOf<{ label: "Recipes"; items: typeof pages; currentPath: "/recipes"; o
 expectTypeOf<{ label: "Recipes"; items: typeof pages; value: "all" }>().toExtend<TabsProps>();
 expectTypeOf<{ label: "Recipes"; items: readonly [{ value: "a"; label: "A"; href: "/a"; content: "A" }] }>().not.toExtend<TabsProps>();
 expectTypeOf<{ label: "Recipes"; items: readonly [{ value: "a"; label: "A"; href: "/a"; disabled: true }] }>().not.toExtend<TabsProps>();
+expectTypeOf<{ label: "Recipes"; items: readonly [{ value: "a"; label: "A"; href: "/a"; disabledReason: "Why" }] }>().not.toExtend<TabsProps>();
+expectTypeOf<{ label: "Recipes"; items: readonly [{ value: "a"; label: "A"; content: "A"; disabledReason: string | undefined }] }>().toExtend<TabsProps>();
 expectTypeOf<{ label: "Recipes"; items: ReadonlyArray<(typeof items)[number] | (typeof pages)[number]> }>().not.toExtend<TabsProps>();
 
 // label and items are required; the guessed props name the fix.

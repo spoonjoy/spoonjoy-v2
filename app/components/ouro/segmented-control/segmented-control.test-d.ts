@@ -10,6 +10,8 @@ import {
 const items = [
   { value: "list", label: "List" },
   { value: "grid", label: "Grid", disabled: true },
+  { value: "map", label: "Map", disabledReason: "Maps need a connection" },
+  { value: "board", label: "Board", disabledReason: undefined },
 ];
 
 expectTypeOf<{ label: "View"; items: typeof items }>().toExtend<SegmentedControlProps>();

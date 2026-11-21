@@ -75,7 +75,7 @@ export const Vertical: Story = {
     items: [
       { value: "profile", label: "Profile", content: <Text>Your name and photo.</Text> },
       { value: "kitchen", label: "Kitchen", content: <Text>Units and default servings.</Text> },
-      { value: "sharing", label: "Sharing", content: <Text>Who can see your cookbooks.</Text>, disabled: true },
+      { value: "sharing", label: "Sharing", content: <Text>Who can see your cookbooks.</Text>, disabledReason: "Sign in to share" },
     ],
   },
   parameters: { screenshot: { name: "tabs-vertical" } },

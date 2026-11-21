@@ -36,74 +36,20 @@
   "app/components/notifications-section.tsx": {
     "react(set-state-in-effect)": 1
   },
-  "app/components/ouro/aspect-ratio/aspect-ratio.test-d.ts": {
-    "react(no-children-prop)": 1
-  },
-  "app/components/ouro/auth-layout/auth-layout.test-d.ts": {
-    "react(no-children-prop)": 1
-  },
-  "app/components/ouro/button/button.test-d.ts": {
-    "react(no-children-prop)": 3
-  },
-  "app/components/ouro/checkbox/checkbox-group.test-d.ts": {
-    "react(no-children-prop)": 1
-  },
-  "app/components/ouro/collapsible/collapsible.test-d.ts": {
-    "react(no-children-prop)": 1
-  },
   "app/components/ouro/collapsible/show-more.test.tsx": {
     "react(jsx-key)": 14
   },
   "app/components/ouro/dialog/confirm-dialog.test.tsx": {
     "react(globals)": 1
   },
-  "app/components/ouro/dialog/dialog.test-d.ts": {
-    "react(no-children-prop)": 2
-  },
-  "app/components/ouro/emoji/emoji.test-d.ts": {
-    "react(no-children-prop)": 1
-  },
-  "app/components/ouro/field/field.test-d.ts": {
-    "react(no-children-prop)": 2
-  },
-  "app/components/ouro/field/fieldset.test-d.ts": {
-    "react(no-children-prop)": 1
-  },
-  "app/components/ouro/form/form.test-d.ts": {
-    "react(no-children-prop)": 5
-  },
   "app/components/ouro/form/form.test.tsx": {
     "react(jsx-key)": 15
-  },
-  "app/components/ouro/link/link.test-d.ts": {
-    "react(no-children-prop)": 1
-  },
-  "app/components/ouro/menu/menu.test-d.ts": {
-    "react(no-children-prop)": 3
   },
   "app/components/ouro/menu/menu.test.tsx": {
     "react(globals)": 1
   },
-  "app/components/ouro/popover/popover.test-d.ts": {
-    "react(no-children-prop)": 2
-  },
-  "app/components/ouro/radio-group/radio-group.test-d.ts": {
-    "react(no-children-prop)": 1
-  },
   "app/components/ouro/scroll-area/scroll-area.test.tsx": {
     "react(jsx-key)": 3
-  },
-  "app/components/ouro/select/select.test-d.ts": {
-    "react(no-children-prop)": 3
-  },
-  "app/components/ouro/sheet/sheet.test-d.ts": {
-    "react(no-children-prop)": 2
-  },
-  "app/components/ouro/swipe-actions/swipe-actions.test-d.ts": {
-    "react(no-children-prop)": 1
-  },
-  "app/components/ouro/tooltip/tooltip.test-d.ts": {
-    "react(no-children-prop)": 2
   },
   "app/components/recipe/CookTimers.tsx": {
     "react(only-export-components)": 1

@@ -73,8 +73,8 @@ export const States: Story = {
       <Switch label="Metric units" name="metric" />
       <Switch label="Show nutrition" name="nutrition" defaultChecked />
       <Switch label="Nightly backups" name="backups" required error="Backups must be on for shared cookbooks." />
-      <Switch label="Offline mode" name="offline" disabled description="Download a recipe first." />
-      <Switch label="Sync" name="sync" disabled defaultChecked />
+      <Switch label="Offline mode" name="offline" disabledReason="Download a recipe first" />
+      <Switch label="Sync" name="sync" disabledReason="Managed by your household" defaultChecked />
     </Surface>
   ),
 };

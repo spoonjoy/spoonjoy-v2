@@ -24,9 +24,9 @@ const radioClass =
   "aria-invalid:border-destructive " +
   "cursor-default select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
-  "not-aria-invalid:not-data-disabled:not-data-checked:pointer-fine:hover:border-foreground " +
-  "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
-  "data-disabled:cursor-not-allowed data-disabled:opacity-50";
+  "not-aria-invalid:not-data-disabled:not-aria-disabled:not-data-checked:pointer-fine:hover:border-foreground " +
+  "motion-safe:not-data-disabled:not-aria-disabled:active:scale-(--ouro-press-scale) " +
+  "data-disabled:cursor-not-allowed data-disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
 
 /**
  * The dot in a chosen radio: it grows in from 95% as it fades in, and with reduced motion only fades.

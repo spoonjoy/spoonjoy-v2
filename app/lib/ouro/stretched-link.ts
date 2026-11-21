@@ -1,6 +1,15 @@
-export { followStretchedLink, raiseControlsClass, stretchedLinkClass };
+export { followStretchedLink, raiseControlsClass, stretchedLinkBaseClass, stretchedLinkClass };
 export type { StretchedClick };
 
+/**
+ * `stretchedLinkClass` without its hover and press tint, for a link whose root draws the tint itself (a Card with a
+ * backdrop tints its picture, inside the picture's clip).
+ *
+ * @internal
+ * @example
+ * <a href="/recipes/1" data-stretched-link="" className={stretchedLinkBaseClass}>Ribs</a>
+ */
+const stretchedLinkBaseClass = "text-inherit no-underline outline-none after:absolute after:inset-0 after:z-1 after:content-['']";
 /**
  * The class for a link that stretches over its whole row or card through its `::after`,
  * so the row is one link with one tab stop (`Item`, `Card` and `Table` with a row link).
@@ -15,8 +24,8 @@ export type { StretchedClick };
  * </div>
  */
 const stretchedLinkClass =
-  "text-inherit no-underline outline-none after:absolute after:inset-0 after:z-1 after:content-[''] " +
-  "after:transition-colors after:duration-(--ouro-duration-fast) pointer-fine:hover:after:bg-foreground/[0.03] active:after:bg-foreground/[0.06]";
+  stretchedLinkBaseClass +
+  " after:transition-colors after:duration-(--ouro-duration-fast) pointer-fine:hover:after:bg-foreground/[0.03] active:after:bg-foreground/[0.06]";
 
 /**
  * The class for a linked root that lifts every control inside it (a link, a button, an

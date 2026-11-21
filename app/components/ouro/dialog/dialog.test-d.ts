@@ -2,6 +2,11 @@ import { createElement, type ComponentProps, type ReactElement } from "react";
 import { expectTypeOf } from "vitest";
 import { Dialog, type DialogProps } from "~/components/ouro/dialog/dialog";
 
+// A call site's props, typed as the component takes them. A case below keeps children in the props object because it
+// checks the props a call passes, children among them, and a .ts file has no JSX to put children in; an app's lint
+// (react(no-children-prop)) flags children passed in createElement's props, so the check doesn't call createElement.
+const propsOf = <P>(value: P): P => value;
+
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
 // fails the check if the line below it stops being an error.
 
@@ -44,5 +49,5 @@ expectTypeOf<{ title: "Edit"; trigger: ReactElement; onClose: () => void; childr
 
 // JSX: the same rules at a call site.
 // @ts-expect-error -- neither trigger nor open
-createElement(Dialog, { title: "Edit", children: "Body" });
-createElement(Dialog, { title: "Edit", trigger, children: "Body" });
+propsOf<ComponentProps<typeof Dialog>>({ title: "Edit", children: "Body" });
+propsOf<ComponentProps<typeof Dialog>>({ title: "Edit", trigger, children: "Body" });

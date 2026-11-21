@@ -1,6 +1,12 @@
-import { createElement } from "react";
+import { type ComponentProps } from "react";
 import { expectTypeOf } from "vitest";
 import { Field, type FieldProps } from "~/components/ouro/field/field";
+
+// A call site's props, typed as the component takes them. A case below keeps children in the props object because it
+// checks the props a call passes, children among them, and a .ts file has no JSX to put children in; an app's lint
+// (react(no-children-prop)) flags children passed in createElement's props, so the check doesn't call createElement.
+const propsOf = <P>(value: P): P => value;
+
 expectTypeOf<readonly ["Taken."]>().toExtend<NonNullable<FieldProps["error"]>>();
 
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
@@ -40,6 +46,6 @@ expectTypeOf<{ label: "Email"; placeholder: "Email"; children: null }>().not.toE
 
 // The same checks through JSX.
 // @ts-expect-error errorMessage is not a prop; use error.
-createElement(Field, { label: "Email", errorMessage: "Required.", children: null });
+propsOf<ComponentProps<typeof Field>>({ label: "Email", errorMessage: "Required.", children: null });
 // @ts-expect-error label is required.
-createElement(Field, { children: null });
+propsOf<ComponentProps<typeof Field>>({ children: null });
