@@ -63,7 +63,7 @@ const chipClass =
  * @claim "A chip's remove button: a square" registry/ouro/components/ouro/combobox/combobox.touch.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.touch.test.tsx::Combobox on a phone > gives chip remove buttons a 44px hit area)
  */
 const chipRemoveClass =
-  "press relative m-0 box-border inline-flex aspect-square h-full shrink-0 items-center justify-center rounded-ouro-sm border-0 p-0 " +
+  "press relative m-0 box-border inline-flex aspect-square h-full min-h-ouro-5 shrink-0 items-center justify-center rounded-ouro-sm border-0 p-0 " +
   "bg-transparent text-inherit cursor-pointer [-webkit-tap-highlight-color:transparent] pointer-fine:hover:bg-accent active:bg-accent motion-safe:active:scale-(--ouro-press-scale) " +
   "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid [&_svg]:size-ouro-3_5";
 

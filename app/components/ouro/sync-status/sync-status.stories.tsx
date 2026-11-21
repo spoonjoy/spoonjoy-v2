@@ -61,3 +61,18 @@ export const InContext: Story = {
     );
   },
 };
+
+/** Offline, with the writes that wait for the connection. Cancel drops one from the app's queue. */
+export const WithQueue: Story = {
+  render: function Queue() {
+    const [queue, setQueue] = useState([
+      { id: "a", label: "Rename trail" },
+      { id: "b", label: "Close bridge" },
+    ]);
+    return (
+      <div style={{ maxWidth: 420, color: "var(--foreground)" }}>
+        <SyncStatus status="offline" queue={queue} onCancel={(id) => setQueue((current) => current.filter((write) => write.id !== id))} />
+      </div>
+    );
+  },
+};
