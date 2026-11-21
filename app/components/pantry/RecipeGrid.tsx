@@ -1,6 +1,6 @@
 import { Empty } from '~/components/ouro/empty/empty'
 import { SectionHeader } from '~/components/ouro/section-header/section-header'
-import { CoverPlaceholder } from '~/components/recipe/CoverPlaceholder'
+import { Cover } from '~/components/ouro/cover/cover'
 import { Item } from '~/components/ouro/item/item'
 import { ItemGroup } from '~/components/ouro/item/item-group'
 import { Text } from '~/components/ouro/text/text'
@@ -69,7 +69,7 @@ export function RecipeGrid({
         media={recipe.coverImageUrl ? (
           <img src={recipe.coverImageUrl} alt="" {...listImageProps(index)} />
         ) : (
-          <CoverPlaceholder aria-hidden="true" title={recipe.title} shape="bleed" />
+          <Cover title={recipe.title} size="fill" shape="square" />
         )}
         mediaSize="md"
         actions={recipe.coverProvenanceLabel ? <CoverProvenanceBadge label={recipe.coverProvenanceLabel} /> : undefined}

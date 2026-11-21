@@ -12,7 +12,9 @@ import { Avatar } from "~/components/ouro/avatar/avatar";
 import { CookbookPage } from "~/components/cookbook/page";
 import { HERO_IMAGE_PROPS, listImageProps } from "~/lib/image-loading";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
-import { CoverPlaceholder } from "~/components/recipe/CoverPlaceholder";
+import { Card } from "~/components/ouro/card/card";
+import { Cover } from "~/components/ouro/cover/cover";
+import { cn } from "~/lib/ouro/cn";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { formatServingsLabel } from "~/lib/quantity";
 import { share } from "~/lib/ouro/share";
@@ -151,31 +153,50 @@ function TableIsSet() {
 }
 
 /**
- * The recipe last worked on, large, with Start cooking and Recipe: the Apple app's On the counter.
+ * The recipe last worked on, as the Apple app's On the counter: one squircle card (radius 24, desk
+ * target.md's 2026-11-18 amendment) with the eyebrow, title, meta line and the Start cooking and
+ * Recipe capsules in the on-photo colours at its foot. It is Ouro UI's Card with a backdrop: a cover
+ * photo fills the card under a dark shade, and Ouro clips only that picture to the card's squircle,
+ * so the text and capsules over it never repaint through a clip. Without a photo the card itself is
+ * charcoal, with no backdrop, and Ouro UI's Cover sits above the text: native lays its initial under the shade, but text
+ * under a shade fails the page's contrast check, so here the letter stays clear of it.
  */
 function OnTheCounter({ recipe }: { recipe: KitchenRecipe }) {
   const servingsLabel = formatServingsLabel(recipe.servings);
+  const photo = recipe.coverImageUrl;
   return (
-    <section aria-label="On the counter" className="grid gap-6 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] sm:items-end">
-      <div className="aspect-[4/3] overflow-hidden rounded-ouro-lg sm:aspect-square">
-        {recipe.coverImageUrl ? (
-          <img src={recipe.coverImageUrl} alt="" {...HERO_IMAGE_PROPS} className="size-full object-cover" />
-        ) : (
-          <CoverPlaceholder aria-hidden="true" title={recipe.title} shape="bleed" className="size-full text-8xl" />
-        )}
-      </div>
-      <div className="min-w-0">
+    <Card
+      as="section"
+      aria-label="On the counter"
+      data-testid="kitchen-counter"
+      backdrop={
+        photo ? (
+          <>
+            <img src={photo} alt="" {...HERO_IMAGE_PROPS} />
+            <div aria-hidden="true" className="sj-counter-shade" />
+          </>
+        ) : undefined
+      }
+      className={cn(
+        "sj-on-charcoal sj-counter-card min-h-[22rem] justify-end sm:min-h-[26rem]",
+        // Without a photo there is no picture to clip: the card is charcoal itself, so it draws its own squircle
+        // and its text sits on a colour the contrast check reads directly.
+        !photo && "[--card:var(--sj-photo-charcoal)]",
+      )}
+    >
+      {photo ? null : <Cover title={recipe.title} size="fill" className="mb-6 h-40 aspect-auto sm:h-48" />}
+      <div className="sm:px-2 sm:pb-2">
         <p className="sj-eyebrow">On the counter</p>
-        <h2 className="font-sj-display mt-2 text-4xl/11 font-semibold tracking-normal text-balance text-[var(--sj-ink)] sm:text-5xl/14">
+        <h2 className="font-sj-display mt-2 text-4xl/11 font-semibold tracking-normal text-balance text-[var(--sj-on-photo)] sm:text-5xl/14">
           {recipe.title}
         </h2>
-        {servingsLabel ? <Text tone="muted" size="sm" className="mt-2">{servingsLabel}</Text> : null}
+        {servingsLabel ? <p className="mt-2 font-sj-ui text-sm font-semibold text-[var(--sj-on-photo-muted)]">{servingsLabel}</p> : null}
         <div className="mt-5 flex flex-wrap gap-3">
           <Button href={`/recipes/${recipe.id}#cook`} startIcon={Play}>Start cooking</Button>
           <Button href={`/recipes/${recipe.id}`} variant="outline" tone="secondary" startIcon={BookOpen} aria-label={`Recipe: ${recipe.title}`}>Recipe</Button>
         </div>
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -248,8 +269,8 @@ function RecipeIndexRow({
       media={recipe.coverImageUrl ? (
         <img src={recipe.coverImageUrl} alt="" {...listImageProps(index)} />
       ) : (
-        // Native's initial tile, square so the media slot's own corner rounds it as it does a photo.
-        <CoverPlaceholder aria-hidden="true" data-testid={`kitchen-recipe-cover-placeholder-${recipe.id}`} title={recipe.title} shape="bleed" />
+        // Ouro UI's Cover, square so the media slot's own corner rounds it as it does a photo.
+        <Cover data-testid={`kitchen-recipe-cover-placeholder-${recipe.id}`} title={recipe.title} size="fill" shape="square" />
       )}
       mediaSize="md"
       actions={
@@ -305,7 +326,7 @@ function CookbookShelf({
               media={photo ? (
                 <img src={photo} alt="" {...listImageProps(1)} />
               ) : (
-                <CoverPlaceholder aria-hidden="true" title={cookbook.title} shape="bleed" />
+                <Cover title={cookbook.title} size="fill" shape="square" />
               )}
               mediaSize="md"
               actions={

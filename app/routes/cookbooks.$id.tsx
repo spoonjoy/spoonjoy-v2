@@ -89,7 +89,7 @@ import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { SectionHeader } from "~/components/ouro/section-header/section-header";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
-import { CoverPlaceholder } from "~/components/recipe/CoverPlaceholder";
+import { Cover } from "~/components/ouro/cover/cover";
 import { useDockSuppressed } from "~/components/navigation";
 import { ShareButton } from "~/components/ouro/share-button/share-button";
 import {
@@ -524,8 +524,8 @@ export default function CookbookDetail() {
                     title={item.recipe.title}
                     description={formatServingsLabel(item.recipe.servings) ? <Text size="sm">{formatServingsLabel(item.recipe.servings)}</Text> : undefined}
                     media={item.recipe.coverImageUrl ? <img src={item.recipe.coverImageUrl} alt="" {...listImageProps(index, { prioritizeFirst: false })} /> : (
-                      // Native's initial tile, square so the media slot's own corner rounds it as it does a photo.
-                      <CoverPlaceholder aria-hidden="true" data-testid={`cookbook-recipe-cover-placeholder-${item.recipe.id}`} title={item.recipe.title} shape="bleed" />
+                      // Ouro UI's Cover, square so the media slot's own corner rounds it as it does a photo.
+                      <Cover data-testid={`cookbook-recipe-cover-placeholder-${item.recipe.id}`} title={item.recipe.title} size="fill" shape="square" />
                     )}
                     mediaSize="md"
                     actions={item.recipe.coverProvenanceLabel ? <CoverProvenanceBadge label={item.recipe.coverProvenanceLabel} /> : undefined}
