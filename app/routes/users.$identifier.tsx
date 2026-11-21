@@ -16,7 +16,7 @@ import { RecipeGrid } from "~/components/pantry/RecipeGrid";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { SectionHeader } from "~/components/ouro/section-header/section-header";
-import { CoverPlaceholder } from "~/components/recipe/CoverPlaceholder";
+import { Cover } from "~/components/ouro/cover/cover";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { absoluteUrlFromRequest } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
@@ -352,7 +352,7 @@ export default function UserProfile() {
                       href={`/cookbooks/${cookbook.id}`}
                       title={cookbook.title}
                       description={<Text size="sm">{cookbook._count.recipes} {cookbook._count.recipes === 1 ? "recipe" : "recipes"}</Text>}
-                      media={photo ? <img src={photo} alt="" /> : <CoverPlaceholder aria-hidden="true" title={cookbook.title} shape="bleed" />}
+                      media={photo ? <img src={photo} alt="" /> : <Cover title={cookbook.title} size="fill" shape="square" />}
                       mediaSize="md"
                     />
                   );

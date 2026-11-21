@@ -11,7 +11,7 @@ import { SCALE_RANGE } from '~/components/cook/cook-controller'
 import { formatServingsLabel, scaleServingsText } from '~/lib/quantity'
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 import { CoverProvenanceBadge } from './CoverProvenanceBadge'
-import { CoverPlaceholder } from './CoverPlaceholder'
+import { Cover } from '~/components/ouro/cover/cover'
 import type { CookSyncStatus } from '~/lib/cook-session-sync'
 import { SyncStatus } from '~/components/ouro/sync-status/sync-status'
 import { cookSyncStatusProps } from '~/lib/cook-sync-status'
@@ -178,7 +178,7 @@ export function RecipeHeader({
             data-testid="recipe-image-placeholder"
             className="h-[36svh] min-h-[16rem] max-h-[20rem] lg:h-[clamp(34rem,72svh,50rem)] lg:max-h-none lg:min-h-0 print:hidden"
           >
-            <CoverPlaceholder title={title} label={displayCoverPlaceholderLabel} shape="bleed" className="h-full w-full" />
+            <Cover title={title} alt={displayCoverPlaceholderLabel} size="fill" shape="square" className="h-full aspect-auto" />
           </div>
         )}
 

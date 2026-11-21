@@ -254,6 +254,35 @@
     color-mix(in srgb, var(--sj-photo-charcoal) 68%, transparent);
 }
 
+/* The kitchen's On the counter card: over a cover photo, the photo shade is darkest at the foot, where
+   its text and capsules sit, and lighter toward the top so the photo shows, as the Apple app's card.
+   The Recipe capsule's outline is the muted on-photo white, as the landing hero's actions are. */
+.sj-counter-shade {
+  background: linear-gradient(0deg, var(--sj-photo-shade), var(--sj-photo-shade) 45%, var(--sj-photo-shade-soft) 75%, transparent);
+}
+
+/* The card's corner is four control radii, the Apple app's 24pt at the theme's 6px radius, so it grows
+   with every other themed corner. It stays a squircle, as the Apple app's continuous corner: Ouro UI's
+   Card takes the corner shape, and its backdrop's squircle clip reads --ouro-sq-r where the engine has
+   no corner-shape. */
+.sj-counter-card {
+  --border: var(--sj-on-photo-muted);
+  --ouro-sq-r: calc(var(--radius) * var(--ouro-radius-scale, 1) * 4);
+  border-radius: calc(var(--ouro-sq-r) * var(--ouro-corner-fallback, 1));
+}
+
+/* Without a photo, Cover sits on the counter card on its own light wash, so its letter takes the page's
+   ink, not the card's on-photo white, which measured 1.67:1 on the wash. */
+.sj-counter-card [data-ouro="cover"] {
+  --foreground: var(--sj-ink);
+}
+
+/* .sj-eyebrow's own ink is unlayered, so a utility can't recolour it; on the counter's shade it is the
+   muted on-photo white. */
+.sj-counter-card .sj-eyebrow {
+  color: var(--sj-on-photo-muted);
+}
+
 /* Keep the action weight through Tailwind's token without changing other controls. */
 [data-ouro="button"]:not([data-ouro-control="sync-status"]) {
   --font-weight-medium: 600;
@@ -649,31 +678,15 @@ body:has(#cook) .sj-site-footer {
   color: var(--sj-on-photo-warm);
 }
 
-/* A recipe with no cover: native's RecipeInitialTile (spoonjoy-apple RecipeIndexRow.swift). Its gradient ends in brass at
-   32% opacity over whatever the tile sits on, as native's does, which keeps the brass initial above 3:1 on it. */
-.sj-cover-placeholder {
-  container-type: size;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border: 0;
-  border-radius: var(--sj-radius-photo);
-  background: linear-gradient(135deg, var(--sj-vellum), color-mix(in srgb, var(--sj-brass) 32%, transparent));
-}
-
-/* Square, where the slot's cover photo runs edge to edge (the recipe header). */
-.sj-cover-placeholder.sj-cover-placeholder-bleed {
-  border-radius: 0;
-}
-
-/* The letter is sized to the tile, 42% of its height, as native's is. */
-.sj-cover-placeholder-initial {
-  font-family: var(--font-sj-display);
-  font-weight: 600;
-  font-size: 42cqh;
-  line-height: 1;
-  color: var(--sj-brass);
+/* A recipe with no cover is Ouro UI's Cover, drawn as native's RecipeInitialTile (spoonjoy-apple RecipeIndexRow.swift):
+   a wash from vellum to brass at 32% over whatever the tile sits on. The letter keeps Cover's own ink, brass mixed
+   toward the ink colour: native's plain brass is 3.3:1 on this wash, short of 4.5:1 for a small tile's letter.
+   These are the cookbook theme's cover tokens (ourostack/ouro-ui#2592); they move to the synced theme once
+   ouro-ui-core ships them. */
+:root,
+.dark {
+  --ouro-cover-from: var(--sj-vellum);
+  --ouro-cover-to: color-mix(in srgb, var(--sj-brass) 32%, transparent);
 }
 
 /* ouro-ui-core's sj-type-step token (Fraunces 600, 1.5rem, 1.25), which core keeps from web's CSS.

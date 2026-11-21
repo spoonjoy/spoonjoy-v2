@@ -1420,8 +1420,9 @@ describe("Cookbooks $id Route", () => {
       expect(screen.queryByText("Serves 4 servings")).not.toBeInTheDocument();
       // A recipe with no cover shows native's initial tile at the photo's size, not an icon.
       const placeholder = screen.getByTestId("cookbook-recipe-cover-placeholder-recipe-2");
-      expect(placeholder).toHaveClass("sj-cover-placeholder", "sj-cover-placeholder-bleed");
-      expect(placeholder).toHaveAttribute("aria-hidden", "true");
+      expect(placeholder).toHaveAttribute("data-ouro", "cover");
+      expect(placeholder).toHaveAttribute("data-shape", "square");
+      expect(placeholder).not.toHaveAttribute("role");
       expect(placeholder).toHaveTextContent(/^S$/);
       expect(placeholder.querySelector("svg")).toBeNull();
       // The tile is the media of Salad's row; test/ouro/ouro-parts-in-spoonjoy-theme.test.tsx measures it at 64px.

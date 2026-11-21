@@ -75,11 +75,15 @@ describe('RecipeGrid', () => {
     expect(container.querySelector('[data-ouro="show-more"]')).toHaveClass('sj-hairline-rows')
   })
 
-  it('shows the initial tile when a recipe has no photo, not a dark "Cover coming soon" box', () => {
+  it('shows Ouro UI\'s Cover when a recipe has no photo, not a dark "Cover coming soon" box', () => {
     const { container } = renderWithRouter(<RecipeGrid recipes={recipes} />)
 
     expect(screen.queryByText('Cover coming soon')).not.toBeInTheDocument()
-    expect(container.querySelector('.sj-cover-placeholder')).not.toBeNull()
+    const cover = container.querySelector('[data-ouro="cover"]')
+    expect(cover).not.toBeNull()
+    // Decoration beside the row's title, so it has no role of its own.
+    expect(cover).not.toHaveAttribute('role')
+    expect(cover).toHaveAttribute('data-shape', 'square')
   })
 
   it('renders cover provenance badges', () => {
