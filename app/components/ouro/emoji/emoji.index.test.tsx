@@ -48,10 +48,10 @@ describe("catalogueIndex", () => {
     for (let other = 0; other < 7; other++) catalogueIndex(wrap([{ id: "all", label: "All", items: freshEmoji() }]));
     // Seven others since: its shape is still kept.
     const moved = (version: number) => wrap([{ id: "all", label: "All", items: kept.map((item) => ({ ...item, src: `${item.src}?v=${version}` })) }]);
-    expect(catalogueIndex(moved(1)).pattern).toBe(first.pattern);
+    expect(catalogueIndex(moved(1)).textStarts).toBe(first.textStarts);
     for (let other = 0; other < 8; other++) catalogueIndex(wrap([{ id: "all", label: "All", items: freshEmoji() }]));
     // Eight others since: let go, so it compiles again.
-    expect(catalogueIndex(moved(2)).pattern).not.toBe(first.pattern);
+    expect(catalogueIndex(moved(2)).textStarts).not.toBe(first.textStarts);
   });
 
   it("compiles nothing again for a catalogue whose emoji differ only in their pictures' addresses, and finds the new pictures", () => {
@@ -61,15 +61,13 @@ describe("catalogueIndex", () => {
     const moved = emoji.map((item) => ({ ...item, src: `${item.src}?signature=2` }));
     const after = catalogueIndex(wrap([{ id: "all", label: "All", items: moved }]));
     expect(after).not.toBe(before);
-    expect(after.pattern).toBe(before.pattern);
-    expect(after.textPattern).toBe(before.textPattern);
     expect(after.textStarts).toBe(before.textStarts);
     expect(after.byId.get(moved[0]!.id)).toEqual({ item: moved[0], tone: "default" });
     expect(after.byText.get("👋🏻")).toEqual({ item: moved.at(-1), tone: "light" });
     expect(after.byToken.get(moved[1]!.shortcodes![0]!)!.item).toBe(moved[1]);
-    // A change to what the emoji say compiles their patterns afresh.
+    // A change to what the emoji say builds their shape afresh.
     const renamed = catalogueIndex(wrap([{ id: "all", label: "All", items: moved.map((item, at) => (at === 0 ? { ...item, text: "🦊" } : item)) }]));
-    expect(renamed.pattern).not.toBe(before.pattern);
+    expect(renamed.textStarts).not.toBe(before.textStarts);
     expect(renamed.byText.get("🦊")!.item.id).toBe(moved[0]!.id);
   });
 
@@ -79,13 +77,13 @@ describe("catalogueIndex", () => {
     const moved = (version: number) => wrap([{ id: "all", label: "All", items: kept.map((item) => ({ ...item, src: `${item.src}?v=${version}` })) }]);
     for (let round = 0; round < 3; round++) {
       for (let other = 0; other < 7; other++) catalogueIndex(wrap([{ id: "all", label: "All", items: freshEmoji() }]));
-      expect(catalogueIndex(moved(round)).pattern).toBe(first.pattern);
+      expect(catalogueIndex(moved(round)).textStarts).toBe(first.textStarts);
     }
   });
 
   it("tells apart catalogues whose emoji say different things, and not those that say the same in other words", () => {
     const base = (): EmojiItem[] => [{ id: "a", name: "A", text: "🦊", shortcodes: ["ab", "c"], src: "/a.png", skinTones: [{ id: "a-1", src: "/a1.png", text: "🦊🏻" }] }];
-    const patternOf = (items: EmojiItem[]) => catalogueIndex(wrap([{ id: "all", label: "All", items }])).pattern;
+    const patternOf = (items: EmojiItem[]) => catalogueIndex(wrap([{ id: "all", label: "All", items }])).textStarts;
     const original = patternOf(base());
     expect(patternOf(base())).toBe(original);
     const changes: [string, (item: EmojiItem) => EmojiItem][] = [

@@ -67,4 +67,17 @@ describe("Breadcrumb on a phone", () => {
     await commands.tap('[role="menuitem"]:last-child');
     await expect.poll(() => page.getByRole("menu").elements().length).toBe(0);
   });
+
+  it("keeps each crumb and the menu button 44px at a compact --spacing too", async () => {
+    const host = await render(<Breadcrumb items={long} />);
+    const sizes = () => [...host.querySelectorAll<HTMLElement>("a, button")].map((target) => [Math.round(target.getBoundingClientRect().width), Math.round(target.getBoundingClientRect().height)]);
+    const roomy = sizes();
+    expect(roomy).toHaveLength(3);
+    for (const [width, height] of roomy) {
+      expect(width).toBeGreaterThanOrEqual(44);
+      expect(height).toBeGreaterThanOrEqual(44);
+    }
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(sizes()).toEqual(roomy);
+  });
 });

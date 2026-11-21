@@ -202,10 +202,10 @@ const elements = ["div", "li", "article"] as const;
 const variants = { plain: "", outline: "rounded-ouro-xl border border-border px-4" } as const;
 const sizes = { md: "py-3", sm: "py-2" } as const;
 const mediaSizes = {
-  icon: "size-10 rounded-ouro-lg bg-muted text-muted-foreground flex items-center justify-center *:[svg]:size-5",
-  sm: "size-10 rounded-ouro-md overflow-hidden *:size-full *:object-cover",
-  md: "size-16 rounded-ouro-lg overflow-hidden *:size-full *:object-cover",
-  lg: "size-28 rounded-ouro-lg overflow-hidden *:size-full *:object-cover",
+  icon: "size-ouro-10 rounded-ouro-lg bg-muted text-muted-foreground flex items-center justify-center *:[svg]:size-ouro-5",
+  sm: "size-ouro-10 rounded-ouro-md overflow-hidden *:size-full *:object-cover",
+  md: "size-ouro-16 rounded-ouro-lg overflow-hidden *:size-full *:object-cover",
+  lg: "size-ouro-28 rounded-ouro-lg overflow-hidden *:size-full *:object-cover",
 } as const;
 // With a description, the media lines up with the title and the description's first line (24px,
 // 2px apart, 20px: 46px) instead of the whole text, so it stays level with the title when the
@@ -246,7 +246,7 @@ const stacked = {
 // A linked row is a full touch target on a coarse pointer, at either size.
 const linkRoot =
   "press cursor-pointer outline-ring -outline-offset-2 has-[[data-item-link]:focus-visible]:outline-2 has-[[data-item-link]:focus-visible]:outline-solid " +
-  "pointer-coarse:min-h-11";
+  "pointer-coarse:min-h-ouro-11";
 // A row a person chooses (onSelect, or href with selected): its own padding and corners, so the selected colour has room
 // in a group that strips them, and the selected colour when it is the one shown. Its description mixes 20% toward the
 // foreground, as muted text on a muted surface does, since the stock pair is under 4.5:1.

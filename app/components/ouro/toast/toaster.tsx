@@ -689,7 +689,7 @@ const ToastItem = memo(function ToastItem({ item, closeLabel }: { item: ToastObj
             screen reader could then never reach it, since it cannot focus or hover the stack first. */}
         <Toast.Close aria-label={closeLabel} aria-hidden={undefined} data-ouro-control="toaster" data-ouro-part="close" className={closeClass}>
           <TouchTarget />
-          <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="size-4">
+          <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="size-ouro-4">
             <path d="M4 4l8 8M12 4l-8 8" />
           </svg>
         </Toast.Close>
@@ -962,7 +962,7 @@ function ToneIcon({ tone }: { tone: string | undefined }): JSX.Element | null {
       strokeWidth="1.75"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={cn("mt-px size-5 shrink-0", color)}
+      className={cn("mt-px size-ouro-5 shrink-0", color)}
     >
       {tone === "success" && (
         <>

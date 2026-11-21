@@ -75,4 +75,22 @@ describe("Navbar on a phone", () => {
       expect(parseFloat(getComputedStyle(link).fontSize)).toBeGreaterThanOrEqual(16);
     }
   });
+
+  it("keeps each sheet link 44px tall, and at a compact --spacing too", async () => {
+    await render(<Navbar label="Main" items={items} currentPath="/recipes" />);
+    await commands.tap("[data-ouro-navbar-menu]");
+    await expect.element(page.getByRole("dialog", { name: "Menu" })).toBeVisible();
+    await expect.poll(() => document.getAnimations().length).toBe(0);
+    const heights = () => [...document.querySelectorAll<HTMLElement>('[data-ouro-part="sheet-link"]')].map((link) => Math.round(link.getBoundingClientRect().height));
+    const roomy = heights();
+    expect(roomy).toHaveLength(2);
+    for (const height of roomy) expect(height).toBeGreaterThanOrEqual(44);
+    // The sheet is portaled out of the test's host, so the spacing scale is set on the page to reach it.
+    document.documentElement.style.setProperty("--spacing", "0.2rem");
+    try {
+      expect(heights()).toEqual(roomy);
+    } finally {
+      document.documentElement.style.removeProperty("--spacing");
+    }
+  });
 });

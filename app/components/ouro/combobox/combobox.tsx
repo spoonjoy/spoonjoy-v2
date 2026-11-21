@@ -363,7 +363,7 @@ const toOption = (item: ComboboxItem): Option => (typeof item === "string" ? { v
  * Icons drawn in the text color at 16px, like the other Ouro icons.
  *
  * @claim "Icons drawn in the text color" registry/ouro/components/ouro/combobox/combobox.tsx verify:fileLine(registry/ouro/components/ouro/combobox/combobox.tsx, /viewBox="0\s0\s16\s16"/)
- * @claim "Icons drawn in the text color" registry/ouro/components/ouro/combobox/combobox.tsx verify:fileLine(registry/ouro/components/ouro/combobox/combobox.tsx, /\[&_svg\]:size-4/)
+ * @claim "Icons drawn in the text color" registry/ouro/components/ouro/combobox/combobox.tsx verify:fileLine(registry/ouro/components/ouro/combobox/combobox.tsx, /className="size-ouro-4"/)
  */
 function Icon({ children }: { children: ReactNode }): JSX.Element {
   return (
@@ -375,7 +375,7 @@ function Icon({ children }: { children: ReactNode }): JSX.Element {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="size-4"
+      className="size-ouro-4"
     >
       {children}
     </svg>
@@ -649,7 +649,7 @@ function ListBody({
               data-ouro-spinner=""
               viewBox="0 0 24 24"
               fill="none"
-              className="size-4 animate-[ouro-spin_0.8s_linear_infinite] motion-reduce:animate-[ouro-pulse_1.6s_ease-in-out_infinite]"
+              className="size-ouro-4 animate-[ouro-spin_0.8s_linear_infinite] motion-reduce:animate-[ouro-pulse_1.6s_ease-in-out_infinite]"
             >
               <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.5" opacity="0.25" />
               <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
@@ -736,7 +736,7 @@ function EndButtons({ clearLabel, readOnly }: { clearLabel: string; readOnly: bo
         }
       />
       )}
-      <BaseCombobox.Icon data-ouro-combobox-icon="" className="flex size-8 items-center justify-center text-muted-foreground sm:pointer-fine:size-6 [&_svg]:size-4">
+      <BaseCombobox.Icon data-ouro-combobox-icon="" className="flex size-ouro-8 items-center justify-center text-muted-foreground sm:pointer-fine:size-ouro-6">
         <ChevronIcon />
       </BaseCombobox.Icon>
     </span>
@@ -814,7 +814,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
 
   const renderItem = (option: Option) => (
     <BaseCombobox.Item key={option.value} value={option} disabled={option.disabled} data-ouro-control="combobox" data-ouro-part="option" className={itemClass}>
-      <BaseCombobox.ItemIndicator className="col-start-1 flex [&_svg]:size-4">
+      <BaseCombobox.ItemIndicator className="col-start-1 flex">
         <Icon>
           <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
         </Icon>
