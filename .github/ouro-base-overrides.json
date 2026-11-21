@@ -1,0 +1,10 @@
+{
+  "@theme inline --radius-md": "Text fields and selects sit 2px inside the control radius, as shadcn's do",
+  ":root --destructive-foreground": "Spoonjoy's palette: text on tomato is paper",
+  ":root --success": "Spoonjoy's palette: success is herb green",
+  ":root --success-foreground": "Spoonjoy's palette: text on herb is paper",
+  ":root --ouro-layer": "Dialogs and sheets go above the phone tab bar (z-50), the install card and the desktop top bar",
+  ".dark --destructive-foreground": "Spoonjoy's palette: text on tomato is paper",
+  ".dark --success": "Spoonjoy's palette: success is herb green",
+  ".dark --success-foreground": "Spoonjoy's palette: text on herb is paper"
+}
