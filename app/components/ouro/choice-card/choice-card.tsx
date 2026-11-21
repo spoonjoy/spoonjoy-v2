@@ -82,7 +82,7 @@ const columnClasses = {
 
 const cardClass =
   // The card doesn't clip what is in it, so a change inside repaints only its own part (#2349): the picture rounds its own top corners.
-  "group/card relative flex min-h-11 min-w-0 cursor-pointer flex-col rounded-ouro-lg border border-solid border-border bg-background text-foreground " +
+  "group/card relative flex min-h-ouro-11 min-w-0 cursor-pointer flex-col rounded-ouro-lg border border-solid border-border bg-background text-foreground " +
   "transition-[background-color,border-color] duration-(--ouro-duration-fast) ease-[ease] " +
   "data-checked:border-primary data-checked:bg-primary/5 " +
   "pointer-fine:hover:not-data-checked:not-data-disabled:border-[color-mix(in_oklab,var(--border)_50%,var(--foreground))] " +
@@ -226,7 +226,7 @@ export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
               {item.media != null ? (
                 <span className="block aspect-[4/3] w-full overflow-clip rounded-t-[calc(var(--radius-ouro-lg)-1px)] bg-muted [&>img]:block [&>img]:size-full [&>img]:object-cover">{item.media}</span>
               ) : null}
-              <span className="grid gap-0.5 p-3 pe-10">
+              <span className="grid gap-0.5 p-3 pe-ouro-10">
                 <span id={`${key}-label`} className="text-sm leading-5 font-medium">
                   {item.label}
                 </span>
@@ -239,9 +239,9 @@ export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
               </span>
               <span
                 aria-hidden="true"
-                className="absolute end-2 bottom-2.5 flex size-6 items-center justify-center rounded-full border border-solid border-border bg-background text-transparent group-data-checked/card:border-primary group-data-checked/card:bg-primary group-data-checked/card:text-primary-foreground"
+                className="absolute end-2 bottom-2.5 flex size-ouro-6 items-center justify-center rounded-full border border-solid border-border bg-background text-transparent group-data-checked/card:border-primary group-data-checked/card:bg-primary group-data-checked/card:text-primary-foreground"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="size-3.5">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="size-ouro-3_5">
                   <path d="M20 6 9 17l-5-5" />
                 </svg>
               </span>

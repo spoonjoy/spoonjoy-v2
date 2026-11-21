@@ -87,6 +87,21 @@ afterEach(async () => {
 });
 
 describe("FileField", () => {
+  it("keeps its drop icon 24px, a file's box 40px, its icon 20px and its remove icon 16px at a compact --spacing", async () => {
+    const { host, zone } = await render(<FileField label="Files" name="files" />);
+    await drop(zone, [text("notes.txt")]);
+    const sizes = () =>
+      [
+        zone.querySelector<SVGElement>("svg")!,
+        host.querySelector<HTMLElement>("[data-ouro-file-list] span[aria-hidden='true']")!,
+        host.querySelector<SVGElement>("[data-ouro-file-list] span[aria-hidden='true'] svg")!,
+        host.querySelector<SVGElement>("[data-ouro-file-remove] svg")!,
+      ].map((element) => getComputedStyle(element).width);
+    expect(sizes()).toEqual(["24px", "40px", "20px", "16px"]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(sizes()).toEqual(["24px", "40px", "20px", "16px"]);
+  });
+
   it("is a labeled native file input inside a drop zone, on the Field contract", async () => {
     const { root, input, zone } = await render(<FileField label="Recipe photo" name="photo" accept="image/*" />);
     expect(root.getAttribute("data-ouro")).toBe("file-field");

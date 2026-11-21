@@ -10,6 +10,14 @@ import { rotate } from "~/lib/ouro/testing/rotate";
 
 let root: Root | undefined;
 const nodes: Element[] = [];
+it("keeps each segment 44px wide at a compact --spacing", async () => {
+  const host = await render(<SegmentedControl label="View" items={items} />);
+  const segment = () => getComputedStyle(host.querySelector<HTMLElement>('[data-ouro-part="segment"]')!);
+  expect(segment().minWidth).toBe("44px");
+  host.style.setProperty("--spacing", "0.2rem");
+  expect(segment().minWidth).toBe("44px");
+});
+
 afterEach(async () => {
   await rotate(390, 844);
   await act(async () => root?.unmount());

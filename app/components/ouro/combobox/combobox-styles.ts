@@ -65,7 +65,7 @@ const chipClass =
 const chipRemoveClass =
   "press relative m-0 box-border inline-flex aspect-square h-full shrink-0 items-center justify-center rounded-ouro-sm border-0 p-0 " +
   "bg-transparent text-inherit cursor-pointer [-webkit-tap-highlight-color:transparent] pointer-fine:hover:bg-accent active:bg-accent motion-safe:active:scale-(--ouro-press-scale) " +
-  "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid [&_svg]:size-3.5";
+  "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid [&_svg]:size-ouro-3_5";
 
 /**
  * The popup: the input's width, on the popover surface. It opens at once and closes with a
@@ -97,10 +97,10 @@ const listClass = "box-border min-h-0 flex-1 overflow-y-auto overscroll-contain 
  *
  * @internal
  * @claim "An item: 44px tall on phones" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox looks > uses a 16px font and a 44px box on phones, stepping down with a mouse on wider screens)
- * @claim "An item: 44px tall on phones" registry/ouro/components/ouro/combobox/combobox.tsx verify:fileLine(registry/ouro/components/ouro/combobox/combobox.tsx, /<BaseCombobox.ItemIndicator\sclassName="col-start-1\sflex\s\[&_svg\]:size-4">/)
+ * @claim "An item: 44px tall on phones" registry/ouro/components/ouro/combobox/combobox.tsx verify:fileLine(registry/ouro/components/ouro/combobox/combobox.tsx, /<BaseCombobox.ItemIndicator\sclassName="col-start-1\sflex">/)
  */
 const itemClass =
-  "relative box-border grid min-h-11 cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-ouro-sm px-2 py-1.5 " +
+  "relative box-border grid min-h-ouro-11 cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-ouro-sm px-2 py-1.5 " +
   "text-base leading-5 outline-none select-none sm:pointer-fine:min-h-8 sm:pointer-fine:text-sm " +
   "data-highlighted:bg-accent data-highlighted:text-accent-foreground not-data-disabled:active:bg-accent not-data-disabled:active:text-accent-foreground " +
   // Forced colours drop the fill, so the highlight takes the system's pair.
@@ -133,7 +133,7 @@ const triggerClass =
   "text-start text-base text-foreground font-[inherit] cursor-pointer [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "not-disabled:active:bg-accent/60 aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 " +
-  "data-placeholder:text-muted-foreground [&>span]:truncate [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground " +
+  "data-placeholder:text-muted-foreground [&>span]:truncate [&_svg]:shrink-0 [&_svg]:text-muted-foreground " +
   "group-has-[[data-ouro-combobox-clear]]/combobox-field:[&>span]:me-10";
 
 /**

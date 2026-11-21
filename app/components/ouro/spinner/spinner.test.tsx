@@ -43,6 +43,15 @@ afterEach(async () => {
 const warnings = () => warn.mock.calls.map((call: unknown[]) => String(call[0]));
 
 describe("Spinner", () => {
+  it("keeps its fixed sizes at a compact --spacing", async () => {
+    const small = await render(<Spinner size="sm" />);
+    const medium = await render(<Spinner />);
+    const large = await render(<Spinner size="lg" />);
+    const sizes = () => [small, medium, large].map((spinner) => getComputedStyle(spinner).width);
+    expect(sizes()).toEqual(["16px", "20px", "32px"]);
+    for (const spinner of [small, medium, large]) spinner.parentElement!.style.setProperty("--spacing", "0.2rem");
+    expect(sizes()).toEqual(["16px", "20px", "32px"]);
+  });
   it("is a status with a hidden label, Loading by default, and a decorative icon", async () => {
     const spinner = await render(<Spinner />);
     expect(spinner.getAttribute("role")).toBe("status");

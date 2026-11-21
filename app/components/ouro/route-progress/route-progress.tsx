@@ -29,7 +29,7 @@ export interface RouteProgressProps {
 }
 
 // Class strings are literal so the app's Tailwind finds them when it compiles.
-const rootClass = "pointer-events-none fixed inset-x-0 top-0 z-(--ouro-layer) block h-0.5 print:hidden";
+const rootClass = "pointer-events-none fixed inset-x-0 top-0 z-(--ouro-layer) rounded-full block h-ouro-0_5 print:hidden";
 // The bar fades in and out; with reduced motion it fades faster.
 const barClass =
   "absolute inset-0 overflow-hidden transition-opacity duration-(--ouro-duration-base) ease-(--ouro-ease-out) data-closed:opacity-0 " +

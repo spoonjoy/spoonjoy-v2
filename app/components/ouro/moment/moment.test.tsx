@@ -90,6 +90,23 @@ afterEach(async () => {
 });
 
 describe("Moment", () => {
+  it("keeps its dismiss icon 16px at a compact --spacing", async () => {
+    const { host } = await render(<Moment kind="success" art={<Art />} title="Saved" onDismiss={() => {}} />);
+    const icon = () => getComputedStyle(host.querySelector<SVGElement>('[aria-label="Dismiss"] svg')!);
+    expect([icon().width, icon().height]).toEqual(["16px", "16px"]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect([icon().width, icon().height]).toEqual(["16px", "16px"]);
+  });
+
+  it("keeps its sparkles 12px at a compact --spacing", async () => {
+    const { host } = await render(<Moment kind="success" art={<Art />} title="Saved" />);
+    // The celebration, and its sparkles, starts after the moment mounts.
+    await expect.poll(() => host.querySelector('[data-ouro-part="sparkle"]')).not.toBeNull();
+    const sparkle = () => getComputedStyle(host.querySelector<SVGElement>('[data-ouro-part="sparkle"]')!);
+    expect([sparkle().width, sparkle().height]).toEqual(["12px", "12px"]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect([sparkle().width, sparkle().height]).toEqual(["12px", "12px"]);
+  });
   it("renders the art, an <h3> title, the line and up to two actions", async () => {
     const { moment, art } = await render(
       <Moment

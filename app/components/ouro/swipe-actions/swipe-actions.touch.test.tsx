@@ -135,6 +135,13 @@ function noMenu() {
 const hits = (target: Element, x: number, y: number) => target.contains(document.elementFromPoint(x, y));
 
 describe("SwipeActions on a phone", () => {
+  it("keeps each row's track 44px tall and its actions 72px wide at a compact --spacing", async () => {
+    const { host, rows } = await renderList();
+    const sizes = () => [getComputedStyle(track(rows[0]!)).minHeight, getComputedStyle(rows[0]!.querySelector<HTMLElement>('[data-ouro-part="action"]')!).minWidth];
+    expect(sizes()).toEqual(["44px", "72px"]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(sizes()).toEqual(["44px", "72px"]);
+  });
   it("lets a vertical swipe that starts on a row scroll the page", async () => {
     const { rows } = await renderList();
     const row = rows[1]!;

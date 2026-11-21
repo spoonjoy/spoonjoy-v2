@@ -102,10 +102,10 @@ const base =
 // centred. Running text is found with CSS ancestor selectors, so the server HTML is right.
 const standalone =
   "pointer-coarse:not-in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:inline-flex " +
-  "pointer-coarse:not-in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:min-h-11 " +
-  "pointer-coarse:not-in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:min-w-11 " +
+  "pointer-coarse:not-in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:min-h-ouro-11 " +
+  "pointer-coarse:not-in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:min-w-ouro-11 " +
   "pointer-coarse:not-in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:items-center";
-const alwaysStandalone = "pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center";
+const alwaysStandalone = "pointer-coarse:inline-flex pointer-coarse:min-h-ouro-11 pointer-coarse:min-w-ouro-11 pointer-coarse:items-center";
 
 // In running text an outline would cover the next character (a comma right after the link), so
 // focus thickens the underline in the ring's colour. The outline stays, transparent, because

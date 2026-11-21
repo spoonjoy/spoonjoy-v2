@@ -48,7 +48,7 @@ const stepperClass =
   "not-active:pointer-fine:hover:bg-accent pointer-fine:hover:text-accent-foreground not-data-disabled:active:bg-[color-mix(in_oklab,var(--accent)_85%,var(--foreground))] not-data-disabled:active:text-accent-foreground " +
   "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid " +
   "first:rounded-s-[calc(var(--ouro-control-r)-1px)] last:rounded-e-[calc(var(--ouro-control-r)-1px)] " +
-  "data-disabled:cursor-not-allowed data-disabled:opacity-50 data-disabled:pointer-fine:hover:bg-transparent [&_svg]:size-4";
+  "data-disabled:cursor-not-allowed data-disabled:opacity-50 data-disabled:pointer-fine:hover:bg-transparent [&_svg]:size-ouro-4";
 
 /**
  * The label's scrub area: drag it sideways with a mouse to change the value.

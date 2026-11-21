@@ -77,7 +77,7 @@ const thumbClass =
  * @claim "The muted text is mixed 20%" registry/ouro/components/ouro/segmented-control/segmented-control-styles.ts verify:fileLine(registry/ouro/components/ouro/segmented-control/segmented-control-styles.ts, /text-\[color-mix\(in_oklab,var\(--muted-foreground\)_80%,var\(--foreground\)\)\]/)
  */
 const segmentClass =
-  "press relative m-0 box-border flex cursor-pointer items-center justify-center px-3 pointer-coarse:min-w-11 " +
+  "press relative m-0 box-border flex cursor-pointer items-center justify-center px-3 pointer-coarse:min-w-ouro-11 " +
   "rounded-ouro-control-md border-0 bg-transparent text-base font-medium whitespace-nowrap text-[color-mix(in_oklab,var(--muted-foreground)_80%,var(--foreground))] sm:pointer-fine:text-sm " +
   "select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "not-data-disabled:not-data-pressed:pointer-fine:hover:text-foreground data-pressed:text-foreground forced-colors:data-pressed:text-[HighlightText] " +

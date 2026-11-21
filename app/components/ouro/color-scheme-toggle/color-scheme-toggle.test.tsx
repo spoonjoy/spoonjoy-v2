@@ -51,6 +51,16 @@ afterEach(async () => {
 });
 
 describe("ColorSchemeToggle", () => {
+  it("keeps its fixed sizes at a compact --spacing", async () => {
+    const { host, trigger } = await render(<ColorSchemeToggle labels={{ dark: "Night" }} />);
+    const sizes = () => {
+      const icon = getComputedStyle(trigger.querySelector<SVGElement>("svg")!);
+      return [getComputedStyle(trigger).width, icon.width, icon.height];
+    };
+    expect(sizes()).toEqual(["44px", "20px", "20px"]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(sizes()).toEqual(["44px", "20px", "20px"]);
+  });
   it("is an icon button named Color scheme that opens Light, Dark and System, the current one checked", async () => {
     const { trigger, toggle } = await render(
       <ColorSchemeProvider>

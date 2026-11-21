@@ -51,6 +51,13 @@ afterEach(async () => {
 });
 
 describe("Celebrate", () => {
+  it("keeps its fixed sizes at a compact --spacing", async () => {
+    const { host } = await render(<Celebrate show message="List cleared" />);
+    const piece = () => getComputedStyle(host.querySelector<HTMLElement>('[data-ouro-part="piece"] span')!);
+    expect([piece().width, piece().height]).toEqual(["8px", "8px"]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect([piece().width, piece().height]).toEqual(["8px", "8px"]);
+  });
   it("shows nothing until the moment, then a badge with the message in the success tone", async () => {
     const { root, celebrate, message } = await render(<Celebrate show={false} message="List cleared" />);
     expect(message).toBeNull();

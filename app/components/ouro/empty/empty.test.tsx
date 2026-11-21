@@ -40,6 +40,16 @@ const Icon = () => (
 );
 
 describe("Empty", () => {
+  it("keeps its fixed sizes at a compact --spacing", async () => {
+    const { host, el } = await render(<Empty title="Nothing here" icon={<svg viewBox="0 0 24 24" />} />);
+    const box = () => {
+      const svg = el.querySelector<SVGElement>("svg")!;
+      return [getComputedStyle(svg.parentElement!).width, getComputedStyle(svg).width];
+    };
+    expect(box()).toEqual(["48px", "24px"]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(box()).toEqual(["48px", "24px"]);
+  });
   it("renders the title as an <h3>, the description, the icon and the action", async () => {
     const { el } = await render(
       <Empty

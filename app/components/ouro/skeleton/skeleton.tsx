@@ -185,11 +185,11 @@ function useBreathes(shimmer: boolean): { breathes: boolean; style: CSSPropertie
 }
 
 const shapes = {
-  rect: "h-4 w-full rounded-ouro-md",
+  rect: "h-ouro-4 w-full rounded-ouro-md",
   circle: "aspect-square rounded-full",
 } as const;
 
-const avatarSizes = { xs: "w-6", sm: "w-8", md: "w-10", lg: "w-12", xl: "w-16", "2xl": "w-18", "3xl": "w-28" } as const;
+const avatarSizes = { xs: "w-ouro-6", sm: "w-ouro-8", md: "w-ouro-10", lg: "w-ouro-12", xl: "w-ouro-16", "2xl": "w-ouro-18", "3xl": "w-ouro-28" } as const;
 const textSizes = { sm: "text-sm", md: "text-base", lg: "text-lg" } as const;
 
 // A line is one line box of its text (`1lh`), with a bar the height of the letters in the middle,
@@ -332,7 +332,7 @@ export function Skeleton(props: SkeletonProps): JSX.Element {
         if (shape === "row") {
           return (
             <span key={index} {...own} {...common} style={waveStyle ? { ...own.style, ...waveStyle } : own.style} className={cn("grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4", rowSizes[frame], className)}>
-              <Bar shimmer={shimmer} className="mt-0.75 size-10 self-start rounded-ouro-md" />
+              <Bar shimmer={shimmer} className="mt-0.75 size-ouro-10 self-start rounded-ouro-md" />
               <span className="flex min-w-0 flex-col gap-0.5">
                 <span className={cn(line, "text-base")}>
                   <Bar shimmer={shimmer} className={title} />

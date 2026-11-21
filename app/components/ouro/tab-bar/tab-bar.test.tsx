@@ -63,6 +63,18 @@ afterEach(async () => {
 });
 
 describe("TabBar", () => {
+  it("keeps its fixed sizes at a compact --spacing", async () => {
+    const { host } = await render(<TabBar label="Main" items={items} accessory={search} currentPath="/recipes" />);
+    const sizes = () => {
+      const list = getComputedStyle(host.querySelector<HTMLElement>("nav ul")!);
+      const accessory = getComputedStyle(host.querySelector<HTMLElement>('[data-ouro-part="accessory"]')!);
+      const icon = getComputedStyle(host.querySelector<HTMLElement>('[data-ouro-part="accessory"] span[aria-hidden="true"]')!);
+      return [list.height, accessory.width, accessory.height, icon.width];
+    };
+    expect(sizes()).toEqual(["64px", "64px", "64px", "24px"]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(sizes()).toEqual(["64px", "64px", "64px", "24px"]);
+  });
   it("is a labelled navigation of links, each named by its label, with the icons hidden", async () => {
     const { nav, tabs, accessory } = await render(<TabBar label="Main" items={items} accessory={search} currentPath="/recipes" />);
     expect(nav.getAttribute("aria-label")).toBe("Main");

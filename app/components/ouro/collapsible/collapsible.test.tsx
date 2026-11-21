@@ -54,6 +54,13 @@ async function settled(element: Element) {
 const facts = <p>Calories 420, protein 18g</p>;
 
 describe("Collapsible", () => {
+  it("keeps its fixed sizes at a compact --spacing", async () => {
+    const { host } = await render(<Collapsible title="Warm up">{facts}</Collapsible>);
+    const chevron = () => getComputedStyle(host.querySelector<SVGElement>("svg")!);
+    expect([chevron().width, chevron().height]).toEqual(["16px", "16px"]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect([chevron().width, chevron().height]).toEqual(["16px", "16px"]);
+  });
   it("reads no style or layout when it mounts closed, however many there are", async () => {
     // The development theme check reads once per page; let it happen first.
     await render(<Collapsible title="Warm up">{facts}</Collapsible>);

@@ -48,6 +48,13 @@ afterEach(async () => {
 });
 
 describe("SyncStatus", () => {
+  it("keeps its fixed sizes at a compact --spacing", async () => {
+    const { host, status } = await render(<SyncStatus status="saving" />);
+    const icon = () => getComputedStyle(status.querySelector<SVGElement>("svg")!);
+    expect([icon().width, icon().height]).toEqual(["16px", "16px"]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect([icon().width, icon().height]).toEqual(["16px", "16px"]);
+  });
   it.each([
     ["saved", "Saved"],
     ["saving", "Saving…"],
@@ -66,6 +73,13 @@ describe("SyncStatus", () => {
     const icon = line.querySelector("svg")!;
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
     expect(getComputedStyle(icon).animationName).toBe(reduced ? "none" : "ouro-spin");
+  });
+
+  it("keeps its icon still in every state but saving", async () => {
+    for (const status of ["saved", "offline", "error"] as const) {
+      const { line } = await render(<SyncStatus status={status} />);
+      expect(getComputedStyle(line.querySelector("svg")!).animationName).toBe("none");
+    }
   });
 
   it("colors a problem apart from the quiet states", async () => {

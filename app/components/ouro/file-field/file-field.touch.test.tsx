@@ -10,6 +10,14 @@ import { rotate } from "~/lib/ouro/testing/rotate";
 
 let root: Root | undefined;
 const nodes: Element[] = [];
+it("keeps its drop zone 44px tall at a compact --spacing", async () => {
+  const host = await render(<FileField label="Files" multiple />);
+  const zone = () => getComputedStyle(host.querySelector<HTMLInputElement>('input[type="file"]')!.closest<HTMLElement>("label")!);
+  expect(zone().minHeight).toBe("44px");
+  host.style.setProperty("--spacing", "0.2rem");
+  expect(zone().minHeight).toBe("44px");
+});
+
 afterEach(async () => {
   await rotate(390, 844);
   await act(async () => root?.unmount());

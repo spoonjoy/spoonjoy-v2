@@ -913,17 +913,69 @@ describe("Emoji helpers", () => {
     expect(splitEmojiText("ok (y)", { categories: [{ id: "plain", label: "Plain", items: [yes] }] })).toEqual(["ok ", { item: yes, tone: "default", source: "(y)" }]);
   });
 
-  it("runs its patterns only on text that could hold an emoji", () => {
-    const matchAll = vi.spyOn(String.prototype, "matchAll");
-    onTestFinished(() => matchAll.mockRestore());
+  it("splits text as one pattern of every token and emoji text did, for any text", () => {
+    // The pattern splitEmojiText ran before it scanned: a token up to its closing colon, then each emoji text, longest
+    // first, with a variation selector allowed after each character. The scan must split every text the same way.
+    const man: EmojiItem = { id: "man", name: "Man", text: "👨", src: image("man") };
+    const coder: EmojiItem = { id: "coder", name: "Man coder", shortcodes: ["coder"], text: "👨\u200d💻", src: image("coder") };
+    const yes: EmojiItem = { id: "yes", name: "Yes", text: "(y)", src: image("yes") };
+    // A text that starts with two colons: a colon with no name after it opens no token, so the text is still found.
+    const eyes: EmojiItem = { id: "eyes", name: "Eyes", text: "::)", src: image("eyes") };
+    const wide: EmojiCatalogue = { categories: [...catalogue.categories, { id: "more", label: "More", items: [man, coder, yes, eyes] }] };
+    expect(splitEmojiText("look ::) here", wide)).toEqual(["look ", { item: eyes, tone: "default", source: "::)" }, " here"]);
+    expect(splitEmojiText("look ::)", wide, false)).toEqual(["look ", { item: eyes, tone: "default", source: "::)" }]);
+    const index = catalogueIndex(wide);
+    const texts: string[] = [];
+    const seen = new Set<string>();
+    for (const item of wide.categories.flatMap((category) => category.items)) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      for (const form of [item, ...(item.skinTones ?? [])]) if (form.text && !texts.includes(form.text.replace(/\uFE0F/g, ""))) texts.push(form.text.replace(/\uFE0F/g, ""));
+    }
+    const escaped = (char: string) => char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const alternatives = texts.sort((a, b) => b.length - a.length).map((text) => Array.from(text, (char) => `${escaped(char)}\\uFE0F?`).join(""));
+    // The pattern told a token from an emoji text by its colon, so it never found a text that starts with one; the
+    // scan does, and so does this, which tells them apart by the alternative that matched.
+    const pattern = new RegExp(["(?<token>:[^\\s:]+(?=:))", ...alternatives].join("|"), "gu");
+    const textPattern = new RegExp(["(?!)", ...alternatives].join("|"), "gu");
+    const before = (text: string, tokens: boolean) => {
+      const parts: unknown[] = [];
+      let plainFrom = 0;
+      for (const match of text.matchAll(tokens ? pattern : textPattern)) {
+        if (match.index < plainFrom) continue;
+        const token = match.groups?.token !== undefined;
+        const found = token ? index.byToken.get(match[0].slice(1).toLowerCase()) : index.byText.get(match[0].replace(/\uFE0F/g, ""));
+        if (!found) continue;
+        if (match.index > plainFrom) parts.push(text.slice(plainFrom, match.index));
+        const end = match.index + match[0].length + (token ? 1 : 0);
+        parts.push({ ...found, source: text.slice(match.index, end) });
+        plainFrom = end;
+      }
+      if (plainFrom < text.length) parts.push(text.slice(plainFrom));
+      return parts;
+    };
+    const pieces = [":", "::", " ", "\u00a0", "a", "Wave", "party", "fern", "coder", "(", ")", "y", "(y)", "🎉", "❤", "\uFE0F", "👋", "\u{1F3FB}", "\u{1F3FD}", "👨", "\u200d", "💻", "\n", "10:30", "https://x"];
+    let seed = 2026;
+    const next = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    for (let run = 0; run < 3000; run++) {
+      let text = "";
+      for (let length = Math.floor(next() * 12); length > 0; length--) text += pieces[Math.floor(next() * pieces.length)];
+      for (const tokens of [true, false]) expect(splitEmojiText(text, wide, tokens), JSON.stringify({ text, tokens })).toEqual(text ? before(text, tokens) : []);
+    }
+  });
+
+  it("scans only text that could hold an emoji", () => {
+    const scan = vi.spyOn(String.prototype, "codePointAt");
+    onTestFinished(() => scan.mockRestore());
     splitEmojiText("just words", catalogue);
     splitEmojiText("see :party:", catalogue, false);
-    expect(matchAll).not.toHaveBeenCalled();
+    expect(scan).not.toHaveBeenCalled();
     splitEmojiText("see :party:", catalogue);
-    expect(matchAll).toHaveBeenCalledTimes(1);
+    expect(scan).toHaveBeenCalled();
+    scan.mockClear();
     const yes: EmojiItem = { id: "yes", name: "Yes", text: "(y)", src: image("yes") };
     splitEmojiText("ok (y)", { categories: [{ id: "plain", label: "Plain", items: [yes] }] }, false);
-    expect(matchAll).toHaveBeenCalledTimes(2);
+    expect(scan).toHaveBeenCalled();
   });
 
   it("finds emoji text with characters a pattern would read as its own", () => {

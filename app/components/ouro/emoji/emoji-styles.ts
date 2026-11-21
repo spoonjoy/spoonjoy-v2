@@ -107,27 +107,25 @@ interface CatalogueIndex {
   byToken: EmojiLookup;
   /** An emoji by its text, without variation selectors. */
   byText: EmojiLookup;
-  /** Finds a token's colon and name, up to its closing colon, and the emoji text the catalogue lists, longest text first. */
-  pattern: RegExp;
-  /**
-   * Finds only the emoji text the catalogue lists, longest first, and nothing when it lists none.
-   *
-  
- * @claim "nothing when it lists none" registry/ouro/components/ouro/emoji/emoji.test.tsx verify:testExists(registry/ouro/components/ouro/emoji/emoji.test.tsx::Emoji helpers > splits text into its runs and emoji with no empty runs between or around them)
-   */
-  textPattern: RegExp;
   /**
    * The first character of each emoji text the catalogue lists: text with none of them (and no colon) holds no emoji.
+   * Each leads to the texts that start with it, longest first, each as its characters.
    *
   
+ * @claim "Each leads to the texts that start with it" registry/ouro/components/ouro/emoji/emoji.test.tsx verify:testExists(registry/ouro/components/ouro/emoji/emoji.test.tsx::Emoji helpers > splits text as one pattern of every token and emoji text did, for any text)
  * @claim "The first character of each emoji text the catalogue lists: text with none of them (and no colon) holds no emoji." registry/ouro/components/ouro/emoji/emoji.test.tsx verify:testExists(registry/ouro/components/ouro/emoji/emoji.test.tsx::Emoji helpers > passes text with no colon and no emoji text's first character straight through, and still finds a plain-text emoji)
    */
-  textStarts: ReadonlySet<string>;
+  textStarts: TextStarts;
 }
+
+/**
+ * Each first character of the catalogue's emoji texts, with the texts it starts, longest first, each as its characters.
+ * @claim "Each first character of the catalogue's emoji texts" registry/ouro/components/ouro/emoji/emoji.test.tsx verify:testExists(registry/ouro/components/ouro/emoji/emoji.test.tsx::Emoji helpers > splits text as one pattern of every token and emoji text did, for any text)
+ */
+type TextStarts = ReadonlyMap<string, readonly (readonly string[])[]>;
 
 const indexes = new WeakMap<EmojiCatalogue, CatalogueIndex>();
 const VARIATION = /\uFE0F/g;
-const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** A list of objects, kept with the index it leads to. */
 interface IndexPath {
@@ -209,7 +207,7 @@ function noteBuild(items: readonly EmojiItem[]): void {
     if (builds.filter((build) => build.emoji === emoji).length > REBUILD_LIMIT) {
       devWarn(
         "EmojiCatalogue",
-        `the index of the same emoji was built more than ${REBUILD_LIMIT} times within a second, each time for a catalogue of new emoji objects. Each build maps every emoji, and compiles two patterns of their text when they changed, so drawing a conversation this way can take seconds`,
+        `the index of the same emoji was built more than ${REBUILD_LIMIT} times within a second, each time for a catalogue of new emoji objects. Each build maps every emoji and lists their texts when they changed, so drawing a conversation this way can take seconds`,
         "build the catalogue once and pass that object every time (useMemo(() => toCatalogue(emoji), [emoji])), or give every copy the same id that changes only when the emoji do: { id: \"contoso-2026-11\", categories }",
       );
     }
@@ -223,7 +221,7 @@ function noteBuild(items: readonly EmojiItem[]): void {
  * changed in place counts as new. An emoji object edited in place (its shortcodes or text)
  * keeps the index it had, so an app that edits emoji that way passes a new `id` or new emoji
  * objects. A catalogue whose emoji differ only in their pictures (new `src` addresses) shares the
- * patterns that find their text, compiling nothing again, and finds its own pictures. @internal
+ * lookups of their ids, tokens and text, building nothing again, and finds its own pictures. @internal
  *
  * @claim "A catalogue whose emoji differ only" registry/ouro/components/ouro/emoji/emoji.index.test.tsx verify:testExists(registry/ouro/components/ouro/emoji/emoji.index.test.tsx::catalogueIndex > compiles nothing again for a catalogue whose emoji differ only in their pictures' addresses, and finds the new pictures)
  *
@@ -247,9 +245,9 @@ function catalogueIndex(catalogue: EmojiCatalogue): CatalogueIndex {
 
 /**
  * What a catalogue's index holds that depends only on its emoji's ids, texts and shortcodes, not on their pictures: where
- * each id, token and text leads (an emoji's place in the catalogue, times 8, plus its tone's), and the patterns that find
- * the text. Shared by every catalogue whose emoji say the same, so a catalogue that changes only its pictures' addresses
- * (a new `src` for each, as a CDN's signed addresses do) compiles nothing again.
+ * each id, token and text leads (an emoji's place in the catalogue, times 8, plus its tone's), and the texts each first
+ * character starts. Shared by every catalogue whose emoji say the same, so a catalogue that changes only its pictures'
+ * addresses (a new `src` for each, as a CDN's signed addresses do) builds nothing again.
  * @claim "What a catalogue's index holds that" registry/ouro/components/ouro/emoji/emoji.index.test.tsx verify:testExists(registry/ouro/components/ouro/emoji/emoji.index.test.tsx::catalogueIndex > compiles nothing again for a catalogue whose emoji differ only in their pictures' addresses, and finds the new pictures)
  * @claim "Shared by every catalogue whose emoji" registry/ouro/components/ouro/emoji/emoji.index.test.tsx verify:testExists(registry/ouro/components/ouro/emoji/emoji.index.test.tsx::catalogueIndex > compiles nothing again for a catalogue whose emoji differ only in their pictures' addresses, and finds the new pictures)
  */
@@ -257,9 +255,7 @@ interface IndexShape {
   byId: ReadonlyMap<string, number>;
   byToken: ReadonlyMap<string, number>;
   byText: ReadonlyMap<string, number>;
-  pattern: RegExp;
-  textPattern: RegExp;
-  textStarts: ReadonlySet<string>;
+  textStarts: TextStarts;
 }
 
 /**
@@ -284,7 +280,7 @@ function signatureOf(items: readonly EmojiItem[]): string {
 }
 
 /**
- * Compiles the shape of a catalogue's emoji: where each id, token and text leads, and the patterns that find their text.
+ * Compiles the shape of a catalogue's emoji: where each id, token and text leads, and the texts each first character starts.
  * @claim "Compiles the shape of a catalogue's" registry/ouro/components/ouro/emoji/emoji.index.test.tsx verify:testExists(registry/ouro/components/ouro/emoji/emoji.index.test.tsx::catalogueIndex > compiles nothing again for a catalogue whose emoji differ only in their pictures' addresses, and finds the new pictures)
  * @claim "Compiles the shape of a catalogue's" registry/ouro/components/ouro/emoji/emoji.test.tsx verify:testExists(registry/ouro/components/ouro/emoji/emoji.test.tsx::Emoji helpers > indexes a catalogue once, each emoji once, by id, tone id, token and text)
  */
@@ -302,13 +298,15 @@ function buildShape(items: readonly EmojiItem[]): IndexShape {
   });
   // Shortcodes win over ids that look the same, so they go in last.
   items.forEach((item, at) => item.shortcodes?.forEach((shortcode) => byToken.set(shortcode.toLowerCase(), at * 8)));
-  // Longest first, so a sequence wins over the emoji it starts with; a variation selector may follow any character.
-  const texts = [...byText.keys()].sort((a, b) => b.length - a.length).map((text) => Array.from(text, (char) => `${escape(char)}\\uFE0F?`).join(""));
-  const pattern = new RegExp([":[^\\s:]+(?=:)", ...texts].join("|"), "gu");
-  // (?!) matches nothing, for a catalogue that lists no text.
-  const textPattern = new RegExp(["(?!)", ...texts].join("|"), "gu");
-  const textStarts = new Set([...byText.keys()].map((text) => Array.from(text)[0]!));
-  return { byId, byToken, byText, pattern, textPattern, textStarts };
+  // Longest first, so a sequence wins over the emoji it starts with.
+  const textStarts = new Map<string, string[][]>();
+  for (const text of [...byText.keys()].sort((a, b) => b.length - a.length)) {
+    const chars = Array.from(text);
+    const texts = textStarts.get(chars[0]!);
+    if (texts) texts.push(chars);
+    else textStarts.set(chars[0]!, [chars]);
+  }
+  return { byId, byToken, byText, textStarts };
 }
 
 /** A shape's places, as the emoji of the catalogue in hand. */
@@ -349,8 +347,6 @@ function buildCatalogueIndex(catalogue: EmojiCatalogue): CatalogueIndex {
     byId: lookup(shape.byId, items),
     byToken: lookup(shape.byToken, items),
     byText: lookup(shape.byText, items),
-    pattern: shape.pattern,
-    textPattern: shape.textPattern,
     textStarts: shape.textStarts,
   };
 }
@@ -368,25 +364,67 @@ type EmojiTextPart = string | (FoundEmoji & { source: string });
  * @claim "A token the catalogue does not know stays text" registry/ouro/components/ouro/emoji/emoji.test.tsx verify:testExists(registry/ouro/components/ouro/emoji/emoji.test.tsx::EmojiText > draws shortcode, id and tone id tokens as their images, and leaves unknown ones as text)
  */
 function splitEmojiText(text: string, catalogue: EmojiCatalogue, tokens = true): EmojiTextPart[] {
-  const { byToken, byText, pattern, textPattern, textStarts } = catalogueIndex(catalogue);
-  // Most text holds no emoji: one pass over its characters says so without running the patterns, which list every
-  // emoji text the catalogue knows (thousands of alternatives).
+  const { byToken, byText, textStarts } = catalogueIndex(catalogue);
+  // Most text holds no emoji: one pass over its characters says so.
   if (!Array.from(text).some((char) => (tokens && char === ":") || textStarts.has(char))) return text ? [text] : [];
   const parts: EmojiTextPart[] = [];
   let plainFrom = 0;
-  for (const match of text.matchAll(tokens ? pattern : textPattern)) {
+  for (let match = nextEmojiText(text, 0, textStarts, tokens); match; match = nextEmojiText(text, match.end, textStarts, tokens)) {
     // A token's closing colon, already taken, does not open another.
     if (match.index < plainFrom) continue;
-    const token = match[0].startsWith(":");
-    const found = token ? byToken.get(match[0].slice(1).toLowerCase()) : byText.get(match[0].replace(VARIATION, ""));
+    const found = match.token ? byToken.get(text.slice(match.index + 1, match.end).toLowerCase()) : byText.get(text.slice(match.index, match.end).replace(VARIATION, ""));
     if (!found) continue;
     if (match.index > plainFrom) parts.push(text.slice(plainFrom, match.index));
-    const end = match.index + match[0].length + (token ? 1 : 0);
+    const end = match.end + (match.token ? 1 : 0);
     parts.push({ ...found, source: text.slice(match.index, end) });
     plainFrom = end;
   }
   if (plainFrom < text.length) parts.push(text.slice(plainFrom));
   return parts;
+}
+
+const SPACE = /\s/u;
+
+/**
+ * The next token or emoji text in `text` from `from`: a token's colon and name up to (not taking) its closing colon, or the
+ * longest emoji text the catalogue lists that starts there, with a variation selector allowed after each character. A
+ * scan of the text's characters with lookups, never one pattern of every emoji text: Chromium drops a compiled pattern at
+ * each full garbage collection, and compiling the thousands of alternatives again took 95-270 ms of the next press that
+ * drew an emoji's text, in a consuming app with a catalogue of thousands. @internal
+ *
+ * @claim "The next token or emoji text in `text` from `from`" registry/ouro/components/ouro/emoji/emoji.test.tsx verify:testExists(registry/ouro/components/ouro/emoji/emoji.test.tsx::Emoji helpers > splits text as one pattern of every token and emoji text did, for any text)
+ * @claim "never one pattern of every emoji text" registry/ouro/components/ouro/emoji/emoji.test.tsx verify:testExists(registry/ouro/components/ouro/emoji/emoji.test.tsx::Emoji helpers > splits text as one pattern of every token and emoji text did, for any text)
+ */
+function nextEmojiText(text: string, from: number, textStarts: TextStarts, tokens: boolean): { index: number; end: number; token: boolean } | null {
+  for (let at = from; at < text.length; ) {
+    const char = String.fromCodePoint(text.codePointAt(at)!);
+    if (tokens && char === ":") {
+      let end = at + 1;
+      while (end < text.length) {
+        const next = String.fromCodePoint(text.codePointAt(end)!);
+        if (next === ":" || SPACE.test(next)) break;
+        end += next.length;
+      }
+      if (end > at + 1 && text[end] === ":") return { index: at, end, token: true };
+    }
+    const texts = textStarts.get(char);
+    if (texts) {
+      for (const chars of texts) {
+        let end = at;
+        for (const c of chars) {
+          if (!text.startsWith(c, end)) {
+            end = -1;
+            break;
+          }
+          end += c.length;
+          if (text[end] === "\uFE0F") end += 1;
+        }
+        if (end !== -1) return { index: at, end, token: false };
+      }
+    }
+    at += char.length;
+  }
+  return null;
 }
 
 /** Lower case, without accents, so "Café" matches "cafe". @internal */

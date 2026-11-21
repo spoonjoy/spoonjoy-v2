@@ -115,7 +115,7 @@ function Line({
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className={cn("me-1.5 inline-block size-4 shrink-0 align-[-0.1875rem]", state === "saving" && "motion-safe:animate-[ouro-spin_1s_linear_infinite]")}
+        className={cn("me-1.5 inline-block size-ouro-4 shrink-0 align-[-0.1875rem]", state === "saving" && "motion-safe:animate-[ouro-spin_1s_linear_infinite]")}
       >
         {icons[state]}
       </svg>
