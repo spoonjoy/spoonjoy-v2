@@ -1,6 +1,6 @@
 {
-  "tag": "v1.3.421",
-  "tagCommit": "33b936823480ab1288c488cf76bcc3f98b87a5a7",
+  "tag": "v1.3.424",
+  "tagCommit": "938b3693d5207709019c719a3ee85dac0dc80fdb",
   "files": {
     "app/components/ouro/alert/alert.stories.tsx": "9fc0c3fec0cc4be3ce2281c979da815134bdc67e260645bbd0546fcae092613f",
     "app/components/ouro/alert/alert.test-d.ts": "f60fa946e10cc89dd3a53fc812f3cb458e8e903d034bd7a3e8d1965c62cd0ad4",
@@ -444,7 +444,7 @@
     "app/lib/ouro/ax/checks.ts": "21f7f2dd63a86ce58447c7af3b02dc00069df43620bee53c71b0faa3697a0ff4",
     "app/lib/ouro/ax/cli.ts": "b3581e0b89b0746dc8131eca036ed562845139e8a2123224519fcf3fc28226d5",
     "app/lib/ouro/ax/component.ts": "dfb59197245fcf2c5e4d012bc43baaba24ae7391436f035aed3e9feef1203ba6",
-    "app/lib/ouro/ax/dev-commands.ts": "911d0d56d47f7feb0d64eb96367c29369bd82a7fa925568e8dacda7a4454e09f",
+    "app/lib/ouro/ax/dev-commands.ts": "a90fd5478409d4298aefe02ea4aaf1b19ff20fe290bf98f92320c9b37371cf11",
     "app/lib/ouro/ax/doctor.ts": "50f27db03682d620e2c78babc40e4ff9d62f731d07ab4eb52678a7c2ad8a4c9d",
     "app/lib/ouro/ax/effects.ts": "08c5e6ebd2485ec34a6e0d915200bdd09447548754d5b430cfb4941a7c7dc5ca",
     "app/lib/ouro/ax/exit-codes.ts": "b6a6cc62877e7125f17846f9aa0861e3f849fa20cff3e52d4e44391562780d7c",
@@ -475,8 +475,8 @@
     "app/lib/ouro/css-panel.tsx": "9639c4b066448f4e8fafd20addfadb6ea78d9daae09c9daf67b0244ebeab9e18",
     "app/lib/ouro/current-path.test.ts": "673a243110ddadee1ea715573546ea96c7ea09d213f1266e738673ec23b0316c",
     "app/lib/ouro/current-path.ts": "bbb63ed157c7458ddec1d11ccf615da1f0978a5f224eeffb7c8fe0ab7a2cc3f6",
-    "app/lib/ouro/dev.test.ts": "7d4a9ffa37efd21ba5fe3ec9b2c41c65a34f318ec486c4db4b189364664723bf",
-    "app/lib/ouro/dev.ts": "08ee35175545f489cb0b1d75a4519c912f7d53f8a3c5b53ea757bf23389900b8",
+    "app/lib/ouro/dev.test.ts": "bc1e178dc02af7878221cbcc41eaf49ed70a80fdad0f0408173062d6258e1312",
+    "app/lib/ouro/dev.ts": "81046cefaf71add52b5ec679e440a4eef4f498b4d32de0518a595179e5be5615",
     "app/lib/ouro/disabled-reason.tsx": "72737119caf8070444f18b17baacbc7b604368c692046e15e3ebd0236b31a3e0",
     "app/lib/ouro/env.d.ts": "b9b1f9fbff01e0acecd2452110007846804d4d30e159a302f56312d2771fe90c",
     "app/lib/ouro/feedback.test.ts": "8d92ab26f084a69c94c08b146813c77e3d28727baddd4ff7cb968985b908dc3f",
@@ -593,7 +593,7 @@
     "app/lib/ouro/use-timer.ts": "26c663740eb62ce07366f83ad22c9e43096ab07db099c72e14e56e1ea2f76e6b",
     "app/lib/ouro/use-until-found.test.tsx": "316260c757576c2822af1ca1c05e9199da37c44bc93ebfe623d723dda91bb83b",
     "app/lib/ouro/use-until-found.ts": "5a922672844a7ff93dcf653b2491ccbd06c55534cdd26aa42c7c00f857a32b45",
-    "app/styles/ouro/ouro-base.css": "ebbb28ae3f252a1436bb7fc605147e913bb6cf097a9ca0e9a73beff702b5c1cc",
+    "app/styles/ouro/ouro-base.css": "bd6f06a2e57d0e64d25abe89bff6bac961b76295c4a5916fb3b83105c2a0b211",
     "e2e/ouro-census/census-axe-version.mjs": "ff44771ab93c60b047d14b06604b1f47f8f8a965ed6be36687e05d7cc7c9a3de",
     "e2e/ouro-census/census-collect.d.mts": "49a8bacdf386c980f4b9eff803bcb9f9d1e412653c81b1b062245e73c1898f52",
     "e2e/ouro-census/census-collect.mjs": "0bb0ac10f477f313305db9039b51510c16ca0736ecd2ef5fb88e9fe22d844342",
@@ -683,6 +683,6 @@
     "e2e/ouro/tooltip.spec.ts": "0281a6131d5e145c3b421001270af27fd2b39c3c57e4b17a5d6061f211a79c5e",
     "scripts/ouro-source-rules.mjs": "d8643b73d77fb8148da14111521b15ebecdd06781f6c9ba0bd10729959b21a75",
     "scripts/ouro/ax/xray.kit.mts": "13c271aebf88b6b4c44a128ea242940159aa0562f77b4e2b712745524468a527",
-    "scripts/ouro/ax/xray.ts": "7c58e38422e52a9079510adba0fb3c888024f89907e28faceab4f68350639031"
+    "scripts/ouro/ax/xray.ts": "225a4077d811e137122cdd8c62413595bab25f8391e9172ec73f0c18ee6198e3"
   }
 }
