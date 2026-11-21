@@ -72,14 +72,18 @@ async function openSecondWhileFirstCloses(presentation: "sheet" | "dialog") {
   await userEvent.click(trigger("Open first"));
   await settledOpen("First");
 
-  await userEvent.keyboard("{Escape}");
-  await expect.poll(() => overlay("First")?.hasAttribute("data-open")).toBe(false);
-  // The overlap: First is still mounted and running its exit transition when Second opens.
-  const closing = overlay("First");
-  expect(closing?.hasAttribute("data-ending-style") || (closing?.getAnimations().length ?? 0) > 0, "First finished closing before Second opened").toBe(true);
-
-  // Dispatched directly: the scan did the same, since First's backdrop can still cover the trigger.
-  trigger("Open second").click();
+  // Escape on First and the press on Second's trigger in one task, before any frame, so First is still mounted and
+  // closing when Second opens however loaded the runner: waiting for First to start closing first left a loaded runner
+  // time to finish its exit and unmount it, and with it the overlap.
+  // The press is dispatched directly, as the scan's was, since First's backdrop can still cover the trigger.
+  let closing: HTMLElement | null = null;
+  await act(async () => {
+    document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+    trigger("Open second").click();
+    closing = overlay("First");
+  });
+  expect(closing, "First was gone before Second opened").not.toBeNull();
+  expect(overlay("First")?.hasAttribute("data-open") ?? false, "First did not start closing").toBe(false);
   const second = await settledOpen("Second");
 
   // A focus guard hands focus back to the dialog a frame later, so each Tab waits until focus is in it

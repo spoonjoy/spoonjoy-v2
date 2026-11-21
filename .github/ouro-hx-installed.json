@@ -1,6 +1,6 @@
 {
-  "tag": "v1.3.395",
-  "tagCommit": "f1b3794bc62c96ad01129660b66cc553a60d5a58",
+  "tag": "v1.3.396",
+  "tagCommit": "3b370f0e01512d91f7033bc85a7b56ab38bdd212",
   "files": {
     "app/components/ouro/alert/alert.stories.tsx": "9fc0c3fec0cc4be3ce2281c979da815134bdc67e260645bbd0546fcae092613f",
     "app/components/ouro/alert/alert.test-d.ts": "f60fa946e10cc89dd3a53fc812f3cb458e8e903d034bd7a3e8d1965c62cd0ad4",
@@ -115,7 +115,7 @@
     "app/components/ouro/dialog/dialog-parts.tsx": "460dffc1fc79ba33b91ad3c04e08c67dc41d9fa184ea52bfb30743d59239a4a7",
     "app/components/ouro/dialog/dialog-styles.ts": "9255e3e63756857fd01b97ee137ada423e7981367d631e52d79ae83dbd9153e0",
     "app/components/ouro/dialog/dialog.first-mount.touch.test.tsx": "81e4c327388ef27032a469bf85ba9026cee970cf9997149eb139cbbeddb30618",
-    "app/components/ouro/dialog/dialog.sheet-overlap.test.tsx": "2008a764e116febe03253228440a5fe785a2c3c5dc16dbb730f1ebb1cdb04876",
+    "app/components/ouro/dialog/dialog.sheet-overlap.test.tsx": "cfd56d3cf1bcec440fb67de0122b3a7b3f56235c4c3bd4d8e295639f136d43ef",
     "app/components/ouro/dialog/dialog.stories.tsx": "1979d7ef6474b0d0ccac31653aedb39f911e2b793602d68302701f8c78963672",
     "app/components/ouro/dialog/dialog.test-d.ts": "0dd0bf4c9ec34eaeaaac301c5adacf3649020b92f2cc6da5da1e88f68d123095",
     "app/components/ouro/dialog/dialog.test.tsx": "50b4be1ba8441c34cd0e2be7a6762ef15fb4515e17707a1846626c58a9a1def8",
@@ -463,8 +463,8 @@
     "app/lib/ouro/css-panel.tsx": "9639c4b066448f4e8fafd20addfadb6ea78d9daae09c9daf67b0244ebeab9e18",
     "app/lib/ouro/current-path.test.ts": "673a243110ddadee1ea715573546ea96c7ea09d213f1266e738673ec23b0316c",
     "app/lib/ouro/current-path.ts": "bbb63ed157c7458ddec1d11ccf615da1f0978a5f224eeffb7c8fe0ab7a2cc3f6",
-    "app/lib/ouro/dev.test.ts": "e4ab41df22f15d4771c42879501a796720bb0940470d97920cde2e2ce556d99b",
-    "app/lib/ouro/dev.ts": "85db9adcf70ab9b8f8dfd1410e7ae16a983177718aa2616d776be0da0d912fd2",
+    "app/lib/ouro/dev.test.ts": "8c6513ff89dc82f7d57d87f25c57223f2624771418991cee58669daf3b5add5b",
+    "app/lib/ouro/dev.ts": "bf52d9a1fea6cf048b227328fee510995e6e7b84c05d63952f88182b23e18dbd",
     "app/lib/ouro/disabled-reason.tsx": "72737119caf8070444f18b17baacbc7b604368c692046e15e3ebd0236b31a3e0",
     "app/lib/ouro/env.d.ts": "b9b1f9fbff01e0acecd2452110007846804d4d30e159a302f56312d2771fe90c",
     "app/lib/ouro/feedback.test.ts": "8d92ab26f084a69c94c08b146813c77e3d28727baddd4ff7cb968985b908dc3f",
