@@ -32,6 +32,28 @@ const items = [
   { value: "grid", label: "Grid" },
 ];
 
+describe("SegmentedControl segment looks off with a reason", () => {
+  it("dims a segment off with a reason as a disabled one is, and leaves the others on", async () => {
+    await render(
+      <SegmentedControl
+        label="View"
+        items={[
+          { value: "list", label: "List" },
+          { value: "map", label: "Map", disabledReason: "Maps need a connection" },
+          { value: "grid", label: "Grid", disabled: true },
+        ]}
+      />,
+    );
+    const [on, reasoned, disabled] = segments();
+    expect(getComputedStyle(disabled!).opacity).toBe("0.5");
+    expect(getComputedStyle(reasoned!).opacity).toBe("0.5");
+    expect(getComputedStyle(reasoned!).cursor).toBe("not-allowed");
+    expect(reasoned!.getAttribute("data-disabled")).toBe("");
+    expect(on!.hasAttribute("data-disabled")).toBe(false);
+    expect(getComputedStyle(on!).opacity).toBe("1");
+  });
+});
+
 describe("SegmentedControl item disabledReason", () => {
   it("turns a segment off with aria-disabled, keeps it focusable and describes it by the reason", async () => {
     await render(<SegmentedControl label="View" items={items} />);

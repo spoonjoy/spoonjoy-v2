@@ -220,6 +220,7 @@ export function TabsTab(allProps: TabsTabProps): JSX.Element {
       {...(reason.off
         ? {
             "aria-disabled": true,
+            "data-disabled": "",
             "aria-describedby": reason.describedBy,
             // Tab is what reaches it, since the arrow keys skip an aria-disabled tab.
             tabIndex: 0,

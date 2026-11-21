@@ -48,6 +48,23 @@ function themeColor(variable: string): string {
 
 const RouterLink: OuroLinkComponent = (props) => <a data-router="" {...props} />;
 
+describe("Badge looks off when marked data-disabled", () => {
+  it("dims and shows the not-allowed cursor, and an unmarked badge stays on", async () => {
+    await render(
+      <>
+        <Badge onClick={() => {}} data-disabled="">
+          Soon
+        </Badge>
+        <Badge onClick={() => {}}>Soon</Badge>
+      </>,
+    );
+    const [marked, on] = Array.from(document.querySelectorAll<HTMLElement>('[data-ouro="badge"]'));
+    expect(getComputedStyle(marked!).opacity).toBe("0.5");
+    expect(getComputedStyle(marked!).cursor).toBe("not-allowed");
+    expect(getComputedStyle(on!).opacity).toBe("1");
+  });
+});
+
 describe("Badge", () => {
   it("is a quiet secondary label by default", async () => {
     const { badge } = await render(<Badge>Draft</Badge>);

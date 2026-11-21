@@ -32,6 +32,28 @@ const items = [
   { value: "kitchen", label: "Kitchen", content: "Kitchen panel" },
 ];
 
+describe("Tabs tab looks off with a reason", () => {
+  it("dims a tab off with a reason as a disabled tab is, and leaves the others on", async () => {
+    await render(
+      <Tabs
+        label="Settings"
+        items={[
+          { value: "a", label: "General", content: "General" },
+          { value: "b", label: "Sharing", content: "Sharing", disabledReason: "Sign in" },
+          { value: "c", label: "Billing", content: "Billing", disabled: true },
+        ]}
+      />,
+    );
+    const [on, reasoned, disabled] = tabs();
+    expect(getComputedStyle(disabled!).opacity).toBe("0.5");
+    expect(getComputedStyle(reasoned!).opacity).toBe("0.5");
+    expect(getComputedStyle(reasoned!).cursor).toBe("not-allowed");
+    expect(reasoned!.getAttribute("data-disabled")).toBe("");
+    expect(on!.hasAttribute("data-disabled")).toBe(false);
+    expect(getComputedStyle(on!).opacity).toBe("1");
+  });
+});
+
 describe("Tabs item disabledReason", () => {
   it("turns a tab off with aria-disabled, keeps it focusable and describes it by the reason", async () => {
     await render(<Tabs label="Settings" items={items} />);
