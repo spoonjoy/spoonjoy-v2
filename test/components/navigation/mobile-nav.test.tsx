@@ -110,7 +110,9 @@ describe("MobileNav signed in", () => {
   it("draws the bar and the search circle on one solid surface, which tailwind.css turns charcoal", () => {
     renderAt("/");
     for (const element of [within(tabBar()).getByRole("list"), screen.getByRole("link", { name: "Search" })]) {
-      expect(element).toHaveClass("bg-popover");
+      // Ouro's tab bar draws both from --popover, which tailwind.css rebinds to charcoal under .sj-tab-bar;
+      // test/ouro/ouro-parts-in-spoonjoy-theme.test.tsx checks the rendered colour.
+      expect(element.closest('[data-ouro="tab-bar"]')).toHaveClass("sj-tab-bar");
       expect(element.className).not.toMatch(/backdrop-blur|\/9\d\b/);
     }
   });

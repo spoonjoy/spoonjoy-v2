@@ -43,7 +43,8 @@ describe("KitchenHome recipe descriptions", () => {
     expect(placeholder).toHaveTextContent(/^B$/);
     expect(placeholder.querySelector("svg")).toBeNull();
     expect(placeholder.className).not.toMatch(/photo-charcoal/);
-    expect(placeholder.parentElement).toHaveClass("size-16");
+    // The tile is the media of broth's row; test/ouro/ouro-parts-in-spoonjoy-theme.test.tsx measures it at 64px.
+    expect(placeholder.closest('[data-ouro="item"]')?.querySelector('a[href="/recipes/broth"]')).not.toBeNull();
     expect(placeholder.parentElement?.className).not.toMatch(/\bborder\b/);
   });
 });
