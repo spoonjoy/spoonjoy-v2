@@ -1,6 +1,6 @@
 {
-  "tag": "v1.3.401",
-  "tagCommit": "9ccf18debe90573bccd47f98223ad367be99f0c6",
+  "tag": "v1.3.403",
+  "tagCommit": "374102cee6bc4ab7e520ac84ccfa783188112276",
   "files": {
     "app/components/ouro/alert/alert.stories.tsx": "9fc0c3fec0cc4be3ce2281c979da815134bdc67e260645bbd0546fcae092613f",
     "app/components/ouro/alert/alert.test-d.ts": "f60fa946e10cc89dd3a53fc812f3cb458e8e903d034bd7a3e8d1965c62cd0ad4",
@@ -18,7 +18,7 @@
     "app/components/ouro/avatar/avatar.stories.tsx": "95fb1d79e9912c87cef1f331c2323e5640c203ec781cb6e6329128a68051cebf",
     "app/components/ouro/avatar/avatar.test-d.ts": "a8d94e97fcd9fb6fa7cbafc6d6cf6d5e7ad3722b15eb11b8cdf3d7cdb251abca",
     "app/components/ouro/avatar/avatar.test.tsx": "984a94f25062bb0d098023dae019a48f8cb6cc657d72c52027d0ab7f796d4226",
-    "app/components/ouro/avatar/avatar.tsx": "826eb1b1df7744b75b7dd6f82b00924f1d87b42558aee0c7748563f715597633",
+    "app/components/ouro/avatar/avatar.tsx": "64e1b0a791ae0ec35f947bb0d72ed61390014def60824d62a23a7d071e826eca",
     "app/components/ouro/avatar/avatar.weight.test.tsx": "9f9c16b85c0412b3c97c1cc25a7915a3e98dff854ca8f85733666eee0af6add2",
     "app/components/ouro/badge/badge.stories.tsx": "be913f22774efbe194d96a137becbce93b686161dd442fd6ba31425853a42dd9",
     "app/components/ouro/badge/badge.test-d.ts": "69d5460984519803403a832a98d62dd2e8fed72f41fbe02cbc6965b1b03729d2",
@@ -463,8 +463,8 @@
     "app/lib/ouro/css-panel.tsx": "9639c4b066448f4e8fafd20addfadb6ea78d9daae09c9daf67b0244ebeab9e18",
     "app/lib/ouro/current-path.test.ts": "673a243110ddadee1ea715573546ea96c7ea09d213f1266e738673ec23b0316c",
     "app/lib/ouro/current-path.ts": "bbb63ed157c7458ddec1d11ccf615da1f0978a5f224eeffb7c8fe0ab7a2cc3f6",
-    "app/lib/ouro/dev.test.ts": "a6a7efef332fef727450f26bf2070a42f7c24caebc901f5b846f57b97fd98d0b",
-    "app/lib/ouro/dev.ts": "e507702a790319bccb30072da618b4d9602770dc17e97ae08e0e97545c1f0ac8",
+    "app/lib/ouro/dev.test.ts": "97a73e8454166911f296af8ff917304a4cfbfa2affc4f5cda0c0171bc611688e",
+    "app/lib/ouro/dev.ts": "c3d56c43baeaba6fc8c3fbfa1e9f79b105cf8f77ea4c6bb897ff0ece823a2a15",
     "app/lib/ouro/disabled-reason.tsx": "72737119caf8070444f18b17baacbc7b604368c692046e15e3ebd0236b31a3e0",
     "app/lib/ouro/env.d.ts": "b9b1f9fbff01e0acecd2452110007846804d4d30e159a302f56312d2771fe90c",
     "app/lib/ouro/feedback.test.ts": "8d92ab26f084a69c94c08b146813c77e3d28727baddd4ff7cb968985b908dc3f",
