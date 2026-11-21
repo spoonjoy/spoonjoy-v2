@@ -63,13 +63,13 @@ export const InContext: Story = {
   },
 };
 
-/** A visible label, a disabled segment, and the whole control disabled. */
+/** A visible label, a segment off with a reason, and every segment off with one. */
 export const States: Story = {
   render: (args) => (
     <Surface>
       <SegmentedControl {...args} label="Units" items={[{ value: "metric", label: "Metric" }, { value: "us", label: "US" }]} />
-      <SegmentedControl {...args} items={[views[0]!, views[1]!, { ...views[2]!, disabled: true }]} />
-      <SegmentedControl {...args} label="Servings" disabled items={[{ value: "2", label: "2" }, { value: "4", label: "4" }, { value: "6", label: "6" }]} />
+      <SegmentedControl {...args} items={[views[0]!, views[1]!, { ...views[2]!, disabledReason: "Maps need a connection" }]} />
+      <SegmentedControl {...args} label="Servings" items={["2", "4", "6"].map((value) => ({ value, label: value, disabledReason: "Pick a recipe first" }))} />
     </Surface>
   ),
 };

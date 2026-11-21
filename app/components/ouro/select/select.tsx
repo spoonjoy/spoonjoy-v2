@@ -2,6 +2,8 @@
 
 import { Select as BaseSelect } from "@base-ui/react/select";
 import { useMemo, type JSX, type ReactNode, type Ref } from "react";
+import { Tooltip } from "~/components/ouro/tooltip/tooltip";
+import { useDisabledReason } from "~/lib/ouro/disabled-reason";
 import { Field } from "~/components/ouro/field/field";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
 import { SelectGroup, SelectItem, SelectListScope } from "~/components/ouro/select/select-parts";
@@ -53,6 +55,15 @@ export interface SelectBaseProps {
   required?: boolean | undefined;
   /** Disables the select and fades it. */
   disabled?: boolean | undefined;
+  /**
+   * Why the select can't be used now. Passing a reason turns it off as `disabled` does, but it
+   * stays in the Tab order, opening it does nothing, and the reason shows as its tooltip on hover
+   * and focus and is read as its description. It wins over `disabled`. `undefined` leaves the
+   * select on and keeps its place. Use `disabled` alone when the reason is obvious.
+   * @example
+   * <Select label="Course" options={courses} disabledReason={full ? "This term is full" : undefined} />
+   */
+  disabledReason?: string | undefined;
   /** The value can be seen but not changed. */
   readOnly?: boolean | undefined;
   /**
@@ -183,10 +194,16 @@ function SelectControl({
     };
   const field = useField()!;
   const form = useFormErrors();
+  const reason = useDisabledReason(props, field.describedBy);
   // Phones (below sm, with a coarse pointer) get the list as a bottom sheet. The list only
   // renders open, after hydration, so the server's answer never shows.
   const sheet = useMediaQuery(sheetQuery, false);
   const presentation = sheet ? "sheet" : undefined;
+
+  // A reasoned select stays focusable, so it opens nothing.
+  const handleOpenChange = (_open: boolean, details: { cancel: () => void }) => {
+    if (reason.off) details.cancel();
+  };
 
   // Choosing a value drops a Form error for this name, as typing does in a text field.
   const handleValueChange = (next: string | string[] | null) => {
@@ -195,6 +212,27 @@ function SelectControl({
   };
 
   const portal = usePortalContainer("Select", true);
+  // A div, not a button: VoiceOver drops the end of a <button role="combobox">'s value and adds a comma before
+  // it (WebKit bug 285047, ourostack/ouro-ui#113), and reads a div's whole, on macOS 15 and 26.
+  const trigger = (
+    <BaseSelect.Trigger
+      render={<div />}
+      nativeButton={false}
+      {...holdPageAtPress.listButton}
+      ref={ref}
+      data-ouro-control="select"
+      data-ouro-part="trigger"
+      className={triggerClass}
+      aria-labelledby={field.labelId}
+      aria-describedby={reason.describedBy}
+      {...(reason.off ? { "aria-disabled": true } : {})}
+      {...(reason.off ? { "data-disabled": "" } : {})}
+      aria-invalid={field.invalid || undefined}
+    >
+      <BaseSelect.Value placeholder={placeholder} className="min-w-0 flex-1 truncate" />
+      <ChevronIcon />
+    </BaseSelect.Trigger>
+  );
   return (
     <BaseSelect.Root<string, boolean>
       items={items}
@@ -204,29 +242,15 @@ function SelectControl({
       onValueChange={handleValueChange}
       name={name}
       required={required}
-      disabled={disabled}
+      disabled={reason.off ? false : disabled}
+      onOpenChange={handleOpenChange}
       readOnly={readOnly}
       autoComplete={autoComplete}
       form={formId}
       inputRef={markInput}
     >
-      {/* A div, not a button: VoiceOver drops the end of a <button role="combobox">'s value and adds a comma before
-          it (WebKit bug 285047, ourostack/ouro-ui#113), and reads a div's whole, on macOS 15 and 26. */}
-      <BaseSelect.Trigger
-        render={<div />}
-        nativeButton={false}
-        {...holdPageAtPress.listButton}
-        ref={ref}
-        data-ouro-control="select"
-        data-ouro-part="trigger"
-        className={triggerClass}
-        aria-labelledby={field.labelId}
-        aria-describedby={field.describedBy}
-        aria-invalid={field.invalid || undefined}
-      >
-        <BaseSelect.Value placeholder={placeholder} className="min-w-0 flex-1 truncate" />
-        <ChevronIcon />
-      </BaseSelect.Trigger>
+      {reason.wrapped ? <Tooltip content={reason.reason}>{trigger}</Tooltip> : trigger}
+      {reason.note}
       {/* Base UI puts the portal inside a Dialog's or Sheet's portal when the Select is in one, where
           the dialog's layers sit at z-1000; 1000 above --ouro-layer clears them there and on the page. */}
       <BaseSelect.Portal {...portal} data-ouro="select-portal" className="relative isolate z-[calc(var(--ouro-layer)+1000)]">

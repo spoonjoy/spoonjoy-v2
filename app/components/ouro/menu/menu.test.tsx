@@ -596,6 +596,134 @@ describe("Menu items", () => {
     await expect.poll(() => menus().length).toBe(1);
   });
 
+  it.each([
+    ["across", 4, 0],
+    ["down", 0, 4],
+  ])("keeps a submenu the keyboard closed shut under a pointer resting where it was, and opens it once the pointer moves %s", async (_, dx, dy) => {
+    await render(
+      <Menu trigger={<Button>Actions</Button>}>
+        <MenuItem>Edit</MenuItem>
+        <MenuSub label="Share">
+          <MenuItem>Copy link</MenuItem>
+        </MenuSub>
+      </Menu>,
+    );
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    await userEvent.keyboard("{ArrowDown}");
+    await userEvent.keyboard("{ArrowRight}");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Copy link");
+    await userEvent.keyboard("{ArrowLeft}");
+    await expect.poll(() => menus().length).toBe(1);
+    const share = document.activeElement as HTMLElement;
+    expect(share.textContent).toContain("Share");
+    const box = share.getBoundingClientRect();
+    const [x, y] = [Math.round(box.left + box.width / 2), Math.round(box.top + box.height / 2)];
+    // What a browser sends to a pointer that stayed still while the submenu, which lay under it, closed: the item it now rests on is entered.
+    const pointerAt = (left: number, top: number) => {
+      share.dispatchEvent(new MouseEvent("mouseenter", { clientX: left, clientY: top }));
+      share.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: left, clientY: top }));
+    };
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await act(async () => {
+        pointerAt(x, y);
+        pointerAt(x, y);
+        vi.advanceTimersByTime(2000);
+      });
+      expect(share.getAttribute("aria-expanded")).toBe("false");
+      expect(menus().length).toBe(1);
+      await act(async () => {
+        pointerAt(x + dx, y + dy);
+        vi.advanceTimersByTime(2000);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    await expect.poll(() => share.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("opens a submenu the pointer closed by leaving it as soon as the pointer comes back", async () => {
+    await render(
+      <Menu trigger={<Button>Actions</Button>}>
+        <MenuItem>Edit</MenuItem>
+        <MenuSub label="Share">
+          <MenuItem>Copy link</MenuItem>
+        </MenuSub>
+      </Menu>,
+    );
+    await userEvent.click(trigger());
+    await settled();
+    const share = page.getByRole("menuitem", { name: "Share" });
+    await userEvent.hover(share);
+    await expect.element(share).toHaveAttribute("aria-expanded", "true");
+    // While the pointer heads for the submenu, Base UI marks the menu inert to the pointer; a pointer that moves on still reaches Edit.
+    await userEvent.hover(page.getByRole("menuitem", { name: "Edit" }), { force: true });
+    await expect.element(share).toHaveAttribute("aria-expanded", "false");
+    await userEvent.hover(share);
+    await expect.element(share).toHaveAttribute("aria-expanded", "true");
+    await commands.parkPointer();
+  });
+
+  it("opens a submenu the keyboard closed again from the keyboard", async () => {
+    await render(
+      <Menu trigger={<Button>Actions</Button>}>
+        <MenuItem>Edit</MenuItem>
+        <MenuSub label="Share">
+          <MenuItem>Copy link</MenuItem>
+        </MenuSub>
+      </Menu>,
+    );
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    await userEvent.keyboard("{ArrowDown}");
+    await userEvent.keyboard("{ArrowRight}");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Copy link");
+    await userEvent.keyboard("{ArrowLeft}");
+    await expect.poll(() => menus().length).toBe(1);
+    await userEvent.keyboard("{ArrowRight}");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Copy link");
+  });
+
+  it("opens a submenu the keyboard closed when its item is clicked where the pointer rests", async () => {
+    await render(
+      <Menu trigger={<Button>Actions</Button>}>
+        <MenuItem>Edit</MenuItem>
+        <MenuSub label="Share">
+          <MenuItem>Copy link</MenuItem>
+        </MenuSub>
+      </Menu>,
+    );
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    await settled();
+    await userEvent.keyboard("{ArrowDown}");
+    await userEvent.keyboard("{ArrowRight}");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Copy link");
+    await userEvent.keyboard("{ArrowLeft}");
+    await expect.poll(() => menus().length).toBe(1);
+    const share = document.activeElement as HTMLElement;
+    const box = share.getBoundingClientRect();
+    const at = { clientX: Math.round(box.left + box.width / 2), clientY: Math.round(box.top + box.height / 2) };
+    // The pointer enters the item and is held there, then presses it without moving.
+    await act(async () => {
+      share.dispatchEvent(new MouseEvent("mouseenter", at));
+      share.dispatchEvent(new MouseEvent("mousemove", { ...at, bubbles: true }));
+    });
+    // A mouse's press, as a browser sends it: Base UI leaves a mouse's press on a hover trigger to the hover.
+    await act(async () => {
+      const mouse = { ...at, bubbles: true, cancelable: true, button: 0, pointerType: "mouse", pointerId: 1, isPrimary: true };
+      share.dispatchEvent(new PointerEvent("pointerdown", mouse));
+      share.dispatchEvent(new MouseEvent("mousedown", { ...mouse, detail: 1 }));
+      share.dispatchEvent(new PointerEvent("pointerup", mouse));
+      share.dispatchEvent(new MouseEvent("mouseup", { ...mouse, detail: 1 }));
+      share.dispatchEvent(new PointerEvent("click", { ...mouse, detail: 1 }));
+    });
+    await expect.poll(() => share.getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("opens a submenu with ArrowLeft in a right-to-left page, where it opens to the left, and closes it with ArrowRight", async () => {
     document.documentElement.dir = "rtl";
     try {

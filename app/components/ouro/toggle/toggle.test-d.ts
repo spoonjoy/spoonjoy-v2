@@ -51,3 +51,4 @@ expectTypeOf<{ label: "Bold"; tone: "primary" }>().not.toExtend<ToggleProps>();
 createElement(Toggle, { pressed: true });
 // @ts-expect-error a toggle is pressed, not checked.
 createElement(Toggle, { label: "Bold", checked: true });
+expectTypeOf<{ label: "Bold"; disabledReason: "Unlock first" }>().toExtend<ToggleProps>();

@@ -62,9 +62,9 @@ export const InContext: Story = {
 
 /**
  * Disabled, as while the last move is being saved: the handles stay in the tab order, dimmed
- * and marked unavailable, and take no drag, menu or pick-up.
+ * and marked unavailable, take no drag, menu or pick-up, and say why (`disabledReason`).
  */
-export const Disabled: Story = { args: { disabled: true } };
+export const Disabled: Story = { args: { disabledReason: "Saving your last move" } };
 
 /** A long list that scrolls in place: hold a row near its top or bottom edge to scroll while dragging. */
 export const ScrollsInPlace: Story = {

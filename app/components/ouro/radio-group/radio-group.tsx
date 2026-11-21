@@ -7,6 +7,8 @@ import { Field } from "~/components/ouro/field/field";
 import { choicesClass, contractWarnings } from "~/components/ouro/field/field-styles";
 import { devThrow } from "~/lib/ouro/dev";
 import { controlRef } from "~/lib/ouro/control-ref";
+import { Tooltip } from "~/components/ouro/tooltip/tooltip";
+import { useDisabledReason } from "~/lib/ouro/disabled-reason";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { FieldOwnerContext, useField, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
@@ -24,6 +26,15 @@ export interface RadioGroupOption {
   description?: ReactNode | undefined;
   /** Disables this one radio; the arrow keys skip it. */
   disabled?: boolean | undefined;
+  /**
+   * Why this choice can't be picked now. Turns it off with `aria-disabled`: it stays
+   * focusable, picking does nothing, and the reason shows as its tooltip on
+   * hover and keyboard focus and is read as its description. The arrow keys skip it, as they
+   * skip a `disabled` radio; Tab reaches it, so a keyboard user can read why. It wins over `disabled`. Pass `undefined` while the radio is available.
+   * @example
+   * { value: "large", label: "Large", disabledReason: soldOut ? "Sold out today" : undefined }
+   */
+  disabledReason?: string | undefined;
 }
 
 /** The props RadioGroup takes whichever way its choices are given. */
@@ -126,6 +137,15 @@ export interface RadioProps {
   description?: ReactNode | undefined;
   /** Disables this one radio; the arrow keys skip it. */
   disabled?: boolean | undefined;
+  /**
+   * Why this radio can't be picked now. Turns it off with `aria-disabled`: it stays
+   * focusable, picking does nothing, and the reason shows as its tooltip on
+   * hover and keyboard focus and is read as its description. The arrow keys skip it, as they
+   * skip a `disabled` radio; Tab reaches it, so a keyboard user can read why. It wins over `disabled`. Pass `undefined` while the radio is available.
+   * @example
+   * <Radio value="large" label="Large" disabledReason={soldOut ? "Sold out today" : undefined} />
+   */
+  disabledReason?: string | undefined;
   /** Layout only: margins, width, grid placement. Appearance classes warn in development. */
   className?: string | undefined;
   /** The radio element, a `<button role="radio">`, which the label names with `for`. */
@@ -150,9 +170,11 @@ const radioOwner = { name: "Radio", data: "radio", layout: "inline" } as const;
 const markInput = controlRef("radio-group", "hidden-input");
 
 /** The radio, inside its Field item: it takes its name and description ids from the field. */
-function RadioCircle({ value, ref }: { value: string; ref: Ref<HTMLElement> | undefined }): JSX.Element {
+function RadioCircle(props: { value: string; ref: Ref<HTMLElement> | undefined; disabledReason?: string | undefined }): JSX.Element {
+  const { value, ref } = props;
   const field = useField()!;
-  return (
+  const reason = useDisabledReason(props, field.describedBy);
+  const circle = (
     <BaseRadio.Root
       value={value}
       ref={ref}
@@ -164,14 +186,20 @@ function RadioCircle({ value, ref }: { value: string; ref: Ref<HTMLElement> | un
       data-ouro-part="circle"
       // Set here, not left to Base UI's effects, so the server HTML names and describes the radio.
       aria-labelledby={field.labelId}
-      aria-describedby={field.describedBy}
+      aria-describedby={reason.describedBy}
       aria-invalid={field.invalid || undefined}
+      // Read-only keeps the radio focusable and unpickable; the arrow keys land on it without picking it.
+      {...(reason.off ? { readOnly: true, "aria-readonly": undefined, "aria-disabled": true } : {})}
+      // The arrow keys skip an aria-disabled item, so Tab is what reaches it to show its reason.
+      {...(reason.off ? { tabIndex: 0 } : {})}
       className={radioClass}
     >
       <TouchTarget />
       <BaseRadio.Indicator keepMounted data-ouro-radio-dot="" className={dotClass} />
+      {reason.note}
     </BaseRadio.Root>
   );
+  return reason.wrapped ? <Tooltip content={reason.reason}>{circle}</Tooltip> : circle;
 }
 
 /**
@@ -190,6 +218,7 @@ function RadioCircle({ value, ref }: { value: string; ref: Ref<HTMLElement> | un
  */
 export function Radio(props: RadioProps): JSX.Element {
   const { value, label, hideLabel, description, disabled, className, ref, checked, name } = props;
+  const reasoned = Boolean(props.disabledReason);
   if (useField()?.group !== "RadioGroup") {
     devThrow(
       "Radio",
@@ -208,8 +237,8 @@ export function Radio(props: RadioProps): JSX.Element {
   return (
     <FieldOwnerContext.Provider value={radioOwner}>
       {/* `name` reaches Field only so it can point the misuse to the group. */}
-      <Field label={label} hideLabel={hideLabel} description={description} disabled={disabled} name={name as string | undefined} className={className}>
-        <RadioCircle value={value} ref={ref} />
+      <Field label={label} hideLabel={hideLabel} description={description} disabled={disabled && !reasoned} name={name as string | undefined} className={className}>
+        <RadioCircle value={value} ref={ref} {...("disabledReason" in props ? { disabledReason: props.disabledReason } : {})} />
       </Field>
     </FieldOwnerContext.Provider>
   );
@@ -338,7 +367,14 @@ export function RadioGroup(props: RadioGroupProps): JSX.Element {
         <Choices value={value} defaultValue={defaultValue} onValueChange={onValueChange} orientation={orientation} ref={ref}>
           {options
             ? options.map((option) => (
-                <Radio key={option.value} value={option.value} label={option.label} description={option.description} disabled={option.disabled} />
+                <Radio
+                  key={option.value}
+                  value={option.value}
+                  label={option.label}
+                  description={option.description}
+                  disabled={option.disabled}
+                  {...("disabledReason" in option ? { disabledReason: option.disabledReason } : {})}
+                />
               ))
             : children}
         </Choices>

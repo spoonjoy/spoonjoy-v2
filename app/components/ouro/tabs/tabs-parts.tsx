@@ -4,6 +4,8 @@ import { Tabs as BaseTabs } from "@base-ui/react/tabs";
 import { createContext, memo, useContext, useEffect, useRef, type JSX, type ReactNode } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
+import { Tooltip } from "~/components/ouro/tooltip/tooltip";
+import { useDisabledReason } from "~/lib/ouro/disabled-reason";
 import { PageDirection } from "~/lib/ouro/page-direction";
 import { devThrow } from "~/lib/ouro/dev";
 import { useMergedRef } from "~/lib/ouro/refs";
@@ -189,17 +191,49 @@ export function TabsLinkList({ orientation, current, children }: { orientation: 
 }
 
 /** Props for {@link TabsTab}. */
-export type TabsTabProps = Omit<BaseTabs.Tab.Props, "className"> & { className?: string | undefined };
+export type TabsTabProps = Omit<BaseTabs.Tab.Props, "className"> & {
+  className?: string | undefined;
+  /**
+   * Why this tab can't be selected now. Turns it off with `aria-disabled`: it stays focusable
+   * and pressing it selects nothing, and the reason shows as its tooltip on hover and keyboard
+   * focus and is read as its description. The arrow keys skip it, as they skip a `disabled`
+   * tab; Tab reaches it, so a keyboard user can read why. It wins over `disabled`. Pass
+   * `undefined` while the tab is available.
+   * @example
+   * <TabsTab value="sharing" disabledReason={signedIn ? undefined : "Sign in to share"}>Sharing</TabsTab>
+   */
+  disabledReason?: string | undefined;
+};
 
 /** Part: one tab, a button that shows the panel with the same `value`. */
-export function TabsTab({ className, children, ...props }: TabsTabProps): JSX.Element {
+export function TabsTab(allProps: TabsTabProps): JSX.Element {
+  const { className, children, disabledReason: _reason, disabled, ...props } = allProps;
   useTabsPart("TabsTab", '<TabsTab value="…">…</TabsTab>');
   usePartClassName("TabsTab", className);
-  return (
-    <BaseTabs.Tab data-ouro-control="tabs" data-ouro-part="tab" {...props} className={cn(tabClass, className)}>
+  const reason = useDisabledReason(allProps, props["aria-describedby"]);
+  const tab = (
+    <BaseTabs.Tab
+      data-ouro-control="tabs"
+      data-ouro-part="tab"
+      {...props}
+      disabled={disabled && !reason.off}
+      {...(reason.off
+        ? {
+            "aria-disabled": true,
+            "aria-describedby": reason.describedBy,
+            // Tab is what reaches it, since the arrow keys skip an aria-disabled tab.
+            tabIndex: 0,
+            onClick: (event: { preventBaseUIHandler: () => void }) => event.preventBaseUIHandler(),
+            onFocus: (event: { preventBaseUIHandler: () => void }) => event.preventBaseUIHandler(),
+          }
+        : {})}
+      className={cn(tabClass, className)}
+    >
       <span className={tabFaceClass}>{children}</span>
+      {reason.note}
     </BaseTabs.Tab>
   );
+  return reason.wrapped ? <Tooltip content={reason.reason}>{tab}</Tooltip> : tab;
 }
 
 /** Part: the line that slides to the selected tab. Put it last inside `TabsList`. */

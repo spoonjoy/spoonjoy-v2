@@ -1,8 +1,13 @@
-import { createElement } from "react";
+import { createElement, type ComponentProps } from "react";
 import { expectTypeOf } from "vitest";
 import { Select, type SelectProps } from "~/components/ouro/select/select";
 expectTypeOf<readonly ["Taken."]>().toExtend<NonNullable<SelectProps["error"]>>();
 import { SelectGroup, SelectItem } from "~/components/ouro/select/select-parts";
+
+// A call site's props, typed as the component takes them. A case below keeps children in the props object because it
+// checks the props a call passes, children among them, and a .ts file has no JSX to put children in; an app's lint
+// (react(no-children-prop)) flags children passed in createElement's props, so the check doesn't call createElement.
+const propsOf = <P>(value: P): P => value;
 
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
 // fails the check if the line below it stops being an error.
@@ -27,7 +32,9 @@ createElement(Select, {
   options: courses,
   className: "mt-4",
 });
-createElement(Select, { label: "Course", children: createElement(SelectGroup, { label: "Mains", children: createElement(SelectItem, { value: "pasta", children: "Pasta" }) }) });
+const pasta = propsOf<ComponentProps<typeof SelectItem>>({ value: "pasta", children: "Pasta" });
+const mains = propsOf<ComponentProps<typeof SelectGroup>>({ label: "Mains", children: createElement(SelectItem, pasta) });
+propsOf<ComponentProps<typeof Select>>({ label: "Course", children: createElement(SelectGroup, mains) });
 
 // A single select's value is a string or null.
 expectTypeOf<{ label: "Course"; value: "pasta"; onValueChange: (value: string | null) => void }>().toExtend<SelectProps>();
@@ -59,3 +66,9 @@ expectTypeOf<{ label: "Course"; isDisabled: true }>().not.toExtend<SelectProps>(
 createElement(Select, { options: courses });
 // @ts-expect-error isMulti is not a prop; use multiple.
 createElement(Select, { label: "Tags", isMulti: true });
+
+// disabledReason is text, or undefined while the select is on.
+createElement(Select, { label: "Course", options: courses, disabledReason: "This term is full" });
+createElement(Select, { label: "Course", options: courses, disabledReason: undefined });
+// @ts-expect-error disabledReason is text, not a flag.
+createElement(Select, { label: "Course", options: courses, disabledReason: true });

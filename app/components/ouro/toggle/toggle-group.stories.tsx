@@ -78,7 +78,7 @@ export const Modes: Story = {
       <ToggleGroup label="Alignment" items={alignment} defaultValue="center" />
       <ToggleGroup label="Text style" multiple items={styles} defaultValue={["bold", "underline"]} />
       <ToggleGroup label="Size" variant="outline" size="sm" items={[{ value: "s", label: "S" }, { value: "m", label: "M" }, { value: "l", label: "L" }]} defaultValue="m" />
-      <ToggleGroup label="Archived filters" disabled items={alignment} defaultValue="left" />
+      <ToggleGroup label="Archived filters" items={alignment.map((item) => ({ ...item, disabledReason: "Restore the recipe first" }))} defaultValue="left" />
     </Surface>
   ),
 };

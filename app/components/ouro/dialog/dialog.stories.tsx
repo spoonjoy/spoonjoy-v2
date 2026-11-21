@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useState, type CSSProperties } from "react";
+import { useState, type ComponentProps, type CSSProperties } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { Dialog } from "~/components/ouro/dialog/dialog";
 import {
@@ -241,20 +241,30 @@ export const WideContent: Story = {
   },
 };
 
-/**
- * `size` caps the width. `auto`, the default, fits the content up to 70% of the screen (40 to 56rem); `xl`, `2xl` and
- * `full` raise the cap to 56rem, 72rem and the viewport; `sm`, `md` and `lg` pin 24, 32 and 40rem. Each opens the gallery.
- */
-export const Sizes: Story = {
-  render: () => (
+/** One trigger and Dialog per size, each opening the gallery. A story scans every overlay it opens, so the sizes are split across two stories. */
+function SizeDialogs({ sizes }: { sizes: readonly NonNullable<ComponentProps<typeof Dialog>["size"]>[] }) {
+  return (
     <div style={row}>
-      {(["auto", "sm", "md", "lg", "xl", "2xl", "full"] as const).map((size) => (
+      {sizes.map((size) => (
         <Dialog key={size} title={`Size ${size}`} description="Ten places along the coast." size={size} trigger={<Button variant="soft">{size}</Button>}>
           <Gallery />
         </Dialog>
       ))}
     </div>
-  ),
+  );
+}
+
+/**
+ * `size` caps the width. `auto`, the default, fits the content up to 70% of the screen (40 to 56rem); `sm`, `md` and `lg`
+ * pin 24, 32 and 40rem. `LargerSizes` shows the caps `xl`, `2xl` and `full`.
+ */
+export const Sizes: Story = {
+  render: () => <SizeDialogs sizes={["auto", "sm", "md", "lg"]} />,
+};
+
+/** `xl`, `2xl` and `full` raise the cap to 56rem, 72rem and the viewport. Each opens the gallery. */
+export const LargerSizes: Story = {
+  render: () => <SizeDialogs sizes={["xl", "2xl", "full"]} />,
 };
 
 /** `presentation` fixes the form at every width. */

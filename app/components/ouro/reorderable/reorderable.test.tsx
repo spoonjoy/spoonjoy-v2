@@ -1194,6 +1194,31 @@ describe("Reorderable", () => {
       expect(onReorder).toHaveBeenCalledTimes(1);
     });
 
+    it("with disabledReason, turns reordering off by itself, describes every handle by the reason and shows it as a tooltip", async () => {
+      const onReorder = vi.fn();
+      await render(list({ onReorder, disabledReason: "Saving your last move" }));
+      for (const name of names) {
+        expect(handle(name).getAttribute("aria-disabled")).toBe("true");
+        expect(document.getElementById(handle(name).getAttribute("aria-describedby")!)!.textContent).toBe("Saving your last move");
+      }
+      await focus("Sear");
+      await press(" ");
+      await press("{Enter}");
+      expect(handle("Sear").hasAttribute("data-grabbed")).toBe(false);
+      expect(document.querySelector('[role="menu"]')).toBeNull();
+      await expect.poll(() => document.querySelector('[data-ouro="tooltip"]')?.textContent).toBe("Saving your last move");
+      expect(onReorder).not.toHaveBeenCalled();
+    });
+
+    it("keeps its handle, and reorders again, when disabledReason goes back to undefined", async () => {
+      await render(list({ disabledReason: "Saving" }));
+      const before = handle("Sear");
+      await render(list({ disabledReason: undefined }));
+      expect(handle("Sear")).toBe(before);
+      expect(handle("Sear").hasAttribute("aria-disabled")).toBe(false);
+      expect(document.getElementById(handle("Sear").getAttribute("aria-describedby")!)!.textContent).toBe(instructions);
+    });
+
     it("puts back a row held from the keyboard and closes an open menu when it turns on", async () => {
       const onReorder = vi.fn();
       const element = await render(list({ onReorder }));

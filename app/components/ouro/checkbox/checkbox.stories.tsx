@@ -82,8 +82,8 @@ export const States: Story = {
       <Checkbox label="Save to my cookbook" name="save" defaultChecked />
       <Checkbox label="Share with the family" name="share" description="Everyone in your household sees it." defaultChecked />
       <Checkbox label="I accept the terms" name="terms" required error="Accept the terms to continue." />
-      <Checkbox label="Publish to the community" name="publish" disabled description="Verify your email first." />
-      <Checkbox label="Keep private" name="private" disabled defaultChecked />
+      <Checkbox label="Publish to the community" name="publish" disabledReason="Verify your email first" />
+      <Checkbox label="Keep private" name="private" disabledReason="Managed by your household" defaultChecked />
     </Surface>
   ),
 };

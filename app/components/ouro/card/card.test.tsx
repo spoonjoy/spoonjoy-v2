@@ -118,6 +118,167 @@ describe("Card", () => {
     expect(media.top).toBe(box.top + 1);
   });
 
+  it("lays a backdrop behind the whole card, edge to edge, clipping only the picture and not the card or its text", async () => {
+    const { card } = await render(
+      <Card
+        backdrop={<img src={pixel} alt="" data-picture="" />}
+        footer={<Button>Start cooking</Button>}
+        className="min-h-80"
+      >
+        <Text>On the counter</Text>
+      </Card>,
+    );
+    const backdrop = card.querySelector<HTMLElement>("[data-card-backdrop]")!;
+    const picture = card.querySelector<HTMLElement>("[data-picture]")!;
+    const box = card.getBoundingClientRect();
+    // It covers the card's border box, behind its content, and the picture fills it.
+    expect(backdrop.getBoundingClientRect().toJSON()).toEqual(box.toJSON());
+    expect(picture.getBoundingClientRect().toJSON()).toEqual(box.toJSON());
+    expect(getComputedStyle(picture).objectFit).toBe("cover");
+    expect(getComputedStyle(backdrop).zIndex).toBe("-1");
+    expect(getComputedStyle(backdrop).pointerEvents).toBe("none");
+    // The picture takes the card's corner and clips itself; the card and its text and controls don't clip.
+    expect(getComputedStyle(backdrop).borderTopLeftRadius).toBe(getComputedStyle(card).borderTopLeftRadius);
+    expect(parseFloat(getComputedStyle(backdrop).borderTopLeftRadius)).toBeGreaterThan(1);
+    expect(getComputedStyle(backdrop).overflow).toBe("clip");
+    expect(getComputedStyle(card).overflow).toBe("visible");
+    for (const part of [page.getByText("On the counter").element(), page.getByRole("button", { name: "Start cooking" }).element()]) {
+      for (let node: Element | null = part; node && node !== card; node = node.parentElement) {
+        expect(getComputedStyle(node).clipPath).toBe("none");
+        expect(backdrop.contains(node)).toBe(false);
+      }
+    }
+    const [x, y] = center(page.getByRole("button", { name: "Start cooking" }).element() as HTMLElement);
+    expect(document.elementFromPoint(x, y)?.closest("button")?.textContent).toBe("Start cooking");
+  });
+
+  it("rounds a plain card's backdrop itself, as plain media is rounded", async () => {
+    const { card } = await render(<Card variant="plain" backdrop={<img src={pixel} alt="" />} title="Cover" />);
+    const backdrop = card.querySelector<HTMLElement>("[data-card-backdrop]")!;
+    expect(parseFloat(getComputedStyle(backdrop).borderTopLeftRadius)).toBeGreaterThan(1);
+    expect(getComputedStyle(backdrop).overflow).toBe("clip");
+  });
+
+  it("tints a linked backdrop card on hover inside the picture's clip, not as a square over its corners", async () => {
+    const { card } = await render(<Card href="/recipes/1" title="Ribs" backdrop={<img src={pixel} alt="" />} className="min-h-40" />);
+    const backdrop = card.querySelector<HTMLElement>("[data-card-backdrop]")!;
+    const link = card.querySelector<HTMLElement>("[data-card-link]")!;
+    const tint = backdrop.querySelector<HTMLElement>("[data-card-tint]")!;
+    const clear = "rgba(0, 0, 0, 0)";
+    expect(tint.style.backgroundColor).toBe("transparent");
+    expect(tint.getBoundingClientRect().toJSON()).toEqual(backdrop.getBoundingClientRect().toJSON());
+    expect(tint.style.transition).toContain("background-color");
+    await userEvent.hover(link);
+    await expect.poll(() => getComputedStyle(tint).backgroundColor).not.toBe(clear);
+    expect(getComputedStyle(link, "::after").backgroundColor).toBe(clear);
+    expect(getComputedStyle(backdrop).overflow).toBe("clip");
+    await commands.parkPointer();
+  });
+
+  it("deepens and clears a linked backdrop card's tint on a press when the app passes no pointer handlers", async () => {
+    const { card } = await render(<Card href="/recipes/1" title="Ribs" backdrop={<img src={pixel} alt="" />} className="min-h-40" />);
+    const tint = card.querySelector<HTMLElement>("[data-card-tint]")!;
+    const link = card.querySelector<HTMLElement>("[data-card-link]")!;
+    const fire = (type: string) => act(() => link.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerType: "mouse" })));
+    await fire("pointerover");
+    const hover = tint.style.backgroundColor;
+    await fire("pointerdown");
+    expect(tint.style.backgroundColor).not.toBe(hover);
+    await fire("pointerup");
+    expect(tint.style.backgroundColor).toBe(hover);
+    await fire("pointerdown");
+    await fire("pointercancel");
+    expect(tint.style.backgroundColor).toBe("transparent");
+  });
+
+  it("fills the backdrop with a picture drawn by an inline element, such as a <picture>", async () => {
+    const { card } = await render(<Card title="Ribs" backdrop={<span data-picture="" />} className="min-h-40" />);
+    const backdrop = card.querySelector<HTMLElement>("[data-card-backdrop]")!;
+    const picture = backdrop.querySelector<HTMLElement>("[data-picture]")!;
+    expect(picture.getBoundingClientRect().toJSON()).toEqual(backdrop.getBoundingClientRect().toJSON());
+  });
+
+  it("deepens a linked backdrop card's tint while its link is pressed, never for a touch, and clears it when the pointer leaves", async () => {
+    const calls: string[] = [];
+    const own = (name: string) => () => calls.push(name);
+    const { card } = await render(
+      <Card
+        href="/recipes/1"
+        title="Ribs"
+        backdrop={<img src={pixel} alt="" style={{ opacity: 0.5 }} />}
+        className="min-h-40"
+        onPointerOver={own("over")}
+        onPointerDown={own("down")}
+        onPointerUp={own("up")}
+        onPointerCancel={own("cancel")}
+        onPointerLeave={own("leave")}
+      />,
+    );
+    const tint = card.querySelector<HTMLElement>("[data-card-tint]")!;
+    const link = card.querySelector<HTMLElement>("[data-card-link]")!;
+    const fire = (target: Element, type: string, pointerType = "mouse", relatedTarget: Element | null = null) =>
+      act(() => target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerType, relatedTarget })));
+    // The colour the tint is set to, not where its transition has reached.
+    const shade = () => tint.style.backgroundColor;
+    const clear = "transparent";
+    await fire(link, "pointerover");
+    const hover = shade();
+    expect(hover).not.toBe(clear);
+    await fire(link, "pointerdown");
+    const press = shade();
+    expect(press).not.toBe(hover);
+    // A press holds through moving over another part of the card.
+    await fire(card.querySelector("h3")!, "pointerover");
+    expect(shade()).toBe(press);
+    await fire(link, "pointerup");
+    expect(shade()).toBe(hover);
+    // React's onPointerLeave comes from the pointer moving out to something outside the card.
+    await fire(link, "pointerout", "mouse", document.body);
+    expect(shade()).toBe(clear);
+    // A touch leaves no hover behind, and a cancelled press clears.
+    await fire(link, "pointerover", "touch");
+    expect(shade()).toBe(clear);
+    await fire(link, "pointerdown", "touch");
+    expect(shade()).toBe(press);
+    await fire(link, "pointerup", "touch");
+    expect(shade()).toBe(clear);
+    await fire(link, "pointerdown", "touch");
+    await fire(link, "pointercancel", "touch");
+    expect(shade()).toBe(clear);
+    // A press that starts off the link isn't the link's.
+    await fire(card, "pointerdown");
+    expect(shade()).toBe(clear);
+    // The app's own pointer handlers still run, and the picture keeps its own style beside the fill.
+    expect(new Set(calls)).toEqual(new Set(["over", "down", "up", "cancel", "leave"]));
+    const picture = card.querySelector<HTMLImageElement>("[data-card-backdrop] img")!;
+    expect([picture.style.opacity, picture.style.objectFit]).toEqual(["0.5", "cover"]);
+  });
+
+  it("lays a backdrop that isn't an element as it is, and an unlinked card's backdrop has no tint", async () => {
+    const { card } = await render(<Card title="Ribs" backdrop="A photo of ribs" className="min-h-40" />);
+    const backdrop = card.querySelector<HTMLElement>("[data-card-backdrop]")!;
+    expect(backdrop.textContent).toBe("A photo of ribs");
+    expect(backdrop.querySelector("[data-card-tint]")).toBeNull();
+  });
+
+  it("keeps a plain card's backdrop inside the plain card, inside an outlined one", async () => {
+    await render(
+      <Card title="Outer">
+        <Card variant="plain" backdrop={<img src={pixel} alt="" />} className="min-h-20" data-inner="">
+          x
+        </Card>
+      </Card>,
+    );
+    const inner = document.querySelector<HTMLElement>("[data-inner]")!;
+    const backdrop = inner.querySelector<HTMLElement>("[data-card-backdrop]")!;
+    expect(backdrop.getBoundingClientRect().toJSON()).toEqual(inner.getBoundingClientRect().toJSON());
+  });
+
+  it("warns that backdrop and media are two pictures", async () => {
+    await render(<Card backdrop={<img src={pixel} alt="" />} media={<img src={pixel} alt="" />} title="Cover" />);
+    expect(warn).toHaveBeenCalledWith('[ouro-ui] Card: backdrop and media are two pictures; use one. Fix: <Card backdrop={<img src=… alt="" />}>.');
+  });
+
   it("is a bordered surface in the card colors, with 24px padding", async () => {
     const { card } = await render(
       <Card title="Pantry">

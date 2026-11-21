@@ -217,13 +217,13 @@ export const Links: Story = {
   ),
 };
 
-/** Disabled buttons fade and ignore presses. Prefer `loading` while an action runs. */
+/** A button with a `disabledReason` fades and ignores presses, stays focusable and says why on hover and focus. Prefer `loading` while an action runs. */
 export const Disabled: Story = {
   render: () => (
     <Surface>
       <div style={row}>
         {variants.map((variant) => (
-          <Button key={variant} variant={variant} disabled>
+          <Button key={variant} variant={variant} disabledReason="Finish the form first">
             {variant[0]!.toUpperCase() + variant.slice(1)}
           </Button>
         ))}

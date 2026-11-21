@@ -1,6 +1,11 @@
-import { createElement, type ComponentProps } from "react";
+import { type ComponentProps } from "react";
 import { expectTypeOf } from "vitest";
 import { Link, type LinkProps } from "~/components/ouro/link/link";
+
+// A call site's props, typed as the component takes them. A case below keeps children in the props object because it
+// checks the props a call passes, children among them, and a .ts file has no JSX to put children in; an app's lint
+// (react(no-children-prop)) flags children passed in createElement's props, so the check doesn't call createElement.
+const propsOf = <P>(value: P): P => value;
 
 // Type tests: `pnpm typecheck` compiles this file.
 
@@ -32,4 +37,4 @@ expectTypeOf<{ href: "/guide/2"; active: true; children: "Chapter 2" }>().not.to
 expectTypeOf<{ href: "/guide/2"; isActive: true; children: "Chapter 2" }>().not.toExtend<LinkProps>();
 
 // @ts-expect-error href is required.
-createElement(Link, { to: "/recipes", children: "Recipes" });
+propsOf<ComponentProps<typeof Link>>({ to: "/recipes", children: "Recipes" });

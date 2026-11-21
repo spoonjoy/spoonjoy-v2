@@ -8,6 +8,11 @@ import {
   type MenuProps,
 } from "~/components/ouro/menu/menu";
 
+// A call site's props, typed as the component takes them. A case below keeps children in the props object because it
+// checks the props a call passes, children among them, and a .ts file has no JSX to put children in; an app's lint
+// (react(no-children-prop)) flags children passed in createElement's props, so the check doesn't call createElement.
+const propsOf = <P>(value: P): P => value;
+
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
 // fails the check if the line below it stops being an error.
 
@@ -67,6 +72,12 @@ expectTypeOf<{ children: "Edit"; checked: true }>().not.toExtend<MenuItemProps>(
 
 // JSX: the same rules at a call site.
 // @ts-expect-error -- no way to open
-createElement(Menu, { children: "Items" });
-createElement(Menu, { trigger, children: "Items" });
-createElement(MenuItem, { children: "Edit", onClick: (event) => event.currentTarget });
+propsOf<ComponentProps<typeof Menu>>({ children: "Items" });
+propsOf<ComponentProps<typeof Menu>>({ trigger, children: "Items" });
+propsOf<ComponentProps<typeof MenuItem>>({ children: "Edit", onClick: (event) => event.currentTarget });
+
+// disabledReason is text, or undefined while the item is on.
+propsOf<ComponentProps<typeof MenuItem>>({ children: "Paste", disabledReason: "Nothing copied yet" });
+propsOf<ComponentProps<typeof MenuItem>>({ children: "Paste", disabledReason: undefined });
+// @ts-expect-error disabledReason is text, not a flag.
+propsOf<ComponentProps<typeof MenuItem>>({ children: "Paste", disabledReason: true });

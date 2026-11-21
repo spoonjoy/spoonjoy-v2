@@ -69,7 +69,7 @@ export const States: Story = {
       <Toggle label="Favorite" icon={StarIcon} variant="outline" defaultPressed />
       <Toggle label="Show completed" size="sm" />
       <Toggle label="Show completed" size="sm" defaultPressed />
-      <Toggle label="Archived" disabled />
+      <Toggle label="Archived" disabledReason="Restore the recipe first" />
     </Surface>
   ),
 };
