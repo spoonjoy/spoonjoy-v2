@@ -126,7 +126,7 @@ export type PaginationProps = (PaginationLinkProps | PaginationButtonProps) & (P
 
 // A cell: 44px with 16px text on a coarse pointer at every width, 36px with 14px text with a fine one.
 const cell =
-  "press relative m-0 box-border inline-flex h-11 min-w-11 pointer-fine:h-9 pointer-fine:min-w-9 items-center justify-center gap-1 " +
+  "press relative m-0 box-border inline-flex h-ouro-11 min-w-ouro-11 pointer-fine:h-9 pointer-fine:min-w-9 items-center justify-center gap-1 " +
   "rounded-ouro-md border-0 forced-colors:border forced-colors:border-solid bg-transparent px-2 font-[inherit] text-base pointer-fine:text-sm leading-5 font-medium text-foreground no-underline " +
   "tabular-nums select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";
@@ -252,7 +252,7 @@ function useListFit(navRef: RefObject<HTMLElement | null>, listRef: RefObject<HT
 
 function Chevron({ back }: { back?: boolean }): JSX.Element {
   return (
-    <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="size-4 shrink-0 rtl:-scale-x-100">
+    <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="size-ouro-4 shrink-0 rtl:-scale-x-100">
       <path d={back ? "M10 3 5 8l5 5" : "m6 3 5 5-5 5"} />
     </svg>
   );
@@ -424,7 +424,7 @@ export function Pagination(props: PaginationProps): JSX.Element {
         {pages.map((target, index) =>
           target === 0 ? (
             <li key={`gap${index}`} className={pageClass}>
-              <span data-ouro-pagination-gap="" aria-hidden="true" className="inline-flex h-11 min-w-9 pointer-fine:h-9 items-center justify-center text-base text-muted-foreground select-none">
+              <span data-ouro-pagination-gap="" aria-hidden="true" className="inline-flex h-ouro-11 min-w-9 pointer-fine:h-9 items-center justify-center text-base text-muted-foreground select-none">
                 …
               </span>
             </li>

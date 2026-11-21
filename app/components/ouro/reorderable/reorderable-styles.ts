@@ -32,12 +32,12 @@ const listClass = "group/reorder m-0 flex min-w-0 list-none flex-col p-0 data-dr
  * the others while it springs into its place; the component writes each row's `transform`.
  *
  * @internal
- * @claim "It is at least 44px tall on a touch screen" registry/ouro/components/ouro/reorderable/reorderable-styles.ts verify:fileLine(registry/ouro/components/ouro/reorderable/reorderable-styles.ts, /pointer-coarse:min-h-11/)
+ * @claim "It is at least 44px tall on a touch screen" registry/ouro/components/ouro/reorderable/reorderable-styles.ts verify:fileLine(registry/ouro/components/ouro/reorderable/reorderable-styles.ts, /pointer-coarse:min-h-ouro-11/)
  * @claim "A dropped row stays above the" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > with a pointer > springs a dropped row into its place with the speed it was let go at, and a row still sliding out of its way with none)
  * @claim "A dropped row stays above the" registry/ouro/components/ouro/reorderable/reorderable.touch.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.touch.test.tsx::Reorderable on a phone > springs the dropped row into its place from under the finger, frame by frame)
  */
 const itemClass =
-  "relative m-0 flex min-w-0 list-none items-center gap-2 p-0 pointer-coarse:min-h-11 " +
+  "relative m-0 flex min-w-0 list-none items-center gap-2 p-0 pointer-coarse:min-h-ouro-11 " +
   "motion-safe:group-data-dragging/reorder:[&:not([data-dragging])]:[transition:transform_var(--ouro-duration-base)_var(--ouro-ease-out)] " +
   "data-dragging:z-10 data-dragging:rounded-ouro-lg data-dragging:bg-background data-dragging:shadow-(--shadow-lg) " +
   "data-dropped:z-10 data-dropped:rounded-ouro-lg data-dropped:bg-background " +
@@ -64,7 +64,7 @@ const contentClass = "min-w-0 flex-1";
  * @claim "`touch-none` keeps a touch that starts" registry/ouro/components/ouro/reorderable/reorderable.touch.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.touch.test.tsx::Reorderable on a phone > lets a touch that starts on a row, outside its handle, scroll the page)
  */
 const handleClass =
-  "press relative m-0 box-border inline-flex size-8 shrink-0 cursor-grab touch-none select-none items-center justify-center rounded-ouro-md border-0 " +
+  "press relative m-0 box-border inline-flex size-ouro-8 shrink-0 cursor-grab touch-none select-none items-center justify-center rounded-ouro-md border-0 " +
   "forced-colors:border forced-colors:border-solid bg-transparent p-0 text-muted-foreground [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "not-aria-disabled:pointer-fine:hover:bg-accent not-aria-disabled:pointer-fine:hover:text-accent-foreground active:cursor-grabbing data-grabbed:bg-accent data-grabbed:text-accent-foreground " +

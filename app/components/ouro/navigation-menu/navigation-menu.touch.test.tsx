@@ -97,4 +97,22 @@ describe("NavigationMenu on a phone", () => {
     await expect.poll(() => followed).toEqual(["/recipes/import"]);
     await expect.poll(() => document.querySelector('[data-ouro="navigation-menu-popup"]')).toBeNull();
   });
+
+  it("keeps each top-level link and trigger 44px tall and wide at a compact --spacing too", async () => {
+    const host = await render(<NavigationMenu label="Main" items={[{ label: "Pricing", href: "/pricing" }, { label: "Recipes", links: [{ label: "Browse", href: "/recipes" }] }]} currentPath="/pricing" />);
+    const sizes = () => [...host.querySelectorAll<HTMLElement>("a, button")].map((target) => [Math.round(target.getBoundingClientRect().width), Math.round(target.getBoundingClientRect().height)]);
+    const roomy = sizes();
+    expect(roomy).toHaveLength(2);
+    for (const [width, height] of roomy) {
+      expect(width).toBeGreaterThanOrEqual(44);
+      expect(height).toBeGreaterThanOrEqual(44);
+    }
+    host.style.setProperty("--spacing", "0.2rem");
+    // The padding around each label follows density; the 44px height and the width floor do not.
+    expect(sizes().map(([, height]) => height)).toEqual(roomy.map(([, height]) => height));
+    for (const [width, height] of sizes()) {
+      expect(width).toBeGreaterThanOrEqual(44);
+      expect(height).toBeGreaterThanOrEqual(44);
+    }
+  });
 });

@@ -58,3 +58,17 @@ it("shows a revealActions row's actions on a touch screen", async () => {
   await act(async () => root!.render(<Item title="Lentil soup" actions={<Button variant="plain" size="sm">Edit</Button>} revealActions />));
   expect(getComputedStyle(host.querySelector("[data-item-actions]")!).opacity).toBe("1");
 });
+
+it("gives a linked row a 44px floor, and keeps it at a compact --spacing", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  nodes.push(host);
+  root = createRoot(host);
+  await act(async () => root!.render(<Item href="/a" title="Small" size="sm" />));
+  const item = host.querySelector<HTMLElement>('[data-ouro="item"]')!;
+  expect(getComputedStyle(item).minHeight).toBe("44px");
+  expect(item.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  host.style.setProperty("--spacing", "0.2rem");
+  expect(getComputedStyle(item).minHeight).toBe("44px");
+  expect(item.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+});

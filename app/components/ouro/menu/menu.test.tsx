@@ -501,6 +501,33 @@ describe("Menu items", () => {
     await expect.poll(menu).toBeNull();
   });
 
+  it("keeps a checkbox item's mark its size and where it sits, with the room its label keeps, at a compact --spacing", async () => {
+    await render(
+      <Menu trigger={<Button>Actions</Button>}>
+        <MenuCheckboxItem defaultChecked>Show ingredients</MenuCheckboxItem>
+        <MenuItem>Print</MenuItem>
+      </Menu>,
+    );
+    await userEvent.click(trigger());
+    await settled();
+    const measure = () => {
+      const item = page.getByRole("menuitemcheckbox", { name: /Show ingredients/ }).element() as HTMLElement;
+      const mark = item.querySelector("[data-ouro-menu-indicator]")!.getBoundingClientRect();
+      const label = item.querySelector("[data-ouro-menu-label]")!.getBoundingClientRect();
+      const start = item.getBoundingClientRect().left;
+      return { size: [mark.width, mark.height], markAt: Math.round(mark.left - start), labelAt: Math.round(label.left - start) };
+    };
+    const roomy = measure();
+    expect(roomy).toEqual({ size: [16, 16], markAt: 8, labelAt: 32 });
+    // The menu is portaled out of the test's host, so the spacing scale is set on the page to reach it.
+    document.documentElement.style.setProperty("--spacing", "0.2rem");
+    try {
+      expect(measure()).toEqual(roomy);
+    } finally {
+      document.documentElement.style.removeProperty("--spacing");
+    }
+  });
+
   it("toggles a checkbox item and stays open", async () => {
     const onCheckedChange = vi.fn();
     await openDropdown(

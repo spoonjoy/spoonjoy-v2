@@ -88,7 +88,7 @@ const rowInnerClass = "flex min-h-0 min-w-0 items-center gap-1 [[data-starting-s
  * @claim "It highlights while hovered (a mouse's" registry/ouro/components/ouro/checklist/checklist-styles.ts verify:fileLine(registry/ouro/components/ouro/checklist/checklist-styles.ts, /not-has-data-disabled:pointer-fine:hover:bg-muted\/60\snot-has-data-disabled:active:bg-muted\/60/)
  */
 const hitClass =
-  "relative m-0 flex min-w-0 flex-1 gap-3 pointer-coarse:min-h-11 " +
+  "relative m-0 flex min-w-0 flex-1 gap-3 pointer-coarse:min-h-ouro-11 " +
   "cursor-pointer select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "[transition:background-color_var(--ouro-duration-fast)_ease] " +
   "not-has-data-disabled:pointer-fine:hover:bg-muted/60 not-has-data-disabled:active:bg-muted/60 has-data-disabled:cursor-not-allowed";
@@ -129,7 +129,7 @@ const outlineCardClass = "my-1 flex min-w-0 items-center gap-1 rounded-ouro-xl b
  * @internal
  * @claim "A row's media: an icon in" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist outline > draws each item's media in a soft tile at the start of the row, hidden from screen readers)
  */
-const mediaClass = "flex size-9 shrink-0 items-center justify-center rounded-ouro-lg bg-muted text-muted-foreground *:[svg]:size-5";
+const mediaClass = "flex size-ouro-9 shrink-0 items-center justify-center rounded-ouro-lg bg-muted text-muted-foreground *:[svg]:size-ouro-5";
 
 /**
  * The round tick at the end of an outlined row: the box as a 24px circle (the check radius set
@@ -139,7 +139,7 @@ const mediaClass = "flex size-9 shrink-0 items-center justify-center rounded-our
  * @internal
  * @claim "The round tick at the end of" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist outline > frames each row as a card and puts a round tick at its end, which fills with the tone)
  */
-const roundBoxClass = "mt-0 size-6 sm:pointer-fine:size-6 [--ouro-check-radius:9999px] [--ouro-check-corner-shape:round]";
+const roundBoxClass = "mt-0 size-ouro-6 sm:pointer-fine:size-ouro-6 [--ouro-check-radius:9999px] [--ouro-check-corner-shape:round]";
 
 /** The text column: the label, and the description under it. @internal */
 const textClass = "flex min-w-0 flex-1 flex-col gap-0.5";

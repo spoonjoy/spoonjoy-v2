@@ -117,7 +117,7 @@ const actionClass =
  * @claim "The dismiss button: a small icon" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > closes from the dismiss button)
  */
 const closeClass =
-  "press relative m-0 -me-1 -mt-1 box-border inline-flex size-7 shrink-0 items-center justify-center rounded-ouro-md border-0 bg-transparent p-0 " +
+  "press relative m-0 -me-ouro-1 -mt-ouro-1 box-border inline-flex size-ouro-7 shrink-0 items-center justify-center rounded-ouro-md border-0 bg-transparent p-0 " +
   "text-muted-foreground cursor-pointer touch-manipulation outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "pointer-fine:hover:bg-accent pointer-fine:hover:text-accent-foreground motion-safe:active:scale-(--ouro-press-scale)";
 

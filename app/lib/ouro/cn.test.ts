@@ -31,6 +31,13 @@ it("keeps a side's radius beside a corner radius, and a later whole radius repla
   expect(cn("rounded-ouro-md", "rounded-t-ouro-lg")).toBe("rounded-ouro-md rounded-t-ouro-lg");
 });
 
+it("lets an app's width or height class win over a fixed-size step, as it does over a spacing class", () => {
+  expect(cn("w-ouro-17 h-ouro-144", "w-20 h-80")).toBe("w-20 h-80");
+  expect(cn("size-ouro-6", "size-10")).toBe("size-10");
+  expect(cn("-ms-ouro-2", "ms-4")).toBe("ms-4");
+  expect(cn("h-ouro-11", "pointer-fine:h-9")).toBe("h-ouro-11 pointer-fine:h-9");
+});
+
 it("resolves every one of Ouro's radius steps, sm to 4xl, as a rounded-* class", () => {
   for (const step of ["sm", "md", "lg", "xl", "2xl", "3xl", "4xl"]) {
     expect(cn(`rounded-ouro-${step}`, "rounded-none")).toBe("rounded-none");

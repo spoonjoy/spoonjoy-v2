@@ -98,6 +98,18 @@ describe("RadioGroup", () => {
     expect(texts(document, group)).toEqual(["Pick one.", "Choose a size."]);
   });
 
+  it("keeps each radio sitting 2px below the top of its row, at the same size, at a compact --spacing", async () => {
+    const { host, radios } = await render(<RadioGroup legend="Size" options={sizes} />);
+    const measure = () => {
+      const { width, height } = radios[0]!.getBoundingClientRect();
+      return { size: [width, height], offset: getComputedStyle(radios[0]!).marginTop };
+    };
+    const roomy = measure();
+    expect(roomy.offset).toBe("2px");
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(measure()).toEqual(roomy);
+  });
+
   it("renders a radio for each option, each named by its label and described by its description", async () => {
     const { radios } = await render(<RadioGroup legend="Size" options={sizes} />);
     expect(radios).toHaveLength(4);
