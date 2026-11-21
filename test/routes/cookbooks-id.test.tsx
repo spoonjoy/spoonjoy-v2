@@ -1424,7 +1424,8 @@ describe("Cookbooks $id Route", () => {
       expect(placeholder).toHaveAttribute("aria-hidden", "true");
       expect(placeholder).toHaveTextContent(/^S$/);
       expect(placeholder.querySelector("svg")).toBeNull();
-      expect(placeholder.parentElement).toHaveClass("size-16");
+      // The tile is the media of Salad's row; test/ouro/ouro-parts-in-spoonjoy-theme.test.tsx measures it at 64px.
+      expect(placeholder.closest('[data-ouro="item"]')).toContainElement(within(recipesSection).getByRole("link", { name: "Salad" }));
       expect(placeholder.parentElement?.className).not.toMatch(/\bborder\b|bg-muted/);
       expect(within(recipesSection).queryByText("COOK")).not.toBeInTheDocument();
       expect(within(recipesSection).queryByRole("button", { name: /^Remove .* from cookbook$/ })).not.toBeInTheDocument();
