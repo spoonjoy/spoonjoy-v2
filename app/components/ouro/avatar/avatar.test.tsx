@@ -1372,6 +1372,25 @@ describe("AvatarGroup", () => {
     expect(Object.fromEntries(overlaps)).toEqual({ xs: 4, sm: 4, md: 4, lg: 8, xl: 8, "2xl": 8, "3xl": 12 });
   });
 
+  it("keeps the overlap a fixed share of the avatar at a compact --spacing", async () => {
+    const { host, group } = await render(
+      <AvatarGroup label="Cooks" size="lg">
+        {cooks.slice(0, 2).map((name) => (
+          <Avatar key={name} name={name} />
+        ))}
+      </AvatarGroup>,
+    );
+    const overlap = () => {
+      const [first, second] = [...group.querySelectorAll<HTMLElement>('[data-ouro="avatar"]')].map((avatar) => avatar.getBoundingClientRect());
+      return Math.round(first!.right - second!.left);
+    };
+    expect(overlap()).toBe(8);
+    expect(getComputedStyle(group.children[1]!).marginLeft).toBe("-8px");
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(overlap()).toBe(8);
+    expect(getComputedStyle(group.children[1]!).marginLeft).toBe("-8px");
+  });
+
   it("shows max avatars and a +N count with a spoken label", async () => {
     const { group } = await render(
       <AvatarGroup label="Cooks" max={3}>

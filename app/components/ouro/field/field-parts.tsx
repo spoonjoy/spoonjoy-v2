@@ -77,7 +77,7 @@ export function FieldRoot({ className, required, ...props }: FieldRootProps): JS
   const value = useMemo(() => ({ required: Boolean(required), describedBy: undefined, invalid, labelId: undefined }), [required, invalid]);
   return (
     <FieldContext.Provider value={value}>
-      <BaseField.Root {...props} data-ouro="field" className={cn(rootClass, className)} />
+      <BaseField.Root data-slot="field" {...props} data-ouro="field" className={cn(rootClass, className)} />
     </FieldContext.Provider>
   );
 }
@@ -106,11 +106,12 @@ export function FieldLabel({ className, children, ...props }: FieldLabelProps): 
   const inline = useFieldOwner().layout === "inline";
   return (
     <div
+      data-slot="field-label-wrap"
       data-ouro-label=""
       {...(field.required ? { "data-ouro-required": "" } : {})}
       className={cn(labelFrameClass, inline && inlineLabelClass, field.required && requiredMarkClass, className)}
     >
-      <BaseField.Label {...props} className={labelClass}>
+      <BaseField.Label data-slot="label" {...props} className={labelClass}>
         {children}
       </BaseField.Label>
     </div>
@@ -124,7 +125,7 @@ export type FieldDescriptionProps = Omit<BaseField.Description.Props, "className
 export function FieldDescription({ className, ...props }: FieldDescriptionProps): JSX.Element {
   useFieldPart("FieldDescription");
   useLayoutClassName("FieldDescription", className);
-  return <BaseField.Description {...props} className={cn(descriptionClass, className)} />;
+  return <BaseField.Description data-slot="field-description" {...props} className={cn(descriptionClass, className)} />;
 }
 
 /** Props for {@link FieldError}. `className` is for layout only. */
@@ -140,7 +141,7 @@ export type FieldErrorProps = Omit<BaseField.Error.Props, "className"> & { class
 export function FieldError({ className, ...props }: FieldErrorProps): JSX.Element {
   useFieldPart("FieldError");
   useLayoutClassName("FieldError", className);
-  return <BaseField.Error data-ouro-text="" {...props} className={cn(errorClass, className)} />;
+  return <BaseField.Error data-slot="field-error" data-ouro-text="" {...props} className={cn(errorClass, className)} />;
 }
 
 /** Props for {@link FieldControl}. `className` is for layout only. */
@@ -165,6 +166,7 @@ export function FieldControl({ className, required, ...props }: FieldControlProp
     <BaseField.Control
       data-ouro-control="field"
       data-ouro-part="control"
+      data-slot="field-control"
       {...props}
       required={isRequired}
       // A passed `aria-required` says "required" without the browser's blocking check.

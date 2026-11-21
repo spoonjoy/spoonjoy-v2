@@ -119,6 +119,7 @@ function SwitchTrack(props: {
   const reason = useDisabledReason(disabledProps, mergeIds(field.describedBy, describedBy));
   const track = (
     <BaseSwitch.Root
+      data-slot="switch"
       {...rest}
       readOnly={readOnly || reason.off}
       // A real button, so the label's `for` names it and not the hidden input: its label finds one control.
@@ -137,7 +138,7 @@ function SwitchTrack(props: {
       className={trackClass}
     >
       <TouchTarget />
-      <BaseSwitch.Thumb data-ouro-switch-thumb="" className={thumbClass} />
+      <BaseSwitch.Thumb data-slot="switch-thumb" data-ouro-switch-thumb="" className={thumbClass} />
       {reason.note}
     </BaseSwitch.Root>
   );

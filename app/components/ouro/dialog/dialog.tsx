@@ -512,7 +512,7 @@ export function DialogFrame({
             {...initialFocus}
           >
             {/* Always rendered: with a hidden title it still keeps the body clear of the close button. */}
-            <div data-ouro-dialog-header="" className="box-border grid min-h-13 shrink-0 gap-1 pt-5 pe-13 pb-2 ps-5">
+            <div data-slot="dialog-header" data-ouro-dialog-header="" className="box-border grid min-h-13 shrink-0 gap-1 pt-5 pe-13 pb-2 ps-5">
               <DialogTitle visuallyHidden={hideTitle}>{title}</DialogTitle>
               {description !== undefined && <DialogDescription>{description}</DialogDescription>}
             </div>

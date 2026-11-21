@@ -123,6 +123,7 @@ function CheckboxBox(props: {
   const reason = useDisabledReason(disabledProps, field.describedBy);
   const box = (
     <BaseCheckbox.Root
+      data-slot="checkbox"
       {...rest}
       readOnly={readOnly || reason.off}
       // A real button, so the label's `for` names it and not the hidden input: its label finds one control.
@@ -141,10 +142,10 @@ function CheckboxBox(props: {
       className={boxClass}
     >
       <TouchTarget />
-      <BaseCheckbox.Indicator keepMounted className={indicatorClass}>
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="size-full">
-          <path d="M3.5 8.5 6.5 11.5 12.5 4.5" pathLength={1} data-ouro-part="tick" className={tickClass} />
-          <path d="M4 8h8" className={dashClass} />
+      <BaseCheckbox.Indicator data-slot="checkbox-indicator" keepMounted className={indicatorClass}>
+        <svg data-slot="checkbox-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="size-full">
+          <path data-slot="checkbox-tick" d="M3.5 8.5 6.5 11.5 12.5 4.5" pathLength={1} data-ouro-part="tick" className={tickClass} />
+          <path data-slot="checkbox-dash" d="M4 8h8" className={dashClass} />
         </svg>
       </BaseCheckbox.Indicator>
       {reason.note}

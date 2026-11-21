@@ -250,6 +250,7 @@ export function Alert(props: AlertProps): JSX.Element {
   const accent = tones[tone].accent;
   return (
     <div
+      data-slot="alert"
       {...rest}
       ref={merged}
       role={urgent.has(tone) ? "alert" : "status"}
@@ -261,19 +262,19 @@ export function Alert(props: AlertProps): JSX.Element {
         className,
       )}
     >
-      {Icon && <Icon aria-hidden="true" data-ouro-alert-icon="" className={cn("mt-0.5 size-5 shrink-0", accent)} />}
+      {Icon && <Icon aria-hidden="true" data-slot="alert-icon" data-ouro-alert-icon="" className={cn("mt-0.5 size-5 shrink-0", accent)} />}
       {/* A long word (an address in an error) wraps anywhere, so it stays inside the alert, however narrow. */}
-      <div className="flex min-w-0 flex-1 flex-col gap-1 [overflow-wrap:anywhere]">
-        <div data-ouro-alert-title="" data-ouro-text="" className={cn("text-base/6 font-medium sm:pointer-fine:text-sm/5", accent)}>
+      <div data-slot="alert-body" className="flex min-w-0 flex-1 flex-col gap-1 [overflow-wrap:anywhere]">
+        <div data-slot="alert-title" data-ouro-alert-title="" data-ouro-text="" className={cn("text-base/6 font-medium sm:pointer-fine:text-sm/5", accent)}>
           {title}
         </div>
         {description !== undefined && (
-          <div data-ouro-alert-description="" data-ouro-text="" className="text-base/6 sm:pointer-fine:text-sm/5">
+          <div data-slot="alert-description" data-ouro-alert-description="" data-ouro-text="" className="text-base/6 sm:pointer-fine:text-sm/5">
             {description}
           </div>
         )}
         {action !== undefined && (
-          <div data-ouro-alert-action="" className="mt-2 flex flex-wrap gap-2">
+          <div data-slot="alert-action" data-ouro-alert-action="" className="mt-2 flex flex-wrap gap-2">
             {action}
           </div>
         )}
