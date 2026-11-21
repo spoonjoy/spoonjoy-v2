@@ -62,7 +62,7 @@ export interface BreadcrumbProps {
 // 16px text and 44px targets on a coarse pointer at every width; 14px text with a fine one.
 const text = "text-base pointer-fine:text-sm leading-5";
 const crumb =
-  "inline-flex min-h-ouro-11 min-w-ouro-11 pointer-fine:min-h-0 pointer-fine:min-w-0 items-center rounded-xs text-muted-foreground no-underline " +
+  "inline-flex min-h-ouro-11 min-w-ouro-11 pointer-fine:min-h-ouro-5 pointer-fine:min-w-0 items-center rounded-xs text-muted-foreground no-underline " +
   "decoration-current/40 underline-offset-4 transition-colors duration-(--ouro-duration-fast) ease-[ease] pointer-fine:hover:text-foreground pointer-fine:hover:underline active:text-foreground " +
   "[-webkit-tap-highlight-color:transparent] outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";
 const more =

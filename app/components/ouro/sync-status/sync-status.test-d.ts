@@ -9,6 +9,8 @@ expectTypeOf<{ status: SyncState; labels: { saved: "Enregistré"; retry: "Réess
 expectTypeOf<ComponentProps<typeof SyncStatus>>().toEqualTypeOf<SyncStatusProps>();
 expectTypeOf<SyncState>().toEqualTypeOf<"saved" | "saving" | "offline" | "error">();
 
+expectTypeOf<{ status: "offline"; queue: [{ id: "a"; label: "Rename" }]; onCancel: (id: string) => void }>().toExtend<SyncStatusProps>();
+
 // status is required.
 expectTypeOf<{ onRetry: () => void }>().not.toExtend<SyncStatusProps>();
 
