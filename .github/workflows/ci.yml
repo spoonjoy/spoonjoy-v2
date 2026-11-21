@@ -226,6 +226,12 @@ jobs:
         if: github.event_name != 'pull_request'
         run: node scripts/warning-gate.ts -- pnpm run lint
 
+      # The stylesheet against ouro-base at the Ouro UI release .github/ouro-hx-installed.json pins: an old copy of an
+      # ouro-base rule, or an override .github/ouro-base-overrides.json doesn't name, fails this job.
+      - name: 🎨 ouro-base drift
+        if: github.event_name != 'pull_request'
+        run: node scripts/warning-gate.ts -- pnpm run ouro:base-check
+
       # Each factual sentence on Spoonjoy's surfaces (claims.config.json) carries its primary
       # source and a check that still holds, checked with HX's lib-claims checker (AGENTS.md,
       # "Claims").
@@ -318,6 +324,11 @@ jobs:
 
       - name: 🧹 Lint
         run: node scripts/warning-gate.ts -- pnpm run lint --base "$(git rev-parse HEAD^1)"
+
+      # The stylesheet against ouro-base at the Ouro UI release .github/ouro-hx-installed.json pins: an old copy of an
+      # ouro-base rule, or an override .github/ouro-base-overrides.json doesn't name, fails this job.
+      - name: 🎨 ouro-base drift
+        run: node scripts/warning-gate.ts -- pnpm run ouro:base-check
 
       # The claims ratchet against the base commit (an exemption claims.config.json adds needs a
       # reason and a mention in the description), the title and body, and every claim, with the
