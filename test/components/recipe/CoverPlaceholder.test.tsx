@@ -1,6 +1,4 @@
-import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { CoverPlaceholder } from "~/components/recipe/CoverPlaceholder";
 import { THEME_CSS } from "../../styles/theme-css";
 
 /** The declarations of the first rule whose selector list is exactly `selector`. */
@@ -11,66 +9,30 @@ function rule(selector: string): string {
   return match[1]!.replace(/\s+/g, " ").trim();
 }
 
-describe("CoverPlaceholder", () => {
-  it("is native's initial tile: the title's first letter, in the display serif and brass", () => {
-    render(<CoverPlaceholder title="  lemon herb rice" data-testid="tile" />);
-
-    const tile = screen.getByTestId("tile");
-    expect(tile).toHaveClass("sj-cover-placeholder");
-    const initial = tile.querySelector(".sj-cover-placeholder-initial");
-    expect(initial).toHaveTextContent("L");
-    expect(initial).toHaveAttribute("aria-hidden", "true");
+describe("the cover tokens", () => {
+  it("draw Ouro UI's Cover on native's wash, vellum to brass at 32%", () => {
+    const tokens = /:root,\n\.dark \{\n  --ouro-cover-from[^}]*\}/.exec(THEME_CSS)?.[0] ?? "";
+    expect(tokens).toContain("--ouro-cover-from: var(--sj-vellum);");
+    expect(tokens).toContain("--ouro-cover-to: color-mix(in srgb, var(--sj-brass) 32%, transparent);");
   });
 
-  it("falls back to S for a title with no letters, as native does", () => {
-    render(<CoverPlaceholder title="   " data-testid="tile" />);
-    expect(screen.getByTestId("tile")).toHaveTextContent("S");
+  it("leave the letter in Cover's own ink, which reads at 4.5:1 on the wash where plain brass does not", () => {
+    expect(THEME_CSS).not.toContain("--ouro-cover-ink");
   });
 
-  it("takes the first character whole, so an emoji title keeps its emoji", () => {
-    render(<CoverPlaceholder title="🍋 Lemon tart" data-testid="tile" />);
-    expect(screen.getByTestId("tile").querySelector(".sj-cover-placeholder-initial")).toHaveTextContent("🍋");
+  it("give the counter card's Cover the page's ink, not the card's on-photo white, on the page colour under its wash", () => {
+    expect(rule('.sj-counter-card [data-ouro="cover"]')).toBe("--foreground: var(--sj-ink); background-color: var(--sj-page);");
   });
 
-  it("keeps a label for screen readers only", () => {
-    render(<CoverPlaceholder title="Toast" label="Cover coming soon" data-testid="tile" />);
-    expect(screen.getByText("Cover coming soon")).toHaveClass("sr-only");
+  it("give the counter card four control radii as its squircle radius, never a round corner shape", () => {
+    const card = rule(".sj-counter-card");
+    expect(card).toContain("--ouro-sq-r: calc(var(--radius) * var(--ouro-radius-scale, 1) * 4);");
+    expect(card).toContain("border-radius: calc(var(--ouro-sq-r) * var(--ouro-corner-fallback, 1));");
+    expect(card).not.toMatch(/corner-shape:\s*round/);
   });
 
-  it("has no border class, whatever layout the caller passes", () => {
-    render(<CoverPlaceholder title="Toast" className="aspect-[3/2] w-full" data-testid="tile" />);
-    const tokens = Array.from(screen.getByTestId("tile").classList);
-    expect(tokens.filter((token) => /^border(-|$)/.test(token))).toEqual([]);
-  });
-
-  it("bleeds square where a cover photo would, keeping the gradient and the initial", () => {
-    render(<CoverPlaceholder title="Toast" shape="bleed" data-testid="tile" />);
-    const tile = screen.getByTestId("tile");
-    expect(tile).toHaveClass("sj-cover-placeholder", "sj-cover-placeholder-bleed");
-    expect(tile).toHaveTextContent("T");
-    expect(rule(".sj-cover-placeholder.sj-cover-placeholder-bleed")).toContain("border-radius: 0;");
-  });
-
-  it("is a photo-radius tile unless asked to bleed", () => {
-    render(<CoverPlaceholder title="Toast" data-testid="tile" />);
-    expect(screen.getByTestId("tile")).not.toHaveClass("sj-cover-placeholder-bleed");
-  });
-
-  it("is a photo-radius tile in native's vellum-to-brass gradient, with no border", () => {
-    const tile = rule(".sj-cover-placeholder");
-    expect(tile).toContain("border-radius: var(--sj-radius-photo);");
-    expect(tile).toContain(
-      "background: linear-gradient(135deg, var(--sj-vellum), color-mix(in srgb, var(--sj-brass) 32%, transparent));",
-    );
-    expect(tile).toContain("border: 0;");
-  });
-
-  it("sets the initial in Fraunces and brass, sized to the tile as native's is", () => {
-    const initial = rule(".sj-cover-placeholder-initial");
-    expect(initial).toContain("font-family: var(--font-sj-display);");
-    expect(initial).toContain("color: var(--sj-brass);");
-    // RecipeInitialTile scales the letter to 42% of the tile's height.
-    expect(initial).toContain("font-size: 42cqh;");
+  it("set Cover's letter in the display serif", () => {
+    expect(THEME_CSS).toMatch(/--font-heading: var\(--font-sj-display\);/);
   });
 });
 
