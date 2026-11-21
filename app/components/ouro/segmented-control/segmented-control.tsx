@@ -109,6 +109,7 @@ function Segment(props: {
         if (next && !reason.off) choose(item.value);
       }}
       disabled={disabled || (item.disabled && !reason.off)}
+      {...(reason.off ? { "data-disabled": "" } : {})}
       data-ouro-segment=""
       data-ouro-control="segmented-control"
       data-ouro-part="segment"

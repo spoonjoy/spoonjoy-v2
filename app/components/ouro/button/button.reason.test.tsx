@@ -28,6 +28,41 @@ afterEach(async () => {
 const button = () => document.querySelector("button")!;
 const tooltip = () => document.querySelector('[data-ouro="tooltip"]');
 
+describe("Button disabledReason looks off", () => {
+  it.each(["solid", "soft", "outline", "plain"] as const)("looks as a disabled %s button does, and is marked only when off", async (variant) => {
+    await render(
+      <>
+        <Button variant={variant} disabled>
+          Save
+        </Button>
+        <Button variant={variant} disabledReason="Saving">
+          Save
+        </Button>
+        <Button variant={variant}>Save</Button>
+      </>,
+    );
+    const [disabled, reasoned, on] = Array.from(document.querySelectorAll<HTMLElement>("button"));
+    // The look a theme gives a disabled button: Ouro's dims it, and an app's theme may instead draw it in its own
+    // colours at full opacity (`--ouro-action-disabled-opacity: 1`, as Spoonjoy's does: spoonjoy-v2#815).
+    const look = (el: HTMLElement) => {
+      const style = getComputedStyle(el);
+      return { opacity: style.opacity, background: style.backgroundColor, color: style.color, cursor: style.cursor };
+    };
+    expect(look(disabled!), "a disabled button looks different from one that is on").not.toEqual(look(on!));
+    expect(look(reasoned!)).toEqual(look(disabled!));
+    expect(reasoned!.getAttribute("data-ouro-off")).toBe("");
+    expect(getComputedStyle(on!).opacity).toBe("1");
+    expect(on!.hasAttribute("data-ouro-off")).toBe(false);
+  });
+
+  it("is not dimmed while loading, and keeps its progress cursor", async () => {
+    await render(<Button loading>Save</Button>);
+    expect(button().hasAttribute("data-ouro-off")).toBe(false);
+    expect(getComputedStyle(button()).opacity).toBe("1");
+    expect(getComputedStyle(button()).cursor).toBe("progress");
+  });
+});
+
 describe("Button disabledReason", () => {
   it("turns the button off with aria-disabled, keeps it focusable and describes it by the reason", async () => {
     await render(<Button disabledReason="Add an item first">Check out</Button>);

@@ -20,6 +20,7 @@ import { TouchTarget } from "~/lib/ouro/touch-target";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { lastInput } from "~/lib/ouro/last-input";
 import { holdPageAtPress } from "~/lib/ouro/page-scroll-hold";
+import { returnFocusTo } from "~/lib/ouro/return-focus";
 import { useMountedOpen } from "~/lib/ouro/use-mounted-open";
 import { useSheetPresentation } from "~/lib/ouro/use-sheet-presentation";
 import { sheetHint } from "~/components/ouro/sheet/sheet-styles";
@@ -464,8 +465,11 @@ export function DialogFrame({
       "aria-haspopup": "dialog",
       "aria-expanded": isOpenNow,
     });
-  // Focus returns to the trigger on close, in either presentation.
+  // Focus returns to the trigger on close, in either presentation, unless a dialog opened since has it. The
+  // sheet's frame makes that check for its own popup; the centered popup makes it here.
   const finalFocus = trigger !== undefined ? { finalFocus: triggerRef } : {};
+  // Stryker disable next-line ConditionalExpression: a dialog with no trigger differs from Base UI's own return only when focus sits outside it at close, which its modal focus trap prevents.
+  const centeredFinalFocus = trigger !== undefined ? { finalFocus: () => returnFocusTo(triggerRef.current) } : {};
   // Focus goes where firstFocus picks, never on a scrolling body. The centered dialog focuses
   // itself after a touch or pen open. A dialog without a trigger decides when it opens, from the
   // last press on the page. (The sheet always focuses itself, like a plain Sheet.)
@@ -504,7 +508,7 @@ export function DialogFrame({
             ref={popupRef}
             className={className}
             size={size}
-            {...finalFocus}
+            {...centeredFinalFocus}
             {...initialFocus}
           >
             {/* Always rendered: with a hidden title it still keeps the body clear of the close button. */}
