@@ -38,8 +38,10 @@ describe("KitchenHome recipe descriptions", () => {
       </MemoryRouter>,
     );
     const placeholder = screen.getByTestId("kitchen-recipe-cover-placeholder-broth");
-    expect(placeholder).toHaveClass("sj-cover-placeholder", "sj-cover-placeholder-bleed");
-    expect(placeholder).toHaveAttribute("aria-hidden", "true");
+    // Ouro UI's Cover, square so the row's media slot rounds it, and decoration beside the title.
+    expect(placeholder).toHaveAttribute("data-ouro", "cover");
+    expect(placeholder).toHaveAttribute("data-shape", "square");
+    expect(placeholder).not.toHaveAttribute("role");
     expect(placeholder).toHaveTextContent(/^B$/);
     expect(placeholder.querySelector("svg")).toBeNull();
     expect(placeholder.className).not.toMatch(/photo-charcoal/);

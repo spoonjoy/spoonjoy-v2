@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
-import { CoverPlaceholder } from "~/components/recipe/CoverPlaceholder";
+import { Cover } from "~/components/ouro/cover/cover";
 import { useCookingNow } from "~/hooks/use-cooking-now";
 import { listImageProps } from "~/lib/image-loading";
 import {
@@ -70,12 +70,7 @@ function CookingNowCover({ entry, index, className }: { entry: CookingNowEntry; 
     );
   }
   return (
-    <CoverPlaceholder
-      aria-hidden="true"
-      data-testid="cooking-now-cover-placeholder"
-      title={entry.recipe.title}
-      className={className}
-    />
+    <Cover data-testid="cooking-now-cover-placeholder" title={entry.recipe.title} size="fill" className={className} />
   );
 }
 

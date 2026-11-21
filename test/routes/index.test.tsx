@@ -541,6 +541,15 @@ describe("Kitchen Index Route", () => {
       expect(within(counter).getByRole("heading", { level: 2, name: "Newest Without Cover" })).toBeInTheDocument();
       expect(within(counter).getByRole("link", { name: "Start cooking" })).toHaveAttribute("href", "/recipes/recipe-new#cook");
       expect(within(counter).getByRole("link", { name: "Recipe: Newest Without Cover" })).toHaveAttribute("href", "/recipes/recipe-new");
+      // One card, as the Apple app's: Ouro UI's Card on a charcoal backdrop with no photo, Ouro UI's Cover
+      // above the text, and the text and capsules in the on-photo colours, clear of the cover's letter.
+      expect(counter).toHaveClass("sj-counter-card", "sj-on-charcoal");
+      expect(counter).toHaveAttribute("data-ouro", "card");
+      expect(counter.querySelector("[data-card-backdrop] img")).toBeNull();
+      expect(counter.querySelector('[data-ouro="cover"]')).toBeInTheDocument();
+      expect(counter.querySelector('[data-card-backdrop] [data-ouro="cover"]')).toBeNull();
+      expect(counter.querySelector(".sj-counter-shade")).toBeNull();
+      expect(within(counter).getByRole("heading", { level: 2 })).toHaveClass("text-[var(--sj-on-photo)]");
       expect(within(index).getAllByText("Newest Without Cover")).toHaveLength(1);
     });
 
@@ -644,9 +653,9 @@ describe("Kitchen Index Route", () => {
         }));
       });
 
-      // HX components set their own inline styles (Text's line clamp, a squircle surface's layer);
-      // the app sets none.
-      const styles = container.querySelectorAll("[style]:not([data-ouro]):not([data-ouro-surface])");
+      // HX components set their own inline styles (Text's line clamp, a squircle surface's layer,
+      // a Card backdrop's inset); the app sets none.
+      const styles = container.querySelectorAll("[style]:not([data-ouro]):not([data-ouro-surface]):not([data-card-backdrop])");
       expect(styles.length).toBe(0);
     });
 
