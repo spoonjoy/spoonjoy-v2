@@ -253,3 +253,71 @@ describe("TabBar development messages", () => {
     expect(error).not.toHaveBeenCalled();
   });
 });
+
+describe("TabBar and the visual viewport", () => {
+  /** Mounts a bar in a root of its own, so a test can render it again or unmount it. */
+  async function mountBar() {
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    const root = createRoot(host);
+    roots.push(root);
+    await act(async () => root.render(<TabBar label="Main" items={items} />));
+    return {
+      nav: () => host.querySelector<HTMLElement>("nav")!,
+      draw: (label: string) => act(async () => root.render(<TabBar label={label} items={items} />)),
+      unmount: async () => {
+        roots.splice(roots.indexOf(root), 1);
+        await act(async () => root.unmount());
+      },
+    };
+  }
+
+  it("reads the visual viewport once, not on each render, and again only when it resizes", async () => {
+    const reads = vi.spyOn(VisualViewport.prototype, "height", "get");
+    const bar = await mountBar();
+    const before = reads.mock.calls.length;
+    for (const label of ["Start", "Home", "Main"]) await bar.draw(label);
+    expect(reads.mock.calls.length).toBe(before);
+    await act(async () => window.visualViewport!.dispatchEvent(new Event("resize")));
+    expect(reads.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it("keeps following the keyboard in a bar that stays mounted when another bar unmounts", async () => {
+    const height = vi.spyOn(VisualViewport.prototype, "height", "get").mockReturnValue(innerHeight);
+    const staying = await mountBar();
+    const leaving = await mountBar();
+    await leaving.unmount();
+    height.mockReturnValue(innerHeight - 300);
+    await act(async () => window.visualViewport!.dispatchEvent(new Event("resize")));
+    expect(staying.nav().hasAttribute("data-closed")).toBe(true);
+    await staying.unmount();
+  });
+
+  it("takes back every viewport and focus listener it added once the bar unmounts", async () => {
+    const added = [vi.spyOn(VisualViewport.prototype, "addEventListener"), vi.spyOn(document, "addEventListener")];
+    const removed = [vi.spyOn(VisualViewport.prototype, "removeEventListener"), vi.spyOn(document, "removeEventListener")];
+    const bar = await mountBar();
+    const listeners = (spies: typeof added) => spies.flatMap((spy) => spy.mock.calls.map(([type, listener]) => [type, listener]));
+    const taken = listeners(added).filter(([type]) => ["resize", "focusin", "focusout"].includes(type as string));
+    expect(taken.length).toBeGreaterThan(0);
+    await bar.unmount();
+    expect(listeners(removed)).toEqual(expect.arrayContaining(taken));
+  });
+
+  it("steps aside when the keyboard shrinks the visual viewport, and keeps no answer once no bar is mounted", async () => {
+    const height = vi.spyOn(VisualViewport.prototype, "height", "get").mockReturnValue(innerHeight);
+    const first = await mountBar();
+    expect(first.nav().hasAttribute("data-open")).toBe(true);
+    height.mockReturnValue(innerHeight - 300);
+    await act(async () => window.visualViewport!.dispatchEvent(new Event("resize")));
+    expect(first.nav().hasAttribute("data-closed")).toBe(true);
+    await first.unmount();
+    // No event tells a bar that mounts later that the keyboard went, so it must read the viewport afresh.
+    height.mockReturnValue(innerHeight);
+    const second = await mountBar();
+    expect(second.nav().hasAttribute("data-open")).toBe(true);
+    await second.unmount();
+  });
+});
+
