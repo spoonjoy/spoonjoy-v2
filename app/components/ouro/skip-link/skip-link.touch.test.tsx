@@ -7,6 +7,19 @@ import { act } from "~/lib/ouro/testing/act";
 
 let root: Root | undefined;
 const nodes: Element[] = [];
+it("keeps its link 44px tall at a compact --spacing", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  nodes.push(host);
+  root = createRoot(host);
+  await act(async () => root!.render(<SkipLink />));
+  const link = () => getComputedStyle(host.querySelector<HTMLElement>("a")!);
+  host.querySelector<HTMLElement>("a")!.focus();
+  expect(link().minHeight).toBe("44px");
+  host.style.setProperty("--spacing", "0.2rem");
+  expect(link().minHeight).toBe("44px");
+});
+
 afterEach(async () => {
   await act(async () => root?.unmount());
   for (const node of nodes.splice(0)) node.remove();

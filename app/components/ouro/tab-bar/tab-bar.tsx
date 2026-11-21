@@ -316,7 +316,7 @@ export function TabBar(props: TabBarProps): JSX.Element {
             data-ouro-part="accessory"
             className={accessoryClass}
           >
-            <span aria-hidden="true" className={cn(iconClass, "size-6")}>
+            <span aria-hidden="true" className={cn(iconClass, "size-ouro-6")}>
               {accessory.icon}
             </span>
             <span className="sr-only">{accessory.label}</span>

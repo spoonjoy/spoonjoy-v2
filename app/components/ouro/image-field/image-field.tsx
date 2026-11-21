@@ -105,7 +105,7 @@ export interface ImageFieldProps {
 
 function PhotoIcon(): JSX.Element {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="size-8">
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="size-ouro-8">
       <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
       <circle cx="9" cy="9" r="2" />
       <path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21" />
@@ -350,7 +350,7 @@ export function ImageField(props: ImageFieldProps): JSX.Element {
           "relative flex items-center justify-center overflow-hidden border border-solid bg-muted text-muted-foreground",
           invalid ? "border-destructive" : "border-border",
           "transition-colors duration-(--ouro-duration-fast) ease-[ease] data-dragging:border-primary data-dragging:bg-primary/10 forced-colors:data-dragging:border-[Highlight]",
-          shape === "circle" ? "w-32 rounded-full" : "w-full max-w-xs rounded-ouro-lg",
+          shape === "circle" ? "w-ouro-32 rounded-full" : "w-full max-w-xs rounded-ouro-lg",
         )}
       >
         {dragging ? (

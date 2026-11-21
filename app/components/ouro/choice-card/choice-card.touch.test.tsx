@@ -8,6 +8,18 @@ import { act } from "~/lib/ouro/testing/act";
 
 let root: Root | undefined;
 const nodes: Element[] = [];
+it("keeps each card's 44px floor at a compact --spacing", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  nodes.push(host);
+  root = createRoot(host);
+  await act(async () => root!.render(<ChoiceCard legend="Size" items={[{ value: "s", label: "Small" }, { value: "l", label: "Large" }]} />));
+  const card = () => getComputedStyle(host.querySelector<HTMLElement>('[data-ouro-part="card"]')!);
+  expect(card().minHeight).toBe("44px");
+  host.style.setProperty("--spacing", "0.2rem");
+  expect(card().minHeight).toBe("44px");
+});
+
 afterEach(async () => {
   await act(async () => root?.unmount());
   for (const node of nodes.splice(0)) node.remove();

@@ -219,7 +219,7 @@ const haloClass =
  * @claim "A small four-pointed spark that grows" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment motion > swells the disc and grows the sparks when it celebrates, and with reduced motion only fades the disc)
  */
 const sparkleClass =
-  "pointer-events-none absolute size-3 opacity-0 motion-reduce:hidden " +
+  "pointer-events-none absolute size-ouro-3 opacity-0 motion-reduce:hidden " +
   "[transition:transform_var(--ouro-duration-sheet)_var(--ouro-ease-out),opacity_var(--ouro-duration-slow)_ease_var(--ouro-duration-slow)] " +
   "starting:[transform:scale(0)] starting:opacity-100";
 

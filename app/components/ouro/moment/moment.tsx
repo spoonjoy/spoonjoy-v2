@@ -254,7 +254,7 @@ const present = (node: ReactNode) => node !== undefined && node !== null && node
 
 function CloseIcon(): JSX.Element {
   return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="size-4">
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="size-ouro-4">
       <path d="m5.5 5.5 9 9m0-9-9 9" />
     </svg>
   );

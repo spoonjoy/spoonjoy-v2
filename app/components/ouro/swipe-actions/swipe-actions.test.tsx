@@ -176,6 +176,18 @@ async function click(target: Element, detail: number) {
 }
 
 describe("SwipeActions", () => {
+  it("keeps its more icon 16px at a compact --spacing", async () => {
+    const element = await render(<OuroProvider motion="reduced">{row()}</OuroProvider>);
+    const icon = () => getComputedStyle(element.querySelector<SVGElement>("[data-ouro-swipe-actions-menu] svg")!);
+    expect([icon().width, icon().height]).toEqual(["16px", "16px"]);
+    document.documentElement.style.setProperty("--spacing", "0.2rem");
+    try {
+      expect([icon().width, icon().height]).toEqual(["16px", "16px"]);
+    } finally {
+      document.documentElement.style.removeProperty("--spacing");
+    }
+  });
+
   it("renders the row closed, with both sides out of reach and an actions button named after the row", async () => {
     const element = await render(row());
     expect(element.hasAttribute("data-open")).toBe(false);

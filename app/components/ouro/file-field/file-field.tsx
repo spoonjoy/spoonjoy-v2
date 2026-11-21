@@ -421,7 +421,7 @@ export function FileField(props: FileFieldProps): JSX.Element {
                     className="aspect-square px-0"
                     onClick={() => remove(file)}
                   >
-                    <Icon className="size-4">
+                    <Icon className="size-ouro-4">
                       <path d="M7 7l10 10M17 7L7 17" />
                     </Icon>
                     <span className="sr-only">{`${removeLabel} ${file.name}`}</span>

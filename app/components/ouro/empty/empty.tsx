@@ -149,7 +149,7 @@ export function Empty(props: EmptyProps): JSX.Element {
       {icon && (
         <div
           aria-hidden="true"
-          className="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground *:[svg]:size-6"
+          className="flex size-ouro-12 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground *:[svg]:size-ouro-6"
         >
           {icon}
         </div>

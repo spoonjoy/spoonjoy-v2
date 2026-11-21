@@ -71,6 +71,13 @@ afterEach(async () => {
 });
 
 describe("RouteProgress", () => {
+  it("keeps its fixed sizes at a compact --spacing", async () => {
+    const { host, region } = await render(<RouteProgress active />);
+    const bar = () => getComputedStyle(region);
+    expect(bar().height).toBe("2px");
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(bar().height).toBe("2px");
+  });
   it("is a 2px bar fixed across the top of the screen in the primary color, which no click reaches", async () => {
     const { region, bar, indicator } = await render(<RouteProgress active />);
     expect(getComputedStyle(region).position).toBe("fixed");

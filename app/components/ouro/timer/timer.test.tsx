@@ -90,6 +90,13 @@ afterEach(async () => {
 });
 
 describe("Timer", () => {
+  it("keeps its fixed sizes at a compact --spacing", async () => {
+    const { timer } = await render(<Timer label="Pasta" duration={600} variant="ring" />);
+    const dial = () => getComputedStyle(timer().querySelector<HTMLElement>("[data-ouro-timer-ring]")!.parentElement!);
+    expect(dial().maxWidth).toBe("320px");
+    timer().style.setProperty("--spacing", "0.2rem");
+    expect(dial().maxWidth).toBe("320px");
+  });
   it("is a group named by its label, with the length beside the label, the time as a timer region and Start", async () => {
     const { timer, time, caption, primary, secondary } = await render(<Timer label="Pasta" duration={600} />);
     expect(timer().getAttribute("role")).toBe("group");

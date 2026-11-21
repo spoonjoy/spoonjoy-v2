@@ -16,6 +16,14 @@ import { act } from "~/lib/ouro/testing/act";
 
 let root: Root | undefined;
 const nodes: Element[] = [];
+it("keeps its link a 44px target at a compact --spacing", async () => {
+  const host = await render(<Link href="/forgot">Forgot password?</Link>);
+  const link = () => getComputedStyle(host.querySelector<HTMLElement>('[data-ouro="link"]')!);
+  expect([link().minHeight, link().minWidth]).toEqual(["44px", "44px"]);
+  host.style.setProperty("--spacing", "0.2rem");
+  expect([link().minHeight, link().minWidth]).toEqual(["44px", "44px"]);
+});
+
 afterEach(async () => {
   await act(async () => root?.unmount());
   for (const node of nodes.splice(0)) node.remove();

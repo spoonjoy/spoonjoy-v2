@@ -55,7 +55,7 @@ const rootClass = "group/swipe relative box-border min-w-0 touch-pan-y overflow-
  * @claim "It is on its own layer" registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx verify:fileLine(registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx, /expect\(getComputedStyle\(track\(element\)\)\.willChange\)\.toBe\("auto"\)/)
  * @claim "It is on its own layer" registry/ouro/components/ouro/swipe-actions/swipe-actions-styles.ts verify:fileLine(registry/ouro/components/ouro/swipe-actions/swipe-actions-styles.ts, /group-data-\[dragging\]/swipe:will-change-transform/)
  */
-const trackClass = "relative flex min-w-0 items-center group-data-[dragging]/swipe:will-change-transform group-data-[ouro-settling]/swipe:will-change-transform pointer-coarse:min-h-11";
+const trackClass = "relative flex min-w-0 items-center group-data-[dragging]/swipe:will-change-transform group-data-[ouro-settling]/swipe:will-change-transform pointer-coarse:min-h-ouro-11";
 
 /** The row the app passes in. @internal */
 const contentClass = "min-w-0 flex-1";
@@ -86,11 +86,11 @@ const stripTones = {
 /**
  * One action: a block as tall as the row and at least 72px wide, with 16px text on a touch screen. @internal
  *
- * @claim "One action: a block as tall" registry/ouro/components/ouro/swipe-actions/swipe-actions-styles.ts verify:fileLine(registry/ouro/components/ouro/swipe-actions/swipe-actions-styles.ts, /min-w-18/)
+ * @claim "One action: a block as tall" registry/ouro/components/ouro/swipe-actions/swipe-actions-styles.ts verify:fileLine(registry/ouro/components/ouro/swipe-actions/swipe-actions-styles.ts, /min-w-ouro-18/)
  * @claim "One action: a block as tall" registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx::SwipeActions > renders the row closed, with both sides out of reach and an actions button named after the row)
  */
 const actionClass =
-  "press relative m-0 box-border inline-flex min-w-18 shrink-0 cursor-pointer items-center justify-center border-0 forced-colors:border forced-colors:border-solid px-4 " +
+  "press relative m-0 box-border inline-flex min-w-ouro-18 shrink-0 cursor-pointer items-center justify-center border-0 forced-colors:border forced-colors:border-solid px-4 " +
   "text-base font-medium whitespace-nowrap pointer-fine:text-sm " +
   "outline-ring -outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid active:opacity-80";
 
@@ -118,4 +118,4 @@ const fadeClass = "group-data-full/swipe:opacity-0";
  * @claim "On a touch screen it is" registry/ouro/components/ouro/swipe-actions/swipe-actions.touch.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.touch.test.tsx::SwipeActions on a phone > keeps the actions button for screen readers without showing it, and shows it for keyboard focus)
  */
 const menuClass =
-  "flex shrink-0 justify-center pointer-fine:pe-2 pointer-coarse:[&:not(:has(:focus-visible))]:sr-only pointer-coarse:has-[:focus-visible]:min-w-11";
+  "flex shrink-0 justify-center pointer-fine:pe-2 pointer-coarse:[&:not(:has(:focus-visible))]:sr-only pointer-coarse:has-[:focus-visible]:min-w-ouro-11";

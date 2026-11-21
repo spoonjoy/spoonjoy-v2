@@ -174,6 +174,39 @@ describe("Skeleton", () => {
     expect(warnings()).toEqual([]);
   });
 
+  it("keeps its fixed sizes at a compact --spacing: the block, a row's media and each avatar box", async () => {
+    const host = document.createElement("div");
+    host.style.width = "300px";
+    document.body.append(host);
+    mounted.push(host);
+    const root = createRoot(host);
+    roots.push(root);
+    const sizes = ["xs", "sm", "md", "lg", "xl", "2xl", "3xl"] as const;
+    await act(async () =>
+      root.render(
+        <>
+          <Skeleton />
+          <Skeleton shape="row" />
+          {sizes.map((size) => (
+            <Skeleton key={size} shape="circle" size={size} />
+          ))}
+        </>,
+      ),
+    );
+    const boxes = () => {
+      const [block, row, ...circles] = [...host.querySelectorAll<HTMLElement>('[data-ouro="skeleton"]')];
+      const media = row!.firstElementChild!.getBoundingClientRect();
+      return [
+        block!.getBoundingClientRect().height,
+        [media.width, media.height],
+        circles.map((circle) => circle.getBoundingClientRect().width),
+      ];
+    };
+    expect(boxes()).toEqual([16, [40, 40], [24, 32, 40, 48, 64, 72, 112]]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(boxes()).toEqual([16, [40, 40], [24, 32, 40, 48, 64, 72, 112]]);
+  });
+
   it("keeps each shape's edge in forced colours, where the fill becomes the page's own colour", async () => {
     await commands.emulateMedia({ forcedColors: "active" });
     try {

@@ -52,6 +52,13 @@ afterEach(async () => {
 });
 
 describe("NumberField", () => {
+  it("keeps its fixed sizes at a compact --spacing", async () => {
+    const { host, root } = await render(<NumberField label="Servings" name="servings" defaultValue={4} />);
+    const icon = () => getComputedStyle(root.querySelector<SVGElement>('[data-ouro-part="increment"] svg')!);
+    expect([icon().width, icon().height]).toEqual(["16px", "16px"]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect([icon().width, icon().height]).toEqual(["16px", "16px"]);
+  });
   it("is a labeled number input built on the Field contract", async () => {
     const { root, input, host } = await render(<NumberField label="Servings" name="servings" defaultValue={4} />);
     expect(root.getAttribute("data-ouro")).toBe("number-field");

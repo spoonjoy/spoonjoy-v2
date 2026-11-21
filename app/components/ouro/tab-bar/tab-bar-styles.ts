@@ -37,7 +37,7 @@ const barClass =
  */
 const surface = "bg-popover text-muted-foreground ring-1 ring-border/60 shadow-(--shadow-lg) forced-colors:border forced-colors:border-solid";
 
-const listClass = `m-0 box-border flex h-16 min-w-0 flex-1 list-none items-stretch rounded-full p-1 ${surface}`;
+const listClass = `m-0 box-border flex h-ouro-16 min-w-0 flex-1 list-none items-stretch rounded-full p-1 ${surface}`;
 
 /**
  * A tab: the icon over a short label. The current page's tab has the accent wash; a press
@@ -56,7 +56,7 @@ const labelClass = "max-w-full truncate text-[0.6875rem] leading-none font-semib
 
 /** The accessory sits apart in a circle of its own, as tall as the bar. */
 const accessoryClass =
-  `press relative box-border grid size-16 shrink-0 place-items-center rounded-full no-underline ${surface} ` +
+  `press relative box-border grid size-ouro-16 shrink-0 place-items-center rounded-full no-underline ${surface} ` +
   "select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "pointer-fine:hover:text-foreground aria-[current=page]:bg-accent aria-[current=page]:text-accent-foreground " +
   "forced-colors:aria-[current=page]:outline-2 forced-colors:aria-[current=page]:outline-solid " +

@@ -188,7 +188,7 @@ export function Celebrate(props: CelebrateProps): JSX.Element {
                     "starting:opacity-100 starting:[transform:scale(0)]",
                   )}
                 >
-                  <span style={piece.style} className={cn("absolute size-2 rounded-[2px] [transform:rotate(var(--ouro-celebrate-turn))]", piece.tone)} />
+                  <span style={piece.style} className={cn("absolute size-ouro-2 rounded-[2px] [transform:rotate(var(--ouro-celebrate-turn))]", piece.tone)} />
                 </span>
               ))}
             </span>

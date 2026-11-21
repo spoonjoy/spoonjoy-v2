@@ -60,7 +60,7 @@ const order: readonly ColorScheme[] = ["light", "dark", "system"];
 /** The sun of a light page and the moon of a dark one, as lucide-react draws them. */
 function SchemeIcon({ dark }: { dark: boolean }): JSX.Element {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-5">
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-ouro-5">
       {dark ? (
         <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
       ) : (
@@ -159,7 +159,7 @@ export function ColorSchemeToggle(props: ColorSchemeToggleProps): JSX.Element {
               variant="plain"
               tone="secondary"
               aria-label={label}
-              className="w-11 px-0"
+              className="w-ouro-11 px-0"
             >
               <SchemeIcon dark={resolved === "dark"} />
             </Button>

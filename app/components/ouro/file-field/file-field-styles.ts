@@ -14,7 +14,7 @@ export { acceptProblem, fileKey, formatSize, listClass, matchesAccept, nameClass
  * @claim "The drop zone: a dashed box" registry/ouro/components/ouro/file-field/file-field.test.tsx verify:testExists(registry/ouro/components/ouro/file-field/file-field.test.tsx::FileField > is a labeled native file input inside a drop zone, on the Field contract)
  */
 const zoneClass =
-  "relative m-0 box-border flex min-h-11 w-full min-w-0 cursor-pointer flex-col items-center justify-center gap-1 px-4 py-6 " +
+  "relative m-0 box-border flex min-h-ouro-11 w-full min-w-0 cursor-pointer flex-col items-center justify-center gap-1 px-4 py-6 " +
   "rounded-ouro-lg border border-dashed border-input bg-transparent text-center text-muted-foreground " +
   "outline-ring outline-offset-2 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-solid " +
   "transition-[border-color,background-color] duration-(--ouro-duration-fast) ease-[ease] " +
@@ -28,7 +28,7 @@ const zoneClass =
  * @internal
  * @claim "The text in the zone: 16px" registry/ouro/components/ouro/file-field/file-field.touch.test.tsx verify:testExists(registry/ouro/components/ouro/file-field/file-field.touch.test.tsx::keeps 16px prompt text and a remove button with a 44px hit area on a landscape phone)
  */
-const promptClass = "m-0 text-base leading-6 sm:pointer-fine:text-sm sm:pointer-fine:leading-5 [&_svg]:mx-auto [&_svg]:mb-1 [&_svg]:size-6";
+const promptClass = "m-0 text-base leading-6 sm:pointer-fine:text-sm sm:pointer-fine:leading-5 [&_svg]:mx-auto [&_svg]:mb-1 [&_svg]:size-ouro-6";
 
 /**
  * The chosen files, one row each.
@@ -44,7 +44,7 @@ const listClass = "m-0 grid list-none gap-2 p-0";
  * @internal
  */
 const previewClass =
-  "flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-ouro-md border border-solid border-border bg-muted text-muted-foreground object-cover [&_svg]:size-5";
+  "flex size-ouro-10 shrink-0 items-center justify-center overflow-hidden rounded-ouro-md border border-solid border-border bg-muted text-muted-foreground object-cover [&_svg]:size-ouro-5";
 
 /**
  * A file's name: one line, cut short with an ellipsis.

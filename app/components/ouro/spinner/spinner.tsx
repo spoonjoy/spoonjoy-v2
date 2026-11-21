@@ -46,7 +46,7 @@ export interface SpinnerOwnProps {
 export type SpinnerProps = Omit<HTMLAttributes<HTMLSpanElement>, keyof SpinnerOwnProps | "children" | "role"> & SpinnerOwnProps;
 
 // Class strings are literal so the app's Tailwind finds them when it compiles.
-const sizes = { sm: "size-4", md: "size-5", lg: "size-8" } as const;
+const sizes = { sm: "size-ouro-4", md: "size-ouro-5", lg: "size-ouro-8" } as const;
 
 const tones = {
   primary: "text-primary",

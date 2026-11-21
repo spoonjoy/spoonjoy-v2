@@ -464,6 +464,21 @@ describe("Inspector geometry", () => {
 });
 
 describe("Inspector", () => {
+  it("keeps its scan band 64px tall and its tags 192px wide at most, at a compact --spacing", async () => {
+    const { host } = await render(<Page><Heading level={2}>Braised short ribs</Heading><Badge>Make ahead</Badge></Page>);
+    await act(() => setOpen(true));
+    const scanHeight = () => getComputedStyle(document.querySelector<HTMLElement>('[data-ouro-part="scan"]')!).height;
+    expect(scanHeight()).toBe("64px");
+    await drawn(pageRoots(host).length);
+    const tagWidth = () => getComputedStyle(tags()[0]!).maxWidth;
+    expect(tagWidth()).toBe("192px");
+    document.documentElement.style.setProperty("--spacing", "0.2rem");
+    try {
+      expect(tagWidth()).toBe("192px");
+    } finally {
+      document.documentElement.style.removeProperty("--spacing");
+    }
+  });
   it("tags a part's own root with the item it ships in, and its docs", () => {
     expect([itemFor("time-grid-nav"), itemFor("toast"), itemFor("time-grid"), itemFor("snap-pip-frame"), itemFor("snap-pip-hint"), itemFor("page-section")]).toEqual(["time-grid", "toaster", "time-grid", "snap-pip", "snap-pip", "page-shell"]);
   });

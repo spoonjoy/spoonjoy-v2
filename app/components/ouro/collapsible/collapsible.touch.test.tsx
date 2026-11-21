@@ -11,6 +11,14 @@ import { rotate } from "~/lib/ouro/testing/rotate";
 
 let root: Root | undefined;
 const nodes: Element[] = [];
+it("keeps its trigger's 44px floor at a compact --spacing", async () => {
+  const host = await render(<Collapsible title="Facts">420 calories</Collapsible>);
+  const trigger = () => getComputedStyle(host.querySelector<HTMLElement>("button[aria-expanded]")!);
+  expect(trigger().minHeight).toBe("44px");
+  host.style.setProperty("--spacing", "0.2rem");
+  expect(trigger().minHeight).toBe("44px");
+});
+
 afterEach(async () => {
   await rotate(390, 844);
   await act(async () => root?.unmount());

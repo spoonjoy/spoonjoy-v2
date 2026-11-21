@@ -53,6 +53,17 @@ afterEach(async () => {
 });
 
 describe("Slider", () => {
+  it("keeps its fixed sizes at a compact --spacing", async () => {
+    const { host, root } = await render(<Slider label="Servings" name="servings" defaultValue={4} min={1} max={12} />);
+    const sizes = () => {
+      const thumb = getComputedStyle(root.querySelector<HTMLElement>("[data-ouro-slider-thumb]")!);
+      const track = getComputedStyle(root.querySelector<HTMLElement>("[data-ouro-slider-indicator]")!.parentElement!);
+      return [thumb.width, thumb.height, track.height];
+    };
+    expect(sizes()).toEqual(["20px", "20px", "6px"]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(sizes()).toEqual(["20px", "20px", "6px"]);
+  });
   it("is a labeled range input built on the Field contract", async () => {
     const { root, inputs } = await render(<Slider label="Servings" name="servings" defaultValue={4} min={1} max={12} />);
     expect(root.getAttribute("data-ouro")).toBe("slider");

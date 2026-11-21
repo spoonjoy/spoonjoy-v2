@@ -5,6 +5,7 @@ import type { HTMLAttributes, JSX, ReactNode, Ref } from "react";
 import { sizeFor } from "~/lib/ouro/appearance-hints";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
+import { isPictureReady, rememberPicture } from "~/lib/ouro/avatar-pictures";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { Skeleton } from "~/components/ouro/skeleton/skeleton";
 import { groupChatWith } from "~/components/ouro/avatar/avatar-styles";
@@ -312,24 +313,20 @@ const presences = ["available", "busy", "away", "do-not-disturb", "offline", "ou
 /** The group's size, which its avatars take. */
 const GroupSize = createContext<AvatarSize | undefined>(undefined);
 
-/**
- * The picture's status: `idle` without one, `loading` while the browser fetches it, then `loaded`
- * or `error`. The picture is drawn once it has loaded, so the initials show until then and after a
- * failure. A picture the browser has already shows on the first paint.
- */
-// Pictures an avatar on this page has loaded, each held by an image so the browser keeps it ready: an avatar
-// of one draws it in its first render, with no second render to swap the initials for it. The oldest go
-// past a few hundred.
-const readyPictures = new Map<string, HTMLImageElement>();
-const READY_PICTURES = 256;
 // Stryker disable next-line ArrowFunction: React only calls the cleanup, so one that returns undefined behaves the same.
 const subscribeNever = () => () => {};
 
+/**
+ * The picture's status: `idle` without one, `loading` while the browser fetches it, then `loaded`
+ * or `error`. The picture is drawn once it has loaded, so the initials show until then and after a
+ * failure. A picture the browser has already shows on the first paint, and so does one the app marked
+ * ready with `markPicturesReady`.
+ */
 function useImageStatus(src: string | undefined): "idle" | "loading" | "loaded" | "error" {
   // In server HTML and while it hydrates, no picture is ready: the initials, as the server drew them.
   const ready = useSyncExternalStore(
     subscribeNever,
-    () => readyPictures.has(src as string),
+    () => isPictureReady(src as string),
     // Stryker disable next-line ArrowFunction: undefined reads as false where ready is read.
     () => false,
   );
@@ -347,8 +344,7 @@ function useImageStatus(src: string | undefined): "idle" | "loading" | "loaded" 
     };
     const image = new window.Image();
     image.onload = () => {
-      readyPictures.set(src, image);
-      if (readyPictures.size > READY_PICTURES) readyPictures.delete(readyPictures.keys().next().value!);
+      rememberPicture(src, image);
       settle("loaded");
     };
     image.onerror = () => settle("error");

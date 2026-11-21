@@ -85,7 +85,7 @@ const outlinesClass =
  * @claim "The scan: a band tinted with" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > opens with a scan down the screen that shows the outlines as it passes, and at once with reduced motion)
  */
 const scanClass =
-  "absolute inset-x-0 top-0 h-16 [translate:0_100vh] border-b-2 border-primary bg-primary/5 " +
+  "absolute inset-x-0 top-0 h-ouro-16 [translate:0_100vh] border-b-2 border-primary bg-primary/5 " +
   // The outlines' transition, the one class for both: each part changes only its own property.
   "motion-safe:[transition:clip-path_calc(var(--ouro-duration-slow)*2)_var(--ouro-ease-in-out),translate_calc(var(--ouro-duration-slow)*2)_var(--ouro-ease-in-out)] " +
   "starting:in-data-starting-style:[translate:0_-100%] motion-reduce:hidden";
@@ -122,7 +122,7 @@ const frameClass =
  * @claim "where it covers no text and" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > leaves every line of the page's text as readable as it was, in light and dark: outlines step around text, and tags sit clear of text and of each other)
  */
 const tagClass =
-  "pointer-events-auto absolute top-0 left-0 z-1 inline-flex max-w-48 items-center truncate rounded-ouro-sm px-1.5 " +
+  "pointer-events-auto absolute top-0 left-0 z-1 inline-flex max-w-ouro-48 items-center truncate rounded-ouro-sm px-1.5 " +
   "font-mono text-[11px] leading-4 font-medium text-primary-foreground no-underline bg-primary " +
   "data-covered:invisible data-crowded:invisible " +
   "outline-ring outline-offset-1 focus-visible:outline-2 focus-visible:outline-solid pointer-fine:hover:underline";

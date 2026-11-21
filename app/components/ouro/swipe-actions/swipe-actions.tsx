@@ -99,7 +99,7 @@ const toneOf = (action: SwipeAction): ToneName => (action.tone !== undefined && 
 
 function EllipsisIcon(): JSX.Element {
   return (
-    <svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" className="size-4">
+    <svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" className="size-ouro-4">
       <circle cx="3" cy="8" r="1.5" />
       <circle cx="8" cy="8" r="1.5" />
       <circle cx="13" cy="8" r="1.5" />

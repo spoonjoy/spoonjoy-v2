@@ -52,6 +52,22 @@ async function opened() {
 }
 
 describe("Combobox on a phone", () => {
+  it("keeps the chevron's box and glyph, and each option, to a finger at a compact --spacing", async () => {
+    const host = await render(<Combobox label="Herb" name="herb" items={herbs} placeholder="Pick a herb" />);
+    await commands.tap(TRIGGER);
+    const panel = await opened();
+    const option = panel.querySelector<HTMLElement>('[role="option"]')!;
+    const chevron = host.querySelector<HTMLElement>(`${TRIGGER} svg`)!;
+    const measure = () => [chevron.getBoundingClientRect().width, option.getBoundingClientRect().height];
+    expect(measure()).toEqual([16, 44]);
+    document.body.style.setProperty("--spacing", "0.2rem");
+    try {
+      expect(measure()).toEqual([16, 44]);
+    } finally {
+      document.body.style.removeProperty("--spacing");
+    }
+  });
+
   it("is a button in the field that opens a sheet titled with the label", async () => {
     const host = await render(<Combobox label="Herb" name="herb" items={herbs} placeholder="Pick a herb" description="For the sauce." />);
     const trigger = host.querySelector<HTMLButtonElement>(TRIGGER)!;

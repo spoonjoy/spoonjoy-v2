@@ -405,6 +405,33 @@ describe("Combobox async", () => {
 });
 
 describe("Combobox multiple", () => {
+  it("keeps its fixed sizes at a compact --spacing: a chip's remove glyph, the chevron's glyph, a chosen option's check and the loading spinner", async () => {
+    await page.viewport(1024, 768);
+    const { host } = await render(
+      <>
+        <Combobox label="Herbs" multiple items={herbs} defaultValue={["Basil"]} />
+        <Combobox label="Rezept" items={[]} loading loadingLabel="Lädt…" />
+      </>,
+    );
+    const both = async (expected: number[], read: () => number[]) => {
+      expect(read()).toEqual(expected);
+      host.style.setProperty("--spacing", "0.2rem");
+      expect(read()).toEqual(expected);
+      host.style.removeProperty("--spacing");
+    };
+    const width = (element: Element | null | undefined) => element!.getBoundingClientRect().width;
+    await both([14, 24, 16], () => [width(host.querySelector("[data-ouro-combobox-chip-remove] svg")), width(host.querySelector("[data-ouro-combobox-icon]")), width(host.querySelector("[data-ouro-combobox-icon] svg"))]);
+    await userEvent.click(host.querySelector<HTMLElement>("[data-ouro-combobox-icon]")!);
+    await expect.poll(() => document.querySelector('[role="option"][aria-selected="true"] svg')).not.toBeNull();
+    await both([16], () => [width(document.querySelector('[role="option"][aria-selected="true"] svg'))]);
+    await userEvent.keyboard("{Escape}");
+    const rezept = page.getByLabelText("Rezept");
+    await userEvent.click(rezept);
+    await userEvent.type(rezept, "x");
+    await expect.poll(() => [...document.querySelectorAll("svg")].find((svg) => svg.getAttribute("class")?.includes("ouro-spin"))).toBeDefined();
+    await both([16], () => [parseFloat(getComputedStyle([...document.querySelectorAll("svg")].find((svg) => svg.getAttribute("class")?.includes("ouro-spin"))!).width)]);
+  });
+
   it("shows a chip per pick and submits each value", async () => {
     const onValueChange = vi.fn();
     const { input, host } = await render(
