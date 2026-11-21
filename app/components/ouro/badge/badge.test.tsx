@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, type SVGProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -47,6 +47,31 @@ function themeColor(variable: string): string {
 }
 
 const RouterLink: OuroLinkComponent = (props) => <a data-router="" {...props} />;
+
+function StarIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" {...props}>
+      <path d="M8 1.5l2 4.2 4.5.6-3.3 3.1.8 4.5L8 11.9l-4 2 .8-4.5L1.5 6.3 6 5.7z" />
+    </svg>
+  );
+}
+
+describe("Badge at a compact --spacing", () => {
+  it("keeps its fixed sizes at a compact --spacing: a 14px icon, a 6px dot and a 24px height", async () => {
+    const { host, badge } = await render(
+      <Badge icon={StarIcon} dot>
+        Starred
+      </Badge>,
+    );
+    const sizes = () => {
+      const dot = getComputedStyle(badge.querySelector("[data-ouro-dot]")!);
+      return [getComputedStyle(badge.querySelector("svg")!).width, dot.width, dot.height, getComputedStyle(badge).height].map((px) => parseFloat(px));
+    };
+    expect(sizes()).toEqual([expect.closeTo(14), expect.closeTo(6), expect.closeTo(6), expect.closeTo(24)]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(sizes()).toEqual([expect.closeTo(14), expect.closeTo(6), expect.closeTo(6), expect.closeTo(24)]);
+  });
+});
 
 describe("Badge looks off when marked data-disabled", () => {
   it("dims and shows the not-allowed cursor, and an unmarked badge stays on", async () => {

@@ -81,7 +81,7 @@ export interface PopoverBaseProps {
    */
   children: ReactNode;
   /**
-   * Layout only, applied to the popover panel: width (18rem, `w-72`, by default) and
+   * Layout only, applied to the popover panel: width (18rem, `w-ouro-72`, by default) and
    * margins. Your classes win over Ouro UI's. The sheet keeps its full width. Appearance
    * classes warn in development.
    * @claim "Layout only, applied to the popover" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > is 18rem wide by default, and className sets layout)

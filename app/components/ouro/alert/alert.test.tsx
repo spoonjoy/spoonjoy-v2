@@ -37,6 +37,13 @@ afterEach(async () => {
 });
 
 describe("Alert", () => {
+  it("keeps its fixed sizes at a compact --spacing: the tone icon at 20px and the dismiss icon at 16px", async () => {
+    const { host, alert } = await render(<Alert title="Saved" onDismiss={() => {}} />);
+    const sizes = () => [alert.querySelector("[data-ouro-alert-icon]"), alert.querySelector("button svg")].map((svg) => parseFloat(getComputedStyle(svg!).width));
+    expect(sizes()).toEqual([expect.closeTo(20), expect.closeTo(16)]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(sizes()).toEqual([expect.closeTo(20), expect.closeTo(16)]);
+  });
   it("renders the title and description in a status region by default", async () => {
     const { alert } = await render(<Alert title="Recipe saved" description="It's in your cookbook now." />);
     expect(alert.getAttribute("role")).toBe("status");

@@ -500,6 +500,16 @@ describe("Dialog stacking above the app's fixed bars", () => {
 });
 
 describe("centered dialog", () => {
+  it("keeps its fixed sizes at a compact --spacing: the close button's 32px box and its 16px icon", async () => {
+    await page.viewport(1280, 800);
+    await openUncontrolled();
+    const close = document.querySelector<HTMLElement>("[data-ouro-dialog-close]")!;
+    const sizes = () => [close, close.querySelector("svg")!].map((element) => parseFloat(getComputedStyle(element).width));
+    expect(sizes()).toEqual([expect.closeTo(32), expect.closeTo(16)]);
+    popup()!.style.setProperty("--spacing", "0.2rem");
+    expect(sizes()).toEqual([expect.closeTo(32), expect.closeTo(16)]);
+  });
+
   it("renders a hidden surface layer first in the popup, under the content", async () => {
     const dialog = await openUncontrolled();
     const surface = dialog.firstElementChild as HTMLElement;

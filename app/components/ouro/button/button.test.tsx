@@ -897,6 +897,30 @@ describe("density", () => {
     await page.viewport(414, 896);
   });
 
+  it("keeps its fixed sizes at a compact --spacing: a fine pointer keeps a 24px floor, and an icon-only button stays square", async () => {
+    await page.viewport(1280, 800);
+    const Plus = (props: SVGProps<SVGSVGElement>) => (
+      <svg viewBox="0 0 16 16" {...props}>
+        <path d="M8 3v10M3 8h10" />
+      </svg>
+    );
+    const { host } = await render(
+      <>
+        <Button>Density</Button>
+        <Button aria-label="Add">
+          <Plus />
+        </Button>
+      </>,
+    );
+    const [text, icon] = Array.from(host.querySelectorAll<HTMLElement>('[data-ouro="button"]'));
+    const box = (element: HTMLElement) => [getComputedStyle(element).height, getComputedStyle(element).width].map((px) => parseFloat(px));
+    expect(box(text!)[0]).toBeCloseTo(36);
+    expect(box(icon!)).toEqual([expect.closeTo(36), expect.closeTo(36)]);
+    host.style.setProperty("--spacing", "0.05rem");
+    expect(box(text!)[0]).toBeCloseTo(24);
+    expect(box(icon!)).toEqual([expect.closeTo(24), expect.closeTo(24)]);
+  });
+
   it("is shorter at 1280px than at 390px", async () => {
     await page.viewport(390, 844);
     const { button } = await render(<Button>Density</Button>);
@@ -983,8 +1007,13 @@ describe("className", () => {
   it("drops its own class when the app's className sets the same property", async () => {
     const { button } = await render(<Button className="h-20">Tall</Button>);
     expect(button.classList.contains("h-20")).toBe(true);
-    expect(button.classList.contains("h-(--ouro-button-h)")).toBe(false);
+    expect(button.classList.contains("h-[max(var(--ouro-button-h),var(--ouro-size-6))]")).toBe(false);
     expect(button.getBoundingClientRect().height).toBe(80);
+  });
+
+  it("takes a height class under its fine-pointer floor, as a compact row inside a message sets one", async () => {
+    const { button } = await render(<Button size="sm" variant="plain" className="h-5">Reply</Button>);
+    expect(button.getBoundingClientRect().height).toBe(20);
   });
 
   it("lets the app's height and padding win at desktop widths too", async () => {

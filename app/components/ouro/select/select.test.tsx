@@ -442,6 +442,22 @@ describe("Select", () => {
     expect(getComputedStyle(root).width).toBe("160px");
   });
 
+  it("keeps its fixed sizes at a compact --spacing: a 16px chevron and check mark, and a fine pointer's trigger at least 20px tall", async () => {
+    await resizeTo(1024, 768);
+    const { host, trigger } = await render(<Select label="Course" options={courses} defaultValue="starter" />);
+    const chevron = () => parseFloat(getComputedStyle(trigger.querySelector("svg")!).width);
+    expect(chevron()).toBeCloseTo(16);
+    expect(trigger.getBoundingClientRect().height).toBeCloseTo(36);
+    host.style.setProperty("--spacing", "0.05rem");
+    expect(chevron()).toBeCloseTo(16);
+    expect(trigger.getBoundingClientRect().height).toBeCloseTo(20);
+    await open(trigger);
+    const check = () => parseFloat(getComputedStyle(popup()!.querySelector('[role="option"] svg')!).width);
+    expect(check()).toBeCloseTo(16);
+    popup()!.style.setProperty("--spacing", "0.2rem");
+    expect(check()).toBeCloseTo(16);
+  });
+
   it("is 36px tall with a fine pointer from sm up, with 32px options", async () => {
     await resizeTo(1024, 768);
     const { trigger } = await render(<Select label="Course" options={courses} />);

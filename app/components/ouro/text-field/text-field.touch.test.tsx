@@ -29,6 +29,21 @@ async function render(node: ReactNode) {
   return host;
 }
 
+it("keeps every TextField's box at least 44px tall to a finger, even at a compact --spacing", async () => {
+  expect(matchMedia("(pointer: coarse)").matches).toBe(true);
+  const host = await render(
+    <>
+      <TextField label="Small" size="sm" />
+      <TextField label="Medium" />
+      <TextField label="Large" size="lg" />
+    </>,
+  );
+  const boxes = () => Array.from(host.querySelectorAll("input"), (input) => input.parentElement!.getBoundingClientRect().height);
+  expect(boxes()).toEqual([expect.closeTo(44), expect.closeTo(44), expect.closeTo(56)]);
+  host.style.setProperty("--spacing", "0.05rem");
+  expect(boxes()).toEqual([expect.closeTo(44), expect.closeTo(44), expect.closeTo(44)]);
+});
+
 it("uses 16px text in TextField and TextArea, so iOS does not zoom on focus", async () => {
   expect(matchMedia("(pointer: coarse)").matches).toBe(true);
   const host = await render(

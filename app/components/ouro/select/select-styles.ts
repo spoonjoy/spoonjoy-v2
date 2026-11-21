@@ -112,13 +112,14 @@ const sheetQuery = "(max-width: 639.98px) and (pointer: coarse)";
 const triggerClass =
   "relative m-0 box-border flex w-full min-w-0 items-center justify-between gap-2 h-(--ouro-control-h) px-3 py-0 " +
   "[--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] " +
+  "pointer-coarse:min-h-ouro-11 pointer-fine:min-h-ouro-5 " +
   "rounded-ouro-control-md border border-solid border-input bg-transparent text-start text-base text-foreground sm:pointer-fine:text-sm " +
   "font-[inherit] cursor-pointer select-none [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "transition-[border-color,background-color] duration-(--ouro-duration-fast) ease-[ease] " +
   "pointer-fine:hover:not-data-disabled:border-ring/60 not-data-disabled:active:bg-accent/60 aria-invalid:border-destructive " +
   "data-disabled:cursor-not-allowed data-disabled:opacity-50 dark:bg-input/30 " +
-  "[&_[data-placeholder]]:text-muted-foreground [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground";
+  "[&_[data-placeholder]]:text-muted-foreground [&>svg]:size-ouro-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground";
 
 /**
  * The positioner. As a sheet it is pinned to the bottom edge at full width, over the place
@@ -184,13 +185,13 @@ const sheetTitleClass = "m-0 shrink-0 px-3 pt-1 pb-2 text-base leading-6 font-se
  * @claim "An option: 44px tall on coarse" registry/ouro/components/ouro/select/select.touch.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.touch.test.tsx::chooses an option with a tap and closes, with 44px rows)
  */
 const itemClass =
-  "relative box-border grid min-h-11 cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-ouro-sm px-2 py-1.5 " +
+  "relative box-border grid min-h-ouro-11 cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-ouro-sm px-2 py-1.5 " +
   "text-base leading-6 outline-none select-none pointer-fine:min-h-8 sm:pointer-fine:text-sm sm:pointer-fine:leading-5 " +
   "scroll-my-1 [-webkit-tap-highlight-color:transparent] data-highlighted:bg-accent data-highlighted:text-accent-foreground " +
   // Forced colours drop the fill, so the highlight takes the system's pair.
   "forced-colors:data-highlighted:bg-[Highlight] forced-colors:data-highlighted:text-[HighlightText] " +
   "not-data-disabled:active:bg-accent not-data-disabled:active:text-accent-foreground " +
-  "data-disabled:opacity-50 [&_svg]:size-4";
+  "data-disabled:opacity-50 [&_svg]:size-ouro-4";
 
 /**
  * The check mark in front of a chosen option.

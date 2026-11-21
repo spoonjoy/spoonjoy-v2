@@ -94,8 +94,8 @@ const listClass =
  */
 const tabClass =
   "group/tab press relative m-0 box-border inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap " +
-  "h-(--ouro-tab-h) px-3 [--ouro-tab-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-tab-h:calc(var(--spacing)*9)] " +
-  "pointer-coarse:min-w-11 justify-center data-[orientation=vertical]:justify-start " +
+  "h-(--ouro-tab-h) px-3 [--ouro-tab-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-tab-h:calc(var(--spacing)*9)] pointer-fine:min-h-ouro-5 " +
+  "pointer-coarse:min-h-ouro-11 pointer-coarse:min-w-ouro-11 justify-center data-[orientation=vertical]:justify-start " +
   "rounded-ouro-md border-0 bg-transparent text-base font-medium text-muted-foreground sm:pointer-fine:text-sm " +
   "forced-colors:border forced-colors:border-solid " +
   "select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
@@ -135,10 +135,10 @@ const tabFaceClass =
 const indicatorClass =
   "pointer-events-none absolute z-1 bg-primary " +
   "[transition-property:translate,scale] duration-(--ouro-duration-base) ease-(--ouro-ease-in-out) motion-reduce:transition-none in-data-ouro-keyboard:transition-none " +
-  "data-[orientation=horizontal]:bottom-0 data-[orientation=horizontal]:left-0 data-[orientation=horizontal]:h-0.5 " +
+  "data-[orientation=horizontal]:bottom-0 data-[orientation=horizontal]:left-0 data-[orientation=horizontal]:h-ouro-0_5 " +
   "data-[orientation=horizontal]:w-px data-[orientation=horizontal]:origin-left data-[orientation=horizontal]:translate-x-(--active-tab-left) " +
   "data-[orientation=horizontal]:scale-x-[tan(atan2(var(--active-tab-width,0px),1px))] " +
-  "data-[orientation=vertical]:top-0 data-[orientation=vertical]:end-0 data-[orientation=vertical]:w-0.5 " +
+  "data-[orientation=vertical]:top-0 data-[orientation=vertical]:end-0 data-[orientation=vertical]:w-ouro-0_5 " +
   "data-[orientation=vertical]:h-px data-[orientation=vertical]:origin-top data-[orientation=vertical]:translate-y-(--active-tab-top) " +
   "data-[orientation=vertical]:scale-y-[tan(atan2(var(--active-tab-height,0px),1px))]";
 
@@ -171,8 +171,8 @@ const tabLinkClass = "flex-1 no-underline";
  */
 const linkIndicatorClass =
   "pointer-events-none absolute z-1 bg-primary " +
-  "data-[orientation=horizontal]:inset-x-0 data-[orientation=horizontal]:bottom-0 data-[orientation=horizontal]:h-0.5 " +
-  "data-[orientation=vertical]:inset-y-0 data-[orientation=vertical]:end-0 data-[orientation=vertical]:w-0.5";
+  "data-[orientation=horizontal]:inset-x-0 data-[orientation=horizontal]:bottom-0 data-[orientation=horizontal]:h-ouro-0_5 " +
+  "data-[orientation=vertical]:inset-y-0 data-[orientation=vertical]:end-0 data-[orientation=vertical]:w-ouro-0_5";
 
 /**
  * A panel. It fades in when its tab is selected; the old panel leaves at once, so the

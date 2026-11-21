@@ -262,7 +262,7 @@ export function Alert(props: AlertProps): JSX.Element {
         className,
       )}
     >
-      {Icon && <Icon aria-hidden="true" data-slot="alert-icon" data-ouro-alert-icon="" className={cn("mt-0.5 size-5 shrink-0", accent)} />}
+      {Icon && <Icon aria-hidden="true" data-slot="alert-icon" data-ouro-alert-icon="" className={cn("mt-0.5 size-ouro-5 shrink-0", accent)} />}
       {/* A long word (an address in an error) wraps anywhere, so it stays inside the alert, however narrow. */}
       <div data-slot="alert-body" className="flex min-w-0 flex-1 flex-col gap-1 [overflow-wrap:anywhere]">
         <div data-slot="alert-title" data-ouro-alert-title="" data-ouro-text="" className={cn("text-base/6 font-medium sm:pointer-fine:text-sm/5", accent)}>
@@ -290,7 +290,7 @@ export function Alert(props: AlertProps): JSX.Element {
           onClick={() => onDismiss()}
           className="-my-1.5 -me-2 w-(--ouro-button-h) px-0"
         >
-          <CloseIcon aria-hidden="true" className="size-4" />
+          <CloseIcon aria-hidden="true" className="size-ouro-4" />
         </Button>
       )}
     </div>

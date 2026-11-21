@@ -1233,6 +1233,17 @@ describe("Sheet dev messages", () => {
 });
 
 describe("Sheet parts", () => {
+  it("keeps its fixed sizes at a compact --spacing: the 32px close button with its 16px icon, and the 36px handle bar", async () => {
+    await page.viewport(1280, 800);
+    await openUncontrolled();
+    const close = document.querySelector<HTMLElement>("[data-ouro-sheet-close]")!;
+    const bar = document.querySelector<HTMLElement>('[data-slot="sheet-handle-bar"]')!;
+    const sizes = () => [close, close.querySelector("svg")!, bar].map((element) => parseFloat(getComputedStyle(element).width));
+    expect(sizes()).toEqual([expect.closeTo(32), expect.closeTo(16), expect.closeTo(36)]);
+    popup()!.style.setProperty("--spacing", "0.2rem");
+    expect(sizes()).toEqual([expect.closeTo(32), expect.closeTo(16), expect.closeTo(36)]);
+  });
+
   it("mark the buttons they render as the sheet's, and leave a rendered Button its own marker", async () => {
     await render(
       <SheetRoot>

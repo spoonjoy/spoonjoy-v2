@@ -141,6 +141,7 @@ const legendClass = "m-0 p-0 text-base leading-6 font-semibold text-foreground d
  */
 const controlClass =
   "m-0 box-border block w-full min-w-0 h-(--ouro-control-h) px-3 py-0 " +
+  "pointer-coarse:min-h-ouro-11 pointer-fine:min-h-ouro-5 " +
   "[--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] " +
   "rounded-ouro-control-md border border-solid border-input bg-transparent text-base text-foreground sm:pointer-fine:text-sm " +
   "font-[inherit] placeholder:text-muted-foreground " +

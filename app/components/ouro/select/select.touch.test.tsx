@@ -30,6 +30,15 @@ async function render(node: ReactNode) {
   return host;
 }
 
+it("keeps a select's trigger 44px tall to a finger, even at a compact --spacing", async () => {
+  expect(matchMedia("(pointer: coarse)").matches).toBe(true);
+  const host = await render(<Select label="Course" options={ingredients.slice(0, 3)} />);
+  const trigger = () => host.querySelector<HTMLElement>('[role="combobox"]')!;
+  expect(trigger().getBoundingClientRect().height).toBeCloseTo(44);
+  host.style.setProperty("--spacing", "0.05rem");
+  expect(trigger().getBoundingClientRect().height).toBeCloseTo(44);
+});
+
 const ingredients = Array.from({ length: 40 }, (_, index) => ({ value: `i${index}`, label: `Ingredient ${index + 1}` }));
 const popup = () => document.querySelector<HTMLElement>('[data-ouro="select-popup"]')!;
 const isOpen = () => document.querySelector('[data-ouro="select-popup"]')?.hasAttribute("data-open") ?? false;

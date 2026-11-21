@@ -465,6 +465,20 @@ describe("Switch look and motion", () => {
     await commands.pointerPress({ selector: '[role="switch"]', action: "up" });
   });
 
+  it("keeps its fixed sizes at a compact --spacing: the 36 by 20 track, the 16px thumb and its 16px travel", async () => {
+    await page.viewport(1280, 800);
+    const { host, track, thumb } = await render(<Switch label="Wi-Fi" defaultChecked />);
+    const sizes = () => {
+      const trackStyle = getComputedStyle(track);
+      return [trackStyle.width, trackStyle.height, getComputedStyle(thumb).width].map((px) => parseFloat(px));
+    };
+    expect(sizes()).toEqual([expect.closeTo(36), expect.closeTo(20), expect.closeTo(16)]);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(sizes()).toEqual([expect.closeTo(36), expect.closeTo(20), expect.closeTo(16)]);
+    await expect.poll(() => thumb.getAnimations().length).toBe(0);
+    expect(parseFloat(getComputedStyle(thumb).translate)).toBeCloseTo(16);
+  });
+
   it("steps down to desktop size with a fine pointer from sm, centered on the label's first line", async () => {
     await page.viewport(1280, 800);
     const { track, label } = await render(<Switch label="Wi-Fi" />);

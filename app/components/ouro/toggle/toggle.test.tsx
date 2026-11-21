@@ -194,6 +194,26 @@ describe("Toggle looks", () => {
     expect(getComputedStyle(outline!).borderTopColor).not.toBe("rgba(0, 0, 0, 0)");
   });
 
+  it("keeps its fixed sizes at a compact --spacing: a fine pointer keeps a toggle at least 24px tall, and an icon-only one square", async () => {
+    await page.viewport(1280, 800);
+    const { host } = await render(
+      <>
+        <Toggle label="Bold" />
+        <Toggle label="Bold" icon={BoldIcon} hideLabel />
+      </>,
+    );
+    const boxes = () =>
+      Array.from(host.querySelectorAll<HTMLElement>('[data-ouro="toggle"]'), (element) => {
+        const style = getComputedStyle(element);
+        return [parseFloat(style.height), parseFloat(style.width)];
+      });
+    expect(boxes()[0]![0]).toBeCloseTo(36);
+    expect(boxes()[1]).toEqual([expect.closeTo(36), expect.closeTo(36)]);
+    host.style.setProperty("--spacing", "0.05rem");
+    expect(boxes()[0]![0]).toBeCloseTo(24);
+    expect(boxes()[1]).toEqual([expect.closeTo(24), expect.closeTo(24)]);
+  });
+
   it("is 44px tall on phones and steps down with a fine pointer from sm, per size", async () => {
     await page.viewport(390, 844);
     const { host } = await render(

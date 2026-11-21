@@ -63,6 +63,22 @@ async function settled(element: Element) {
 }
 
 describe("Tabs", () => {
+  it("keeps its fixed sizes at a compact --spacing: a 2px underline, and a fine pointer's tab at least 20px tall", async () => {
+    await page.viewport(1280, 800);
+    const { host, tabs } = await render(<Tabs label="Recipe" items={items} />);
+    const underline = () => {
+      const style = getComputedStyle(host.querySelector<HTMLElement>("[data-ouro-tabs-indicator]")!);
+      return [style.width, style.height].map((px) => parseFloat(px));
+    };
+    await expect.poll(() => host.querySelector("[data-ouro-tabs-indicator]")).not.toBeNull();
+    const tabHeight = () => parseFloat(getComputedStyle(tabs[0]!).height);
+    expect(underline()).toEqual([expect.closeTo(1), expect.closeTo(2)]);
+    expect(tabHeight()).toBeCloseTo(36);
+    host.style.setProperty("--spacing", "0.05rem");
+    expect(underline()).toEqual([expect.closeTo(1), expect.closeTo(2)]);
+    expect(tabHeight()).toBeCloseTo(20);
+  });
+
   it("draws each tab's edge under forced colours, where its fill and the underline drop away", async () => {
     try {
       const { tabs } = await render(<Tabs label="Recipe" items={items} />);
