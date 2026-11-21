@@ -26,6 +26,22 @@ async function render(node: ReactNode) {
   return host;
 }
 
+it("keeps every tab 44px tall to a finger, even at a compact --spacing", async () => {
+  const host = await render(
+    <Tabs
+      label="Recipe"
+      items={[
+        { value: "ingredients", label: "Ingredients", content: <p>Two cups of flour</p> },
+        { value: "method", label: "Method", content: <p>Knead for ten minutes</p> },
+      ]}
+    />,
+  );
+  const tabs = () => [...host.querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) => tab.getBoundingClientRect().height);
+  expect(tabs()).toEqual([expect.closeTo(44), expect.closeTo(44)]);
+  host.style.setProperty("--spacing", "0.05rem");
+  expect(tabs()).toEqual([expect.closeTo(44), expect.closeTo(44)]);
+});
+
 /** Every target is at least 44px tall with 16px text, in portrait and in landscape past the sm breakpoint. */
 async function expectTouchSize(host: HTMLElement, selector: string) {
   expect(matchMedia("(pointer: coarse)").matches).toBe(true);

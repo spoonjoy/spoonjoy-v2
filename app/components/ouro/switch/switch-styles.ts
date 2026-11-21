@@ -19,11 +19,11 @@ export { thumbClass, trackClass };
  * @claim "Its hit area is 44px on" registry/ouro/components/ouro/switch/switch.touch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.touch.test.tsx::gives the switch a 44px hit area, though it is 24px tall)
  * @claim "The track: 40x24 on touch screens" registry/ouro/components/ouro/switch/switch.touch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.touch.test.tsx::keeps the phone size and 16px label on a landscape phone, past the sm breakpoint)
  * @claim "which keeps 3:1 against the page" https://www.w3.org/TR/WCAG22/#non-text-contrast verify:urlOk(https://www.w3.org/TR/WCAG22/#non-text-contrast)
- * @claim "`--ouro-switch-thumb` is the thumb's size at" registry/ouro/components/ouro/switch/switch-styles.ts verify:fileLine(registry/ouro/components/ouro/switch/switch-styles.ts, /\[--ouro-switch-thumb:calc\(var\(--spacing\)\*5\)\]\ssm:pointer-fine:\[--ouro-switch-thumb:calc\(var\(--spacing\)\*4\)\]/)
+ * @claim "`--ouro-switch-thumb` is the thumb's size at" registry/ouro/components/ouro/switch/switch-styles.ts verify:fileLine(registry/ouro/components/ouro/switch/switch-styles.ts, /\[--ouro-switch-thumb:var\(--ouro-size-5\)\]\ssm:pointer-fine:\[--ouro-switch-thumb:var\(--ouro-size-4\)\]/)
  */
 const trackClass =
-  "group relative m-0 box-border inline-flex h-6 w-10 shrink-0 items-center p-px sm:pointer-fine:h-5 sm:pointer-fine:w-9 " +
-  "[--ouro-switch-thumb:calc(var(--spacing)*5)] sm:pointer-fine:[--ouro-switch-thumb:calc(var(--spacing)*4)] " +
+  "group relative m-0 box-border inline-flex h-ouro-6 w-ouro-10 shrink-0 items-center p-px sm:pointer-fine:h-ouro-5 sm:pointer-fine:w-ouro-9 " +
+  "[--ouro-switch-thumb:var(--ouro-size-5)] sm:pointer-fine:[--ouro-switch-thumb:var(--ouro-size-4)] " +
   "[--corner-shape:round] [corner-shape:round] rounded-full border border-solid border-muted-foreground bg-muted data-checked:border-primary data-checked:bg-primary " +
   // More contrast trades the padding for a 2px hairline, so the thumb keeps its place.
   "contrast-more:border-2 contrast-more:p-0 " +
@@ -65,8 +65,8 @@ const thumbClass =
   "forced-colors:bg-[ButtonText] forced-colors:data-checked:bg-[HighlightText] forced-colors:bg-none " +
   // Translate and origin have no logical form, so a right-to-left page reverses them: the thumb
   // starts at the inline start and slides toward the inline end either way.
-  "translate-x-0 data-checked:translate-x-4 rtl:data-checked:-translate-x-4 " +
+  "translate-x-0 data-checked:translate-x-ouro-4 rtl:data-checked:-translate-x-ouro-4 " +
   "origin-left rtl:origin-right " +
   "motion-safe:[transition:translate_var(--ouro-duration-press)_var(--ouro-ease-out),scale_var(--ouro-duration-press)_var(--ouro-ease-out)] " +
   "motion-safe:group-active:not-data-disabled:scale-x-[1.2] " +
-  "motion-safe:group-active:not-data-disabled:data-checked:translate-x-3 rtl:motion-safe:group-active:not-data-disabled:data-checked:-translate-x-3";
+  "motion-safe:group-active:not-data-disabled:data-checked:translate-x-ouro-3 rtl:motion-safe:group-active:not-data-disabled:data-checked:-translate-x-ouro-3";

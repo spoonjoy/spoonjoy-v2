@@ -185,19 +185,19 @@ type TriggerProps = {
  * @claim "A compact icon button in the" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > has a visible, compact close button in the top corner, labelled by closeLabel)
  */
 const closeClass =
-  "absolute top-3 end-3 box-border inline-flex size-8 items-center justify-center m-0 p-0 border-0 rounded-ouro-lg " +
+  "absolute top-3 end-3 box-border inline-flex size-ouro-8 items-center justify-center m-0 p-0 border-0 rounded-ouro-lg " +
   "forced-colors:border forced-colors:border-solid " +
   "press bg-transparent text-muted-foreground cursor-pointer [-webkit-tap-highlight-color:transparent] " +
   "not-disabled:pointer-fine:hover:bg-accent not-disabled:pointer-fine:hover:text-accent-foreground " +
   "not-disabled:active:bg-accent not-disabled:active:text-accent-foreground motion-safe:not-disabled:active:scale-(--ouro-press-scale) " +
   "disabled:cursor-not-allowed disabled:opacity-50 " +
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid [&>svg]:size-4";
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid [&>svg]:size-ouro-4";
 
 /**
  * The close button's icon: a 16px cross in the text color.
  *
  * @claim "The close button's icon: a 16px" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > has a visible, compact close button in the top corner, labelled by closeLabel)
- * @claim "The close button's icon: a 16px" registry/ouro/components/ouro/dialog/dialog.tsx verify:fileLine(registry/ouro/components/ouro/dialog/dialog.tsx, /\[&>svg\]:size-4/)
+ * @claim "The close button's icon: a 16px" registry/ouro/components/ouro/dialog/dialog.tsx verify:fileLine(registry/ouro/components/ouro/dialog/dialog.tsx, /\[&>svg\]:size-ouro-4/)
  */
 function CloseIcon(): JSX.Element {
   return (

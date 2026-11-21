@@ -351,6 +351,14 @@ describe("Checkbox look", () => {
     }
   });
 
+  it("keeps its fixed sizes at a compact --spacing: the 16px box beside 14px text on a fine pointer", async () => {
+    await page.viewport(1280, 800);
+    const { host, box } = await render(<Checkbox label="Basil" />);
+    expect(parseFloat(getComputedStyle(box).width)).toBeCloseTo(16);
+    host.style.setProperty("--spacing", "0.2rem");
+    expect(parseFloat(getComputedStyle(box).width)).toBeCloseTo(16);
+  });
+
   it("is 16px beside 14px text with a fine pointer from sm, centered on the label's first line", async () => {
     await page.viewport(1280, 800);
     const { box, label } = await render(<Checkbox label="Basil" />);

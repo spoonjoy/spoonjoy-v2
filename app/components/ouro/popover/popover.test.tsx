@@ -91,6 +91,15 @@ async function openUncontrolled(props: Partial<PopoverProps> = {}) {
 }
 
 describe("Popover", () => {
+  it("keeps its fixed sizes at a compact --spacing: an 18rem panel", async () => {
+    await page.viewport(1280, 800);
+    const panel = await openUncontrolled();
+    const width = () => parseFloat(getComputedStyle(panel).width);
+    expect(width()).toBeCloseTo(288);
+    panel.style.setProperty("--spacing", "0.2rem");
+    expect(width()).toBeCloseTo(288);
+  });
+
   it("opens below its trigger as a non-modal dialog named by its title", async () => {
     const element = await openUncontrolled({ description: "Anyone with the link can view it." });
     await expect.element(page.getByRole("dialog", { name: "Share recipe" })).toBeVisible();

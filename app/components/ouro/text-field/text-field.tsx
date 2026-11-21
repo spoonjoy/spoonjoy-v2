@@ -198,7 +198,7 @@ function Icon({ children }: { children: ReactNode }): JSX.Element {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="size-4"
+      className="size-ouro-4"
     >
       {children}
     </svg>

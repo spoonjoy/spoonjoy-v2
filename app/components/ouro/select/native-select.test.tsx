@@ -56,6 +56,17 @@ afterEach(async () => {
 });
 
 describe("NativeSelect", () => {
+  it("keeps its fixed sizes at a compact --spacing: a 16px chevron, and a fine pointer's box at least 20px tall", async () => {
+    await page.viewport(1280, 800);
+    const { host, select } = await render(<NativeSelect label="Country" name="country" options={countries} />);
+    const chevron = () => parseFloat(getComputedStyle(host.querySelector("svg")!).width);
+    expect(chevron()).toBeCloseTo(16);
+    expect(select.getBoundingClientRect().height).toBeCloseTo(36);
+    host.style.setProperty("--spacing", "0.05rem");
+    expect(chevron()).toBeCloseTo(16);
+    expect(select.getBoundingClientRect().height).toBeCloseTo(20);
+  });
+
   it("is a labeled native select built on the Field contract", async () => {
     const { root, select } = await render(<NativeSelect label="Country" name="country" options={countries} />);
     expect(root.getAttribute("data-ouro")).toBe("native-select");

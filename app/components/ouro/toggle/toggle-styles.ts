@@ -53,21 +53,21 @@ const toggleBase =
  * @internal
  * @claim "Phones keep 16px text and the" registry/ouro/components/ouro/toggle/toggle.touch.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.touch.test.tsx::keeps 44px toggles and 16px text on a landscape phone, past the sm breakpoint)
  * @claim "Phones keep 16px text and the" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle looks > is 44px tall on phones and steps down with a fine pointer from sm, per size)
- * @claim "Height and padding read two variables" registry/ouro/components/ouro/toggle/toggle-styles.ts verify:fileLine(registry/ouro/components/ouro/toggle/toggle-styles.ts, /h-\(--ouro-toggle-h\)\spx-\(--ouro-toggle-px\)/)
+ * @claim "Height and padding read two variables" registry/ouro/components/ouro/toggle/toggle-styles.ts verify:fileLine(registry/ouro/components/ouro/toggle/toggle-styles.ts, /h-\[max\(var\(--ouro-toggle-h\),var\(--ouro-size-6\)\)\]\spx-\(--ouro-toggle-px\)/)
  * @claim "Height and padding read two variables" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle > lets app layout classes win)
  */
 const sizes = {
   xs:
-    "h-(--ouro-toggle-h) px-(--ouro-toggle-px) gap-1 text-sm sm:pointer-fine:text-xs [--ouro-toggle-h:calc(var(--spacing)*8)] [--ouro-toggle-px:calc(var(--spacing)*3)] " +
+    "h-[max(var(--ouro-toggle-h),var(--ouro-size-6))] px-(--ouro-toggle-px) gap-1 text-sm sm:pointer-fine:text-xs [--ouro-toggle-h:calc(var(--spacing)*8)] [--ouro-toggle-px:calc(var(--spacing)*3)] " +
     "sm:pointer-fine:[--ouro-toggle-h:calc(var(--spacing)*6)] sm:pointer-fine:[--ouro-toggle-px:calc(var(--spacing)*2.5)]",
   sm:
-    "h-(--ouro-toggle-h) px-(--ouro-toggle-px) gap-1.5 text-sm [--ouro-toggle-h:calc(var(--spacing)*9)] [--ouro-toggle-px:calc(var(--spacing)*3)] " +
+    "h-[max(var(--ouro-toggle-h),var(--ouro-size-6))] px-(--ouro-toggle-px) gap-1.5 text-sm [--ouro-toggle-h:calc(var(--spacing)*9)] [--ouro-toggle-px:calc(var(--spacing)*3)] " +
     "sm:pointer-fine:[--ouro-toggle-h:calc(var(--spacing)*8)] sm:pointer-fine:[--ouro-toggle-px:calc(var(--spacing)*2.5)]",
   md:
-    "h-(--ouro-toggle-h) px-(--ouro-toggle-px) gap-2 text-base sm:pointer-fine:text-sm [--ouro-toggle-h:calc(var(--spacing)*11)] [--ouro-toggle-px:calc(var(--spacing)*3.5)] " +
+    "h-[max(var(--ouro-toggle-h),var(--ouro-size-6))] px-(--ouro-toggle-px) gap-2 text-base sm:pointer-fine:text-sm [--ouro-toggle-h:calc(var(--spacing)*11)] [--ouro-toggle-px:calc(var(--spacing)*3.5)] " +
     "sm:pointer-fine:[--ouro-toggle-h:calc(var(--spacing)*9)] sm:pointer-fine:[--ouro-toggle-px:calc(var(--spacing)*3)]",
   lg:
-    "h-(--ouro-toggle-h) px-(--ouro-toggle-px) gap-2 text-base [--ouro-toggle-h:calc(var(--spacing)*12)] [--ouro-toggle-px:calc(var(--spacing)*4)] " +
+    "h-[max(var(--ouro-toggle-h),var(--ouro-size-6))] px-(--ouro-toggle-px) gap-2 text-base [--ouro-toggle-h:calc(var(--spacing)*12)] [--ouro-toggle-px:calc(var(--spacing)*4)] " +
     "sm:pointer-fine:[--ouro-toggle-h:calc(var(--spacing)*11)]",
 } as const;
 
@@ -102,7 +102,7 @@ type ToggleShape = keyof typeof shapes;
  *
  * @internal
  */
-const squareClass = "aspect-square px-0";
+const squareClass = "aspect-square px-0 pointer-fine:min-w-ouro-6";
 
 /**
  * `plain` has no border until it is pressed; `outline` always has one, in the primary tone while pressed.

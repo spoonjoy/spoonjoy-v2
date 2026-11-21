@@ -427,6 +427,18 @@ describe("Field wiring", () => {
 });
 
 describe("Field looks", () => {
+  it("keeps its fixed sizes at a compact --spacing: a fine pointer's control stays at least 20px tall", async () => {
+    await page.viewport(1280, 800);
+    const { host, input } = await render(
+      <Field label="Name">
+        <FieldControl />
+      </Field>,
+    );
+    expect(input.getBoundingClientRect().height).toBeCloseTo(36);
+    host.style.setProperty("--spacing", "0.05rem");
+    expect(input.getBoundingClientRect().height).toBeCloseTo(20);
+  });
+
   it("styles the control as a bordered text input in the theme's colors", async () => {
     const { input } = await render(
       <Field label="Email">

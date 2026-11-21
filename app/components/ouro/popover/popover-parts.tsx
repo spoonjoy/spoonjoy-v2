@@ -189,7 +189,7 @@ export function PopoverPopupUnchecked({ className, ...props }: PopoverPopupProps
       className={cn(
         floatingSurfaceClass,
         floatingMotionClass,
-        "relative flex w-72 max-w-(--available-width) max-h-(--available-height) min-h-0 flex-col gap-2 p-4",
+        "relative flex w-ouro-72 max-w-(--available-width) max-h-(--available-height) min-h-0 flex-col gap-2 p-4",
         className,
       )}
     />

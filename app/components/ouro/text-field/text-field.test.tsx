@@ -529,6 +529,26 @@ describe("TextField looks", () => {
 });
 
 describe("TextField variant and size", () => {
+  it("keeps its fixed sizes at a compact --spacing: a 16px clear icon, and a fine pointer's box at least 20px tall for md and 24px for lg", async () => {
+    await page.viewport(1280, 800);
+    const md = await render(<TextField label="Search" clearable defaultValue="x" />);
+    const lg = await render(<TextField label="Search" size="lg" clearable defaultValue="x" />);
+    const sm = await render(<TextField label="Search" size="sm" clearable defaultValue="x" />);
+    const measure = ({ host, input }: { host: HTMLElement; input: HTMLInputElement }) => [
+      parseFloat(getComputedStyle(host.querySelector("[data-ouro-clear] svg")!).width),
+      input.parentElement!.getBoundingClientRect().height,
+    ];
+    expect(measure(md)).toEqual([expect.closeTo(16), expect.closeTo(36)]);
+    expect(measure(lg)).toEqual([expect.closeTo(16), expect.closeTo(48)]);
+    expect(measure(sm)).toEqual([expect.closeTo(16), expect.closeTo(32)]);
+    md.host.style.setProperty("--spacing", "0.05rem");
+    lg.host.style.setProperty("--spacing", "0.05rem");
+    sm.host.style.setProperty("--spacing", "0.05rem");
+    expect(measure(md)).toEqual([expect.closeTo(16), expect.closeTo(20)]);
+    expect(measure(lg)).toEqual([expect.closeTo(16), expect.closeTo(24)]);
+    expect(measure(sm)).toEqual([expect.closeTo(16), expect.closeTo(24)]);
+  });
+
   it("draws no frame of its own with variant plain, and still outlines on keyboard focus", async () => {
     const { group, input } = await render(<TextField label="Search recipes" hideLabel type="search" variant="plain" />);
     const box = getComputedStyle(group);

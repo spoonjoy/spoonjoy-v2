@@ -110,11 +110,11 @@ const groupVariants = {
  */
 const groupSizes = {
   sm:
-    "[--ouro-control-h:calc(var(--spacing)*9)] sm:[--ouro-control-h:calc(var(--spacing)*8)] pointer-coarse:min-h-11 " +
+    "[--ouro-control-h:calc(var(--spacing)*9)] sm:[--ouro-control-h:calc(var(--spacing)*8)] pointer-coarse:min-h-ouro-11 pointer-fine:min-h-ouro-6 " +
     "sm:[--ouro-control-px:calc(var(--spacing)*2.5)] text-sm [--ouro-field-icon:1.25em]",
-  md: "[--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] text-base sm:pointer-fine:text-sm [--ouro-field-icon:1rem]",
+  md: "[--ouro-control-h:calc(var(--spacing)*11)] pointer-coarse:min-h-ouro-11 pointer-fine:min-h-ouro-5 sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] text-base sm:pointer-fine:text-sm [--ouro-field-icon:1rem]",
   lg:
-    "[--ouro-control-h:calc(var(--spacing)*14)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*12)] text-xl [--ouro-field-icon:1.25rem]",
+    "[--ouro-control-h:calc(var(--spacing)*14)] pointer-coarse:min-h-ouro-11 pointer-fine:min-h-ouro-6 sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*12)] text-xl [--ouro-field-icon:1.25rem]",
 } as const;
 
 /**

@@ -114,6 +114,7 @@ const owner = { name: "NativeSelect", data: "native-select" };
  */
 const selectClass =
   "m-0 box-border block w-full min-w-0 h-(--ouro-control-h) ps-3 pe-9 py-0 appearance-none " +
+  "pointer-coarse:min-h-ouro-11 pointer-fine:min-h-ouro-5 " +
   "[--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] " +
   "rounded-ouro-control-md border border-solid border-input bg-transparent text-base text-foreground sm:pointer-fine:text-sm " +
   "font-[inherit] cursor-pointer [-webkit-tap-highlight-color:transparent] " +
@@ -133,7 +134,7 @@ function ChevronIcon(): JSX.Element {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="pointer-events-none absolute end-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+      className="pointer-events-none absolute end-3 top-1/2 size-ouro-4 -translate-y-1/2 text-muted-foreground"
     >
       <path d="M4.5 6.5L8 10l3.5-3.5" />
     </svg>
