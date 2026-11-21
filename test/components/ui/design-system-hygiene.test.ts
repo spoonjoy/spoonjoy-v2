@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { createElement } from "react";
 import { render, screen } from "@testing-library/react";
 import { Button } from "~/components/ouro/button/button";
+import { APP_CSS } from "../../styles/theme-css";
 
 const APP_AND_STORY_FILES = [
   "app/components",
@@ -167,7 +168,8 @@ describe("Spoonjoy UI design-system hygiene", () => {
   });
 
   it("derives Ouro UI's radii from Spoonjoy's control radius", () => {
-    const css = readSourceFile("app/styles/tailwind.css");
+    // ouro-base's rules, in tailwind.css or in the file it imports (test/styles/theme-css.ts).
+    const css = APP_CSS;
 
     expect(css).toContain("--radius: var(--sj-radius-control);");
     expect(css).toContain("--radius-xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 1.4);");
