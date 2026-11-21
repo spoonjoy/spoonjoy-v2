@@ -320,7 +320,7 @@ export function ImageCropper(props: ImageCropperProps): JSX.Element {
         <p id={statusId} role="status" className={cn("m-0 text-center text-sm leading-5 text-destructive", !failure && "sr-only")}>
           {failure === "open" ? openError : failure === "save" ? saveError : null}
         </p>
-        <Slider label={word.zoom} min={MIN_ZOOM} max={MAX_ZOOM} step={0.01} value={zoom} onValueChange={zoomTo} disabled={!natural} format={{ style: "percent" }} className="w-full max-w-72" />
+        <Slider label={word.zoom} min={MIN_ZOOM} max={MAX_ZOOM} step={0.01} value={zoom} onValueChange={zoomTo} disabled={!natural} format={{ style: "percent" }} className="w-full max-w-ouro-72" />
       </div>
     </Dialog>
   );

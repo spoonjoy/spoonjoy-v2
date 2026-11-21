@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { Skeleton } from "~/components/ouro/skeleton/skeleton";
+import { useLoadingVisible } from "~/lib/ouro/use-loading-visible";
 
 // Layout here uses inline styles and the theme's CSS variables (shadcn's names).
 
@@ -128,3 +130,24 @@ export const LongScroller: Story = { render: () => <LongScrollerList shimmer /> 
 
 /** The same scroller with `shimmer={false}`: 131 still placeholders. */
 export const LongScrollerStill: Story = { render: () => <LongScrollerList shimmer={false} /> };
+
+function TimedLoad(): JSX.Element {
+  const [loading, setLoading] = useState(false);
+  const visible = useLoadingVisible(loading);
+  return (
+    <Surface>
+      <button type="button" data-test-harness="" onClick={() => setLoading(true)}>
+        Start a load
+      </button>
+      <button type="button" data-test-harness="" onClick={() => setLoading(false)}>
+        Finish the load
+      </button>
+      <div aria-busy={loading} aria-label="Messages" role="group">
+        {visible ? <Skeleton shape="row" count={2} /> : null}
+      </div>
+    </Surface>
+  );
+}
+
+/** `useLoadingVisible` holds the placeholder back for 200ms and keeps it for 500ms once shown: start a load and finish it at once to see none. */
+export const TimedLoading: Story = { render: () => <TimedLoad /> };
