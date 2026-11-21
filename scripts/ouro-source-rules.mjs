@@ -125,6 +125,10 @@ import ts from "typescript";
 //   resolve through tsconfig paths, barrels, re-exports and namespace re-exports (`export * as`);
 //   a re-exported third-party control counts as third-party-control where it is used.
 //
+// A moved Ouro AX import stops the rule before the baseline is read, so the baseline cannot record it: an app file
+// that imports `#ouro-ax/command.ts` or `#ouro-ax/claims.ts` (MOVED_AX_IMPORTS, #2757), by a static import, an export
+// from or a dynamic import(), fails with the new path as its fix.
+//
 // An element is what it renders: Motion's `<m.button>` and `motion.create("button")`,
 // `createElement("button")`, a string-typed tag (`const Tag = "button"`) and an `as="button"` prop
 // are buttons. Tags are resolved in every category (`@headlessui/react.Button`,
@@ -627,6 +631,27 @@ export function listSourceFiles(root, config, readdir = defaultDeps.readdir) {
     .map((entry) => `${config.src}/${String(entry).split(path.sep).join("/")}`)
     .filter((file) => isScannedFile(file, config))
     .sort();
+}
+
+/** The Ouro AX files that moved (#2757): the import path an app used, and the one it writes now. */
+export const MOVED_AX_IMPORTS = {
+  "#ouro-ax/command.ts": "#ouro-ax/ax-command.ts",
+  "#ouro-ax/claims.ts": "#ouro-ax/ax-claims.ts",
+};
+
+/** The imports of a moved Ouro AX path in these TypeScript files: static, re-exported or dynamic (import()) with the literal path. */
+export function findMovedImports(files, { root = process.cwd(), readFile = defaultDeps.readFile } = {}) {
+  const found = [];
+  for (const file of files.filter((name) => /\.tsx?$/.test(name))) {
+    const source = ts.createSourceFile(file, readFile(path.join(root, file)), ts.ScriptTarget.Latest, false, file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+    const visit = (node) => {
+      const specifier = ts.isImportDeclaration(node) || ts.isExportDeclaration(node) ? node.moduleSpecifier : ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword ? node.arguments[0] : undefined;
+      if (specifier && ts.isStringLiteralLike(specifier) && Object.hasOwn(MOVED_AX_IMPORTS, specifier.text)) found.push({ file, from: specifier.text, to: MOVED_AX_IMPORTS[specifier.text] });
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return found;
 }
 
 function splitVariants(token) {
@@ -2212,6 +2237,13 @@ export function main(argv, deps) {
 
   const config = loadConfig(root, { readFile, readdir });
   const files = listSourceFiles(root, config, readdir);
+  const moved = findMovedImports(files, { root, readFile });
+  if (moved.length > 0) {
+    for (const { file, from, to } of moved) io.error(`${file} imports ${from}, which moved. Fix: import from ${to}.`);
+    io.error("ouro-source-rules: a moved Ouro AX import stops the rule before the baseline is read, so the baseline cannot record it.");
+    exit(1);
+    return;
+  }
   const offenders = findOffenders(files, { root, readFile, hook: config.hook, failureCopyAllow: config.failureCopyAllow });
   const baselineFile = path.join(root, config.baseline);
   const committed = readBaseline(baselineFile, readFile);

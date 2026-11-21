@@ -96,6 +96,19 @@ describe("ImageCropper geometry", () => {
 });
 
 describe("ImageCropper", () => {
+  it("keeps the zoom slider's 18rem maximum width at a compact --spacing", async () => {
+    await render(<Harness image={null} onCropped={() => {}} />);
+    // The dialog is portalled to the body, so the compact spacing goes on the root element.
+    const slider = () => document.querySelector<HTMLElement>('[data-ouro="image-cropper"]')!.lastElementChild as HTMLElement;
+    expect(parseFloat(getComputedStyle(slider()).maxWidth)).toBeCloseTo(288, 1);
+    document.documentElement.style.setProperty("--spacing", "0.2rem");
+    try {
+      expect(parseFloat(getComputedStyle(slider()).maxWidth)).toBeCloseTo(288, 1);
+    } finally {
+      document.documentElement.style.removeProperty("--spacing");
+    }
+  });
+
   it("opens as a dialog with the photo in a named crop area and a zoom slider, Save waiting for the photo", async () => {
     const file = await photo();
     await render(<Harness image={file} onCropped={() => {}} />);
