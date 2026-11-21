@@ -361,7 +361,7 @@ export function Card(props: CardProps): JSX.Element {
   // A rising title lies on a surface of its own over the media, so it keeps an outlined card's inset whatever the variant.
   const titlePad = rise ? inset.outline[size] : pad;
   const heading = title ? (
-    <Heading level={level} size={size === "sm" ? "sm" : "md"}>
+    <Heading data-slot="card-title" level={level} size={size === "sm" ? "sm" : "md"}>
       {linked ? (
         <RouterLink
           href={href}
@@ -376,7 +376,7 @@ export function Card(props: CardProps): JSX.Element {
           className={backdrop ? stretchedLinkBaseClass : stretchedLinkClass}
         >
           {title}
-          {external && <span className="sr-only"> (opens in a new tab)</span>}
+          {external && <span data-slot="card-link-note" className="sr-only"> (opens in a new tab)</span>}
         </RouterLink>
       ) : (
         title
@@ -386,28 +386,29 @@ export function Card(props: CardProps): JSX.Element {
   // The title, description and action; for a rising description, laid over the media's bottom.
   const titleBlock = (place?: string) =>
     (heading || description || action) && (
-      <div className={cn("flex items-start gap-4", stackBelow && headerStacked[stackBelow], titlePad, place)}>
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div data-slot="card-header" className={cn("flex items-start gap-4", stackBelow && headerStacked[stackBelow], titlePad, place)}>
+        <div data-slot="card-text" className="flex min-w-0 flex-1 flex-col gap-1">
           {heading}
           {description &&
             (reveal ? (
-              <div id={descriptionId} data-card-reveal={rise ? "rise" : ""} className={rise ? riseClass : revealClass}>
-                <Text as="div" size="sm" tone="muted" className={rise ? "min-h-0 overflow-hidden" : undefined}>
+              <div data-slot="card-reveal" id={descriptionId} data-card-reveal={rise ? "rise" : ""} className={rise ? riseClass : revealClass}>
+                <Text data-slot="card-description" as="div" size="sm" tone="muted" className={rise ? "min-h-0 overflow-hidden" : undefined}>
                   {description}
                 </Text>
               </div>
             ) : (
-              <Text as="div" size="sm" tone="muted">
+              <Text data-slot="card-description" as="div" size="sm" tone="muted">
                 {description}
               </Text>
             ))}
         </div>
-        {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+        {action && <div data-slot="card-action" className="flex shrink-0 items-center gap-2">{action}</div>}
       </div>
     );
   return createElement(
     element,
     {
+      "data-slot": "card",
       ...rest,
       // A click anywhere on a linked card opens its link, wherever the app's layout leaves the link's layer.
       onClick: (event: MouseEvent<HTMLElement>) => (rest.onClick?.(event), followStretchedLink(event)),
@@ -438,6 +439,7 @@ export function Card(props: CardProps): JSX.Element {
     variant === "outline" && <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />,
     backdrop && (
       <div
+        data-slot="card-backdrop"
         data-card-backdrop=""
         data-ouro-avatar-surface=""
         className={cn(backdropClass, backdropCorner[variant][size])}
@@ -453,20 +455,20 @@ export function Card(props: CardProps): JSX.Element {
         )}
       </div>
     ),
-    media && !rise && <div className={cn("relative overflow-hidden", mediaPull[variant][size], zoom && zoomMediaClass)}>{media}</div>,
+    media && !rise && <div data-slot="card-media" className={cn("relative overflow-hidden", mediaPull[variant][size], zoom && zoomMediaClass)}>{media}</div>,
     // The title stacked over the media in one grid cell, not positioned, so the link's layer still covers the whole
     // card; a cell grows to fit a title and description taller than the media rather than cutting the title off.
     rise && (
-      <div className={cn("grid overflow-hidden", mediaPull[variant][size])}>
-        <div className={cn("relative overflow-hidden [grid-area:1/1]", zoom && zoomMediaClass)}>{media}</div>
-        <div className={riseBandClass}>
-          <div aria-hidden="true" data-card-glass="" className={riseGlassClass} />
+      <div data-slot="card-rise" className={cn("grid overflow-hidden", mediaPull[variant][size])}>
+        <div data-slot="card-rise-media" className={cn("relative overflow-hidden [grid-area:1/1]", zoom && zoomMediaClass)}>{media}</div>
+        <div data-slot="card-rise-band" className={riseBandClass}>
+          <div aria-hidden="true" data-slot="card-rise-glass" data-card-glass="" className={riseGlassClass} />
           {titleBlock("z-2 py-3 [grid-area:1/1]")}
         </div>
       </div>
     ),
     !rise && titleBlock(),
-    children && <div className={cn("min-w-0", pad)}>{children}</div>,
-    footer && <div className={cn("flex flex-wrap items-center gap-2", pad)}>{footer}</div>,
+    children && <div data-slot="card-content" className={cn("min-w-0", pad)}>{children}</div>,
+    footer && <div data-slot="card-footer" className={cn("flex flex-wrap items-center gap-2", pad)}>{footer}</div>,
   );
 }

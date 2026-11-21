@@ -78,6 +78,11 @@ describe("Card", () => {
     expect(bare.querySelector("[data-ouro-surface]")).toBeNull();
     expect(bare.hasAttribute("data-ouro-squircle")).toBe(false);
   });
+  it("names its root card, as shadcn does, for an app that styles it by part name", async () => {
+    const { card } = await render(<Card title="Braising">Two hours.</Card>);
+    expect(card.getAttribute("data-slot")).toBe("card");
+  });
+
   it("renders its slots in order: media, title as <h3>, description, action, body, footer", async () => {
     const { card } = await render(
       <Card

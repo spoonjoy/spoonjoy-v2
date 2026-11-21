@@ -73,11 +73,11 @@ function CheckIcon(): JSX.Element {
 export function SelectItem({ value, children, disabled, label }: SelectItemProps): JSX.Element {
   useSelectPart("SelectItem");
   return (
-    <BaseSelect.Item value={value} disabled={disabled} label={label} data-ouro-control="select" data-ouro-part="option" className={itemClass}>
-      <BaseSelect.ItemIndicator className={itemIndicatorClass}>
+    <BaseSelect.Item data-slot="select-item" value={value} disabled={disabled} label={label} data-ouro-control="select" data-ouro-part="option" className={itemClass}>
+      <BaseSelect.ItemIndicator data-slot="select-item-indicator" className={itemIndicatorClass}>
         <CheckIcon />
       </BaseSelect.ItemIndicator>
-      <BaseSelect.ItemText className="col-start-2 min-w-0">{children}</BaseSelect.ItemText>
+      <BaseSelect.ItemText data-slot="select-item-text" className="col-start-2 min-w-0">{children}</BaseSelect.ItemText>
     </BaseSelect.Item>
   );
 }
@@ -104,8 +104,8 @@ export interface SelectGroupProps {
 export function SelectGroup({ label, children }: SelectGroupProps): JSX.Element {
   useSelectPart("SelectGroup");
   return (
-    <BaseSelect.Group className="block py-0.5">
-      <BaseSelect.GroupLabel className={groupLabelClass}>{label}</BaseSelect.GroupLabel>
+    <BaseSelect.Group data-slot="select-group" className="block py-0.5">
+      <BaseSelect.GroupLabel data-slot="select-label" className={groupLabelClass}>{label}</BaseSelect.GroupLabel>
       {children}
     </BaseSelect.Group>
   );

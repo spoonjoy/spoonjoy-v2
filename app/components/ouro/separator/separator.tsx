@@ -146,6 +146,7 @@ export function Separator(props: SeparatorProps): JSX.Element {
     // The text reads in its place; the two lines only decorate it.
     return (
       <div
+        data-slot="separator"
         {...rest}
         data-ouro="separator"
         data-orientation="horizontal"
@@ -161,6 +162,7 @@ export function Separator(props: SeparatorProps): JSX.Element {
   }
   return (
     <BaseSeparator
+      data-slot="separator"
       {...rest}
       orientation={orientation}
       {...(decorative ? { role: "none", "aria-orientation": undefined } : {})}

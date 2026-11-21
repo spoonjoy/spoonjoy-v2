@@ -300,14 +300,15 @@ export function Field(props: FieldProps): JSX.Element {
       // section rather than a control, so it keeps full contrast when the group is disabled.
       // The required marker is CSS on the legend, outside the element that names the group.
       <div
+        data-slot="field-legend"
         data-ouro-legend=""
         {...(required ? { "data-ouro-required": "" } : {})}
         className={cn(labelFrameClass, required && requiredMarkClass, hideLabel && "sr-only")}
       >
-        <span id={labelId} className="font-medium text-foreground">
+        <span data-slot="field-legend-text" id={labelId} className="font-medium text-foreground">
           {label}
           {/* The asterisk is not text; a group with no aria-required says "required" in words. */}
-          {required && owner.requiredLabel && <span className="sr-only"> {owner.requiredLabel}</span>}
+          {required && owner.requiredLabel && <span data-slot="field-required-label" className="sr-only"> {owner.requiredLabel}</span>}
         </span>
       </div>
     ) : (
@@ -375,13 +376,14 @@ export function Field(props: FieldProps): JSX.Element {
   return (
     <FieldContext.Provider value={value}>
       {item ? (
-        <BaseField.Item ref={rootRef} disabled={disabled} data-ouro={owner.data} className={rootClassName}>
+        <BaseField.Item data-slot={owner.data} ref={rootRef} disabled={disabled} data-ouro={owner.data} className={rootClassName}>
           {content}
         </BaseField.Item>
       ) : (
         // `invalid` stays Ouro's: Base UI would count it as a failed check and block the
         // form's next submit. Its own checks (`required`, `type`) still mark and block.
         <BaseField.Root
+          data-slot={owner.data}
           ref={rootRef}
           name={name}
           disabled={disabled}

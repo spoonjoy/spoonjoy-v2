@@ -78,6 +78,7 @@ export function PopoverTrigger({ style, onPointerDown, onKeyDown, ...props }: Ba
   const noScale = (own?: CSSProperties): CSSProperties => ({ ...own, ["--ouro-press-scale" as string]: 1 });
   return (
     <BasePopover.Trigger
+      data-slot="popover-trigger"
       {...(props.render === undefined ? { className: "forced-colors:border forced-colors:border-solid", "data-ouro-control": "popover", "data-ouro-part": "trigger" } : {})}
       {...props}
       onPointerDown={(event) => {
@@ -104,7 +105,7 @@ export function PopoverPortal(props: Omit<BasePopover.Portal.Props, "className">
   usePopoverPart("PopoverPortal", "…");
   const portal = usePortalContainer("Popover", true);
   return (
-    <BasePopover.Portal {...portal} {...props} data-ouro="popover-portal" className={floatingPortalClass}>
+    <BasePopover.Portal data-slot="popover-portal" {...portal} {...props} data-ouro="popover-portal" className={floatingPortalClass}>
       <PortalScope>{props.children}</PortalScope>
     </BasePopover.Portal>
   );
@@ -182,6 +183,7 @@ export function PopoverPopupUnchecked({ className, ...props }: PopoverPopupProps
   usePopoverPart("PopoverPopup", "…");
   return (
     <BasePopover.Popup
+      data-slot="popover-content"
       {...props}
       data-ouro="popover"
       className={cn(
@@ -209,6 +211,7 @@ export function PopoverTitle({ visuallyHidden, ...props }: PopoverTitleProps): J
   usePopoverPart("PopoverTitle", "<PopoverTitle>…</PopoverTitle>…");
   return (
     <BasePopover.Title
+      data-slot="popover-title"
       {...props}
       data-ouro-popover-title=""
       className={visuallyHidden ? "sr-only" : "m-0 font-[family-name:var(--font-heading,inherit)] text-sm leading-5 font-semibold text-popover-foreground"}
@@ -221,6 +224,7 @@ export function PopoverDescription(props: Omit<BasePopover.Description.Props, "c
   usePopoverPart("PopoverDescription", "<PopoverTitle>…</PopoverTitle><PopoverDescription>…</PopoverDescription>…");
   return (
     <BasePopover.Description
+      data-slot="popover-description"
       {...props}
       data-ouro-popover-description=""
       className="m-0 text-sm leading-5 text-pretty text-muted-foreground"
@@ -237,5 +241,5 @@ export function PopoverDescription(props: Omit<BasePopover.Description.Props, "c
  */
 export function PopoverClose(props: BasePopover.Close.Props): JSX.Element {
   usePopoverPart("PopoverClose", "<PopoverTitle>…</PopoverTitle><PopoverClose>Close</PopoverClose>");
-  return <BasePopover.Close {...(props.render === undefined ? { className: popoverCloseClass, "data-ouro-control": "popover", "data-ouro-part": "close" } : {})} {...props} />;
+  return <BasePopover.Close data-slot="popover-close" {...(props.render === undefined ? { className: popoverCloseClass, "data-ouro-control": "popover", "data-ouro-part": "close" } : {})} {...props} />;
 }
