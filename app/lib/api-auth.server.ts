@@ -668,7 +668,7 @@ export function requireApiPrincipal(principal: ApiPrincipal | null | undefined):
 export function assertCanUseOwnerEmail(principal: ApiPrincipal | null | undefined, ownerEmail: string) {
   if (principal && principal.email.toLowerCase() !== ownerEmail.toLowerCase()) {
     throw new ApiAuthError(
-      `ownerEmail ${ownerEmail} is not the signed-in account (${principal.email}); leave ownerEmail out, because a signed-in caller always acts as themselves`,
+      `ownerEmail is not the signed-in account (${principal.email}); leave ownerEmail out, because a signed-in caller always acts as themselves`,
       403,
     );
   }

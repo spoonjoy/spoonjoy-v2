@@ -636,7 +636,7 @@ describe("API authentication helpers", () => {
     expect(requireApiPrincipal(principal)).toMatchObject({ source: "session", id: user.id });
     expect(() => assertCanUseOwnerEmail(principal, user.email.toUpperCase())).not.toThrow();
     expect(() => assertCanUseOwnerEmail(principal, "other@example.com")).toThrow(
-      `ownerEmail other@example.com is not the signed-in account (${user.email}); leave ownerEmail out`,
+      `ownerEmail is not the signed-in account (${user.email}); leave ownerEmail out`,
     );
   });
 });
