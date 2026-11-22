@@ -219,7 +219,7 @@
     },
     {
       "name": "update-recipe",
-      "summary": "Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: a step with an id updates that step, a step without one updates the step at its position or is added, and steps left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only.",
+      "summary": "Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: a step with an id updates that step, a step without one updates the step at its position or is added, and steps left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only. To change one step's text without sending the rest, pass stepPatches instead of steps: each names a step by stepId or stepNum (from 1) and gives only the fields to change (title, description, duration); the other steps, every ingredient and every output link stay as they are. Pass steps or stepPatches, not both.",
       "effect": "private",
       "flags": {
         "owner-email": {
@@ -254,6 +254,10 @@
         "steps": {
           "type": "string",
           "description": "The recipe's steps, in order; steps left out are removed, as JSON."
+        },
+        "step-patches": {
+          "type": "string",
+          "description": "Changes to single steps, leaving every other step as it is. Use this or steps, not both, as JSON."
         }
       }
     },

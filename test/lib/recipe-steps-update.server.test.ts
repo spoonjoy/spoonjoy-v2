@@ -226,6 +226,50 @@ describe("update_recipe updates steps in place", () => {
     expect(after.uses).toEqual([]);
   });
 
+  it("lands a patch by step number on the step that has that number when the batch runs", async () => {
+    const { recipeId, before } = await seedSoup();
+    const [soak, chop] = before.steps;
+    let raced = false;
+    const racing: D1ReadDatabase = {
+      prepare: (sql) => d1.binding.prepare(sql),
+      async batch(statements) {
+        if (!raced) {
+          raced = true;
+          // Another editor swaps steps 1 and 2 just before this batch runs.
+          await callSpoonjoyApiOperation("update_recipe", {
+            id: recipeId,
+            steps: [{ ...SOUP[1], id: chop!.id }, { ...SOUP[0], id: soak!.id }, SOUP[2]],
+          }, context());
+        }
+        return d1.binding.batch(statements as never);
+      },
+    };
+
+    await callSpoonjoyApiOperation("update_recipe", { id: recipeId, stepPatches: [{ stepNum: 1, description: "First, chop" }] }, context(racing));
+
+    const after = await snapshot(recipeId);
+    expect(after.steps.map((step) => [step.id, step.description])).toEqual([
+      [chop!.id, "First, chop"],
+      [soak!.id, "Soak the beans"],
+      [before.steps[2]!.id, "Simmer everything"],
+    ]);
+    expect(ingredientIds(after)).toEqual(ingredientIds(before));
+  });
+
+  it("writes a step patch as one batch that re-checks the steps and only updates the step named", async () => {
+    const { recipeId } = await seedSoup();
+    const before = d1.roundTrips();
+    const firstStatement = d1.statements.length;
+
+    await callSpoonjoyApiOperation("update_recipe", { id: recipeId, stepPatches: [{ stepNum: 2, description: "Chop it" }] }, context(d1.binding));
+
+    const batch = d1.statements.slice(firstStatement);
+    expect(d1.roundTrips() - before).toBe(1);
+    expect(batch.filter((statement) => statement.sql.startsWith("SELECT json(")).length).toBe(2);
+    expect(batch.filter((statement) => statement.sql.startsWith('UPDATE "RecipeStep"'))).toHaveLength(1);
+    expect(batch.some((statement) => /^(DELETE|INSERT)/.test(statement.sql))).toBe(false);
+  });
+
   it("writes the D1 update as one batch that starts by re-checking the steps", async () => {
     const { recipeId } = await seedSoup();
     const before = d1.roundTrips();

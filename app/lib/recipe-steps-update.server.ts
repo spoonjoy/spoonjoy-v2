@@ -62,6 +62,19 @@ export interface StepUpdatePlan {
   statements: D1Query[];
 }
 
+/**
+ * A change to one step's own fields, for `update_recipe`'s stepPatches. It names the step by id
+ * or by its number (from 1), and changes only the fields it has: a title or duration of null
+ * clears it. The step's ingredients, its output links and every other step stay as they are.
+ */
+export interface StepPatch {
+  id?: string;
+  stepNum?: number;
+  title?: string | null;
+  description?: string;
+  duration?: number | null;
+}
+
 /** Reads what the plan needs about a recipe's current steps. */
 export async function loadCurrentRecipeSteps(db: PrismaClient, recipeId: string): Promise<CurrentRecipeSteps> {
   const [steps, ingredients, outputUses] = await Promise.all([
@@ -280,6 +293,44 @@ export function planRecipeStepsUpdate(
     ...outputUses.map((use) => stepOutputUseInsertStatement(recipeId, use.inputStepNum, use.outputStepNum, now)),
   ];
 
+  return { guard: fingerprintGuard(recipeId, current), statements };
+}
+
+/**
+ * Plans `patches`, each an update of one step's title, description or duration. Throws
+ * StepUpdateError when a patch names no step of this recipe or a step another patch names. The
+ * guard is the same as a full update's, so a patch by number never lands on a step that moved.
+ */
+export function planRecipeStepPatches(
+  recipeId: string,
+  current: CurrentRecipeSteps,
+  patches: readonly StepPatch[],
+  now: Date,
+): StepUpdatePlan {
+  const byId = new Map(current.steps.map((step) => [step.id, step]));
+  const byNum = new Map(current.steps.map((step) => [step.stepNum, step]));
+  const patched = new Set<string>();
+  const statements = patches.map((patch, index): D1Query => {
+    const step = patch.id !== undefined ? byId.get(patch.id) : byNum.get(patch.stepNum!);
+    if (!step) {
+      throw new StepUpdateError(patch.id !== undefined
+        ? `stepPatches[${index}].stepId is not a step of this recipe`
+        : `stepPatches[${index}].stepNum is not a step of this recipe (it has ${current.steps.length})`);
+    }
+    if (patched.has(step.id)) throw new StepUpdateError(`stepPatches[${index}] names a step an earlier patch already changes`);
+    patched.add(step.id);
+    const changes = ([["stepTitle", patch.title], ["description", patch.description], ["duration", patch.duration]] as const)
+      .filter(([, value]) => value !== undefined);
+    const assignments = changes.map(([column]) => `"${column}" = ?`);
+    const values = changes.map(([, value]) => value);
+    return [
+      `UPDATE "RecipeStep" SET ${assignments.join(", ")}, "updatedAt" = ? WHERE "id" = ? AND "recipeId" = ?`,
+      ...values,
+      d1Timestamp(now),
+      step.id,
+      recipeId,
+    ];
+  });
   return { guard: fingerprintGuard(recipeId, current), statements };
 }
 

@@ -48,6 +48,23 @@ const updatedSteps = field.list({
     },
   }),
 });
+const stepPatches = field.list({
+  label: "Step changes",
+  description: "Changes to single steps, leaving every other step as it is. Use this or steps, not both.",
+  optional: true,
+  protocolOnly: true,
+  of: field.group({
+    label: "Step change",
+    description: "A change to one step's own fields; fields left out stay as they are.",
+    fields: {
+      stepId: field.string({ label: "Step", description: "The id of the step to change. Use this or stepNum.", optional: true }),
+      stepNum: field.integer({ label: "Step number", description: "The number of the step to change, from 1. Use this or stepId.", optional: true, min: 1 }),
+      title: field.string({ label: "Title", description: "The step's new short title, or null to clear it.", optional: true, nullable: true }),
+      description: field.string({ label: "Description", description: "The step's new text: what to do in this step.", optional: true }),
+      duration: field.number({ label: "Duration", description: "How long the step takes, in minutes, or null to clear it.", optional: true, nullable: true }),
+    },
+  }),
+});
 const clearable = (label: string, description: string) => field.string({ label, description: `${description}, or null to clear it.`, optional: true, nullable: true });
 
 export const searchSpoonjoy = defineAction({
@@ -116,7 +133,7 @@ export const updateRecipe = defineAction({
   consent: "write",
   label: "Update recipe",
   description: "Change one of your recipes.",
-  agent: "Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: a step with an id updates that step, a step without one updates the step at its position or is added, and steps left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only.",
+  agent: "Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: a step with an id updates that step, a step without one updates the step at its position or is added, and steps left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only. To change one step's text without sending the rest, pass stepPatches instead of steps: each names a step by stepId or stepNum (from 1) and gives only the fields to change (title, description, duration); the other steps, every ingredient and every output link stay as they are. Pass steps or stepPatches, not both.",
   input: {
     ownerEmail,
     id: recipeId,
@@ -126,6 +143,7 @@ export const updateRecipe = defineAction({
     sourceUrl: clearable("Source", "Where the recipe came from, as a URL"),
     imageUrl: clearable("Photo", "A Spoonjoy image URL from upload_recipe_image"),
     steps: updatedSteps,
+    stepPatches,
   },
   output: {},
   // With steps, the steps left out are removed.

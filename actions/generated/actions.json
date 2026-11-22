@@ -405,7 +405,7 @@
       "consent": "write",
       "label": "Update recipe",
       "description": "Change one of your recipes.",
-      "agent": "Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: a step with an id updates that step, a step without one updates the step at its position or is added, and steps left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only.",
+      "agent": "Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: a step with an id updates that step, a step without one updates the step at its position or is added, and steps left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only. To change one step's text without sending the rest, pass stepPatches instead of steps: each names a step by stepId or stepNum (from 1) and gives only the fields to change (title, description, duration); the other steps, every ingredient and every output link stay as they are. Pass steps or stepPatches, not both.",
       "input": {
         "ownerEmail": {
           "label": "Owner",
@@ -524,6 +524,53 @@
                   "kind": "integer"
                 },
                 "kind": "list"
+              }
+            },
+            "kind": "group"
+          },
+          "kind": "list"
+        },
+        "stepPatches": {
+          "label": "Step changes",
+          "description": "Changes to single steps, leaving every other step as it is. Use this or steps, not both.",
+          "optional": true,
+          "protocolOnly": true,
+          "of": {
+            "label": "Step change",
+            "description": "A change to one step's own fields; fields left out stay as they are.",
+            "fields": {
+              "stepId": {
+                "label": "Step",
+                "description": "The id of the step to change. Use this or stepNum.",
+                "optional": true,
+                "kind": "string"
+              },
+              "stepNum": {
+                "label": "Step number",
+                "description": "The number of the step to change, from 1. Use this or stepId.",
+                "optional": true,
+                "min": 1,
+                "kind": "integer"
+              },
+              "title": {
+                "label": "Title",
+                "description": "The step's new short title, or null to clear it.",
+                "optional": true,
+                "nullable": true,
+                "kind": "string"
+              },
+              "description": {
+                "label": "Description",
+                "description": "The step's new text: what to do in this step.",
+                "optional": true,
+                "kind": "string"
+              },
+              "duration": {
+                "label": "Duration",
+                "description": "How long the step takes, in minutes, or null to clear it.",
+                "optional": true,
+                "nullable": true,
+                "kind": "number"
               }
             },
             "kind": "group"

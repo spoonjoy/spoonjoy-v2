@@ -23,7 +23,7 @@ When registered under the server name `spoonjoy`, the harness exposes these firs
 | `search_shopping_list` | Full-text search the configured owner's private shopping list by ingredient, unit, category, icon, and checked state. |
 | `get_recipe` | Fetch a recipe by id or title with ordered steps and ingredients. |
 | `create_recipe` | Create a recipe for the configured owner, including steps and ingredients. |
-| `update_recipe` | Update an owner-scoped recipe's title, optional metadata, and optionally replace its steps and ingredients. |
+| `update_recipe` | Update an owner-scoped recipe's title, optional metadata, and optionally replace its steps and ingredients (`steps`) or change single steps' title, text or duration (`stepPatches`, by `stepId` or `stepNum`), leaving the other steps as they are. |
 | `delete_recipe` | Soft-delete an owner-scoped recipe so agent-created drafts and test recipes can be cleaned up. |
 | `start_photo_upload` | Get a signed, single-use upload link (`putUrl`) for one JPG/PNG/WebP photo, so a photo file can be sent with `curl -T` instead of as base64. |
 | `upload_recipe_image` | Store a JPG/PNG/WebP photo, from an `uploadId` or base64 bytes, and receive a Spoonjoy image URL for recipe cover assignment. |

@@ -159,7 +159,7 @@ export const cliInput: Readonly<Record<string, Readonly<Record<string, string>>>
   "search-spoonjoy": { "owner-email": "ownerEmail" },
   "search-recipes": { "chef-username": "chefUsername", "chef-email": "chefEmail" },
   "create-recipe": { "owner-email": "ownerEmail", "source-url": "sourceUrl", "image-url": "imageUrl" },
-  "update-recipe": { "owner-email": "ownerEmail", "source-url": "sourceUrl", "image-url": "imageUrl" },
+  "update-recipe": { "owner-email": "ownerEmail", "source-url": "sourceUrl", "image-url": "imageUrl", "step-patches": "stepPatches" },
   "delete-recipe": { "owner-email": "ownerEmail" },
   "upload-recipe-image": { "owner-email": "ownerEmail", "upload-id": "uploadId", "image-base64": "imageBase64", "mime-type": "mimeType" },
   "fork-recipe": { "source-recipe-id": "sourceRecipeId", "idempotency-key": "idempotencyKey" },
@@ -196,7 +196,7 @@ export const cliInput: Readonly<Record<string, Readonly<Record<string, string>>>
 export const cliJson: Readonly<Record<string, readonly string[]>> = {
   "create-api-token": ["scopes", "expiresInDays"],
   "create-recipe": ["steps"],
-  "update-recipe": ["steps"],
+  "update-recipe": ["steps", "stepPatches"],
 };
 
 export function fromCli(action: keyof typeof twins.actions, input: Readonly<Record<string, unknown>>): Record<string, unknown> {
