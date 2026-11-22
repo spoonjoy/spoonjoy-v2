@@ -19,6 +19,8 @@
 // it. An inactive
 // line is skipped: the element is judged by its other lines, and passes as inactive only when it
 // has no other line.
+// A line an ancestor's hidden overflow cuts off entirely (a line-clamp's cut lines) is not painted
+// and is not measured.
 import type { Locator, Page } from "@playwright/test";
 import sharp from "sharp";
 import { formatRgb, parseCssColor, requiredTextContrast, worstContrastOver, type Rgb, type Rgba } from "./contrast";
@@ -89,10 +91,24 @@ function installHelpers(): void {
     for (let node = walker.nextNode(); node; node = walker.nextNode()) if (visibleText(node)) all.push(node as Text);
     return all;
   };
+  // A line wholly outside an ancestor that hides its overflow is never painted: the lines a
+  // line-clamp cuts off still have boxes, below the clamped element's own. Scrolling can't show it
+  // (unlike a line in a scroll container, which is scrolled into view), so it is not text on the page.
+  const clippedAway = (node: Text, rect: DOMRect) => {
+    for (let box = node.parentElement; box; box = box.parentElement) {
+      const style = getComputedStyle(box);
+      const hides = (overflow: string) => overflow === "hidden" || overflow === "clip";
+      if (!hides(style.overflowX) && !hides(style.overflowY)) continue;
+      const clip = box.getBoundingClientRect();
+      if (hides(style.overflowY) && (rect.top >= clip.bottom || rect.bottom <= clip.top)) return true;
+      if (hides(style.overflowX) && (rect.left >= clip.right || rect.right <= clip.left)) return true;
+    }
+    return false;
+  };
   const rectsOf = (node: Text) => {
     const range = document.createRange();
     range.selectNodeContents(node);
-    return Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
+    return Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0 && !clippedAway(node, rect));
   };
   // A form field's text is its value, not a text node: it is measured over the field's content
   // box, the area inside its border and padding where the value is drawn. A single-line field
