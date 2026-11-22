@@ -55,6 +55,20 @@ describe("seed-qa-kitchen", () => {
     expect(db.prepare("SELECT COUNT(*) n FROM Recipe WHERE chefId = ?").get(KITCHEN.newbie.id)).toEqual({ n: 0 });
   });
 
+  it("gives each cookbook a recipe with a sample photo, as the Apple app's parity kitchen shows them, and leaves Lemon Herb Rice without one", () => {
+    const db = migratedDb();
+    db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+    const cover = (id: string) => db.prepare(
+      "SELECT c.imageUrl, c.status, r.activeCoverVariant FROM Recipe r JOIN RecipeCover c ON c.id = r.activeCoverId WHERE r.id = ?",
+    ).get(id);
+    expect(cover(KITCHEN.recipes.tomatoSoup.id)).toEqual({ imageUrl: "/photos/samples/covers/squash-soup.jpg", status: "ready", activeCoverVariant: "image" });
+    expect(cover(KITCHEN.recipes.risotto.id)).toEqual({ imageUrl: "/photos/samples/covers/penne-ragu.jpg", status: "ready", activeCoverVariant: "image" });
+    expect(cover(KITCHEN.recipes.lemonRice.id)).toBeUndefined();
+    // A second reset replaces the covers with the recipes rather than failing on them.
+    db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+    expect(db.prepare("SELECT COUNT(*) n FROM RecipeCover WHERE recipeId IN (?, ?)").get(KITCHEN.recipes.tomatoSoup.id, KITCHEN.recipes.risotto.id)).toEqual({ n: 2 });
+  });
+
   it("seeds a public chef with more than two profile pages of recipes, and resets it on every run", () => {
     const db = migratedDb();
     db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
