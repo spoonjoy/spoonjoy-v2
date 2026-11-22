@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // The dependency rule for app/domains (docs/domains.md), checked on every pull request through `pnpm lint`:
-// - each bounded context is a folder app/domains/<context> with an index.ts, its public surface;
-// - code outside a context imports it only through that index ("~/domains/<context>"), never its folders;
+// - each bounded context is a folder app/domains/<context> with an index.ts, its public surface, and optionally an
+//   index.server.ts, its server-only surface;
+// - code outside a context imports it only through those ("~/domains/<context>", "~/domains/<context>/index.server"),
+//   never its folders;
 // - a context's model/ does no I/O: it imports only its own model/, the shared kernel (Food knowledge, through its
 //   index) and pure packages, never app code outside it, Node or Cloudflare built-ins, React, Prisma or AI clients.
 //
@@ -32,7 +34,7 @@ export const IO_PACKAGES = Object.freeze(["react", "react-dom", "react-router", 
 
 const SOURCE = /\.(?:ts|tsx|mts)$/;
 const TEST = /(?:\.test\.|\.spec\.|\/__tests__\/)/;
-const INDEX = new Set(["", "index", "index.ts", "index.tsx"]);
+const INDEX = new Set(["", "index", "index.ts", "index.tsx", "index.server", "index.server.ts"]);
 
 function sourceFiles(root, dir) {
   const full = join(root, dir);
@@ -74,7 +76,7 @@ function checkImport(file, specifier) {
   }
   if (!from || !from.rest.startsWith("model/")) return null;
   const ownModel = to && to.context === from.context && to.rest.startsWith("model/");
-  const kernel = to && to.context === SHARED_KERNEL;
+  const kernel = to && to.context === SHARED_KERNEL && !to.rest.startsWith("index.server");
   if (path === null ? !isIoPackage(specifier) : ownModel || kernel) return null;
   return {
     rule: "model-purity",
