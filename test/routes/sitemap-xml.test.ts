@@ -61,6 +61,7 @@ describe("sitemap.xml route", () => {
     );
     expect(xml).toContain("<loc>https://spoonjoy.app/</loc>");
     expect(xml).toContain("<loc>https://spoonjoy.app/test-kitchen</loc>");
+    expect(xml).toContain("<loc>https://spoonjoy.app/roadmap</loc>");
     expect(xml).toContain(`<loc>https://spoonjoy.app/recipes/${recipe.id}</loc>`);
     expect(xml).toContain(
       `<loc>https://spoonjoy.app/cookbooks/${cookbook.id}</loc>`,

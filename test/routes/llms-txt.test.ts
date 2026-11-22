@@ -15,6 +15,7 @@ describe("/llms.txt", () => {
     expect(text).toMatch(/^# Spoonjoy\n/);
     for (const link of [
       "https://spoonjoy.app/test-kitchen",
+      "https://spoonjoy.app/roadmap",
       "https://github.com/spoonjoy/spoonjoy-v2",
       "https://github.com/spoonjoy/spoonjoy-v2/blob/main/docs/building-with-ouro-hx.md",
       "https://spoonjoy.app/developers",
