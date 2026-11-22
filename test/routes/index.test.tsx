@@ -451,6 +451,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByRole("link", { name: "Start Your Kitchen" })).toHaveAttribute("href", "/signup");
       expect(screen.getByRole("link", { name: "Log in" })).toHaveAttribute("href", "/login");
       expect(screen.getByRole("link", { name: "Search Recipes" })).toHaveAttribute("href", "/search");
+      expect(screen.getByRole("link", { name: "See the roadmap" })).toHaveAttribute("href", "/roadmap");
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     });
 

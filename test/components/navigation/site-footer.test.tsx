@@ -75,6 +75,12 @@ describe("SiteFooter", () => {
     expect(app).toHaveAttribute("href", "https://apps.apple.com/app/id6787505444");
   });
 
+  it("links every visitor to the public roadmap", () => {
+    renderSite();
+    const footer = screen.getByRole("contentinfo");
+    expect(within(footer).getByRole("link", { name: "Roadmap" })).toHaveAttribute("href", "/roadmap");
+  });
+
   it("turns X-ray on from \"See all the components\", listing the page's components with their docs and source", async () => {
     layOutComponents();
     const user = userEvent.setup();
