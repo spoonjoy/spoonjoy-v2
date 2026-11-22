@@ -117,7 +117,9 @@ import ts from "typescript";
 //   beside other children (`{count} failed`), is never bare. `failureCopyAllow` lets a precise text
 //   through, each entry with its reason, and is where a protocol's own wording ("Parse error")
 //   goes. It counts where the text is written and never makes the component around it a
-//   hand-rolled control.
+//   hand-rolled control. A comment `// ouro-allow vague-failure-copy: <reason>` on the line before
+//   the text, or on its line, keeps it, counted as vague-failure-escape, so a new one fails against
+//   `--base` like a new allow entry unless `--allow-regression <reason>` records why.
 // - uses-hand-rolled-control: a JSX use of an imported app component that is offending, counted at
 //   the call site. A component is offending when an offender sits inside it, or it renders an
 //   offending component (same file or imported), to a fixed point across modules: a wrapper
@@ -190,6 +192,7 @@ export const CATEGORIES = [
   "hand-drawn-corner",
   "hand-drawn-switch",
   "vague-failure-copy",
+  "vague-failure-escape",
   "hand-drawn-avatar",
   "hand-drawn-presence-dot",
   "hand-drawn-unread-dot",
@@ -327,12 +330,14 @@ export function vagueFailurePhrase(text, { whole = true } = {}) {
   return word(trimmed);
 }
 
+const FAILURE_COPY_ESCAPE = /ouro-allow vague-failure-copy:\s*\S/;
+
 /** What the vague-failure-copy rule tells an app to write instead, and how to keep a precise text. */
 export const VAGUE_FAILURE_COPY_FIX =
   'Say what happened and precisely why, naming the system and its answer ("The photo service says this picture was deleted by its owner."), ' +
   "who or what caused it where you know, and the next step as a working action or command (\"Ask them to share it again.\"); " +
   "when the cause is unknown, say what was tried and what came back. " +
-  "When the wording is already precise, add it to failureCopyAllow in ouro-source-rules.json with a reason.";
+  "When the wording is already precise, add it to failureCopyAllow in ouro-source-rules.json with a reason, or put `// ouro-allow vague-failure-copy: <reason>` on the line before it.";
 
 /** What the render-index rule tells an app to do. */
 export const RENDER_INDEX_FIX =
@@ -409,6 +414,11 @@ const CATEGORY_MESSAGES = {
   "details-summary": { headline: "New <details> or <summary> drawn by hand", fix: DISCLOSURE_FIX },
   // Base UI's CSPProvider has an Ouro form; any other library's control takes the general message.
   "third-party-control": (tag) => (/\.CSPProvider$/.test(tag) ? { headline: "New Base UI CSPProvider", fix: CSP_PROVIDER_FIX } : undefined),
+  // A comment escape is counted, so a new one needs a reason recorded against the base.
+  "vague-failure-escape": (phrase) => ({
+    headline: `New vague failure copy kept by an ouro-allow comment ("${phrase}")`,
+    fix: `Say what failed and why instead of keeping "${phrase}" with a comment`,
+  }),
   // Names the phrase it found, the fingerprint's tag.
   "vague-failure-copy": (phrase) => ({
     headline: `New vague failure copy ("${phrase}")`,
@@ -1628,7 +1638,12 @@ function scanScript(module, resolver, failureCopyAllow) {
     const copy = copyOf(node);
     const phrase = copy && vagueFailurePhrase(copy.text, { whole: copy.whole });
     if (!phrase || failureCopyAllow.some((entry) => copy.text.includes(entry.match))) return;
-    const category = "vague-failure-copy";
+    // A comment with a reason on the line before the copy, or on its own line, keeps it, and is counted
+    // in its own category so a new one rises against the base and needs a recorded reason.
+    const line = lineOf(node) - 1;
+    const lines = sourceFile.text.split("\n");
+    const escaped = [lines[line - 1], lines[line]].some((text) => text !== undefined && FAILURE_COPY_ESCAPE.test(text));
+    const category = escaped ? "vague-failure-escape" : "vague-failure-copy";
     offenders.push({ category, fingerprint: [file, componentName(node), category, phrase, copy.text].join("::"), file, line: lineOf(node) });
   };
   const ouroExport = (control, name, pattern) => {

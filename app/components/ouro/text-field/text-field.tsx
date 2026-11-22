@@ -209,7 +209,8 @@ function Icon({ children }: { children: ReactNode }): JSX.Element {
  * A labeled one-line text input on the Field contract: pass `label`, and `error` from your
  * server action or client check. The `type` sets the phone keyboard and autofill, `password`
  * gets a show/hide button that keeps focus in the input, `clearable` adds a clear button, and
- * `startAdornment`/`endAdornment` put text or icons inside the box.
+ * `startAdornment`/`endAdornment` put text or icons inside the box. Escape
+ * empties a filled `type="search"` field, as Chromium's own search field does.
  *
  * Use `TextArea` instead for several lines, `NumberField` for numbers, `DatePicker` for a date picked from a calendar, `FileField` for files, and `Field` with
  * `FieldControl` when the control is not a text input.
@@ -291,6 +292,7 @@ export function TextField(props: TextFieldProps): JSX.Element {
     suffix,
     isClearable,
     multiline,
+    onKeyDown,
     ...rest
   } = props;
   // A type that is not one of TextField's (a type error) warns and renders the default.
@@ -336,6 +338,13 @@ export function TextField(props: TextFieldProps): JSX.Element {
   const handleChange: NonNullable<FieldControlProps["onChange"]> = (event) => {
     setTyped(event.currentTarget.value !== "");
     onChange?.(event);
+  };
+  // Escape empties a search field in every browser: Chromium does it natively, WebKit and Firefox do not.
+  const handleKeyDown: NonNullable<FieldControlProps["onKeyDown"]> = (event) => {
+    onKeyDown?.(event);
+    if (event.defaultPrevented || event.key !== "Escape" || type !== "search" || event.nativeEvent.isComposing || event.currentTarget.value === "") return;
+    event.preventDefault();
+    clear();
   };
   // A form reset puts back the default value after the reset event, so read it a task later.
   useEffect(() => {
@@ -438,6 +447,7 @@ export function TextField(props: TextFieldProps): JSX.Element {
             value={value}
             defaultValue={defaultValue}
             onChange={handleChange}
+            onKeyDown={handleKeyDown}
             readOnly={readOnly}
             type={password && revealed ? "text" : type}
             inputMode={inputMode ?? defaults.inputMode}
