@@ -95,7 +95,10 @@ function installHelpers(): void {
     return Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
   };
   // A form field's text is its value, not a text node: it is measured over the field's content
-  // box, the area inside its border and padding where the value is drawn.
+  // box, the area inside its border and padding where the value is drawn. A single-line field
+  // (an input or a select) draws its one line centred in that box, so it is measured over that
+  // line: an input that fills a capsule's height has a content box reaching into the capsule's
+  // curved border, where no text is ever drawn.
   const NOT_TEXT_INPUTS = new Set(["checkbox", "radio", "range", "color", "file", "hidden", "image"]);
   const isField = (element: Element): element is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement =>
     (element instanceof HTMLInputElement && !NOT_TEXT_INPUTS.has(element.type)) || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement;
@@ -106,7 +109,11 @@ function installHelpers(): void {
     const top = box.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop);
     const right = box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
     const bottom = box.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom);
-    return new DOMRect(left, top, right - left, bottom - top);
+    if (element instanceof HTMLTextAreaElement) return new DOMRect(left, top, right - left, bottom - top);
+    // The line's height: the computed line height, or for "normal" a generous 1.3 times the font size.
+    const line = Math.max(parseFloat(style.lineHeight) || 0, parseFloat(style.fontSize) * 1.3);
+    const height = Math.min(bottom - top, line);
+    return new DOMRect(left, top + (bottom - top - height) / 2, right - left, height);
   };
   // Date and time fields draw their parts (or blanks) even with no value.
   const DRAWN_WHEN_EMPTY = new Set(["date", "datetime-local", "month", "time", "week"]);

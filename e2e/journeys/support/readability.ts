@@ -459,18 +459,29 @@ export async function measureBoundaryContrast(page: Page, locator: Locator, labe
  * What is painted on top of the element at its centre, just inside each corner and at the middle
  * of each edge, described by
  * tag, id, class and label. An empty list means nothing covers it. A point outside the viewport
- * counts as covered: the person can't see it there.
+ * counts as covered: the person can't see it there. A corner point sits inside the corner's
+ * curve, stepped in along the diagonal by the part of its radius a circular arc leaves outside
+ * (a squircle's curve is fuller, so it is inside that too): browsers hit-test the rounded shape,
+ * so a point in a capsule's cut-off corner reaches whatever is behind it.
  */
 export async function coveringElements(locator: Locator): Promise<string[]> {
   return locator.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     const inset = 2;
+    const style = getComputedStyle(element);
+    const corner = (radius: string) => inset + Math.min(parseFloat(radius) || 0, rect.width / 2, rect.height / 2) * (1 - Math.SQRT1_2);
+    const [topLeft, topRight, bottomLeft, bottomRight] = [
+      style.borderTopLeftRadius,
+      style.borderTopRightRadius,
+      style.borderBottomLeftRadius,
+      style.borderBottomRightRadius,
+    ].map(corner) as [number, number, number, number];
     const points: Array<[string, number, number]> = [
       ["centre", rect.x + rect.width / 2, rect.y + rect.height / 2],
-      ["top left", rect.left + inset, rect.top + inset],
-      ["top right", rect.right - inset, rect.top + inset],
-      ["bottom left", rect.left + inset, rect.bottom - inset],
-      ["bottom right", rect.right - inset, rect.bottom - inset],
+      ["top left", rect.left + topLeft, rect.top + topLeft],
+      ["top right", rect.right - topRight, rect.top + topRight],
+      ["bottom left", rect.left + bottomLeft, rect.bottom - bottomLeft],
+      ["bottom right", rect.right - bottomRight, rect.bottom - bottomRight],
       ["top edge", rect.x + rect.width / 2, rect.top + inset],
       ["bottom edge", rect.x + rect.width / 2, rect.bottom - inset],
       ["left edge", rect.left + inset, rect.y + rect.height / 2],
