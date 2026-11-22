@@ -37,7 +37,9 @@ import { putShoppingListItemOnceOnD1, type D1ShoppingItemPut } from "~/lib/shopp
 import {
   applyRecipeStepsUpdateWithPrisma,
   loadCurrentRecipeSteps,
+  planRecipeStepPatches,
   planRecipeStepsUpdate,
+  type StepPatch,
   type StepUpdate,
 } from "~/lib/recipe-steps-update.server";
 import {
@@ -1324,6 +1326,36 @@ function parseStepUpdates(value: unknown): StepUpdate[] {
   });
 }
 
+/**
+ * update_recipe's stepPatches: each names one step by stepId or stepNum and gives the fields of
+ * that step to change. A title or duration of null clears it; a description can't be cleared.
+ */
+function parseStepPatches(value: unknown): StepPatch[] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error("stepPatches must be a list of at least one step patch");
+  return value.map((raw, index) => {
+    const at = `stepPatches[${index}]`;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${at} must be an object`);
+    const entry = raw as Record<string, unknown>;
+    const hasId = entry.stepId !== undefined;
+    if (hasId === (entry.stepNum !== undefined)) throw new Error(`${at} needs exactly one of stepId or stepNum`);
+    const patch: StepPatch = {};
+    if (hasId) patch.id = requiredString(entry, "stepId");
+    else if (Number.isInteger(entry.stepNum) && (entry.stepNum as number) >= 1) patch.stepNum = entry.stepNum as number;
+    else throw new Error(`${at}.stepNum must be a step number, from 1`);
+    if (hasArgument(entry, "title")) patch.title = optionalNullableStringArgument(entry, "title") ?? null;
+    if (hasArgument(entry, "description")) patch.description = requiredString(entry, "description");
+    if (hasArgument(entry, "duration")) {
+      if (entry.duration === null) patch.duration = null;
+      else if ((patch.duration = optionalPositiveNumber(entry.duration)) === undefined) throw new Error(`${at}.duration must be a number of minutes above 0, or null to clear it`);
+    }
+    if (patch.title === undefined && patch.description === undefined && patch.duration === undefined) {
+      throw new Error(`${at} changes nothing: give title, description or duration`);
+    }
+    assertAcceptableText(patch.title ?? undefined, patch.description);
+    return patch;
+  });
+}
+
 /** The recipe fields that make a new chef-upload cover the active one, as setActiveRecipeCover does. */
 function placeholderCoverFields(ownerId: string) {
   return {
@@ -2434,7 +2466,9 @@ const updateRecipeTool: SpoonjoyApiOperation = {
       const servings = optionalNullableStringArgument(args, "servings");
       const sourceUrl = optionalNullableStringArgument(args, "sourceUrl");
       const requestedImageUrl = optionalNullableStringArgument(args, "imageUrl");
+      if (hasArgument(args, "steps") && hasArgument(args, "stepPatches")) throw new Error("Pass steps or stepPatches, not both");
       const steps = hasArgument(args, "steps") ? parseStepUpdates(args.steps) : undefined;
+      const stepPatches = hasArgument(args, "stepPatches") ? parseStepPatches(args.stepPatches) : undefined;
 
       const owner = await getOrCreateOwner(context, email);
       const existing = await context.db.recipe.findFirst({
@@ -2450,7 +2484,9 @@ const updateRecipeTool: SpoonjoyApiOperation = {
       const imageUrl = repeatsActiveCover ? null : requestedImageUrl;
       const stepsPlan = steps
         ? planRecipeStepsUpdate(existing.id, await loadCurrentRecipeSteps(context.db, existing.id), steps, new Date())
-        : undefined;
+        : stepPatches
+          ? planRecipeStepPatches(existing.id, await loadCurrentRecipeSteps(context.db, existing.id), stepPatches, new Date())
+          : undefined;
 
       const data: Pick<RecipeFields, "title" | "description" | "servings" | "sourceUrl"> = {};
       if (title !== undefined) {

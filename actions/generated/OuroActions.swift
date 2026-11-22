@@ -1117,7 +1117,7 @@ public enum UpdateRecipeAction {
 
 public struct UpdateRecipeIntent: AppIntent {
     public static let title: LocalizedStringResource = "Update recipe"
-    public static let description = IntentDescription("Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: a step with an id updates that step, a step without one updates the step at its position or is added, and steps left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only.")
+    public static let description = IntentDescription("Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: a step with an id updates that step, a step without one updates the step at its position or is added, and steps left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only. To change one step's text without sending the rest, pass stepPatches instead of steps: each names a step by stepId or stepNum (from 1) and gives only the fields to change (title, description, duration); the other steps, every ingredient and every output link stay as they are. Pass steps or stepPatches, not both.")
 
     @Parameter(title: "Recipe", description: "The recipe's id.")
     public var id: String

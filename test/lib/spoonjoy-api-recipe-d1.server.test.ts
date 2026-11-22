@@ -117,6 +117,7 @@ describe("MCP recipe tools on a D1 binding", () => {
     ["fields", { title: "Renamed", description: null, servings: "8", sourceUrl: null }],
     ["steps", { steps: [{ description: "Just one", ingredients: [{ name: "Rice", quantity: 1, unit: "cup" }] }] }],
     ["fields and steps", { description: "Both", steps: [] }],
+    ["one step's text", { stepPatches: [{ stepNum: 2, description: "Simmer until tender", duration: 45 }, { stepNum: 1, title: null }] }],
   ])("updates %s in one batch, as the Prisma path does", async (_label, update) => {
     const seed = async (title: string) => createdId(await callSpoonjoyApiOperation("create_recipe", { title, steps }, context()));
     const viaPrisma = await seed("Update via Prisma");

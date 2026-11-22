@@ -1,5 +1,5 @@
 {
-  "_note": "Each MCP tool's inputSchema as hand-written before it was declared (tools/list on ac81a24d). A declaration must accept exactly these inputs; the test compares them with descriptions left out. Deliberate input changes made after declaration are recorded here too: start_photo_upload, and uploadId on upload_spoon_photo, upload_recipe_image and create_recipe_cover_from_upload (2026-11-22).",
+  "_note": "Each MCP tool's inputSchema as hand-written before it was declared (tools/list on ac81a24d). A declaration must accept exactly these inputs; the test compares them with descriptions left out. Deliberate input changes made after declaration are recorded here too: start_photo_upload, and uploadId on upload_spoon_photo, upload_recipe_image and create_recipe_cover_from_upload, and stepPatches on update_recipe (2026-11-22).",
   "tools": {
     "add_recipe_to_cookbook": {
       "type": "object",
@@ -972,6 +972,35 @@
             ],
             "additionalProperties": false
           }
+        },
+        "stepPatches": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "duration": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "stepId": {
+                "type": "string"
+              },
+              "stepNum": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "type": "array"
         }
       },
       "required": [

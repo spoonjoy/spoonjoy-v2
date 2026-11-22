@@ -1965,6 +1965,83 @@ describe("spoonjoy MCP tools", () => {
     });
   });
 
+  it("changes one step's text with stepPatches and leaves every other step, ingredient and link as it was", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Step Patch Focaccia",
+      steps: [
+        { title: "Mix", description: "Mix the dough", duration: 10, ingredients: [{ name: "Flour", quantity: 500, unit: "Grams" }] },
+        { title: "Proof", description: "Proof for an hour", duration: 60, ingredients: [{ name: "Yeast", quantity: 7, unit: "Grams" }] },
+        { description: "Bake hot", ingredients: [{ name: "Salt", quantity: 1, unit: "Teaspoon" }] },
+      ],
+    }, context));
+    await context.db.stepOutputUse.create({ data: { recipeId: created.recipe.id, outputStepNum: 1, inputStepNum: 2 } });
+    const before = await context.db.recipeStep.findMany({
+      where: { recipeId: created.recipe.id },
+      include: { ingredients: { select: { id: true, quantity: true } } },
+      orderBy: { stepNum: "asc" },
+    });
+
+    const patched = parseJson(await callSpoonjoyMcpTool("update_recipe", {
+      id: created.recipe.id,
+      stepPatches: [
+        { stepNum: 2, description: "Proof until doubled, about an hour", duration: null },
+        { stepId: before[2]!.id, title: "Bake" },
+      ],
+    }, context));
+
+    expect(patched.recipe.steps).toMatchObject([
+      { id: before[0]!.id, stepNum: 1, title: "Mix", description: "Mix the dough", duration: 10 },
+      { id: before[1]!.id, stepNum: 2, title: "Proof", description: "Proof until doubled, about an hour", duration: null },
+      { id: before[2]!.id, stepNum: 3, title: "Bake", description: "Bake hot", duration: null },
+    ]);
+    const after = await context.db.recipeStep.findMany({
+      where: { recipeId: created.recipe.id },
+      include: { ingredients: { select: { id: true, quantity: true } } },
+      orderBy: { stepNum: "asc" },
+    });
+    expect(after.map((step) => step.ingredients)).toEqual(before.map((step) => step.ingredients));
+    await expect(context.db.stepOutputUse.findMany({
+      where: { recipeId: created.recipe.id },
+      select: { outputStepNum: true, inputStepNum: true },
+    })).resolves.toEqual([{ outputStepNum: 1, inputStepNum: 2 }]);
+
+    const cleared = parseJson(await callSpoonjoyMcpTool("update_recipe", {
+      id: created.recipe.id,
+      stepPatches: [{ stepNum: 1, title: null }, { stepNum: 3, title: "" }],
+    }, context));
+    expect(cleared.recipe.steps).toMatchObject([{ title: null, description: "Mix the dough" }, { title: "Proof" }, { title: null }]);
+  });
+
+  it("refuses step patches that name no step, name one twice, change nothing or come with steps", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Step Patch Refusals",
+      steps: [{ description: "Stir", ingredients: [] }],
+    }, context));
+    const patch = (stepPatches: unknown, extra: Record<string, unknown> = {}) =>
+      callSpoonjoyMcpTool("update_recipe", { id: created.recipe.id, stepPatches, ...extra }, context);
+
+    await expect(patch([])).rejects.toThrow("stepPatches must be a list of at least one step patch");
+    await expect(patch({ stepNum: 1 })).rejects.toThrow("stepPatches must be a list of at least one step patch");
+    await expect(patch(["Stir well"])).rejects.toThrow("stepPatches[0] must be an object");
+    await expect(patch([[]])).rejects.toThrow("stepPatches[0] must be an object");
+    await expect(patch([{ description: "Stir well" }])).rejects.toThrow("stepPatches[0] needs exactly one of stepId or stepNum");
+    await expect(patch([{ stepNum: 1, stepId: "x", description: "Stir well" }])).rejects.toThrow("needs exactly one of stepId or stepNum");
+    await expect(patch([{ stepNum: 0, description: "Stir well" }])).rejects.toThrow("stepPatches[0].stepNum must be a step number, from 1");
+    await expect(patch([{ stepNum: 1.5, description: "Stir well" }])).rejects.toThrow("stepPatches[0].stepNum must be a step number, from 1");
+    await expect(patch([{ stepNum: 2, description: "Stir well" }])).rejects.toThrow("stepPatches[0].stepNum is not a step of this recipe (it has 1)");
+    await expect(patch([{ stepId: "not-a-step", description: "Stir well" }])).rejects.toThrow("stepPatches[0].stepId is not a step of this recipe");
+    await expect(patch([{ stepNum: 1, description: "Stir well" }, { stepNum: 1, title: "Stir" }])).rejects.toThrow("stepPatches[1] names a step an earlier patch already changes");
+    await expect(patch([{ stepNum: 1 }])).rejects.toThrow("stepPatches[0] changes nothing: give title, description or duration");
+    await expect(patch([{ stepNum: 1, description: "" }])).rejects.toThrow("description is required");
+    await expect(patch([{ stepNum: 1, duration: 0 }])).rejects.toThrow("stepPatches[0].duration must be a number of minutes above 0, or null to clear it");
+    await expect(patch([{ stepNum: 1, title: 4 }])).rejects.toThrow("title must be a string or null");
+    await expect(patch([{ stepNum: 1, description: "Stir well" }], { steps: [{ description: "Stir", ingredients: [] }] }))
+      .rejects.toThrow("Pass steps or stepPatches, not both");
+
+    const unchanged = parseJson(await callSpoonjoyMcpTool("get_recipe", { id: created.recipe.id }, context));
+    expect(unchanged.recipe.steps).toMatchObject([{ description: "Stir", title: null }]);
+  });
+
   it("rejects invalid or unauthorized recipe updates", async () => {
     const first = parseJson(await callSpoonjoyMcpTool("create_recipe", { title: "Update Owner Recipe" }, context));
     await callSpoonjoyMcpTool("create_recipe", { title: "Update Duplicate Recipe" }, context);

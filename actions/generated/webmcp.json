@@ -385,7 +385,7 @@
     },
     {
       "name": "update_recipe",
-      "description": "Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: a step with an id updates that step, a step without one updates the step at its position or is added, and steps left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only.",
+      "description": "Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: a step with an id updates that step, a step without one updates the step at its position or is added, and steps left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only. To change one step's text without sending the rest, pass stepPatches instead of steps: each names a step by stepId or stepNum (from 1) and gives only the fields to change (title, description, duration); the other steps, every ingredient and every output link stay as they are. Pass steps or stepPatches, not both.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -493,6 +493,45 @@
               "required": [
                 "description"
               ],
+              "additionalProperties": false
+            }
+          },
+          "stepPatches": {
+            "type": "array",
+            "description": "Changes to single steps, leaving every other step as it is. Use this or steps, not both.",
+            "items": {
+              "type": "object",
+              "description": "A change to one step's own fields; fields left out stay as they are.",
+              "properties": {
+                "stepId": {
+                  "type": "string",
+                  "description": "The id of the step to change. Use this or stepNum."
+                },
+                "stepNum": {
+                  "type": "integer",
+                  "description": "The number of the step to change, from 1. Use this or stepId.",
+                  "minimum": 1
+                },
+                "title": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The step's new short title, or null to clear it."
+                },
+                "description": {
+                  "type": "string",
+                  "description": "The step's new text: what to do in this step."
+                },
+                "duration": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "How long the step takes, in minutes, or null to clear it."
+                }
+              },
+              "required": [],
               "additionalProperties": false
             }
           }
