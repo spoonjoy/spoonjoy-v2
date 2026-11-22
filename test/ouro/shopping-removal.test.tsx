@@ -1,11 +1,13 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { settled } from "~/lib/ouro/testing/settled";
 import { shoppingRemovalFixture } from "./shopping-removal-fixture";
 
 vi.mock("~/lib/shopping-list.server", () => ({
   loadShoppingList: () => { throw new Error("Browser fixture owns the Router loader"); },
   handleShoppingListAction: () => { throw new Error("Browser fixture owns the Router action"); },
 }));
+const openMenu = () => document.querySelector('[role="menu"]');
 let fixture: Awaited<ReturnType<typeof shoppingRemovalFixture>> | undefined;
 afterEach(async () => { await fixture?.dispose(); fixture = undefined; });
 
@@ -13,6 +15,9 @@ it("real menu-to-modal focus, Escape, a second request and explicit confirmation
   fixture = await shoppingRemovalFixture();
   await expect.poll(() => fixture!.row()).toBeTruthy();
   await userEvent.click(page.getByRole("button", { name: "Actions for lemons" }));
+  // At this frame's phone width the menu is a sheet that rises from below the frame. A click sent
+  // while it rises can land outside the frame and never reach the page (spoonjoy-v2#846).
+  await settled(openMenu);
   await annotate(`T21_MENU_BEFORE ${JSON.stringify({
     focused: { tag: document.activeElement?.tagName, role: document.activeElement?.getAttribute("role") },
     items: Array.from(document.querySelectorAll('[role="menuitem"]')).map((item) => ({
@@ -46,6 +51,7 @@ it("real menu-to-modal focus, Escape, a second request and explicit confirmation
   expect(fixture.writes).toEqual([]);
   // The row's one delete route is its actions menu: opening it again asks again.
   await userEvent.click(page.getByRole("button", { name: "Actions for lemons" }));
+  await settled(openMenu);
   await userEvent.click(page.getByRole("menuitem", { name: "Delete lemons" }));
   await expect.poll(() => document.querySelector('[role="alertdialog"]')).toBeTruthy();
   expect(fixture.writes).toEqual([]);
