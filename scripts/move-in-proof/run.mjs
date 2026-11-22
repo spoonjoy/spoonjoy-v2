@@ -59,6 +59,8 @@ async function main() {
   const { counts, recipes } = await observeKitchen({ profile, kitchen, seeded });
   const expected = expectedCounts(kitchen);
   const mismatches = compareCounts(expected, counts);
+  for (const mismatch of mismatches) log(`MISMATCH ${mismatch.path}: expected ${mismatch.expected}, server held ${mismatch.observed}`);
+  if (mismatches.length === 0) log(`every count matches (${Object.keys(expected).length} entities)`);
 
   const outDir = path.join(values.out, values.source, values.size);
   mkdirSync(outDir, { recursive: true });
@@ -76,12 +78,7 @@ async function main() {
   };
   writeFileSync(path.join(outDir, "fixture.json"), `${stableStringify(fixture, 2)}\n`);
 
-  if (mismatches.length > 0) {
-    for (const mismatch of mismatches) log(`MISMATCH ${mismatch.path}: expected ${mismatch.expected}, server held ${mismatch.observed}`);
-    process.exitCode = 1;
-    return;
-  }
-  log(`every count matches (${Object.keys(expected).length} entities)`);
+  if (mismatches.length > 0) process.exitCode = 1;
 }
 
 main().catch((error) => {

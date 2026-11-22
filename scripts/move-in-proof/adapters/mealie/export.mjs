@@ -3,10 +3,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { stableStringify } from "../../kitchen.mjs";
-import { eachLimited } from "./client.mjs";
-
-const CONCURRENCY = 4;
-
 export async function exportKitchen({ profile, seeded, recipes, outDir, log = () => {} }) {
   const adminSession = seeded.adminSession;
   const before = new Set((await adminSession.get("/api/admin/backups")).imports.map((backup) => backup.name));
@@ -31,11 +27,18 @@ export async function exportKitchen({ profile, seeded, recipes, outDir, log = ()
     const zipDir = path.join(outDir, "recipe-zips");
     mkdirSync(zipDir, { recursive: true });
     const owner = seeded.sessions.owner;
-    await eachLimited(recipes, CONCURRENCY, async (recipe) => {
+    // One at a time: the server builds every recipe zip at the same temporary path, so two
+    // exports at once overwrite each other's file mid-download.
+    for (const recipe of recipes) {
       const { token } = await owner.request("POST", `/api/recipes/${recipe.slug}/exports`, { idempotent: true });
-      writeFileSync(path.join(zipDir, `${recipe.slug}.zip`), await owner.download(`/api/recipes/${recipe.slug}/exports/zip`, { token }));
+      const zip = await owner.download(`/api/recipes/${recipe.slug}/exports/zip`, { token });
+      const endOfDirectory = zip.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+      if (endOfDirectory < 0 || !zip.includes(Buffer.from(`${recipe.slug}.json`))) {
+        throw new Error(`The zip export of ${recipe.slug} is incomplete (${zip.length} bytes).`);
+      }
+      writeFileSync(path.join(zipDir, `${recipe.slug}.zip`), zip);
       recipeZips += 1;
-    });
+    }
   }
   log(`${recipes.length} recipe JSON files, ${recipeZips} recipe zips`);
   return { backupBytes: zip.length, recipeFiles: recipes.length, recipeZips };

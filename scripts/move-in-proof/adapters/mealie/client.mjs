@@ -55,9 +55,12 @@ export class SourceClient {
     const attempts = idempotent ? 4 : 1;
     for (let attempt = 1; ; attempt += 1) {
       let response;
+      let content;
       try {
         response = await fetch(url, { method, headers, body: payload, dispatcher });
+        content = Buffer.from(await response.arrayBuffer());
       } catch (error) {
+        // A dropped connection, before or during the answer.
         if (attempt >= attempts) throw error;
         await sleep(500 * attempt);
         continue;
@@ -66,9 +69,9 @@ export class SourceClient {
         await sleep(500 * attempt);
         continue;
       }
-      if (!response.ok) throw new SourceApiError(method, path, response.status, await response.text());
-      if (raw) return Buffer.from(await response.arrayBuffer());
-      const text = await response.text();
+      if (!response.ok) throw new SourceApiError(method, path, response.status, content.toString("utf8"));
+      if (raw) return content;
+      const text = content.toString("utf8");
       return text ? JSON.parse(text) : null;
     }
   }
