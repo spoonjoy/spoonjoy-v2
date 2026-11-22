@@ -15,6 +15,7 @@ import {
 import { createContext, useContext, useEffect, useRef, type RefObject } from "react";
 import { usePostHog } from "~/lib/use-posthog";
 import { getUserId } from "~/lib/session.server";
+import { flagsFor } from "~/domains/platform";
 import { touchLastSeen } from "~/lib/account-activity.server";
 import { NonceContext } from "~/lib/nonce";
 import { FOLD_BOOTSTRAP } from "~/lib/fold";
@@ -101,7 +102,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // X-ray's Source links point at the commit that is running (main in a local build without git).
   const built = buildSourceSha();
   const sourceSha = built === UNKNOWN_SOURCE_SHA ? "main" : built;
-  return { userId, oauthProviders, sourceSha };
+  // The feature flags on for this visitor, so components can read them with useFlag.
+  const flags = flagsFor(context.cloudflare?.env, userId);
+  return { userId, oauthProviders, sourceSha, flags };
 }
 
 /**
