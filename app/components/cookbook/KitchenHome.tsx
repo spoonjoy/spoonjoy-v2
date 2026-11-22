@@ -85,13 +85,14 @@ export function KitchenHome({
             </div>
           </div>
 
-          {/* One row of capsules: Add a recipe first, then Chefs and Settings. */}
+          {/* One row: Add a recipe first, then Chefs, then Settings as a circle with its gear, as the Apple
+              app's kitchen toolbar shows it, so the row fits a 390px phone without wrapping. */}
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {isOwner ? (
               <>
                 <Button href="/recipes/new" startIcon={Plus}>Add a recipe</Button>
                 <Button href="/chefs" variant="outline" tone="secondary" startIcon={Users}>Chefs</Button>
-                <Button href="/account/settings" variant="outline" tone="secondary" startIcon={Settings} aria-label="Kitchen settings">Settings</Button>
+                <Button href="/account/settings" variant="outline" tone="secondary" aria-label="Kitchen settings"><Settings /></Button>
               </>
             ) : (
               <Button href="/search" variant="outline" tone="secondary" startIcon={SearchIcon}>Search recipes</Button>
