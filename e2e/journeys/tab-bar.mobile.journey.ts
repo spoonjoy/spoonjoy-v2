@@ -158,6 +158,12 @@ test.describe("Tab bar on iPhone", () => {
 
     await page.goto("/");
     await waitForHydration(page);
+    // The kitchen's actions sit in one row on the phone, as the Apple app's kitchen toolbar does:
+    // Add a recipe, Chefs, then Settings as a circle with its gear.
+    const actions = ["Add a recipe", "Chefs", "Kitchen settings"].map((name) => main.getByRole("link", { name, exact: true }));
+    const boxes = await Promise.all(actions.map(async (action) => (await action.boundingBox())!));
+    expect(boxes.map((box) => Math.round(box.y)), "the kitchen's actions share one row").toEqual(Array(3).fill(Math.round(boxes[0]!.y)));
+    expect(Math.round(boxes[2]!.width), "Settings is a circle").toBe(Math.round(boxes[2]!.height));
     await main.getByRole("link", { name: "Chefs", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/chefs"));
     await expect(page.getByRole("heading", { level: 1, name: "Chefs", exact: true })).toBeVisible();
