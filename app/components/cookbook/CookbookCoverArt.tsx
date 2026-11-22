@@ -96,7 +96,7 @@ function CookbookImageCover({
       : "grid-cols-2 grid-rows-2";
 
   return (
-    <div className={clsx("sj-photo-tile grid h-full w-full", layoutClass)} aria-label={`${title} cover photos`}>
+    <div role="group" className={clsx("sj-photo-tile grid h-full w-full", layoutClass)} aria-label={`${title} cover photos`}>
       {images.map((image) => (
         <span
           key={`${image.coverImageUrl}-${image.title}`}

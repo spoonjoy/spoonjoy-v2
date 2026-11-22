@@ -90,7 +90,8 @@ describe("CookbookCoverArt", () => {
     );
 
     expect(container.querySelectorAll("img")).toHaveLength(2);
-    expect(screen.getByLabelText("Two Dishes cover photos")).toBeInTheDocument();
+    // A named div needs a role for its name to count (axe aria-prohibited-attr).
+    expect(screen.getByRole("group", { name: "Two Dishes cover photos" })).toBeInTheDocument();
   });
 
   it("renders a four-photo cover and ignores extra images", () => {
