@@ -238,6 +238,9 @@ export function keepsFunctionNames(nodeEnv: string | undefined): boolean {
   return nodeEnv !== undefined && nodeEnv !== "production";
 }
 
+/** Dependencies the Worker's optimizer bundles before it starts, so it finds none of them mid-build. */
+export const SSR_PREBUNDLED = ["lucide-react"] as const;
+
 export default defineConfig(({ command }) => ({
   esbuild: { keepNames: keepsFunctionNames(process.env.NODE_ENV) },
   define: {
@@ -250,6 +253,10 @@ export default defineConfig(({ command }) => ({
     reactRouter(),
   ],
   optimizeDeps: command === "build" ? { noDiscovery: true, include: [] } : undefined,
+  // React Router's build runs a dev server with no WebSocket. When the Worker's optimizer finds
+  // lucide-react late there, it asks for a reload that @cloudflare/vite-plugin can't send, and the
+  // build fails (spoonjoy-v2#739). Optimizing it up front leaves nothing for the optimizer to find.
+  environments: { ssr: { optimizeDeps: { include: [...SSR_PREBUNDLED] } } },
   build: {
     rollupOptions: {
       onLog(level, log, defaultHandler) {
