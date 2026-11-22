@@ -148,9 +148,11 @@
 
 /* The kitchen's On the counter card: over a cover photo, the photo shade is darkest at the foot, where
    its text and capsules sit, and lighter toward the top so the photo shows, as the Apple app's card.
+   At iPhone width a two-line title lifts the eyebrow well above 45% of the card's height: with the full
+   shade ending at 45%, the eyebrow measured 2.79:1 over a light photo, so the full shade reaches 70%.
    The Recipe capsule's outline is the muted on-photo white, as the landing hero's actions are. */
 .sj-counter-shade {
-  background: linear-gradient(0deg, var(--sj-photo-shade), var(--sj-photo-shade) 45%, var(--sj-photo-shade-soft) 75%, transparent);
+  background: linear-gradient(0deg, var(--sj-photo-shade), var(--sj-photo-shade) 70%, var(--sj-photo-shade-soft) 88%, transparent);
 }
 
 /* The card's corner is four control radii, the Apple app's 24pt at the theme's 6px radius, so it grows

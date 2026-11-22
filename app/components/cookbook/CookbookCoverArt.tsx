@@ -66,11 +66,11 @@ export function CookbookCoverArt({
       ) : (
         <>
           <CookbookImageCover images={images} title={title} priority={priority} />
-          {caption ? <figcaption className="absolute inset-x-0 bottom-0 z-10 border-t border-[color-mix(in_srgb,var(--sj-paper)_18%,transparent)] bg-[color-mix(in_srgb,var(--sj-charcoal)_82%,transparent)] p-4 text-[var(--sj-paper)] backdrop-blur-sm">
+          {caption ? <figcaption className="absolute inset-x-0 bottom-0 z-10 border-t border-[var(--sj-photo-line)] bg-[var(--sj-photo-shade)] p-4 text-[var(--sj-on-photo)] backdrop-blur-sm">
         <TitleTag className="font-sj-display line-clamp-2 text-2xl/7 font-semibold tracking-normal">
           {title}
         </TitleTag>
-        <p className="font-sj-ui mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[color-mix(in_srgb,var(--sj-paper)_72%,transparent)]">
+        <p className="font-sj-ui mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-on-photo-muted)]">
           {recipeLabel}
         </p>
           </figcaption> : null}
