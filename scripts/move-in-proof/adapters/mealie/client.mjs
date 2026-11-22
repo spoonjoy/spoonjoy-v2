@@ -1,7 +1,13 @@
 // A small HTTP client for the source app's REST API. It signs in with a password, sends JSON,
 // forms and multipart uploads, and retries only reads, so a retried write can never double a
-// count. Exercised against real servers by the Move-in Proof workflow.
+// count (a write that is safe to repeat, like asking for an export token, says so with
+// `idempotent`). Exercised against real servers by the Move-in Proof workflow.
 import { createHash } from "node:crypto";
+import { Agent, FormData, fetch } from "undici";
+
+// The source app's server drops a kept-alive connection after 5 idle seconds; reusing one it has
+// just dropped fails the request. Idle connections here close after 1 second instead.
+const dispatcher = new Agent({ keepAliveTimeout: 1000, keepAliveMaxTimeout: 1000 });
 
 export class SourceApiError extends Error {
   constructor(method, path, status, body) {
@@ -36,7 +42,7 @@ export class SourceClient {
     return this.withToken(response.access_token);
   }
 
-  async request(method, path, { json, body, query, raw = false } = {}) {
+  async request(method, path, { json, body, query, raw = false, idempotent = method === "GET" } = {}) {
     const url = new URL(`${this.baseUrl}${path}`);
     for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, String(value));
     const headers = { accept: "application/json" };
@@ -46,11 +52,11 @@ export class SourceClient {
       headers["content-type"] = "application/json";
       payload = JSON.stringify(json);
     }
-    const attempts = method === "GET" ? 4 : 1;
+    const attempts = idempotent ? 4 : 1;
     for (let attempt = 1; ; attempt += 1) {
       let response;
       try {
-        response = await fetch(url, { method, headers, body: payload });
+        response = await fetch(url, { method, headers, body: payload, dispatcher });
       } catch (error) {
         if (attempt >= attempts) throw error;
         await sleep(500 * attempt);
@@ -102,7 +108,7 @@ export async function waitForServer(baseUrl, { timeoutMs = 240_000 } = {}) {
   let lastError = "no answer yet";
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/app/about`);
+      const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/app/about`, { dispatcher });
       if (response.ok) return response.json();
       lastError = `status ${response.status}`;
     } catch (error) {

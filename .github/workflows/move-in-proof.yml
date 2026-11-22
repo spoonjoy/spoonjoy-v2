@@ -11,7 +11,7 @@ name: Move-in Proof
 #
 # - workflow_dispatch and the weekly schedule on main: small (20 recipes) and large (500) kitchens,
 #   published to the move-in-proof-fixtures-v1 release, which does not expire like an artifact.
-# - pull requests that change the harness: small kitchens only, uploaded as an artifact.
+# - pull requests that change the harness: the same kitchens, uploaded only as an artifact.
 
 on:
   schedule:
@@ -51,7 +51,7 @@ defaults:
 
 env:
   PRISMA_HIDE_UPDATE_MESSAGE: "1"
-  SIZES: ${{ github.event_name == 'pull_request' && 'small' || inputs.sizes || 'small,large' }}
+  SIZES: ${{ inputs.sizes || 'small,large' }}
   RELEASE_TAG: move-in-proof-fixtures-v1
 
 jobs:
