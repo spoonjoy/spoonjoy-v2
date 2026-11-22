@@ -10,6 +10,7 @@ export function llmsText(origin: string) {
 ## Try it
 
 - [Test Kitchen](${origin}/test-kitchen): cook a recipe without an account, and add ?xray to outline the Ouro HX components on the page, with links to their docs and source
+- [Roadmap](${origin}/roadmap): what has shipped, what is being built now, and what comes next and later
 
 ## Build with it
 
