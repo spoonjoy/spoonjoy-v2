@@ -19,12 +19,18 @@ New code lives in a bounded context under `app/domains/<context>/`. Existing `ap
 
 ## Inside a context
 
-- `index.ts` is the context's public surface. Everything else imports the context as `~/domains/<context>`.
+- `index.ts` is the context's public surface. Everything else imports the context as `~/domains/<context>` (or `~/domains/<context>/index.server` for its server-only surface).
 - `model/` holds entities, value objects and domain events, and does no I/O.
 - `application/` holds use cases, which take ports from Platform rather than reaching for D1, R2 or a fetch.
 - `adapters/` holds D1, HTTP, MCP and UI glue.
 
 Food knowledge's quantity formatting (`food-knowledge/model/quantity.ts`) is the worked example: a pure model, exported through `food-knowledge/index.ts` and imported by components and routes as `~/domains/food-knowledge`.
+
+## Platform ports
+
+Platform ports cover only what a self-hosted server does differently from spoonjoy.app: `AI` (Gemini here; a self-hosted server brings its own model address), `Push` (web push here; a self-hosted server sends directly or through a relay) and `Email` (account mail, captured to the outbox on QA). A self-hosted server runs the same Worker in workerd, so D1, R2, the cook-session Durable Object and `waitUntil` keep their Cloudflare bindings and need no port. Application code takes the ports it uses as arguments and never reads their secrets itself. `cloudflarePlatform(env)` (`~/domains/platform/index.server`) builds them for spoonjoy.app from today's code; a port whose binding or secret is missing throws `PlatformUnavailableError` naming it.
+
+A context may have an `index.server.ts` beside its `index.ts` for server-only exports, imported as `~/domains/<context>/index.server`.
 
 ## The rule, checked
 

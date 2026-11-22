@@ -28,7 +28,7 @@ describe("scripts/check-domain-boundaries.mjs", () => {
       "app/domains/kitchen/model/slug.ts": "export const slug = 1;\n",
       "app/domains/kitchen/application/save.ts": 'import { db } from "~/lib/db.server";\nimport { recipe } from "../model/recipe";\nimport { isFlagOn } from "~/domains/platform";\n',
       "app/domains/kitchen/model/recipe.test.ts": 'import { readFileSync } from "node:fs";\n',
-      "app/routes/recipes.tsx": 'import { recipe } from "~/domains/kitchen";\nconst lazy = () => import("~/domains/cooking/index");\n',
+      "app/routes/recipes.tsx": 'import { recipe } from "~/domains/kitchen";\nconst lazy = () => import("~/domains/cooking/index");\nimport { cloudflarePlatform } from "~/domains/platform/index.server";\n',
       "app/lib/readme.md": 'import x from "~/domains/kitchen/model/recipe";\n',
     });
     expect(findViolations(root)).toEqual([]);
@@ -45,6 +45,7 @@ describe("scripts/check-domain-boundaries.mjs", () => {
         'import { isFlagOn } from "~/domains/platform";',
         'import { env } from "cloudflare:workers";',
         'import path from "path";',
+        'import { lookup } from "~/domains/food-knowledge/index.server";',
       ].join("\n"),
     });
     expect(findViolations(root).map((v) => v.specifier)).toEqual([
@@ -56,6 +57,7 @@ describe("scripts/check-domain-boundaries.mjs", () => {
       "~/domains/platform",
       "cloudflare:workers",
       "path",
+      "~/domains/food-knowledge/index.server",
     ]);
     expect(findViolations(root)[0]).toMatchObject({ file: "app/domains/kitchen/model/recipe.ts", rule: "model-purity" });
   });

@@ -2,6 +2,8 @@ import OpenAI from "openai";
 
 export interface OpenAIClientConfig {
   apiKey: string;
+  /** An OpenAI-compatible address; unset is OpenAI's own. */
+  baseURL?: string;
   timeout?: number;
   maxRetries?: number;
 }
