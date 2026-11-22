@@ -96,6 +96,7 @@ export const census: Journey[] = [
   { id: "privacy", enrolled: true, persona: "signed-out", path: "/privacy", states: [DEFAULT] },
   { id: "terms", enrolled: true, persona: "signed-out", path: "/terms", states: [DEFAULT] },
   { id: "support", enrolled: true, persona: "signed-out", path: "/support", states: [DEFAULT] },
+  { id: "roadmap", enrolled: true, persona: "signed-out", path: "/roadmap", states: [DEFAULT] },
   {
     id: "test-kitchen",
     enrolled: true,
