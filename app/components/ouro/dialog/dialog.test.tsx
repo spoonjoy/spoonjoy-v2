@@ -1451,16 +1451,18 @@ describe("Dialog and the page's scroll", () => {
         </header>
       </div>,
     );
+    // scrollend fires once for every scroll, including the instant resets below; a listener added
+    // right after one of those calls can catch its own scrollend instead of the arrow key's, so each
+    // scroll here is awaited by its own listener, added before the scroll that it is for.
+    const scrollEnd = () => new Promise<void>((resolve) => window.addEventListener("scrollend", () => resolve(), { once: true }));
+    const toTwoThousand = scrollEnd();
     window.scrollTo({ top: 2000, behavior: "instant" });
+    await toTwoThousand;
     document.documentElement.style.scrollBehavior = "smooth";
     document.querySelector<HTMLElement>('[data-ouro="button"]')!.focus({ preventScroll: true });
+    const arrowScroll = scrollEnd();
     await userEvent.keyboard("{ArrowDown}");
-    let last = -1;
-    while (window.scrollY !== last) {
-      last = window.scrollY;
-      await frame();
-      await frame();
-    }
+    await arrowScroll;
     window.scrollTo({ top: 1500, behavior: "instant" });
     await frame();
     await frame();
