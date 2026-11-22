@@ -50,9 +50,10 @@
   --input: var(--sj-border-strong);
   --ring: var(--sj-brass);
   --radius: var(--sj-radius-control);
-  /* Ouro's Cookbook theme makes controls squircle capsules: a full radius each control caps at half its height, with no
-     corner-shape token, so the ends stay squircles. Held to the vendored core theme by test/styles/sj-token-parity.test.ts. */
+  /* Ouro's Cookbook theme makes controls Apple's continuous capsule, as in Spoonjoy's Apple app: a full radius each control
+     caps at half its height, in superellipse(1.05). Held to the vendored core theme by test/styles/sj-token-parity.test.ts. */
   --ouro-control-radius: 9999px;
+  --ouro-control-corner-shape: superellipse(1.05);
   /* HX Heading's typeface: Spoonjoy's display serif for every heading. */
   --font-heading: var(--font-sj-display);
 }
