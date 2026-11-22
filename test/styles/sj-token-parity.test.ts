@@ -68,13 +68,16 @@ describe("Spoonjoy's tokens from ouro-ui-core", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("sets the control radius the pinned Cookbook theme sets, with no corner-shape token, so controls are squircle capsules", () => {
+  it("sets the control radius and corner shape the pinned Cookbook theme sets, so controls are continuous capsules, never round", () => {
     const core = readFileSync(resolve(ROOT, "vendor/ouro-ui-core/cookbook.css"), "utf8");
-    const coreRadius = /--ouro-control-radius:\s*([^;]+);/.exec(core)?.[1].trim();
     const mapping = TAILWIND.slice(TAILWIND.indexOf(":root,\n.dark {"));
-    const ownRadius = /--ouro-control-radius:\s*([^;]+);/.exec(mapping.slice(0, mapping.indexOf("}")))?.[1].trim();
-    expect(coreRadius).toBe("9999px");
-    expect(ownRadius).toBe(coreRadius);
-    expect(TAILWIND).not.toMatch(/--ouro-(?:control|check)-corner-shape\s*:/);
+    const block = mapping.slice(0, mapping.indexOf("}"));
+    for (const [name, value] of [["--ouro-control-radius", "9999px"], ["--ouro-control-corner-shape", "superellipse(1.05)"]]) {
+      const pattern = new RegExp(`${name}:\\s*([^;]+);`);
+      const coreValue = pattern.exec(core)?.[1].trim();
+      expect(coreValue, name).toBe(value);
+      expect(pattern.exec(block)?.[1].trim(), name).toBe(coreValue);
+    }
+    expect(TAILWIND).not.toMatch(/corner-shape:\s*round|--ouro-check-corner-shape\s*:/);
   });
 });
