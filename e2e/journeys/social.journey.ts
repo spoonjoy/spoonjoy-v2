@@ -13,6 +13,7 @@
 // the URL the app redirects to.
 import { test, expect } from "./support/journey";
 import type { Page, TestInfo } from "@playwright/test";
+import { chooseMenuItem } from "./support/menu";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStateForProject } from "./support/personas";
 
@@ -62,8 +63,7 @@ function logCookDialog(page: Page) {
 
 // Opens "Log a cook" and checks that "Log cook" waits for something to save.
 async function openLogCook(page: Page) {
-  await page.getByTestId("recipe-header-more-action").click();
-  await page.getByRole("menuitem", { name: "Log cook", exact: true }).click();
+  await chooseMenuItem(page, page.getByTestId("recipe-header-more-action"), "Log cook");
   const dialog = logCookDialog(page);
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Log cook", exact: true })).toBeDisabled();
