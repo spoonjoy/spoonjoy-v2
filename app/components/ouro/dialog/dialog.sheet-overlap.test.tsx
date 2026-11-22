@@ -185,9 +185,17 @@ describe("a centered dialog's focus when it closes", () => {
     await act(async () => root!.render(<Controlled />));
     await userEvent.click(trigger("Open first"));
     await settledOpen("First");
-    await userEvent.keyboard("{Escape}");
-    await expect.poll(() => overlay("First")?.hasAttribute("data-open")).toBe(false);
-    trigger("Open second").click();
+    // Escape on First and the press on Second's trigger in one task, as openSecondWhileFirstCloses does, so First is
+    // still mounted and closing when Second opens: waiting for First to start closing let a loaded runner finish its
+    // exit and unmount it first, and a poll for its closed state then read nothing until it timed out (#3027).
+    let closing: HTMLElement | null = null;
+    await act(async () => {
+      document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+      trigger("Open second").click();
+      closing = overlay("First");
+    });
+    expect(closing, "First was gone before Second opened").not.toBeNull();
+    expect(overlay("First")?.hasAttribute("data-open") ?? false, "First did not start closing").toBe(false);
     const second = await settledOpen("Second");
     // The first dialog unmounts when its exit transition ends; focus must still be in the second then.
     await expect.poll(() => overlay("First")).toBeNull();

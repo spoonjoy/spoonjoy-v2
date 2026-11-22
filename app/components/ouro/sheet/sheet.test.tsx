@@ -555,7 +555,7 @@ describe("feel", () => {
 describe("dragging (Chromium)", () => {
   chromiumOnly("closes after a drag down past 60% of the sheet's height", async () => {
     const sheet = await openUncontrolled();
-    await dragSheet(sheet.offsetHeight * 0.6, { durationMs: 1200, steps: 24 });
+    await dragSheet(sheet.offsetHeight * 0.6, { durationMs: 600, steps: 12 });
     await expect.poll(() => popup()).toBeNull();
   });
 
