@@ -188,6 +188,15 @@ gh workflow run native-kill-switches.yml --ref main -f mode=report   # compare w
 gh workflow run native-kill-switches.yml --ref main -f mode=set -f switches='<the switches you want>'
 ```
 
+### Feature flags
+
+Unfinished features land on main behind a flag declared in `app/domains/platform/flags/flags.ts`; servers read one with `isFlagOn`, components with `useFlag` (the root loader hands each visitor the flags that are on for them). Every flag is off unless a Worker variable turns it on:
+
+- `SPOONJOY_FLAGS` turns flags on for everyone: `all`, or names separated by commas or spaces. `wrangler.json`'s `env.qa` sets `all`, so shared QA and every Journeys run stack have every flag on; production leaves it unset, so production has every flag off.
+- `SPOONJOY_FLAG_USERS` turns flags on for chosen users, for dogfooding: JSON from user id to a list of names or `"all"`, for example `{"<user id>":["meal-planner"]}`. Set it in `wrangler.json`'s `vars` in a pull request, so Production Deploy ships it in a tagged version like any other change.
+
+Names nobody declared are ignored, and a value the Worker cannot read turns nothing on. Removing a flag (its declaration and every read of it) is the last step of its feature.
+
 ### CSP Enforcement And Rollback
 
 `SPOONJOY_CSP_MODE=enforce` emits the blocking `Content-Security-Policy` header. QA and production source config intentionally set that value so release owners can prove the exact SHA in QA first, then release the same SHA to production. The policy keeps required runtime sources for fonts, the configured HTTPS `VITE_POSTHOG_HOST` ingestion origin and matching PostHog assets origin, legacy/imported HTTPS images, `data:`/`blob:` images, and the `/csp-report` violation sink.
