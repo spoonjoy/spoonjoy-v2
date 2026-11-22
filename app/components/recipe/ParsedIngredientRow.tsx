@@ -5,7 +5,7 @@ import { Field } from '~/components/ouro/field/field'
 import { FieldControl } from '~/components/ouro/field/field-parts'
 import { TextField } from '~/components/ouro/text-field/text-field'
 import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
-import { formatQuantity } from '~/lib/quantity'
+import { formatQuantity } from "~/domains/food-knowledge"
 
 interface ValidationErrors {
   quantity?: string

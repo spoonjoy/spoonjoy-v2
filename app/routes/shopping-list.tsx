@@ -1,7 +1,7 @@
 import { Heading } from "~/components/ouro/text/heading";
 import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/shopping-list";
-import { formatAmount } from "~/lib/quantity";
+import { formatAmount } from "~/domains/food-knowledge";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLoaderData, Form, useSubmit, useFetchers, useActionData, useLocation, useRevalidator, type ShouldRevalidateFunctionArgs } from "react-router";
 import { revalidateUnlessNetworkFailure, submitOrReportLostRequest } from "~/lib/network-failure";

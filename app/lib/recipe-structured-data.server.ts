@@ -1,4 +1,4 @@
-import { formatQuantity } from "~/lib/quantity";
+import { formatQuantity } from "~/domains/food-knowledge";
 
 export type RecipeJsonLdIngredient = {
   quantity: number;

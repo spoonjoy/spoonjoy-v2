@@ -6,7 +6,7 @@ import { ItemGroup } from '~/components/ouro/item/item-group'
 import { Text } from '~/components/ouro/text/text'
 import { Button } from '~/components/ouro/button/button'
 
-import { formatServingsLabel } from '~/lib/quantity'
+import { formatServingsLabel } from "~/domains/food-knowledge"
 import { CoverProvenanceBadge } from '~/components/recipe/CoverProvenanceBadge'
 import { listImageProps } from '~/lib/image-loading'
 import { ShowMore, type ShowMoreLoadProps } from '~/components/ouro/collapsible/show-more'
