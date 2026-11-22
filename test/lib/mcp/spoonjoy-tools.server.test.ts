@@ -1582,7 +1582,7 @@ describe("spoonjoy MCP tools", () => {
     await expect(callSpoonjoyMcpTool("add_shopping_list_item", {
       ownerEmail: uniqueEmail("token-attacker"),
       name: "Milk",
-    }, authedContext)).rejects.toThrow("different owner");
+    }, authedContext)).rejects.toThrow("is not the signed-in account");
 
     const revoked = parseJson(await callSpoonjoyMcpTool("revoke_api_token", {
       credentialId: created.credential.id,
