@@ -12,6 +12,7 @@ import { getUserId } from "~/lib/session.server";
 import { SPOONJOY_APP_STORE_URL } from "~/lib/app-store";
 import { hidesChef, withoutHidden } from "~/lib/moderation.server";
 import { Button } from "~/components/ouro/button/button";
+import { Link } from "~/components/ouro/link/link";
 import { KitchenHome, absoluteKitchenUrl } from "~/components/cookbook/KitchenHome";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { HERO_IMAGE_PROPS } from "~/lib/image-loading";
@@ -249,6 +250,13 @@ export default function Index() {
               <p className="mt-2 text-sm/6 text-[var(--sj-ink-soft)]">{copy}</p>
             </div>
           ))}
+        </section>
+
+        <section aria-label="What's next" className="mx-auto max-w-6xl px-5 pb-12 sm:px-8 lg:px-12">
+          <p className="max-w-2xl text-sm/6 text-[var(--sj-ink-soft)]">
+            Meal planning, households, moving in from other recipe apps and running Spoonjoy on your own server are on the way.{" "}
+            <Link href="/roadmap">See the roadmap</Link>
+          </p>
         </section>
       </div>
     );
