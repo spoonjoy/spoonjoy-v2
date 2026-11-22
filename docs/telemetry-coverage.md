@@ -163,14 +163,14 @@ The gate launched with **38** allowlisted gaps, including **24 `backfill`** entr
 #219): 9 paths were instrumented and 15 were re-categorized as already-covered
 (`delegated` / `rethrow` / …). **0 `backfill` entries remain.**
 
-The allowlist now holds **59** entries — all deliberate (no telemetry warranted) except
+The allowlist now holds **60** entries — all deliberate (no telemetry warranted) except
 the single `llm-owned` entry tracked by the LLM-telemetry workstream:
 
 | Category | Count | Backfill priority |
 | --- | --- | --- |
 | `delegated` | 10 | none (instrumented via a shared helper) |
 | `rethrow` | 23 | none |
-| `swallow` | 12 | none |
+| `swallow` | 13 | none |
 | `expected-4xx` | 9 | none |
 | `non-request` | 4 | none |
 | `llm-owned` | 1 | owned by the LLM-telemetry workstream |

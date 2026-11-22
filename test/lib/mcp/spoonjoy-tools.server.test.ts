@@ -157,6 +157,7 @@ describe("spoonjoy MCP tools", () => {
       "update_recipe",
       "delete_recipe",
       "upload_recipe_image",
+      "start_photo_upload",
       "upload_spoon_photo",
       "fork_recipe",
       "add_recipe_to_shopping_list",
@@ -255,7 +256,7 @@ describe("spoonjoy MCP tools", () => {
     expect(byName.get("add_recipe_to_cookbook")).toMatchObject({ idempotentHint: true });
   });
 
-  it("publishes upload schemas with required image fields and kitchen write scopes", () => {
+  it("publishes upload schemas that take an uploadId or base64 bytes, with kitchen write scopes", () => {
     const byName = new Map(listSpoonjoyMcpTools().map((tool) => [tool.name, tool]));
 
     for (const toolName of ["upload_recipe_image", "upload_spoon_photo"]) {
@@ -263,15 +264,23 @@ describe("spoonjoy MCP tools", () => {
       expect(tool?.requiredScopes).toEqual(["kitchen:write"]);
       expect(tool?.inputSchema).toMatchObject({
         type: "object",
-        required: ["imageBase64", "mimeType", "filename"],
         properties: {
+          uploadId: { type: "string" },
           imageBase64: { type: "string" },
           mimeType: { type: "string", enum: ["image/jpeg", "image/png", "image/webp"] },
           filename: { type: "string" },
         },
         additionalProperties: false,
       });
+      expect(tool?.inputSchema.required ?? []).toEqual([]);
+      expect(tool?.description).toContain("start_photo_upload");
+      expect(tool?.description).toContain("curl -fsS -T /mnt/user-data/uploads/<name>");
     }
+    expect(byName.get("start_photo_upload")).toMatchObject({
+      requiredScopes: ["kitchen:write"],
+      annotations: { readOnlyHint: false },
+      inputSchema: { type: "object", properties: { ownerEmail: { type: "string" } }, additionalProperties: false },
+    });
   });
 
   it("publishes recipe cover browse schemas with safe read annotations", () => {
@@ -316,7 +325,7 @@ describe("spoonjoy MCP tools", () => {
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
       inputSchema: {
         type: "object",
-        required: ["recipeId", "imageUrl"],
+        required: ["recipeId"],
         properties: {
           recipeId: { type: "string" },
           imageUrl: { type: "string" },

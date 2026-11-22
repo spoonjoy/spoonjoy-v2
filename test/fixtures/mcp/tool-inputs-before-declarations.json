@@ -1,5 +1,5 @@
 {
-  "_note": "Each MCP tool's inputSchema as hand-written before it was declared (tools/list on ac81a24d). A declaration must accept exactly these inputs; the test compares them with descriptions left out.",
+  "_note": "Each MCP tool's inputSchema as hand-written before it was declared (tools/list on ac81a24d). A declaration must accept exactly these inputs; the test compares them with descriptions left out. Deliberate input changes made after declaration are recorded here too: start_photo_upload, and uploadId on upload_spoon_photo, upload_recipe_image and create_recipe_cover_from_upload (2026-11-22).",
   "tools": {
     "add_recipe_to_cookbook": {
       "type": "object",
@@ -267,55 +267,46 @@
       "type": "object",
       "properties": {
         "recipeId": {
-          "type": "string",
-          "description": "Recipe that will receive the cover candidate."
+          "type": "string"
         },
         "imageUrl": {
-          "type": "string",
-          "description": "Spoonjoy uploaded recipe or spoon photo URL to use as the original cover source."
+          "type": "string"
+        },
+        "uploadId": {
+          "type": "string"
         },
         "activateWhenReady": {
-          "type": "boolean",
-          "description": "Make the cover active when the editorial image is ready."
+          "type": "boolean"
         },
         "generateEditorial": {
-          "type": "boolean",
-          "description": "Generate an editorialized cover from the uploaded original photo."
+          "type": "boolean"
         },
         "promptAddition": {
           "type": "string",
-          "maxLength": 240,
-          "description": "Optional bounded instruction to guide editorial cover generation."
+          "maxLength": 240
         },
         "postAsSpoon": {
-          "type": "boolean",
-          "description": "Also create a Spoon entry to preserve the original photo with optional cook notes."
+          "type": "boolean"
         },
         "note": {
-          "type": "string",
-          "description": "Spoon note used when postAsSpoon preserves the original photo."
+          "type": "string"
         },
         "nextTime": {
-          "type": "string",
-          "description": "Spoon next-time note used when postAsSpoon preserves the original photo."
+          "type": "string"
         },
         "cookedAt": {
           "type": "string",
-          "format": "date-time",
-          "description": "ISO date-time for the Spoon cook when postAsSpoon preserves the original photo."
+          "format": "date-time"
         },
         "idempotencyKey": {
-          "type": "string",
-          "description": "Stable key for replay-safe cover creation."
+          "type": "string"
         },
         "dryRun": {
-          "type": "boolean",
-          "description": "Validate inputs and return planned next actions without writing a cover."
+          "type": "boolean"
         }
       },
       "required": [
-        "recipeId",
-        "imageUrl"
+        "recipeId"
       ],
       "additionalProperties": false
     },
@@ -864,6 +855,16 @@
       },
       "additionalProperties": false
     },
+    "start_photo_upload": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
     "update_recipe": {
       "type": "object",
       "properties": {
@@ -1011,6 +1012,9 @@
         "ownerEmail": {
           "type": "string"
         },
+        "uploadId": {
+          "type": "string"
+        },
         "imageBase64": {
           "type": "string"
         },
@@ -1026,11 +1030,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "imageBase64",
-        "mimeType",
-        "filename"
-      ],
+      "required": [],
       "additionalProperties": false
     },
     "upload_spoon_photo": {
@@ -1039,6 +1039,9 @@
         "ownerEmail": {
           "type": "string"
         },
+        "uploadId": {
+          "type": "string"
+        },
         "imageBase64": {
           "type": "string"
         },
@@ -1054,11 +1057,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "imageBase64",
-        "mimeType",
-        "filename"
-      ],
+      "required": [],
       "additionalProperties": false
     }
   }

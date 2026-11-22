@@ -30,6 +30,7 @@
 
 import { captureException, resolvePostHogServerConfig, type PostHogServerEnv } from "~/lib/analytics-server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
+import { PHOTO_PENDING_UPLOAD_PREFIX } from "~/lib/photo-variants";
 /** Where stored photos are served from; rows keep this relative URL. */
 export const PHOTO_URL_PREFIX = "/photos/";
 /** Moved objects wait here, unserved, until they are purged or restored. */
@@ -75,9 +76,9 @@ export function photoKeyFromStoredUrl(url: string | null | undefined): string | 
   return key || null;
 }
 
-/** False for keys `/photos/` must never serve: quarantined objects. */
+/** False for keys `/photos/` must never serve: quarantined objects and pending photo uploads. */
 export function isServablePhotoKey(key: string): boolean {
-  return !key.startsWith(PHOTO_QUARANTINE_PREFIX);
+  return !key.startsWith(PHOTO_QUARANTINE_PREFIX) && !key.startsWith(PHOTO_PENDING_UPLOAD_PREFIX);
 }
 
 const VARIANT_KEY = /^variants\/w[0-9]+\/(.+)\.webp$/;

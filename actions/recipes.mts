@@ -1,7 +1,7 @@
 // The recipes' actions and Spoonjoy's search, each declared once with Ouro UI's action model. The MCP tools keep the
 // names and inputs agents already call.
 import { defineAction, field } from "../tools/ouro-actions/ouro-actions.mts";
-import { idempotencyKey, ownerEmail, searchLimit } from "./fields.mts";
+import { idempotencyKey, ownerEmail, PHOTO_UPLOAD_STEPS, photoFilename, photoImageBase64, photoMimeType, photoUploadId, searchLimit } from "./fields.mts";
 
 const query = field.string({ label: "Search", description: "The words to search for. Every word must match; commas separate alternatives, any of which may match.", optional: true });
 const recipeId = field.string({ label: "Recipe", description: "The recipe's id." });
@@ -148,12 +148,13 @@ export const uploadRecipeImage = defineAction({
   consent: "write",
   label: "Upload recipe image",
   description: "Add a photo for a recipe.",
-  agent: "Upload a recipe photo from base64 bytes and return a Spoonjoy image URL for recipe cover assignment.",
+  agent: `Store a recipe photo and return a Spoonjoy image URL for recipe cover assignment. Pass exactly one of uploadId (from start_photo_upload) or imageBase64. ${PHOTO_UPLOAD_STEPS}`,
   input: {
     ownerEmail,
-    imageBase64: field.string({ label: "Image", description: "The photo's bytes, base64-encoded." }),
-    mimeType: field.enum({ label: "Type", description: "The photo's type.", values: ["image/jpeg", "image/png", "image/webp"] }),
-    filename: field.string({ label: "File name", description: "The photo's file name, such as lasagna.jpg." }),
+    uploadId: photoUploadId,
+    imageBase64: photoImageBase64,
+    mimeType: photoMimeType,
+    filename: photoFilename("lasagna.jpg"),
   },
   output: {},
 });

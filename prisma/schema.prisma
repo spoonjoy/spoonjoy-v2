@@ -266,6 +266,25 @@ model PendingAppleLink {
   @@index([expiresAt])
 }
 
+// A photo upload link (app/lib/photo-upload-link.server.ts): one photo, sent with a signed PUT and
+// used once by an upload action, for the account that started it. No foreign key: rows last fifteen
+// minutes and are cleared as new ones start.
+model PhotoUpload {
+  id         String    @id
+  ownerId    String
+  // pending, receiving, uploaded, consuming or consumed.
+  status     String    @default("pending")
+  mimeType   String?
+  sizeBytes  Int?
+  expiresAt  DateTime
+  uploadedAt DateTime?
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([ownerId])
+  @@index([expiresAt])
+}
+
 // Spoonjoy acting as an OAuth 2.1 authorization server for remote MCP
 // connectors (e.g. the claude.ai one-click connector). Distinct from the
 // `OAuth` model above, which records Spoonjoy logging in *as a client* to

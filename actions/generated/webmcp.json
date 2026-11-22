@@ -534,7 +534,7 @@
     },
     {
       "name": "upload_recipe_image",
-      "description": "Upload a recipe photo from base64 bytes and return a Spoonjoy image URL for recipe cover assignment.",
+      "description": "Store a recipe photo and return a Spoonjoy image URL for recipe cover assignment. Pass exactly one of uploadId (from start_photo_upload) or imageBase64. To send a photo that is a file (in a chat, an attachment is at /mnt/user-data/uploads/<name>): call start_photo_upload, run `curl -fsS -T /mnt/user-data/uploads/<name> \"<putUrl>\"` in your code sandbox, then pass the returned uploadId here. Never read the photo into the conversation or write it out as base64.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -542,13 +542,17 @@
             "type": "string",
             "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
           },
+          "uploadId": {
+            "type": "string",
+            "description": "The uploadId from start_photo_upload, after the photo was PUT to its putUrl. Use this or imageBase64, not both."
+          },
           "imageBase64": {
             "type": "string",
-            "description": "The photo's bytes, base64-encoded."
+            "description": "The photo's bytes, base64-encoded. Use this or uploadId, not both; prefer uploadId, which keeps the bytes out of the conversation."
           },
           "mimeType": {
             "type": "string",
-            "description": "The photo's type.",
+            "description": "The photo's type. Required with imageBase64; with uploadId, Spoonjoy reads it from the bytes.",
             "enum": [
               "image/jpeg",
               "image/png",
@@ -557,14 +561,10 @@
           },
           "filename": {
             "type": "string",
-            "description": "The photo's file name, such as lasagna.jpg."
+            "description": "The photo's file name, such as lasagna.jpg. Required with imageBase64; optional with uploadId."
           }
         },
-        "required": [
-          "imageBase64",
-          "mimeType",
-          "filename"
-        ],
+        "required": [],
         "additionalProperties": false
       },
       "annotations": {
@@ -1103,8 +1103,27 @@
       }
     },
     {
+      "name": "start_photo_upload",
+      "description": "Start a photo upload and get a single-use upload link for one JPEG, PNG or WebP photo. Returns uploadId, putUrl, expiresAt, maxBytes and mimeTypes. PUT the photo's raw bytes to putUrl with no Authorization header (the link is signed), for example `curl -fsS -T /mnt/user-data/uploads/<name> \"<putUrl>\"` from a code sandbox, before expiresAt (about 15 minutes). Then pass uploadId to upload_spoon_photo, upload_recipe_image or create_recipe_cover_from_upload, once. Use this instead of imageBase64 whenever the photo is a file you can reach from a shell, such as a chat attachment: never read the photo into the conversation or write it out as base64.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ownerEmail": {
+            "type": "string",
+            "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "consequentialHint": false
+      }
+    },
+    {
       "name": "upload_spoon_photo",
-      "description": "Upload a spoon/cook photo from base64 bytes and return a Spoonjoy image URL for spoon assignment.",
+      "description": "Store a spoon/cook photo and return a Spoonjoy image URL for create_spoon or update_spoon's photoUrl. Pass exactly one of uploadId (from start_photo_upload) or imageBase64. To send a photo that is a file (in a chat, an attachment is at /mnt/user-data/uploads/<name>): call start_photo_upload, run `curl -fsS -T /mnt/user-data/uploads/<name> \"<putUrl>\"` in your code sandbox, then pass the returned uploadId here. Never read the photo into the conversation or write it out as base64.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1112,13 +1131,17 @@
             "type": "string",
             "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
           },
+          "uploadId": {
+            "type": "string",
+            "description": "The uploadId from start_photo_upload, after the photo was PUT to its putUrl. Use this or imageBase64, not both."
+          },
           "imageBase64": {
             "type": "string",
-            "description": "The photo's bytes, base64-encoded."
+            "description": "The photo's bytes, base64-encoded. Use this or uploadId, not both; prefer uploadId, which keeps the bytes out of the conversation."
           },
           "mimeType": {
             "type": "string",
-            "description": "The photo's type.",
+            "description": "The photo's type. Required with imageBase64; with uploadId, Spoonjoy reads it from the bytes.",
             "enum": [
               "image/jpeg",
               "image/png",
@@ -1127,14 +1150,10 @@
           },
           "filename": {
             "type": "string",
-            "description": "The photo's file name, such as dinner.jpg."
+            "description": "The photo's file name, such as dinner.jpg. Required with imageBase64; optional with uploadId."
           }
         },
-        "required": [
-          "imageBase64",
-          "mimeType",
-          "filename"
-        ],
+        "required": [],
         "additionalProperties": false
       },
       "annotations": {
@@ -1212,7 +1231,7 @@
     },
     {
       "name": "create_recipe_cover_from_upload",
-      "description": "Create a Recipe Photo Studio cover candidate from an uploaded recipe or spoon photo URL.",
+      "description": "Create a Recipe Photo Studio cover candidate from a photo: a Spoonjoy uploaded recipe or spoon photo URL (imageUrl), or a start_photo_upload upload (uploadId). Pass exactly one of the two. To send a photo that is a file (in a chat, an attachment is at /mnt/user-data/uploads/<name>): call start_photo_upload, run `curl -fsS -T /mnt/user-data/uploads/<name> \"<putUrl>\"` in your code sandbox, then pass the returned uploadId here. Never read the photo into the conversation or write it out as base64.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1222,7 +1241,11 @@
           },
           "imageUrl": {
             "type": "string",
-            "description": "Spoonjoy uploaded recipe or spoon photo URL to use as the original cover source."
+            "description": "Spoonjoy uploaded recipe or spoon photo URL to use as the original cover source. Use this or uploadId, not both."
+          },
+          "uploadId": {
+            "type": "string",
+            "description": "The uploadId from start_photo_upload, after the photo was PUT to its putUrl. Use this or imageBase64, not both."
           },
           "activateWhenReady": {
             "type": "boolean",
@@ -1264,8 +1287,7 @@
           }
         },
         "required": [
-          "recipeId",
-          "imageUrl"
+          "recipeId"
         ],
         "additionalProperties": false
       },

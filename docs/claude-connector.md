@@ -70,6 +70,8 @@ curl -s -X POST https://spoonjoy.app/mcp \
 
 The connector exposes the same authenticated tools as the [Ouroboros stdio MCP integration](./ouroboros-mcp.md#tools) — health, search, recipe CRUD for authoring/import flows, cookbook organization, shopping-list management, and token lifecycle. Use `POST /api/tools/start_agent_connection` and `POST /api/tools/poll_agent_connection` before connecting to `/mcp`; unauthenticated `/mcp` calls are challenged.
 
+To add a photo attached in a chat, the chat calls `start_photo_upload`, runs `curl -fsS -T /mnt/user-data/uploads/<name> "<putUrl>"` in its code sandbox, and passes the returned `uploadId` to `upload_spoon_photo`, `upload_recipe_image` or `create_recipe_cover_from_upload`, so the photo never passes through the conversation as base64 ([Upload links](./ouroboros-mcp.md#upload-links)). The sandbox reaches `spoonjoy.app` only once the domain is added under claude.ai Settings → Capabilities → Code execution and file creation → Additional allowed domains.
+
 ## Security posture
 
 - The endpoint is an OAuth-protected resource: every request requires a valid bearer token, so an MCP client must authenticate (OAuth or a bearer header) before it can list or call tools.

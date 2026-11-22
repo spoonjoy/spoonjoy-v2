@@ -1,7 +1,7 @@
 // The spoons' actions (a spoon is one logged cook of a recipe), each declared once with Ouro UI's action model. The MCP
 // tools keep the names and inputs agents already call.
 import { defineAction, field } from "../tools/ouro-actions/ouro-actions.mts";
-import { idempotencyKey, ownerEmail, pageLimit, pageOffset } from "./fields.mts";
+import { idempotencyKey, ownerEmail, pageLimit, pageOffset, PHOTO_UPLOAD_STEPS, photoFilename, photoImageBase64, photoMimeType, photoUploadId } from "./fields.mts";
 
 const spoonId = field.string({ label: "Cook", description: "The spoon's id." });
 const note = field.string({ label: "Note", description: "How the cook went.", optional: true });
@@ -80,19 +80,30 @@ export const listSpoonsByChef = defineAction({
   output: {},
 });
 
+export const startPhotoUpload = defineAction({
+  id: "start_photo_upload",
+  consent: "write",
+  label: "Start photo upload",
+  description: "Get a link to upload a photo to.",
+  agent: `Start a photo upload and get a single-use upload link for one JPEG, PNG or WebP photo. Returns uploadId, putUrl, expiresAt, maxBytes and mimeTypes. PUT the photo's raw bytes to putUrl with no Authorization header (the link is signed), for example \`curl -fsS -T /mnt/user-data/uploads/<name> "<putUrl>"\` from a code sandbox, before expiresAt (about 15 minutes). Then pass uploadId to upload_spoon_photo, upload_recipe_image or create_recipe_cover_from_upload, once. Use this instead of imageBase64 whenever the photo is a file you can reach from a shell, such as a chat attachment: never read the photo into the conversation or write it out as base64.`,
+  input: { ownerEmail },
+  output: {},
+});
+
 export const uploadSpoonPhoto = defineAction({
   id: "upload_spoon_photo",
   consent: "write",
   label: "Upload spoon photo",
   description: "Add a photo of something you cooked.",
-  agent: "Upload a spoon/cook photo from base64 bytes and return a Spoonjoy image URL for spoon assignment.",
+  agent: `Store a spoon/cook photo and return a Spoonjoy image URL for create_spoon or update_spoon's photoUrl. Pass exactly one of uploadId (from start_photo_upload) or imageBase64. ${PHOTO_UPLOAD_STEPS}`,
   input: {
     ownerEmail,
-    imageBase64: field.string({ label: "Image", description: "The photo's bytes, base64-encoded." }),
-    mimeType: field.enum({ label: "Type", description: "The photo's type.", values: ["image/jpeg", "image/png", "image/webp"] }),
-    filename: field.string({ label: "File name", description: "The photo's file name, such as dinner.jpg." }),
+    uploadId: photoUploadId,
+    imageBase64: photoImageBase64,
+    mimeType: photoMimeType,
+    filename: photoFilename("dinner.jpg"),
   },
   output: {},
 });
 
-export const spoons = [createSpoon, updateSpoon, deleteSpoon, listSpoonsForRecipe, listSpoonsByChef, uploadSpoonPhoto];
+export const spoons = [createSpoon, updateSpoon, deleteSpoon, listSpoonsForRecipe, listSpoonsByChef, startPhotoUpload, uploadSpoonPhoto];

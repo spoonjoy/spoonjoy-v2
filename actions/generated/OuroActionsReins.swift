@@ -57,7 +57,7 @@ extension DeleteRecipeInput: ReinsInput {
 }
 
 extension UploadRecipeImageInput: ReinsInput {
-    public static var reinsSchema: ReinsSchema { .object(properties: ["imageBase64": .string, "mimeType": .oneOf(["image/jpeg", "image/png", "image/webp"]), "filename": .string], required: ["imageBase64", "mimeType", "filename"]) }
+    public static var reinsSchema: ReinsSchema { .object(properties: ["imageBase64": .string, "mimeType": .oneOf(["image/jpeg", "image/png", "image/webp"]), "filename": .string], required: []) }
 }
 
 extension ForkRecipeInput: ReinsInput {
@@ -128,8 +128,12 @@ extension ListSpoonsByChefInput: ReinsInput {
     public static var reinsSchema: ReinsSchema { .object(properties: ["chefIdOrUsername": .string, "limit": .number, "offset": .number], required: ["chefIdOrUsername"]) }
 }
 
+extension StartPhotoUploadInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: [:], required: []) }
+}
+
 extension UploadSpoonPhotoInput: ReinsInput {
-    public static var reinsSchema: ReinsSchema { .object(properties: ["imageBase64": .string, "mimeType": .oneOf(["image/jpeg", "image/png", "image/webp"]), "filename": .string], required: ["imageBase64", "mimeType", "filename"]) }
+    public static var reinsSchema: ReinsSchema { .object(properties: ["imageBase64": .string, "mimeType": .oneOf(["image/jpeg", "image/png", "image/webp"]), "filename": .string], required: []) }
 }
 
 extension ListRecipeCoversInput: ReinsInput {
@@ -141,7 +145,7 @@ extension ListRecipeSpoonImagesInput: ReinsInput {
 }
 
 extension CreateRecipeCoverFromUploadInput: ReinsInput {
-    public static var reinsSchema: ReinsSchema { .object(properties: ["recipeId": .string, "imageUrl": .string, "activateWhenReady": .boolean, "generateEditorial": .boolean, "promptAddition": .string, "postAsSpoon": .boolean, "note": .string, "nextTime": .string, "cookedAt": .string], required: ["recipeId", "imageUrl"]) }
+    public static var reinsSchema: ReinsSchema { .object(properties: ["recipeId": .string, "imageUrl": .string, "activateWhenReady": .boolean, "generateEditorial": .boolean, "promptAddition": .string, "postAsSpoon": .boolean, "note": .string, "nextTime": .string, "cookedAt": .string], required: ["recipeId"]) }
 }
 
 extension GenerateRecipeCoverPlaceholderInput: ReinsInput {
@@ -326,6 +330,11 @@ extension ReinsAction {
     /// List cooks by chef: See what a chef has cooked.
     public static func listSpoonsByChef() -> ReinsAction {
         ReinsAction("listSpoonsByChef", "List cooks by chef", input: ListSpoonsByChefInput.self) { input in _ = try await ListSpoonsByChefAction.run(input) }
+    }
+
+    /// Start photo upload: Get a link to upload a photo to.
+    public static func startPhotoUpload() -> ReinsAction {
+        ReinsAction("startPhotoUpload", "Start photo upload", input: StartPhotoUploadInput.self) { input in _ = try await StartPhotoUploadAction.run(input) }
     }
 
     /// Upload spoon photo: Add a photo of something you cooked.
