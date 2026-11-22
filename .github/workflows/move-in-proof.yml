@@ -1,0 +1,212 @@
+name: Move-in Proof
+
+# Builds the move-in proof's fixtures. For each source app version (latest 1.x, latest 2.x and
+# 3.31.0, from ghcr.io/mealie-recipes/mealie), it starts a real server in Docker, seeds a synthetic
+# kitchen through the server's API (scripts/move-in-proof/kitchen.mjs: recipes with photos, foods,
+# units, linked steps, organizers, ratings, comments, timeline photos, filter cookbooks, meal
+# plans, shopping lists and a second household member), reads the kitchen back and fails on any
+# count that differs, then exports the full backup zip and each recipe's JSON (and zip, where the
+# version has one). The manifest job checks every fixture against one manifest of expected counts,
+# which is the same on every run, and uploads them together.
+#
+# - workflow_dispatch and the weekly schedule on main: small (20 recipes) and large (500) kitchens,
+#   published to the move-in-proof-fixtures-v1 release, which does not expire like an artifact.
+# - pull requests that change the harness: small kitchens only, uploaded as an artifact.
+
+on:
+  schedule:
+    - cron: "41 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      sizes:
+        description: Kitchen sizes to build
+        required: false
+        type: choice
+        default: small,large
+        options:
+          - small,large
+          - small
+          - large
+      publish:
+        description: Publish the fixtures to the release (main only)
+        required: false
+        type: boolean
+        default: true
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/move-in-proof/**
+      - .github/workflows/move-in-proof.yml
+
+concurrency:
+  group: move-in-proof-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PRISMA_HIDE_UPDATE_MESSAGE: "1"
+  SIZES: ${{ github.event_name == 'pull_request' && 'small' || inputs.sizes || 'small,large' }}
+  RELEASE_TAG: move-in-proof-fixtures-v1
+
+jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sizes: ${{ steps.sizes.outputs.sizes }}
+    steps:
+      - name: Choose kitchen sizes
+        id: sizes
+        run: |
+          [[ "$SIZES" =~ ^(small|large)(,(small|large))?$ ]] || { echo "::error::Unexpected sizes: $SIZES"; exit 1; }
+          echo "sizes=$(jq -cn --arg sizes "$SIZES" '$sizes | split(",")')" >> "$GITHUB_OUTPUT"
+
+  seed:
+    name: seed ${{ matrix.source }} ${{ matrix.size }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [v1.12.0, v2.8.0, v3.31.0]
+        size: ${{ fromJSON(needs.plan.outputs.sizes) }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start the source app
+        env:
+          IMAGE: ghcr.io/mealie-recipes/mealie:${{ matrix.source }}
+        run: |
+          docker run --detach --name source-app --publish 9000:9000 \
+            --env ALLOW_SIGNUP=false --env TZ=UTC --env LOG_LEVEL=warning "$IMAGE"
+          docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE"
+
+      - name: Seed, check and export the kitchen
+        env:
+          SOURCE: ${{ matrix.source }}
+          SIZE: ${{ matrix.size }}
+        run: node scripts/move-in-proof/run.mjs --source "$SOURCE" --size "$SIZE" --base-url http://localhost:9000 --out move-in-proof
+
+      - name: Show the source app's log
+        if: failure()
+        run: docker logs --tail 300 source-app
+
+      - name: Upload the fixtures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: move-in-proof-${{ matrix.source }}-${{ matrix.size }}
+          path: move-in-proof/
+          if-no-files-found: error
+          retention-days: 7
+
+  manifest:
+    name: manifest
+    needs: [plan, seed]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the fixtures
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: move-in-proof-v*
+          path: move-in-proof
+          merge-multiple: true
+
+      # Two writes of the manifest must be byte-identical: it holds no ids, times or passwords.
+      - name: Write the manifest twice and compare
+        run: |
+          node scripts/move-in-proof/manifest-cli.mjs write manifest-a.json --sizes "$SIZES"
+          node scripts/move-in-proof/manifest-cli.mjs write manifest-b.json --sizes "$SIZES"
+          cmp manifest-a.json manifest-b.json
+          mv manifest-a.json move-in-proof/manifest.json
+          sha256sum move-in-proof/manifest.json
+
+      - name: Check every fixture against the manifest
+        run: node scripts/move-in-proof/manifest-cli.mjs check move-in-proof
+
+      - name: Package the fixtures
+        run: |
+          cd move-in-proof
+          zip -qr ../move-in-proof-fixtures.zip .
+          cd ..
+          ls -l move-in-proof-fixtures.zip
+
+      - name: Upload the move-in proof fixtures
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: move-in-proof-fixtures
+          path: |
+            move-in-proof-fixtures.zip
+            move-in-proof/manifest.json
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    name: publish
+    needs: manifest
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.publish)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download the move-in proof fixtures
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: move-in-proof-fixtures
+          path: fixtures
+
+      # One release per manifest schema; each run replaces its assets, so the move-in lane always
+      # downloads the newest fixtures with: gh release download move-in-proof-fixtures-v1
+      - name: Publish to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --prerelease \
+              --title "Move-in proof fixtures v1" \
+              --notes "Source app exports of the synthetic kitchen, with the manifest of expected counts. Rebuilt weekly by the Move-in Proof workflow."
+          fi
+          gh release upload "$RELEASE_TAG" --clobber fixtures/move-in-proof-fixtures.zip fixtures/move-in-proof/manifest.json
