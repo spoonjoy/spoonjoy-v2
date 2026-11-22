@@ -5,9 +5,11 @@ import { expect, test } from "../fixtures";
 // times the token's scale (rounded-lg is 1, rounded-xl 1.4, as tailwind.css's @theme sets them) times
 // the Safari factor the engine applies: 1 where it draws corner-shape, and Ouro's 0.7 where it has
 // none (ouro-base's @supports not (corner-shape: squircle), copied into app/styles/tailwind.css).
+// A control (control: true) wears the theme's control radius instead (--ouro-control-radius, Cookbook's 9999px capsule),
+// which stops at half the control's height.
 const STORIES = [
-  { name: "Button", id: "actions-button--playground", selector: "#storybook-root button", scale: 1 },
-  { name: "Card", id: "display-card--playground", selector: '#storybook-root [data-ouro="card"]', scale: 1.4 },
+  { name: "Button", id: "actions-button--playground", selector: "#storybook-root button", scale: 1, control: true },
+  { name: "Card", id: "display-card--playground", selector: '#storybook-root [data-ouro="card"]', scale: 1.4, control: false },
 ] as const;
 
 test.describe("Ouro corner radii", () => {
@@ -16,11 +18,12 @@ test.describe("Ouro corner radii", () => {
       await page.goto(`iframe.html?id=${story.id}&viewMode=story&globals=theme:light;a11y.manual:!true;page:!true`);
       await page.locator(story.selector).first().waitFor();
 
-      const measured = await page.evaluate((selector) => {
+      const measured = await page.evaluate(([selector, control]) => {
         const element = document.querySelector<HTMLElement>(selector);
         if (!element) throw new Error(`no element for ${selector}`);
         const probe = document.createElement("div");
-        probe.style.borderRadius = "calc(var(--radius) * var(--ouro-radius-scale, 1))";
+        const radius = control ? "var(--ouro-control-radius, var(--radius))" : "var(--radius)";
+        probe.style.borderRadius = `min(calc(${radius} * var(--ouro-radius-scale, 1)), ${control ? element.getBoundingClientRect().height / 2 : 99999}px)`;
         document.body.append(probe);
         const base = parseFloat(getComputedStyle(probe).borderTopLeftRadius);
         probe.remove();
@@ -31,7 +34,7 @@ test.describe("Ouro corner radii", () => {
           cornerShape: CSS.supports("corner-shape", "squircle"),
           userAgent: navigator.userAgent,
         };
-      }, story.selector);
+      }, [story.selector, story.control] as const);
 
       const factor = measured.cornerShape ? 1 : 0.7;
       const engine = testInfo.project.name;
