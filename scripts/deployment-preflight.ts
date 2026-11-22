@@ -507,7 +507,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     ),
     commandStepSignature(
       `${WARNING_GATE_COMMAND_PREFIX}mkdir -p .cache/osv-scanner`,
-      `${WARNING_GATE_COMMAND_PREFIX}curl -fsSL --retry 3 --retry-delay 2 -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/google/osv-scanner/git/ref/tags/\${OSV_SCANNER_VERSION}" -o .cache/osv-scanner/tag.json`,
+      `${WARNING_GATE_COMMAND_PREFIX}node scripts/fetch-osv-scanner-tag.mjs .cache/osv-scanner/tag.json`,
       `${WARNING_GATE_COMMAND_PREFIX}jq -e --arg expected "$OSV_SCANNER_TAG_SHA" '.object | select(.type == "commit" and .sha == $expected)' .cache/osv-scanner/tag.json`,
       `${WARNING_GATE_COMMAND_PREFIX}curl -fsSL --retry 3 --retry-delay 2 "https://github.com/google/osv-scanner/releases/download/\${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o .cache/osv-scanner/osv-scanner`,
       'printf \'%s  %s\\n\' "$OSV_SCANNER_LINUX_AMD64_SHA256" ".cache/osv-scanner/osv-scanner" > .cache/osv-scanner/checksums.txt',

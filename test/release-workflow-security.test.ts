@@ -374,13 +374,18 @@ describe("web dependency advisory gate", () => {
     expect(advisoryScan).toContain('"--lockfile=pnpm-lock.yaml"');
     expect(ci).toContain("osv-scanner_linux_amd64");
     expect(ci).toContain("bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc");
-    expect(ci).toContain("https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}");
     // The tag lookup is authenticated with the job's read-only token, so it cannot hit the shared
-    // unauthenticated rate limit (2026-10-10: a 403 there failed a required advisory check).
+    // unauthenticated rate limit (2026-10-10: a 403 there failed a required advisory check). Even
+    // authenticated it can hit a rate limit, so the script retries 403 and 429 (spoonjoy-v2#840).
+    const tagLookup = readFileSync("scripts/fetch-osv-scanner-tag.mjs", "utf8");
+    expect(tagLookup).toContain("https://api.github.com/repos/google/osv-scanner/git/ref/tags/${version}");
+    expect(tagLookup).toContain("Authorization: `Bearer ${token}`");
+    expect(tagLookup).toContain("token: process.env.GITHUB_TOKEN");
     for (const source of [ci, readFileSync(".github/workflows/advisory-scheduled.yml", "utf8")]) {
       expect(source).toContain(
-        'curl -fsSL --retry 3 --retry-delay 2 -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}"',
+        "node scripts/warning-gate.ts -- node scripts/fetch-osv-scanner-tag.mjs .cache/osv-scanner/tag.json",
       );
+      expect(source).not.toContain("osv-scanner/git/ref/tags");
       expect(source).toContain("GITHUB_TOKEN: ${{ github.token }}");
     }
     expect(ci).toContain(
