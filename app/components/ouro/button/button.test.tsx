@@ -88,7 +88,8 @@ describe("button branch", () => {
 
   // An app's theme may change the medium weight and the radius, on the root or on its buttons alone, and may give its
   // controls their own radius (--ouro-control-radius, which falls back to Ouro's lg step), so compare with a probe
-  // inside the button that wears the same steps.
+  // inside the button that wears the same steps. A control's radius stops at half its height, so a theme's 9999px
+  // capsule is compared at that.
   function expectThemeLook(button: HTMLElement) {
     const style = getComputedStyle(button);
     expect(style.whiteSpace).toBe("nowrap");
@@ -97,7 +98,8 @@ describe("button branch", () => {
     const step = button.appendChild(document.createElement("div"));
     mounted.push(step);
     step.className = "absolute font-medium";
-    step.style.borderRadius = "calc(var(--ouro-control-radius, var(--radius)) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1))";
+    const half = `${button.getBoundingClientRect().height / 2}px`;
+    step.style.borderRadius = `calc(min(calc(var(--ouro-control-radius, var(--radius)) * var(--ouro-radius-scale, 1)), ${half}) * var(--ouro-corner-fallback, 1))`;
     expect(style.fontWeight).toBe(getComputedStyle(step).fontWeight);
     expect(style.borderTopLeftRadius).toBe(getComputedStyle(step).borderTopLeftRadius);
   }
@@ -115,6 +117,17 @@ describe("button branch", () => {
     scoped.textContent = '[data-ouro="button"] { --font-weight-medium: 600; --radius: 0.125rem; --ouro-control-radius: 0.125rem; }';
     expect(getComputedStyle(button).fontWeight).toBe("600");
     expect(getComputedStyle(button).borderTopLeftRadius).not.toBe(root);
+    expectThemeLook(button);
+  });
+
+  it("is a capsule, its radius half its height, when a theme sets its controls to 9999px", async () => {
+    const { button } = await render(<Button>Save the draft</Button>);
+    const scoped = document.head.appendChild(document.createElement("style"));
+    mounted.push(scoped);
+    scoped.textContent = ":root { --ouro-control-radius: 9999px; }";
+    const half = button.getBoundingClientRect().height / 2;
+    const fallback = Number.parseFloat(getComputedStyle(button).getPropertyValue("--ouro-corner-fallback")) || 1;
+    expect(Number.parseFloat(getComputedStyle(button).borderTopLeftRadius)).toBeCloseTo(half * fallback, 1);
     expectThemeLook(button);
   });
 
