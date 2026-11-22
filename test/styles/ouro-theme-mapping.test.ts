@@ -120,6 +120,7 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
       "--input": "var(--sj-border-strong)",
       "--ring": "var(--sj-brass)",
       "--radius": "var(--sj-radius-control)",
+      "--ouro-control-radius": "9999px",
       "--font-heading": "var(--font-sj-display)",
     });
   });

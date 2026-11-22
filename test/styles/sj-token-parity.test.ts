@@ -67,4 +67,14 @@ describe("Spoonjoy's tokens from ouro-ui-core", () => {
     expect(rules).toBeGreaterThan(2);
     expect(offenders).toEqual([]);
   });
+
+  it("sets the control radius the pinned Cookbook theme sets, with no corner-shape token, so controls are squircle capsules", () => {
+    const core = readFileSync(resolve(ROOT, "vendor/ouro-ui-core/cookbook.css"), "utf8");
+    const coreRadius = /--ouro-control-radius:\s*([^;]+);/.exec(core)?.[1].trim();
+    const mapping = TAILWIND.slice(TAILWIND.indexOf(":root,\n.dark {"));
+    const ownRadius = /--ouro-control-radius:\s*([^;]+);/.exec(mapping.slice(0, mapping.indexOf("}")))?.[1].trim();
+    expect(coreRadius).toBe("9999px");
+    expect(ownRadius).toBe(coreRadius);
+    expect(TAILWIND).not.toMatch(/--ouro-(?:control|check)-corner-shape\s*:/);
+  });
 });
