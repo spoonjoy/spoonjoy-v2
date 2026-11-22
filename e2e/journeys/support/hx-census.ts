@@ -18,6 +18,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { CensusState, Journey as OuroCensusJourney } from "../../ouro-census/census-page.mjs";
 import { KITCHEN } from "../../../scripts/seed-qa-kitchen.mjs";
 import { expect } from "./journey";
+import { chooseMenuItem } from "./menu";
 import { openDisclosure } from "./navigation";
 import { personaStorageStatePath, type PersonaName } from "./personas";
 
@@ -172,8 +173,8 @@ export const census: Journey[] = [
       {
         id: "log-cook-dialog",
         action: async (page) => {
-          await page.getByTestId("recipe-header-more-action").click();
-          await openDialog(page.getByRole("menuitem", { name: "Log cook", exact: true }), page.getByRole("dialog", { name: "Log a cook" }));
+          await chooseMenuItem(page, page.getByTestId("recipe-header-more-action"), "Log cook");
+          await expect(page.getByRole("dialog", { name: "Log a cook" })).toBeVisible();
         },
       },
     ],
@@ -296,8 +297,8 @@ export const census: Journey[] = [
       {
         id: "clear-all-dialog",
         action: async (page) => {
-          await page.getByRole("button", { name: "List actions", exact: true }).click();
-          await openDialog(page.getByRole("menuitem", { name: "Clear all", exact: true }), page.getByRole("alertdialog", { name: "Start fresh?" }));
+          await chooseMenuItem(page, page.getByRole("button", { name: "List actions", exact: true }), "Clear all");
+          await expect(page.getByRole("alertdialog", { name: "Start fresh?" })).toBeVisible();
         },
       },
       {

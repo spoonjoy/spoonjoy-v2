@@ -17,6 +17,7 @@ import type { Page, Response } from "@playwright/test";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStateForProject } from "./support/personas";
 import { requiredLabel } from "./support/forms";
+import { chooseMenuItem } from "./support/menu";
 import { stepScaleUp } from "./support/recipe-scale";
 
 const SHOPPING_LIST = "/shopping-list";
@@ -89,8 +90,7 @@ async function addByHand(page: Page, text: string, name: string, amount: string 
 
 // Clear checked and Clear all live in the list's ⋯ menu.
 async function listAction(page: Page, name: "Clear checked" | "Clear all") {
-  await page.getByRole("button", { name: "List actions", exact: true }).click();
-  await page.getByRole("menuitem", { name, exact: true }).click();
+  await chooseMenuItem(page, page.getByRole("button", { name: "List actions", exact: true }), name);
 }
 
 async function clearAll(page: Page) {
