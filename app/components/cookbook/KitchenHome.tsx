@@ -173,8 +173,9 @@ function OnTheCounter({ recipe }: { recipe: KitchenRecipe }) {
       backdrop={
         photo ? (
           <>
-            <img src={photo} alt="" {...HERO_IMAGE_PROPS} />
-            <div aria-hidden="true" className="sj-counter-shade" />
+            {/* Card positions a single backdrop element; a fragment's two children place themselves. */}
+            <img src={photo} alt="" {...HERO_IMAGE_PROPS} className="absolute inset-0 size-full object-cover" />
+            <div aria-hidden="true" className="sj-counter-shade absolute inset-0" />
           </>
         ) : undefined
       }

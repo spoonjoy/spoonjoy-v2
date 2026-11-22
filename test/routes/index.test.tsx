@@ -503,6 +503,34 @@ describe("Kitchen Index Route", () => {
       ]));
     });
 
+    it("fills the counter card with the newest recipe's photo under a full-size shade", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/",
+          Component: Index,
+          loader: () => ({
+            tab: "recipes",
+            isOwner: true,
+            viewer: { id: "viewer-1", username: "chef", email: "chef@example.com", photoUrl: null },
+            kitchenUser: { id: "viewer-1", username: "chef", photoUrl: null },
+            recipes: [{ id: "recipe-photo", title: "Squash Soup", description: null, servings: null, coverImageUrl: "https://example.com/soup.jpg" }],
+            cookbooks: [],
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/"]} />);
+
+      const counter = await screen.findByRole("region", { name: "On the counter" });
+      const backdrop = counter.querySelector<HTMLElement>("[data-card-backdrop]");
+      expect(backdrop).not.toBeNull();
+      // Card positions only a single backdrop element, so the photo and its shade each fill the card
+      // themselves; a shade with no size leaves the text on the bare photo.
+      expect(backdrop!.querySelector('img[src="https://example.com/soup.jpg"]')).toHaveClass("absolute", "inset-0", "size-full", "object-cover");
+      expect(backdrop!.querySelector(".sj-counter-shade")).toHaveClass("absolute", "inset-0");
+      expect(counter.querySelector('[data-ouro="cover"]')).toBeNull();
+    });
+
     it("lists every recipe in the index in the loader's order, with no lead hero", async () => {
       const Stub = createTestRoutesStub([
         {
