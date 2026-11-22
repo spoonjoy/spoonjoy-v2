@@ -59,8 +59,10 @@ const groupClass =
 const thumbClass =
   "pointer-events-none absolute top-0.5 bottom-0.5 -z-1 rounded-ouro-control-md " +
   "[position-anchor:--ouro-segment] start-[anchor(start)] end-[anchor(end)] " +
-  "forced-colors:bg-[Highlight] " +
   "bg-background dark:bg-[color-mix(in_oklab,var(--foreground)_16%,var(--muted))] " +
+  // Comes after dark:, so under forced colours the fill is Highlight in either theme: the dark fill
+  // would otherwise win the cascade and be forced to Canvas, leaving HighlightText unreadable on it.
+  "forced-colors:bg-[Highlight] forced-colors:dark:bg-[Highlight] " +
   "shadow-(--shadow-sm) " +
   "[transition:inset-inline-start_var(--ouro-duration-base)_var(--ouro-ease-in-out),inset-inline-end_var(--ouro-duration-base)_var(--ouro-ease-in-out),opacity_var(--ouro-duration-fast)_ease] " +
   "motion-reduce:[transition:opacity_var(--ouro-duration-fast)_ease] in-data-ouro-keyboard:[transition:none]";
