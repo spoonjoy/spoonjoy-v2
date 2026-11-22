@@ -21,8 +21,12 @@ export const KITCHEN = Object.freeze({
     // The chef's two recipes serve 4, as the Apple app's parity kitchen seeds them (spoonjoy-apple
     // Apps/Spoonjoy/Journeys/Support/ParityCapture.swift), so both apps' meta rows read "Serves 4".
     lemonRice: { id: "qa-kitchen-recipe-lemon-rice", chef: "chef", title: "Lemon Herb Rice", servings: "4" },
-    tomatoSoup: { id: "qa-kitchen-recipe-tomato-soup", chef: "chef", title: "Roasted Tomato Soup", servings: "4" },
-    risotto: { id: "qa-kitchen-recipe-risotto", chef: "friend", title: "Saffron Risotto" },
+    // The soup and the risotto carry the sample photos the Apple app's parity kitchen shows on its
+    // two cookbooks (QA's sample covers, scripts/qa-sample-covers.mjs), so each web cookbook's
+    // cover is a photo, as the Apple app's are. Lemon Herb Rice keeps no photo: the Cooking now
+    // journey checks its letter.
+    tomatoSoup: { id: "qa-kitchen-recipe-tomato-soup", chef: "chef", title: "Roasted Tomato Soup", servings: "4", cover: "squash-soup.jpg" },
+    risotto: { id: "qa-kitchen-recipe-risotto", chef: "friend", title: "Saffron Risotto", cover: "penne-ragu.jpg" },
     salmon: { id: "qa-kitchen-recipe-salmon", chef: "friend", title: "Miso Glazed Salmon" },
   },
   cookbooks: {
@@ -409,6 +413,16 @@ export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.ha
     statements.push(
       `INSERT INTO Recipe (id, title, description, servings, chefId, deletedAt, sourceRecipeId, sourceUrl, activeCoverId, activeCoverVariant, coverMode, createdAt, updatedAt) VALUES (${sqlString(recipe.id)}, ${sqlString(recipe.title)}, NULL, ${recipe.servings ? sqlString(recipe.servings) : "NULL"}, ${sqlString(chefId)}, NULL, NULL, NULL, NULL, NULL, ${sqlString("auto")}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
     );
+
+    if (recipe.cover) {
+      const coverId = `${recipe.id}-cover`;
+      statements.push(
+        `INSERT INTO RecipeCover (id, recipeId, imageUrl, sourceType, status, generationStatus, createdById, createdAt) VALUES (${sqlString(coverId)}, ${sqlString(recipe.id)}, ${sqlString(`/photos/samples/covers/${recipe.cover}`)}, ${sqlString("ai-placeholder")}, ${sqlString("ready")}, ${sqlString("succeeded")}, ${sqlString(chefId)}, CURRENT_TIMESTAMP);`,
+      );
+      statements.push(
+        `UPDATE Recipe SET activeCoverId = ${sqlString(coverId)}, activeCoverVariant = ${sqlString("image")} WHERE id = ${sqlString(recipe.id)};`,
+      );
+    }
 
     for (const step of content.steps) {
       statements.push(
