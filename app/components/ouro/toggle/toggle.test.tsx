@@ -238,6 +238,15 @@ describe("Toggle looks", () => {
     expect(getComputedStyle(md!).fontSize).toBe("14px");
   });
 
+  it("is a capsule, its radius half its height, when a theme sets its controls to 9999px", async () => {
+    const { host } = await render(<Toggle label="Rect" />);
+    const toggle = host.querySelector<HTMLElement>('[data-ouro="toggle"]')!;
+    toggle.style.setProperty("--ouro-control-radius", "9999px");
+    const half = toggle.getBoundingClientRect().height / 2;
+    const fallback = Number.parseFloat(getComputedStyle(toggle).getPropertyValue("--ouro-corner-fallback")) || 1;
+    expect(Number.parseFloat(getComputedStyle(toggle).borderTopLeftRadius)).toBeCloseTo(half * fallback, 1);
+  });
+
   it("rounds fully with regular-weight text with shape pill", async () => {
     const { host } = await render(
       <>
@@ -252,9 +261,11 @@ describe("Toggle looks", () => {
     expect(getComputedStyle(rect!).fontWeight).toBe("500");
     expect(getComputedStyle(pill!).fontWeight).toBe("400");
     const radius = (element: HTMLElement) => parseFloat(getComputedStyle(element).borderTopLeftRadius);
-    // A rect wears the theme's control radius: Ouro's lg step unless the theme sets --ouro-control-radius.
+    // A rect wears the theme's control radius: Ouro's lg step unless the theme sets --ouro-control-radius, stopping at half
+    // its height, so a theme's 9999px capsule is compared at that.
     const probe = rect!.appendChild(document.createElement("span"));
-    probe.style.borderRadius = "calc(var(--ouro-control-radius, var(--radius)) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1))";
+    const half = `${rect!.getBoundingClientRect().height / 2}px`;
+    probe.style.borderRadius = `calc(min(calc(var(--ouro-control-radius, var(--radius)) * var(--ouro-radius-scale, 1)), ${half}) * var(--ouro-corner-fallback, 1))`;
     expect(radius(rect!)).toBe(radius(probe));
     probe.remove();
     expect(radius(pill!)).toBeGreaterThanOrEqual(pill!.getBoundingClientRect().height / 2);
