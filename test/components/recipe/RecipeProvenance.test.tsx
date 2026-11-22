@@ -71,7 +71,10 @@ describe("RecipeProvenance", () => {
   it("falls back to the raw string when sourceUrl is malformed (no protocol)", () => {
     renderWithRouter(<RecipeProvenance sourceUrl="not a real url" />);
     expect(screen.getByText(/originally from/i)).toBeInTheDocument();
-    expect(screen.getByText("not a real url")).toBeInTheDocument();
+    // By the link's accessible name, as a screen reader reads it: Ouro UI's Link may wrap the text's
+    // last word with its external icon (ourostack/ouro-ui#2818), which splits the text across elements.
+    const link = screen.getByRole("link", { name: "not a real url (opens in a new tab)" });
+    expect(link).toHaveTextContent(/^not a real url/);
   });
 
   it("falls back to the raw string when the URL parses but has an empty hostname", () => {
