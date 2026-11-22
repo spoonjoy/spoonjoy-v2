@@ -6,6 +6,8 @@ const componentsDirectory = new URL("./app/components", import.meta.url).pathnam
 const coverageInclude = [
   "app/entry.server.tsx",
   "app/lib/**/*.ts",
+  "app/domains/**/*.ts",
+  "app/domains/**/*.tsx",
   "app/routes/**/*.ts",
   "app/routes/**/*.tsx",
   "app/components/**/*.tsx",
