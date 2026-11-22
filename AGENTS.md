@@ -72,6 +72,7 @@ The census measures, page by page and state by state, how many of the controls a
 
 ```
 app/
+├── domains/         # Bounded contexts; new code goes here (docs/domains.md, checked by pnpm lint)
 ├── routes/          # Route modules (loaders, actions, components)
 │   ├── api.v1.$.ts  # REST API (/api/v1)
 │   └── mcp.tsx      # MCP server endpoint (/mcp)
