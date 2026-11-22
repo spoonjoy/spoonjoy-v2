@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
-import Roadmap, { RoadmapRow, meta } from "~/routes/roadmap";
+import Roadmap, { RoadmapRow, RoadmapSection, meta } from "~/routes/roadmap";
 import { ROADMAP, ROADMAP_STATUSES, roadmapByStatus, type RoadmapItem } from "~/content/roadmap";
 
 async function renderRoadmap() {
@@ -84,5 +84,16 @@ describe("/roadmap", () => {
     const date = await screen.findByText("Dec 2026");
     expect(date.closest("time")).toHaveAttribute("datetime", "2026-12-01");
     expect(screen.getByText("Planning")).toBeInTheDocument();
+  });
+
+  it("counts a group of one as one thing", async () => {
+    const Stub = createTestRoutesStub([{
+      path: "/roadmap",
+      Component: () => (
+        <RoadmapSection status="later" title="Later" summary="Planned." items={[{ id: "pantry", title: "Pantry", benefit: "Know what you have.", status: "later", area: "Shopping" }]} />
+      ),
+    }]);
+    render(<Stub initialEntries={["/roadmap"]} />);
+    expect(await screen.findByText("1 thing")).toBeInTheDocument();
   });
 });
