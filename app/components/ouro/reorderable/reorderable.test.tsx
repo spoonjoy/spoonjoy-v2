@@ -1208,11 +1208,11 @@ describe("Reorderable", () => {
       before.focus();
       await pressTab();
       expect(document.activeElement).toBe(handle("Sear"));
+      await expect.poll(() => document.querySelector('[data-ouro="tooltip"]')?.textContent).toBe("Saving your last move");
       await press(" ");
       await press("{Enter}");
       expect(handle("Sear").hasAttribute("data-grabbed")).toBe(false);
       expect(document.querySelector('[role="menu"]')).toBeNull();
-      await expect.poll(() => document.querySelector('[data-ouro="tooltip"]')?.textContent).toBe("Saving your last move");
       expect(onReorder).not.toHaveBeenCalled();
     });
 
