@@ -250,7 +250,8 @@
         ],
         "link": [
           "app/components/cookbook/KitchenHome.tsx",
-          "app/components/cooking-now/CookingNow.tsx"
+          "app/components/cooking-now/CookingNow.tsx",
+          "app/routes/_index.tsx"
         ],
         "menu": [
           "app/components/cookbook/KitchenHome.tsx"
@@ -1182,6 +1183,60 @@
         ],
         "text": [
           "app/routes/support.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/roadmap",
+      "file": "app/routes/roadmap.tsx",
+      "sources": [
+        "app/routes/roadmap.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/content/roadmap.ts",
+        "app/lib/app-store.ts"
+      ],
+      "components": [
+        "badge",
+        "button",
+        "heading",
+        "item",
+        "item-group",
+        "link",
+        "local-date",
+        "page-header",
+        "section-header",
+        "text"
+      ],
+      "renders": {
+        "badge": [
+          "app/routes/roadmap.tsx"
+        ],
+        "button": [
+          "app/routes/roadmap.tsx"
+        ],
+        "heading": [
+          "app/routes/roadmap.tsx"
+        ],
+        "item": [
+          "app/routes/roadmap.tsx"
+        ],
+        "item-group": [
+          "app/routes/roadmap.tsx"
+        ],
+        "link": [
+          "app/routes/roadmap.tsx"
+        ],
+        "local-date": [
+          "app/routes/roadmap.tsx"
+        ],
+        "page-header": [
+          "app/routes/roadmap.tsx"
+        ],
+        "section-header": [
+          "app/routes/roadmap.tsx"
+        ],
+        "text": [
+          "app/routes/roadmap.tsx"
         ]
       }
     },
