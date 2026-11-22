@@ -50,6 +50,9 @@
   --input: var(--sj-border-strong);
   --ring: var(--sj-brass);
   --radius: var(--sj-radius-control);
+  /* Ouro's Cookbook theme makes controls squircle capsules: a full radius each control caps at half its height, with no
+     corner-shape token, so the ends stay squircles. Held to the vendored core theme by test/styles/sj-token-parity.test.ts. */
+  --ouro-control-radius: 9999px;
   /* HX Heading's typeface: Spoonjoy's display serif for every heading. */
   --font-heading: var(--font-sj-display);
 }
