@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { Checklist, type ChecklistItemData } from '~/components/ouro/checklist/checklist'
 import type { IngredientIconKey } from '~/lib/ingredient-affordances'
-import { formatAmount, scaleQuantity } from '~/lib/quantity'
+import { formatAmount, scaleQuantity } from "~/domains/food-knowledge"
 
 export interface Ingredient {
   /** Unique identifier */

@@ -8,7 +8,7 @@ import { Link } from '~/components/ouro/link/link'
 import { Avatar } from '../ouro/avatar/avatar'
 import { NumberField } from '~/components/ouro/number-field/number-field'
 import { SCALE_RANGE } from '~/components/cook/cook-controller'
-import { formatServingsLabel, scaleServingsText } from '~/lib/quantity'
+import { formatServingsLabel, scaleServingsText } from "~/domains/food-knowledge"
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 import { CoverProvenanceBadge } from './CoverProvenanceBadge'
 import { Cover } from '~/components/ouro/cover/cover'

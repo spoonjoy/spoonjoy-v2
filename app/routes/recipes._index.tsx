@@ -21,7 +21,7 @@ import {
   readPublicRecipesWithPrisma,
   type PublicRecipe,
 } from "~/lib/collection-reads.server";
-import { formatServingsLabel } from "~/lib/quantity";
+import { formatServingsLabel } from "~/domains/food-knowledge";
 import { RecipesSectionNav } from "~/components/navigation";
 import { ShowMore } from "~/components/ouro/collapsible/show-more";
 import { useAppendingList } from "~/hooks/use-appending-list";

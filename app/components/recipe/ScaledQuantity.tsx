@@ -1,4 +1,4 @@
-import { formatAmount, scaleQuantity } from '../../lib/quantity'
+import { formatAmount, scaleQuantity } from "~/domains/food-knowledge"
 
 export interface ScaledQuantityProps {
   /** The base quantity (before scaling) */

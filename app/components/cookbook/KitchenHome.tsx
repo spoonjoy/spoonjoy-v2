@@ -16,7 +16,7 @@ import { Card } from "~/components/ouro/card/card";
 import { Cover } from "~/components/ouro/cover/cover";
 import { cn } from "~/lib/ouro/cn";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
-import { formatServingsLabel } from "~/lib/quantity";
+import { formatServingsLabel } from "~/domains/food-knowledge";
 import { share } from "~/lib/ouro/share";
 
 export function absoluteKitchenUrl(path: string) {

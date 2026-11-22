@@ -14,7 +14,7 @@ import { Text } from "~/components/ouro/text/text";
 import { claim } from "~/lib/ouro/claims";
 import { useLocalCookController } from "~/lib/cook/local-cook-controller";
 import { useXray } from "~/components/xray/xray-provider";
-import { scaleServingsText } from "~/lib/quantity";
+import { scaleServingsText } from "~/domains/food-knowledge";
 import { TEST_KITCHEN } from "~/lib/test-kitchen/content";
 import { resetTestKitchen, testKitchenProgressStorage } from "~/lib/test-kitchen/storage";
 import { resetTimer } from "~/lib/ouro/use-timer";

@@ -15,7 +15,7 @@ import {
   type PostHogServerConfig,
   type PostHogServerEnv,
 } from "~/lib/analytics-server";
-import { formatServingsLabel } from "~/lib/quantity";
+import { formatServingsLabel } from "~/domains/food-knowledge";
 import { useEffect, useState } from "react";
 import { absoluteUrlFromRequest, shareImageMeta, shareImageUrl } from "~/lib/og-metadata";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";

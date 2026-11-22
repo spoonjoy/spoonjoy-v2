@@ -1,6 +1,6 @@
 import type { Route } from "./+types/og.recipes.$id.png";
 import type { RecipeCover } from "@prisma/client";
-import { formatServingsLabel } from "~/lib/quantity";
+import { formatServingsLabel } from "~/domains/food-knowledge";
 import { absoluteUrlFromRequest, createRecipeOgImageResponse } from "~/lib/og-image.server";
 import {
   getRecipeCoverImageUrl,

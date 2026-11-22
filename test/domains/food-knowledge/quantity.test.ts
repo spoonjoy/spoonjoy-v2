@@ -6,7 +6,7 @@ import {
   formatQuantity,
   scaleQuantity,
   scaleServingsText,
-} from './quantity'
+} from '~/domains/food-knowledge'
 
 describe('quantity utilities', () => {
   describe('formatQuantity', () => {
@@ -251,7 +251,7 @@ describe('quantity utilities', () => {
           },
         }))
 
-        const { formatQuantity: formatQuantityMocked } = await import('./quantity')
+        const { formatQuantity: formatQuantityMocked } = await import('~/domains/food-knowledge')
         const result = formatQuantityMocked(0.5)
         expect(result).toBe('2/7')
 
@@ -271,7 +271,7 @@ describe('quantity utilities', () => {
           },
         }))
 
-        const { formatQuantity: formatQuantityMocked } = await import('./quantity')
+        const { formatQuantity: formatQuantityMocked } = await import('~/domains/food-knowledge')
         const result = formatQuantityMocked(3.2857)
         expect(result).toBe('3 2/7')
 
