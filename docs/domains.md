@@ -1,0 +1,37 @@
+# Domains
+
+New code lives in a bounded context under `app/domains/<context>/`. Existing `app/lib` modules move into their context when a change touches them, one at a time, never in one big move.
+
+## Contexts
+
+| Folder | Context | Kind | Holds |
+|---|---|---|---|
+| `kitchen` | Kitchen | core | the recipe (steps, ingredients, step output links), organizers (tags, categories, tools), cookbooks, ratings, comments, attachments |
+| `cooking` | Cooking | core | cook mode, cook sessions, timers, cooking now, spoons (cook log with photos), last-made |
+| `planning` | Planning | core | meal plan, plan entries, plan rules, calendar feed, plan to shopping list |
+| `pantry-and-shopping` | Pantry and Shopping | core | shopping lists, items, labels and aisle order, pantry stock |
+| `food-knowledge` | Food knowledge | shared kernel | foods, units, conversion, nutrition, swaps, ingredient parsing, food names |
+| `households-and-identity` | Households and Identity | supporting | users, households, membership and roles, invites, sign-in |
+| `move-in` | Move-in | supporting, anti-corruption layer | import jobs, one source adapter per app we import from |
+| `community-and-federation` | Community and Federation | supporting | chefs, follows, forks with provenance, recipes travelling between servers |
+| `integrations` | Integrations | generic | domain events out: webhooks, notifiers, recipe actions, calendar feeds |
+| `platform` | Platform | ports and adapters | feature flags, and the ports the app runs on (database, blobs, realtime, jobs, push, AI, email) |
+
+## Inside a context
+
+- `index.ts` is the context's public surface. Everything else imports the context as `~/domains/<context>`.
+- `model/` holds entities, value objects and domain events, and does no I/O.
+- `application/` holds use cases, which take ports from Platform rather than reaching for D1, R2 or a fetch.
+- `adapters/` holds D1, HTTP, MCP and UI glue.
+
+Food knowledge's quantity formatting (`food-knowledge/model/quantity.ts`) is the worked example: a pure model, exported through `food-knowledge/index.ts` and imported by components and routes as `~/domains/food-knowledge`.
+
+## The rule, checked
+
+`pnpm lint` runs `scripts/check-domain-boundaries.mjs`, which fails when:
+
+- a context has no `index.ts`, or `app/domains/` holds a folder that is not one of the contexts above (`context-index`, `unknown-context`);
+- any app code imports another context's folders instead of its index (`context-internals`);
+- a file in a `model/` imports anything but its own context's `model/`, the shared kernel (`~/domains/food-knowledge`) and pure packages: no other app code, no Node or Cloudflare built-ins, React, React Router, Prisma or AI clients (`model-purity`).
+
+Each failure names the file, the import and the fix. Tests are not checked, so a test may reach a context's internals.
