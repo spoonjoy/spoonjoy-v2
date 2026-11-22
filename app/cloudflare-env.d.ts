@@ -97,6 +97,10 @@ declare global {
     /** "apply" lets the photo sweep move unreferenced photos to quarantine; "off" stops it; anything else is a dry run. */
     PHOTO_SWEEP_MODE?: string;
     SPOONJOY_CSP_MODE?: string;
+    /** Feature flags on for everyone: "all" (QA) or names (app/domains/platform/flags); unset in production. */
+    SPOONJOY_FLAGS?: string;
+    /** Feature flags on for chosen users, as JSON from user id to names or "all" (app/domains/platform/flags). */
+    SPOONJOY_FLAG_USERS?: string;
     /** Comma-separated usernames who may review /moderation. */
     SPOONJOY_MODERATOR_USERNAMES?: string;
     /** "1" only on a per-run QA Worker: handleError writes one scrubbed console.error line per error. */
