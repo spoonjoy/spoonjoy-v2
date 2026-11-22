@@ -34,7 +34,7 @@ describe("Move-in Proof workflow", () => {
   it("seeds every source version the adapter knows, in each chosen size", () => {
     expect(workflow.jobs.seed.strategy?.matrix.source).toEqual(SOURCE_VERSIONS.map((source) => source.version));
     expect(workflow.jobs.seed.strategy?.matrix.size).toBe("${{ fromJSON(needs.plan.outputs.sizes) }}");
-    expect(workflow.env.SIZES).toBe("${{ github.event_name == 'pull_request' && 'small' || inputs.sizes || 'small,large' }}");
+    expect(workflow.env.SIZES).toBe("${{ inputs.sizes || 'small,large' }}");
   });
 
   it("reads the repository everywhere and writes only the release, from main, never for a pull request", () => {

@@ -32,7 +32,7 @@ export async function exportKitchen({ profile, seeded, recipes, outDir, log = ()
     mkdirSync(zipDir, { recursive: true });
     const owner = seeded.sessions.owner;
     await eachLimited(recipes, CONCURRENCY, async (recipe) => {
-      const { token } = await owner.post(`/api/recipes/${recipe.slug}/exports`);
+      const { token } = await owner.request("POST", `/api/recipes/${recipe.slug}/exports`, { idempotent: true });
       writeFileSync(path.join(zipDir, `${recipe.slug}.zip`), await owner.download(`/api/recipes/${recipe.slug}/exports/zip`, { token }));
       recipeZips += 1;
     });
