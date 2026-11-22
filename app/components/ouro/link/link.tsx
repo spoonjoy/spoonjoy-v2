@@ -159,6 +159,12 @@ function linkHint(token: string): string {
   return `tone="${toneFor(token)}"`;
 }
 
+/** A text split before its last word, trailing spaces kept with that word; null for a blank text. @internal */
+function lastWord(text: string): { head: string; last: string } | null {
+  const at = text.search(/\S+\s*$/);
+  return at < 0 ? null : { head: text.slice(0, at), last: text.slice(at) };
+}
+
 /**
  * A text link that navigates through your router. Internal `href`s render through
  * `OuroProvider`'s `linkComponent`, the same path `Button` with `href` takes, and
@@ -261,6 +267,23 @@ export function Link(props: LinkProps): JSX.Element {
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
+  const externalIcon = (
+    <svg
+      aria-hidden="true"
+      data-ouro-external=""
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="ms-0.5 inline size-[0.75em] align-baseline"
+    >
+      <path d="M6 3h7v7M13 3 4 12" />
+    </svg>
+  );
+  // A link's text and its external icon: the last word goes with the icon.
+  const glued = external && typeof children === "string" ? lastWord(children) : null;
   return (
     <RouterLink
       data-ouro-control="link"
@@ -276,25 +299,22 @@ export function Link(props: LinkProps): JSX.Element {
       data-current={marked ? "" : undefined}
       className={cn(base, iconInlineClass, inlineProp === undefined ? [standalone, inTextFocus, iconRowClass, iconInTextClass] : inlineProp ? [inlineFocus, alwaysIconInTextClass] : [alwaysStandalone, alwaysIconRowClass], tones[tone], currentClass, className)}
     >
-      {children}
-      {external && (
+      {glued ? (
         <>
-          <svg
-            aria-hidden="true"
-            data-ouro-external=""
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="ms-0.5 inline size-[0.75em] align-baseline"
-          >
-            <path d="M6 3h7v7M13 3 4 12" />
-          </svg>
-          <span className="sr-only"> (opens in a new tab)</span>
+          {glued.head}
+          {/* The last word and the icon break together: the icon never wraps onto a line of its own. */}
+          <span data-slot="link-last-word" className="whitespace-nowrap">
+            {glued.last}
+            {externalIcon}
+          </span>
+        </>
+      ) : (
+        <>
+          {children}
+          {external ? externalIcon : null}
         </>
       )}
+      {external ? <span className="sr-only"> (opens in a new tab)</span> : null}
     </RouterLink>
   );
 }

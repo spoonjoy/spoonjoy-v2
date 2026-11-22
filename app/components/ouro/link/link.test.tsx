@@ -324,6 +324,46 @@ describe("Link", () => {
     expect(link.getClientRects().length).toBeGreaterThan(1);
   });
 
+  it("keeps an external link's icon on its last word's line, never on a line alone", async () => {
+    const { host, link } = await render(
+      <p style={{ width: 200 }}>
+        The buttons work only in the app. <Link href="https://ouro.bot" external inline>Open in the app</Link>
+      </p>,
+    );
+    const p = host.querySelector("p")!;
+    const icon = link.querySelector<SVGElement>("[data-ouro-external]")!;
+    // The link's words up to its icon: its last line is the one the icon must share.
+    const words = document.createRange();
+    words.setStart(link, 0);
+    words.setEndBefore(icon);
+    const alone: number[] = [];
+    for (let width = 60; width <= 260; width++) {
+      p.style.width = `${width}px`;
+      // The icon's middle sits within the last line of words, whatever the fonts' metrics.
+      const last = [...words.getClientRects()].at(-1)!;
+      const box = icon.getBoundingClientRect();
+      const middle = (box.top + box.bottom) / 2;
+      if (middle < last.top || middle > last.bottom) alone.push(width);
+    }
+    expect(alone).toEqual([]);
+  });
+
+  it("glues only an external link's last word to its icon, keeping its text as given", async () => {
+    const glued = async (node: ReactNode) => {
+      const { link } = await render(node);
+      const words = [...link.childNodes].filter((n) => !(n instanceof Element && n.classList.contains("sr-only"))).map((n) => n.textContent).join("");
+      return { words, last: link.querySelector(".whitespace-nowrap")?.textContent ?? null };
+    };
+    expect(await glued(<Link href="https://ouro.bot" external>Open in the app </Link>)).toEqual({ words: "Open in the app ", last: "app " });
+    expect(await glued(<Link href="https://ouro.bot" external>Open</Link>)).toEqual({ words: "Open", last: "Open" });
+    // Nothing to glue: a blank text, or a link that opens here, keeps its children as they are.
+    expect((await glued(<Link href="https://ouro.bot" external>{"   "}</Link>)).last).toBeNull();
+    expect(await glued(<Link href="/home">Go home</Link>)).toEqual({ words: "Go home", last: null });
+    // Children that aren't one string are drawn as given, with the icon after them.
+    const { link } = await render(<Link href="https://ouro.bot" external><b>The guide</b></Link>);
+    expect([link.querySelector("b")?.textContent, link.querySelector(".whitespace-nowrap"), !!link.querySelector("[data-ouro-external]")]).toEqual(["The guide", null, true]);
+  });
+
   it("lets app layout classes win", async () => {
     const { link } = await render(
       <Link href="/x" className="ms-2 inline-block">

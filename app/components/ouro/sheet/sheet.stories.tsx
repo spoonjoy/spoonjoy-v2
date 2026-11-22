@@ -172,7 +172,10 @@ export const Controlled: Story = {
   },
 };
 
-/** Built from parts. A part given no `render` is a plain button of its own: here the trigger and the close button. */
+/**
+ * Built from parts. A part given no `render` is a plain button of its own: here the trigger and the close button.
+ * The title sits in a header row inset as `Sheet`'s is, clear of the popup's rounded corners and the line on its open edge.
+ */
 export const Parts: Story = {
   render: () => (
     <SheetRoot>
@@ -181,7 +184,9 @@ export const Parts: Story = {
         <SheetBackdrop />
         <SheetViewport>
           <SheetPopup>
-            <SheetTitle>Add a note</SheetTitle>
+            <div className="px-5 pt-3 pb-2">
+              <SheetTitle>Add a note</SheetTitle>
+            </div>
             <SheetContent>
               Notes stay with this recipe.
               <SheetClose>Close</SheetClose>

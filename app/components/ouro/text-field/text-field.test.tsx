@@ -305,6 +305,45 @@ describe("TextField password toggle", () => {
   });
 });
 
+describe("TextField Escape in a search field", () => {
+  it("empties a filled search field and keeps focus, in every browser, with the key's default prevented", async () => {
+    const onValueChange = vi.fn();
+    const { input } = await render(<TextField label="Filter" type="search" defaultValue="but" onValueChange={onValueChange} />);
+    let prevented: boolean | undefined;
+    const seen = (event: KeyboardEvent) => (prevented = event.defaultPrevented);
+    document.addEventListener("keydown", seen);
+    input.focus();
+    await userEvent.keyboard("{Escape}");
+    document.removeEventListener("keydown", seen);
+    expect(input.value).toBe("");
+    expect(document.activeElement).toBe(input);
+    expect(prevented).toBe(true);
+    expect(onValueChange).toHaveBeenCalledWith("", expect.anything());
+  });
+
+  it("leaves an empty search field, another type, the app's own handled key and a composing Escape alone", async () => {
+    const seen: boolean[] = [];
+    const record = (event: KeyboardEvent) => seen.push(event.defaultPrevented);
+    document.addEventListener("keydown", record);
+    const empty = await render(<TextField label="Empty" type="search" />);
+    empty.input.focus();
+    await userEvent.keyboard("{Escape}");
+    const text = await render(<TextField label="Name" defaultValue="Ada" />);
+    text.input.focus();
+    await userEvent.keyboard("{Escape}");
+    document.removeEventListener("keydown", record);
+    expect(seen).toEqual([false, false]);
+    expect(text.input.value).toBe("Ada");
+    const own = await render(<TextField label="Own" type="search" defaultValue="but" onKeyDown={(event) => event.preventDefault()} />);
+    own.input.focus();
+    await userEvent.keyboard("{Escape}");
+    expect(own.input.value).toBe("but");
+    const composing = await render(<TextField label="Composing" type="search" defaultValue="but" />);
+    composing.input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", isComposing: true, bubbles: true, cancelable: true }));
+    expect(composing.input.value).toBe("but");
+  });
+});
+
 describe("TextField clearable", () => {
   it("clears the field and refocuses it", async () => {
     const onChange = vi.fn();
