@@ -68,6 +68,7 @@ import {
   type RecipeCoverVariant,
 } from "~/lib/recipe-cover.server";
 import { uploadFoodImage } from "~/lib/image-upload-tools.server";
+import { photoUploadIsUsable, photoUploadSigningSecret, PHOTO_UPLOAD_REFUSAL, startPhotoUpload, spendPhotoUpload } from "~/lib/photo-upload-link.server";
 import { FOOD_IMAGE_TYPES } from "~/lib/recipe-image";
 import { validateSpoonPhotoAssignment } from "~/lib/recipe-image-assignment.server";
 import { normalizeSearchScope, searchSpoonjoy } from "~/lib/search.server";
@@ -133,7 +134,7 @@ export interface SpoonjoyApiContext {
   defaultOwnerEmail?: string;
   allowOwnerEmailFallback?: boolean;
   waitUntil?: (promise: Promise<unknown>) => void;
-  env?: (ImageGenEnv & { DB?: unknown; SPOONJOY_BASE_URL?: string } & VapidEnv & PostHogServerEnv) | null;
+  env?: (ImageGenEnv & { DB?: unknown; SPOONJOY_BASE_URL?: string; SESSION_SECRET?: string; NODE_ENV?: string } & VapidEnv & PostHogServerEnv) | null;
   bucket?: R2Bucket;
   imageGenRunner?: ImageGenRunner;
   allowLocalImageFallback?: boolean;
@@ -1748,7 +1749,7 @@ const createRecipeCoverFromUploadTool: SpoonjoyApiOperation = {
   async handle(args, context) {
     const principal = requireApiPrincipal(context.principal);
     const recipeId = requiredString(args, "recipeId");
-    const imageUrl = requiredString(args, "imageUrl");
+    const uploadId = photoUploadIdArgument(args, "imageUrl");
     const activate = optionalBooleanArgument(args, "activateWhenReady", optionalBooleanArgument(args, "activate"));
     const generateEditorial = optionalBooleanArgument(args, "generateEditorial", true);
     const dryRun = optionalBooleanArgument(args, "dryRun");
@@ -1762,6 +1763,70 @@ const createRecipeCoverFromUploadTool: SpoonjoyApiOperation = {
     const recipe = await findOwnedCoverMutationRecipe(context, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(context, recipe);
 
+    const createCoverFromImage = async (imageUrl: string, mutationKey: string | null) => {
+      const spoon = postAsSpoon
+        ? (await createRecipeSpoon(context.db, {
+            chefId: principal.id,
+            recipeId,
+            photoUrl: imageUrl,
+            note,
+            nextTime,
+            cookedAt,
+          })).spoon
+        : null;
+
+      const cover = await createCover(context.db, {
+        recipeId,
+        imageUrl,
+        sourceType: spoon ? "spoon" : "chef-upload",
+        sourceSpoonId: spoon?.id,
+        status: generateEditorial ? "processing" : "ready",
+        createdById: principal.id,
+        sourceImageUrl: imageUrl,
+        generationStatus: generateEditorial ? "processing" : "none",
+        promptAddition,
+      });
+
+      if (generateEditorial) {
+        await scheduleRecipeCoverStylization(context, {
+          userId: principal.id,
+          recipeId,
+          coverId: cover.id,
+          rawPhotoUrl: imageUrl,
+          recipeTitle: recipe.title,
+          sourceType: spoon ? "spoon" : "chef-upload",
+          promptAddition,
+          activateWhenReady: activate,
+          suppressAutoActivation: !activate,
+          activationGuard: activate
+            ? {
+                activeCoverId: recipe.activeCoverId,
+                activeCoverVariant: recipe.activeCoverVariant,
+                coverMode: recipe.coverMode,
+              }
+            : undefined,
+        });
+      } else if (activate) {
+        await setActiveRecipeCover(context.db, {
+          recipeId,
+          coverId: cover.id,
+          variant: "image",
+        }, d1Binding(context.env?.DB));
+      }
+
+      const nextRecipe = await reloadCoverMutationRecipe(context, recipeId);
+      const createdCover = await reloadFullCoverPayload(context, nextRecipe, cover.id);
+      const activeCover = await activeFullCoverPayload(context, nextRecipe);
+      return coverMutationResponse({
+        activeCover,
+        previousActiveCover,
+        createdCover,
+        generationStatus: createdCover.generationStatus,
+        nextActions: activate ? ["get_cover_generation_status"] : ["set_active_recipe_cover", "get_cover_generation_status"],
+        idempotencyKey: mutationKey,
+      });
+    };
+
     return runIdempotentMcpCoverMutation(context, principal, {
       operation: "create_recipe_cover_from_upload",
       recipeId,
@@ -1769,12 +1834,17 @@ const createRecipeCoverFromUploadTool: SpoonjoyApiOperation = {
       idempotencyKey,
       dryRun,
       write: async (mutationKey) => {
-        await validateRecipeCoverImageSource({
-          imageUrl,
-          ownerId: principal.id,
-          bucket: context.bucket,
-          allowLocalImageFallback: context.allowLocalImageFallback,
-        });
+        if (uploadId && !(await photoUploadIsUsable(context.db, { uploadId, ownerId: principal.id }))) {
+          throw new ApiAuthError(PHOTO_UPLOAD_REFUSAL, 404);
+        }
+        if (!uploadId) {
+          await validateRecipeCoverImageSource({
+            imageUrl: requiredString(args, "imageUrl"),
+            ownerId: principal.id,
+            bucket: context.bucket,
+            allowLocalImageFallback: context.allowLocalImageFallback,
+          });
+        }
 
         if (dryRun) {
           return coverMutationResponse({
@@ -1787,67 +1857,17 @@ const createRecipeCoverFromUploadTool: SpoonjoyApiOperation = {
           });
         }
 
-        const spoon = postAsSpoon
-          ? (await createRecipeSpoon(context.db, {
-              chefId: principal.id,
-              recipeId,
-              photoUrl: imageUrl,
-              note,
-              nextTime,
-              cookedAt,
-            })).spoon
-          : null;
-
-        const cover = await createCover(context.db, {
-          recipeId,
-          imageUrl,
-          sourceType: spoon ? "spoon" : "chef-upload",
-          sourceSpoonId: spoon?.id,
-          status: generateEditorial ? "processing" : "ready",
-          createdById: principal.id,
-          sourceImageUrl: imageUrl,
-          generationStatus: generateEditorial ? "processing" : "none",
-          promptAddition,
-        });
-
-        if (generateEditorial) {
-          await scheduleRecipeCoverStylization(context, {
-            userId: principal.id,
-            recipeId,
-            coverId: cover.id,
-            rawPhotoUrl: imageUrl,
-            recipeTitle: recipe.title,
-            sourceType: spoon ? "spoon" : "chef-upload",
-            promptAddition,
-            activateWhenReady: activate,
-            suppressAutoActivation: !activate,
-            activationGuard: activate
-              ? {
-                  activeCoverId: recipe.activeCoverId,
-                  activeCoverVariant: recipe.activeCoverVariant,
-                  coverMode: recipe.coverMode,
-                }
-              : undefined,
-          });
-        } else if (activate) {
-          await setActiveRecipeCover(context.db, {
-            recipeId,
-            coverId: cover.id,
-            variant: "image",
-          }, d1Binding(context.env?.DB));
+        // An upload is stored where a photo of its kind goes: with the spoon when one preserves it.
+        if (uploadId) {
+          return spendPhotoUpload(context.db, {
+            uploadId,
+            ownerId: principal.id,
+            namespace: postAsSpoon ? "spoons" : "recipes",
+            bucket: context.bucket,
+            allowLocalImageFallback: context.allowLocalImageFallback,
+          }, (stored) => createCoverFromImage(stored.imageUrl, mutationKey));
         }
-
-        const nextRecipe = await reloadCoverMutationRecipe(context, recipeId);
-        const createdCover = await reloadFullCoverPayload(context, nextRecipe, cover.id);
-        const activeCover = await activeFullCoverPayload(context, nextRecipe);
-        return coverMutationResponse({
-          activeCover,
-          previousActiveCover,
-          createdCover,
-          generationStatus: createdCover.generationStatus,
-          nextActions: activate ? ["get_cover_generation_status"] : ["set_active_recipe_cover", "get_cover_generation_status"],
-          idempotencyKey: mutationKey,
-        });
+        return createCoverFromImage(requiredString(args, "imageUrl"), mutationKey);
       },
     });
   },
@@ -2570,13 +2590,36 @@ const deleteRecipeTool: SpoonjoyApiOperation = {
   },
 };
 
+/**
+ * Which photo a call names: an uploadId from start_photo_upload, or the bytes or URL under `other`.
+ * Exactly one is required.
+ */
+function photoUploadIdArgument(args: Record<string, unknown>, other: "imageBase64" | "imageUrl"): string | null {
+  const uploadId = optionalString(args.uploadId);
+  const hasOther = optionalString(args[other]) !== undefined;
+  if (uploadId && hasOther) throw new ApiAuthError(`Pass uploadId or ${other}, not both`, 400);
+  if (!uploadId && !hasOther) throw new ApiAuthError(`uploadId or ${other} is required`, 400);
+  return uploadId ?? null;
+}
+
 async function uploadFoodImageForOwner(
   args: Record<string, unknown>,
   context: SpoonjoyApiContext,
   namespace: "recipes" | "spoons",
 ){
   const email = requireOwnerEmail(args, context);
+  const uploadId = photoUploadIdArgument(args, "imageBase64");
   const owner = await getOrCreateOwner(context, email);
+  if (uploadId) {
+    return spendPhotoUpload(context.db, {
+      uploadId,
+      ownerId: owner.id,
+      namespace,
+      filename: optionalString(args.filename),
+      bucket: context.bucket,
+      allowLocalImageFallback: context.allowLocalImageFallback,
+    }, async (stored) => stored);
+  }
   return uploadFoodImage({
     imageBase64: requiredString(args, "imageBase64"),
     mimeType: requiredString(args, "mimeType"),
@@ -2587,6 +2630,21 @@ async function uploadFoodImageForOwner(
     allowLocalImageFallback: context.allowLocalImageFallback,
   });
 }
+
+const startPhotoUploadTool: SpoonjoyApiOperation = {
+  ...declaredOperation("start_photo_upload"),
+  requiredScopes: ["kitchen:write"],
+  async handle(args, context) {
+    const email = requireOwnerEmail(args, context);
+    const owner = await getOrCreateOwner(context, email);
+    return json(await startPhotoUpload(context.db, {
+      ownerId: owner.id,
+      baseUrl: context.env?.SPOONJOY_BASE_URL ?? "https://spoonjoy.app",
+      secret: photoUploadSigningSecret(context.env),
+      bucket: context.bucket,
+    }));
+  },
+};
 
 const uploadRecipeImageTool: SpoonjoyApiOperation = {
   ...declaredOperation("upload_recipe_image"),
@@ -3630,6 +3688,7 @@ const tools: SpoonjoyApiOperation[] = [
   updateRecipeTool,
   deleteRecipeTool,
   uploadRecipeImageTool,
+  startPhotoUploadTool,
   uploadSpoonPhotoTool,
   importRecipeFromUrlTool,
   forkRecipeTool,
@@ -3682,6 +3741,7 @@ const TOOL_ANNOTATIONS = {
   update_recipe: declaredAnnotations("update_recipe"),
   delete_recipe: declaredAnnotations("delete_recipe"),
   upload_recipe_image: declaredAnnotations("upload_recipe_image"),
+  start_photo_upload: declaredAnnotations("start_photo_upload"),
   upload_spoon_photo: declaredAnnotations("upload_spoon_photo"),
   import_recipe_from_url: { title: "Import recipe from URL", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   fork_recipe: declaredAnnotations("fork_recipe"),

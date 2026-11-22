@@ -25,12 +25,18 @@ const LARGEST_VARIANT_WIDTH = PHOTO_VARIANT_WIDTHS[PHOTO_VARIANT_WIDTHS.length -
  */
 export const PHOTO_QUARANTINE_PREFIX = "quarantine/";
 
+/**
+ * Prefix of photos sent to a photo upload link (photo-upload-link.server.ts) and not yet used. They
+ * belong to no row until an action stores them as a recipe or spoon photo, so they are never served.
+ */
+export const PHOTO_PENDING_UPLOAD_PREFIX = "pending-uploads/";
+
 const VARIANT_KEY = /^variants\/w[0-9]+\/(.+)\.webp$/;
 
-/** False for keys `/photos/` must never serve: quarantined photos and variants of them. */
+/** False for keys `/photos/` must never serve: quarantined photos, pending uploads and variants of them. */
 export function isServablePhotoKey(key: string): boolean {
   const original = VARIANT_KEY.exec(key)?.[1] ?? key;
-  return !key.startsWith(PHOTO_QUARANTINE_PREFIX) && !original.startsWith(PHOTO_QUARANTINE_PREFIX);
+  return [key, original].every((candidate) => !candidate.startsWith(PHOTO_QUARANTINE_PREFIX) && !candidate.startsWith(PHOTO_PENDING_UPLOAD_PREFIX));
 }
 
 /** True for keys that are themselves variants, which have no variants of their own. */

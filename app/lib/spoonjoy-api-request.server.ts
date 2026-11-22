@@ -65,6 +65,8 @@ interface CloudflareEnvLike extends ImageGenEnv {
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
   PHOTOS?: R2Bucket;
+  SESSION_SECRET?: string;
+  NODE_ENV?: string;
   POSTHOG_KEY?: string;
   POSTHOG_HOST?: string;
   POSTHOG_DISABLED?: string;
@@ -99,6 +101,9 @@ export function buildSpoonjoyApiContext(params: {
           IMAGE_PROVIDER_PRIMARY: cloudflareEnv.IMAGE_PROVIDER_PRIMARY,
           IMAGE_PROVIDER_FALLBACKS: cloudflareEnv.IMAGE_PROVIDER_FALLBACKS,
           SPOONJOY_BASE_URL: cloudflareEnv.SPOONJOY_BASE_URL,
+          // Signs photo upload links (start_photo_upload).
+          SESSION_SECRET: cloudflareEnv.SESSION_SECRET,
+          NODE_ENV: cloudflareEnv.NODE_ENV,
           VAPID_PUBLIC_KEY: cloudflareEnv.VAPID_PUBLIC_KEY,
           VAPID_PRIVATE_KEY: cloudflareEnv.VAPID_PRIVATE_KEY,
           VAPID_SUBJECT: cloudflareEnv.VAPID_SUBJECT,

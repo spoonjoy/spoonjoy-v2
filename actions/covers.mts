@@ -1,7 +1,7 @@
 // Recipe Photo Studio's actions (a recipe's cover candidates), each declared once with Ouro UI's action model. The MCP
 // tools keep the names and inputs agents already call.
 import { defineAction, field } from "../tools/ouro-actions/ouro-actions.mts";
-import { idempotencyKey } from "./fields.mts";
+import { idempotencyKey, PHOTO_UPLOAD_STEPS, photoUploadId } from "./fields.mts";
 
 const recipeId = (description: string) => field.string({ label: "Recipe", description });
 const coverId = (description: string) => field.string({ label: "Cover", description });
@@ -48,10 +48,11 @@ export const createRecipeCoverFromUpload = defineAction({
   consent: "write",
   label: "Create recipe cover from upload",
   description: "Make a cover for a recipe from a photo you uploaded.",
-  agent: "Create a Recipe Photo Studio cover candidate from an uploaded recipe or spoon photo URL.",
+  agent: `Create a Recipe Photo Studio cover candidate from a photo: a Spoonjoy uploaded recipe or spoon photo URL (imageUrl), or a start_photo_upload upload (uploadId). Pass exactly one of the two. ${PHOTO_UPLOAD_STEPS}`,
   input: {
     recipeId: recipeId("Recipe that will receive the cover candidate."),
-    imageUrl: field.string({ label: "Photo", description: "Spoonjoy uploaded recipe or spoon photo URL to use as the original cover source." }),
+    imageUrl: field.string({ label: "Photo", description: "Spoonjoy uploaded recipe or spoon photo URL to use as the original cover source. Use this or uploadId, not both.", optional: true }),
+    uploadId: photoUploadId,
     activateWhenReady: activateWhenReady("Make the cover active when the editorial image is ready."),
     generateEditorial: field.boolean({ label: "Editorial", description: "Generate an editorialized cover from the uploaded original photo.", optional: true }),
     promptAddition: promptAddition("Optional bounded instruction to guide editorial cover generation."),

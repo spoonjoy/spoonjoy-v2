@@ -25,8 +25,9 @@ When registered under the server name `spoonjoy`, the harness exposes these firs
 | `create_recipe` | Create a recipe for the configured owner, including steps and ingredients. |
 | `update_recipe` | Update an owner-scoped recipe's title, optional metadata, and optionally replace its steps and ingredients. |
 | `delete_recipe` | Soft-delete an owner-scoped recipe so agent-created drafts and test recipes can be cleaned up. |
-| `upload_recipe_image` | Upload JPG/PNG/WebP base64 bytes and receive a Spoonjoy image URL for recipe cover assignment. |
-| `upload_spoon_photo` | Upload JPG/PNG/WebP base64 bytes and receive a Spoonjoy image URL for spoon photo assignment. |
+| `start_photo_upload` | Get a signed, single-use upload link (`putUrl`) for one JPG/PNG/WebP photo, so a photo file can be sent with `curl -T` instead of as base64. |
+| `upload_recipe_image` | Store a JPG/PNG/WebP photo, from an `uploadId` or base64 bytes, and receive a Spoonjoy image URL for recipe cover assignment. |
+| `upload_spoon_photo` | Store a JPG/PNG/WebP photo, from an `uploadId` or base64 bytes, and receive a Spoonjoy image URL for spoon photo assignment. |
 | `add_recipe_to_shopping_list` | Add all recipe ingredients to the owner shopping list. Each one adds to the quantity of a matching item still on the list (same ingredient and unit); a removed or cleared matching item comes back at the added quantity, not on top of its old one. |
 | `list_cookbooks` | List cookbooks owned by the configured owner, with active recipe counts and cover recipes. |
 | `get_cookbook` | Fetch one owner-scoped cookbook by `cookbookId`, `title`, or `cookbookTitle`. |
@@ -50,8 +51,20 @@ Logging a cook is replay-safe with an `idempotencyKey`. Pass a key of 8 to 100 l
 
 Agents should upload image bytes first, then assign the returned URL:
 
-1. Call `upload_recipe_image` or `upload_spoon_photo` with `{ imageBase64, mimeType, filename }`.
+1. Call `upload_recipe_image` or `upload_spoon_photo` with `{ uploadId }` from an upload link (below), or with `{ imageBase64, mimeType, filename }`. Pass exactly one of `uploadId` and `imageBase64`.
 2. Use the returned `imageUrl` as `create_recipe.imageUrl`, `update_recipe.imageUrl`, `create_spoon.photoUrl`, or `update_spoon.photoUrl`.
+
+`create_recipe_cover_from_upload` also takes `uploadId` in place of `imageUrl`, and stores the photo itself.
+
+### Upload links
+
+An agent that holds a photo as a file, such as a claude.ai chat whose attachment is on its code sandbox at `/mnt/user-data/uploads/<name>`, should never read the photo into its conversation or write it out as base64. Instead:
+
+1. Call `start_photo_upload`. It returns `{ uploadId, putUrl, expiresAt, maxBytes, mimeTypes }`.
+2. Send the file's raw bytes to `putUrl` with no `Authorization` header, for example `curl -fsS -T /mnt/user-data/uploads/<name> "$putUrl"`. The link is signed (HMAC-SHA256 over the upload id and expiry), lasts 15 minutes and takes one photo of at most `maxBytes` (5 MB), whose bytes must be a JPEG, PNG or WebP whatever its `Content-Type` says. A rejected photo leaves the link usable for the right file.
+3. Pass `uploadId` to `upload_spoon_photo`, `upload_recipe_image` or `create_recipe_cover_from_upload`, once, before `expiresAt`.
+
+An upload belongs to the account that started it. Another account's upload, an expired or used one, one not sent yet and one that never existed all get the same `404` answer. The sandbox must be allowed to reach `spoonjoy.app`; in claude.ai that is Settings → Capabilities → Code execution and file creation → Additional allowed domains.
 
 Accepted image MIME types are exactly `image/jpeg`, `image/png`, and `image/webp`; GIF bytes are rejected even if mislabeled. Upload tools store production images under owner-scoped `/photos/recipes/<ownerId>/uploads/...` or `/photos/spoons/<ownerId>/uploads/...` keys. Local/test data URL fallbacks are available only when the server is explicitly configured for local image fallback; production-like missing R2 buckets reject image uploads.
 

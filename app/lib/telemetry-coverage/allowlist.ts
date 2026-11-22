@@ -65,6 +65,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Linking a pending Apple ID runs after a sign-in that already succeeded, so a database failure there is logged as a structured apple.pending_link warning and returns outcome \"error\" instead of failing the sign-in; the row is put back best-effort so a retry can still link.",
   },
   {
+    file: "app/lib/photo-upload-link.server.ts",
+    category: "swallow",
+    reason:
+      "Clearing expired photo uploads is housekeeping beside start_photo_upload, so its failure is a structured photo_upload.prune_failed warning and the next start or the photo sweep clears them; the other catches put an upload back and rethrow, and the PUT route and the API door capture what they rethrow.",
+  },
+  {
     file: "app/lib/db.server.ts",
     category: "swallow",
     reason:

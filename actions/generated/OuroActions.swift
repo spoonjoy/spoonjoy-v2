@@ -62,6 +62,7 @@ public enum OuroActions {
         "delete_spoon": .consequential,
         "list_spoons_for_recipe": .read,
         "list_spoons_by_chef": .read,
+        "start_photo_upload": .write,
         "upload_spoon_photo": .write,
         "list_recipe_covers": .read,
         "list_recipe_spoon_images": .read,
@@ -1288,11 +1289,13 @@ public enum UploadRecipeImageMimeTypeValue: String, Codable, Sendable, Hashable,
 
 public struct UploadRecipeImageInput: Codable, Sendable, Hashable {
     public var ownerEmail: String?
-    public var imageBase64: String
-    public var mimeType: UploadRecipeImageMimeTypeValue
-    public var filename: String
-    public init(ownerEmail: String? = nil, imageBase64: String, mimeType: UploadRecipeImageMimeTypeValue, filename: String) {
+    public var uploadId: String?
+    public var imageBase64: String?
+    public var mimeType: UploadRecipeImageMimeTypeValue?
+    public var filename: String?
+    public init(ownerEmail: String? = nil, uploadId: String? = nil, imageBase64: String? = nil, mimeType: UploadRecipeImageMimeTypeValue? = nil, filename: String? = nil) {
         self.ownerEmail = ownerEmail
+        self.uploadId = uploadId
         self.imageBase64 = imageBase64
         self.mimeType = mimeType
         self.filename = filename
@@ -1322,14 +1325,14 @@ public enum UploadRecipeImageAction {
 
 public struct UploadRecipeImageIntent: AppIntent {
     public static let title: LocalizedStringResource = "Upload recipe image"
-    public static let description = IntentDescription("Upload a recipe photo from base64 bytes and return a Spoonjoy image URL for recipe cover assignment.")
+    public static let description = IntentDescription("Store a recipe photo and return a Spoonjoy image URL for recipe cover assignment. Pass exactly one of uploadId (from start_photo_upload) or imageBase64. To send a photo that is a file (in a chat, an attachment is at /mnt/user-data/uploads/<name>): call start_photo_upload, run `curl -fsS -T /mnt/user-data/uploads/<name> \"<putUrl>\"` in your code sandbox, then pass the returned uploadId here. Never read the photo into the conversation or write it out as base64.")
 
-    @Parameter(title: "Image", description: "The photo's bytes, base64-encoded.")
-    public var imageBase64: String
-    @Parameter(title: "Type", description: "The photo's type.")
-    public var mimeType: UploadRecipeImageMimeTypeValue
-    @Parameter(title: "File name", description: "The photo's file name, such as lasagna.jpg.")
-    public var filename: String
+    @Parameter(title: "Image", description: "The photo's bytes, base64-encoded. Use this or uploadId, not both; prefer uploadId, which keeps the bytes out of the conversation.")
+    public var imageBase64: String?
+    @Parameter(title: "Type", description: "The photo's type. Required with imageBase64; with uploadId, Spoonjoy reads it from the bytes.")
+    public var mimeType: UploadRecipeImageMimeTypeValue?
+    @Parameter(title: "File name", description: "The photo's file name, such as lasagna.jpg. Required with imageBase64; optional with uploadId.")
+    public var filename: String?
 
     public init() {}
 
@@ -2946,6 +2949,85 @@ extension ListSpoonsByChefButton where Label == Text {
     }
 }
 
+// MARK: start_photo_upload (write)
+
+public struct StartPhotoUploadInput: Codable, Sendable, Hashable {
+    public var ownerEmail: String?
+    public init(ownerEmail: String? = nil) {
+        self.ownerEmail = ownerEmail
+    }
+}
+
+public struct StartPhotoUploadOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Start photo upload: Get a link to upload a photo to.
+@MainActor
+public enum StartPhotoUploadAction {
+    public static let id = "start_photo_upload"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (StartPhotoUploadInput) async throws -> StartPhotoUploadOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (StartPhotoUploadInput, Result<StartPhotoUploadOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: StartPhotoUploadInput) async throws -> StartPhotoUploadOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct StartPhotoUploadIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Start photo upload"
+    public static let description = IntentDescription("Start a photo upload and get a single-use upload link for one JPEG, PNG or WebP photo. Returns uploadId, putUrl, expiresAt, maxBytes and mimeTypes. PUT the photo's raw bytes to putUrl with no Authorization header (the link is signed), for example `curl -fsS -T /mnt/user-data/uploads/<name> \"<putUrl>\"` from a code sandbox, before expiresAt (about 15 minutes). Then pass uploadId to upload_spoon_photo, upload_recipe_image or create_recipe_cover_from_upload, once. Use this instead of imageBase64 whenever the photo is a file you can reach from a shell, such as a chat attachment: never read the photo into the conversation or write it out as base64.")
+
+    public init() {}
+
+    public init(_ input: StartPhotoUploadInput) {
+        self.init()
+    }
+
+    public var input: StartPhotoUploadInput {
+        StartPhotoUploadInput()
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<StartPhotoUploadOutput, any Error>
+        do { result = .success(try await StartPhotoUploadAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = StartPhotoUploadAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for start_photo_upload: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct StartPhotoUploadButton<Label: View>: View {
+    public let input: StartPhotoUploadInput
+    let label: Label
+
+    public init(_ input: StartPhotoUploadInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: StartPhotoUploadIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Get a link to upload a photo to."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension StartPhotoUploadButton where Label == Text {
+    public init(_ input: StartPhotoUploadInput) {
+        self.init(input) { Text(verbatim: "Start photo upload") }
+    }
+}
+
 // MARK: upload_spoon_photo (write)
 
 public enum UploadSpoonPhotoMimeTypeValue: String, Codable, Sendable, Hashable, CaseIterable, AppEnum {
@@ -2962,11 +3044,13 @@ public enum UploadSpoonPhotoMimeTypeValue: String, Codable, Sendable, Hashable, 
 
 public struct UploadSpoonPhotoInput: Codable, Sendable, Hashable {
     public var ownerEmail: String?
-    public var imageBase64: String
-    public var mimeType: UploadSpoonPhotoMimeTypeValue
-    public var filename: String
-    public init(ownerEmail: String? = nil, imageBase64: String, mimeType: UploadSpoonPhotoMimeTypeValue, filename: String) {
+    public var uploadId: String?
+    public var imageBase64: String?
+    public var mimeType: UploadSpoonPhotoMimeTypeValue?
+    public var filename: String?
+    public init(ownerEmail: String? = nil, uploadId: String? = nil, imageBase64: String? = nil, mimeType: UploadSpoonPhotoMimeTypeValue? = nil, filename: String? = nil) {
         self.ownerEmail = ownerEmail
+        self.uploadId = uploadId
         self.imageBase64 = imageBase64
         self.mimeType = mimeType
         self.filename = filename
@@ -2996,14 +3080,14 @@ public enum UploadSpoonPhotoAction {
 
 public struct UploadSpoonPhotoIntent: AppIntent {
     public static let title: LocalizedStringResource = "Upload spoon photo"
-    public static let description = IntentDescription("Upload a spoon/cook photo from base64 bytes and return a Spoonjoy image URL for spoon assignment.")
+    public static let description = IntentDescription("Store a spoon/cook photo and return a Spoonjoy image URL for create_spoon or update_spoon's photoUrl. Pass exactly one of uploadId (from start_photo_upload) or imageBase64. To send a photo that is a file (in a chat, an attachment is at /mnt/user-data/uploads/<name>): call start_photo_upload, run `curl -fsS -T /mnt/user-data/uploads/<name> \"<putUrl>\"` in your code sandbox, then pass the returned uploadId here. Never read the photo into the conversation or write it out as base64.")
 
-    @Parameter(title: "Image", description: "The photo's bytes, base64-encoded.")
-    public var imageBase64: String
-    @Parameter(title: "Type", description: "The photo's type.")
-    public var mimeType: UploadSpoonPhotoMimeTypeValue
-    @Parameter(title: "File name", description: "The photo's file name, such as dinner.jpg.")
-    public var filename: String
+    @Parameter(title: "Image", description: "The photo's bytes, base64-encoded. Use this or uploadId, not both; prefer uploadId, which keeps the bytes out of the conversation.")
+    public var imageBase64: String?
+    @Parameter(title: "Type", description: "The photo's type. Required with imageBase64; with uploadId, Spoonjoy reads it from the bytes.")
+    public var mimeType: UploadSpoonPhotoMimeTypeValue?
+    @Parameter(title: "File name", description: "The photo's file name, such as dinner.jpg. Required with imageBase64; optional with uploadId.")
+    public var filename: String?
 
     public init() {}
 
@@ -3248,7 +3332,8 @@ extension ListRecipeSpoonImagesButton where Label == Text {
 
 public struct CreateRecipeCoverFromUploadInput: Codable, Sendable, Hashable {
     public var recipeId: String
-    public var imageUrl: String
+    public var imageUrl: String?
+    public var uploadId: String?
     public var activateWhenReady: Bool?
     public var generateEditorial: Bool?
     public var promptAddition: String?
@@ -3258,9 +3343,10 @@ public struct CreateRecipeCoverFromUploadInput: Codable, Sendable, Hashable {
     public var cookedAt: String?
     public var idempotencyKey: String?
     public var dryRun: Bool?
-    public init(recipeId: String, imageUrl: String, activateWhenReady: Bool? = nil, generateEditorial: Bool? = nil, promptAddition: String? = nil, postAsSpoon: Bool? = nil, note: String? = nil, nextTime: String? = nil, cookedAt: String? = nil, idempotencyKey: String? = nil, dryRun: Bool? = nil) {
+    public init(recipeId: String, imageUrl: String? = nil, uploadId: String? = nil, activateWhenReady: Bool? = nil, generateEditorial: Bool? = nil, promptAddition: String? = nil, postAsSpoon: Bool? = nil, note: String? = nil, nextTime: String? = nil, cookedAt: String? = nil, idempotencyKey: String? = nil, dryRun: Bool? = nil) {
         self.recipeId = recipeId
         self.imageUrl = imageUrl
+        self.uploadId = uploadId
         self.activateWhenReady = activateWhenReady
         self.generateEditorial = generateEditorial
         self.promptAddition = promptAddition
@@ -3296,12 +3382,12 @@ public enum CreateRecipeCoverFromUploadAction {
 
 public struct CreateRecipeCoverFromUploadIntent: AppIntent {
     public static let title: LocalizedStringResource = "Create recipe cover from upload"
-    public static let description = IntentDescription("Create a Recipe Photo Studio cover candidate from an uploaded recipe or spoon photo URL.")
+    public static let description = IntentDescription("Create a Recipe Photo Studio cover candidate from a photo: a Spoonjoy uploaded recipe or spoon photo URL (imageUrl), or a start_photo_upload upload (uploadId). Pass exactly one of the two. To send a photo that is a file (in a chat, an attachment is at /mnt/user-data/uploads/<name>): call start_photo_upload, run `curl -fsS -T /mnt/user-data/uploads/<name> \"<putUrl>\"` in your code sandbox, then pass the returned uploadId here. Never read the photo into the conversation or write it out as base64.")
 
     @Parameter(title: "Recipe", description: "Recipe that will receive the cover candidate.")
     public var recipeId: String
-    @Parameter(title: "Photo", description: "Spoonjoy uploaded recipe or spoon photo URL to use as the original cover source.")
-    public var imageUrl: String
+    @Parameter(title: "Photo", description: "Spoonjoy uploaded recipe or spoon photo URL to use as the original cover source. Use this or uploadId, not both.")
+    public var imageUrl: String?
     @Parameter(title: "Use when ready", description: "Make the cover active when the editorial image is ready.")
     public var activateWhenReady: Bool?
     @Parameter(title: "Editorial", description: "Generate an editorialized cover from the uploaded original photo.")

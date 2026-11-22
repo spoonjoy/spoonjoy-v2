@@ -86,8 +86,32 @@ export async function uploadFoodImage({
   bucket,
   allowLocalImageFallback,
 }: FoodImageUploadInput): Promise<FoodImageUploadResult> {
+  foodImageMimeType(mimeType);
+  return storeFoodImageBytes({
+    bytes: decodeBase64Bytes(imageBase64),
+    mimeType,
+    filename,
+    ownerId,
+    namespace,
+    bucket,
+    allowLocalImageFallback,
+  });
+}
+
+/**
+ * Check and store a food photo's bytes, however they arrived (base64 in a call, or a photo upload
+ * link), so every agent upload is held to the same rules and lands at the same kind of URL.
+ */
+export async function storeFoodImageBytes({
+  bytes,
+  mimeType,
+  filename,
+  ownerId,
+  namespace,
+  bucket,
+  allowLocalImageFallback,
+}: Omit<FoodImageUploadInput, "imageBase64"> & { bytes: Uint8Array }): Promise<FoodImageUploadResult> {
   const type = foodImageMimeType(mimeType);
-  const bytes = decodeBase64Bytes(imageBase64);
   const file = fileFromBytes(bytes, filename, type);
   const validationError = await validateImageFileForStorage(file, {
     allowedTypes: FOOD_IMAGE_TYPES,

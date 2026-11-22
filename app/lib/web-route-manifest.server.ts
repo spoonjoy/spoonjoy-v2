@@ -119,6 +119,7 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/api.push.public-key.ts", "/api/push/public-key", "api-or-oauth"),
   route("routes/api.push.subscriptions.ts", "/api/push/subscriptions", "api-or-oauth"),
   route("routes/api.push.preferences.ts", "/api/push/preferences", "api-or-oauth"),
+  route("routes/api.photo-uploads.$uploadId.ts", "/api/photo-uploads/:uploadId", "api-or-oauth"),
   route("routes/api.v1.$.ts", "/api/v1/*", "api-or-oauth"),
   route("routes/api.$.ts", "/api/*", "api-or-oauth"),
   route("routes/mcp.tsx", "/mcp", "api-or-oauth"),

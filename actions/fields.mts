@@ -26,3 +26,22 @@ export const searchLimit = field.number({ label: "Limit", description: "The most
 /** A page of a list: how many, and from where. */
 export const pageLimit = (description: string) => field.number({ label: "Limit", description, optional: true });
 export const pageOffset = field.number({ label: "Offset", description: "Zero-based pagination offset.", optional: true });
+
+/** The bytes a photo upload takes: a start_photo_upload link's uploadId, or the bytes themselves base64-encoded. */
+export const photoUploadId = field.string({
+  label: "Upload",
+  description: "The uploadId from start_photo_upload, after the photo was PUT to its putUrl. Use this or imageBase64, not both.",
+  optional: true,
+  protocolOnly: true,
+});
+export const photoImageBase64 = field.string({
+  label: "Image",
+  description: "The photo's bytes, base64-encoded. Use this or uploadId, not both; prefer uploadId, which keeps the bytes out of the conversation.",
+  optional: true,
+});
+export const photoMimeType = field.enum({ label: "Type", description: "The photo's type. Required with imageBase64; with uploadId, Spoonjoy reads it from the bytes.", values: ["image/jpeg", "image/png", "image/webp"], optional: true });
+export const photoFilename = (example: string) => field.string({ label: "File name", description: `The photo's file name, such as ${example}. Required with imageBase64; optional with uploadId.`, optional: true });
+
+/** The steps a sandboxed chat follows to send a photo it holds as a file, so its bytes never pass through the conversation. */
+export const PHOTO_UPLOAD_STEPS =
+  "To send a photo that is a file (in a chat, an attachment is at /mnt/user-data/uploads/<name>): call start_photo_upload, run `curl -fsS -T /mnt/user-data/uploads/<name> \"<putUrl>\"` in your code sandbox, then pass the returned uploadId here. Never read the photo into the conversation or write it out as base64.";
