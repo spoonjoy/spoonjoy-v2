@@ -44,6 +44,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       method: "PUT",
     }).catch(() => undefined);
     if (waitUntil) waitUntil(capture);
-    return answer(500, { error: { code: "upload_failed", message: "The photo couldn't be stored. Try the same link again." } });
+    return answer(500, { error: { code: "upload_failed", message: "Spoonjoy's photo storage refused the photo with an error, so nothing was kept. Send the same PUT to this link again." } });
   }
 }

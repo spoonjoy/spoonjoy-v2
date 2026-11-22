@@ -11,6 +11,7 @@ const SERVER_ONLY_ROUTE_CHUNKS = new Set([
   "api.openapi-json",
   "api.openapi-spec",
   "api.playground",
+  "api.photo-uploads._uploadId",
   "api.push.preferences",
   "api.push.public-key",
   "api.push.subscriptions",

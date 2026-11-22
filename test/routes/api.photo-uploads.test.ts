@@ -193,7 +193,7 @@ describe("photo upload links over HTTP", () => {
     bucket.put.mockRejectedValueOnce(new Error("R2 down"));
     await expect(putPhoto(link.putUrl, JPEG)).resolves.toEqual({
       status: 500,
-      body: { error: { code: "upload_failed", message: "The photo couldn't be stored. Try the same link again." } },
+      body: { error: { code: "upload_failed", message: "Spoonjoy's photo storage refused the photo with an error, so nothing was kept. Send the same PUT to this link again." } },
     });
     expect(captureException).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ route: "/api/photo-uploads/{uploadId}", method: "PUT" }));
     await expect(putPhoto(link.putUrl, JPEG)).resolves.toMatchObject({ status: 200 });
