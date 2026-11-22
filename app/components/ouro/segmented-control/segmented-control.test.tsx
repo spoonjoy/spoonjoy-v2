@@ -555,6 +555,28 @@ describe("SegmentedControl", () => {
     }
   });
 
+  it("keeps the thumb Highlight and the pressed label readable under forced colours in the dark theme", async () => {
+    document.documentElement.classList.add("dark");
+    try {
+      const r = await render(<SegmentedControl label="View" items={items} defaultValue="grid" />);
+      await commands.emulateMedia({ forcedColors: "active" });
+      expect(matchMedia("(forced-colors: active)").matches).toBe(true);
+      const probe = document.body.appendChild(document.createElement("span"));
+      probe.style.cssText = "background-color: Highlight; color: HighlightText";
+      const { backgroundColor: highlight } = getComputedStyle(probe);
+      probe.remove();
+      await settled(r.root);
+      const pressed = r.segments[1]!;
+      const thumbStyle = getComputedStyle(r.thumb);
+      expect(thumbStyle.backgroundColor).toBe(highlight);
+      // The label's colour must differ from the thumb behind it, or it is unreadable.
+      expect(getComputedStyle(pressed).color).not.toBe(thumbStyle.backgroundColor);
+    } finally {
+      document.documentElement.classList.remove("dark");
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
   it("slides the thumb on the ease-in-out token, and moves it at once on an arrow key", async () => {
     const r = await render(<SegmentedControl label="View" items={items} />);
     const style = () => getComputedStyle(r.thumb);
