@@ -1,7 +1,7 @@
 {
-  "tag": "v1.8.0",
-  "release": "https://github.com/ourostack/ouro-ui-core/releases/tag/v1.8.0",
-  "asset": "ouro-ui-core-v1.8.0-dist.zip",
+  "tag": "v1.9.0",
+  "release": "https://github.com/ourostack/ouro-ui-core/releases/tag/v1.9.0",
+  "asset": "ouro-ui-core-v1.9.0-dist.zip",
   "path": "web/themes/cookbook.css",
-  "sha256": "2d7717e8def30f2be4ffdbd1e6ff937eeb66f9ea81b1eb6509f8d71d3f5c9bd3"
+  "sha256": "f1f6a04c6d1466255c31ebac05cae608c2c0b4f2597065b651088a8afc3463dd"
 }

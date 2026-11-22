@@ -255,8 +255,7 @@
   --shadow-xl: var(--sj-shadow);
   --ouro-action: var(--sj-action);
   --ouro-control-radius: 9999px;
-  --ouro-control-corner-shape: round;
-  --ouro-check-radius: 9999px;
-  --ouro-check-corner-shape: round;
+  --ouro-cover-from: var(--sj-vellum);
+  --ouro-cover-to: color-mix(in srgb, var(--sj-brass) 32%, transparent);
   --ouro-action-foreground: var(--sj-on-action);
 }
