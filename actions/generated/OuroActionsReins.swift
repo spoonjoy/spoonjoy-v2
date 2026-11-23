@@ -172,6 +172,10 @@ extension ArchiveRecipeCoverInput: ReinsInput {
     public static var reinsSchema: ReinsSchema { .object(properties: ["recipeId": .string, "coverId": .string, "replacementCoverId": .string, "replacementVariant": .oneOf(["image", "stylized"]), "confirmNoCover": .boolean, "deleteSafeObjects": .boolean], required: ["recipeId", "coverId"]) }
 }
 
+extension GetMealPlanInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["week": .string], required: []) }
+}
+
 extension ApproveAgentConnectionInput: ReinsInput {
     public static var reinsSchema: ReinsSchema { .object(properties: ["requestId": .string], required: ["requestId"]) }
 }
@@ -385,6 +389,11 @@ extension ReinsAction {
     /// Archive recipe cover: Put away one of a recipe's covers.
     public static func archiveRecipeCover() -> ReinsAction {
         ReinsAction("archiveRecipeCover", "Archive recipe cover", input: ArchiveRecipeCoverInput.self) { input in _ = try await ArchiveRecipeCoverAction.run(input) }
+    }
+
+    /// Get meal plan: See a week of your meal plan.
+    public static func getMealPlan() -> ReinsAction {
+        ReinsAction("getMealPlan", "Get meal plan", input: GetMealPlanInput.self) { input in _ = try await GetMealPlanAction.run(input) }
     }
 
     /// Approve access: Let this agent, app or device use your Spoonjoy account.

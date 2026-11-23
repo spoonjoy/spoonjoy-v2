@@ -70,6 +70,8 @@ interface CloudflareEnvLike extends ImageGenEnv {
   POSTHOG_KEY?: string;
   POSTHOG_HOST?: string;
   POSTHOG_DISABLED?: string;
+  SPOONJOY_FLAGS?: string;
+  SPOONJOY_FLAG_USERS?: string;
 }
 
 /**
@@ -110,6 +112,9 @@ export function buildSpoonjoyApiContext(params: {
           POSTHOG_KEY: cloudflareEnv.POSTHOG_KEY,
           POSTHOG_HOST: cloudflareEnv.POSTHOG_HOST,
           POSTHOG_DISABLED: cloudflareEnv.POSTHOG_DISABLED,
+          // Feature flags, which gate tools such as the meal planner's.
+          SPOONJOY_FLAGS: cloudflareEnv.SPOONJOY_FLAGS,
+          SPOONJOY_FLAG_USERS: cloudflareEnv.SPOONJOY_FLAG_USERS,
         }
       : null,
     bucket: cloudflareEnv?.PHOTOS ?? undefined,

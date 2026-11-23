@@ -73,6 +73,7 @@ public enum OuroActions {
         "set_active_recipe_cover": .write,
         "set_recipe_no_cover": .write,
         "archive_recipe_cover": .write,
+        "get_meal_plan": .read,
         "approve_agent_connection": .personOnly,
     ]
 
@@ -4053,6 +4054,91 @@ public struct ArchiveRecipeCoverButton<Label: View>: View {
 extension ArchiveRecipeCoverButton where Label == Text {
     public init(_ input: ArchiveRecipeCoverInput) {
         self.init(input) { Text(verbatim: "Archive recipe cover") }
+    }
+}
+
+// MARK: get_meal_plan (read)
+
+public struct GetMealPlanInput: Codable, Sendable, Hashable {
+    public var ownerEmail: String?
+    public var week: String?
+    public init(ownerEmail: String? = nil, week: String? = nil) {
+        self.ownerEmail = ownerEmail
+        self.week = week
+    }
+}
+
+public struct GetMealPlanOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Get meal plan: See a week of your meal plan.
+@MainActor
+public enum GetMealPlanAction {
+    public static let id = "get_meal_plan"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (GetMealPlanInput) async throws -> GetMealPlanOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (GetMealPlanInput, Result<GetMealPlanOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: GetMealPlanInput) async throws -> GetMealPlanOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct GetMealPlanIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Get meal plan"
+    public static let description = IntentDescription("Fetch one week of the person's meal plan: seven days from the plan's first day of the week, each with its planned meals in meal order. A meal is a recipe at a servings scale (scaleFactor multiplies the recipe's servings) or a note. Leave week out for this week in the plan's own time zone.")
+
+    @Parameter(title: "Week", description: "Optional. Any day of the week to fetch, as YYYY-MM-DD.")
+    public var week: String?
+
+    public init() {}
+
+    public init(_ input: GetMealPlanInput) {
+        self.init()
+        self.week = input.week
+    }
+
+    public var input: GetMealPlanInput {
+        GetMealPlanInput(week: week)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<GetMealPlanOutput, any Error>
+        do { result = .success(try await GetMealPlanAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = GetMealPlanAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for get_meal_plan: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct GetMealPlanButton<Label: View>: View {
+    public let input: GetMealPlanInput
+    let label: Label
+
+    public init(_ input: GetMealPlanInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: GetMealPlanIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "See a week of your meal plan."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension GetMealPlanButton where Label == Text {
+    public init(_ input: GetMealPlanInput) {
+        self.init(input) { Text(verbatim: "Get meal plan") }
     }
 }
 

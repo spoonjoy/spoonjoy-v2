@@ -1659,6 +1659,30 @@
       "idempotent": true
     },
     {
+      "id": "get_meal_plan",
+      "consent": "read",
+      "label": "Get meal plan",
+      "description": "See a week of your meal plan.",
+      "agent": "Fetch one week of the person's meal plan: seven days from the plan's first day of the week, each with its planned meals in meal order. A meal is a recipe at a servings scale (scaleFactor multiplies the recipe's servings) or a note. Leave week out for this week in the plan's own time zone.",
+      "input": {
+        "ownerEmail": {
+          "label": "Owner",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "week": {
+          "label": "Week",
+          "description": "Optional. Any day of the week to fetch, as YYYY-MM-DD.",
+          "optional": true,
+          "format": "date",
+          "kind": "string"
+        }
+      },
+      "output": {}
+    },
+    {
       "id": "approve_agent_connection",
       "consent": "person-only",
       "label": "Approve access",
