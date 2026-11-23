@@ -7,6 +7,10 @@
  * 400, 500, 600 and 700; Source Serif 4 opsz,wght 8..60, 400..800; display=swap), downloaded
  * unchanged into app/fonts/. Vite fingerprints each file into /assets/. Every font is under the SIL
  * Open Font License 1.1; its licence is beside the files (app/fonts/OFL-*.txt).
+ *
+ * They are the hinted build Google serves to Windows and Linux browsers. Its glyphs and versions are
+ * the same as the unhinted build Google serves to macOS, but Windows and Linux lay text out with the
+ * hinting, so only the hinted build renders there as Google's did. macOS and iOS ignore hinting.
  */
 
 /* Fraunces, vietnamese */
