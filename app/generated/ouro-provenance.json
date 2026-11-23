@@ -3615,6 +3615,121 @@
       }
     },
     {
+      "path": "/move-in",
+      "file": "app/routes/move-in.tsx",
+      "sources": [
+        "app/routes/move-in.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/domains/kitchen/adapters/readable-recipes.ts",
+        "app/domains/kitchen/index.ts",
+        "app/domains/kitchen/model/recipe-visibility.ts",
+        "app/domains/move-in/adapters/archive/zip.ts",
+        "app/domains/move-in/adapters/sources/mealie-backup/backup.ts",
+        "app/domains/move-in/adapters/sources/mealie-backup/database.ts",
+        "app/domains/move-in/adapters/storage/job-store.server.ts",
+        "app/domains/move-in/adapters/storage/photo-writer.server.ts",
+        "app/domains/move-in/adapters/storage/recipe-writer.server.ts",
+        "app/domains/move-in/adapters/worker/move-in-ports.server.ts",
+        "app/domains/move-in/adapters/worker/start-move-in.server.ts",
+        "app/domains/move-in/adapters/worker/sweep-move-in-archives.server.ts",
+        "app/domains/move-in/application/run-move-in.ts",
+        "app/domains/move-in/index.ts",
+        "app/domains/move-in/model/move-in-error.ts",
+        "app/domains/move-in/model/recipe-draft.ts",
+        "app/domains/move-in/model/source-key.ts",
+        "app/domains/platform/flags/flags.ts",
+        "app/domains/platform/flags/index.ts",
+        "app/domains/platform/flags/use-flag.ts",
+        "app/domains/platform/index.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/image-gen-ledger.server.ts",
+        "app/lib/image-gen-telemetry.server.ts",
+        "app/lib/image-gen.server.ts",
+        "app/lib/image-storage.server.ts",
+        "app/lib/ingredient-parse-fallback.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/ingredient-text-parser.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/objectionable-terms.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/photo-variants.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/r2-transient-retry.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/recipe-image.ts",
+        "app/lib/recipe-import-fetch.server.ts",
+        "app/lib/recipe-import-jsonld.server.ts",
+        "app/lib/recipe-import-llm.server.ts",
+        "app/lib/recipe-import-video.server.ts",
+        "app/lib/recipe-import.server.ts",
+        "app/lib/recipe-source-url.server.ts",
+        "app/lib/recipe-title-uniqueness.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/safe-image-fetch.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/slow-call.server.ts",
+        "app/lib/validation.ts"
+      ],
+      "components": [
+        "alert",
+        "button",
+        "choice-card",
+        "description-list",
+        "file-field",
+        "form",
+        "page-header",
+        "spinner",
+        "text"
+      ],
+      "renders": {
+        "alert": [
+          "app/routes/move-in.tsx"
+        ],
+        "button": [
+          "app/routes/move-in.tsx"
+        ],
+        "choice-card": [
+          "app/routes/move-in.tsx"
+        ],
+        "description-list": [
+          "app/routes/move-in.tsx"
+        ],
+        "file-field": [
+          "app/routes/move-in.tsx"
+        ],
+        "form": [
+          "app/routes/move-in.tsx"
+        ],
+        "page-header": [
+          "app/routes/move-in.tsx"
+        ],
+        "spinner": [
+          "app/routes/move-in.tsx"
+        ],
+        "text": [
+          "app/routes/move-in.tsx"
+        ]
+      }
+    },
+    {
       "path": "/account/settings",
       "file": "app/routes/account.settings.tsx",
       "sources": [
