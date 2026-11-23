@@ -24,7 +24,8 @@ describe("RecipeProvenance", () => {
       <RecipeProvenance sourceUrl="https://example.com/very/long/path/to/recipe" />,
     );
     const link = screen.getByRole("link", { name: /example\.com/i });
-    expect(link.textContent).toBe("example.com (opens in a new tab)");
+    // Ouro UI joins the last word to the new-tab hint with a word joiner (U+2060).
+    expect(link.textContent?.replace(/\u2060/g, "")).toBe("example.com (opens in a new tab)");
     expect(link).toHaveAttribute("target", "_blank");
   });
 
