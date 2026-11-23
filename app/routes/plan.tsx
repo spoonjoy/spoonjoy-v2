@@ -75,15 +75,17 @@ function fieldsOf(form: FormData): Fields {
 }
 
 /** Reports a failure the plan can't answer to PostHog, without holding up the response. */
-function reportFailure(context: Route.ActionArgs["context"], request: Request, userId: string, intent: string | undefined, error: unknown) {
+function reportFailure(context: Route.ActionArgs["context"], request: Request, userId: string, intent: string, error: unknown) {
   const cloudflare = (context as { cloudflare?: { ctx?: { waitUntil?: (promise: Promise<unknown>) => void } } }).cloudflare;
+  // The flag check already read this env, so it is there; the fallback only satisfies the type.
+  /* istanbul ignore next -- @preserve */
   const config = resolvePostHogServerConfig(getCloudflareEnv(context) ?? {});
   const capture = captureException(config, {
     error,
     distinctId: userId,
     route: new URL(request.url).pathname,
     method: request.method,
-    extras: { action: `plan_${intent ?? "unknown"}`.replace("-", "_") },
+    extras: { action: `plan_${intent.replaceAll("-", "_")}` },
   });
   if (cloudflare?.ctx?.waitUntil) cloudflare.ctx.waitUntil(capture);
   else void capture;
@@ -96,7 +98,7 @@ function refused(intent: string | undefined, general: string) {
 export async function action({ request, context }: Route.ActionArgs) {
   const userId = await plannerUser(request, context);
   const fields = fieldsOf(await request.formData());
-  const intent = fields.intent;
+  const intent = fields.intent ?? "";
   const store = prismaPlanStore(await getRequestDb(context));
   try {
     if (intent === "remove") {
