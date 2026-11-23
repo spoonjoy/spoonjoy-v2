@@ -10,7 +10,7 @@ import { test as journeyTest, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { chooseMenuItem } from "./support/menu";
-import { personaStorageStatePath, scratchStorageStatePath } from "./support/personas";
+import { personaStorageStatePath, scratchDesktopStorageStatePath, scratchStorageStatePath } from "./support/personas";
 import { requiredLabel } from "./support/forms";
 import { recordCookSyncRequests } from "./support/cook-sync-evidence";
 
@@ -378,6 +378,95 @@ test.describe("Recipe create and edit", () => {
     const deleteRecipeDialog = page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ });
     await deleteRecipeDialog.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/recipes"));
+  });
+
+  // The cook (scratch 1) makes a household and its desktop twin joins through the invite link, so the twin is the
+  // household member; the friend persona is the cook outside it. Both device projects run this at once, each with its
+  // own household and recipe, but the same two people, so the member's leaving below is tidying, not a check: they may
+  // still share the other run's household. The member and then the cook leave at the end, so the household is gone.
+  test("a recipe kept to Household reads for a household member after a reload, and is missing for another cook @mutates", async ({
+    page,
+    browser,
+    verifyAfterReload,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    const stamp = `${testInfo.project.name} ${Date.now().toString(36)}`;
+    const title = `Journey Household Stew ${stamp}`;
+    const householdName = `Journey Household ${stamp}`;
+
+    // --- The cook makes a household and an invite link, and the twin joins it.
+    await page.goto("/households");
+    await waitForHydration(page);
+    await page.getByLabel("Household name").fill(householdName);
+    await page.getByRole("button", { name: "Create household", exact: true }).click();
+    await expect(page).toHaveURL(/\/households\/[0-9a-f-]{36}$/);
+    const householdPath = new URL(page.url()).pathname;
+    await page.getByRole("button", { name: "Make invite link", exact: true }).click();
+    const linkField = page.getByLabel("Invite link");
+    await expect(linkField).toHaveValue(/\/join\/[A-Za-z0-9_-]{43}$/);
+    const invitePath = new URL(await linkField.inputValue()).pathname;
+
+    let recipePath = "";
+    const member = await browser.newContext({ storageState: scratchDesktopStorageStatePath(1) });
+    try {
+      const memberPage = await member.newPage();
+      await memberPage.goto(invitePath);
+      await waitForHydration(memberPage);
+      await memberPage.getByRole("button", { name: "Join household", exact: true }).click();
+      await expect(memberPage).toHaveURL(pathUrl(householdPath));
+
+      // --- The cook saves a recipe as Household.
+      await page.goto("/recipes/new");
+      await waitForHydration(page);
+      await page.getByLabel(requiredLabel("Title"), { exact: true }).fill(title);
+      const choice = page.getByRole("radiogroup", { name: "Who can see this recipe" });
+      await choice.getByRole("radio", { name: /^Household/ }).check();
+      await page.getByRole("button", { name: "Create recipe", exact: true }).click();
+      await expect(page).toHaveURL(RECIPE_URL);
+      recipePath = new URL(page.url()).pathname;
+      const recipeId = recipePath.split("/").pop()!;
+      await verifyAfterReload(async () => {
+        await expect(page.getByRole("heading", { level: 1, name: title, exact: true })).toBeVisible();
+      });
+
+      // --- The member reads it, after a reload too, and over the API.
+      expect((await memberPage.goto(recipePath))?.status(), "household member: recipe page").toBe(200);
+      await memberPage.reload({ waitUntil: "load" });
+      await expect(memberPage.getByRole("heading", { level: 1, name: title, exact: true })).toBeVisible();
+      await testInfo.attach("household-recipe-member-view", { body: await memberPage.screenshot(), contentType: "image/png" });
+      expect((await member.request.get(`/api/v1/recipes/${recipeId}`)).status(), "household member: API").toBe(200);
+
+      // --- Another signed-in cook, outside the household, finds nothing.
+      const stranger = await browser.newContext({ storageState: personaStorageStatePath("friend") });
+      try {
+        const strangerPage = await stranger.newPage();
+        expect((await strangerPage.goto(recipePath))?.status(), "another cook: recipe page").toBe(404);
+        await testInfo.attach("household-recipe-another-cook-view", { body: await strangerPage.screenshot(), contentType: "image/png" });
+        expect((await stranger.request.get(`/api/v1/recipes/${recipeId}`)).status(), "another cook: API").toBe(404);
+      } finally {
+        await stranger.close();
+      }
+
+      // --- Tidy up: the member leaves.
+      await memberPage.goto(householdPath);
+      await waitForHydration(memberPage);
+      await memberPage.getByRole("button", { name: "Leave household", exact: true }).click();
+      await expect(memberPage).toHaveURL(pathUrl("/households"));
+    } finally {
+      await member.close();
+    }
+
+    // --- Tidy up: delete the recipe, and the cook leaves the household, which ends it.
+    await page.goto(recipePath);
+    await waitForHydration(page);
+    await expectCookProgressSynced(page);
+    await chooseRecipeAction(page, "Delete");
+    await page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ }).getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page).toHaveURL(pathUrl("/recipes"));
+    await page.goto(householdPath);
+    await waitForHydration(page);
+    await page.getByRole("button", { name: "Leave household", exact: true }).click();
+    await expect(page).toHaveURL(pathUrl("/households"));
   });
 
   // QA has no OpenAI key (see AGENTS.md), so import answers that it isn't switched on rather than
