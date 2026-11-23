@@ -37,3 +37,14 @@ export function startOfWeek(date: LocalDate, firstDayOfWeek: number): LocalDate 
 export function weekDates(start: LocalDate): LocalDate[] {
   return Array.from({ length: 7 }, (_, offset) => addDays(start, offset));
 }
+
+/** Today's date where the plan lives; an unknown time zone falls back to UTC. */
+export function todayIn(timeZone: string, now: Date): LocalDate {
+  let zone = timeZone;
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone: zone });
+  } catch {
+    zone = "UTC";
+  }
+  return new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
