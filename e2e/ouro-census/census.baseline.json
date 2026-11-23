@@ -3393,6 +3393,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Households\" [button/root] in banner",
+          "count": 1
+        },
+        {
           "identity": "link \"Kitchen Search\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
