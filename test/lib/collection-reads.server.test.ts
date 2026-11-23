@@ -104,6 +104,34 @@ describe("collection reads", () => {
     await expect(readPublicRecipesFromD1(d1.binding, { query: "stew", limit: 48 })).resolves.toHaveLength(4);
   });
 
+  it("lists only public recipes, so a private or household recipe never shows in all public recipes", async () => {
+    const chef = await db.user.create({ data: { ...createTestUser(), username: `visibilitychef_${Date.now()}` } });
+    const recipe = (title: string, minute: number, visibility: string) =>
+      db.recipe.create({ data: { title, chefId: chef.id, visibility, createdAt: at(minute), updatedAt: at(minute) } });
+    await recipe("Shared Chowder", 1, "public");
+    const secret = await recipe("Secret Chowder", 2, "private");
+    await recipe("Family Chowder", 3, "household");
+    await recipe("Open Chowder", 4, "public");
+
+    for (const input of [
+      { query: "", limit: 48 },
+      { query: "chowder", limit: 48 },
+      { query: "", limit: 48, after: secret.id },
+    ]) {
+      const fromD1 = await readPublicRecipesFromD1(d1.binding, input);
+      expect(fromD1, JSON.stringify(input)).toEqual(await readPublicRecipesWithPrisma(db, input));
+      expect(fromD1.map((listed) => listed.title), JSON.stringify(input)).not.toContain("Secret Chowder");
+      expect(fromD1.map((listed) => listed.title), JSON.stringify(input)).not.toContain("Family Chowder");
+    }
+    const all = await readPublicRecipesFromD1(d1.binding, { query: "", limit: 48 });
+    expect(all.map((listed) => listed.title)).toEqual(["Open Chowder", "Shared Chowder"]);
+    const searched = await readPublicRecipesFromD1(d1.binding, { query: "chowder", limit: 48 });
+    expect(searched.map((listed) => listed.title).sort()).toEqual(["Open Chowder", "Shared Chowder"]);
+    // A page after a private recipe still continues from its place in the order.
+    const afterSecret = await readPublicRecipesFromD1(d1.binding, { query: "", limit: 48, after: secret.id });
+    expect(afterSecret.map((listed) => listed.title)).toEqual(["Shared Chowder"]);
+  });
+
   it("pages through public recipes after a cursor, as Prisma does, with every recipe on exactly one page", async () => {
     const chef = await db.user.create({ data: { ...createTestUser(), username: `pagechef_${Date.now()}` } });
     // Seven recipes, three sharing one timestamp, so the id must break the tie consistently.

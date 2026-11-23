@@ -15,6 +15,7 @@ import {
 } from "~/lib/cookbook-previews.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { searchSpoonjoy, searchSpoonjoyFromD1 } from "~/lib/search.server";
+import { readableRecipeSql, readableRecipeWhere } from "~/domains/kitchen";
 
 // Reads behind the recipe, saved-recipe and cookbook lists (`/recipes`, `/saved-recipes`,
 // `/cookbooks`). Each page has the original Prisma reads, used where there is no D1
@@ -67,6 +68,11 @@ function inSearchOrder<T extends { id: string }>(recipes: T[], recipeIds: string
   return [...recipes].sort((a, b) => order.get(a.id)! - order.get(b.id)!);
 }
 
+// All public recipes lists only what anyone may read: the rule for a viewer who is not signed in. A cook's own
+// private and household recipes are on My Recipes, not here.
+const PUBLIC_ONLY_SQL = readableRecipeSql("r", null).sql;
+const PUBLIC_ONLY_WHERE = readableRecipeWhere(null);
+
 export async function readPublicRecipesWithPrisma(
   database: PrismaClient,
   { query, limit, after }: PublicRecipesInput,
@@ -84,6 +90,8 @@ export async function readPublicRecipesWithPrisma(
   const recipes = await database.recipe.findMany({
     where: {
       deletedAt: null,
+      // AND keeps the readable rule and the cursor's OR from replacing each other.
+      AND: [PUBLIC_ONLY_WHERE],
       ...(query ? { id: { in: recipeIds } } : {}),
       ...(cursorRow
         ? {
@@ -151,7 +159,7 @@ export async function readPublicRecipesFromD1(
   const [rows] = await d1ReadBatch(db, [
     query
       ? [
-          `${PUBLIC_RECIPE_SELECT} WHERE r."deletedAt" IS NULL AND r."id" IN (${recipeIds.map(() => "?").join(", ")}) LIMIT ?`,
+          `${PUBLIC_RECIPE_SELECT} WHERE r."deletedAt" IS NULL AND ${PUBLIC_ONLY_SQL} AND r."id" IN (${recipeIds.map(() => "?").join(", ")}) LIMIT ?`,
           ...recipeIds,
           limit,
         ]
@@ -159,13 +167,13 @@ export async function readPublicRecipesFromD1(
         ? [
             // Keyset: compare with the cursor row's stored values, so the page boundary uses exactly
             // the ordering below, whatever format a row's timestamp was written in.
-            `${PUBLIC_RECIPE_SELECT} WHERE r."deletedAt" IS NULL
+            `${PUBLIC_RECIPE_SELECT} WHERE r."deletedAt" IS NULL AND ${PUBLIC_ONLY_SQL}
               AND (r."updatedAt", r."id") < (SELECT c."updatedAt", c."id" FROM "Recipe" c WHERE c."id" = ?)
               ORDER BY r."updatedAt" DESC, r."id" DESC LIMIT ?`,
             after,
             limit,
           ]
-        : [`${PUBLIC_RECIPE_SELECT} WHERE r."deletedAt" IS NULL ORDER BY r."updatedAt" DESC, r."id" DESC LIMIT ?`, limit],
+        : [`${PUBLIC_RECIPE_SELECT} WHERE r."deletedAt" IS NULL AND ${PUBLIC_ONLY_SQL} ORDER BY r."updatedAt" DESC, r."id" DESC LIMIT ?`, limit],
   ]);
   const recipes = rows!.map((row) => {
     const { chefId, chefUsername, ...recipe } = mapModel(PUBLIC_RECIPE_COLUMNS, row);
