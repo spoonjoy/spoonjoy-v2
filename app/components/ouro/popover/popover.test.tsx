@@ -1080,3 +1080,23 @@ describe("Popover first frame", () => {
     expectFirstFramesInPlace(await recording.stop());
   });
 });
+
+describe("Popover under forced colours", () => {
+  it("keeps its own edge, whether or not a plain button inside it draws one (#3103)", async () => {
+    await render(
+      <Popover title="Reactions" trigger={<Button>React</Button>}>
+        <Button variant="plain">👍</Button>
+      </Popover>,
+    );
+    await userEvent.click(trigger());
+    await settled();
+    const panel = popoverPopup()!;
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      await expect.poll(() => parseFloat(getComputedStyle(panel).borderTopWidth)).toBeGreaterThan(0);
+      expect(getComputedStyle(panel).borderTopStyle).toBe("solid");
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+});
