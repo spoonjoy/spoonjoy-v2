@@ -256,6 +256,8 @@ export const census: Journey[] = [
     states: [DEFAULT, { id: "uses-output-open", action: openUsesOutput }],
   },
   { id: "my-recipes", enrolled: true, persona: "chef", path: "/my-recipes", states: [DEFAULT] },
+  // The upload form only: a move-in itself changes the persona's recipes (move-in.journey.ts runs it).
+  { id: "move-in", enrolled: true, persona: "chef", path: "/move-in", states: [DEFAULT] },
   { id: "saved-recipes", enrolled: true, persona: "chef", path: "/saved-recipes", states: [DEFAULT] },
 
   // Cookbooks.
