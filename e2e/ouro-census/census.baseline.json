@@ -1818,6 +1818,90 @@
         }
       ]
     },
+    "move-in": {
+      "default": [
+        {
+          "identity": "button \"Backup zip\" [file-field/input] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"Log out\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"Move in\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Chefs\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Kitchen Search\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Kitchen\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"My Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Shopping List\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy for iPhone and iPad\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy kitchen\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Mealie\" [choice-card/input] in group \"Where are you coming from?\"",
+          "count": 1
+        }
+      ]
+    },
     "my-recipes": {
       "default": [
         {
@@ -6638,6 +6722,62 @@
         },
         {
           "identity": "textbox \"Title\" [text-field/input] in region \"Add a note\"",
+          "count": 1
+        }
+      ]
+    },
+    "move-in": {
+      "default": [
+        {
+          "identity": "button \"Backup zip\" [file-field/input] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Move in\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy for iPhone and iPad\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Mealie\" [choice-card/input] in group \"Where are you coming from?\"",
           "count": 1
         }
       ]
