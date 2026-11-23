@@ -143,6 +143,8 @@ jobs:
       # checked against Apple's public keys (e2e/self-host, playwright.self-host-fresh.config.ts).
       - name: Sign in on the fresh server
         run: |
+          echo "runner: $(curl -s -o /dev/null -w '%{http_code}' https://appleid.apple.com/auth/keys)"
+          docker exec sj node -e 'fetch("https://appleid.apple.com/auth/keys").then(async r=>console.log("container node:",r.status,(await r.text()).slice(0,200)))' || true
           docker run --rm --network host --user "$(id -u):$(id -g)" --ipc host \
             -v "$PWD:/work" -w /work -e HOME=/tmp -e CI=true \
             -e SPOONJOY_JOURNEYS_BASE_URL=http://localhost:8080 \
