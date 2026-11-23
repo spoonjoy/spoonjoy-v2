@@ -8,6 +8,6 @@ const migration = (path: string) => readFileSync(resolve(__dirname, "../..", pat
 describe("migration 0046 (household lists)", () => {
   it("mirrors the D1 migration in Prisma's folder", () => {
     const withoutComments = migration("migrations/0046_household_lists.sql").split("\n").filter((line) => !line.startsWith("--")).join("\n");
-    expect(migration("prisma/migrations/20261123180000_household_lists/migration.sql")).toBe(withoutComments);
+    expect(migration("prisma/migrations/20261123190000_household_lists/migration.sql")).toBe(withoutComments);
   });
 });
