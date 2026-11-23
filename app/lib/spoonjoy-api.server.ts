@@ -31,7 +31,7 @@ import {
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { canRead, readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
 import { isFlagOn, likeContainsSearch, type FlagEnv } from "~/domains/platform";
-import { getWeek, parseLocalDate, prismaPlanStore, type PlanEntry } from "~/domains/planning";
+import { addEntry, getWeek, parseLocalDate, prismaPlanStore, removeEntry, type PlanEntry } from "~/domains/planning";
 import { cookRecipeVisibilityDefault } from "~/lib/recipe-create.server";
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
 import { d1Binding, d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
@@ -3276,6 +3276,42 @@ const getMealPlanTool: SpoonjoyApiOperation = {
   },
 };
 
+const planMealTool: SpoonjoyApiOperation = {
+  ...declaredOperation("plan_meal"),
+  requiredScopes: ["kitchen:write"],
+  async handle(args, context) {
+    const owner = await mealPlanner(args, context);
+    const key = optionalString(args.idempotencyKey);
+    // A retry key names the meal, so the same call sent again finds the meal the first one planned.
+    const entryId = key ? await idForWriteToken("plan-entry", owner.id, `mcp:${key}`) : crypto.randomUUID();
+    const input = {
+      kind: optionalString(args.recipeId) ? "recipe" : "note",
+      date: args.date,
+      mealType: args.mealType,
+      recipeId: args.recipeId,
+      title: args.title,
+      note: args.note,
+      scaleFactor: args.scaleFactor,
+    };
+    const store = prismaPlanStore(context.db);
+    const planned = await retryD1Write({ scope: "plan_entry.add.mcp" }, () => addEntry(store, owner.id, entryId, input));
+    if (!planned.ok) throw new ApiAuthError(planned.error, 400);
+    return json({ meal: formatPlannedMeal(planned.value) });
+  },
+};
+
+const removeMealPlanEntryTool: SpoonjoyApiOperation = {
+  ...declaredOperation("remove_meal_plan_entry"),
+  requiredScopes: ["kitchen:write"],
+  async handle(args, context) {
+    const owner = await mealPlanner(args, context);
+    const entryId = requiredString(args, "entryId");
+    const store = prismaPlanStore(context.db);
+    const removed = await retryD1Write({ scope: "plan_entry.remove.mcp" }, () => removeEntry(store, owner.id, entryId));
+    return json({ removed });
+  },
+};
+
 /** Whether a spoon was its chef's first cook of their own recipe, judged against earlier spoons. */
 async function wasOriginCook(
   db: PrismaClientType,
@@ -3829,6 +3865,8 @@ const tools: SpoonjoyApiOperation[] = [
   listSpoonsForRecipeTool,
   listSpoonsByChefTool,
   getMealPlanTool,
+  planMealTool,
+  removeMealPlanEntryTool,
 ];
 
 /**
@@ -3883,6 +3921,8 @@ const TOOL_ANNOTATIONS = {
   list_spoons_for_recipe: declaredAnnotations("list_spoons_for_recipe"),
   list_spoons_by_chef: declaredAnnotations("list_spoons_by_chef"),
   get_meal_plan: declaredAnnotations("get_meal_plan"),
+  plan_meal: declaredAnnotations("plan_meal"),
+  remove_meal_plan_entry: declaredAnnotations("remove_meal_plan_entry"),
 } satisfies Record<string, McpToolAnnotations>;
 
 /**
