@@ -182,6 +182,7 @@ test.describe("Households", () => {
       await expect(joinerPage.getByRole("checkbox", { name: "2 litres milk" })).toBeChecked();
       await expect(joinerPage.getByRole("checkbox", { name: "2 litres milk" })).toBeDisabled();
       await expect(joinerPage.getByLabel("Add an item")).toHaveCount(0);
+      await expect(joinerPage.getByText("You can see this list. An owner can let you add to it.", { exact: true })).toBeVisible();
       await expect(joinerPage.getByRole("button", { name: "Delete list", exact: true })).toHaveCount(0);
       await attachScreenshot(testInfo, joinerPage, "viewer-shared-list");
 

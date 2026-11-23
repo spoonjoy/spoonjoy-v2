@@ -251,4 +251,30 @@ describe("household list pages", () => {
     expect(screen.queryByRole("textbox", { name: "Add an item" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete list" })).toBeNull();
   });
+
+  it("tells a view-only member why they can't add, and names who added each item as bylines do", async () => {
+    const VIEW_ONLY_NOTE = "You can see this list. An owner can let you add to it.";
+    const listFor = (canEdit: boolean) =>
+      createTestRoutesStub([
+        {
+          path: "/households/:id/lists/:listId",
+          Component: ListPage,
+          loader: () => ({
+            household: { id: "h1", name: "Home" },
+            list: { id: "l1", name: "Groceries", canEdit, items: [{ id: "i1", text: "eggs", checked: false, addedBy: "deleted-chef" }] },
+          }),
+        },
+      ]);
+
+    const Viewer = listFor(false);
+    render(<Viewer initialEntries={["/households/h1/lists/l1"]} />);
+    expect(await screen.findByText(VIEW_ONLY_NOTE)).toBeTruthy();
+    expect(screen.getByText("Added by Deleted chef")).toBeTruthy();
+    cleanup();
+
+    const Member = listFor(true);
+    render(<Member initialEntries={["/households/h1/lists/l1"]} />);
+    expect(await screen.findByRole("textbox", { name: "Add an item" })).toBeTruthy();
+    expect(screen.queryByText(VIEW_ONLY_NOTE)).toBeNull();
+  });
 });
