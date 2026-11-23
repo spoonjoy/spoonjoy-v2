@@ -55,6 +55,9 @@ model User {
   contentReports           ContentReport[]
   blocksMade               ChefBlock[]               @relation("ChefBlocker")
   blocksReceived           ChefBlock[]               @relation("ChefBlocked")
+  householdsCreated        Household[]
+  householdMemberships     HouseholdMember[]
+  householdInvitesMade     HouseholdInvite[]
 
   pushSubscriptions      PushSubscription[]
   nativePushDevices      NativePushDevice[]
@@ -975,4 +978,49 @@ model SourceRecord {
 
   @@unique([sourceId, sourceTable, sourceKey])
   @@index([targetType, targetId])
+}
+
+// Households (app/domains/households-and-identity, migrations/0042_households.sql): people who cook together. Triggers
+// in the migration keep an owner when one's account goes and delete a household once nobody is left in it.
+model Household {
+  id          String            @id @default(cuid())
+  name        String
+  createdById String?
+  createdBy   User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @default(now())
+  members     HouseholdMember[]
+  invites     HouseholdInvite[]
+}
+
+model HouseholdMember {
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // owner, member or viewer (view-only)
+  role        String
+  joinedAt    DateTime  @default(now())
+
+  @@id([householdId, userId])
+  @@index([userId])
+}
+
+model HouseholdInvite {
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  // SHA-256 of the token in the link; the token itself is shown once and never stored.
+  tokenHash   String    @unique
+  // member or viewer: an owner is made after joining
+  role        String    @default("member")
+  usesLeft    Int       @default(1)
+  email       String?
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([householdId])
 }
