@@ -149,6 +149,40 @@ describe("Cloudflare worker app", () => {
     expect(ctx.waitUntil).toHaveBeenCalledWith(runScheduledPhotoSweep.mock.results[0].value);
   });
 
+  it("runs queued jobs with the Worker's bindings, and leaves a kind it can't run here for another try", async () => {
+    const { migratedSqliteD1 } = await import("../helpers/migrated-sqlite");
+    const database = migratedSqliteD1();
+    try {
+      const message = (key: string) => ({
+        id: key,
+        timestamp: new Date(0),
+        attempts: 1,
+        body: { type: "move-in.run", key, payload: { jobId: "movein_gone" } },
+        ack: vi.fn(),
+        retry: vi.fn(),
+      });
+      const batch = (messages: unknown[]) => ({ queue: "spoonjoy-jobs-qa", messages, ackAll: vi.fn(), retryAll: vi.fn() }) as unknown as MessageBatch<unknown>;
+      const queue = { send: vi.fn(), sendBatch: vi.fn() };
+
+      // A move-in that no longer exists has nothing to run, so its message is settled.
+      const ran = message("move-in:movein_gone:inspect:-");
+      await worker.queue!(batch([ran]), versionedEnvironment({ DB: database.binding as never, PHOTOS: {} as never, JOBS: queue as never }), context());
+      expect(ran.ack).toHaveBeenCalled();
+
+      // Without photo storage this Worker can't run a move-in, so it leaves the job for one that can.
+      const left = message("move-in:movein_gone:recipes:0");
+      await worker.queue!(batch([left]), versionedEnvironment({ DB: database.binding as never, JOBS: queue as never }), context());
+      expect(left.retry).toHaveBeenCalledWith({ delaySeconds: 300 });
+    } finally {
+      database.close();
+    }
+  });
+
+  it("refuses a batch of jobs when it has no database for their keys", async () => {
+    const batch = { queue: "spoonjoy-jobs-qa", messages: [], ackAll: vi.fn(), retryAll: vi.fn() } as unknown as MessageBatch<unknown>;
+    await expect(worker.queue!(batch, versionedEnvironment({ DB: undefined }), context())).rejects.toThrow(/need the DB binding/);
+  });
+
   it("configures React Router with the statically imported server build, evaluated at Worker startup", () => {
     expect(configuredServerBuild).toMatchObject(serverBuildMarker);
     expect(configuredMode).toBe(import.meta.env.MODE);

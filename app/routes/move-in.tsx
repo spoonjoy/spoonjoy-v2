@@ -1,6 +1,7 @@
 // Move in: bring a kitchen over from another recipe app. The person picks the app, drops its
 // backup zip, watches it come in, and lands on what arrived and what didn't. Behind the move_in
-// flag until moved-in recipes can be kept private.
+// flag until moved-in recipes can be kept private. Where the Worker has a jobs queue, the move-in
+// runs there and the page only shows how far it has got; elsewhere each poll keeps it running.
 import { useEffect, useRef } from "react";
 import { data, Form as RouterForm, redirect, useActionData, useFetcher, useLoaderData, useNavigation } from "react-router";
 import type { Route } from "./+types/move-in";
@@ -18,13 +19,15 @@ import {
   MOVE_IN_ERROR_MESSAGES,
   MOVE_IN_UPLOAD_MAX_BYTES,
   moveInPorts,
+  nudgeMoveIn,
+  queueMoveIn,
   readMoveInProgress,
   runForAWhile,
   startMoveIn,
   type MoveInEnv,
   type MoveInProgress,
 } from "~/domains/move-in";
-import { isFlagOn } from "~/domains/platform";
+import { d1JobKeys, isFlagOn, queueJobs, type JobKeysDatabase, type JobMessage } from "~/domains/platform";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
@@ -44,22 +47,26 @@ async function signedInWithFlag(request: Request, context: Route.LoaderArgs["con
   const userId = await requireUserId(request, "/login", env);
   if (!isFlagOn("move_in", env, userId)) throw new Response("Not found", { status: 404 });
   if (!env?.DB || !env.PHOTOS) throw new Response("Move-in needs its database and photo storage, and this server has neither.", { status: 503 });
-  return { userId, env: { DB: env.DB, PHOTOS: env.PHOTOS } as unknown as MoveInEnv };
+  const jobs = env.JOBS ? queueJobs(env.JOBS as Queue<JobMessage>, d1JobKeys(env.DB as unknown as JobKeysDatabase)) : null;
+  return { userId, env: { DB: env.DB, PHOTOS: env.PHOTOS } as unknown as MoveInEnv, jobs };
+}
+
+/** Reports a move-in the page couldn't run or queue; the next poll tries again. */
+async function report(context: Route.ActionArgs["context"], userId: string, phase: "run" | "queue", error: unknown) {
+  await captureException(resolvePostHogServerConfig(getCloudflareEnv(context) ?? {}), {
+    error,
+    distinctId: userId,
+    route: "/move-in",
+    extras: { phase },
+  });
 }
 
 /** Keeps the move-in running after the response, inside the request's waitUntil. */
 function keepRunning(context: Route.ActionArgs["context"], env: MoveInEnv, jobId: string, userId: string) {
   const ctx = context.cloudflare?.ctx;
   if (!ctx) return;
-  const run = runForAWhile(jobId, moveInPorts(env, () => new Date()), { budgetMs: RUN_BUDGET_MS }).catch(async (error: unknown) => {
-    // The page's next poll resumes the move-in; the report says how often runs stop, and why.
-    await captureException(resolvePostHogServerConfig(getCloudflareEnv(context) ?? {}), {
-      error,
-      distinctId: userId,
-      route: "/move-in",
-      extras: { phase: "run" },
-    });
-  });
+  // The page's next poll resumes the move-in; the report says how often runs stop, and why.
+  const run = runForAWhile(jobId, moveInPorts(env, () => new Date()), { budgetMs: RUN_BUDGET_MS }).catch((error: unknown) => report(context, userId, "run", error));
   ctx.waitUntil(run);
 }
 
@@ -73,9 +80,11 @@ export interface MoveInView {
   photos: { found: number; in: number };
   failure: string | null;
   notes: Array<{ seq: number; level: "warn" | "error"; message: string }>;
+  /** It runs on the server, so the page can be closed. */
+  runsOnServer: boolean;
 }
 
-function view(progress: MoveInProgress): MoveInView {
+function view(progress: MoveInProgress, runsOnServer: boolean): MoveInView {
   const recipes = progress.counts.recipes ?? { found: 0, created: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 };
   const photos = progress.counts.photos ?? { found: 0, created: 0, unchanged: 0 };
   const failure = [...progress.events].reverse().find((event) => event.kind === "job-failed")?.message ?? null;
@@ -96,29 +105,33 @@ function view(progress: MoveInProgress): MoveInView {
     failure,
     notes: progress.events.flatMap((event) =>
       event.level === "info" || event.kind === "job-failed" ? [] : [{ seq: event.seq, level: event.level, message: event.message }]),
+    runsOnServer,
   };
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const { userId, env } = await signedInWithFlag(request, context);
+  const { userId, env, jobs } = await signedInWithFlag(request, context);
   const jobId = new URL(request.url).searchParams.get("job");
   const maxBytes = MOVE_IN_UPLOAD_MAX_BYTES;
   if (!jobId) return { move: null, maxBytes };
   const progress = await readMoveInProgress(env.DB, { ownerId: userId, jobId });
   if (!progress) throw new Response("Not found", { status: 404 });
-  return { move: view(progress), maxBytes };
+  return { move: view(progress, jobs !== null), maxBytes };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
-  const { userId, env } = await signedInWithFlag(request, context);
+  const { userId, env, jobs } = await signedInWithFlag(request, context);
   const fail = (code: keyof typeof MOVE_IN_ERROR_MESSAGES, status = 400) => data({ error: MOVE_IN_ERROR_MESSAGES[code] }, { status });
   if (Number(request.headers.get("Content-Length") ?? 0) > MOVE_IN_UPLOAD_MAX_BYTES + 1024 * 1024) return fail("backup-too-large", 413);
 
   const form = await request.formData();
   if (form.get("intent") === "continue") {
     const jobId = String(form.get("jobId") ?? "");
-    if (!(await readMoveInProgress(env.DB, { ownerId: userId, jobId }))) throw new Response("Not found", { status: 404 });
-    keepRunning(context, env, jobId, userId);
+    const progress = await readMoveInProgress(env.DB, { ownerId: userId, jobId });
+    if (!progress) throw new Response("Not found", { status: 404 });
+    // On the server, the page only picks up a move-in whose segments stopped coming.
+    if (jobs) await nudgeMoveIn(jobs, progress.job, new Date()).catch((error: unknown) => report(context, userId, "queue", error));
+    else keepRunning(context, env, jobId, userId);
     return { error: null };
   }
 
@@ -132,7 +145,9 @@ export async function action({ request, context }: Route.ActionArgs) {
     now: new Date(),
   });
   if (!started.ok) return fail(started.code, started.code === "backup-too-large" ? 413 : 400);
-  keepRunning(context, env, started.jobId, userId);
+  // A move-in that couldn't be queued waits for the page, which queues it once it has been quiet a while.
+  if (jobs) await queueMoveIn(jobs, { id: started.jobId, phase: "inspect", cursor: null }).catch((error: unknown) => report(context, userId, "queue", error));
+  else keepRunning(context, env, started.jobId, userId);
   return redirect(`/move-in?job=${started.jobId}`);
 }
 
@@ -194,7 +209,9 @@ function Progress({ move }: { move: MoveInView }) {
           {counted ? `${move.recipes.done} of ${plural(move.recipes.found, "recipe")} in so far.` : "Reading the backup…"}
         </Text>
       </div>
-      <Text tone="muted">You can leave this page; the move carries on when you come back.</Text>
+      <Text tone="muted">
+        {move.runsOnServer ? "You can close this page; your recipes keep moving in without it." : "You can leave this page; the move carries on when you come back."}
+      </Text>
     </section>
   );
 }
