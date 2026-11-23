@@ -83,9 +83,14 @@ export function listGroups(db: MealieDatabase): MealieGroup[] {
   });
 }
 
-/** The group to bring: the only one, or the one whose members include the importer's email; null means ask. */
+/**
+ * The group to bring: the only one with recipes, or the one of those whose members include the importer's email; null
+ * means ask. Every backup also holds the empty group the app makes when it first starts, which is passed over.
+ */
 export function chooseGroup(db: MealieDatabase, importerEmail: string | null): string | null {
-  const groups = listGroups(db);
+  const all = listGroups(db);
+  const withRecipes = all.filter((group) => group.recipes > 0);
+  const groups = withRecipes.length ? withRecipes : all;
   if (groups.length === 1) return groups[0].key;
   const email = importerEmail?.trim().toLowerCase();
   const user = db.rows("users").find((row) => typeof row.email === "string" && row.email.toLowerCase() === email);

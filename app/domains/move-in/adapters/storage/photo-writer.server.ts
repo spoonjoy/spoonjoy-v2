@@ -1,7 +1,7 @@
 // Stores a moved-in recipe's photo in R2 and gives the recipe a cover row for it, the way a photo
 // from a recipe link becomes a cover. The cover becomes the recipe's active cover only while the
 // recipe is still on an automatic cover with none chosen.
-import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { putWithTransientRetry } from "~/lib/r2-transient-retry.server";
 
@@ -42,10 +42,19 @@ export async function attachMovedInPhoto({ db, bucket, ownerId, recipeId, bytes,
       stamp,
     ],
     [
-      `UPDATE "Recipe" SET "activeCoverId" = ?, "activeCoverVariant" = 'image'
+      `UPDATE "Recipe" SET "activeCoverId" = ?, "activeCoverVariant" = 'image', "updatedAt" = ?
        WHERE "id" = ? AND "coverMode" = 'auto' AND "activeCoverId" IS NULL`,
       coverId,
+      stamp,
       recipeId,
     ],
   ]);
+}
+
+const MOVED_IN_PHOTO_URL = "/photos/covers/import/movein-%";
+
+/** Whether the recipe has a cover that moved in, so a repeated run doesn't add its photo twice. */
+export async function hasMovedInPhoto(db: D1ReadDatabase, recipeId: string): Promise<boolean> {
+  const [rows] = await d1ReadBatch(db, [[`SELECT 1 FROM "RecipeCover" WHERE "recipeId" = ? AND "imageUrl" LIKE ? LIMIT 1`, recipeId, MOVED_IN_PHOTO_URL]]);
+  return rows.length > 0;
 }

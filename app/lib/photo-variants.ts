@@ -30,6 +30,11 @@ export const PHOTO_QUARANTINE_PREFIX = "quarantine/";
  * belong to no row until an action stores them as a recipe or spoon photo, so they are never served.
  */
 export const PHOTO_PENDING_UPLOAD_PREFIX = "pending-uploads/";
+/**
+ * Prefix of backups uploaded to move a kitchen in (app/domains/move-in). They hold another app's
+ * accounts, so the photo sweep never copies them: move-in deletes each one itself.
+ */
+export const MOVE_IN_ARCHIVE_PREFIX = `${PHOTO_PENDING_UPLOAD_PREFIX}move-in/`;
 
 const VARIANT_KEY = /^variants\/w[0-9]+\/(.+)\.webp$/;
 

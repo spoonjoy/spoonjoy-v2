@@ -2,14 +2,16 @@
 // uploaded, and reading a job's progress for its owner.
 import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
-import { FINISHED, type MoveInCounts, type MoveInEvent, type MoveInJob, type MoveInPorts } from "../../application/run-move-in";
+import { FINISHED, LostClaimError, type MoveInCounts, type MoveInEvent, type MoveInJob, type MoveInPorts } from "../../application/run-move-in";
 
-const JOB_COLUMNS = `"id", "ownerId", "kind", "sourceId", "status", "phase", "cursor", "archiveKey", "lastError"`;
+const JOB_COLUMNS = `"id", "ownerId", "kind", "sourceId", "status", "phase", "cursor", "archiveKey", "lastError", "attempt"`;
+// What the owner may see of a job: no archive key, which names where the other app's accounts wait.
+const PROGRESS_COLUMNS = `"id", "ownerId", "kind", "sourceId", "status", "phase", "cursor", "lastError", "attempt", "archiveName", "createdAt", "finishedAt"`;
 const COUNT_FIELDS = ["found", "created", "updated", "unchanged", "skipped", "failed"] as const;
 /** How long a run may go without a heartbeat before another run may take its job over. */
 export const MOVE_IN_CLAIM_MS = 45_000;
 // The job fields the runner may change, and so the only columns updateJob writes.
-const PATCHABLE = ["sourceId", "status", "phase", "cursor", "archiveKey", "lastError"] as const;
+const PATCHABLE = ["sourceId", "status", "phase", "cursor", "archiveKey", "lastError", "attempt"] as const;
 
 export async function createMoveInJob(
   db: D1ReadDatabase,
@@ -34,14 +36,34 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
   return {
     loadJob: (id) => loadJob(db, id),
 
-    async updateJob(id, patch) {
+    async updateJob(id, patch, token) {
       const stamp = d1Timestamp(now());
       const fields = PATCHABLE.filter((field) => field in patch);
-      const sets = [...fields.map((field) => `"${field}" = ?`), `"updatedAt" = ?`, `"heartbeatAt" = ?`];
-      const values: unknown[] = [...fields.map((field) => patch[field] ?? null), stamp, stamp];
-      if (patch.status === "running") sets.push(`"startedAt" = COALESCE("startedAt", ?)`), values.push(stamp);
-      if (patch.status && FINISHED.includes(patch.status)) sets.push(`"finishedAt" = ?`), values.push(stamp);
-      await d1WriteBatch(db, [[`UPDATE "ImportJob" SET ${sets.join(", ")} WHERE "id" = ?`, ...values, id]]);
+      const sets = [...fields.map((field) => `"${field}" = ?`), `"updatedAt" = ?`];
+      const values: unknown[] = [...fields.map((field) => patch[field] ?? null), stamp];
+      // Each write under a claim is also its heartbeat.
+      const stamped = (column: string) => {
+        sets.push(column);
+        values.push(stamp);
+      };
+      if (token !== undefined) stamped(`"heartbeatAt" = ?`);
+      if (patch.status === "running") stamped(`"startedAt" = COALESCE("startedAt", ?)`);
+      if (patch.status && FINISHED.includes(patch.status)) stamped(`"finishedAt" = ?`);
+      const fence = token === undefined ? "" : ` AND "claimToken" = ?`;
+      const [{ changes }] = await d1WriteBatch(db, [[
+        `UPDATE "ImportJob" SET ${sets.join(", ")} WHERE "id" = ?${fence}`,
+        ...values, id, ...(token === undefined ? [] : [token]),
+      ]]);
+      if (token !== undefined && changes === 0) throw new LostClaimError();
+    },
+
+    async sourceInstanceKey(sourceId) {
+      const [[row]] = await d1ReadBatch(db, [[`SELECT "instanceKey" FROM "ImportSource" WHERE "id" = ?`, sourceId]]);
+      return row ? String(row.instanceKey) : null;
+    },
+
+    async resetCounts(jobId) {
+      await d1WriteBatch(db, [[`DELETE FROM "ImportEntityCount" WHERE "jobId" = ?`, jobId]]);
     },
 
     async ensureSource({ ownerId, kind, instanceKey, label, sourceVersion }) {
@@ -68,22 +90,23 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
     async addEvent(jobId, event: MoveInEvent) {
       // One statement, so two writers never take the same seq: the unique index refuses the second.
       await d1WriteBatch(db, [[
-        `INSERT INTO "ImportEvent" ("id", "jobId", "seq", "level", "kind", "entity", "sourceKey", "targetId", "message", "createdAt")
-         SELECT ?, ?, COALESCE(MAX("seq"), 0) + 1, ?, ?, ?, ?, ?, ?, ? FROM "ImportEvent" WHERE "jobId" = ?`,
-        `event_${crypto.randomUUID()}`, jobId, event.level, event.kind, event.entity, event.sourceKey, event.targetId, event.message, d1Timestamp(now()), jobId,
+        `INSERT INTO "ImportEvent" ("id", "jobId", "seq", "level", "kind", "entity", "sourceKey", "targetId", "message", "detail", "createdAt")
+         SELECT ?, ?, COALESCE(MAX("seq"), 0) + 1, ?, ?, ?, ?, ?, ?, ?, ? FROM "ImportEvent" WHERE "jobId" = ?`,
+        `event_${crypto.randomUUID()}`, jobId, event.level, event.kind, event.entity, event.sourceKey, event.targetId, event.message, event.detail ?? null, d1Timestamp(now()), jobId,
       ]]);
     },
 
     async claim(jobId, at) {
+      const token = `claim_${crypto.randomUUID()}`;
       const [{ changes }] = await d1WriteBatch(db, [[
-        `UPDATE "ImportJob" SET "heartbeatAt" = ? WHERE "id" = ? AND ("heartbeatAt" IS NULL OR "heartbeatAt" < ?)`,
-        d1Timestamp(at), jobId, d1Timestamp(new Date(at.getTime() - MOVE_IN_CLAIM_MS)),
+        `UPDATE "ImportJob" SET "heartbeatAt" = ?, "claimToken" = ? WHERE "id" = ? AND ("heartbeatAt" IS NULL OR "heartbeatAt" < ?)`,
+        d1Timestamp(at), token, jobId, d1Timestamp(new Date(at.getTime() - MOVE_IN_CLAIM_MS)),
       ]]);
-      return changes === 1;
+      return changes === 1 ? token : null;
     },
 
-    async release(jobId) {
-      await d1WriteBatch(db, [[`UPDATE "ImportJob" SET "heartbeatAt" = NULL WHERE "id" = ?`, jobId]]);
+    async release(jobId, token) {
+      await d1WriteBatch(db, [[`UPDATE "ImportJob" SET "heartbeatAt" = NULL, "claimToken" = NULL WHERE "id" = ? AND "claimToken" = ?`, jobId, token]]);
     },
 
     async hasIssues(jobId) {
@@ -94,7 +117,7 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
 }
 
 export interface MoveInProgress {
-  job: MoveInJob & { archiveName: string | null; createdAt: string; finishedAt: string | null };
+  job: Omit<MoveInJob, "archiveKey"> & { archiveName: string | null; createdAt: string; finishedAt: string | null };
   counts: Record<string, MoveInCounts>;
   events: Array<MoveInEvent & { seq: number }>;
 }
@@ -102,7 +125,7 @@ export interface MoveInProgress {
 /** A job's state, counts and report, or null when the job isn't this owner's. */
 export async function readMoveInProgress(db: D1ReadDatabase, { ownerId, jobId }: { ownerId: string; jobId: string }): Promise<MoveInProgress | null> {
   const [[job], counts, events] = await d1ReadBatch(db, [
-    [`SELECT ${JOB_COLUMNS}, "archiveName", "createdAt", "finishedAt" FROM "ImportJob" WHERE "id" = ? AND "ownerId" = ?`, jobId, ownerId],
+    [`SELECT ${PROGRESS_COLUMNS} FROM "ImportJob" WHERE "id" = ? AND "ownerId" = ?`, jobId, ownerId],
     [`SELECT * FROM "ImportEntityCount" WHERE "jobId" = ? ORDER BY "entity"`, jobId],
     [`SELECT "seq", "level", "kind", "entity", "sourceKey", "targetId", "message" FROM "ImportEvent" WHERE "jobId" = ? ORDER BY "seq"`, jobId],
   ]);

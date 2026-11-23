@@ -319,6 +319,14 @@ describe("runPhotoSweep", () => {
     expect(cleanupRows().map((row) => row.key)).toEqual(["covers/unused.jpg"]);
   });
 
+  it("never copies a backup waiting to move in, which move-in clears itself", async () => {
+    const bucket = memoryBucket({ "pending-uploads/move-in/chef/backup.zip": "zip" });
+    const first = await runPhotoSweep({ db, bucket, mode: "apply", now: at(0) });
+    expect(first).toMatchObject({ objectsScanned: 0, unreferencedObjects: 0 });
+    await runPhotoSweep({ db, bucket, mode: "apply", now: at(PHOTO_SWEEP_GRACE_MS) });
+    expect([...bucket.objects.keys()]).toEqual(["pending-uploads/move-in/chef/backup.zip"]);
+  });
+
   it("forgets a photo that is referenced again before it is moved", async () => {
     const bucket = arrangeKitchen();
     await runPhotoSweep({ db, bucket, mode: "dry-run", now: at(0) });
