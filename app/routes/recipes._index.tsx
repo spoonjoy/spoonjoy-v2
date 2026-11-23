@@ -2,11 +2,13 @@ import { Empty } from "~/components/ouro/empty/empty";
 import { PUBLIC_RECIPES_TITLE } from "~/lib/seo-titles";
 import type { Route } from "./+types/recipes._index";
 import { chefDisplayName } from "~/lib/username";
+import { useState } from "react";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Plus, Search as SearchIcon } from "lucide-react";
 import { Button } from "~/components/ouro/button/button";
 import { Heading } from "~/components/ouro/text/heading";
 import { Item } from "~/components/ouro/item/item";
+import { SegmentedControl } from "~/components/ouro/segmented-control/segmented-control";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ouro/text/text";
 import { CookbookPage } from "~/components/cookbook/page";
@@ -26,6 +28,8 @@ import { RecipesSectionNav } from "~/components/navigation";
 import { ShowMore } from "~/components/ouro/collapsible/show-more";
 import { useAppendingList } from "~/hooks/use-appending-list";
 import { listImageProps, type ImageLoadingProps } from "~/lib/image-loading";
+import { RECIPE_VIEWS, parseRecipeView, recipeViewCookie, recipeViewFromCookie, type RecipeView } from "~/domains/kitchen";
+import { useFlag } from "~/domains/platform";
 
 const PUBLIC_RECIPE_LIMIT = 48;
 
@@ -79,6 +83,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     recipes: withoutHidden(hides, page, (recipe) => ({ type: "recipe", id: recipe.id, chefId: recipe.chef.id })),
     after,
     nextCursor: hasMore ? page[page.length - 1]!.id : null,
+    // The view the cook picked last, so the first render already uses it. Only shown while the organizers flag is on.
+    view: recipeViewFromCookie(request.headers.get("Cookie")),
   };
 }
 
@@ -96,7 +102,15 @@ const selectPublicRecipesPage = (data: PublicRecipesData) => ({ items: data.reci
 const loadPublicRecipesPage = (cursor: string) => `/recipes?index&after=${encodeURIComponent(cursor)}`;
 
 export default function RecipesIndex() {
-  const { query, isAuthenticated, recipes: firstPage, after, nextCursor } = useLoaderData<typeof loader>();
+  const { query, isAuthenticated, recipes: firstPage, after, nextCursor, view: savedView } = useLoaderData<typeof loader>();
+  const canPickView = useFlag("organizers");
+  const [pickedView, setPickedView] = useState<RecipeView>(savedView);
+  const view: RecipeView = canPickView ? pickedView : "pictures";
+  const pickView = (value: string) => {
+    const next = parseRecipeView(value);
+    setPickedView(next);
+    document.cookie = recipeViewCookie(next);
+  };
   const hasQuery = query.length > 0;
   const list = useAppendingList({
     page: { items: firstPage, nextCursor },
@@ -179,11 +193,17 @@ export default function RecipesIndex() {
             </p>
           </div>
 
+          {canPickView && recipes.length > 0 ? (
+            <SegmentedControl label="Recipe view" items={RECIPE_VIEWS} value={view} onValueChange={pickView} className="mb-5" />
+          ) : null}
+
           {recipes.length > 0 ? (
             <ShowMore
               ordered
               items={recipes.map((recipe, index) => (
-                <RecipeRow key={recipe.id} recipe={recipe} imageProps={listImageProps(index)} />
+                view === "list"
+                  ? <RecipeLine key={recipe.id} recipe={recipe} imageProps={listImageProps(index)} />
+                  : <RecipeRow key={recipe.id} recipe={recipe} imageProps={listImageProps(index)} />
               ))}
               hasMore={Boolean(list.nextCursor)}
               loading={list.loading}
@@ -216,6 +236,27 @@ export default function RecipesIndex() {
   );
 }
 
+function recipeByline(recipe: PublicRecipe): string {
+  return [`By ${chefDisplayName(recipe.chef.username)}`, formatServingsLabel(recipe.servings)].filter(Boolean).join(" • ");
+}
+
+/** One compact line in the list view: a small thumbnail, the title and the byline. */
+function RecipeLine({ recipe, imageProps }: { recipe: PublicRecipe; imageProps: ImageLoadingProps }) {
+  return (
+    <Item
+      as="article"
+      // Plain, so the lines sit close together; a list of many recipes is what this view is for.
+      variant="plain"
+      href={`/recipes/${recipe.id}`}
+      className="[overflow-wrap:anywhere]"
+      title={recipe.title}
+      description={recipeByline(recipe)}
+      media={recipe.coverImageUrl ? <img src={recipe.coverImageUrl} alt="" {...imageProps} /> : <ChefHat />}
+      mediaSize={recipe.coverImageUrl ? "sm" : "icon"}
+    />
+  );
+}
+
 function RecipeRow({
   recipe,
   imageProps,
@@ -223,7 +264,7 @@ function RecipeRow({
   recipe: PublicRecipe;
   imageProps: ImageLoadingProps;
 }) {
-  const byline = [`By ${chefDisplayName(recipe.chef.username)}`, formatServingsLabel(recipe.servings)].filter(Boolean).join(" • ");
+  const byline = recipeByline(recipe);
 
   return (
     <Item
