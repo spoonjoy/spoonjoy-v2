@@ -198,7 +198,7 @@ describe("the move-in job", () => {
     const ran = await jobs.drain();
 
     expect(ran.map(({ outcome }) => outcome.status)).toEqual(["retry", "retry", "retry", "retry", "failed"]);
-    expect((ran.at(-1)?.outcome as { error: Error }).error.message).toBe(`A segment of ${jobId} moved nothing`);
+    expect(ran.at(-1)?.outcome).toMatchObject({ status: "failed", error: { message: `A segment of ${jobId} moved nothing` } });
   });
 
   it("queues the next segment again when the first try to queue it fails", async () => {
