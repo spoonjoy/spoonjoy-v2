@@ -1,7 +1,8 @@
 // Where each page's Ouro HX components come from: for every page route in app/routes.ts, the app
 // files it imports (followed through the TypeScript import graph, stopping at the installed HX
 // under app/components/ouro and app/lib/ouro) and the HX items they render. X-ray's Source links,
-// /ouro-provenance.json and /llms.txt read it. `--check` fails when the committed file is stale.
+// /ouro-provenance.json and /llms.txt read it. Git ignores the file: install, typecheck, test and CI jobs that
+// install without scripts write it, and the build fails on its import without it. `--check` fails when it is stale.
 // It names no HX release: app/lib/ouro-provenance.server.ts reads that from HX's own source at build
 // time, so an Ouro update, which changes only HX's files, leaves this file as it is.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
