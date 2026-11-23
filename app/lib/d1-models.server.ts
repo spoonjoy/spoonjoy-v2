@@ -28,6 +28,7 @@ export const RECIPE_COLUMNS: ColumnSpec<Recipe> = {
   activeCoverId: "string?",
   activeCoverVariant: "string?",
   coverMode: "string",
+  visibility: "string",
   sourceRecipeId: "string?",
   sourceUrl: "string?",
   createdAt: "dateTime",
