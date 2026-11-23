@@ -99,7 +99,7 @@ describe("API recipe reads", () => {
     });
     const recipe = {
       id: "r", title: "t", description: null, servings: null, sourceUrl: null, activeCoverId: null, activeCoverVariant: null,
-      coverMode: "auto", createdAt: 1, updatedAt: 1, chef_id: "u", chef_username: "chef", source_id: null, cover_id: null,
+      coverMode: "auto", visibility: "public", createdAt: 1, updatedAt: 1, chef_id: "u", chef_username: "chef", source_id: null, cover_id: null,
     };
     await expect(loadApiRecipeFromD1(rowsFor([[{ ...recipe, chef_username: 1 }], [], [], [], []]) as never, "r"))
       .rejects.toThrow("D1 column chef_username");

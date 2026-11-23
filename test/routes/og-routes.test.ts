@@ -197,7 +197,7 @@ describe("dynamic OG image routes", () => {
         request: new Request(`https://spoonjoy.app/og/recipes/${hidden.id}.png`),
         params: { id: hidden.id },
         context: { cloudflare: { env: null } },
-      } as any),
+      } as unknown as Parameters<typeof recipeOgLoader>[0]),
     ).rejects.toMatchObject({ status: 404 });
   });
 
@@ -216,7 +216,7 @@ describe("dynamic OG image routes", () => {
       request: new Request(`https://spoonjoy.app/og/cookbooks/${cookbook.id}.png`),
       params: { id: cookbook.id },
       context: { cloudflare: { env: null } },
-    } as any);
+    } as unknown as Parameters<typeof cookbookOgLoader>[0]);
 
     const svg = await expectSvgResponse(response);
     expect(svg).toContain("1 RECIPE");

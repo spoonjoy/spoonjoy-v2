@@ -38,6 +38,7 @@ import { readChefProfileFromD1, readChefProfileWithPrisma } from "~/lib/chef-pro
 import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { loadApiRecipeFromD1, loadApiRecipeWithPrisma } from "~/lib/api-recipe-reads.server";
+import { canRead, readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
 import { d1WriteBatch } from "~/lib/d1-write.server";
 import { d1WriteOnceKey } from "~/lib/d1-write-once.server";
 import { putShoppingListItemOnceOnD1, type D1ShoppingItemPut } from "~/lib/shopping-list-d1-actions.server";
@@ -1324,8 +1325,24 @@ type SourceRecipeRow = {
   id: string;
   title: string;
   deletedAt: Date | null;
+  visibility: string;
   chef: { id: string; username: string };
 } | null;
+
+function apiReader(principal: ApiPrincipal | null): RecipeViewer {
+  return principal ? { id: principal.id } : null;
+}
+
+// A fork whose source the reader may not read shows no source, as on its web page.
+function withReadableSource<T extends { sourceRecipe: SourceRecipeRow }>(recipe: T, viewer: RecipeViewer): T {
+  const source = recipe.sourceRecipe;
+  if (!source || canRead(viewer, { chefId: source.chef.id, visibility: source.visibility })) return recipe;
+  return { ...recipe, sourceRecipe: null };
+}
+
+function withReadableSources<T extends { recipes: Array<{ recipe: { sourceRecipe: SourceRecipeRow } }> }>(cookbook: T, viewer: RecipeViewer): T {
+  return { ...cookbook, recipes: cookbook.recipes.map((entry) => ({ ...entry, recipe: withReadableSource(entry.recipe, viewer) })) };
+}
 
 function sourceHost(sourceUrl: string | null): string | null {
   if (!sourceUrl) return null;
@@ -1560,9 +1577,11 @@ async function loadOwnedCoverRecipe(db: ApiV1Db, principal: ApiPrincipal, recipe
   return recipe;
 }
 
-async function loadActiveRecipeForSpoons(db: ApiV1Db, recipeId: string): Promise<RecipeForApiV1SpoonCoverRow> {
+// Pass the reader to answer a recipe they may not read as not found. Reloads after a write the
+// reader already passed this check for leave it out.
+async function loadActiveRecipeForSpoons(db: ApiV1Db, recipeId: string, reader?: { viewer: RecipeViewer }): Promise<RecipeForApiV1SpoonCoverRow> {
   const recipe = await db.recipe.findFirst({
-    where: { id: recipeId, deletedAt: null },
+    where: { id: recipeId, deletedAt: null, ...(reader ? readableRecipeWhere(reader.viewer) : {}) },
     select: {
       id: true,
       title: true,
@@ -1808,7 +1827,7 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
   const recipes = await db.recipe.findMany({
     where: {
       deletedAt: null,
-      AND: [cursorWhere, queryWhere],
+      AND: [cursorWhere, queryWhere, readableRecipeWhere(apiReader(principal))],
     },
     select: {
       id: true,
@@ -1827,6 +1846,7 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
           id: true,
           title: true,
           deletedAt: true,
+          visibility: true,
           chef: { select: { id: true, username: true } },
         },
       },
@@ -1846,7 +1866,9 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
     cursor: cursor?.raw ?? null,
     nextCursor,
     hasMore,
-    recipes: withoutHidden(hides, page, (recipe) => ({ type: "recipe", id: recipe.id, chefId: recipe.chef.id })).map((recipe) => recipeSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin)),
+    recipes: withoutHidden(hides, page, (recipe) => ({ type: "recipe", id: recipe.id, chefId: recipe.chef.id }))
+      .map((recipe) => withReadableSource(recipe, apiReader(principal)))
+      .map((recipe) => recipeSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin)),
   }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
@@ -1855,11 +1877,16 @@ async function handleRecipeDetail(args: ApiV1RouteArgs, requestId: string, princ
   // One D1 batch where the binding exists, instead of Prisma's query per relation level.
   const d1 = requestD1(args.context);
   const recipe = d1 ? await loadApiRecipeFromD1(d1, id) : await loadRecipeById(await getRequestDb(args.context), id);
-  if (!recipe || hidesContent(await apiViewerHides(args, principal), "recipe", recipe.id, recipe.chef.id)) {
+  const viewer = apiReader(principal);
+  if (
+    !recipe
+    || !canRead(viewer, { chefId: recipe.chef.id, visibility: recipe.visibility })
+    || hidesContent(await apiViewerHides(args, principal), "recipe", recipe.id, recipe.chef.id)
+  ) {
     throw new ApiV1Error("not_found", "Recipe not found");
   }
 
-  return apiV1Success(requestId, { recipe: recipeDetail(recipe, origin) }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
+  return apiV1Success(requestId, { recipe: recipeDetail(withReadableSource(recipe, viewer), origin) }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
 function objectBody(value: unknown, field: string): Record<string, unknown> {
@@ -2101,7 +2128,7 @@ async function handleRecipeSpoonList(args: ApiV1RouteArgs, requestId: string, pr
   const url = new URL(args.request.url);
   const limit = parseListLimit(url);
   const cursor = parseSpoonListCursor(url);
-  await loadActiveRecipeForSpoons(db, recipeId);
+  await loadActiveRecipeForSpoons(db, recipeId, { viewer: principal ? { id: principal.id } : null });
   const spoons = await db.recipeSpoon.findMany({
     where: {
       recipeId,
@@ -2248,7 +2275,7 @@ async function recipeSpoonCreateData(
   },
 ) {
   const origin = publicContentOrigin(args);
-  const recipe = await loadActiveRecipeForSpoons(input.db, input.recipeId);
+  const recipe = await loadActiveRecipeForSpoons(input.db, input.recipeId, { viewer: { id: input.principal.id } });
   const spoon = await input.db.recipeSpoon.findFirstOrThrow({
     where: { id: input.spoonId, recipeId: input.recipeId },
     include: { chef: { select: API_V1_SPOON_CHEF_SELECT } },
@@ -2291,7 +2318,7 @@ async function recoverRecipeSpoonCreate(
     },
   });
   if (!spoon) return null;
-  const recipe = await loadActiveRecipeForSpoons(input.db, input.recipeId);
+  const recipe = await loadActiveRecipeForSpoons(input.db, input.recipeId, { viewer: { id: input.principal.id } });
   return {
     status: 201,
     data: await recipeSpoonCreateData(args, {
@@ -2344,7 +2371,7 @@ async function handleRecipeSpoonCreate(args: ApiV1RouteArgs, requestId: string, 
   const photoUrl = optionalNullableString(body.photoUrl, "photoUrl", 2048);
   const useAsRecipeCover = optionalBoolean(body.useAsRecipeCover, "useAsRecipeCover");
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.create", async (db, reservation) => {
-    await loadActiveRecipeForSpoons(db, recipeId);
+    await loadActiveRecipeForSpoons(db, recipeId, { viewer: { id: principal.id } });
     let created: Awaited<ReturnType<typeof createSpoon>>;
     try {
       created = await createSpoon(db, {
@@ -2415,7 +2442,7 @@ async function handleRecipeSpoonCreateWithPhoto(args: ApiV1RouteArgs, requestId:
   };
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.spoons.create", async (db, reservation) => {
-    await loadActiveRecipeForSpoons(db, recipeId);
+    await loadActiveRecipeForSpoons(db, recipeId, { viewer: { id: principal.id } });
 
     if (!hasUploadedImageFile(photo)) {
       throw new ApiV1Error("validation_error", "Please select a photo to upload", { field: "photo", reason: "missing" });
@@ -3266,8 +3293,9 @@ function nativeAccountSyncCookbookPayload(cookbook: CookbookRow, origin: string)
   };
 }
 
-async function loadCookbookById(db: Awaited<ReturnType<typeof getRequestDb>>, id: string) {
-  return db.cookbook.findUnique({
+// Lists only the entries the reader may read.
+async function loadCookbookById(db: Awaited<ReturnType<typeof getRequestDb>>, id: string, viewer: RecipeViewer) {
+  const cookbook = await db.cookbook.findUnique({
     where: { id },
     select: {
       id: true,
@@ -3276,6 +3304,7 @@ async function loadCookbookById(db: Awaited<ReturnType<typeof getRequestDb>>, id
       updatedAt: true,
       author: { select: { id: true, username: true } },
       recipes: {
+        where: { recipe: readableRecipeWhere(viewer) },
         select: {
           createdAt: true,
           recipeId: true,
@@ -3297,6 +3326,7 @@ async function loadCookbookById(db: Awaited<ReturnType<typeof getRequestDb>>, id
                   id: true,
                   title: true,
                   deletedAt: true,
+                  visibility: true,
                   chef: { select: { id: true, username: true } },
                 },
               },
@@ -3309,6 +3339,7 @@ async function loadCookbookById(db: Awaited<ReturnType<typeof getRequestDb>>, id
       },
     },
   });
+  return cookbook ? withReadableSources(cookbook, viewer) : null;
 }
 
 async function handleCookbookList(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null) {
@@ -3336,6 +3367,7 @@ async function handleCookbookList(args: ApiV1RouteArgs, requestId: string, princ
       updatedAt: true,
       author: { select: { id: true, username: true } },
       recipes: {
+        where: { recipe: readableRecipeWhere(apiReader(principal)) },
         select: {
           createdAt: true,
           recipeId: true,
@@ -3357,6 +3389,7 @@ async function handleCookbookList(args: ApiV1RouteArgs, requestId: string, princ
                   id: true,
                   title: true,
                   deletedAt: true,
+                  visibility: true,
                   chef: { select: { id: true, username: true } },
                 },
               },
@@ -3382,14 +3415,14 @@ async function handleCookbookList(args: ApiV1RouteArgs, requestId: string, princ
     cursor: cursor?.raw ?? null,
     nextCursor,
     hasMore,
-    cookbooks: withoutHidden(hides, page, (cookbook) => ({ type: "cookbook", id: cookbook.id, chefId: cookbook.author.id })).map((cookbook) => cookbookSummary(cookbook, origin)),
+    cookbooks: withoutHidden(hides, page, (cookbook) => ({ type: "cookbook", id: cookbook.id, chefId: cookbook.author.id })).map((cookbook) => cookbookSummary(withReadableSources(cookbook, apiReader(principal)), origin)),
   }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
 async function handleCookbookDetail(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null, id: string) {
   const db = await getRequestDb(args.context);
   const origin = publicContentOrigin(args);
-  const cookbook = await loadCookbookById(db, id);
+  const cookbook = await loadCookbookById(db, id, apiReader(principal));
   if (!cookbook || hidesContent(await apiViewerHides(args, principal), "cookbook", cookbook.id, cookbook.author.id)) {
     throw new ApiV1Error("not_found", "Cookbook not found");
   }
@@ -3416,8 +3449,8 @@ function productActivationPendingApiV1Error(error: unknown): ApiV1Error | null {
     : null;
 }
 
-async function loadExistingCookbookById(db: ApiV1Db, id: string) {
-  const cookbook = await loadCookbookById(db, id);
+async function loadExistingCookbookById(db: ApiV1Db, id: string, viewer: RecipeViewer) {
+  const cookbook = await loadCookbookById(db, id, viewer);
   if (!cookbook) {
     throw new ApiV1Error("not_found", "Cookbook not found", { resource: "cookbook", cookbookId: id });
   }
@@ -3425,7 +3458,7 @@ async function loadExistingCookbookById(db: ApiV1Db, id: string) {
 }
 
 async function loadOwnedCookbookById(db: ApiV1Db, principal: ApiPrincipal, id: string) {
-  const cookbook = await loadExistingCookbookById(db, id);
+  const cookbook = await loadExistingCookbookById(db, id, { id: principal.id });
   if (cookbook.author.id !== principal.id) {
     throw new ApiV1Error("insufficient_scope", "Only the cookbook owner can mutate this cookbook", { resource: "cookbook", cookbookId: id });
   }
@@ -3447,7 +3480,7 @@ async function handleCookbookCreate(args: ApiV1RouteArgs, requestId: string, pri
     status: 201,
     data: {
       created: true,
-      cookbook: cookbookDetail(await loadExistingCookbookById(db, cookbookId), origin),
+      cookbook: cookbookDetail(await loadExistingCookbookById(db, cookbookId, { id: principal.id }), origin),
       mutation: { clientMutationId, replayed: false },
     },
   });
@@ -3503,7 +3536,7 @@ async function handleCookbookUpdate(args: ApiV1RouteArgs, requestId: string, pri
       throw error;
     }
 
-    const cookbook = await loadExistingCookbookById(db, id);
+    const cookbook = await loadExistingCookbookById(db, id, { id: principal.id });
     return {
       status: 200,
       data: {
@@ -3565,7 +3598,7 @@ async function handleCookbookRecipeAdd(
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.recipes.add", async (db) => {
     await loadOwnedCookbookById(db, principal, cookbookId);
     const recipe = await db.recipe.findFirst({
-      where: { id: recipeId, deletedAt: null },
+      where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: principal.id }) },
       select: { id: true },
     });
     if (!recipe) {
@@ -3587,7 +3620,7 @@ async function handleCookbookRecipeAdd(
       throw error;
     }
 
-    const cookbook = await loadExistingCookbookById(db, cookbookId);
+    const cookbook = await loadExistingCookbookById(db, cookbookId, { id: principal.id });
     return {
       status: added ? 201 : 200,
       data: {
@@ -3630,7 +3663,7 @@ async function handleCookbookRecipeRemove(
     } catch (error) {
       throw productActivationPendingApiV1Error(error) ?? error;
     }
-    const cookbook = await loadExistingCookbookById(db, cookbookId);
+    const cookbook = await loadExistingCookbookById(db, cookbookId, { id: principal.id });
     return {
       status: 200,
       data: {
@@ -4101,10 +4134,10 @@ async function handleNativeAccountSync(args: ApiV1RouteArgs, requestId: string, 
   const pageEntries = await Promise.all(pageRefs.map(async (entry): Promise<NativeSyncEntry | null> => {
     if (entry.action === "upsert" && entry.kind === "recipe") {
       const recipe = await loadRecipeById(db, entry.resourceId);
-      return recipe ? { ...entry, payload: recipeDetail(recipe, origin) } : null;
+      return recipe ? { ...entry, payload: recipeDetail(withReadableSource(recipe, { id: principal.id }), origin) } : null;
     }
     if (entry.action === "upsert" && entry.kind === "cookbook") {
-      const cookbook = await loadCookbookById(db, entry.resourceId);
+      const cookbook = await loadCookbookById(db, entry.resourceId, { id: principal.id });
       return cookbook ? { ...entry, payload: nativeAccountSyncCookbookPayload(cookbook, origin) } : null;
     }
     return entry;
@@ -4572,7 +4605,7 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "shopping-list.add-from-recipe", async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const recipe = await db.recipe.findFirst({
-      where: { id: recipeId, deletedAt: null },
+      where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: principal.id }) },
       include: {
         steps: {
           orderBy: { stepNum: "asc" },

@@ -19,6 +19,7 @@ export const API_RECIPE_SELECT = {
   activeCoverId: true,
   activeCoverVariant: true,
   coverMode: true,
+  visibility: true,
   createdAt: true,
   updatedAt: true,
   chef: { select: { id: true, username: true } },
@@ -27,6 +28,7 @@ export const API_RECIPE_SELECT = {
       id: true,
       title: true,
       deletedAt: true,
+      visibility: true,
       chef: { select: { id: true, username: true } },
     },
   },
@@ -81,6 +83,7 @@ const RECIPE_FIELDS: ColumnSpec<Omit<ApiRecipeRow, "chef" | "sourceRecipe" | "ac
   activeCoverId: "string?",
   activeCoverVariant: "string?",
   coverMode: "string",
+  visibility: "string",
   createdAt: "dateTime",
   updatedAt: "dateTime",
 };
@@ -91,6 +94,7 @@ const SOURCE_FIELDS: ColumnSpec<Omit<NonNullable<ApiRecipeRow["sourceRecipe"]>, 
   id: "string",
   title: "string",
   deletedAt: "dateTime?",
+  visibility: "string",
 };
 
 const STEP_FIELDS: ColumnSpec<Omit<ApiStep, "ingredients" | "usingSteps">> = {
