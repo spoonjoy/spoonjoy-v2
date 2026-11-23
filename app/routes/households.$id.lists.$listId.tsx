@@ -60,7 +60,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
             ? { result: await deleteHouseholdList(lists, on), as: "deleted" as const }
             : null;
   if (!done) return data({ error: "Unknown action." }, { status: 400 });
-  if (!done.result.ok) return data({ error: done.result.error }, { status: 400 });
+  if (!done.result.ok) return data({ error: done.result.error }, { status: done.result.forbidden ? 403 : 400 });
   if (done.as === "deleted") return redirect(`/households/${params.id}/lists`);
   return { done: done.as };
 }

@@ -59,10 +59,12 @@ describe("household shopping lists", () => {
     expect(await createHouseholdList(store, { householdId: "h1", userId: "cal", name: "Mine", now })).toEqual({
       ok: false,
       error: "View-only members can't change shared lists.",
+      forbidden: true,
     });
     expect(await createHouseholdList(store, { householdId: "h1", userId: "dee", name: "Mine", now })).toEqual({
       ok: false,
       error: "That household isn't one of yours.",
+      forbidden: true,
     });
     expect(await createHouseholdList(store, { householdId: "h1", userId: "ann", name: " ", now })).toEqual({
       ok: false,
@@ -111,6 +113,7 @@ describe("household shopping lists", () => {
     expect(await deleteHouseholdList(store, { householdId: "h1", listId: annsList, userId: "dee" })).toEqual({
       ok: false,
       error: "Only the person who made this list or a household owner can delete it.",
+      forbidden: true,
     });
     expect(await getHouseholdList(store, { householdId: "h1", listId: annsList, userId: "ann" })).not.toBeNull();
     expect(await removeHouseholdListItem(store, { householdId: "h1", listId: annsList, userId: "dee", itemId })).toEqual({ ok: true, value: null });
@@ -131,7 +134,8 @@ describe("household shopping lists", () => {
     const added = await addHouseholdListItem(store, { householdId: "h1", listId, userId: "ann", text: "eggs", now });
     if (!added.ok) throw new Error(added.error);
     const itemId = added.value.id;
-    const viewOnly = { ok: false, error: "View-only members can't change shared lists." };
+    // Refusals for who someone is carry forbidden, so the routes answer them with 403 rather than 400.
+    const viewOnly = { ok: false, error: "View-only members can't change shared lists.", forbidden: true };
 
     expect(await addHouseholdListItem(store, { householdId: "h1", listId, userId: "cal", text: "cake", now })).toEqual(viewOnly);
     expect(await setHouseholdListItemChecked(store, { householdId: "h1", listId, userId: "cal", itemId, checked: true, now })).toEqual(viewOnly);
@@ -140,6 +144,7 @@ describe("household shopping lists", () => {
     expect(await addHouseholdListItem(store, { householdId: "h1", listId, userId: "dee", text: "cake", now })).toEqual({
       ok: false,
       error: "That household isn't one of yours.",
+      forbidden: true,
     });
     // A list from another household, reached through a household the person is in, isn't found.
     const missing = { ok: false, error: "That list isn't in this household." };

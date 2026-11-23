@@ -28,8 +28,8 @@ const mayDelete = (householdId: string, userId: string, role: HouseholdRole, lis
 
 async function editable(store: HouseholdListStore, { householdId, userId }: InHousehold): Promise<Checked<null>> {
   const role = await store.roleIn(householdId, userId);
-  if (!role) return { ok: false, error: NOT_YOURS };
-  if (!allows(householdId, userId, role)) return { ok: false, error: VIEW_ONLY };
+  if (!role) return { ok: false, error: NOT_YOURS, forbidden: true };
+  if (!allows(householdId, userId, role)) return { ok: false, error: VIEW_ONLY, forbidden: true };
   return { ok: true, value: null };
 }
 
@@ -111,7 +111,7 @@ export async function deleteHouseholdList(store: HouseholdListStore, input: OnLi
   if (!allowed.ok) return allowed;
   const [role, list] = await Promise.all([store.roleIn(input.householdId, input.userId), store.list(input.householdId, input.listId)]);
   if (!list) return { ok: false, error: NOT_HERE };
-  if (!role || !mayDelete(input.householdId, input.userId, role, list)) return { ok: false, error: NOT_YOUR_LIST };
+  if (!role || !mayDelete(input.householdId, input.userId, role, list)) return { ok: false, error: NOT_YOUR_LIST, forbidden: true };
   await store.deleteList(input.listId);
   return allowed;
 }

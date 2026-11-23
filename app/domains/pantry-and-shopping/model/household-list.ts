@@ -4,7 +4,8 @@
 export const MAX_HOUSEHOLD_LIST_NAME_LENGTH = 80;
 export const MAX_HOUSEHOLD_LIST_ITEM_LENGTH = 200;
 
-export type Checked<T> = { ok: true; value: T } | { ok: false; error: string };
+/** A refusal with `forbidden` is about who is asking (403), not about what they sent (400). */
+export type Checked<T> = { ok: true; value: T } | { ok: false; error: string; forbidden?: true };
 
 export type HouseholdListSummary = { id: string; name: string; itemCount: number; openCount: number };
 
