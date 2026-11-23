@@ -201,6 +201,18 @@ describe("AppNavbar", () => {
     expect(households.className).not.toMatch(/(^|\s)rounded-(full|\[)/);
   });
 
+  it("labels the Households icon with a Households tooltip when a pointer rests on it", async () => {
+    renderNavbarWithFlags(["households"], "chef-1", "/");
+    const households = screen.getByRole("link", { name: "Households" });
+    fireEvent.pointerEnter(households, { pointerType: "mouse" });
+    const tooltip = await waitFor(() => {
+      const found = document.querySelector('[data-ouro="tooltip"]');
+      expect(found).not.toBeNull();
+      return found!;
+    }, { timeout: 2000 });
+    expect(tooltip).toHaveTextContent("Households");
+  });
+
   it("leaves Households out of the bar when the households flag is off", () => {
     renderNavbarWithFlags([], "chef-1", "/");
     expect(screen.queryByRole("link", { name: "Households" })).not.toBeInTheDocument();
