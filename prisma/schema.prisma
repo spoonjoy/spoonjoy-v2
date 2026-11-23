@@ -677,7 +677,7 @@ model CookingNow {
   @@index([userId, touchedAt])
 }
 
-// A cook's meal plan (migration 0041, app/domains/planning): one per cook until households set
+// A cook's meal plan (migration 0043, app/domains/planning): one per cook until households set
 // householdId. An entry is a recipe at a servings scale or a note, on a local "YYYY-MM-DD" day.
 model MealPlan {
   id             String      @id @default(cuid())

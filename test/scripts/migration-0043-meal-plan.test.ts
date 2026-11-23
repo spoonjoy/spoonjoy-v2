@@ -5,9 +5,9 @@ import { describe, expect, it } from "vitest";
 import { assertAdditiveMigrationSql } from "../../scripts/deploy-production-canary";
 
 const MIGRATIONS_DIR = resolve(__dirname, "../../migrations");
-const MIGRATION = "0041_meal_plan.sql";
+const MIGRATION = "0043_meal_plan.sql";
 const ROOT_MIGRATION = resolve(MIGRATIONS_DIR, MIGRATION);
-const PRISMA_MIGRATION = resolve(__dirname, "../../prisma/migrations/20261123120000_meal_plan/migration.sql");
+const PRISMA_MIGRATION = resolve(__dirname, "../../prisma/migrations/20261123160000_meal_plan/migration.sql");
 const AT = "2026-11-23T12:00:00.000Z";
 
 /** A database with every root D1 migration applied in order, optionally without one. */
@@ -35,13 +35,13 @@ function seed(db: DatabaseSync.Database) {
 
 const insertEntry = `INSERT INTO "PlanEntry" ("id", "mealPlanId", "date", "mealType", "kind", "recipeId", "recipeTitle", "title", "addedById", "sourceSystem", "sourceId", "updatedAt") VALUES (?, 'p1', '2026-11-23', 'dinner', ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-describe("migration 0041 copies", () => {
+describe("migration 0043 copies", () => {
   it("keeps root D1 and Prisma migration SQL byte-identical", () => {
     expect(readFileSync(ROOT_MIGRATION, "utf8")).toBe(readFileSync(PRISMA_MIGRATION, "utf8"));
   });
 });
 
-describe("migration 0041 - meal plan", () => {
+describe("migration 0043 - meal plan", () => {
   it("is additive so the production release can apply it automatically", () => {
     expect(() => assertAdditiveMigrationSql(MIGRATION, readFileSync(ROOT_MIGRATION, "utf8"))).not.toThrow();
   });
