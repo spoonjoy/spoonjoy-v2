@@ -184,15 +184,21 @@ describe("AppNavbar", () => {
     expect(centerLinks.slice(0, 2)).toEqual(["Kitchen", "Recipes"]);
   });
 
-  it("links signed-in cooks to their households after the shopping list when the households flag is on", () => {
+  it("puts Households beside Account, outside the page links, when the households flag is on", () => {
     renderNavbarWithFlags(["households"], "chef-1", "/households/household-1");
 
-    const nav = screen.getByRole("navigation", { name: "Main navigation" });
-    const households = within(nav).getByRole("link", { name: "Households" });
+    const households = screen.getByRole("link", { name: "Households" });
     expect(households).toHaveAttribute("href", "/households");
     expect(households).toHaveAttribute("aria-current", "page");
-    const labels = within(nav).getAllByRole("link").map((link) => link.textContent);
-    expect(labels[labels.indexOf("Shopping List") + 1]).toBe("Households");
+    // An action, so the page links keep the room they fit in at 1280px.
+    const nav = screen.getByRole("navigation", { name: "Main navigation" });
+    expect(within(nav).queryByRole("link", { name: "Households" })).not.toBeInTheDocument();
+    const account = screen.getByRole("link", { name: "Account" });
+    expect(households.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The same Ouro button as Account, squared for its icon, with the base's squircle corner and none of its own.
+    expect(households.getAttribute("data-ouro")).toBe(account.getAttribute("data-ouro"));
+    expect(households).toHaveClass("rounded-ouro-control");
+    expect(households.className).not.toMatch(/(^|\s)rounded-(full|\[)/);
   });
 
   it("leaves Households out of the bar when the households flag is off", () => {
