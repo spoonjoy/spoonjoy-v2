@@ -32,6 +32,10 @@ Platform ports cover only what a self-hosted server does differently from spoonj
 
 A context may have an `index.server.ts` beside its `index.ts` for server-only exports, imported as `~/domains/<context>/index.server`.
 
+## Platform jobs
+
+The jobs port (`platform/ports/jobs.ts`) runs work on the server after the request that asked for it, so it keeps going when the person closes the page. Define a kind with `defineJob<Payload>("context.name", { maxAttempts })`, register its handler on `jobHandlers` in `workers/app.ts`, and enqueue it with a key that names the work: `jobs.enqueue(kind, payload, { key })`. A key that is waiting or done is not enqueued again, and a delivery whose key is done is skipped. A run that throws is retried after 10 s, doubling up to 15 minutes, until its attempts run out; then the failure is reported and the key freed. On spoonjoy.app `queueJobs(env.JOBS, d1JobKeys(env.DB))` sends jobs on Cloudflare Queues and keeps keys in D1's `PlatformJobKey` table; tests use `memoryJobs(registry)` and `drain()`. The `JOBS` queue binding arrives with the first job kind; until then enqueueing throws `JobsUnavailableError`.
+
 ## The rule, checked
 
 `pnpm lint` runs `scripts/check-domain-boundaries.mjs`, which fails when:
