@@ -473,6 +473,12 @@ async function lineInView(locator: Locator, index: number): Promise<LineResult> 
         (portal) => !portal.contains(element) && portal.querySelector("[data-open]")?.checkVisibility({ visibilityProperty: true }),
       );
       if (hidden && popup) return { inactive: `out of view while ${helpers.describe(popup)} is open and holds the page still, and hidden from assistive technology by ${helpers.describe(hidden)}` };
+      // A dropdown menu holds the page too, but Base UI hides the page behind it only for a context menu, so
+      // text below the fold stays in the accessibility tree and still can't be shown. That text is out of the
+      // open menu's state: the same page is measured with the menu closed. Only text outside the menu, and
+      // only a line the hold keeps out of view; the menu's own items, and every line in view, are measured.
+      const menu = popup?.querySelector('[role="menu"][data-open]');
+      if (popup && menu) return { inactive: `out of view behind the open menu ${helpers.describe(menu)}, which holds the page still; measured with it closed` };
     }
     if (!line || !inside(line.rect)) return { blocker: `line ${index + 1} moved out of view` };
     return { box: { x: line.rect.x, y: line.rect.y, width: line.rect.width, height: line.rect.height }, run: line.run };

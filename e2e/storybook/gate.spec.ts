@@ -291,6 +291,33 @@ test.describe("text axe cannot judge", () => {
     expect((await measureTextContrast(page, "#t", "fixture")).error).toBe("line 1 moved out of view");
   });
 
+  test("passes text below the fold behind an open dropdown menu that holds the page, and still fails it behind another popup", async ({ page }) => {
+    // Base UI's dropdown holds the page without hiding it from assistive technology (only a context menu
+    // does), so the recipe's steps below its ⋯ menu stay in the tree but can't be scrolled into view.
+    const holdStill = () => {
+      document.body.style.overflow = "hidden";
+      addEventListener("scroll", () => requestAnimationFrame(() => scrollTo(0, 0)));
+    };
+    const fold = `<div style="height:1200px"></div><p style="margin:0;background:#fff"><span id="t" style="color:#123">L</span></p><div style="height:400px"></div>`;
+    const popup = (role: string) => `<div data-base-ui-portal><div role="${role}" data-open style="position:fixed;top:8px;left:8px;width:80px;height:40px;background:#fff">Menu</div></div>`;
+    await show(page, fold + popup("menu"));
+    await page.evaluate(holdStill);
+    const measured = await measureTextContrast(page, "#t", "fixture");
+    expect(measured.passed).toBe(true);
+    expect(measured.inactive).toMatch(/^out of view behind the open menu div, which holds the page still; measured with it closed$/);
+
+    await show(page, fold + popup("listbox"));
+    await page.evaluate(holdStill);
+    expect((await measureTextContrast(page, "#t", "fixture")).error).toBe("line 1 moved out of view");
+  });
+
+  test("fails low-contrast text inside an open dropdown menu", async ({ page }) => {
+    await show(page, `<div data-base-ui-portal><div role="menu" data-open style="position:fixed;top:8px;left:8px;width:200px;height:40px;background:#fff"><span id="t" role="menuitem" style="color:#ddd">Delete</span></div></div>`);
+    const measured = await measureTextContrast(page, "#t", "fixture");
+    expect(measured.passed).toBe(false);
+    expect(measured.error).toBeUndefined();
+  });
+
   test("fails covered text hidden from assistive technology when no dialog is open", async ({ page }) => {
     await show(page, `<p id="t" aria-hidden="true" style="color:#000;background:#fff">Hidden</p><div style="position:fixed;inset:0;background:#fff"></div>`);
     const measured = await measureTextContrast(page, "#t", "fixture");
