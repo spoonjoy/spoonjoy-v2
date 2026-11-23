@@ -1,25 +1,18 @@
-// Move in on both devices, as scratch user 11's per-device twins (AGENTS.md's scratch index table):
-// for each source app version the move-in proof seeds, drop that version's small kitchen backup on
-// /move-in, watch it move in, and check the finish screen against the proof's manifest: every
-// recipe and every photo it counted. Then drop the same backup again and see nothing come in
-// twice, and find one of its recipes, photo and all, in the person's kitchen. The backups and the
-// manifest are the published proof fixtures (scripts/move-in-proof, release
-// move-in-proof-fixtures-v1), read from the public release and checked against pinned digests.
-//
-// The two devices sign in as different accounts, so neither sees the other's recipes, and each
-// version's kitchen is its own source with its own ids (checked below), so the three versions
-// never collide: a later version's recipes get a "(2)" or "(3)" after a title the account already
-// has, which also makes those move-ins finish with something to look over.
-import { test, expect } from "./support/journey";
+// Moving a kitchen in, for the Move in journeys (move-in.mobile.journey.ts, move-in.desktop.journey.ts):
+// drop a source version's small kitchen backup on /move-in, watch it move in, and check the finish
+// screen against the move-in proof's manifest; move the same backup in again and see nothing added;
+// find one of its recipes, photo and steps and all, in the kitchen. The backups and the manifest are
+// the published proof fixtures (scripts/move-in-proof, release move-in-proof-fixtures-v1), read from
+// the public release and checked against pinned digests. Each version's kitchen has its own ids
+// (checked below), and each journey moves into its own fresh scratch account.
 import type { Page } from "@playwright/test";
-import { bytesSource, openZip } from "../../app/domains/move-in/adapters/archive/zip";
-import { openMealieBackup } from "../../app/domains/move-in/adapters/sources/mealie-backup/backup";
-import { chooseGroup, recipeDrafts } from "../../app/domains/move-in/adapters/sources/mealie-backup/database";
-import { requiredLabel } from "./support/forms";
-import { download } from "./support/move-in-fixtures";
-import { scratchStorageStateForProject } from "./support/personas";
+import { test, expect } from "./journey";
+import { bytesSource, openZip } from "../../../app/domains/move-in/adapters/archive/zip";
+import { openMealieBackup } from "../../../app/domains/move-in/adapters/sources/mealie-backup/backup";
+import { chooseGroup, recipeDrafts } from "../../../app/domains/move-in/adapters/sources/mealie-backup/database";
+import { requiredLabel } from "./forms";
+import { download } from "./move-in-fixtures";
 
-const SCRATCH_INDEX = 11;
 // A move-in of a small kitchen polls every few seconds; give it room on a slow QA run.
 const MOVE_IN_MS = 150_000;
 
@@ -32,8 +25,6 @@ let manifest: Manifest | undefined;
 const backups = new Map<string, Buffer>();
 /** One recipe with a photo from each version's kitchen, to find after it moves in. */
 const samples = new Map<string, string>();
-/** Every recipe title in each version's kitchen. */
-const titles = new Map<string, Set<string>>();
 
 /** The manifest and each version's small kitchen backup, read once per worker. */
 async function fixtures(): Promise<Manifest> {
@@ -50,7 +41,6 @@ async function fixtures(): Promise<Manifest> {
     const group = chooseGroup(backup.database, null) as string;
     groups.add(group);
     const drafts = recipeDrafts(backup.database, group);
-    titles.set(source.version, new Set(drafts.map((draft) => draft.title)));
     const sample = drafts.find((draft) => backup.hasFile(draft.photoPath));
     if (!sample) throw new Error(`The ${source.version} kitchen has no recipe with a photo`);
     samples.set(source.version, sample.title);
@@ -74,7 +64,7 @@ async function dropBackup(page: Page, version: string) {
   await expect(page).toHaveURL(/\/move-in\?job=movein_/);
 }
 
-type JourneyArgs = Pick<Parameters<Parameters<typeof test>[2]>[0], "page" | "expectAccessible">;
+export type JourneyArgs = Pick<Parameters<Parameters<typeof test>[2]>[0], "page" | "expectAccessible">;
 
 /** Attaches a full-page screenshot to the report, named for the version, so a reviewer can see each state. */
 async function snapshot(page: Page, version: string, state: string) {
@@ -88,8 +78,8 @@ async function snapshot(page: Page, version: string, state: string) {
  * Moves the version's small kitchen in and checks the finish screen against the manifest. Returns
  * that check, for the test to run again after a reload.
  */
-async function moveIn(version: string, { page, expectAccessible }: JourneyArgs): Promise<() => Promise<void>> {
-  test.setTimeout(3 * MOVE_IN_MS);
+export async function moveIn(version: string, { page, expectAccessible }: JourneyArgs): Promise<() => Promise<void>> {
+  test.setTimeout(Math.max(test.info().timeout, 3 * MOVE_IN_MS));
   const { kitchens, sources } = await fixtures();
   expect(sources.map((source) => source.version)).toContain(version);
   const { recipes, recipesWithPhoto } = kitchens.small.counts;
@@ -116,40 +106,47 @@ async function moveIn(version: string, { page, expectAccessible }: JourneyArgs):
   return finished;
 }
 
-/** Moves the same backup in again: every recipe and photo is already here, so nothing comes in twice. */
-async function moveInAgain(version: string, { page }: Pick<JourneyArgs, "page">) {
+/**
+ * Moves the same backup in again: every recipe and photo is already here, so nothing comes in twice.
+ * Returns that check, for the test to run again after a reload.
+ */
+export async function moveInAgain(version: string, { page }: Pick<JourneyArgs, "page">): Promise<() => Promise<void>> {
   const { recipes, recipesWithPhoto } = (await fixtures()).kitchens.small.counts;
   const main = page.getByRole("main");
   await main.getByRole("link", { name: "Move in another backup", exact: true }).click();
   await dropBackup(page, version);
-  await expect(main.getByRole("heading", { level: 2, name: "Nothing new to move in", exact: true })).toBeVisible({ timeout: MOVE_IN_MS });
-  await expect(detail(page, "Already here")).toHaveText(String(recipes));
-  await expect(detail(page, "Photos")).toHaveText(`${recipesWithPhoto} of ${recipesWithPhoto}`);
+  const nothingAdded = async () => {
+    await expect(main.getByRole("heading", { level: 2, name: "Everything was already here", exact: true })).toBeVisible({ timeout: MOVE_IN_MS });
+    await expect(main.getByText(`${recipes} already here, 0 changed.`, { exact: true })).toBeVisible();
+    await expect(detail(page, "Recipes moved in")).toHaveText("0");
+    await expect(detail(page, "Photos")).toHaveText(`${recipesWithPhoto} of ${recipesWithPhoto}`);
+  };
+  await nothingAdded();
+  await snapshot(page, version, "5-moved-in-again");
+  return nothingAdded;
 }
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
- * Finds the version's sample recipe in the person's kitchen and opens it to see its photo. Kitchens
- * can share titles, so the account holds one copy ("Title", "Title (2)", ...) for each version moved
- * in so far that has the recipe. Any copy will do for the photo: each came in with one.
+ * Finds the version's sample recipe in the person's kitchen, once and under its own name, and opens
+ * it to see its photo and steps. Each account moves in one kitchen, so a second copy ("Title (2)")
+ * would mean a recipe came in twice.
  */
-async function inTheKitchen(version: string, { page }: Pick<JourneyArgs, "page">) {
-  const { sources } = await fixtures();
+export async function inTheKitchen(version: string, { page }: Pick<JourneyArgs, "page">) {
+  await fixtures();
   const title = samples.get(version) as string;
-  const upTo = sources.slice(0, sources.findIndex((source) => source.version === version) + 1);
-  const movedIn = upTo.filter((source) => titles.get(source.version)?.has(title)).length;
   const main = page.getByRole("main");
   await main.getByRole("link", { name: "See your recipes", exact: true }).click();
   await expect(page).toHaveURL(/\/my-recipes/);
   await page.goto(`/my-recipes?q=${encodeURIComponent(title)}`);
   const copies = main.locator(`a[href^="/recipes/"]`).filter({ hasText: title });
-  await expect.poll(() => copies.count()).toBeGreaterThanOrEqual(movedIn);
+  await expect(copies.first()).toBeVisible();
+  await expect(main.locator(`a[href^="/recipes/"]`).filter({ hasText: new RegExp(`${escaped(title)} \\(\\d+\\)`) })).toHaveCount(0);
   await copies.first().click();
-  const heading = main.getByRole("heading", { level: 1, name: new RegExp(`^${escaped(title)}( \\(\\d+\\))?$`) });
+  const heading = main.getByRole("heading", { level: 1, name: title, exact: true });
   await expect(heading).toBeVisible();
-  const name = (await heading.textContent())?.trim() ?? title;
-  const photo = main.getByRole("img", { name: `Photo of ${name}`, exact: true });
+  const photo = main.getByRole("img", { name: `Photo of ${title}`, exact: true });
   await expect(photo).toBeVisible();
   await expect.poll(() => photo.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   // Its steps came over too, in order, with the ingredients each one uses linked to it.
@@ -158,25 +155,3 @@ async function inTheKitchen(version: string, { page }: Pick<JourneyArgs, "page">
   await expect(main.getByRole("article", { name: /^Step \d+$/ }).getByRole("checkbox").first()).toBeVisible();
   await snapshot(page, version, "4-recipe");
 }
-
-test.describe("Move in", () => {
-  test.use({ storageState: scratchStorageStateForProject(SCRATCH_INDEX) });
-
-  test("a v1.12.0 kitchen moves in with every recipe and photo, and moving it in again adds nothing @mutates", async ({ page, expectAccessible, verifyAfterReload }) => {
-    await verifyAfterReload(await moveIn("v1.12.0", { page, expectAccessible }));
-    await moveInAgain("v1.12.0", { page });
-    await inTheKitchen("v1.12.0", { page });
-  });
-
-  test("a v2.8.0 kitchen moves in with every recipe and photo, and moving it in again adds nothing @mutates", async ({ page, expectAccessible, verifyAfterReload }) => {
-    await verifyAfterReload(await moveIn("v2.8.0", { page, expectAccessible }));
-    await moveInAgain("v2.8.0", { page });
-    await inTheKitchen("v2.8.0", { page });
-  });
-
-  test("a v3.31.0 kitchen moves in with every recipe and photo, and moving it in again adds nothing @mutates", async ({ page, expectAccessible, verifyAfterReload }) => {
-    await verifyAfterReload(await moveIn("v3.31.0", { page, expectAccessible }));
-    await moveInAgain("v3.31.0", { page });
-    await inTheKitchen("v3.31.0", { page });
-  });
-});
