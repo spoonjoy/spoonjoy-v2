@@ -34,6 +34,7 @@ import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/ouro/link/link";
 import { Menu, MenuItem } from "~/components/ouro/menu/menu";
+import { useFlag } from "~/domains/platform";
 import { cookTimeLabel } from "~/lib/recipe-cook-time";
 import { Text } from "~/components/ouro/text/text";
 import { Toggle } from "~/components/ouro/toggle/toggle";
@@ -226,6 +227,7 @@ function RecipeDetail() {
     ? recipeCoverFields.coverProvenanceLabel
     : null;
   const isAuthenticated = loaderData.isAuthenticated ?? true;
+  const organizersOn = useFlag("organizers");
   const cookSessionUserId = loaderData.cookSessionUserId ?? null;
   const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;
   const savedInCookbookIds = loaderData.savedInCookbookIds ?? EMPTY_SAVED_COOKBOOK_IDS;
@@ -482,6 +484,9 @@ function RecipeDetail() {
         >
           {isOwner ? (
             <MenuItem href={`/recipes/${recipe.id}/edit`}>Edit</MenuItem>
+          ) : null}
+          {isOwner && organizersOn ? (
+            <MenuItem href={`/recipes/${recipe.id}/tags`}>Tags</MenuItem>
           ) : null}
           {isOwner ? <MenuItem onClick={() => setIsCoversDialogOpen(true)}>Manage covers</MenuItem> : null}
           {isOwner ? <MenuItem onClick={() => setIsVariationDialogOpen(true)}>Make a variation</MenuItem> : null}

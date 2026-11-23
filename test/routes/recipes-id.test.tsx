@@ -4400,6 +4400,27 @@ describe("Recipes $id Route", () => {
       expect(await screen.findByRole("dialog", { name: 'Make a variation of "My Recipe"?' })).toBeInTheDocument();
     });
 
+    it("offers its cook a Tags item in the recipe menu while the organizers flag is on", async () => {
+      const mockData = {
+        recipe: { id: "recipe-1", title: "Tagged Recipe", description: null, servings: null, coverImageUrl: null, chef: { id: "user-1", username: "testchef" }, steps: [] },
+        isOwner: true,
+      };
+      const On = createTestRoutesStub([
+        { id: "root", path: "/", loader: () => ({ flags: ["organizers"] }), children: [{ path: "recipes/:id", Component: RecipeDetail, loader: () => mockData }] },
+      ]);
+      render(<On initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Tagged Recipe" });
+      expect(await recipeMenuItem("Tags")).toHaveAttribute("href", "/recipes/recipe-1/tags");
+      await userEvent.keyboard("{Escape}");
+      cleanup();
+
+      const Off = createTestRoutesStub([{ path: "/recipes/:id", Component: RecipeDetail, loader: () => mockData }]);
+      render(<Off initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Tagged Recipe" });
+      await recipeMenuItem("Edit");
+      expect(screen.queryByRole("menuitem", { name: "Tags" })).not.toBeInTheDocument();
+    });
+
     it("renders owner cover history controls and hides them from non-owners", async () => {
       const user = userEvent.setup();
       const submittedIntents: Array<Record<string, string | null>> = [];

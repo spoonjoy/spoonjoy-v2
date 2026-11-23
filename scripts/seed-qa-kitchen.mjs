@@ -47,6 +47,9 @@ const PAGER_DISHES = [
   "Chili Crisp Eggs", "Za'atar Flatbread", "Tamarind Lentils", "Maple Butter Squash",
 ];
 // Words other journeys search for; no fixture title or step may contain one.
+// The one tag the seed gives chef, on Lemon Herb Rice.
+export const QA_KITCHEN_TAG = Object.freeze({ id: "qa-kitchen-tag-weeknight", name: "Weeknight", slug: "weeknight" });
+
 export const PAGER_FORBIDDEN_WORDS = ["saffron", "lemon", "arborio", "tomato", "risotto", "salmon", "rice", "soup", "herb", "miso"];
 // 2020-01-01T00:00Z: fixture recipe n is dated n minutes later, all older than anything else.
 const PAGER_EPOCH_MS = Date.UTC(2020, 0, 1);
@@ -471,6 +474,12 @@ export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.ha
       `INSERT INTO RecipeInCookbook (id, cookbookId, recipeId, addedById, createdAt, updatedAt) VALUES (${sqlString(`${cookbook.id}-${recipe.id}`)}, ${sqlString(cookbook.id)}, ${sqlString(recipe.id)}, ${sqlString(KITCHEN.chef.id)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
     );
   }
+
+  // 8b. One tag: chef tags Lemon Herb Rice "Weeknight", so /tags and /tags/weeknight have something to show.
+  statements.push(
+    `INSERT INTO Organizer (id, ownerId, kind, name, slug, createdAt, updatedAt) VALUES (${sqlString(QA_KITCHEN_TAG.id)}, ${sqlString(KITCHEN.chef.id)}, 'tag', ${sqlString(QA_KITCHEN_TAG.name)}, ${sqlString(QA_KITCHEN_TAG.slug)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+    `INSERT INTO RecipeOrganizer (recipeId, organizerId, createdAt) VALUES (${sqlString(KITCHEN.recipes.lemonRice.id)}, ${sqlString(QA_KITCHEN_TAG.id)}, CURRENT_TIMESTAMP);`,
+  );
 
   // 9. Chef's shopping list: three unchecked items.
   const shoppingListId = "qa-kitchen-shoppinglist-chef";
