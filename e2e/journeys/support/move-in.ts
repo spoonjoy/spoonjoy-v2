@@ -3,15 +3,15 @@
 // screen against the move-in proof's manifest; move the same backup in again and see nothing added;
 // find one of its recipes, photo and steps and all, in the kitchen. The backups and the manifest are
 // the published proof fixtures (scripts/move-in-proof, release move-in-proof-fixtures-v1), read from
-// the public release and checked against pinned digests. Each version's kitchen has its own ids
+// the public release and checked against the pinned manifest. Each version's kitchen has its own ids
 // (checked below), and each journey moves into its own fresh scratch account.
 import type { Page } from "@playwright/test";
 import { test, expect } from "./journey";
-import { bytesSource, openZip } from "../../../app/domains/move-in/adapters/archive/zip";
+import { bytesSource } from "../../../app/domains/move-in/adapters/archive/zip";
 import { openMealieBackup } from "../../../app/domains/move-in/adapters/sources/mealie-backup/backup";
 import { chooseGroup, recipeDrafts } from "../../../app/domains/move-in/adapters/sources/mealie-backup/database";
 import { requiredLabel } from "./forms";
-import { download } from "./move-in-fixtures";
+import { proofFixtures } from "./move-in-fixtures";
 
 // A move-in of a small kitchen polls every few seconds; give it room on a slow QA run.
 const MOVE_IN_MS = 150_000;
@@ -30,8 +30,9 @@ const samples = new Map<string, string>();
 async function fixtures(): Promise<Manifest> {
   if (manifest) return manifest;
   const groups = new Set<string>();
-  const read = JSON.parse(new TextDecoder().decode(await download("manifest.json"))) as Manifest;
-  const bundle = await openZip(bytesSource(await download("move-in-proof-fixtures.zip")));
+  const fixtures = await proofFixtures();
+  const read = fixtures.manifest as unknown as Manifest;
+  const bundle = fixtures.bundle;
   for (const source of read.sources) {
     const entry = bundle.get(source.fixtures.small.backup);
     if (!entry) throw new Error(`The proof fixtures have no ${source.fixtures.small.backup}`);
