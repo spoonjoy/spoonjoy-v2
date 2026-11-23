@@ -103,7 +103,8 @@ export async function readChefProfileWithPrisma(
     : {};
   const [recipes, recipeCount, cookbooks, recentSpoons, fellowChefsCount, kitchenVisitorsCount] = await Promise.all([
     database.recipe.findMany({
-      where: { ...liveRecipe, ...afterCursor },
+      // AND, not a spread: the cursor's OR would otherwise replace the readable one.
+      where: { AND: [liveRecipe, afterCursor] },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       ...(recipeLimit === null ? {} : { take: recipeLimit }),
       select: { ...RECIPE_CARD_SELECT, description: true, servings: true },

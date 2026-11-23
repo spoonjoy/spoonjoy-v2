@@ -154,6 +154,18 @@ describe("chef profile reads", () => {
     }
   });
 
+  it("keeps private recipes out of later pages for a signed-in visitor, on Prisma as on D1", async () => {
+    const { chef, fan } = await seedChef();
+    const [newest] = await db.recipe.findMany({ where: { chefId: chef.id, deletedAt: null }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 1 });
+    await db.recipe.updateMany({ where: { chefId: chef.id, id: { not: newest!.id } }, data: { visibility: "private" } });
+    // The cursor recipe stays the newest, so every private recipe falls on the page after it.
+    await db.recipe.update({ where: { id: newest!.id }, data: { updatedAt: new Date("2100-01-01T00:00:00.000Z") } });
+    const input = { identifier: chef.username, recipeLimit: 50, recipeAfter: newest!.id, viewerId: fan.id };
+    const fromPrisma = await readChefProfileWithPrisma(db, input);
+    expect(fromPrisma.recipes).toEqual([]);
+    expect(displayed(fromPrisma)).toEqual(displayed(await readChefProfileFromD1(d1.binding, input)));
+  });
+
   it("prefers a username match over another user whose id equals it", async () => {
     const first = await db.user.create({ data: createTestUser() });
     const named = await db.user.create({ data: { ...createTestUser(), username: first.id } });

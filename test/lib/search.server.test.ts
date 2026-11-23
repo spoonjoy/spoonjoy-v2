@@ -509,7 +509,7 @@ describe("search.server", () => {
       `SELECT "sourceFingerprint" FROM "SearchIndexMetadata" WHERE "id" = 'current' LIMIT 1`,
     );
     // The metadata row only marks the maintenance scheme; it holds no recipe or cover data.
-    expect(metadataRows[0]!.sourceFingerprint).toBe("per-entity-triggers-v3");
+    expect(metadataRows[0]!.sourceFingerprint).toBe("per-entity-triggers-v4");
   });
 
   it("finds a private recipe only for its cook, and keeps its title out of cookbook results", async () => {
@@ -534,6 +534,20 @@ describe("search.server", () => {
     const bunBook = cookbooks.find((result) => result.id === cookbook.id);
     expect(bunBook?.metadata).toMatchObject({ recipeCount: 0, recipeTitles: [] });
     expect(await searchSpoonjoy(db, { query: "secret saffron", scope: "cookbooks", viewerId: stranger.id })).toEqual([]);
+  });
+
+  it("counts only a chef's public recipes, and recounts when one goes private", async () => {
+    const chef = await createChef("countcook");
+    const open = await createSearchableRecipe(chef.id, "Open Fennel Salad", "fennel");
+    await createSearchableRecipe(chef.id, "Closed Fennel Salad", "fennel");
+    await db.recipe.updateMany({ where: { chefId: chef.id, id: { not: open.id } }, data: { visibility: "private" } });
+    await rebuildSearchIndex(db);
+    const count = async () => (await searchSpoonjoy(db, { query: "countcook", scope: "chefs" }))
+      .find((result) => result.id === chef.id)?.metadata;
+
+    expect(await count()).toMatchObject({ recipeCount: 1 });
+    await db.recipe.update({ where: { id: open.id }, data: { visibility: "private" } });
+    expect(await count()).toMatchObject({ recipeCount: 0 });
   });
 
   it("keeps shopping-list search private to the signed-in owner", async () => {

@@ -25,6 +25,15 @@ export function readableRecipeSqlOn(
   };
 }
 
+/**
+ * readableRecipeSql for a viewer named by a column of the same row (a cook's own list joined to recipes), with no
+ * bound values. It does not know the viewer's household, so household recipes read only for their cook.
+ */
+export function readableRecipeSqlForViewerColumn(alias: string | undefined, viewerColumn: string): string {
+  const table = alias ?? `"Recipe"`;
+  return `(${table}."visibility" = 'public' OR ${table}."chefId" = ${viewerColumn})`;
+}
+
 type ReadableRecipeWhere =
   | { visibility: "public" }
   | { OR: Array<{ visibility: "public" } | { chefId: string } | { visibility: "household"; chefId: { in: string[] } }> };

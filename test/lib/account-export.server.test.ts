@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "~/lib/db.server";
-import { ACCOUNT_EXPORT_FORMAT, accountExportFileName, buildAccountExport } from "~/lib/account-export.server";
+import { ACCOUNT_EXPORT_FORMAT, PRIVATE_RECIPE_TITLE, accountExportFileName, buildAccountExport } from "~/lib/account-export.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 
 const ORIGIN = "https://spoonjoy.app";
@@ -150,6 +150,21 @@ describe("buildAccountExport", () => {
       cooks: [],
     });
     expect(Date.parse(exported!.exportedAt)).not.toBeNaN();
+  });
+
+  it("leaves out another cook's recipe gone private, keeping the cook's own notes on it", async () => {
+    const owner = await db.user.create({ data: { email: "owner@example.com", username: "owner_chef" } });
+    const user = await db.user.create({ data: { email: "fan@example.com", username: "fan_chef" } });
+    const recipe = await db.recipe.create({ data: { title: "Hidden Pie", chefId: owner.id } });
+    const book = await db.cookbook.create({ data: { title: "Fan book", authorId: user.id } });
+    await db.recipeInCookbook.create({ data: { cookbookId: book.id, recipeId: recipe.id, addedById: user.id } });
+    await db.recipeSpoon.create({ data: { chefId: user.id, recipeId: recipe.id, note: "Good crust" } });
+    await db.recipe.update({ where: { id: recipe.id }, data: { visibility: "private" } });
+
+    const exported = await buildAccountExport(db, user.id, ORIGIN);
+    expect(exported!.cookbooks[0]!.recipes).toEqual([]);
+    expect(exported!.cooks).toMatchObject([{ recipeTitle: PRIVATE_RECIPE_TITLE, note: "Good crust" }]);
+    expect(JSON.stringify(exported)).not.toContain("Hidden Pie");
   });
 
   it("returns null for a missing account", async () => {

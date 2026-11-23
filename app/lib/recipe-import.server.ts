@@ -752,7 +752,7 @@ async function persistRecipe(
   recipeId?: string,
 ): Promise<{ id: string; recipe: unknown; title: string }> {
   let title = await resolveTitleWithRetry(db, chefId, draft.title, now);
-  const visibility = await cookRecipeVisibilityDefault(db, chefId);
+  const visibility = await cookRecipeVisibilityDefault(db, chefId, env);
 
   // Parse every ingredient line in one call, outside the transaction.
   const allIngredients = draft.ingredients.length === 0

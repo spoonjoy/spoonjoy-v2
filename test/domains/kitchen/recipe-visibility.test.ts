@@ -9,6 +9,7 @@ import {
   newRecipeVisibility,
   parseRecipeVisibility,
   readableRecipeSql,
+  readableRecipeSqlForViewerColumn,
   readableRecipeWhere,
   type RecipeViewer,
 } from "~/domains/kitchen";
@@ -124,6 +125,21 @@ describe("readable recipe queries", () => {
         .prepare(`SELECT r."id" FROM "Recipe" r WHERE ${readable.sql} ORDER BY r."id"`)
         .all(...readable.params) as Array<{ id: string }>;
       const expected = recipes.filter((recipe) => canRead(viewer, recipe)).map((recipe) => recipe.id).sort();
+      expect(rows.map((row) => row.id)).toEqual(expected);
+    }
+  });
+
+  it("select in SQL, for a viewer named by a column, exactly the recipes canRead allows that viewer outside a household", () => {
+    const db = database();
+    db.exec(`CREATE TABLE "Viewer" ("userId" TEXT NOT NULL)`);
+    for (const viewerId of [CHEF, STRANGER, HOUSEMATE]) {
+      db.exec(`DELETE FROM "Viewer"`);
+      db.prepare(`INSERT INTO "Viewer" ("userId") VALUES (?)`).run(viewerId);
+      const readable = readableRecipeSqlForViewerColumn("r", `v."userId"`);
+      const rows = db
+        .prepare(`SELECT r."id" FROM "Recipe" r JOIN "Viewer" v ON ${readable} ORDER BY r."id"`)
+        .all() as Array<{ id: string }>;
+      const expected = recipes.filter((recipe) => canRead({ id: viewerId }, recipe)).map((recipe) => recipe.id).sort();
       expect(rows.map((row) => row.id)).toEqual(expected);
     }
   });

@@ -1,3 +1,4 @@
+import { canRead, readableRecipeWhere } from "~/domains/kitchen";
 import type { PrismaClient } from "@prisma/client";
 
 // A copy of everything a person put into Spoonjoy, as one JSON document they can download from
@@ -84,6 +85,9 @@ export interface AccountExport {
   }>;
 }
 
+/** What a cook's export calls another cook's recipe that is private now. */
+export const PRIVATE_RECIPE_TITLE = "A private recipe";
+
 /** Builds the export for `userId`, with photo and recipe URLs made absolute against `origin`. */
 export async function buildAccountExport(
   db: ExportDb,
@@ -126,6 +130,8 @@ export async function buildAccountExport(
       orderBy: { createdAt: "asc" },
       include: {
         recipes: {
+          // Another cook's recipe that has since gone private is left out, as on the cookbook's page.
+          where: { recipe: readableRecipeWhere({ id: userId }) },
           orderBy: { createdAt: "asc" },
           include: { recipe: { select: { id: true, title: true, chef: { select: { username: true } } } } },
         },
@@ -144,7 +150,7 @@ export async function buildAccountExport(
     db.recipeSpoon.findMany({
       where: { chefId: userId, deletedAt: null },
       orderBy: { cookedAt: "asc" },
-      include: { recipe: { select: { title: true } } },
+      include: { recipe: { select: { title: true, chefId: true, visibility: true } } },
     }),
   ]);
 
@@ -220,7 +226,8 @@ export async function buildAccountExport(
     cooks: spoons.map((spoon) => ({
       id: spoon.id,
       recipeId: spoon.recipeId,
-      recipeTitle: spoon.recipe.title,
+      // The cook's own notes stay; the title of another cook's recipe gone private does not.
+      recipeTitle: canRead({ id: userId }, spoon.recipe) ? spoon.recipe.title : PRIVATE_RECIPE_TITLE,
       cookedAt: iso(spoon.cookedAt),
       note: spoon.note,
       nextTime: spoon.nextTime,

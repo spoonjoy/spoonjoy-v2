@@ -315,6 +315,11 @@ test.describe("Recipe create and edit", () => {
     await page.getByLabel(requiredLabel("Title"), { exact: true }).fill(title);
     const choice = page.getByRole("radiogroup", { name: "Who can see this recipe" });
     await choice.getByRole("radio", { name: /^Only me/ }).check();
+    // A step, because the sitemap lists only recipes with steps: without one its absence below would prove nothing.
+    await page.getByRole("button", { name: "Add step", exact: true }).click();
+    const step = page.getByRole("article", { name: "Step 1", exact: true });
+    await step.getByLabel("Instructions").fill("Simmer the stew");
+    await step.getByRole("switch", { name: "AI Parse" }).setChecked(false);
     await page.getByRole("button", { name: "Create recipe", exact: true }).click();
     await expect(page).toHaveURL(RECIPE_URL);
     const recipePath = new URL(page.url()).pathname;
@@ -324,7 +329,8 @@ test.describe("Recipe create and edit", () => {
     });
     await testInfo.attach("private-recipe-owner-view", { body: await page.screenshot(), contentType: "image/png" });
 
-    // The cook finds it in their own search, so the index holds it and its absence below means something.
+    // The cook reads it over the API and finds it in their own search, so its absence below means something.
+    expect((await page.request.get(`/api/v1/recipes/${recipeId}`)).status(), "its cook: API").toBe(200);
     await page.goto(`/search?q=${encodeURIComponent(title)}`);
     await expect(page.getByRole("region", { name: "Search results" }).getByRole("link", { name: new RegExp(title) })).toBeVisible();
 

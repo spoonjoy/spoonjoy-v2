@@ -529,6 +529,19 @@ describe("Cookbooks $id Route", () => {
       ).resolves.toEqual({ updatedAt: baselineUpdatedAt });
     });
 
+    it("answers another cook's private recipe as not found and adds nothing", async () => {
+      const other = await db.user.create({ data: { email: `private_${faker.string.alphanumeric(6)}@example.com`, username: `private_${faker.string.alphanumeric(6)}` } });
+      const recipe = await db.recipe.create({ data: { title: "Private Add Recipe", chefId: other.id, visibility: "private" } });
+      const result = await action({
+        request: await createFormRequest({ intent: "addRecipe", recipeId: recipe.id }, testUserId),
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as unknown as Parameters<typeof action>[0]).catch((error: unknown) => error);
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(404);
+      await expect(db.recipeInCookbook.count({ where: { cookbookId, recipeId: recipe.id } })).resolves.toBe(0);
+    });
+
     it("should reject direct attempts to add a soft-deleted recipe", async () => {
       const recipe = await db.recipe.create({
         data: {

@@ -1,3 +1,5 @@
+import { cookRecipeVisibilityDefault } from "~/lib/recipe-create.server";
+import { isFlagOn } from "~/domains/platform";
 import { authenticateUserByEmailOrUsername, lookupUserIdByEmailOrUsername } from "~/lib/auth.server";
 import { recordAccountSignIn, touchLastSeen, type AccountActivityEnv } from "~/lib/account-activity.server";
 import {
@@ -1286,6 +1288,7 @@ async function handleSearch(args: ApiV1RouteArgs, requestId: string, principal: 
     query,
     scope,
     viewerId,
+    readerId: principal?.id ?? null,
     hideFor: principal?.id ?? null,
     limit,
   });
@@ -6646,6 +6649,7 @@ async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, princ
       recipeId: reservation.id,
       d1: requestD1(args.context),
       placeholderCoverId,
+      visibility: await cookRecipeVisibilityDefault(db, principal.id, args.context.cloudflare?.env),
     }));
     await scheduleApiRecipeCreatePlaceholder(args, db, {
       userId: principal.id,
@@ -6789,7 +6793,11 @@ async function handleRecipeFork(args: ApiV1RouteArgs, requestId: string, princip
   const origin = publicContentOrigin(args);
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.fork", async (db, reservation) => {
-    const forked = recipeWriteResultOrThrow(await forkNativeRecipe(db, principal.id, sourceRecipeId, parsed.data, { recipeId: reservation.id, d1: requestD1(args.context) }));
+    const forked = recipeWriteResultOrThrow(await forkNativeRecipe(db, principal.id, sourceRecipeId, parsed.data, {
+      recipeId: reservation.id,
+      d1: requestD1(args.context),
+      useCookDefault: isFlagOn("recipe_visibility", args.context.cloudflare?.env, principal.id),
+    }));
     await notifyNativeRecipeFork(args, db, {
       appliedTitle: forked.data.fork.appliedTitle,
       forkerId: principal.id,
