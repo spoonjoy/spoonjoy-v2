@@ -52,6 +52,8 @@ let photos: ReturnType<typeof memoryBucket>;
 let ownerId: string;
 let otherId: string;
 let waiting: Array<Promise<unknown>>;
+/** The Worker's jobs queue, when the test gives it one: what it was sent, and whether sending fails. */
+let jobsQueue: { sent: unknown[]; fails: boolean; send(body: unknown): Promise<void> } | undefined;
 
 async function cookie(userId: string) {
   const session = await sessionStorage.getSession();
@@ -65,7 +67,7 @@ const platform = { photos: true, ctx: true };
 function context(flags: string | undefined = "move_in") {
   return {
     cloudflare: {
-      env: { DB: d1.binding, PHOTOS: platform.photos ? photos : undefined, SPOONJOY_FLAGS: flags },
+      env: { DB: d1.binding, PHOTOS: platform.photos ? photos : undefined, SPOONJOY_FLAGS: flags, JOBS: jobsQueue },
       ctx: platform.ctx ? { waitUntil: (promise: Promise<unknown>) => void waiting.push(promise), passThroughOnException() {} } : undefined,
     },
   } as never;
@@ -106,6 +108,7 @@ beforeEach(async () => {
   runFails.with = null;
   platform.photos = true;
   platform.ctx = true;
+  jobsQueue = undefined;
   ownerId = (await createUser(db, "cook@example.com", "cook", "testPassword123")).id;
   otherId = (await createUser(db, "pat@example.com", "pat", "testPassword123")).id;
 });
@@ -135,6 +138,7 @@ describe("the Move in page", () => {
     expect(move).toMatchObject({
       status: "done-with-issues",
       finished: true,
+      runsOnServer: false,
       archiveName: "mealie_2026.11.23.zip",
       recipes: { found: 3, done: 3, created: 3, failed: 0 },
       photos: { found: 1, in: 1 },
@@ -163,6 +167,57 @@ describe("the Move in page", () => {
     expect(await post({ intent: "continue", jobId })).toEqual({ error: null });
     expect(waiting).toHaveLength(1);
     await Promise.all(waiting);
+  });
+
+  describe("where the Worker has a jobs queue", () => {
+    beforeEach(() => {
+      const queue = {
+        sent: [] as unknown[],
+        fails: false,
+        async send(body: unknown) {
+          if (queue.fails) throw new Error("the queue is down");
+          queue.sent.push(body);
+        },
+      };
+      jobsQueue = queue;
+    });
+
+    const started = async () => {
+      const location = ((await post({ app: "mealie", backup: backup() })) as Response).headers.get("Location") as string;
+      return { location, jobId: new URL(location, "http://localhost").searchParams.get("job") as string };
+    };
+
+    it("hands the move-in to the queue, runs none of it in the request, and says the page can close", async () => {
+      const { location, jobId } = await started();
+      expect(waiting).toEqual([]);
+      expect(jobsQueue?.sent).toEqual([{ type: "move-in.run", key: `move-in:${jobId}:inspect:-`, payload: { jobId } }]);
+      expect((await load(location)).move).toMatchObject({ status: "queued", finished: false, runsOnServer: true });
+    });
+
+    it("queues a move-in again from the page only once nothing has moved it for a minute", async () => {
+      const { jobId } = await started();
+      expect(await post({ intent: "continue", jobId })).toEqual({ error: null });
+      expect(jobsQueue?.sent).toHaveLength(1);
+      expect(waiting).toEqual([]);
+
+      // Its segment ran out of attempts, which frees the key, and the job has been quiet since.
+      await d1.binding.prepare(`DELETE FROM "PlatformJobKey"`).run();
+      await d1.binding.prepare(`UPDATE "ImportJob" SET "updatedAt" = ?`).bind(new Date(Date.now() - 61_000).toISOString()).run();
+      await post({ intent: "continue", jobId });
+      expect(jobsQueue?.sent).toHaveLength(2);
+    });
+
+    it("reports a move-in it couldn't queue, and leaves it for the page to pick up", async () => {
+      jobsQueue!.fails = true;
+      const { location, jobId } = await started();
+      expect(location).toMatch(/^\/move-in\?job=movein_/);
+      await d1.binding.prepare(`UPDATE "ImportJob" SET "updatedAt" = ?`).bind(new Date(Date.now() - 61_000).toISOString()).run();
+      expect(await post({ intent: "continue", jobId })).toEqual({ error: null });
+      expect(captured).toEqual([
+        { error: new Error("the queue is down"), distinctId: ownerId, route: "/move-in", extras: { phase: "queue" } },
+        { error: new Error("the queue is down"), distinctId: ownerId, route: "/move-in", extras: { phase: "queue" } },
+      ]);
+    });
   });
 
   it("reports a run that stops with an error, for the next poll to resume", async () => {

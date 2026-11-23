@@ -6,7 +6,7 @@ import { FINISHED, LostClaimError, type MoveInCounts, type MoveInEvent, type Mov
 
 const JOB_COLUMNS = `"id", "ownerId", "kind", "sourceId", "status", "phase", "cursor", "archiveKey", "lastError", "attempt"`;
 // What the owner may see of a job: no archive key, which names where the other app's accounts wait.
-const PROGRESS_COLUMNS = `"id", "ownerId", "kind", "sourceId", "status", "phase", "cursor", "lastError", "attempt", "archiveName", "createdAt", "finishedAt"`;
+const PROGRESS_COLUMNS = `"id", "ownerId", "kind", "sourceId", "status", "phase", "cursor", "lastError", "attempt", "archiveName", "createdAt", "updatedAt", "finishedAt"`;
 const COUNT_FIELDS = ["found", "created", "updated", "unchanged", "skipped", "failed"] as const;
 /** How long a run may go without a heartbeat before another run may take its job over. */
 export const MOVE_IN_CLAIM_MS = 45_000;
@@ -121,7 +121,7 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
 }
 
 export interface MoveInProgress {
-  job: Omit<MoveInJob, "archiveKey"> & { archiveName: string | null; createdAt: string; finishedAt: string | null };
+  job: Omit<MoveInJob, "archiveKey"> & { archiveName: string | null; createdAt: string; updatedAt: string; finishedAt: string | null };
   counts: Record<string, MoveInCounts>;
   events: Array<MoveInEvent & { seq: number }>;
 }
