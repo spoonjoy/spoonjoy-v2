@@ -238,6 +238,13 @@ export function keepsFunctionNames(nodeEnv: string | undefined): boolean {
   return nodeEnv !== undefined && nodeEnv !== "production";
 }
 
+// The security policy allows fonts only from the app's own origin (font-src 'self'), and Vite
+// would otherwise turn font files under 4 KB into data: URLs that the policy blocks. Every font
+// stays a file under /assets/; other assets keep Vite's default.
+export function inlinesAsset(filePath: string): false | undefined {
+  return /\.woff2?$/.test(filePath) ? false : undefined;
+}
+
 /** Dependencies the Worker's optimizer bundles before it starts, so it finds none of them mid-build. */
 export const SSR_PREBUNDLED = ["lucide-react"] as const;
 
@@ -258,6 +265,7 @@ export default defineConfig(({ command }) => ({
   // build fails (spoonjoy-v2#739). Optimizing it up front leaves nothing for the optimizer to find.
   environments: { ssr: { optimizeDeps: { include: [...SSR_PREBUNDLED] } } },
   build: {
+    assetsInlineLimit: inlinesAsset,
     rollupOptions: {
       onLog(level, log, defaultHandler) {
         if (shouldLogRollupBuildMessage(level, log)) {
