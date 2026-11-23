@@ -1153,7 +1153,7 @@ model HouseholdListItem {
 }
 
 // Who may make an account on a self-hosted server (app/lib/server-access.server.ts,
-// migrations/0044_server_access.sql). "admin" is the first account's id; "signups" is open or invite.
+// migrations/0045_server_access.sql). "admin" is the first account's id; "signups" is open or invite.
 model ServerSetting {
   key   String @id
   value String
