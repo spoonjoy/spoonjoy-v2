@@ -168,6 +168,23 @@ describe("kitchen home reads", () => {
     }
   });
 
+  it("shows a visitor only the recipes they may read, and the cook all of theirs", async () => {
+    const { owner, viewer } = await seedKitchen();
+    const hidden = await db.recipe.findFirstOrThrow({ where: { chefId: owner.id, title: "Extra 8" } });
+    await db.recipe.update({ where: { id: hidden.id }, data: { visibility: "private" } });
+
+    for (const viewerId of [viewer.id, null, owner.id]) {
+      const input = { viewerId, kitchenUserWhere: { id: owner.id } };
+      const rows = await readKitchenHomeFromD1(d1.binding, input);
+      expect(displayed(rows)).toEqual(displayed(await readKitchenHomeWithPrisma(db, input)));
+      const sees = viewerId === owner.id;
+      expect(rows.recipes.some((recipe) => recipe.id === hidden.id), String(viewerId)).toBe(sees);
+      const big = rows.cookbooks.find((cookbook) => cookbook.title === "Big")!;
+      expect(big._count.recipes).toBe(sees ? 5 : 4);
+      expect(big.recipes.some((entry) => entry.recipe.id === hidden.id)).toBe(sees);
+    }
+  });
+
   it("returns no kitchen for an unknown chef, and no viewer for an unknown viewer", async () => {
     const input = { viewerId: "missing-viewer", kitchenUserWhere: { username: "missing-chef" } };
     const fromD1 = await readKitchenHomeFromD1(d1.binding, input);

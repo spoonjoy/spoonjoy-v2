@@ -7,6 +7,7 @@ import {
   cookbookPreviewQuery,
   cookbookPreviewsById,
 } from "~/lib/cookbook-previews.server";
+import { readableRecipeSql, readableRecipeWhere } from "~/domains/kitchen";
 import { cookingNowD1Query, cookingNowRowsFromD1, listCookingNow, type CookingNowRow } from "~/lib/cooking-now.server";
 
 // Reads behind the kitchen home page (`/`, `/?chef=…`). The Prisma reader is the
@@ -66,9 +67,11 @@ export async function readKitchenHomeWithPrisma(
     return { viewer, kitchenUser: null, recipes: [], cookbooks: [], cookingNow: [], hides: NO_HIDES };
   }
 
+  // A visitor sees only the recipes they may read; the cook sees all of theirs.
+  const listed = { deletedAt: null, ...readableRecipeWhere({ id: viewerId ?? "" }) };
   const [recipes, cookbooks, cookingNow] = await Promise.all([
     database.recipe.findMany({
-      where: { chefId: kitchenUser.id, deletedAt: null },
+      where: { chefId: kitchenUser.id, ...listed },
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
@@ -86,9 +89,9 @@ export async function readKitchenHomeWithPrisma(
       orderBy: { updatedAt: "desc" },
       include: {
         // A deleted recipe stays in its cookbooks, but the card neither counts nor shows it.
-        _count: { select: { recipes: { where: { recipe: { deletedAt: null } } } } },
+        _count: { select: { recipes: { where: { recipe: listed } } } },
         recipes: {
-          where: { recipe: { deletedAt: null } },
+          where: { recipe: listed },
           take: COOKBOOK_PREVIEW_RECIPES,
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           include: {
@@ -158,6 +161,9 @@ export async function readKitchenHomeFromD1(
   const owner = kitchenUserCondition(kitchenUserWhere);
   const ownerId = `(SELECT "id" FROM "User" WHERE ${owner.sql})`;
   const coverSelect = selectColumns(RECIPE_COVER_COLUMNS, "rc", "cover_");
+  const reader = { id: viewerId ?? "" };
+  const listed = readableRecipeSql("r", reader);
+  const live = readableRecipeSql("live", reader);
   const [viewerRows, kitchenUserRows, recipeRows, cookbookRows, previewRows, cookingNowRows, hideRows] = await d1ReadBatch(db, [
     viewerId
       ? [`SELECT "id", "username", "email", "photoUrl" FROM "User" WHERE "id" = ? LIMIT 1`, viewerId]
@@ -166,21 +172,23 @@ export async function readKitchenHomeFromD1(
     [
       `SELECT r."id", r."title", r."description", r."servings", r."activeCoverId", r."activeCoverVariant", r."coverMode", ${coverSelect}
        FROM "Recipe" r ${ACTIVE_COVER_JOIN}
-       WHERE r."chefId" = ${ownerId} AND r."deletedAt" IS NULL
+       WHERE r."chefId" = ${ownerId} AND r."deletedAt" IS NULL AND ${listed.sql}
        ORDER BY r."updatedAt" DESC, r."createdAt" DESC, r."id" DESC`,
       owner.value,
+      ...listed.params,
     ],
     [
       `SELECT ${selectColumns(COOKBOOK_COLUMNS, "c")},
          (SELECT COUNT(*) FROM "RecipeInCookbook" ric
-          JOIN "Recipe" live ON live."id" = ric."recipeId" AND live."deletedAt" IS NULL
+          JOIN "Recipe" live ON live."id" = ric."recipeId" AND live."deletedAt" IS NULL AND ${live.sql}
           WHERE ric."cookbookId" = c."id") AS "recipeCount"
        FROM "Cookbook" c
        WHERE c."authorId" = ${ownerId}
        ORDER BY c."updatedAt" DESC`,
+      ...live.params,
       owner.value,
     ],
-    cookbookPreviewQuery(`SELECT "id" FROM "Cookbook" WHERE "authorId" = ${ownerId}`, owner.value),
+    cookbookPreviewQuery(reader, `SELECT "id" FROM "Cookbook" WHERE "authorId" = ${ownerId}`, owner.value),
     // Only the owner sees their Cooking now list, so the cook must be both the viewer and the owner.
     viewerId
       ? cookingNowD1Query({ sql: `cn."userId" = ? AND cn."userId" = ${ownerId}`, values: [viewerId, owner.value] }, now)

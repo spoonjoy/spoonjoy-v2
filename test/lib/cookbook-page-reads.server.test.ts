@@ -198,6 +198,21 @@ describe("cookbook page reads", () => {
     ]);
   });
 
+  it("shows each viewer only the recipes in it they may read", async () => {
+    const { owner, friend, book } = await seedCookbook();
+    const stylized = await db.recipe.findFirstOrThrow({ where: { chefId: friend.id, title: "Stylized" } });
+    await db.recipe.update({ where: { id: stylized.id }, data: { visibility: "private" } });
+
+    for (const viewerId of [owner.id, null, friend.id]) {
+      const input = { cookbookId: book.id, viewerId };
+      const rows = await readCookbookPageFromD1(d1.binding, input);
+      expect(displayed(rows)).toEqual(displayed(await readCookbookPageWithPrisma(db, input)));
+      const titles = rows.cookbook!.recipes.map((entry) => entry.recipe.title);
+      expect(titles.includes("Stylized"), String(viewerId)).toBe(viewerId === friend.id);
+      expect(titles).toContain("Covered");
+    }
+  });
+
   it("offers recipes to add only to the cookbook's owner", async () => {
     const { owner, friend, book, othersBook } = await seedCookbook();
     for (const input of [

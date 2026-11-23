@@ -5,14 +5,22 @@ import { viewerIdOf, type RecipeViewer } from "../model/recipe-visibility";
 /** A WHERE clause, with its bound values, that keeps the recipes this viewer may read. alias names the Recipe table. */
 export function readableRecipeSql(alias: string | undefined, viewer: RecipeViewer): { sql: string; params: string[] } {
   const table = alias ?? `"Recipe"`;
-  const isPublic = `${table}."visibility" = 'public'`;
+  return readableRecipeSqlOn({ visibility: `${table}."visibility"`, chefId: `${table}."chefId"` }, viewer);
+}
+
+/** readableRecipeSql for rows that carry a recipe's visibility and cook in other columns, such as the search index. */
+export function readableRecipeSqlOn(
+  columns: { visibility: string; chefId: string },
+  viewer: RecipeViewer,
+): { sql: string; params: string[] } {
+  const isPublic = `${columns.visibility} = 'public'`;
   const viewerId = viewerIdOf(viewer);
   if (!viewerId) return { sql: isPublic, params: [] };
   const household = [...(viewer?.householdChefIds ?? [])];
-  if (household.length === 0) return { sql: `(${isPublic} OR ${table}."chefId" = ?)`, params: [viewerId] };
+  if (household.length === 0) return { sql: `(${isPublic} OR ${columns.chefId} = ?)`, params: [viewerId] };
   const placeholders = household.map(() => "?").join(", ");
   return {
-    sql: `(${isPublic} OR ${table}."chefId" = ? OR (${table}."visibility" = 'household' AND ${table}."chefId" IN (${placeholders})))`,
+    sql: `(${isPublic} OR ${columns.chefId} = ? OR (${columns.visibility} = 'household' AND ${columns.chefId} IN (${placeholders})))`,
     params: [viewerId, ...household],
   };
 }

@@ -509,7 +509,31 @@ describe("search.server", () => {
       `SELECT "sourceFingerprint" FROM "SearchIndexMetadata" WHERE "id" = 'current' LIMIT 1`,
     );
     // The metadata row only marks the maintenance scheme; it holds no recipe or cover data.
-    expect(metadataRows[0]!.sourceFingerprint).toBe("per-entity-triggers-v2");
+    expect(metadataRows[0]!.sourceFingerprint).toBe("per-entity-triggers-v3");
+  });
+
+  it("finds a private recipe only for its cook, and keeps its title out of cookbook results", async () => {
+    const chef = await createChef("privcook");
+    const stranger = await createChef("privstranger");
+    const hidden = await createSearchableRecipe(chef.id, "Secret Saffron Buns", "saffron");
+    const cookbook = await db.cookbook.create({ data: { title: "Bun Book", authorId: chef.id } });
+    await db.recipeInCookbook.create({ data: { cookbookId: cookbook.id, recipeId: hidden.id, addedById: chef.id } });
+    await rebuildSearchIndex(db);
+
+    // Made private after it was indexed: search honours it before the index catches up.
+    await db.recipe.update({ where: { id: hidden.id }, data: { visibility: "private" } });
+
+    for (const viewerId of [stranger.id, null]) {
+      const results = await searchSpoonjoy(db, { query: "saffron", scope: "recipes", viewerId });
+      expect(results.map((result) => result.id), String(viewerId)).not.toContain(hidden.id);
+    }
+    const own = await searchSpoonjoy(db, { query: "saffron", scope: "recipes", viewerId: chef.id });
+    expect(own.map((result) => result.id)).toContain(hidden.id);
+
+    const cookbooks = await searchSpoonjoy(db, { query: "bun book", scope: "cookbooks", viewerId: stranger.id });
+    const bunBook = cookbooks.find((result) => result.id === cookbook.id);
+    expect(bunBook?.metadata).toMatchObject({ recipeCount: 0, recipeTitles: [] });
+    expect(await searchSpoonjoy(db, { query: "secret saffron", scope: "cookbooks", viewerId: stranger.id })).toEqual([]);
   });
 
   it("keeps shopping-list search private to the signed-in owner", async () => {

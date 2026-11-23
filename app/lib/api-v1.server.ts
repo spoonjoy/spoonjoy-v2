@@ -5426,7 +5426,7 @@ async function handleUserProfile(args: ApiV1RouteArgs, requestId: string, princi
   const origin = publicContentOrigin(args);
   const after = parseProfileRecipeCursor(new URL(args.request.url));
   const d1 = requestD1(args.context);
-  const readInput = { identifier, recipeLimit: API_V1_PROFILE_RECIPE_LIMIT + 1, recipeAfter: after };
+  const readInput = { identifier, recipeLimit: API_V1_PROFILE_RECIPE_LIMIT + 1, recipeAfter: after, viewerId: principal?.id ?? null };
   const rows = d1
     ? await readChefProfileFromD1(d1, readInput)
     : await readChefProfileWithPrisma(await getRequestDb(args.context), readInput);

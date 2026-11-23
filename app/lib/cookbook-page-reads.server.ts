@@ -9,6 +9,7 @@ import {
   selectColumns,
   type ColumnSpec,
 } from "~/lib/d1-models.server";
+import { readableRecipeSql, readableRecipeWhere } from "~/domains/kitchen";
 
 // Reads behind a cookbook's page (`/cookbooks/:id`). The Prisma reader is the fallback
 // where there is no D1 binding (unit tests, scripts); the D1 reader returns the same data
@@ -54,7 +55,8 @@ export async function readCookbookPageWithPrisma(
     include: {
       author: { select: { id: true, username: true } },
       recipes: {
-        where: { recipe: { deletedAt: null } },
+        // A cookbook shows each viewer only the recipes they may read.
+        where: { recipe: { deletedAt: null, ...readableRecipeWhere({ id: viewerId ?? "" }) } },
         include: {
           recipe: {
             select: {
@@ -126,6 +128,7 @@ export async function readCookbookPageFromD1(
   db: D1ReadDatabase,
   { cookbookId, viewerId }: CookbookPageInput,
 ): Promise<CookbookPageRows> {
+  const readable = readableRecipeSql("r", { id: viewerId ?? "" });
   const [cookbookRows, entryRows, availableRows, hideRows] = await d1ReadBatch(db, [
     [
       `SELECT ${selectColumns(COOKBOOK_COLUMNS, "c")}, ${selectColumns(AUTHOR_COLUMNS, "a", "author_")}
@@ -140,11 +143,12 @@ export async function readCookbookPageFromD1(
          ${selectColumns(CHEF_COLUMNS, "u", "chef_")},
          ${selectColumns(RECIPE_COVER_COLUMNS, "rc", "cover_")}
        FROM "RecipeInCookbook" e
-       JOIN "Recipe" r ON r."id" = e."recipeId" AND r."deletedAt" IS NULL
+       JOIN "Recipe" r ON r."id" = e."recipeId" AND r."deletedAt" IS NULL AND ${readable.sql}
        JOIN "User" u ON u."id" = r."chefId"
        LEFT JOIN "RecipeCover" rc ON rc."id" = r."activeCoverId" AND rc."recipeId" = r."id"
        WHERE e."cookbookId" = ?
        ORDER BY e."createdAt" ASC, e."id" ASC`,
+      ...readable.params,
       cookbookId,
     ],
     // Only the cookbook's author gets recipes to add: a signed-out viewer binds NULL,
