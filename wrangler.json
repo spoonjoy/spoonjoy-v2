@@ -125,6 +125,21 @@
           "bucket_name": "spoonjoy-photos-qa"
         }
       ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "JOBS",
+            "queue": "spoonjoy-jobs-qa"
+          }
+        ],
+        "consumers": [
+          {
+            "queue": "spoonjoy-jobs-qa",
+            "max_batch_size": 1,
+            "max_retries": 100
+          }
+        ]
+      },
       "ratelimits": [
         {
           "name": "API_TOKEN_RATE_LIMITER",

@@ -50,6 +50,9 @@ import {
   teardown,
   verify,
   QA_ERROR_LOGS_VAR,
+  RUN_QUEUE_PATTERN,
+  SHARED_QA_QUEUE,
+  ensureSharedQueue,
 } from "../../scripts/qa-run-scope.mjs";
 import { QA_BASE_URL, QA_D1_DATABASE_ID } from "../../scripts/script-environment.mjs";
 import { expectConsoleError } from "../warning-policy";
@@ -68,6 +71,7 @@ const IDENTITY = {
   workerName: "spoonjoy-v2-qa-run-1001-2",
   databaseName: "spoonjoy-qa-run-1001-2",
   baseUrl: "https://spoonjoy-v2-qa-run-1001-2.mendelow-studio.workers.dev",
+  queueName: "spoonjoy-jobs-qa-run-1001-2",
 };
 const RUN_DB_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 
@@ -123,6 +127,9 @@ function fakeApi(overrides: Partial<Record<string, unknown>> = {}) {
     deleteDatabase: vi.fn(async () => ({ success: true })),
     listWorkers: vi.fn(async () => [] as Array<{ id: string; created_on?: string }>),
     deleteWorker: vi.fn(async () => ({ success: true })),
+    listQueues: vi.fn(async () => [] as Array<{ queue_name?: string; queue_id: string; created_on?: string }>),
+    createQueue: vi.fn(async (name: string) => ({ queue_id: "new-queue", queue_name: name })),
+    deleteQueue: vi.fn(async () => ({ success: true })),
     ...overrides,
   };
 }
@@ -140,7 +147,7 @@ function fakeExec(answers: Record<string, string> = {}) {
 }
 
 describe("runIdentity", () => {
-  it("names the run's Worker, database and workers.dev URL after the run and attempt", () => {
+  it("names the run's Worker, database, jobs queue and workers.dev URL after the run and attempt", () => {
     expect(runIdentity(RUN_ENV)).toEqual(IDENTITY);
   });
 
@@ -196,7 +203,7 @@ describe("requireGitHubActions", () => {
 });
 
 describe("scopeWranglerConfig", () => {
-  it("rewrites only env.qa's Worker name, D1 binding and base URL, and leaves production alone", () => {
+  it("rewrites only env.qa's Worker name, D1 binding, jobs queue and base URL, and leaves production alone", () => {
     const scoped = scopeWranglerConfig(REAL_WRANGLER, IDENTITY, RUN_DB_ID);
 
     expect(scoped.env.qa.name).toBe(IDENTITY.workerName);
@@ -209,6 +216,13 @@ describe("scopeWranglerConfig", () => {
     expect(scoped.env.qa.ratelimits).toEqual(REAL_WRANGLER.env.qa.ratelimits);
     expect(scoped.env.qa.durable_objects).toEqual(REAL_WRANGLER.env.qa.durable_objects);
     expect(scoped.env.qa.vars.COOK_SESSION_BOOTSTRAP_MODE).toBe("1");
+    // The run's Worker sends its jobs to its own queue and takes them from there, one at a time.
+    expect(REAL_WRANGLER.env.qa.queues.producers).toEqual([{ binding: "JOBS", queue: SHARED_QA_QUEUE }]);
+    expect(scoped.env.qa.queues).toEqual({
+      producers: [{ binding: "JOBS", queue: IDENTITY.queueName }],
+      consumers: [{ ...REAL_WRANGLER.env.qa.queues.consumers[0], queue: IDENTITY.queueName }],
+    });
+    expect(scoped.env.qa.queues.consumers[0].max_batch_size).toBe(1);
     const { env: _scopedEnv, ...scopedTop } = scoped;
     const { env: _realEnv, ...realTop } = REAL_WRANGLER;
     expect(scopedTop).toEqual(realTop);
@@ -244,6 +258,17 @@ describe("scopeWranglerConfig", () => {
     otherUrl.env.qa.vars.SPOONJOY_BASE_URL = "https://spoonjoy.app";
     expect(() => scopeWranglerConfig(otherUrl, IDENTITY, RUN_DB_ID)).toThrow(/does not target/);
 
+    const otherQueue = structuredClone(REAL_WRANGLER);
+    otherQueue.env.qa.queues.producers[0].queue = "spoonjoy-jobs";
+    otherQueue.env.qa.queues.consumers[0].queue = "spoonjoy-jobs";
+    expect(() => scopeWranglerConfig(otherQueue, IDENTITY, RUN_DB_ID)).toThrow(/does not use shared QA's jobs queue/);
+
+    const noConsumer = structuredClone(REAL_WRANGLER);
+    noConsumer.env.qa.queues.consumers = [];
+    expect(() => scopeWranglerConfig(noConsumer, IDENTITY, RUN_DB_ID)).toThrow(/no JOBS queue with one consumer/);
+    delete noConsumer.env.qa.queues;
+    expect(() => scopeWranglerConfig(noConsumer, IDENTITY, RUN_DB_ID)).toThrow(/no JOBS queue with one consumer/);
+
     const noDb = structuredClone(REAL_WRANGLER);
     noDb.env.qa.d1_databases = [];
     expect(() => scopeWranglerConfig(noDb, IDENTITY, RUN_DB_ID)).toThrow(/no D1 binding named DB/);
@@ -260,6 +285,8 @@ describe("scopeGeneratedBuildConfig", () => {
     expect(scoped.name).toBe(IDENTITY.workerName);
     expect(scoped.vars.SPOONJOY_BASE_URL).toBe(IDENTITY.baseUrl);
     expect(scoped.d1_databases[0]).toEqual({ binding: "DB", database_name: IDENTITY.databaseName, database_id: RUN_DB_ID });
+    expect(scoped.queues.producers[0].queue).toBe(IDENTITY.queueName);
+    expect(scoped.queues.consumers[0].queue).toBe(IDENTITY.queueName);
     expect(scoped.migrations).toEqual(config.migrations);
     expect(scoped.assets).toEqual(config.assets);
     expect(config.name).toBe("spoonjoy-v2-qa");
@@ -282,9 +309,19 @@ describe("assertOnlyIdentityChanged", () => {
     sneaky.r2_buckets[0].bucket_name = "spoonjoy-photos";
     expect(() => assertOnlyIdentityChanged(before, sneaky)).toThrow(/more than its identity/);
 
+    // Only the jobs queue's name may change, not how its consumer takes messages.
+    const retried = structuredClone(after);
+    retried.queues.consumers[0].max_retries = 1;
+    expect(() => assertOnlyIdentityChanged(before, retried)).toThrow(/more than its identity/);
+
     // A config without vars or D1 still compares.
     expect(() => assertOnlyIdentityChanged({ name: "a" }, { name: "b" })).not.toThrow();
     expect(() => assertOnlyIdentityChanged({ d1_databases: [null] }, { d1_databases: [null] })).not.toThrow();
+    const producerOnly = (queue: string) => ({ queues: { producers: [{ binding: "JOBS", queue }] } });
+    expect(() => assertOnlyIdentityChanged(producerOnly("a"), producerOnly("b"))).not.toThrow();
+    // Another queue's consumer is not the jobs queue's identity, so its name must stay.
+    const withOther = (queue: string, other: string) => ({ queues: { producers: [{ binding: "JOBS", queue }], consumers: [{ queue: other }] } });
+    expect(() => assertOnlyIdentityChanged(withOther("a", "x"), withOther("b", "y"))).toThrow(/more than its identity/);
   });
 });
 
@@ -328,6 +365,8 @@ describe("createCloudflareApi", () => {
   it("calls the account's D1 and Workers endpoints with the bearer token, listing databases unfiltered", async () => {
     const fetchImpl = vi.fn(async (url: string, init: { method: string; body?: string }) => {
       if (url.includes("/d1/database?")) return jsonResponse(200, { success: true, result: [{ name: "spoonjoy-qa-run-1-1", uuid: "u" }] });
+      if (url.includes("/queues?")) return jsonResponse(200, { success: true, result: [{ queue_name: "spoonjoy-jobs-qa-run-1-1", queue_id: "q" }] });
+      if (init.method === "POST" && url.endsWith("/queues")) return jsonResponse(200, { success: true, result: { queue_id: "q" } });
       if (init.method === "POST") return jsonResponse(200, { success: true, result: { uuid: RUN_DB_ID } });
       if (url.endsWith("/workers/scripts")) return jsonResponse(200, { success: true, result: [{ id: "w" }] });
       return jsonResponse(200, { success: true, result: null });
@@ -339,6 +378,9 @@ describe("createCloudflareApi", () => {
     await api.deleteDatabase("u");
     expect(await api.listWorkers()).toEqual([{ id: "w" }]);
     await api.deleteWorker("spoonjoy-v2-qa-run-1-1");
+    expect(await api.listQueues()).toEqual([{ queue_name: "spoonjoy-jobs-qa-run-1-1", queue_id: "q" }]);
+    expect(await api.createQueue("spoonjoy-jobs-qa-run-1-1")).toEqual({ queue_id: "q" });
+    await api.deleteQueue("q");
 
     const base = `https://api.cloudflare.com/client/v4/accounts/${RUN_ENV.CLOUDFLARE_ACCOUNT_ID}`;
     expect(fetchImpl.mock.calls.map(([url, init]) => `${init.method} ${url}`)).toEqual([
@@ -347,8 +389,12 @@ describe("createCloudflareApi", () => {
       `DELETE ${base}/d1/database/u`,
       `GET ${base}/workers/scripts`,
       `DELETE ${base}/workers/scripts/spoonjoy-v2-qa-run-1-1?force=true`,
+      `GET ${base}/queues?page=1&per_page=100`,
+      `POST ${base}/queues`,
+      `DELETE ${base}/queues/q`,
     ]);
     expect(fetchImpl.mock.calls[1][1].body).toBe(JSON.stringify({ name: "spoonjoy-qa-run-1-1" }));
+    expect(fetchImpl.mock.calls[6][1].body).toBe(JSON.stringify({ queue_name: "spoonjoy-jobs-qa-run-1-1" }));
     expect(fetchImpl.mock.calls[0][1]).toMatchObject({ headers: { Authorization: "Bearer token" } });
   });
 
@@ -480,13 +526,24 @@ describe("sweepStaleRunStacks", () => {
         { id: "spoonjoy-v2", created_on: old },
         { created_on: old },
       ]),
+      listQueues: vi.fn(async () => [
+        { queue_name: "spoonjoy-jobs-qa-run-1-1", queue_id: "stale-queue", created_on: old },
+        { queue_name: "spoonjoy-jobs-qa-run-2-1", queue_id: "fresh-queue", created_on: fresh },
+        { queue_name: SHARED_QA_QUEUE, queue_id: "shared-queue", created_on: old },
+        { queue_name: "spoonjoy-jobs", queue_id: "production-queue", created_on: old },
+        { queue_id: "nameless-queue", created_on: old },
+      ]),
     });
     const log = vi.fn();
 
-    expect(await sweepStaleRunStacks({ api, now, log })).toEqual({ swept: 2, remainingRunWorkers: 1 });
+    expect(await sweepStaleRunStacks({ api, now, log })).toEqual({ swept: 3, remainingRunWorkers: 1 });
     expect(api.deleteDatabase.mock.calls).toEqual([["stale-db"]]);
+    expect(api.deleteQueue.mock.calls).toEqual([["stale-queue"]]);
     expect(api.deleteWorker.mock.calls).toEqual([["spoonjoy-v2-qa-run-1-1"]]);
-    expect(log).toHaveBeenCalledTimes(2);
+    // A run's queue goes before its Worker, which Cloudflare may refuse to delete while it consumes one.
+    expect(api.deleteQueue.mock.invocationCallOrder[0]).toBeLessThan(api.deleteWorker.mock.invocationCallOrder[0]);
+    expect(log).toHaveBeenCalledTimes(3);
+    expect(RUN_QUEUE_PATTERN.test(SHARED_QA_QUEUE)).toBe(false);
   });
 
   it("treats a stack another run deleted first (404) as already gone, and fails on any other error", async () => {
@@ -496,11 +553,14 @@ describe("sweepStaleRunStacks", () => {
       deleteDatabase: gone.deleteDatabase,
       listWorkers: vi.fn(async () => [{ id: "spoonjoy-v2-qa-run-1-1", created_on: old }]),
       deleteWorker: gone.deleteWorker,
+      listQueues: vi.fn(async () => [{ queue_name: "spoonjoy-jobs-qa-run-1-1", queue_id: "stale-queue", created_on: old }]),
+      deleteQueue: gone.deleteQueue,
     });
     const log = vi.fn();
-    expect(await sweepStaleRunStacks({ api, now, log })).toEqual({ swept: 2, remainingRunWorkers: 0 });
+    expect(await sweepStaleRunStacks({ api, now, log })).toEqual({ swept: 3, remainingRunWorkers: 0 });
     expect(log.mock.calls.map(([line]) => line)).toEqual([
       `Already gone: stale QA run database spoonjoy-qa-run-1-1 (created ${old}).`,
+      `Already gone: stale QA run jobs queue spoonjoy-jobs-qa-run-1-1 (created ${old}).`,
       `Already gone: stale QA run Worker spoonjoy-v2-qa-run-1-1 (created ${old}).`,
     ]);
 
@@ -576,6 +636,10 @@ describe("prepare", () => {
 
     expect(state).toEqual({ ...IDENTITY, databaseId: RUN_DB_ID });
     expect(api.createDatabase).toHaveBeenCalledWith(IDENTITY.databaseName);
+    expect(api.createQueue).toHaveBeenCalledWith(IDENTITY.queueName);
+    expect(log).toHaveBeenCalledWith(`Created QA run jobs queue ${IDENTITY.queueName}.`);
+    expect(files.json(WRANGLER_CONFIG).env.qa.queues.producers[0].queue).toBe(IDENTITY.queueName);
+    expect(files.json(GENERATED_BUILD_CONFIG).queues.consumers[0].queue).toBe(IDENTITY.queueName);
     expect(files.json(STATE_FILE)).toEqual(state);
     expect(files.json(WRANGLER_CONFIG).env.qa.d1_databases[0].database_id).toBe(RUN_DB_ID);
     expect(files.json(WRANGLER_CONFIG).d1_databases).toEqual(REAL_WRANGLER.d1_databases);
@@ -626,6 +690,37 @@ describe("prepare", () => {
     await expect(prepare({ now: Date.now, env: RUN_ENV, fs: fakeFs(preparedFiles()).fs, api: raced, log: vi.fn(), secrets })).resolves.toMatchObject({
       databaseId: RUN_DB_ID,
     });
+  });
+
+  it("replaces a jobs queue left by an earlier try of the same attempt, and reuses one a retried create made", async () => {
+    const api = fakeApi({
+      listQueues: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ queue_name: IDENTITY.queueName, queue_id: "leftover" }, { queue_name: SHARED_QA_QUEUE, queue_id: "keep" }]),
+    });
+    await prepare({ now: Date.now, env: RUN_ENV, fs: fakeFs(preparedFiles()).fs, api, log: vi.fn(), secrets });
+    expect(api.deleteQueue.mock.calls).toEqual([["leftover"]]);
+    expect(api.createQueue.mock.calls).toEqual([[IDENTITY.queueName]]);
+
+    const retried = fakeApi({
+      listQueues: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ queue_name: IDENTITY.queueName, queue_id: "made-first-time" }]),
+      createQueue: vi.fn(async () => {
+        throw new Error("Cloudflare API POST /queues returned 409: queue name already taken");
+      }),
+    });
+    const log = vi.fn();
+    await prepare({ now: Date.now, env: RUN_ENV, fs: fakeFs(preparedFiles()).fs, api: retried, log, secrets });
+    expect(log).toHaveBeenCalledWith(`Created QA run jobs queue ${IDENTITY.queueName}.`);
+
+    const refused = fakeApi({
+      createQueue: vi.fn(async () => {
+        throw new Error("Cloudflare API POST /queues returned 403: not allowed");
+      }),
+    });
+    await expect(prepare({ now: Date.now, env: RUN_ENV, fs: fakeFs(preparedFiles()).fs, api: refused, log: vi.fn(), secrets })).rejects.toThrow(/403/);
   });
 
   it("reuses the run's database when a retried create finds the first try had worked", async () => {
@@ -1170,15 +1265,44 @@ describe("deploy", () => {
   });
 });
 
+describe("ensureSharedQueue", () => {
+  it("creates shared QA's jobs queue only when it is missing", async () => {
+    const missing = fakeApi({ listQueues: vi.fn(async () => [{ queue_name: IDENTITY.queueName, queue_id: "a-run" }]) });
+    const log = vi.fn();
+    expect(await ensureSharedQueue({ env: RUN_ENV, api: missing, log })).toBe(true);
+    expect(missing.createQueue.mock.calls).toEqual([[SHARED_QA_QUEUE]]);
+    expect(log).toHaveBeenCalledWith(`Created shared QA's jobs queue ${SHARED_QA_QUEUE}.`);
+
+    const present = fakeApi({ listQueues: vi.fn(async () => [{ queue_name: SHARED_QA_QUEUE, queue_id: "shared" }]) });
+    const log2 = vi.fn();
+    expect(await ensureSharedQueue({ env: RUN_ENV, api: present, log: log2 })).toBe(false);
+    expect(present.createQueue).not.toHaveBeenCalled();
+    expect(log2).toHaveBeenCalledWith(`Shared QA's jobs queue ${SHARED_QA_QUEUE} is already there.`);
+    expect(SHARED_QA_QUEUE).toBe("spoonjoy-jobs-qa");
+  });
+
+  it("refuses to run outside GitHub Actions", async () => {
+    await expect(ensureSharedQueue({ env: { ...RUN_ENV, GITHUB_ACTIONS: "false" }, api: fakeApi(), log: vi.fn() })).rejects.toThrow(/GitHub Actions/);
+  });
+});
+
 describe("teardown", () => {
-  it("deletes this run's Worker and the database prepare recorded, by id, and its local state", async () => {
-    const api = fakeApi();
+  it("deletes this run's jobs queue, then its Worker and the database prepare recorded, by id, and its local state", async () => {
+    const api = fakeApi({
+      listQueues: vi.fn(async () => [
+        { queue_name: `${IDENTITY.queueName}0`, queue_id: "longer-name" },
+        { queue_name: IDENTITY.queueName, queue_id: "run-queue" },
+      ]),
+    });
     const files = scopedFiles();
     const log = vi.fn();
 
     expect(await teardown({ env: RUN_ENV, fs: files.fs, api, log })).toBe(true);
     expect(api.deleteWorker.mock.calls).toEqual([[IDENTITY.workerName]]);
     expect(api.deleteDatabase.mock.calls).toEqual([[RUN_DB_ID]]);
+    expect(api.deleteQueue.mock.calls).toEqual([["run-queue"]]);
+    expect(api.deleteQueue.mock.invocationCallOrder[0]).toBeLessThan(api.deleteWorker.mock.invocationCallOrder[0]);
+    expect(log).toHaveBeenCalledWith(`Deleted QA run jobs queue ${IDENTITY.queueName}.`);
     // The recorded id is enough: no listing, so nothing depends on how a listing matches names.
     expect(api.listDatabases).not.toHaveBeenCalled();
     expect(files.removed).toEqual([STATE_DIR]);
@@ -1211,14 +1335,18 @@ describe("teardown", () => {
     expect(await teardown({ env: RUN_ENV, fs: fakeFs().fs, api, log })).toBe(true);
     expect(api.deleteDatabase).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith(
-      `::warning::Nothing to delete for part of this run's QA stack: no Worker named ${IDENTITY.workerName} existed; no database named ${IDENTITY.databaseName} existed.`,
+      `::warning::Nothing to delete for part of this run's QA stack: no jobs queue named ${IDENTITY.queueName} existed; no Worker named ${IDENTITY.workerName} existed; no database named ${IDENTITY.databaseName} existed.`,
     );
 
-    const alreadyDeleted = fakeApi({ deleteDatabase: gone.deleteDatabase });
+    const alreadyDeleted = fakeApi({
+      deleteDatabase: gone.deleteDatabase,
+      deleteQueue: gone.deleteQueue,
+      listQueues: vi.fn(async () => [{ queue_name: IDENTITY.queueName, queue_id: "run-queue" }]),
+    });
     const log2 = vi.fn();
     expect(await teardown({ env: RUN_ENV, fs: scopedFiles().fs, api: alreadyDeleted, log: log2 })).toBe(true);
     expect(log2).toHaveBeenCalledWith(
-      `::warning::Nothing to delete for part of this run's QA stack: database ${IDENTITY.databaseName} (${RUN_DB_ID}) was already deleted.`,
+      `::warning::Nothing to delete for part of this run's QA stack: jobs queue ${IDENTITY.queueName} was already deleted; database ${IDENTITY.databaseName} (${RUN_DB_ID}) was already deleted.`,
     );
   });
 
@@ -1230,11 +1358,14 @@ describe("teardown", () => {
       listDatabases: vi.fn(async () => {
         throw new Error("d1 500");
       }),
+      listQueues: vi.fn(async () => {
+        throw new Error("queues 500");
+      }),
     });
     const log = vi.fn();
     expect(await teardown({ env: RUN_ENV, fs: fakeFs().fs, api, log })).toBe(false);
     expect(log).toHaveBeenCalledWith(
-      "::warning::Could not fully delete this run's QA stack (worker 500; d1 500). The scheduled sweep deletes it once it is 3 hours old.",
+      "::warning::Could not fully delete this run's QA stack (queues 500; worker 500; d1 500). The scheduled sweep deletes it once it is 3 hours old.",
     );
   });
 
@@ -1296,6 +1427,8 @@ describe("main and the CLI guard", () => {
     await main(["verify"], { env: RUN_ENV, exec: verifyExec().exec, fs: files.fs, fetchImpl: site(LIVE), log });
     expect(await main(["teardown"], { env: RUN_ENV, fs: files.fs, api, log })).toBe(true);
     expect(await main(["sweep"], { env: RUN_ENV, api, log })).toEqual({ swept: 0, remainingRunWorkers: 0 });
+    expect(await main(["shared-queue"], { env: RUN_ENV, api, log })).toBe(true);
+    expect(api.createQueue).toHaveBeenLastCalledWith(SHARED_QA_QUEUE);
     await expect(main(["release"], { env: RUN_ENV, api })).rejects.toThrow(/Usage/);
   });
 
@@ -1565,7 +1698,8 @@ describe("Journeys workflow", () => {
     expect(deploySteps.at(-1)).toMatchObject({
       name: "Deploy main to shared QA",
       if: "steps.tip.outputs.current == 'true'",
-      run: "pnpm run deploy:qa",
+      // Shared QA's jobs queue must exist before a deploy can bind it.
+      run: "node scripts/qa-run-scope.mjs shared-queue && pnpm run deploy:qa",
     });
     expect(deploySteps.filter((candidate) => candidate.env?.CLOUDFLARE_API_TOKEN)).toHaveLength(1);
   });
