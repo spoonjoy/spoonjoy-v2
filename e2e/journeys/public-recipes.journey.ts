@@ -56,7 +56,9 @@ test.describe("Public recipes", () => {
       await expect(views.getByRole("radio", { name: "List", exact: true })).toBeChecked();
     });
     await expectNoHydrationErrors(page);
-    await testInfo.attach("recipes-list-view", { body: await main.screenshot(), contentType: "image/png" });
+    // The first screen: the switch on List and the first lines under it.
+    await views.scrollIntoViewIfNeeded();
+    await testInfo.attach("recipes-list-view", { body: await page.screenshot(), contentType: "image/png" });
   });
 
   test("following the next-page links reaches the oldest seeded recipe", async ({ page }) => {
