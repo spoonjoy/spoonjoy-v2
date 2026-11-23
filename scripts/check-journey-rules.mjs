@@ -22,6 +22,7 @@ import { readFile as nodeReadFile, readdir as nodeReaddir } from "node:fs/promis
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
+import { contextRouteImports, inlineContextRoutes } from "./route-sources.mjs";
 
 export const JOURNEY_FILE_PATTERN = /\.(?:journey|setup)\.ts$/;
 
@@ -656,7 +657,10 @@ export function parseRulesArgs(argv) {
 const DEFAULT_EXPORT_PATTERN = /^export default\b/m;
 
 async function censusViolations({ census, routes: routesFile }, journeys, readFile) {
-  const routes = parseRouteConfig(await readFile(routesFile));
+  const source = await readFile(routesFile);
+  const contexts = new Map();
+  for (const { file } of contextRouteImports(source, routesFile)) contexts.set(file, await readFile(file));
+  const routes = parseRouteConfig(inlineContextRoutes(source, routesFile, contexts));
   const pageFiles = new Set();
   for (const route of routes.filter((candidate) => !candidate.layout)) {
     if (DEFAULT_EXPORT_PATTERN.test(await readFile(path.join(path.dirname(routesFile), route.file)))) pageFiles.add(route.file);

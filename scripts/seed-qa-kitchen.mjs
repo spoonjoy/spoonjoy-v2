@@ -7,7 +7,7 @@
 // injectable execFile, CLI guard).
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -208,19 +208,33 @@ export function generatePersonaPasswords(random = randomBytes) {
   };
 }
 
-// SCRATCH_USER_COUNT counts scratch INDICES (1..10), not accounts: each index is seeded as
+// SCRATCH_USER_COUNT counts scratch INDICES, not accounts: each index is seeded as
 // SCRATCH_VARIANTS.length accounts, and SCRATCH_ACCOUNT_COUNT below is the total number of
-// accounts (20). The name predates the desktop twins and is kept because journeys, AGENTS.md and
-// the tests refer to it.
+// accounts. The name predates the desktop twins and is kept because journeys and the tests refer
+// to it.
 //
-// Number of per-run scratch indices seeded alongside the three kitchen personas. Journeys that
-// change data use one of these (via support/personas.ts's scratch(n)) instead of signing up a
-// throwaway user through /signup, so they stop spending QA's shared auth rate limit
-// (AUTH_IP_RATE_LIMITER, 60/minute in QA — see docs/deployment.md). Each scratch index is owned
-// by exactly one journey area (see AGENTS.md's Validation section for the assignment table) —
-// 10 is exactly today's assignment table; see personas.setup.ts's budget comment for the
-// accounting before raising this further.
-export const SCRATCH_USER_COUNT = 10;
+// Journeys that change data use a scratch index (via support/personas.ts's scratch(n)) instead of
+// signing up a throwaway user through /signup, so they stop spending QA's shared auth rate limit
+// (AUTH_IP_RATE_LIMITER, 60/minute in QA — see docs/deployment.md). Each index is owned by one
+// journey area and has its own file, e2e/journeys/scratch/<n>-<area>.setup.ts, which signs it in.
+// The seed counts those files, so a pull request that adds an area adds one file and edits no
+// shared line. test/scripts/journey-sign-in-budget.test.ts keeps the sign-ins under QA's limit.
+// Read from the repository root, where pnpm runs this script.
+export const SCRATCH_SETUP_DIR = "e2e/journeys/scratch";
+const SCRATCH_SETUP_FILE = /^(\d+)-[a-z0-9-]+\.setup\.ts$/;
+
+/** The number of scratch indices the setup files name: exactly 1..n, each once, or it throws. */
+export function scratchIndexCount(fileNames) {
+  const indices = fileNames.map((name) => SCRATCH_SETUP_FILE.exec(name)).filter(Boolean).map((match) => Number(match[1])).sort((a, b) => a - b);
+  indices.forEach((index, position) => {
+    if (index !== position + 1) {
+      throw new Error(`e2e/journeys/scratch/ must number its setup files 1 to ${indices.length}, each once; found ${indices.join(", ")}. Take the next free index.`);
+    }
+  });
+  return indices.length;
+}
+
+export const SCRATCH_USER_COUNT = scratchIndexCount(readdirSync(SCRATCH_SETUP_DIR));
 
 // Every scratch index is seeded as two accounts: the base account, and a desktop twin.
 // The iphone-webkit and desktop-chrome journey projects run at the same time, and some data is
@@ -234,7 +248,7 @@ export const SCRATCH_VARIANTS = Object.freeze([
   { variant: "desktop", suffix: "d" },
 ]);
 
-// Total scratch ACCOUNTS seeded per run (20): every index (SCRATCH_USER_COUNT), once per variant.
+// Total scratch ACCOUNTS seeded per run: every index (SCRATCH_USER_COUNT), once per variant.
 // Use this for anything counted per account, such as passwords or sign-ins.
 export const SCRATCH_ACCOUNT_COUNT = SCRATCH_USER_COUNT * SCRATCH_VARIANTS.length;
 

@@ -251,7 +251,7 @@ describe("decide", () => {
     expect(decide({ files: ["app/routes/home.tsx", file], labels: [], specs: SPECS }).mode).toBe("full");
   });
 
-  it.each(["app/root.tsx", "app/routes.ts", "app/entry.client.tsx", "app/entry.server.tsx", "app/styles/tailwind.css"])(
+  it.each(["app/root.tsx", "app/routes.ts", "app/route-config/planning/routes.ts", "app/route-config/web-route.ts", "app/entry.client.tsx", "app/entry.server.tsx", "app/styles/tailwind.css"])(
     "runs the full suite when the app-wide %s changes",
     (file) => {
       const decision = decide({ files: [file], labels: [], specs: SPECS });

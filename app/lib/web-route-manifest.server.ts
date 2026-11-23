@@ -1,3 +1,17 @@
+import { webRoute as route, type WebRouteCategory, type WebRouteClassification } from "~/route-config/web-route";
+import communityAndFederationWebRoutes from "~/route-config/community-and-federation/web-routes";
+import cookingWebRoutes from "~/route-config/cooking/web-routes";
+import foodKnowledgeWebRoutes from "~/route-config/food-knowledge/web-routes";
+import householdsAndIdentityWebRoutes from "~/route-config/households-and-identity/web-routes";
+import integrationsWebRoutes from "~/route-config/integrations/web-routes";
+import kitchenWebRoutes from "~/route-config/kitchen/web-routes";
+import moveInWebRoutes from "~/route-config/move-in/web-routes";
+import pantryAndShoppingWebRoutes from "~/route-config/pantry-and-shopping/web-routes";
+import planningWebRoutes from "~/route-config/planning/web-routes";
+import platformWebRoutes from "~/route-config/platform/web-routes";
+
+export type { WebRouteCategory, WebRouteClassification };
+
 export const APPLE_BUNDLE_IDS = [
   "app.spoonjoy",
   "app.spoonjoy.mac",
@@ -6,43 +20,10 @@ export const APPLE_BUNDLE_IDS = [
 ] as const;
 export const APPLE_TEAM_ID_PATTERN = /^[A-Z0-9]{10}$/;
 
-export type WebRouteCategory =
-  | "user-product"
-  | "secure-web-handoff"
-  | "api-or-oauth"
-  | "developer-resource"
-  | "platform-asset"
-  | "intentional-exclude";
-
-export type WebRouteClassification = {
-  routeId: string;
-  routeFile: string;
-  urlPattern: `/${string}`;
-  category: WebRouteCategory;
-  universalLink: boolean;
-  publicShareable: boolean;
-};
-
 export type AppleAppLinkComponent = {
   "/": string;
   "?"?: { "*": "*" };
 };
-
-function route(
-  routeFile: string,
-  urlPattern: `/${string}`,
-  category: WebRouteCategory,
-  options: { universalLink?: boolean; publicShareable?: boolean } = {},
-): WebRouteClassification {
-  return {
-    routeId: routeFile.replace(/^routes\//, "").replace(/\.(tsx|ts)$/, ""),
-    routeFile,
-    urlPattern,
-    category,
-    universalLink: options.universalLink ?? category === "user-product",
-    publicShareable: options.publicShareable ?? false,
-  };
-}
 
 export const WEB_ROUTE_MANIFEST = [
   route("routes/_index.tsx", "/", "user-product", { universalLink: true }),
@@ -99,9 +80,6 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/cookbooks.new.tsx", "/cookbooks/new", "user-product", { universalLink: true }),
   route("routes/cookbooks.$id.tsx", "/cookbooks/:id", "user-product", { universalLink: true, publicShareable: true }),
   route("routes/shopping-list.tsx", "/shopping-list", "user-product", { universalLink: true }),
-  // Households are web-only for now: the iPhone app has no household screens to open a link in.
-  route("routes/households._index.tsx", "/households", "user-product", { universalLink: false }),
-  route("routes/households.$id.tsx", "/households/:id", "user-product", { universalLink: false }),
   route("routes/join.$token.tsx", "/join/:token", "user-product", { universalLink: false }),
   route("routes/account.settings.tsx", "/account/settings", "user-product", { universalLink: true }),
   // A file download and the page after deletion stay in the browser.
@@ -148,6 +126,17 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/photos.$.tsx", "/photos/*", "platform-asset"),
   route("routes/devtools-well-known.tsx", "/.well-known/appspecific/com.chrome.devtools.json", "platform-asset"),
   route("routes/$.tsx", "/*", "intentional-exclude", { universalLink: false }),
+  // Each context's classifications, from app/route-config/<context>/web-routes.ts.
+  ...communityAndFederationWebRoutes,
+  ...cookingWebRoutes,
+  ...foodKnowledgeWebRoutes,
+  ...householdsAndIdentityWebRoutes,
+  ...integrationsWebRoutes,
+  ...kitchenWebRoutes,
+  ...moveInWebRoutes,
+  ...pantryAndShoppingWebRoutes,
+  ...planningWebRoutes,
+  ...platformWebRoutes,
 ] as const satisfies readonly WebRouteClassification[];
 
 export const APPLE_APP_LINK_COMPONENTS = [
