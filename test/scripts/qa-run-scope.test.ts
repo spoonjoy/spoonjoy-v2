@@ -127,6 +127,8 @@ function fakeApi(overrides: Partial<Record<string, unknown>> = {}) {
     listQueues: vi.fn(async () => [] as Array<{ queue_name?: string; queue_id: string; created_on?: string }>),
     createQueue: vi.fn(async (name: string) => ({ queue_id: "new-queue", queue_name: name })),
     deleteQueue: vi.fn(async () => ({ success: true })),
+    listQueueConsumers: vi.fn(async (queueId: string) => [{ consumer_id: `${queueId}-consumer`, script_name: "a-worker" }]),
+    deleteQueueConsumer: vi.fn(async () => ({ success: true })),
     ...overrides,
   };
 }
@@ -351,6 +353,7 @@ describe("createCloudflareApi", () => {
       if (init.method === "POST" && url.endsWith("/queues")) return jsonResponse(200, { success: true, result: { queue_id: "q" } });
       if (init.method === "POST") return jsonResponse(200, { success: true, result: { uuid: RUN_DB_ID } });
       if (url.endsWith("/workers/scripts")) return jsonResponse(200, { success: true, result: [{ id: "w" }] });
+      if (init.method === "GET" && url.endsWith("/consumers")) return jsonResponse(200, { success: true, result: [{ consumer_id: "c" }] });
       return jsonResponse(200, { success: true, result: null });
     });
     const api = createCloudflareApi({ env: RUN_ENV, fetchImpl, sleep: vi.fn() });
@@ -363,6 +366,8 @@ describe("createCloudflareApi", () => {
     expect(await api.listQueues()).toEqual([{ queue_name: "spoonjoy-jobs-qa-run-1-1", queue_id: "q" }]);
     expect(await api.createQueue("spoonjoy-jobs-qa-run-1-1")).toEqual({ queue_id: "q" });
     await api.deleteQueue("q");
+    expect(await api.listQueueConsumers("q")).toEqual([{ consumer_id: "c" }]);
+    await api.deleteQueueConsumer("q", "c");
 
     const base = `https://api.cloudflare.com/client/v4/accounts/${RUN_ENV.CLOUDFLARE_ACCOUNT_ID}`;
     expect(fetchImpl.mock.calls.map(([url, init]) => `${init.method} ${url}`)).toEqual([
@@ -374,6 +379,8 @@ describe("createCloudflareApi", () => {
       `GET ${base}/queues?page=1&per_page=100`,
       `POST ${base}/queues`,
       `DELETE ${base}/queues/q`,
+      `GET ${base}/queues/q/consumers`,
+      `DELETE ${base}/queues/q/consumers/c`,
     ]);
     expect(fetchImpl.mock.calls[1][1].body).toBe(JSON.stringify({ name: "spoonjoy-qa-run-1-1" }));
     expect(fetchImpl.mock.calls[6][1].body).toBe(JSON.stringify({ queue_name: "spoonjoy-jobs-qa-run-1-1" }));
@@ -396,6 +403,7 @@ describe("createCloudflareApi", () => {
     const shortApi = createCloudflareApi({ env: RUN_ENV, fetchImpl: short, sleep: vi.fn() });
     expect(await shortApi.listDatabases()).toEqual([]);
     expect(await shortApi.listWorkers()).toEqual([]);
+    expect(await shortApi.listQueueConsumers("q")).toEqual([]);
 
     // Smaller pages than asked for still come in full when the API says how many there are.
     const small = [
@@ -533,8 +541,10 @@ describe("sweepStaleRunStacks", () => {
     expect(api.deleteDatabase.mock.calls).toEqual([["stale-db"]]);
     expect(api.deleteQueue.mock.calls).toEqual([["stale-queue"]]);
     expect(api.deleteWorker.mock.calls).toEqual([["spoonjoy-v2-qa-run-1-1"]]);
-    // A run's queue goes before its Worker, which Cloudflare may refuse to delete while it consumes one.
-    expect(api.deleteQueue.mock.invocationCallOrder[0]).toBeLessThan(api.deleteWorker.mock.invocationCallOrder[0]);
+    // Cloudflare deletes neither a Worker that consumes a queue nor a queue a Worker binds: consumer, Worker, queue.
+    expect(api.deleteQueueConsumer.mock.calls).toEqual([["stale-queue", "stale-queue-consumer"]]);
+    expect(api.deleteQueueConsumer.mock.invocationCallOrder[0]).toBeLessThan(api.deleteWorker.mock.invocationCallOrder[0]);
+    expect(api.deleteWorker.mock.invocationCallOrder[0]).toBeLessThan(api.deleteQueue.mock.invocationCallOrder[0]);
     expect(log).toHaveBeenCalledTimes(3);
     expect(RUN_QUEUE_PATTERN.test(SHARED_QA_QUEUE)).toBe(false);
   });
@@ -548,14 +558,28 @@ describe("sweepStaleRunStacks", () => {
       deleteWorker: gone.deleteWorker,
       listQueues: vi.fn(async () => [{ queue_name: "spoonjoy-jobs-qa-run-1-1", queue_id: "stale-queue", created_on: old }]),
       deleteQueue: gone.deleteQueue,
+      listQueueConsumers: gone.listQueueConsumers,
     });
     const log = vi.fn();
     expect(await sweepStaleRunStacks({ api, now, log })).toEqual({ swept: 3, remainingRunWorkers: 0 });
     expect(log.mock.calls.map(([line]) => line)).toEqual([
       `Already gone: stale QA run database spoonjoy-qa-run-1-1 (created ${old}).`,
-      `Already gone: stale QA run jobs queue spoonjoy-jobs-qa-run-1-1 (created ${old}).`,
       `Already gone: stale QA run Worker spoonjoy-v2-qa-run-1-1 (created ${old}).`,
+      `Already gone: stale QA run jobs queue spoonjoy-jobs-qa-run-1-1 (created ${old}).`,
     ]);
+    // A consumer another sweep removed first is gone too; any other error stops the sweep.
+    const consumerGone = fakeApi({
+      listQueues: vi.fn(async () => [{ queue_name: "spoonjoy-jobs-qa-run-1-1", queue_id: "stale-queue", created_on: old }]),
+      deleteQueueConsumer: gone.deleteQueueConsumer,
+    });
+    expect(await sweepStaleRunStacks({ api: consumerGone, now, log: vi.fn() })).toEqual({ swept: 1, remainingRunWorkers: 0 });
+    const consumersBroken = fakeApi({
+      listQueues: vi.fn(async () => [{ queue_name: "spoonjoy-jobs-qa-run-1-1", queue_id: "stale-queue", created_on: old }]),
+      listQueueConsumers: vi.fn(async () => {
+        throw new Error("queues 500");
+      }),
+    });
+    await expect(sweepStaleRunStacks({ api: consumersBroken, now, log: vi.fn() })).rejects.toThrow("queues 500");
 
     const broken = fakeApi({
       listDatabases: vi.fn(async () => [{ name: "spoonjoy-qa-run-1-1", uuid: "stale-db", created_at: old }]),
@@ -1209,7 +1233,9 @@ describe("teardown", () => {
     expect(api.deleteWorker.mock.calls).toEqual([[IDENTITY.workerName]]);
     expect(api.deleteDatabase.mock.calls).toEqual([[RUN_DB_ID]]);
     expect(api.deleteQueue.mock.calls).toEqual([["run-queue"]]);
-    expect(api.deleteQueue.mock.invocationCallOrder[0]).toBeLessThan(api.deleteWorker.mock.invocationCallOrder[0]);
+    expect(api.deleteQueueConsumer.mock.calls).toEqual([["run-queue", "run-queue-consumer"]]);
+    expect(api.deleteQueueConsumer.mock.invocationCallOrder[0]).toBeLessThan(api.deleteWorker.mock.invocationCallOrder[0]);
+    expect(api.deleteWorker.mock.invocationCallOrder[0]).toBeLessThan(api.deleteQueue.mock.invocationCallOrder[0]);
     expect(log).toHaveBeenCalledWith(`Deleted QA run jobs queue ${IDENTITY.queueName}.`);
     // The recorded id is enough: no listing, so nothing depends on how a listing matches names.
     expect(api.listDatabases).not.toHaveBeenCalled();
@@ -1249,6 +1275,7 @@ describe("teardown", () => {
     const alreadyDeleted = fakeApi({
       deleteDatabase: gone.deleteDatabase,
       deleteQueue: gone.deleteQueue,
+      listQueueConsumers: gone.listQueueConsumers,
       listQueues: vi.fn(async () => [{ queue_name: IDENTITY.queueName, queue_id: "run-queue" }]),
     });
     const log2 = vi.fn();
@@ -1256,6 +1283,19 @@ describe("teardown", () => {
     expect(log2).toHaveBeenCalledWith(
       `::warning::Nothing to delete for part of this run's QA stack: jobs queue ${IDENTITY.queueName} was already deleted; database ${IDENTITY.databaseName} (${RUN_DB_ID}) was already deleted.`,
     );
+  });
+
+  it("warns instead of failing when its queue can't be deleted, after the Worker is gone", async () => {
+    const api = fakeApi({
+      listQueues: vi.fn(async () => [{ queue_name: IDENTITY.queueName, queue_id: "run-queue" }]),
+      deleteQueue: vi.fn(async () => {
+        throw new Error("queue 500");
+      }),
+    });
+    const log = vi.fn();
+    expect(await teardown({ env: RUN_ENV, fs: scopedFiles().fs, api, log })).toBe(false);
+    expect(api.deleteWorker).toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("Could not fully delete this run's QA stack (queue 500)"));
   });
 
   it("warns instead of failing when deletion fails, so the sweep can finish it later", async () => {
