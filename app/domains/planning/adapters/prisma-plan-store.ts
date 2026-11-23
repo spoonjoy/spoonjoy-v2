@@ -4,7 +4,7 @@ import { readableRecipeWhere } from "~/domains/kitchen";
 import type { PlanStore } from "../application/plan";
 import { ENTRY_SELECT, toEntry } from "./plan-entry-row";
 
-type PlanDb = Pick<PrismaClient, "mealPlan" | "planEntry" | "recipe">;
+type PlanDb = Pick<PrismaClient, "mealPlan" | "planEntry" | "recipe" | "recipeSpoon">;
 
 export function prismaPlanStore(db: PlanDb): PlanStore {
   return {
@@ -53,6 +53,16 @@ export function prismaPlanStore(db: PlanDb): PlanStore {
       for (const { id, date, mealType, position } of placements) {
         await db.planEntry.updateMany({ where: { id, mealPlanId: planId }, data: { date, mealType, position } });
       }
+    },
+
+    async lastCooked(chefId, recipeIds) {
+      const groups = await db.recipeSpoon.groupBy({
+        by: ["recipeId"],
+        where: { chefId, recipeId: { in: [...recipeIds] }, deletedAt: null },
+        _max: { cookedAt: true },
+      });
+      // A group exists only for a recipe with a live cook, and cookedAt is never null, so _max always has one.
+      return groups.map((group) => ({ recipeId: group.recipeId, cookedAt: group._max.cookedAt as Date }));
     },
   };
 }

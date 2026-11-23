@@ -33,6 +33,31 @@ describe("planning a week, stored", () => {
     await cleanupDatabase();
   });
 
+  it("says when the cook last made each planned recipe, on the plan's own calendar, from their live cooks only", async () => {
+    const chef = await cook();
+    const friend = await cook();
+    const rice = await db.recipe.create({ data: { ...createTestRecipe(friend.id), title: "Lemon Herb Rice" } });
+    const stew = await db.recipe.create({ data: { ...createTestRecipe(friend.id), title: "Bean Stew" } });
+    const never = await db.recipe.create({ data: { ...createTestRecipe(friend.id), title: "Never Made" } });
+    await db.mealPlan.create({ data: { ownerId: chef.id, timeZone: "America/Los_Angeles" } });
+    await db.recipeSpoon.createMany({
+      data: [
+        { chefId: chef.id, recipeId: rice.id, cookedAt: new Date("2026-10-01T18:00:00Z") },
+        // Late on Nov 2 in Los Angeles, already Nov 3 in UTC.
+        { chefId: chef.id, recipeId: rice.id, cookedAt: new Date("2026-11-03T05:00:00Z") },
+        { chefId: chef.id, recipeId: stew.id, cookedAt: new Date("2026-11-20T18:00:00Z"), deletedAt: new Date() },
+        { chefId: friend.id, recipeId: stew.id, cookedAt: new Date("2026-11-21T18:00:00Z") },
+      ],
+    });
+    for (const [id, recipe] of [["entry-rice", rice], ["entry-stew", stew], ["entry-never", never]] as const) {
+      await addEntry(store, chef.id, id, { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: recipe.id });
+    }
+    await addEntry(store, chef.id, "entry-note", { kind: "note", date: "2026-11-25", mealType: "lunch", title: "Out" });
+
+    const week = await getWeek(store, chef.id, "2026-11-24");
+    expect(week.lastMade).toEqual({ [rice.id]: "2026-11-02" });
+  });
+
   it("starts an empty week on Monday for a cook with no plan yet, and makes the plan once", async () => {
     const chef = await cook();
     const week = await getWeek(store, chef.id, "2026-11-26");
