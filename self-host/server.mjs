@@ -11,7 +11,7 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { Miniflare } from "miniflare";
+import { Miniflare, fetch as nodeFetch } from "miniflare";
 import { miniflareOptions, photoUploads, settingsFromEnv } from "./config.mjs";
 import { startCronTimers } from "./cron.mjs";
 import { applyMigrations, migrationFiles, splitSql } from "./migrations.mjs";
@@ -39,6 +39,7 @@ const options = miniflareOptions({
   sessionSecret: readFileSync(secretFile, "utf8").trim(),
   version: process.env.SPOONJOY_VERSION ?? "dev",
   serverAssetFiles: readdirSync(path.join(appDir, "build/server/assets")),
+  outboundFetch: nodeFetch,
 });
 if (command !== "serve") options.host = "127.0.0.1";
 
