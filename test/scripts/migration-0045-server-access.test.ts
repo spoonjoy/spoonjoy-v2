@@ -20,9 +20,9 @@ beforeEach(() => {
 
 afterEach(() => database.close());
 
-describe("migration 0044 (server access)", () => {
+describe("migration 0045 (server access)", () => {
   it("mirrors the D1 migration in Prisma's folder", () => {
-    const withoutComments = migration("migrations/0044_server_access.sql").split("\n").filter((line) => !line.startsWith("--")).join("\n");
+    const withoutComments = migration("migrations/0045_server_access.sql").split("\n").filter((line) => !line.startsWith("--")).join("\n");
     expect(migration("prisma/migrations/20261123180000_server_access/migration.sql")).toBe(withoutComments);
   });
 
