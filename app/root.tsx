@@ -57,6 +57,8 @@ import { SiteFooter } from "~/components/navigation/site-footer";
 import { smartAppBannerContent } from "~/lib/app-store";
 import { XrayProvider } from "~/components/xray/xray-provider";
 import { UNKNOWN_SOURCE_SHA, buildSourceSha } from "~/lib/build-info.server";
+// The web fonts come from the app's own assets (app/styles/fonts.css), never from Google Fonts.
+import "./styles/fonts.css";
 import "./styles/tailwind.css";
 import "./styles/fold.css";
 
@@ -75,12 +77,6 @@ export function meta() {
 
 export function links() {
   return [
-    { rel: "preconnect", href: "https://fonts.googleapis.com" },
-    { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-    {
-      rel: "stylesheet",
-      href: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,400..900,60..100,0..1&family=IBM+Plex+Sans+Condensed:wght@300;400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400..800&display=swap",
-    },
     // Square, so Google's favicon service (which Claude's connector rows use) doesn't squash the 5:3 mark.
     { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
     { rel: "icon", href: "/icons/sj-192.png", type: "image/png", sizes: "192x192" },
