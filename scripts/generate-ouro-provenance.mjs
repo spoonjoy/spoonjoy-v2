@@ -5,7 +5,7 @@
 // install without scripts write it, and the build fails on its import without it. `--check` fails when it is stale.
 // It names no HX release: app/lib/ouro-provenance.server.ts reads that from HX's own source at build
 // time, so an Ouro update, which changes only HX's files, leaves this file as it is.
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
@@ -28,7 +28,10 @@ const USAGE = "Usage: generate-ouro-provenance.mjs [--check]";
 export const defaultDeps = {
   readFile: (file) => readFileSync(file, "utf8"),
   exists: (file) => existsSync(file),
-  writeFile: (file, contents) => writeFileSync(file, contents),
+  writeFile: (file, contents) => {
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, contents);
+  },
 };
 
 function stringArg(node, file) {
