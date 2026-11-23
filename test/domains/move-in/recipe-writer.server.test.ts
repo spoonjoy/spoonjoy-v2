@@ -24,7 +24,7 @@ function draft(fields: Partial<RecipeDraft> = {}): RecipeDraft {
     description: "Fluffy ones.",
     servings: "4 servings",
     sourceUrl: "https://example.com/pancakes",
-    photoPath: null,
+    photoPath: "data/recipes/recipe-1/images/original.webp",
     steps: [
       { sourceKey: "step-1", title: "Batter", text: "Whisk the flour and milk.", ingredientKeys: ["r|flour", "r|milk"] },
       { sourceKey: "step-2", title: null, text: "Cook in butter, then add the salt.", ingredientKeys: ["r|flour"] },
