@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createMoveInJob, moveInJobStore, readMoveInProgress } from "~/domains/move-in/adapters/storage/job-store.server";
-import type { MoveInEvent } from "~/domains/move-in/application/run-move-in";
+import { LostClaimError, type MoveInEvent } from "~/domains/move-in/application/run-move-in";
 import { migratedSqliteD1, type MigratedSqlite } from "../../helpers/migrated-sqlite";
 
 let database: MigratedSqlite;
@@ -30,7 +30,7 @@ describe("the move-in job store", () => {
   it("creates a queued job that starts by inspecting its archive", async () => {
     const id = await create();
     expect(await moveInJobStore(database.binding, () => clock).loadJob(id)).toEqual({
-      id, ownerId: "chef-1", kind: "mealie-backup", sourceId: null, status: "queued", phase: "inspect", cursor: null, archiveKey: "move-in/chef-1/a.zip", lastError: null,
+      id, ownerId: "chef-1", kind: "mealie-backup", sourceId: null, status: "queued", phase: "inspect", cursor: null, archiveKey: "move-in/chef-1/a.zip", lastError: null, attempt: 0,
     });
     expect(await moveInJobStore(database.binding, () => clock).loadJob("nope")).toBeNull();
   });
@@ -40,10 +40,10 @@ describe("the move-in job store", () => {
     const id = await create();
     later(5);
     await store.updateJob(id, { status: "running" });
-    expect(row(id)).toMatchObject({ status: "running", startedAt: "2026-11-23T12:00:05.000Z", finishedAt: null, heartbeatAt: "2026-11-23T12:00:05.000Z" });
+    expect(row(id)).toMatchObject({ status: "running", startedAt: "2026-11-23T12:00:05.000Z", finishedAt: null, heartbeatAt: null });
     later(5);
     await store.updateJob(id, { cursor: "10", phase: "recipes" });
-    expect(row(id)).toMatchObject({ startedAt: "2026-11-23T12:00:05.000Z", heartbeatAt: "2026-11-23T12:00:10.000Z" });
+    expect(row(id)).toMatchObject({ startedAt: "2026-11-23T12:00:05.000Z", updatedAt: "2026-11-23T12:00:10.000Z" });
     later(5);
     await store.updateJob(id, { status: "done", phase: "done", cursor: null });
     expect(row(id)).toMatchObject({ status: "done", finishedAt: "2026-11-23T12:00:15.000Z", updatedAt: "2026-11-23T12:00:15.000Z" });
@@ -73,18 +73,55 @@ describe("the move-in job store", () => {
     expect(progress?.counts).toEqual({ recipes: { found: 3, created: 1, updated: 0, unchanged: 0, skipped: 1, failed: 0 } });
     expect(progress?.events.map((event) => [event.seq, event.level, event.message])).toEqual([[1, "info", "Found 3 recipes."], [2, "warn", "Pancakes (2)"]]);
     expect(progress?.job).toMatchObject({ id, status: "queued", archiveName: "backup.zip" });
+    expect(progress?.job).not.toHaveProperty("archiveKey");
   });
 
   it("lets one run work on a job at a time, and another take over a run that went quiet", async () => {
     const store = moveInJobStore(database.binding, () => clock);
     const id = await create();
-    expect(await store.claim(id, clock)).toBe(true);
-    expect(await store.claim(id, later(30))).toBe(false);
-    await store.updateJob(id, { cursor: "1" });
-    expect(await store.claim(id, later(44))).toBe(false);
-    expect(await store.claim(id, later(2))).toBe(true);
-    await store.release(id);
-    expect(await store.claim(id, clock)).toBe(true);
+    const first = await store.claim(id, clock);
+    expect(first).toEqual(expect.any(String));
+    expect(await store.claim(id, later(30))).toBeNull();
+    await store.updateJob(id, { cursor: "1" }, first as string);
+    expect(await store.claim(id, later(44))).toBeNull();
+    const second = await store.claim(id, later(2));
+    expect(second).toEqual(expect.any(String));
+    expect(second).not.toBe(first);
+    await store.release(id, first as string);
+    expect(await store.claim(id, clock)).toBeNull();
+    await store.release(id, second as string);
+    expect(await store.claim(id, clock)).toEqual(expect.any(String));
+  });
+
+  it("refuses the writes of a run that lost its claim", async () => {
+    const store = moveInJobStore(database.binding, () => clock);
+    const id = await create();
+    const first = (await store.claim(id, clock)) as string;
+    later(50);
+    await store.claim(id, clock);
+    await expect(store.updateJob(id, { cursor: "9" }, first)).rejects.toBeInstanceOf(LostClaimError);
+    expect(await store.loadJob(id)).toMatchObject({ cursor: null });
+  });
+
+  it("starts the counts over, and remembers the kitchen a source is", async () => {
+    const store = moveInJobStore(database.binding, () => clock);
+    const id = await create();
+    await store.addCounts(id, "recipes", { found: 3 });
+    await store.resetCounts(id);
+    await store.addCounts(id, "recipes", { found: 3 });
+    expect((await readMoveInProgress(database.binding, { ownerId: "chef-1", jobId: id }))?.counts.recipes).toMatchObject({ found: 3 });
+    const source = await store.ensureSource({ ownerId: "chef-1", kind: "mealie-backup", instanceKey: "group-1", label: "Home", sourceVersion: "v2.8.0" });
+    expect(await store.sourceInstanceKey(source)).toBe("group-1");
+    expect(await store.sourceInstanceKey("nope")).toBeNull();
+  });
+
+  it("keeps what the system said apart from the report's message", async () => {
+    const store = moveInJobStore(database.binding, () => clock);
+    const id = await create();
+    await store.addEvent(id, { ...info("Soup didn't move in this time."), level: "error", kind: "item-failed", detail: "D1 said no" });
+    const progress = await readMoveInProgress(database.binding, { ownerId: "chef-1", jobId: id });
+    expect(progress?.events[0]).not.toHaveProperty("detail");
+    expect(database.sqlite.prepare(`SELECT "detail" FROM "ImportEvent"`).get()).toEqual({ detail: "D1 said no" });
   });
 
   it("shows a job only to its owner", async () => {

@@ -1,7 +1,7 @@
-// Runs a move-in a chunk at a time. Each call loads the job, does one bounded piece of work and
-// saves where it got to, so a Worker that stops mid-way loses at most one chunk: the next call
-// picks up from the cursor, and the SourceRecord rows make a repeated recipe a no-op. The ports
-// keep this free of D1, R2 and the request.
+// Runs a move-in a piece at a time. Each call loads the job, does one bounded piece of work and
+// saves where it got to after every recipe, so a Worker that stops mid-way repeats at most the
+// recipe it stopped on, and the SourceRecord rows make that repeat a no-op. Only the run that holds
+// the job's claim may write it. The ports keep this free of D1, R2 and the request.
 import type { RangeSource } from "../adapters/archive/zip";
 import { openMealieBackup, type MealieBackup } from "../adapters/sources/mealie-backup/backup";
 import { chooseGroup, inspectGroup, listGroups, recipeDrafts } from "../adapters/sources/mealie-backup/database";
@@ -11,6 +11,8 @@ import type { RecipeDraft } from "../model/recipe-draft";
 export type MoveInStatus = "queued" | "running" | "done" | "done-with-issues" | "failed";
 export type MoveInPhase = "inspect" | "recipes" | "done";
 export const FINISHED: readonly MoveInStatus[] = ["done", "done-with-issues", "failed"];
+/** How many times in a row an outage may stop the job before it fails with the "stuck" message. */
+export const MAX_ATTEMPTS = 5;
 
 export interface MoveInJob {
   id: string;
@@ -22,6 +24,8 @@ export interface MoveInJob {
   cursor: string | null;
   archiveKey: string | null;
   lastError: string | null;
+  /** Outages in a row since the job last moved forward. */
+  attempt: number;
 }
 
 export interface MoveInCounts {
@@ -40,6 +44,8 @@ export interface MoveInEvent {
   sourceKey: string | null;
   targetId: string | null;
   message: string;
+  /** What the system said, kept for support and never shown as the message. */
+  detail?: string | null;
 }
 
 export type RecipeWriteResult =
@@ -47,24 +53,38 @@ export type RecipeWriteResult =
   | { outcome: "unchanged"; recipeId: string }
   | { outcome: "skipped"; recipeId: string; reason: string };
 
+/** The job's claim passed to another run: this run must stop writing. */
+export class LostClaimError extends Error {
+  constructor() {
+    super("Another run has taken this move-in over");
+    this.name = "LostClaimError";
+  }
+}
+
 export interface MoveInPorts {
   store: {
     loadJob(id: string): Promise<MoveInJob | null>;
-    updateJob(id: string, patch: Partial<MoveInJob>): Promise<void>;
+    /** Saves the job; with a token, only while that claim holds, and LostClaimError otherwise. */
+    updateJob(id: string, patch: Partial<MoveInJob>, token?: string): Promise<void>;
     ensureSource(source: { ownerId: string; kind: string; instanceKey: string; label: string; sourceVersion: string }): Promise<string>;
+    /** The kitchen's key in the backup, as inspect chose it. */
+    sourceInstanceKey(sourceId: string): Promise<string | null>;
     addCounts(jobId: string, entity: string, delta: Partial<MoveInCounts>): Promise<void>;
+    resetCounts(jobId: string): Promise<void>;
     addEvent(jobId: string, event: MoveInEvent): Promise<void>;
     /** Whether the job has logged a warning or an error. */
     hasIssues(jobId: string): Promise<boolean>;
-    /** Takes the job for this run unless another run has shown signs of life lately; false when it is taken. */
-    claim(jobId: string, at: Date): Promise<boolean>;
-    /** Lets the job go, so the next run can take it at once. */
-    release(jobId: string): Promise<void>;
+    /** Takes the job for this run unless another run has shown signs of life lately: the claim's token, or null. */
+    claim(jobId: string, at: Date): Promise<string | null>;
+    /** Lets the job go, if this run still holds it, so the next run can take it at once. */
+    release(jobId: string, token: string): Promise<void>;
   };
   openArchive(job: MoveInJob): RangeSource | Promise<RangeSource>;
   ownerEmail(ownerId: string): Promise<string | null>;
   writeRecipe(input: { sourceId: string; jobId: string; chefId: string; draft: RecipeDraft }): Promise<RecipeWriteResult>;
   attachPhoto(input: { ownerId: string; recipeId: string; bytes: Uint8Array }): Promise<void>;
+  /** Whether the recipe already has a cover that moved in. */
+  hasMovedInPhoto(recipeId: string): Promise<boolean>;
   /** Deletes the uploaded backup; it holds the other app's accounts, so it is kept no longer than the job needs it. */
   discardArchive(job: MoveInJob): Promise<void>;
   now(): Date;
@@ -87,15 +107,32 @@ interface Opened {
   drafts: RecipeDraft[];
 }
 
-async function open(job: MoveInJob, ports: MoveInPorts): Promise<Opened> {
-  const backup = await openMealieBackup(await ports.openArchive(job));
-  const groupKey = chooseGroup(backup.database, await ports.ownerEmail(job.ownerId));
-  if (!groupKey) throw new MoveInError("pick-a-group");
-  return { backup, groupKey, drafts: recipeDrafts(backup.database, groupKey) };
+/** One chunk's context: the job, the ports, the claim it writes under. */
+interface Run {
+  job: MoveInJob;
+  ports: MoveInPorts;
+  token: string | undefined;
 }
 
-async function inspect(job: MoveInJob, ports: MoveInPorts, { backup, groupKey, drafts }: Opened) {
-  const { store } = ports;
+/** What one run keeps between its chunks, so the backup is read and parsed once. */
+export interface RunCache {
+  opened?: Opened;
+}
+
+async function open({ job, ports }: Run, cache: RunCache): Promise<Opened> {
+  if (cache.opened) return cache.opened;
+  const backup = await openMealieBackup(await ports.openArchive(job));
+  // Once inspect has chosen the kitchen, the job keeps to it.
+  const groupKey = job.sourceId
+    ? await ports.store.sourceInstanceKey(job.sourceId)
+    : chooseGroup(backup.database, await ports.ownerEmail(job.ownerId));
+  if (!groupKey) throw new MoveInError("pick-a-group");
+  cache.opened = { backup, groupKey, drafts: recipeDrafts(backup.database, groupKey) };
+  return cache.opened;
+}
+
+async function inspect(run: Run, { backup, groupKey, drafts }: Opened) {
+  const { job, ports: { store } } = run;
   const group = listGroups(backup.database).find((candidate) => candidate.key === groupKey) as { name: string };
   const sourceId = await store.ensureSource({
     ownerId: job.ownerId,
@@ -106,6 +143,8 @@ async function inspect(job: MoveInJob, ports: MoveInPorts, { backup, groupKey, d
   });
   const counted = inspectGroup(backup.database, groupKey);
   const photos = drafts.filter((draft) => backup.hasFile(draft.photoPath)).length;
+  // A repeated inspect (after a stop before it saved its phase) counts from nothing again.
+  await store.resetCounts(job.id);
   await store.addCounts(job.id, "recipes", { found: drafts.length });
   await store.addCounts(job.id, "photos", { found: photos });
   // Spoonjoy has no tags, categories or tools yet; they are counted, and left for a later move-in.
@@ -116,10 +155,10 @@ async function inspect(job: MoveInJob, ports: MoveInPorts, { backup, groupKey, d
   if (left.length) {
     await store.addEvent(job.id, event("item-skipped", `Spoonjoy doesn't have tags, categories or tools yet, so ${left.join(", ")} stayed in the backup.`, { entity: "tags" }));
   }
-  await store.updateJob(job.id, { status: "running", phase: "recipes", cursor: "0", sourceId });
+  await store.updateJob(job.id, { status: "running", phase: "recipes", cursor: "0", sourceId, attempt: 0 }, run.token);
 }
 
-async function bringPhoto(job: MoveInJob, ports: MoveInPorts, backup: MealieBackup, draft: RecipeDraft, recipeId: string) {
+async function bringPhoto({ job, ports }: Run, backup: MealieBackup, draft: RecipeDraft, recipeId: string) {
   const { store } = ports;
   // A damaged photo loses only the photo, never the job.
   const bytes = await backup.readFile(draft.photoPath).catch(() => null);
@@ -133,7 +172,8 @@ async function bringPhoto(job: MoveInJob, ports: MoveInPorts, backup: MealieBack
   }
 }
 
-async function bringRecipe(job: MoveInJob, ports: MoveInPorts, backup: MealieBackup, draft: RecipeDraft) {
+async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft) {
+  const { job, ports } = run;
   const { store } = ports;
   const at = { entity: "recipes", sourceKey: draft.sourceKey };
   const hasPhoto = backup.hasFile(draft.photoPath);
@@ -141,8 +181,9 @@ async function bringRecipe(job: MoveInJob, ports: MoveInPorts, backup: MealieBac
   try {
     result = await ports.writeRecipe({ sourceId: job.sourceId as string, jobId: job.id, chefId: job.ownerId, draft });
   } catch (error) {
+    if (error instanceof LostClaimError) throw error;
     await store.addCounts(job.id, "recipes", { failed: 1 });
-    await store.addEvent(job.id, event("item-failed", `${draft.title} didn't move in: ${(error as Error).message}`, at));
+    await store.addEvent(job.id, event("item-failed", `${draft.title} didn't move in this time. Moving the same backup in again tries it once more.`, { ...at, detail: (error as Error).message }));
     return;
   }
   const target = { ...at, targetId: result.recipeId };
@@ -153,66 +194,98 @@ async function bringRecipe(job: MoveInJob, ports: MoveInPorts, backup: MealieBac
   }
   if (result.outcome === "unchanged") {
     await store.addCounts(job.id, "recipes", { unchanged: 1 });
-    if (hasPhoto) await store.addCounts(job.id, "photos", { unchanged: 1 });
+    // A run that stopped between the recipe and its photo left the photo out; bring it now.
+    if (!hasPhoto) return;
+    if (await ports.hasMovedInPhoto(result.recipeId)) await store.addCounts(job.id, "photos", { unchanged: 1 });
+    else await bringPhoto(run, backup, draft, result.recipeId);
     return;
   }
   await store.addCounts(job.id, "recipes", { created: 1 });
   for (const warning of result.warnings) await store.addEvent(job.id, event("item-degraded", warning, target));
-  if (hasPhoto) await bringPhoto(job, ports, backup, draft, result.recipeId);
+  if (hasPhoto) await bringPhoto(run, backup, draft, result.recipeId);
 }
 
-async function recipes(job: MoveInJob, ports: MoveInPorts, { backup, drafts }: Opened, chunkSize: number) {
+async function recipes(run: Run, { backup, drafts }: Opened, chunkSize: number) {
+  const { job, ports } = run;
   const { store } = ports;
   const start = Number(job.cursor);
-  for (const draft of drafts.slice(start, start + chunkSize)) await bringRecipe(job, ports, backup, draft);
-  const next = start + chunkSize;
-  if (next < drafts.length) {
-    await store.updateJob(job.id, { cursor: String(next) });
-    return;
+  const end = Math.min(start + chunkSize, drafts.length);
+  for (let i = start; i < end; i++) {
+    await bringRecipe(run, backup, drafts[i]);
+    await store.updateJob(job.id, { cursor: String(i + 1), attempt: 0 }, run.token);
   }
+  if (end < drafts.length) return;
   const status = (await store.hasIssues(job.id)) ? "done-with-issues" : "done";
   await store.addEvent(job.id, event("job-done", `${plural(drafts.length, "recipe")} moved in.`));
-  await store.updateJob(job.id, { status, phase: "done", cursor: null });
+  await store.updateJob(job.id, { status, phase: "done", cursor: null }, run.token);
   await discard(job, ports);
 }
 
-// A backup left behind is swept with other unused uploads, so a failed delete never holds the job up.
+// A backup a failed delete leaves behind is cleared by sweepMoveInArchives, so it never holds the job up.
 async function discard(job: MoveInJob, ports: MoveInPorts) {
   await ports.discardArchive(job).catch(() => undefined);
 }
 
-/** Does the job's next piece of work and returns the job as it then stands, or null when there is no such job. */
-export async function runNextChunk(jobId: string, ports: MoveInPorts, { chunkSize = DEFAULT_CHUNK_SIZE } = {}): Promise<MoveInJob | null> {
+async function fail(run: Run, code: keyof typeof MOVE_IN_ERROR_MESSAGES) {
+  const { job, ports } = run;
+  await ports.store.addEvent(job.id, event("job-failed", MOVE_IN_ERROR_MESSAGES[code]));
+  await ports.store.updateJob(job.id, { status: "failed", lastError: code }, run.token);
+  await discard(job, ports);
+}
+
+/**
+ * Does the job's next piece of work and returns the job as it then stands, or null when there is no such job.
+ * `token` is the claim it writes under (runForAWhile takes one); `cache` carries the parsed backup between chunks.
+ */
+export async function runNextChunk(
+  jobId: string,
+  ports: MoveInPorts,
+  { chunkSize = DEFAULT_CHUNK_SIZE, token, cache = {} }: { chunkSize?: number; token?: string; cache?: RunCache } = {},
+): Promise<MoveInJob | null> {
   const { store } = ports;
   const job = await store.loadJob(jobId);
   if (!job || FINISHED.includes(job.status)) return job;
-  if (job.status === "queued") await store.updateJob(job.id, { status: "running" });
+  const run: Run = { job, ports, token };
+  if (job.status === "queued") await store.updateJob(job.id, { status: "running" }, token);
   try {
-    const opened = await open(job, ports);
-    if (job.phase === "inspect") await inspect(job, ports, opened);
-    else await recipes(job, ports, opened, chunkSize);
+    const opened = await open(run, cache);
+    if (job.phase === "inspect") await inspect(run, opened);
+    else await recipes(run, opened, chunkSize);
   } catch (error) {
-    if (!(error instanceof MoveInError)) throw error;
-    await store.addEvent(job.id, event("job-failed", MOVE_IN_ERROR_MESSAGES[error.code]));
-    await store.updateJob(job.id, { status: "failed", lastError: error.code });
-    await discard(job, ports);
+    if (error instanceof MoveInError) await fail(run, error.code);
+    else if (error instanceof LostClaimError) throw error;
+    else {
+      // An outage: the next run tries again, until the same job has been stopped MAX_ATTEMPTS times in a row.
+      const attempt = ((await store.loadJob(jobId)) as MoveInJob).attempt + 1;
+      if (attempt < MAX_ATTEMPTS) {
+        await store.updateJob(job.id, { attempt }, token);
+        throw error;
+      }
+      await fail(run, "stuck");
+    }
   }
   return store.loadJob(jobId);
 }
 
 /**
- * Runs chunks until the job finishes or `budgetMs` has passed, checked after each chunk, and returns the job as it
- * then stands. A Worker gives a request's waitUntil about 30 seconds, so the budget stays well inside that.
+ * Runs chunks under one claim until the job finishes, another run takes it, or `budgetMs` has passed (checked after
+ * each chunk), and returns the job as it then stands. A Worker gives a request's waitUntil about 30 seconds, so the
+ * budget stays well inside that.
  */
 export async function runForAWhile(jobId: string, ports: MoveInPorts, { budgetMs, chunkSize }: { budgetMs: number; chunkSize?: number }): Promise<MoveInJob | null> {
   const started = ports.now();
-  if (!(await ports.store.claim(jobId, started))) return ports.store.loadJob(jobId);
+  const token = await ports.store.claim(jobId, started);
+  if (!token) return ports.store.loadJob(jobId);
+  const cache: RunCache = {};
   try {
     for (;;) {
-      const job = await runNextChunk(jobId, ports, { chunkSize });
+      const job = await runNextChunk(jobId, ports, { chunkSize, token, cache });
       if (!job || FINISHED.includes(job.status) || ports.now().getTime() - started.getTime() >= budgetMs) return job;
     }
+  } catch (error) {
+    if (error instanceof LostClaimError) return ports.store.loadJob(jobId);
+    throw error;
   } finally {
-    await ports.store.release(jobId);
+    await ports.store.release(jobId, token);
   }
 }

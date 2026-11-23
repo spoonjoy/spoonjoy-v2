@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { attachMovedInPhoto, MOVED_IN_PHOTO_MAX_BYTES } from "~/domains/move-in/adapters/storage/photo-writer.server";
+import { attachMovedInPhoto, hasMovedInPhoto, MOVED_IN_PHOTO_MAX_BYTES } from "~/domains/move-in/adapters/storage/photo-writer.server";
 import { migratedSqliteD1, type MigratedSqlite } from "../../helpers/migrated-sqlite";
 
 let database: MigratedSqlite;
@@ -46,6 +46,18 @@ describe("attachMovedInPhoto", () => {
       createdById: "chef-1",
     })]);
     expect(recipe()).toEqual({ activeCoverId: covers[0].id, activeCoverVariant: "image", coverMode: "auto" });
+  });
+
+  it("marks the recipe changed, so the phone app fetches its new cover", async () => {
+    database.sqlite.prepare(`UPDATE "Recipe" SET "updatedAt" = '2026-01-01T00:00:00.000Z' WHERE "id" = 'recipe-1'`).run();
+    await attachMovedInPhoto({ db: database.binding, bucket: bucket(), ownerId: "chef-1", recipeId: "recipe-1", bytes: webp, now });
+    expect(database.sqlite.prepare(`SELECT "updatedAt" FROM "Recipe" WHERE "id" = 'recipe-1'`).get()).toEqual({ updatedAt: "2026-11-23T12:00:00.000Z" });
+  });
+
+  it("knows whether a recipe already has a photo that moved in", async () => {
+    expect(await hasMovedInPhoto(database.binding, "recipe-1")).toBe(false);
+    await attachMovedInPhoto({ db: database.binding, bucket: bucket(), ownerId: "chef-1", recipeId: "recipe-1", bytes: webp, now });
+    expect(await hasMovedInPhoto(database.binding, "recipe-1")).toBe(true);
   });
 
   it("keeps a cover the chef already chose", async () => {

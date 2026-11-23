@@ -30,7 +30,7 @@
 
 import { captureException, resolvePostHogServerConfig, type PostHogServerEnv } from "~/lib/analytics-server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
-import { PHOTO_PENDING_UPLOAD_PREFIX } from "~/lib/photo-variants";
+import { MOVE_IN_ARCHIVE_PREFIX, PHOTO_PENDING_UPLOAD_PREFIX } from "~/lib/photo-variants";
 /** Where stored photos are served from; rows keep this relative URL. */
 export const PHOTO_URL_PREFIX = "/photos/";
 /** Moved objects wait here, unserved, until they are purged or restored. */
@@ -351,7 +351,7 @@ export async function runPhotoSweep(options: RunPhotoSweepOptions): Promise<Phot
   const originals = new Map<string, number>();
   const variantsByOriginal = new Map<string, string[]>();
   for (const object of objects) {
-    if (object.key.startsWith(PHOTO_QUARANTINE_PREFIX) || object.key.startsWith(PHOTO_SAMPLE_PREFIX)) continue;
+    if ([PHOTO_QUARANTINE_PREFIX, PHOTO_SAMPLE_PREFIX, MOVE_IN_ARCHIVE_PREFIX].some((prefix) => object.key.startsWith(prefix))) continue;
     const original = originalKeyOfVariant(object.key);
     if (original?.startsWith(PHOTO_SAMPLE_PREFIX)) continue;
     if (original !== null) {

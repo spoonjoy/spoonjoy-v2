@@ -5,14 +5,14 @@ import type { RangeSource } from "../archive/zip";
 import { MoveInError } from "../../model/move-in-error";
 import type { MoveInPorts } from "../../application/run-move-in";
 import { moveInJobStore } from "../storage/job-store.server";
-import { attachMovedInPhoto } from "../storage/photo-writer.server";
+import { attachMovedInPhoto, hasMovedInPhoto } from "../storage/photo-writer.server";
 import { writeMovedInRecipe } from "../storage/recipe-writer.server";
 
 /**
- * Where an uploaded backup waits while it moves in. The photo route never serves this prefix and
- * the photo sweep clears what is left there, so a backup never becomes a public photo.
+ * Where an uploaded backup waits while it moves in. The photo route never serves this prefix and the
+ * photo sweep skips it; a finished job deletes its backup, and sweepMoveInArchives clears the rest.
  */
-export const MOVE_IN_ARCHIVE_PREFIX = "pending-uploads/move-in/";
+export { MOVE_IN_ARCHIVE_PREFIX } from "~/lib/photo-variants";
 
 type ArchiveBucket = Pick<R2Bucket, "head" | "get" | "put" | "delete">;
 
@@ -37,17 +37,21 @@ export async function r2RangeSource(bucket: Pick<R2Bucket, "head" | "get">, key:
   };
 }
 
+/** The email the person signs in to Spoonjoy with, which picks their kitchen in a backup that holds several. */
+export async function ownerEmail(db: D1ReadDatabase, ownerId: string): Promise<string | null> {
+  const [[row]] = await d1ReadBatch(db, [[`SELECT "email" FROM "User" WHERE "id" = ?`, ownerId]]);
+  return row ? String(row.email) : null;
+}
+
 export function moveInPorts(env: MoveInEnv, now: () => Date): MoveInPorts {
   const db = env.DB;
   return {
     store: moveInJobStore(db, now),
     openArchive: (job) => r2RangeSource(env.PHOTOS, job.archiveKey as string),
-    async ownerEmail(ownerId) {
-      const [[row]] = await d1ReadBatch(db, [[`SELECT "email" FROM "User" WHERE "id" = ?`, ownerId]]);
-      return row ? String(row.email) : null;
-    },
+    ownerEmail: (ownerId) => ownerEmail(db, ownerId),
     writeRecipe: (input) => writeMovedInRecipe({ db, ...input, now: now() }),
     attachPhoto: (input) => attachMovedInPhoto({ db, bucket: env.PHOTOS, ...input, now: now() }),
+    hasMovedInPhoto: (recipeId) => hasMovedInPhoto(db, recipeId),
     discardArchive: async (job) => env.PHOTOS.delete(job.archiveKey as string),
     now,
   };
