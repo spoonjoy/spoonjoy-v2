@@ -74,8 +74,8 @@ The provider's sign-in needs the server on an `https://` address or on `localhos
 The first account made on a new server is its admin. After that the server is invite-only, so someone who finds it on the internet can't make an account.
 
 - **Server settings.** The admin finds them under Account settings, at `/account/server`. **Open sign-ups** lets anyone sign up; **Make invite-only** turns that off again. People who already have an account always sign in.
-- **Invite links.** **Make an invite link** shows a link to copy once. It signs up one account at `/signup?invite=…` and stops working after it's used, after seven days, or when the admin revokes it. Spoonjoy keeps only a hash of it. An invite signs up with a password; the new cook can link Google, GitHub or Apple in Account settings afterwards.
-- **Everything else is refused.** While the server is invite-only, a new account through a password, Google, GitHub, Apple on the web or in the apps is refused with "This server is invite-only. Ask its owner for an invite link."
+- **Invite links.** **Make an invite link** shows a link to copy once. It signs up one account at `/signup?invite=…` and stops working after it's used, after seven days, or when the admin revokes it. Spoonjoy keeps only a hash of it. An invite signs up with a password or with any sign-in provider the server offers, including your own OpenID Connect provider; the invite page shows those buttons and passes the invite through the provider's sign-in.
+- **Everything else is refused.** While the server is invite-only, a new account through a password, Google, GitHub, your OpenID Connect provider, or Apple on the web or in the apps is refused with "This server is invite-only. Ask its owner for an invite link."
 - **Moderation.** The admin can review reports at `/moderation`.
 
 If the admin's account is deleted, the oldest remaining account becomes admin.

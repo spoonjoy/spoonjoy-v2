@@ -420,6 +420,33 @@ describe("oauth-route.server", () => {
     expect(response?.headers.get("Location")).toBe("/login?redirectTo=/account/settings&oauthError=login_required");
   });
 
+  it("carries a self-hosted server's invite link from sign-up to the callback, but never into linking", async () => {
+    const start = new Request("https://spoonjoy.app/auth/oidc?invite=invite-token-1&failureRedirect=%2Fsignup%3Finvite%3Dinvite-token-1");
+    const data = resolveOAuthStartSessionData(start, "state", { codeVerifier: "verifier", nonce: "nonce" });
+    expect(data).toMatchObject({ inviteToken: "invite-token-1", failureRedirect: "/signup?invite=invite-token-1" });
+    expect(resolveOAuthStartSessionData(new Request("https://spoonjoy.app/auth/oidc?invite=x&linking=true"), "state"))
+      .not.toHaveProperty("inviteToken");
+
+    const cookie = await commitOAuthStartSession(start, "oidc", data);
+    const read = await readOAuthStartSession(
+      new Request("https://spoonjoy.app/auth/oidc/callback", { headers: { Cookie: cookieHeader(cookie) } }),
+      "oidc",
+    );
+    expect(read?.inviteToken).toBe("invite-token-1");
+
+    // A later start without an invite doesn't keep the earlier one.
+    const again = await commitOAuthStartSession(
+      new Request("https://spoonjoy.app/auth/oidc", { headers: { Cookie: cookieHeader(cookie) } }),
+      "oidc",
+      { ...data, inviteToken: undefined },
+    );
+    const reread = await readOAuthStartSession(
+      new Request("https://spoonjoy.app/auth/oidc/callback", { headers: { Cookie: cookieHeader(again) } }),
+      "oidc",
+    );
+    expect(reread).not.toHaveProperty("inviteToken");
+  });
+
   it("commits and reads OAuth session data with a code verifier", async () => {
     const request = new Request("https://spoonjoy.app/auth/google");
     const cookie = await commitOAuthStartSession(request, "google", {

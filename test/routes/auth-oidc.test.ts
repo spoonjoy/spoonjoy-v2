@@ -188,6 +188,8 @@ describe("OpenID Connect sign-in routes", () => {
     expect(mocks.handleOidcOAuthCallback).toHaveBeenCalledWith({
       db: { source: "db" },
       d1: null,
+      env: oidcEnv,
+      inviteToken: undefined,
       provider: "oidc:https://auth.example.test/realms/kitchen",
       oidcUser,
       currentUserId: null,

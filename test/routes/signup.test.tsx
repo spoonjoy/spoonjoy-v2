@@ -684,6 +684,15 @@ describe("Signup Route", () => {
       expect(extractResponseData(await signUpOn(env, "", token)).status).toBe(403);
     });
 
+    it("lists the configured providers on a valid invite link, and none for a stranger", async () => {
+      const oidcEnv = { ...env, SPOONJOY_OIDC_ISSUER: "https://auth.example.test", SPOONJOY_OIDC_CLIENT_ID: "spoonjoy", SPOONJOY_OIDC_CLIENT_SECRET: "test-only" };
+      await signUpOn(oidcEnv);
+      const [admin] = await db.user.findMany();
+      const { token } = await createServerInvite(db, admin.id);
+      expect(await loadSignup(oidcEnv, `?invite=${token}`)).toMatchObject({ oauthProviders: ["oidc"], invite: token });
+      expect(await loadSignup(oidcEnv)).toMatchObject({ oauthProviders: [] });
+    });
+
     it("keeps the invite when the sign-up it was for fails on a taken email", async () => {
       await signUpOn(env);
       const [admin] = await db.user.findMany();
@@ -737,6 +746,17 @@ describe("Signup Route", () => {
       ]);
       render(<Stub initialEntries={["/signup?oauthError=signups_closed"]} />);
       expect(await screen.findByText(INVITE_ONLY_MESSAGE)).toBeInTheDocument();
+    });
+
+    it("offers the server's sign-in providers on an invite link, carrying the invite to them", async () => {
+      const Stub = createTestRoutesStub([
+        { path: "/signup", Component: Signup, loader: () => ({ oauthProviders: ["oidc"], oidcLabel: "Kitchen sign-in", invite: "invite-token" }) },
+      ]);
+      render(<Stub initialEntries={["/signup?invite=invite-token"]} />);
+      const href = new URL((await screen.findByRole("link", { name: "Kitchen sign-in" })).getAttribute("href")!, "http://localhost");
+      expect(href.pathname).toBe("/auth/oidc");
+      expect(href.searchParams.get("invite")).toBe("invite-token");
+      expect(href.searchParams.get("failureRedirect")).toBe("/signup?invite=invite-token");
     });
 
     it("sends the invite with the form when opened from an invite link", async () => {

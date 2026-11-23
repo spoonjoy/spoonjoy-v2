@@ -1,4 +1,6 @@
 import { randomBytes } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { Page } from "@playwright/test";
 import { test, expect } from "../fixtures";
 import { Secret, fillSecret } from "../journeys/support/secret";
@@ -112,6 +114,21 @@ test.describe("A fresh self-hosted server", () => {
     await page.goto(new URL(inviteLink).pathname + new URL(inviteLink).search);
     await expect(page.getByTestId("signups-closed")).toContainText("This invite link has already been used.");
     await expect(page.getByRole("button", { name: /sign up/i })).toHaveCount(0);
+  });
+
+  // The workflow's OpenID Connect check runs after this file, against the same server, and needs
+  // an invite for a stranger who signs up through the provider. SPOONJOY_SELF_HOST_INVITE_OUT names
+  // the file to leave it in; the workflow deletes it with the other credentials.
+  test("the admin makes an invite link for the OpenID Connect check", async ({ page }) => {
+    const out = process.env.SPOONJOY_SELF_HOST_INVITE_OUT;
+    test.skip(!out, "SPOONJOY_SELF_HOST_INVITE_OUT names where the OpenID Connect check reads its invite");
+    await signInAsOwner(page);
+    await page.goto("/account/server");
+    await page.getByRole("button", { name: "Make an invite link" }).click();
+    const link = (await page.getByTestId("server-invite-link").textContent()) ?? "";
+    expect(link).toContain("/signup?invite=");
+    mkdirSync(dirname(out!), { recursive: true });
+    writeFileSync(out!, link);
   });
 
   test("the Spoonjoy apps' Sign in with Apple is set up, and a token Apple didn't sign is refused", async ({ request }) => {

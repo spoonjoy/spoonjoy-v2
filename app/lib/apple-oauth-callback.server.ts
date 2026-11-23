@@ -35,6 +35,8 @@ export interface AppleOAuthCallbackParams {
   d1?: D1ReadDatabase | null;
   /** The Worker's settings: on a self-hosted server a new account must pass its account-creation gate */
   env?: ServerAccessEnv | null;
+  /** The invite link sign-up started from, which lets a new account onto an invite-only server */
+  inviteToken?: string | null;
   /** Apple user data from verified callback */
   appleUser: AppleUser;
   /** Current logged-in user ID (null if not logged in) */
@@ -83,7 +85,7 @@ export interface AppleOAuthCallbackResult {
 export async function handleAppleOAuthCallback(
   params: AppleOAuthCallbackParams
 ): Promise<AppleOAuthCallbackResult> {
-  const { db, d1 = null, env = null, currentUserId, redirectTo } = params;
+  const { db, d1 = null, env = null, inviteToken = null, currentUserId, redirectTo } = params;
   // Only an address Apple marked verified in its signed token may match, create or verify an
   // account (#675). Both verifiers already drop an unverified one; this holds the rule here too.
   const appleUser: AppleUser = params.appleUser.emailVerified
@@ -175,7 +177,7 @@ export async function handleAppleOAuthCallback(
     email: appleUser.email,
     name: appleUser.fullName,
     emailVerified: appleUser.emailVerified,
-  }, d1, env);
+  }, d1, env, inviteToken);
 
   if (!createResult.success) {
     return {

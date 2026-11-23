@@ -83,6 +83,21 @@ describe("Self-host Image workflow", () => {
     expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["e2e/self-host/**"]));
   });
 
+  it("hands the OpenID Connect check an invite from the fresh server's admin, and runs it when a provider's sign-in changes", () => {
+    expect(stepNamed(image, /fresh server/).run).toContain("SPOONJOY_SELF_HOST_INVITE_OUT=.self-host/oidc-invite.txt");
+    expect(stepNamed(image, /OpenID Connect/).run).toContain("SPOONJOY_SELF_HOST_INVITE_FILE=.self-host/oidc-invite.txt");
+    expect(stepNamed(image, /Remove credentials/).run).toContain("rm -rf .self-host");
+    expect(workflow.on.pull_request.paths).toEqual(
+      expect.arrayContaining([
+        "app/lib/oauth-route.server.ts",
+        "app/lib/oauth-callback-route.server.ts",
+        "app/lib/oidc-callback.server.ts",
+        "app/lib/oidc.server.ts",
+        "app/components/oauth.tsx",
+      ]),
+    );
+  });
+
   it("runs the fresh server's sign-up and invite checks when the code that decides who may sign up changes", () => {
     expect(stepNamed(image, /fresh server/).name).toMatch(/sign-ups and invites/);
     expect(workflow.on.pull_request.paths).toEqual(

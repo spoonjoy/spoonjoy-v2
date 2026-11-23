@@ -22,6 +22,11 @@ on:
       - app/lib/apple-native-auth.server.ts
       - app/lib/server-access.server.ts
       - app/lib/oauth-user.server.ts
+      - app/lib/oauth-route.server.ts
+      - app/lib/oauth-callback-route.server.ts
+      - app/lib/oidc-callback.server.ts
+      - app/lib/oidc.server.ts
+      - app/components/oauth.tsx
       - app/routes/signup.tsx
       - app/routes/account.server-settings.tsx
       - playwright.journeys.config.ts
@@ -152,11 +157,13 @@ jobs:
           docker run --rm --network host --user "$(id -u):$(id -g)" --ipc host \
             -v "$PWD:/work" -w /work -e HOME=/tmp -e CI=true \
             -e SPOONJOY_JOURNEYS_BASE_URL=http://localhost:8080 \
+            -e SPOONJOY_SELF_HOST_INVITE_OUT=.self-host/oidc-invite.txt \
             mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f \
             node node_modules/@playwright/test/cli.js test -c playwright.self-host-fresh.config.ts
 
       # Sign-in with the owner's own OpenID Connect provider (SPOONJOY_OIDC_*): Dex, pinned by digest,
-      # with the one client and user in e2e/self-host/dex.yaml. The server runs on the host network
+      # with the one client and user in e2e/self-host/dex.yaml. The server is invite-only by now, so
+      # Dex's user is refused, then signs up from the invite link the last step left. The server runs on the host network
       # here so it reaches Dex at localhost:5556, the address the browser uses and Dex's ID tokens
       # name as their issuer. The client secret and password are test values that open nothing else.
       - name: Sign in through an OpenID Connect provider
@@ -186,6 +193,7 @@ jobs:
             -v "$PWD:/work" -w /work -e HOME=/tmp -e CI=true \
             -e SPOONJOY_JOURNEYS_BASE_URL=http://localhost:8080 \
             -e "SPOONJOY_SELF_HOST_OIDC_LABEL=Sign in with Dex" \
+            -e SPOONJOY_SELF_HOST_INVITE_FILE=.self-host/oidc-invite.txt \
             mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f \
             node node_modules/@playwright/test/cli.js test -c playwright.self-host-fresh.config.ts e2e/self-host/oidc.spec.ts
 
