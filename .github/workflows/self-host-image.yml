@@ -303,7 +303,14 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: |
           docker tag "$LOCAL_IMAGE" "$IMAGE:$VERSION-$ARCH"
-          docker push "$IMAGE:$VERSION-$ARCH"
+          # GHCR sometimes answers a layer upload with "unknown blob" (run 45135166086); a retry pushes
+          # only the layers that didn't land.
+          for attempt in 1 2 3; do
+            docker push "$IMAGE:$VERSION-$ARCH" && exit 0
+            echo "Push attempt $attempt failed; trying again in $((attempt * 10)) s."
+            sleep $((attempt * 10))
+          done
+          exit 1
 
   publish:
     needs: image
