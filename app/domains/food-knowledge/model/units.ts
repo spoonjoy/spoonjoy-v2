@@ -58,7 +58,7 @@ const UNITS: readonly (KnownUnit & { names: readonly string[] })[] = [
   { slug: "teaspoon", dimension: "volume", toBase: 5, names: ["teaspoon", "teaspoons", "tsp", "tsps"] },
   { slug: "tablespoon", dimension: "volume", toBase: 15, names: ["tablespoon", "tablespoons", "tbsp", "tbsps", "tbs", "tbl"] },
   { slug: "us-fluid-ounce", dimension: "volume", toBase: US_FL_OZ_ML, names: ["fl oz", "floz", "fluid ounce", "fluid ounces"] },
-  { slug: "cup", dimension: "volume", toBase: US_CUP_ML, names: ["cup", "cups"] },
+  { slug: "cup", dimension: "volume", toBase: US_CUP_ML, names: ["cup", "cups", "c"] },
   { slug: "us-pint", dimension: "volume", toBase: US_CUP_ML * 2, names: ["pint", "pints", "pt", "pts", "us pint", "us pints"] },
   { slug: "us-quart", dimension: "volume", toBase: US_CUP_ML * 4, names: ["quart", "quarts", "qt", "qts"] },
   { slug: "us-gallon", dimension: "volume", toBase: US_CUP_ML * 16, names: ["gallon", "gallons", "gal"] },
@@ -110,6 +110,9 @@ interface Rung {
 
 // A larger unit takes over a little before a whole one of it, within 2.5%, so 59 ml is "¼ cup", not "4 tbsp".
 const TAKE_OVER = 0.975;
+
+// The furthest a converted amount may be rounded from the exact one before it is not worth showing.
+const MAX_ROUNDING_ERROR = 0.25;
 
 function roundSmallMetric(value: number): number {
   if (value < 10) return Math.round(value * 2) / 2;
@@ -193,7 +196,11 @@ export function formatAmountIn(
   const rung = rungFor(LADDERS[system][known.dimension], base);
   if (rung.slug === known.slug) return asWritten();
 
-  const value = (rung.round ?? ((exact: number) => exact))(base / rung.toBase);
+  const exact = base / rung.toBase;
+  const value = (rung.round ?? ((n: number) => n))(exact);
+  // A tiny amount that would show as 0, or as a fraction far from it (2 g is not "⅛ oz"), stays as written.
+  const shown = rung.decimal ? value : Math.round(value * 8) / 8;
+  if (shown === 0 || Math.abs(shown - exact) / exact > MAX_ROUNDING_ERROR) return asWritten();
   const text = rung.decimal ? String(value) : formatQuantity(value);
   const unitText = rung.plural && value > 1 && text !== "1" ? rung.plural : rung.singular;
   return `${text} ${unitText}`;
