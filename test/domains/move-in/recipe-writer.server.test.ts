@@ -84,6 +84,11 @@ describe("writeMovedInRecipe", () => {
     ]);
   });
 
+  it("keeps a moved-in recipe private, for its cook to share when ready", async () => {
+    const result = await write(draft());
+    expect(all(`SELECT "visibility" FROM "Recipe" WHERE "id" = '${result.recipeId}'`)).toEqual([{ visibility: "private" }]);
+  });
+
   it("adds nothing when the same recipe moves in again", async () => {
     const first = await write(draft());
     expect(await write(draft(), "job-2")).toEqual({ outcome: "unchanged", recipeId: first.recipeId, jobId: "job-1" });
