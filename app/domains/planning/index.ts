@@ -5,4 +5,6 @@ export * from "./model/meal-type";
 export * from "./model/plan-entry";
 export * from "./model/calendar-feed";
 export * from "./application/plan";
+export * from "./application/last-made";
 export * from "./adapters/prisma-plan-store";
+export * from "./adapters/prisma-last-made-store";
