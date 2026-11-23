@@ -90,3 +90,5 @@ test/generated/
 
 # Written by `pnpm install` (scripts/generate-ouro-provenance.mjs); generated, never committed or merged by hand
 app/generated/ouro-provenance.json
+# Written by e2e/journeys/hx-census.journey.ts: the census baseline without the shared shell in page entries
+e2e/ouro-census/.census.baseline.pages.json

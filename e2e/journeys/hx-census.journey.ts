@@ -12,11 +12,13 @@
 // The census reads the seeded QA kitchen before any other journey changes QA data, so the Journeys
 // workflow runs it alone first (`pnpm run test:journeys:census`), then everything else
 // (`pnpm run test:journeys:after-census`). The kit tags its tests @ouro-census.
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { TestInfo } from "@playwright/test";
 import { censusTests } from "../ouro-census/census-page.mjs";
 import { test as journeyTest } from "./support/journey";
 import { CENSUS_PROJECTS, censusJourneys } from "./support/hx-census";
 import { hideShell } from "./support/census-shell";
+import { withoutShell } from "./support/census-shell-baseline";
 import { waitForHydration } from "./support/navigation";
 
 const NOT_FOUND_PATH = "/hx-census-page-that-does-not-exist";
@@ -61,7 +63,16 @@ const censusTest = new Proxy(test, {
   },
 });
 
+// The kit checks each state against this copy of the baseline, with the shared shell left out of
+// page entries (support/census-shell-baseline.ts). Each worker writes the same bytes and renames
+// them into place, so a worker never reads a half-written file. Git ignores it.
+const PAGE_BASELINE_PATH = "e2e/ouro-census/.census.baseline.pages.json";
+const pageBaseline = `${JSON.stringify(withoutShell(JSON.parse(readFileSync("e2e/ouro-census/census.baseline.json", "utf8"))), null, 2)}\n`;
+writeFileSync(`${PAGE_BASELINE_PATH}.${process.pid}`, pageBaseline);
+renameSync(`${PAGE_BASELINE_PATH}.${process.pid}`, PAGE_BASELINE_PATH);
+
 censusTests({
+  baselinePath: PAGE_BASELINE_PATH,
   test: censusTest,
   journeys: censusJourneys(),
   projects: CENSUS_PROJECTS,
