@@ -1,7 +1,7 @@
 // Move in on both devices, as scratch user 11's per-device twins (AGENTS.md's scratch index table):
 // for each source app version the move-in proof seeds, drop that version's small kitchen backup on
-// /move-in, watch it move in, and check the finish screen against the proof's manifest: every
-// recipe and every photo it counted. Then drop the same backup again and see nothing come in
+// /move-in, close the page once it starts, and come back when the server has moved it all in: the
+// finish screen must match the proof's manifest, every recipe and every photo it counted. Then drop the same backup again and see nothing come in
 // twice, and find one of its recipes, photo and all, in the person's kitchen. The backups and the
 // manifest are the published proof fixtures (scripts/move-in-proof, release
 // move-in-proof-fixtures-v1), read from the public release and checked against pinned digests.
@@ -102,9 +102,20 @@ async function moveIn(version: string, { page, expectAccessible }: JourneyArgs):
   await snapshot(page, version, "1-before-a-file");
 
   await dropBackup(page, version);
-  // A small kitchen can finish before the first poll, so progress is captured only when it shows.
+  const move = page.url();
+  // A small kitchen can finish before the page shows it moving, so progress is captured only when it shows.
   const moving = main.getByRole("heading", { level: 2, name: "Moving in", exact: true });
   if (await moving.isVisible()) await snapshot(page, version, "2-progress");
+
+  // Close the page: from here nothing in the browser asks the move-in to go on. Reading the page's
+  // HTML never runs or queues it, so the server alone has to finish it before the person comes back.
+  await page.goto("about:blank");
+  const done = new RegExp(`${recipes}(?:<!-- -->)? recipes moved in`);
+  await expect(async () => {
+    expect(await (await page.request.get(move)).text()).toMatch(done);
+  }).toPass({ timeout: MOVE_IN_MS, intervals: [3_000] });
+  await page.goto(move);
+
   const finished = async () => {
     await expect(main.getByRole("heading", { level: 2, name: `${recipes} recipes moved in`, exact: true })).toBeVisible({ timeout: MOVE_IN_MS });
     await expect(detail(page, "Recipes moved in")).toHaveText(String(recipes));
