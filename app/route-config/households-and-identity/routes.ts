@@ -5,4 +5,7 @@ import { type RouteConfig, route } from "@react-router/dev/routes";
 export default [
   route("households", "routes/households._index.tsx"),
   route("households/:id", "routes/households.$id.tsx"),
+  // Sign-in with a self-hosted server's own OpenID Connect provider.
+  route("auth/oidc", "routes/auth.oidc.tsx"),
+  route("auth/oidc/callback", "routes/auth.oidc.callback.tsx"),
 ] satisfies RouteConfig;
