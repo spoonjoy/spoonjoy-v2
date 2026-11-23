@@ -44,6 +44,13 @@ import "@testing-library/jest-dom";
 import "./warning-policy";
 import { vi, beforeAll, expect } from "vitest";
 import React from "react";
+import { configure } from "@testing-library/react";
+
+// findBy* and waitFor wait 3 s, not Testing Library's 1 s: on a loaded CI runner a route stub can
+// still show an empty <div /> after 1 s (test/routes/developers.test.tsx, unit-changed run
+// 45210673048 attempt 2, issue #942). A longer wait changes only how long a failing wait takes.
+export const ASYNC_UTIL_TIMEOUT_MS = 3000;
+configure({ asyncUtilTimeout: ASYNC_UTIL_TIMEOUT_MS });
 
 // happy-dom does not compile the app's Tailwind stylesheet. Supply its installed base
 // token here; CI's Ouro browser projects load the actual stylesheet and check the theme.
