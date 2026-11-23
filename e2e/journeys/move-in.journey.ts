@@ -2,20 +2,30 @@
 // for each source app version the move-in proof seeds, drop that version's small kitchen backup on
 // /move-in, watch it move in, and check the finish screen against the proof's manifest: every
 // recipe and every photo it counted. Then drop the same backup again and see nothing come in
-// twice. The backups and the manifest are the published proof fixtures
-// (scripts/move-in-proof, release move-in-proof-fixtures-v1), read from the public release.
+// twice, and find one of its recipes, photo and all, in the person's kitchen. The backups and the
+// manifest are the published proof fixtures (scripts/move-in-proof, release
+// move-in-proof-fixtures-v1), read from the public release and checked against pinned digests.
 //
 // The two devices sign in as different accounts, so neither sees the other's recipes, and each
-// version's kitchen is its own source with its own ids, so the three versions never collide: a
-// later version's recipes may only get a "(2)" after a title the account already has.
+// version's kitchen is its own source with its own ids (checked below), so the three versions
+// never collide: a later version's recipes get a "(2)" or "(3)" after a title the account already
+// has, which also makes those move-ins finish with something to look over.
 import { test, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
+import { createHash } from "node:crypto";
 import { bytesSource, openZip } from "../../app/domains/move-in/adapters/archive/zip";
+import { openMealieBackup } from "../../app/domains/move-in/adapters/sources/mealie-backup/backup";
+import { chooseGroup, recipeDrafts } from "../../app/domains/move-in/adapters/sources/mealie-backup/database";
 import { requiredLabel } from "./support/forms";
 import { scratchStorageStateForProject } from "./support/personas";
 
 const SCRATCH_INDEX = 9;
 const RELEASE = "https://github.com/spoonjoy/spoonjoy-v2/releases/download/move-in-proof-fixtures-v1";
+// The release's assets can be replaced under the same tag; these pin the generation the counts belong to.
+const DIGESTS: Record<string, string> = {
+  "manifest.json": "95d32baf9cf8b120a0623cd5aec57b18d6d313f16717b5291d7ae65ced65a58f",
+  "move-in-proof-fixtures.zip": "18bb7cbf934fc61b33f1b90d563835dd351fe6cea0546686a82a5e811cbbc9bb",
+};
 // A move-in of a small kitchen polls every few seconds; give it room on a slow QA run.
 const MOVE_IN_MS = 150_000;
 
@@ -26,23 +36,50 @@ interface Manifest {
 
 let manifest: Manifest | undefined;
 const backups = new Map<string, Buffer>();
+/** One recipe with a photo from each version's kitchen, to find after it moves in. */
+const samples = new Map<string, string>();
+/** Every recipe title in each version's kitchen. */
+const titles = new Map<string, Set<string>>();
 
+/** Fetches a release asset, trying again after a blip, and refuses bytes that aren't the pinned ones. */
 async function download(name: string): Promise<Uint8Array> {
-  const response = await fetch(`${RELEASE}/${name}`);
-  if (!response.ok) throw new Error(`The proof fixture ${name} answered ${response.status}`);
-  return new Uint8Array(await response.arrayBuffer());
+  let failure = "";
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt) await new Promise((resolve) => setTimeout(resolve, 2000 * 2 ** attempt));
+    const response = await fetch(`${RELEASE}/${name}`).catch((error: Error) => error);
+    if (response instanceof Error || !response.ok) {
+      failure = response instanceof Error ? response.message : `HTTP ${response.status}`;
+      continue;
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    if (digest !== DIGESTS[name]) throw new Error(`The proof fixture ${name} changed (sha256 ${digest}); update DIGESTS with the counts it belongs to`);
+    return bytes;
+  }
+  throw new Error(`The proof fixture ${name} didn't download: ${failure}`);
 }
 
 /** The manifest and each version's small kitchen backup, read once per worker. */
 async function fixtures(): Promise<Manifest> {
   if (manifest) return manifest;
+  const groups = new Set<string>();
   const read = JSON.parse(new TextDecoder().decode(await download("manifest.json"))) as Manifest;
   const bundle = await openZip(bytesSource(await download("move-in-proof-fixtures.zip")));
   for (const source of read.sources) {
     const entry = bundle.get(source.fixtures.small.backup);
     if (!entry) throw new Error(`The proof fixtures have no ${source.fixtures.small.backup}`);
-    backups.set(source.version, Buffer.from(await bundle.read(entry, { maxBytes: 50 * 1024 * 1024 })));
+    const bytes = await bundle.read(entry, { maxBytes: 50 * 1024 * 1024 });
+    backups.set(source.version, Buffer.from(bytes));
+    const backup = await openMealieBackup(bytesSource(bytes));
+    const group = chooseGroup(backup.database, null) as string;
+    groups.add(group);
+    const drafts = recipeDrafts(backup.database, group);
+    titles.set(source.version, new Set(drafts.map((draft) => draft.title)));
+    const sample = drafts.find((draft) => backup.hasFile(draft.photoPath));
+    if (!sample) throw new Error(`The ${source.version} kitchen has no recipe with a photo`);
+    samples.set(source.version, sample.title);
   }
+  if (groups.size !== read.sources.length) throw new Error("Two proof kitchens share a kitchen id, so they would move in as one");
   manifest = read;
   return read;
 }
@@ -68,7 +105,7 @@ type JourneyArgs = Parameters<Parameters<typeof test>[2]>[0];
  * that check, for the test to run again after a reload.
  */
 async function moveIn(version: string, { page, expectAccessible }: JourneyArgs): Promise<() => Promise<void>> {
-  test.setTimeout(2 * MOVE_IN_MS + 60_000);
+  test.setTimeout(3 * MOVE_IN_MS);
   const { kitchens, sources } = await fixtures();
   expect(sources.map((source) => source.version)).toContain(version);
   const { recipes, recipesWithPhoto } = kitchens.small.counts;
@@ -101,6 +138,33 @@ async function moveInAgain(version: string, { page }: JourneyArgs) {
   await expect(detail(page, "Photos")).toHaveText(`${recipesWithPhoto} of ${recipesWithPhoto}`);
 }
 
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Finds the version's sample recipe in the person's kitchen and opens it to see its photo. Kitchens
+ * can share titles, so the account holds one copy ("Title", "Title (2)", ...) for each version moved
+ * in so far that has the recipe. Any copy will do for the photo: each came in with one.
+ */
+async function inTheKitchen(version: string, { page }: JourneyArgs) {
+  const { sources } = await fixtures();
+  const title = samples.get(version) as string;
+  const upTo = sources.slice(0, sources.findIndex((source) => source.version === version) + 1);
+  const movedIn = upTo.filter((source) => titles.get(source.version)?.has(title)).length;
+  const main = page.getByRole("main");
+  await main.getByRole("link", { name: "See your recipes", exact: true }).click();
+  await expect(page).toHaveURL(/\/my-recipes/);
+  await page.goto(`/my-recipes?q=${encodeURIComponent(title)}`);
+  const copies = main.locator(`a[href^="/recipes/"]`).filter({ hasText: title });
+  await expect.poll(() => copies.count()).toBeGreaterThanOrEqual(movedIn);
+  await copies.first().click();
+  const heading = main.getByRole("heading", { level: 1, name: new RegExp(`^${escaped(title)}( \\(\\d+\\))?$`) });
+  await expect(heading).toBeVisible();
+  const name = (await heading.textContent())?.trim() ?? title;
+  const photo = main.getByRole("img", { name: `Photo of ${name}`, exact: true });
+  await expect(photo).toBeVisible();
+  await expect.poll(() => photo.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+}
+
 test.describe("Move in", () => {
   test.use({ storageState: scratchStorageStateForProject(SCRATCH_INDEX) });
 
@@ -108,17 +172,20 @@ test.describe("Move in", () => {
     const { verifyAfterReload } = args;
     await verifyAfterReload(await moveIn("v1.12.0", args));
     await moveInAgain("v1.12.0", args);
+    await inTheKitchen("v1.12.0", args);
   });
 
   test("a v2.8.0 kitchen moves in with every recipe and photo, and moving it in again adds nothing @mutates", async (args) => {
     const { verifyAfterReload } = args;
     await verifyAfterReload(await moveIn("v2.8.0", args));
     await moveInAgain("v2.8.0", args);
+    await inTheKitchen("v2.8.0", args);
   });
 
   test("a v3.31.0 kitchen moves in with every recipe and photo, and moving it in again adds nothing @mutates", async (args) => {
     const { verifyAfterReload } = args;
     await verifyAfterReload(await moveIn("v3.31.0", args));
     await moveInAgain("v3.31.0", args);
+    await inTheKitchen("v3.31.0", args);
   });
 });
