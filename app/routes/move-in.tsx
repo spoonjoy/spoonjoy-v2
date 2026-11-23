@@ -27,6 +27,7 @@ import {
 import { isFlagOn } from "~/domains/platform/flags";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
+import { CookbookPage } from "~/components/cookbook/page";
 
 /** How long one request keeps a move-in running after it answers; a Worker allows about 30 seconds. */
 const RUN_BUDGET_MS = 20_000;
@@ -229,20 +230,23 @@ export default function MoveIn() {
   const { move, maxBytes } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-8">
-      <PageHeader
-        eyebrow="Move in"
-        title="Bring your kitchen with you."
-        description="Your recipes come over with their photos, steps and ingredients. Nothing changes in the app you're leaving."
-        divider
-      />
-      {!move || move.status === "failed" ? (
-        <UploadForm error={actionData?.error ?? move?.failure ?? null} maxBytes={maxBytes} />
-      ) : move.finished ? (
-        <Finished move={move} />
-      ) : (
-        <Progress move={move} />
-      )}
-    </main>
+    // The app's layout owns the page's one main landmark; this is its content.
+    <CookbookPage>
+      <div className="flex flex-col gap-8">
+        <PageHeader
+          eyebrow="Move in"
+          title="Bring your kitchen with you."
+          description="Your recipes come over with their photos, steps and ingredients. Nothing changes in the app you're leaving."
+          divider
+        />
+        {!move || move.status === "failed" ? (
+          <UploadForm error={actionData?.error ?? move?.failure ?? null} maxBytes={maxBytes} />
+        ) : move.finished ? (
+          <Finished move={move} />
+        ) : (
+          <Progress move={move} />
+        )}
+      </div>
+    </CookbookPage>
   );
 }
