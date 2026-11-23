@@ -15,7 +15,7 @@ import {
 import { createContext, useContext, useEffect, useRef, type RefObject } from "react";
 import { usePostHog } from "~/lib/use-posthog";
 import { getUserId } from "~/lib/session.server";
-import { flagsFor } from "~/domains/platform";
+import { flagsFor, useFlag } from "~/domains/platform";
 import { touchLastSeen } from "~/lib/account-activity.server";
 import { NonceContext } from "~/lib/nonce";
 import { FOLD_BOOTSTRAP } from "~/lib/fold";
@@ -118,6 +118,7 @@ function getActiveNav(pathname: string): string | null {
   if (pathname.startsWith("/saved-recipes")) return "saved-recipes";
   if (pathname.startsWith("/cookbooks")) return "cookbooks";
   if (pathname.startsWith("/shopping-list")) return "shopping";
+  if (pathname.startsWith("/households")) return "households";
   if (pathname.startsWith("/chefs")) return "chefs";
   if (pathname.startsWith("/recipes")) return "recipes";
   if (pathname.startsWith("/account")) return "account";
@@ -134,6 +135,11 @@ const signedInLinks = [
   { label: "Chefs", href: "/chefs", nav: "chefs" },
   { label: "Kitchen Search", href: "/search", nav: "search" },
 ];
+
+// Behind the households flag: the cook's households, right after their own shopping list.
+const householdsLink = { label: "Households", href: "/households", nav: "households" };
+const afterShopping = signedInLinks.findIndex((link) => link.nav === "shopping") + 1;
+const signedInLinksWithHouseholds = [...signedInLinks.slice(0, afterShopping), householdsLink, ...signedInLinks.slice(afterShopping)];
 
 const signedOutLinks = [
   { label: "Search", href: "/search", nav: "search" },
@@ -174,7 +180,8 @@ export function AppNavbar({
 }) {
   const location = useLocation();
   const currentNav = getActiveNav(location.pathname);
-  const links = userId ? signedInLinks : signedOutLinks;
+  const households = useFlag("households");
+  const links = userId ? (households ? signedInLinksWithHouseholds : signedInLinks) : signedOutLinks;
 
   return (
     <Navbar
