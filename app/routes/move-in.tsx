@@ -2,6 +2,7 @@
 // backup zip, watches it come in, and lands on what arrived and what didn't. Behind the move_in
 // flag until moved-in recipes can be kept private. Where the Worker has a jobs queue, the move-in
 // runs there and the page only shows how far it has got; elsewhere each poll keeps it running.
+import { Utensils } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { data, Form as RouterForm, redirect, useActionData, useFetcher, useLoaderData, useNavigation } from "react-router";
 import type { Route } from "./+types/move-in";
@@ -261,7 +262,9 @@ function Progress({ move }: { move: MoveInView }) {
               key={recipe.id}
               href={`/recipes/${recipe.id}`}
               title={recipe.title}
-              media={recipe.photoUrl ? <img src={recipe.photoUrl} alt="" /> : undefined}
+              // A recipe whose photo isn't in yet keeps its place in a tile the photo's size; the next poll brings the photo.
+              media={recipe.photoUrl ? <img src={recipe.photoUrl} alt="" /> : <Utensils aria-hidden="true" />}
+              mediaSize={recipe.photoUrl ? "sm" : "icon"}
             />
           ))}
         </ItemGroup>
