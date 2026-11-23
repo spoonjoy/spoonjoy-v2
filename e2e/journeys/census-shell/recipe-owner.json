@@ -34,6 +34,7 @@
       "footer"
     ],
     "delete-dialog": [
+      "tabBar",
       "footer"
     ],
     "log-cook-dialog": [
@@ -45,6 +46,7 @@
       "footer"
     ],
     "variation-dialog": [
+      "tabBar",
       "footer"
     ]
   }
