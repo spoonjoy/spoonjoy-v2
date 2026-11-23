@@ -9,7 +9,8 @@ import {
   type AccountSettingsActionResult,
   type AccountSettingsLoaderData,
 } from "~/lib/account-settings.server";
-import { LogOut } from "lucide-react";
+import { House, LogOut } from "lucide-react";
+import { useFlag } from "~/domains/platform";
 import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/ouro/button/button";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
@@ -77,6 +78,7 @@ const REMOVE_PASSWORD_FIELDS = ["currentPassword"] as const;
 export default function AccountSettings() {
   const { user, oauthError, notifications, blockedChefs = [] } = useLoaderData<AccountSettingsLoaderData & { blockedChefs?: BlockedChefRow[] }>();
   useSectionFocus(SETTINGS_SECTIONS);
+  const households = useFlag("households");
   const actionData = useActionData<AccountSettingsActionResult>();
   const [initialActionData] = useState(actionData);
   const userInfoAnswer = useIntentAnswer(actionData, USER_INFO_INTENTS);
@@ -166,14 +168,22 @@ export default function AccountSettings() {
         eyebrow="Kitchen identity"
         title="Account settings"
         actions={(
-          // Desktop logs out from its top navigation; a phone logs out here. A plain form post,
-          // so it works before the page hydrates and the next page loads fresh.
-          <RouterForm method="post" action="/logout" className="m-0 lg:hidden" onSubmit={clearCookProgressCache}>
-            <Button type="submit" variant="outline" tone="secondary">
-              <LogOut data-slot="icon" className="size-4" />
-              Log out
-            </Button>
-          </RouterForm>
+          // Desktop reaches households and logs out from its top navigation; a phone does both here.
+          // Log out is a plain form post, so it works before the page hydrates and the next page loads fresh.
+          <div className="flex flex-wrap items-center gap-2 lg:hidden">
+            {households ? (
+              <Button href="/households" variant="outline" tone="secondary">
+                <House data-slot="icon" className="size-4" />
+                Households
+              </Button>
+            ) : null}
+            <RouterForm method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
+              <Button type="submit" variant="outline" tone="secondary">
+                <LogOut data-slot="icon" className="size-4" />
+                Log out
+              </Button>
+            </RouterForm>
+          </div>
         )}
         size="lg"
         divider
