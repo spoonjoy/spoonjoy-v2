@@ -175,6 +175,7 @@ describe("spoonjoy MCP tools", () => {
       "delete_spoon",
       "list_spoons_for_recipe",
       "list_spoons_by_chef",
+      "get_meal_plan",
     ]);
   });
 

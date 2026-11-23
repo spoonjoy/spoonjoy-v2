@@ -48,6 +48,7 @@ export const componentAx = {
     { id: "set-active-recipe-cover", summary: "Choose a recipe's cover.", effect: "private", agent: true },
     { id: "set-recipe-no-cover", summary: "Show a recipe with no cover.", effect: "private", agent: true },
     { id: "archive-recipe-cover", summary: "Put away one of a recipe's covers.", effect: "private", agent: true },
+    { id: "get-meal-plan", summary: "See a week of your meal plan.", effect: "private", agent: true },
     { id: "approve-agent-connection", summary: "Let this agent, app or device use your Spoonjoy account.", effect: "private", personOnly: "You can't approve access to the person's Spoonjoy account; only they can." },
   ],
 } as const;
@@ -96,6 +97,7 @@ export const twins = {
     "set-active-recipe-cover": "spoonjoy set-active-recipe-cover",
     "set-recipe-no-cover": "spoonjoy set-recipe-no-cover",
     "archive-recipe-cover": "spoonjoy archive-recipe-cover",
+    "get-meal-plan": "spoonjoy get-meal-plan",
   },
   refuseAs: {
     "approve-agent-connection": "spoonjoy connection approve",
@@ -145,6 +147,7 @@ export const controls = {
   "set-active-recipe-cover": { label: "Set active recipe cover", description: "Choose a recipe's cover.", consent: "write", props: { "data-ax-action": "set-active-recipe-cover" } },
   "set-recipe-no-cover": { label: "Set recipe no cover", description: "Show a recipe with no cover.", consent: "write", props: { "data-ax-action": "set-recipe-no-cover" } },
   "archive-recipe-cover": { label: "Archive recipe cover", description: "Put away one of a recipe's covers.", consent: "write", props: { "data-ax-action": "archive-recipe-cover" } },
+  "get-meal-plan": { label: "Get meal plan", description: "See a week of your meal plan.", consent: "read", props: { "data-ax-action": "get-meal-plan" } },
   "approve-agent-connection": { label: "Approve access", description: "Let this agent, app or device use your Spoonjoy account.", consent: "person-only", props: { "data-ax-action": "approve-agent-connection" } },
 } as const;
 
@@ -190,6 +193,7 @@ export const cliInput: Readonly<Record<string, Readonly<Record<string, string>>>
   "set-active-recipe-cover": { "recipe-id": "recipeId", "cover-id": "coverId", "idempotency-key": "idempotencyKey" },
   "set-recipe-no-cover": { "recipe-id": "recipeId", "confirm-no-cover": "confirmNoCover", "idempotency-key": "idempotencyKey" },
   "archive-recipe-cover": { "recipe-id": "recipeId", "cover-id": "coverId", "replacement-cover-id": "replacementCoverId", "replacement-variant": "replacementVariant", "confirm-no-cover": "confirmNoCover", "delete-safe-objects": "deleteSafeObjects", "idempotency-key": "idempotencyKey" },
+  "get-meal-plan": { "owner-email": "ownerEmail" },
 };
 
 // A list, group or one-of field comes in on the CLI as one JSON string; fromCli parses it.

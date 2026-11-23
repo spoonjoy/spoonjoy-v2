@@ -30,7 +30,8 @@ import {
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { canRead, readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
-import { likeContainsSearch } from "~/domains/platform";
+import { isFlagOn, likeContainsSearch, type FlagEnv } from "~/domains/platform";
+import { getWeek, parseLocalDate, prismaPlanStore, type PlanEntry } from "~/domains/planning";
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
 import { d1Binding, d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { deleteNativeRecipe } from "~/lib/api-v1-recipe-writes.server";
@@ -139,7 +140,7 @@ export interface SpoonjoyApiContext {
   defaultOwnerEmail?: string;
   allowOwnerEmailFallback?: boolean;
   waitUntil?: (promise: Promise<unknown>) => void;
-  env?: (ImageGenEnv & { DB?: unknown; SPOONJOY_BASE_URL?: string; SESSION_SECRET?: string; NODE_ENV?: string } & ServerAccessEnv & VapidEnv & PostHogServerEnv) | null;
+  env?: (ImageGenEnv & { DB?: unknown; SPOONJOY_BASE_URL?: string; SESSION_SECRET?: string; NODE_ENV?: string } & ServerAccessEnv & VapidEnv & PostHogServerEnv & NonNullable<FlagEnv>) | null;
   bucket?: R2Bucket;
   imageGenRunner?: ImageGenRunner;
   allowLocalImageFallback?: boolean;
@@ -3224,6 +3225,49 @@ const getShoppingListTool: SpoonjoyApiOperation = {
   },
 };
 
+/** The cook behind a meal plan call, refused as not found while the meal planner is off for them. */
+async function mealPlanner(args: Record<string, unknown>, context: SpoonjoyApiContext) {
+  const owner = await getOrCreateOwner(context, requireOwnerEmail(args, context));
+  if (!isFlagOn("meal-planner", context.env, owner.id)) {
+    throw new ApiAuthError("The meal planner isn't available on this account yet.", 404);
+  }
+  return owner;
+}
+
+function formatPlannedMeal(entry: PlanEntry) {
+  return {
+    id: entry.id,
+    mealType: entry.mealType,
+    kind: entry.kind,
+    recipeId: entry.recipeId,
+    // A recipe keeps the title it had when planned; a note has only its own.
+    title: entry.recipeTitle ?? entry.title,
+    note: entry.note,
+    scaleFactor: entry.scaleFactor,
+  };
+}
+
+const getMealPlanTool: SpoonjoyApiOperation = {
+  ...declaredOperation("get_meal_plan"),
+  requiredScopes: ["kitchen:read"],
+  async handle(args, context) {
+    const owner = await mealPlanner(args, context);
+    const asked = optionalString(args.week);
+    const week = asked === undefined ? null : parseLocalDate(asked);
+    if (asked !== undefined && !week) throw new ApiAuthError("week must be a day as YYYY-MM-DD", 400);
+    const plan = await getWeek(prismaPlanStore(context.db), owner.id, week);
+    return json({
+      mealPlan: {
+        weekStart: plan.start,
+        today: plan.today,
+        timeZone: plan.timeZone,
+        firstDayOfWeek: plan.firstDayOfWeek,
+        days: plan.days.map((day) => ({ date: day.date, meals: day.entries.map(formatPlannedMeal) })),
+      },
+    });
+  },
+};
+
 /** Whether a spoon was its chef's first cook of their own recipe, judged against earlier spoons. */
 async function wasOriginCook(
   db: PrismaClientType,
@@ -3775,6 +3819,7 @@ const tools: SpoonjoyApiOperation[] = [
   deleteSpoonTool,
   listSpoonsForRecipeTool,
   listSpoonsByChefTool,
+  getMealPlanTool,
 ];
 
 /**
@@ -3828,6 +3873,7 @@ const TOOL_ANNOTATIONS = {
   delete_spoon: declaredAnnotations("delete_spoon"),
   list_spoons_for_recipe: declaredAnnotations("list_spoons_for_recipe"),
   list_spoons_by_chef: declaredAnnotations("list_spoons_by_chef"),
+  get_meal_plan: declaredAnnotations("get_meal_plan"),
 } satisfies Record<string, McpToolAnnotations>;
 
 /**

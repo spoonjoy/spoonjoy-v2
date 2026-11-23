@@ -11,6 +11,7 @@ import { defineAction, defineActions, field } from "../tools/ouro-actions/ouro-a
 import { access } from "./access.mts";
 import { cookbooks } from "./cookbooks.mts";
 import { covers } from "./covers.mts";
+import { planning } from "./planning.mts";
 import { recipes } from "./recipes.mts";
 import { shopping } from "./shopping.mts";
 import { spoons } from "./spoons.mts";
@@ -37,4 +38,4 @@ export const approveAgentConnection = defineAction({
   cli: "connection approve",
 });
 
-export default defineActions("spoonjoy", [...access, ...recipes, ...shopping, ...cookbooks, ...spoons, ...covers, approveAgentConnection], { tool: "spoonjoy" });
+export default defineActions("spoonjoy", [...access, ...recipes, ...shopping, ...cookbooks, ...spoons, ...covers, ...planning, approveAgentConnection], { tool: "spoonjoy" });

@@ -255,6 +255,7 @@ function dispatchGet(path: string, segments: string[], url: URL): ApiDispatch {
   if (path === "shopping-list") return { operation: "get_shopping_list", args: pickArgs(args, ["ownerEmail"]) };
   if (path === "shopping-list/search") return { operation: "search_shopping_list", args: pickArgs(args, ["ownerEmail", "query", "limit"]) };
   if (path === "tokens") return { operation: "list_api_tokens", args: pickArgs(args, ["ownerEmail"]) };
+  if (path === "meal-plan") return { operation: "get_meal_plan", args: pickArgs(args, ["ownerEmail", "week"]) };
 
   notFound(path);
 }

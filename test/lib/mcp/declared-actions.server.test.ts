@@ -52,7 +52,8 @@ describe("Spoonjoy's declared actions (Ouro UI's one action model)", () => {
   });
 
   it("keeps every MCP tool's accepted input as it was before the tool was declared", () => {
-    const served = Object.fromEntries(listSpoonjoyMcpTools().map((tool) => [tool.name, canonical(accepted(tool.inputSchema))]));
+    // The fixture is the tools that predate the declarations; a tool first made as a declaration has no before.
+    const served = Object.fromEntries(listSpoonjoyMcpTools().filter((tool) => tool.name in inputsBefore.tools).map((tool) => [tool.name, canonical(accepted(tool.inputSchema))]));
     const before = Object.fromEntries(Object.entries(inputsBefore.tools).map(([name, schema]) => [name, canonical(accepted(schema))]));
     expect(served).toEqual(before);
   });
