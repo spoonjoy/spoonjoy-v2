@@ -33,6 +33,7 @@ import {
   removeShoppingListItemOnD1,
   setShoppingListItemCheckedOnD1,
 } from "~/lib/shopping-list-d1-actions.server";
+import { readableRecipeWhere } from "~/domains/kitchen";
 
 type ShoppingListItemPosition = {
   id: string;
@@ -317,6 +318,7 @@ async function d1ShoppingListWrites(d1: D1ReadDatabase, userId: string): Promise
     }),
     addRecipe: async (recipeId, scaleFactor, submission) => addRecipeToShoppingListOnD1(d1, {
       shoppingListId,
+      readerId: userId,
       recipeId,
       scaleFactor,
       writeKey: await d1WriteOnceKey({ userId, operation: "shopping_list.add_recipe", ...submission }),
@@ -387,7 +389,7 @@ async function prismaShoppingListWrites(database: PrismaClient, userId: string):
 
     async addRecipe(recipeId, scaleFactor) {
       const recipe = await database.recipe.findFirst({
-        where: { id: recipeId, deletedAt: null },
+        where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: userId }) },
         include: {
           steps: {
             include: {

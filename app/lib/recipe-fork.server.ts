@@ -26,6 +26,7 @@ import {
   type RecipeCoverStatus,
   type RecipeCoverVariant,
 } from "~/lib/recipe-cover.server";
+import { canRead } from "~/domains/kitchen";
 
 export class ForkSourceNotFoundError extends Error {
   constructor(sourceRecipeId: string) {
@@ -334,7 +335,8 @@ export async function forkRecipe(
     where: { id: input.sourceRecipeId },
     include: sourceInclude,
   });
-  if (!source || source.deletedAt) {
+  // A recipe the cook may not read forks as one that does not exist.
+  if (!source || source.deletedAt || !canRead({ id: input.viewerId }, source)) {
     throw new ForkSourceNotFoundError(input.sourceRecipeId);
   }
 
@@ -464,7 +466,7 @@ export async function readForkSourceFromD1(
  */
 export async function forkRecipeOnD1(d1: D1ReadDatabase, input: ForkRecipeInput): Promise<ForkedRecipeSummary> {
   const read = await readForkSourceFromD1(d1, input);
-  if (!read || read.source.deletedAt) {
+  if (!read || read.source.deletedAt || !canRead({ id: input.viewerId }, read.source)) {
     throw new ForkSourceNotFoundError(input.sourceRecipeId);
   }
   const { source, stepOutputUses } = read;

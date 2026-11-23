@@ -4,7 +4,7 @@ import { FOOD_IMAGE_SIZE_MESSAGE, FOOD_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-i
 import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 import { newReservationId as cuidShapedId } from "~/lib/api-idempotency.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
-import { readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
+import { canRead, readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
 
 export class SpoonValidationError extends Error {
   status = 400;
@@ -106,13 +106,23 @@ export async function isOriginCookCandidate(
   chefId: string,
   recipeId: string,
 ): Promise<boolean> {
+  return (await originCookAndAccess(db, chefId, recipeId)).isOriginCook;
+}
+
+// One read of the recipe answers both whether this is its cook's first cook and whether the cook
+// may read it at all.
+async function originCookAndAccess(
+  db: PrismaClient,
+  chefId: string,
+  recipeId: string,
+): Promise<{ isOriginCook: boolean; readable: boolean }> {
   const recipe = await db.recipe.findUnique({
     where: { id: recipeId },
-    select: { chefId: true },
+    select: { chefId: true, visibility: true },
   });
-  if (!recipe) return false;
-  if (recipe.chefId !== chefId) return false;
-  return !(await hasPriorNonDeletedSpoon(db, chefId, recipeId));
+  if (!recipe) return { isOriginCook: false, readable: true };
+  if (recipe.chefId !== chefId) return { isOriginCook: false, readable: canRead({ id: chefId }, recipe) };
+  return { isOriginCook: !(await hasPriorNonDeletedSpoon(db, chefId, recipeId)), readable: true };
 }
 
 export async function createSpoon(
@@ -120,7 +130,9 @@ export async function createSpoon(
   input: CreateSpoonInput,
   deps: CreateSpoonDeps = {},
 ): Promise<CreateSpoonResult> {
-  const isOriginCook = await isOriginCookCandidate(db, input.chefId, input.recipeId);
+  const { isOriginCook, readable } = await originCookAndAccess(db, input.chefId, input.recipeId);
+  // A recipe the cook may not read takes no cooks from them: it answers as one that does not exist.
+  if (!readable) throw new SpoonNotFoundError(`Recipe ${input.recipeId} not found`);
   const { note, nextTime, photoUrl } = await prepareSpoonContent(input, deps);
   // The id is chosen before the first try (shaped like the cuid Prisma would make), so after a
   // transient D1 error the create either finds the spoon its earlier try wrote or writes it once.

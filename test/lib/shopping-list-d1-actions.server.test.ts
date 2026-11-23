@@ -83,7 +83,7 @@ async function seedKitchen(): Promise<Kitchen> {
   };
 }
 
-type Step = Record<string, string> | ((kitchen: Kitchen) => Record<string, string>);
+type Step = Record<string, string> | ((kitchen: Kitchen) => Record<string, string> | Promise<Record<string, string>>);
 
 async function submit(kitchen: Kitchen, fields: Record<string, string>, env: Record<string, unknown> | null) {
   const form = new UndiciFormData();
@@ -134,7 +134,7 @@ async function onBothPaths(steps: Step[]) {
     spies.getRequestDb!.mockClear();
     const responses: unknown[] = [];
     for (const step of steps) {
-      const fields = typeof step === "function" ? step(kitchen) : step;
+      const fields = typeof step === "function" ? await step(kitchen) : step;
       responses.push(await submit(kitchen, fields, env).then(
         (result) => (result as { data?: unknown } | null)?.data ?? result,
         (error: unknown) => (error instanceof Response ? { status: error.status } : Promise.reject(error)),
@@ -211,6 +211,23 @@ describe("shopping list actions on a D1 binding", () => {
     expect(item(state, "butter (tbsp)")).toMatchObject({ quantity: 6, sortIndex: 4 });
     expect(item(state, "pepper (tbsp)")).toMatchObject({ quantity: null, sortIndex: 5 });
     expect(item(state, "eggs")).toMatchObject({ checked: true, touched: false });
+  });
+
+  it("answers another cook's private recipe as not found and adds nothing, as the Prisma path does", async () => {
+    const { responses, state } = await onBothPaths([
+      async () => {
+        const cook = await db.user.create({ data: createTestUser() });
+        const hidden = await db.recipe.create({ data: { ...createTestRecipe(cook.id), visibility: "private" } });
+        await db.recipeStep.create({ data: { recipeId: hidden.id, stepNum: 1, description: "Mix" } });
+        await db.ingredient.create({
+          data: { recipeId: hidden.id, stepNum: 1, quantity: 1, unitId: (await db.unit.findFirstOrThrow({ where: { name: "cups" } })).id, ingredientRefId: (await db.ingredientRef.findFirstOrThrow({ where: { name: "flour" } })).id },
+        });
+        return { intent: "addFromRecipe", recipeId: hidden.id };
+      },
+    ]);
+
+    expect(responses).toEqual([{ status: 404 }]);
+    expect(item(state, "flour (cups)")).toMatchObject({ quantity: 2, touched: false });
   });
 
   it("checks, unchecks, removes and clears as the Prisma path does, closing the gaps", async () => {
