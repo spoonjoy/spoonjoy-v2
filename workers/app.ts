@@ -12,6 +12,7 @@ import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
 import { defaultPhotoCache, deliverPhoto, photoKeyFromPath } from "../app/lib/photo-delivery.server";
 import { isServablePhotoKey, runScheduledPhotoSweep } from "../app/lib/photo-lifecycle.server";
+import { runScheduledMoveInSweep } from "../app/domains/move-in";
 import { serveReleaseAssetFallback } from "../app/lib/release-assets.server";
 import { generateNonce, withSecurityHeaders } from "../app/lib/security-headers.server";
 import {
@@ -371,5 +372,6 @@ export default {
   // run unless that setting is exactly "apply" (see app/lib/photo-lifecycle.server.ts).
   async scheduled(_controller, env, ctx) {
     ctx.waitUntil(runScheduledPhotoSweep(withTransientD1Retry(env)));
+    ctx.waitUntil(runScheduledMoveInSweep(withTransientD1Retry(env), new Date()));
   },
 } satisfies ExportedHandler<CloudflareEnvironment>;
