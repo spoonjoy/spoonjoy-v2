@@ -460,6 +460,32 @@ describe("Account Settings Route", () => {
       expect(await screen.findByRole("heading", { name: /account settings/i })).toBeInTheDocument();
     });
 
+    it("links a phone to its households beside Log out while the households flag is on", async () => {
+      const settings = () => ({
+        user: { id: testUserId, email: testUserEmail.toLowerCase(), username: testUsername, hasPassword: true, oauthAccounts: [], photoUrl: null, passkeys: [] },
+        notifications: { pushSubscribed: false },
+      });
+      const settingsWithFlags = (flags: string[]) =>
+        createTestRoutesStub([
+          { id: "root", path: "/", loader: () => ({ flags }), children: [{ path: "account/settings", Component: AccountSettings, loader: settings }] },
+        ]);
+
+      const On = settingsWithFlags(["households"]);
+      const { unmount } = render(<On initialEntries={["/account/settings"]} />);
+      const households = await screen.findByRole("link", { name: "Households" });
+      expect(households).toHaveAttribute("href", "/households");
+      // Phone only, as Log out is here: the desktop top bar has its own Households.
+      const logOut = screen.getByRole("button", { name: "Log out" });
+      expect(households.closest(".lg\\:hidden")).not.toBeNull();
+      expect(households.closest(".lg\\:hidden")).toBe(logOut.closest("form")?.parentElement?.closest(".lg\\:hidden") ?? null);
+      unmount();
+
+      const Off = settingsWithFlags([]);
+      render(<Off initialEntries={["/account/settings"]} />);
+      expect(await screen.findByRole("button", { name: "Log out" })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Households" })).not.toBeInTheDocument();
+    });
+
     it("renders API credential and OAuth app revocation controls", async () => {
       const mockData = {
         user: {

@@ -747,36 +747,6 @@ describe("Kitchen Index Route", () => {
       expect(screen.queryByText(/Serves/)).not.toBeInTheDocument();
     });
 
-    it("puts Households in the owner's action row, beside Kitchen settings, only while the households flag is on", async () => {
-      const ownerKitchen = () => ({
-        tab: "recipes",
-        isOwner: true,
-        viewer: { id: "viewer-1", username: "chef", email: "chef@example.com", photoUrl: null },
-        kitchenUser: { id: "viewer-1", username: "chef", photoUrl: null },
-        recipes: [],
-        cookbooks: [],
-      });
-      const kitchenWithFlags = (flags: string[]) =>
-        createTestRoutesStub([
-          { id: "root", path: "/", loader: () => ({ flags }), children: [{ index: true, Component: Index, loader: ownerKitchen }] },
-        ]);
-
-      const On = kitchenWithFlags(["households"]);
-      const { unmount } = render(<On initialEntries={["/"]} />);
-      const households = await screen.findByRole("link", { name: "Households" });
-      expect(households).toHaveAttribute("href", "/households");
-      const settings = screen.getByRole("link", { name: "Kitchen settings" });
-      expect(households.parentElement).toBe(settings.parentElement);
-      expect(households.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(households.className).toBe(settings.className);
-      unmount();
-
-      const Off = kitchenWithFlags([]);
-      render(<Off initialEntries={["/"]} />);
-      expect(await screen.findByRole("link", { name: "Kitchen settings" })).toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: "Households" })).not.toBeInTheDocument();
-    });
-
     it("renders visitor kitchen with read-only controls hidden", async () => {
       const Stub = createTestRoutesStub([
         {
