@@ -59,6 +59,9 @@ model User {
   notificationEvents     NotificationEvent[]
   notificationPreference NotificationPreference?
 
+  importSources ImportSource[]
+  importJobs    ImportJob[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 }
@@ -870,4 +873,99 @@ model PhotoSweepRun {
   note                String?
 
   @@index([startedAt])
+}
+
+// Move-in (app/domains/move-in, migrations/0040_move_in.sql): a kitchen moving in from another app.
+model ImportSource {
+  id            String         @id
+  ownerId       String
+  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // The source adapter, for example "mealie-backup".
+  kind          String
+  // The other app's id for this kitchen, so the same kitchen maps onto the same rows.
+  instanceKey   String
+  label         String
+  serverUrl     String?
+  sourceVersion String?
+  createdAt     DateTime       @default(now())
+  jobs          ImportJob[]
+  records       SourceRecord[]
+
+  @@unique([ownerId, kind, instanceKey])
+}
+
+model ImportJob {
+  id          String              @id
+  ownerId     String
+  owner       User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  kind        String
+  sourceId    String?
+  source      ImportSource?       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  // queued, running, done, done-with-issues, failed or cancelled.
+  status      String              @default("queued")
+  phase       String              @default("receive")
+  // The phase's resume point, owned by the source adapter.
+  cursor      String?
+  archiveKey  String?
+  archiveName String?
+  attempt     Int                 @default(0)
+  lastError   String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  heartbeatAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @default(now())
+  counts      ImportEntityCount[]
+  events      ImportEvent[]
+
+  @@index([ownerId, createdAt])
+  @@index([sourceId])
+  @@index([status, heartbeatAt])
+}
+
+model ImportEntityCount {
+  jobId     String
+  job       ImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  entity    String
+  found     Int       @default(0)
+  created   Int       @default(0)
+  updated   Int       @default(0)
+  unchanged Int       @default(0)
+  skipped   Int       @default(0)
+  failed    Int       @default(0)
+
+  @@id([jobId, entity])
+}
+
+model ImportEvent {
+  id        String    @id
+  jobId     String
+  job       ImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  seq       Int
+  level     String
+  kind      String
+  entity    String?
+  sourceKey String?
+  targetId  String?
+  message   String
+  detail    String?
+  createdAt DateTime  @default(now())
+
+  @@unique([jobId, seq])
+}
+
+model SourceRecord {
+  id              String       @id
+  sourceId        String
+  source          ImportSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceTable     String
+  sourceKey       String
+  targetType      String
+  targetId        String
+  sourceUpdatedAt String?
+  contentHash     String?
+  lastJobId       String
+
+  @@unique([sourceId, sourceTable, sourceKey])
+  @@index([targetType, targetId])
 }
