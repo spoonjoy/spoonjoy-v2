@@ -5,7 +5,7 @@ import type { AppLoadContext } from "react-router";
 import { data } from "react-router";
 import { OBJECTIONABLE_CONTENT_MESSAGE, containsObjectionableContent } from "~/lib/objectionable-terms";
 import { listOrganizers, organizerPage, organizersOnRecipe, setRecipeOrganizers } from "../application/organizers";
-import { ORGANIZER_KINDS, ORGANIZER_NAME_MAX_LENGTH, type Organizer, type OrganizerKind } from "../model/organizer";
+import { ORGANIZER_KINDS, ORGANIZER_NAME_MAX_LENGTH, normalizeOrganizerName, type Organizer, type OrganizerKind } from "../model/organizer";
 import { organizerNamesFromInput, organizersRequest } from "./organizers-route.server";
 
 type Args = { request: Request; context: AppLoadContext };
@@ -58,7 +58,8 @@ export async function recipeOrganizeAction({ request, context, recipeId }: Args 
   if (names.some(([, typed]) => typed.some((name) => containsObjectionableContent(name)))) {
     return data({ error: OBJECTIONABLE_CONTENT_MESSAGE }, { status: 400 });
   }
-  const tooLong = names.find(([, typed]) => typed.some((name) => name.trim().length > ORGANIZER_NAME_MAX_LENGTH));
+  // A name the model refuses though it has text is too long; empty entries between commas are skipped.
+  const tooLong = names.find(([, typed]) => typed.some((name) => name.trim() !== "" && normalizeOrganizerName(name) === null));
   if (tooLong) {
     return data({ error: `Keep each ${KIND_WORD[tooLong[0]]} to ${ORGANIZER_NAME_MAX_LENGTH} characters or fewer.` }, { status: 400 });
   }
