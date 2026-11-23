@@ -713,17 +713,27 @@ model CookingNow {
 // A cook's meal plan (migration 0043, app/domains/planning): one per cook until households set
 // householdId. An entry is a recipe at a servings scale or a note, on a local "YYYY-MM-DD" day.
 model MealPlan {
-  id             String      @id @default(cuid())
-  ownerId        String      @unique
-  owner          User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  id             String        @id @default(cuid())
+  ownerId        String        @unique
+  owner          User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   householdId    String?
-  firstDayOfWeek Int         @default(1)
-  timeZone       String      @default("UTC")
+  firstDayOfWeek Int           @default(1)
+  timeZone       String        @default("UTC")
   entries        PlanEntry[]
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @default(now()) @updatedAt
+  calendarFeed   CalendarFeed?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @default(now()) @updatedAt
 
   @@index([householdId])
+}
+
+// A plan's private calendar feed link (migration 0048, app/domains/planning). One per plan; a new link replaces it.
+model CalendarFeed {
+  mealPlanId String   @id
+  mealPlan   MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  // SHA-256 of the token in the link; the token itself is shown once and never stored.
+  tokenHash  String   @unique
+  createdAt  DateTime @default(now())
 }
 
 model PlanEntry {
