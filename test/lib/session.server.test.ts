@@ -543,6 +543,42 @@ describe("session.server", () => {
       }
     });
 
+    it("drops Secure for a server its owner runs on a plain-http address, such as a home network", async () => {
+      const lanUserId = await createSessionUser();
+      const env = { NODE_ENV: "production", SESSION_SECRET: "self-hosted-secret", SPOONJOY_BASE_URL: "http://192.168.1.20:8080" };
+      const request = new Request("http://192.168.1.20:8080/login", { method: "POST" }) as unknown as globalThis.Request;
+
+      const response = await createUserSession(lanUserId, "/recipes", env, request);
+      const setCookie = response.headers.get("Set-Cookie") ?? "";
+      expect(setCookie).toContain("__session=");
+      expect(setCookie).not.toContain("Secure");
+
+      const signedInRequest = new Request("http://192.168.1.20:8080/recipes", {
+        headers: { Cookie: cookieHeader(setCookie) },
+      }) as unknown as globalThis.Request;
+      await expect(getUserId(signedInRequest, env)).resolves.toBe(lanUserId);
+    });
+
+    it("keeps Secure on a plain-http server's cookie when the request reaches it at another address", async () => {
+      const env = { NODE_ENV: "production", SESSION_SECRET: "self-hosted-secret", SPOONJOY_BASE_URL: "http://192.168.1.20:8080" };
+      const request = new Request("https://kitchen.example.com/login", { method: "POST" }) as unknown as globalThis.Request;
+
+      const response = await createUserSession("lan-user-elsewhere", "/recipes", env, request);
+      expect(response.headers.get("Set-Cookie") ?? "").toContain("Secure");
+    });
+
+    it("still needs a session secret on a plain-http server", async () => {
+      delete process.env.SESSION_SECRET;
+      vi.stubEnv("NODE_ENV", "production");
+      try {
+        const request = new Request("http://192.168.1.20:8080/", { method: "GET" }) as unknown as globalThis.Request;
+        await expect(getUserId(request, { NODE_ENV: "production", SPOONJOY_BASE_URL: "http://192.168.1.20:8080" }))
+          .rejects.toThrow(/SESSION_SECRET is required/);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it("uses secure runtime session cookies when production has a real secret", async () => {
       const secureProductionUserId = await createSessionUser();
       const request = new Request("https://spoonjoy.app/", { method: "GET" }) as unknown as globalThis.Request;

@@ -37,6 +37,9 @@ export function selfHostVars({ built, env, port, sessionSecret }) {
     SESSION_SECRET: sessionSecret,
     // spoonjoy.app's moderators are not this server's.
     SPOONJOY_MODERATOR_USERNAMES: "",
+    // Sign in with Apple from the Spoonjoy iPhone, iPad and Mac apps: the server checks the app's
+    // identity token against Apple's public keys and these bundle IDs, so it needs no Apple secret.
+    APPLE_NATIVE_CLIENT_IDS: "app.spoonjoy,app.spoonjoy.mac",
   };
   for (const [key, value] of Object.entries(env)) {
     if (value !== undefined && PASSED_THROUGH.some((pattern) => pattern.test(key))) vars[key] = value;

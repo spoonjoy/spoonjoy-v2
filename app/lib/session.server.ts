@@ -79,8 +79,18 @@ function allowsInsecureLocalSessions(env?: SessionEnv | null, request?: Request 
   );
 }
 
+// A self-hosted server its owner runs on a plain-http address (a home network, say) declares it with
+// an http SPOONJOY_BASE_URL. A browser drops a Secure cookie there, so a request to exactly that
+// address gets one without Secure. It still needs a session secret.
+function servesDeclaredPlainHttp(env?: SessionEnv | null, request?: Request | null): boolean {
+  const baseUrl = env?.SPOONJOY_BASE_URL ?? process.env.SPOONJOY_BASE_URL;
+  if (!request || !baseUrl || !URL.canParse(baseUrl)) return false;
+  const base = new URL(baseUrl);
+  return base.protocol === "http:" && new URL(request.url).origin === base.origin;
+}
+
 function shouldUseSecureSessionCookie(env?: SessionEnv | null, request?: Request | null): boolean {
-  return isProduction(env) && !allowsInsecureLocalSessions(env, request);
+  return isProduction(env) && !allowsInsecureLocalSessions(env, request) && !servesDeclaredPlainHttp(env, request);
 }
 
 function sessionCacheKey(secret: string, secure: boolean): string {
