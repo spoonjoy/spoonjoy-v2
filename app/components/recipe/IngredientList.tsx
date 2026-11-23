@@ -3,7 +3,6 @@ import { Checklist, type ChecklistItemData } from '~/components/ouro/checklist/c
 import type { IngredientIconKey } from '~/lib/ingredient-affordances'
 import { formatAmountIn, scaleQuantity, swapsFor, type UnitSystem } from "~/domains/food-knowledge"
 import { useUnitSystem } from "./use-unit-system"
-import { useIngredientSwaps } from "./use-ingredient-swaps"
 
 export interface Ingredient {
   /** Unique identifier */
@@ -116,7 +115,7 @@ export function IngredientList({
   showSwaps = false,
 }: IngredientListProps) {
   const { system } = useUnitSystem()
-  const swapsOn = useIngredientSwaps() && showSwaps
+  const swapsOn = showSwaps
   const outputIds = useMemo(() => new Set(stepOutputUses.map((reference) => reference.id)), [stepOutputUses])
   const items: ChecklistItemData[] = uncheckedFirst([
     ...stepOutputUses.map((reference) => ({

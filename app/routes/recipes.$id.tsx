@@ -48,7 +48,6 @@ import { SpoonDialog } from "~/components/recipe/SpoonDialog";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { RecipeCookView, useCookModeReturnFocus } from "~/components/cook/RecipeCookView";
 import { UnitSystemProvider } from "~/components/recipe/UnitSystemProvider";
-import { IngredientSwapsProvider } from "~/components/recipe/IngredientSwapsProvider";
 import { useDockSuppressed } from "~/components/navigation";
 import { ShareButton } from "~/components/ouro/share-button/share-button";
 import type { ShareResult } from "~/lib/ouro/share";
@@ -194,12 +193,9 @@ export function ErrorBoundary() {
 // The cook's units hold across the page and cook mode, which replaces it, so the provider sits above both.
 export default function RecipeDetailRoute() {
   const { unitSystem } = useLoaderData<typeof loader>();
-  const swapsEnabled = useFlag("ingredient-swaps");
   return (
     <UnitSystemProvider initialSystem={unitSystem}>
-      <IngredientSwapsProvider enabled={swapsEnabled}>
-        <RecipeDetail />
-      </IngredientSwapsProvider>
+      <RecipeDetail />
     </UnitSystemProvider>
   );
 }
