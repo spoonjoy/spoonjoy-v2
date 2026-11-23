@@ -503,6 +503,24 @@ describe("Toggle under forced colours", () => {
     }
   });
 
+  it("draws no border on an unpressed plain toggle at rest, and keeps the Highlight border once pressed (#3098)", async () => {
+    try {
+      const { host } = await render(
+        <>
+          <Toggle label="Off" />
+          <Toggle label="On" defaultPressed />
+        </>,
+      );
+      const [off, on] = [...host.querySelectorAll<HTMLElement>('[data-ouro="toggle"]')];
+      expect(getComputedStyle(off!).borderTopColor).toBe("rgba(0, 0, 0, 0)");
+      await commands.emulateMedia({ forcedColors: "active" });
+      await expect.poll(() => parseFloat(getComputedStyle(on!).borderTopWidth)).toBeGreaterThan(0);
+      expect(getComputedStyle(off!).borderTopWidth).toBe("0px");
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
   it("carries the squircle marker and a hidden surface behind the label on a rect, and neither on a pill", async () => {
     const { host } = await render(
       <>

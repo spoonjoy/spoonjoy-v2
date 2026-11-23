@@ -252,6 +252,10 @@ describe("Moment", () => {
       await heardIfSpoken();
       await render(<Moment kind="empty" announce title="Nothing to say" />);
       await heardIfSpoken();
+      await render(<Moment kind="loading" title="Loading quietly" />);
+      await heardIfSpoken();
+      await render(<Moment kind="loading" announce title="Loading your chats" />);
+      await expect.poll(() => announced.count("Loading your chats")).toBe(1);
       await render(<Moment kind="success" announce title="Sent" description={<strong>to Ana</strong>} />);
       await expect.poll(() => announced.count("Sent")).toBe(1);
       // A moment that turns into a success is heard then, and again when what it says changes.
@@ -261,6 +265,7 @@ describe("Moment", () => {
       await act(async () => turning.root.render(<Moment kind="success" announce title="Uploaded twice" />));
       await expect.poll(() => announced.count("Uploaded twice")).toBe(1);
       expect(announced.count("Saved quietly")).toBe(0);
+      expect(announced.count("Loading quietly")).toBe(0);
       expect(announced.count("Nothing to say")).toBe(0);
       expect(announced.count("[object")).toBe(0);
       expect(announced.count("Not sent: you're offline")).toBe(1);
@@ -1215,7 +1220,7 @@ describe("Moment development messages", () => {
     ["cap per", { title: "x", id: "a", cap: { times: 1, per: "hour" } }, 'cap per "hour" is not a period; use "day", "week", "month", "ever"', '<Moment cap={{ times: 1, per: "day" }}>'],
     ["cap times", { title: "x", id: "a", cap: { times: 1.5, per: "day" } }, "cap times must be a whole number, 0 or more, got 1.5", '<Moment cap={{ times: 1, per: "day" }}>'],
     ["cap key", { title: "x", cap: { times: 1, per: "day" } }, "cap counts showings under dismissKey or id, and this moment has neither", '<Moment dismissKey="caught-up" cap={{ times: 1, per: "day" }}>'],
-    ["announce", { title: "x", kind: "welcome", announce: true }, 'announce speaks only success, error and ask moments, not kind="first-run"', '<Moment kind="success" announce>'],
+    ["announce", { title: "x", kind: "welcome", announce: true }, 'announce speaks only success, error, ask and loading moments, not kind="first-run"', '<Moment kind="success" announce>'],
     ["dismissFor", { title: "x", dismissKey: "a", dismissFor: "year" }, 'dismissFor="year" is not a period; use "hour", "day", "week", "month"', '<Moment dismissKey="ask" dismissFor="day">'],
     ["dismissFor without a key", { title: "x", dismissFor: "day" }, "dismissFor keeps a dismissal through dismissKey, and this moment has none", '<Moment dismissKey="ask" dismissFor="day">'],
     ["icon", { title: "x", icon: "i" }, "icon is not a prop", "<Moment art={<Illustration />}>"],

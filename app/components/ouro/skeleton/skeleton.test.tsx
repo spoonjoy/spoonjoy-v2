@@ -33,14 +33,21 @@ function animationPhase(el: Element): number {
 }
 
 /**
- * A late placeholder computes its delay from a live clock read in a layout effect, but a
- * busy host can hold the document's own animation timeline at an older tick until the next
- * paint, so the two reads land that much apart even though both track the same wave from
- * then on. A run with the main thread held for 80ms before the second mount read back a gap
- * of about 80ms; this bound gives a loaded runner room past the single CI miss this guards
- * (177ms) while staying a small slice of a breath (2400ms), so a real desync still fails it.
+ * Once its animation's own clock is pegged to a real frame, a placeholder corrects it to the
+ * join a fresh clock read would have given it, so a hold between the layout effect's read and
+ * that frame no longer leaves the two apart by the hold's own length. Held right after mounting
+ * for 300ms or 2000ms, the two later tests below land the join within a few milliseconds, on
+ * Chromium and on WebKit, and fail at this same bound without that correction (a host held
+ * 2000ms then landed 310-400ms apart, run local to this change). This bound keeps headroom past
+ * that measured join while still catching a desync within a slice of a breath (2400ms).
  */
-const phaseGapMs = 500;
+const phaseGapMs = 150;
+
+/** How far apart two phases are on the wave's circle: a phase a hair under one whole breath (2400ms) away is close, not far, so this takes the shorter way around. */
+function phaseGap(a: number, b: number): number {
+  const d = Math.abs(a - b) % breathMs;
+  return Math.min(d, breathMs - d);
+}
 
 let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
@@ -264,26 +271,104 @@ describe("Skeleton", () => {
     const late = await render(<Skeleton />);
     // Both are read in one task, so they share close to a frame's time.
     const [a, b] = [phase(first), phase(late)];
-    expect(Math.abs(a - b)).toBeLessThan(phaseGapMs);
+    expect(phaseGap(a, b)).toBeLessThan(phaseGapMs);
     // A remount (a new key) while the others breathe keeps the phase.
     await act(async () => root.render(<Skeleton key="again" />));
     const again = mounted.at(-2)!.querySelector<HTMLElement>('[data-ouro="skeleton"]')!;
-    expect(Math.abs(phase(again) - phase(late))).toBeLessThan(phaseGapMs);
+    expect(phaseGap(phase(again), phase(late))).toBeLessThan(phaseGapMs);
     await commands.emulateMedia({ reducedMotion: "reduce" });
     expect(getComputedStyle(late).animationName).toBe("none");
     expect(late.getAnimations()).toEqual([]);
   });
 
-  it("joins the shared phase past a host that holds the main thread before the mount", async () => {
+  it("joins the shared phase past a host held right after it mounts, before its first frame can peg its own clock", async () => {
     const phase = animationPhase;
     const first = await render(<Skeleton />);
-    await expect.poll(() => phase(first)).toBeGreaterThan(1300);
-    // A synchronous hold stands in for a loaded host that delays a paint before this mount,
-    // the same gap the bound above is sized for.
-    const holdUntil = performance.now() + 200;
+    // Holds the main thread right after mounting, while the animation is still pending (its own clock, its
+    // startTime, not yet pegged to a real frame): the moment this placeholder's delay assumed was now.
+    const holdUntil = performance.now() + 300;
     while (performance.now() < holdUntil) { /* holds the main thread, no yield */ }
     const late = await render(<Skeleton />);
-    expect(Math.abs(phase(first) - phase(late))).toBeLessThan(phaseGapMs);
+    // One settled frame past the mount, so both animations' own clocks have had their pending startTime pegged.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(phaseGap(phase(first), phase(late))).toBeLessThan(phaseGapMs);
+  });
+
+  it("joins the shared phase past a host held for longer than the mount itself takes", async () => {
+    const phase = animationPhase;
+    const first = await render(<Skeleton />);
+    // A hold well past the bound's comment checks the join still tracks the clock, not the hold.
+    const holdUntil = performance.now() + 2000;
+    while (performance.now() < holdUntil) { /* holds the main thread, no yield */ }
+    const late = await render(<Skeleton />);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(phaseGap(phase(first), phase(late))).toBeLessThan(phaseGapMs);
+  });
+
+  it("joins the shared phase on a row's and a card's own Bar, past a host held right after mounting", async () => {
+    // registerNode's node is the outer row/card span, not the Bar the animation plays on: the
+    // correction below must read each registered node's whole subtree to reach it.
+    for (const shape of ["row", "card"] as const) {
+      const host = (await render(<Skeleton shape={shape} />)).parentElement!;
+      const holdUntil = performance.now() + 300;
+      while (performance.now() < holdUntil) { /* holds the main thread, no yield */ }
+      const late = (await render(<Skeleton shape={shape} />)).parentElement!;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const firstAnimation = host.getAnimations({ subtree: true })[0]!;
+      const lateAnimation = late.getAnimations({ subtree: true })[0]!;
+      const localTime = (animation: Animation) => Number(animation.effect!.getComputedTiming().localTime) - Number(animation.effect!.getTiming().delay);
+      expect(phaseGap(localTime(firstAnimation), localTime(lateAnimation)), shape).toBeLessThan(phaseGapMs);
+    }
+  });
+
+  it("drops a row's node from the correction map once it unmounts, so a frame already pending for it does not read a removed node", async () => {
+    // Holds the mount's own correction frame instead of letting it run: by the time a real one would
+    // fire, this test harness has already settled the render below it, which would otherwise race it.
+    let pendingFrame: FrameRequestCallback | undefined;
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      pendingFrame = callback;
+      return 0;
+    });
+    await render(<Skeleton shape="row" count={3} />);
+    const root = roots.at(-1)!;
+    raf.mockRestore();
+    const spy = vi.spyOn(Element.prototype, "getAnimations");
+    // Shrinks while the mount's correction frame is still held: the two dropped rows' nodes must leave the map themselves.
+    await act(async () => root.render(<Skeleton shape="row" count={1} />));
+    pendingFrame!(performance.now());
+    // The map should hold just the surviving row's node: one call, on that node alone.
+    expect(spy.mock.instances).toHaveLength(1);
+  });
+
+  it("keeps each index's ref callback across renders, so a render that only changes a prop does not detach and reattach the node", async () => {
+    let attaches = 0;
+    let detaches = 0;
+    const track = (node: HTMLElement | null) => {
+      if (node) attaches++;
+      else detaches++;
+    };
+    await render(<Skeleton ref={track} />);
+    const root = roots.at(-1)!;
+    await act(async () => root.render(<Skeleton ref={track} className="extra" />));
+    expect(attaches).toBe(1);
+    expect(detaches).toBe(0);
+  });
+
+  it("cancels its pending correction frame on unmount, so an already-stale frame never reads a gone node", async () => {
+    const spy = vi.spyOn(window, "cancelAnimationFrame");
+    await render(<Skeleton />);
+    const root = roots.pop()!;
+    await act(async () => root.unmount());
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("re-measures its place when shimmer toggles on the same instance, without remounting", async () => {
+    const breathes = (el: Element) => getComputedStyle(el).animationName === "ouro-skeleton-breathe";
+    const el = await render(<Skeleton shimmer={false} />);
+    const root = roots.at(-1)!;
+    expect(breathes(el)).toBe(false);
+    await act(async () => root.render(<Skeleton shimmer />));
+    expect(breathes(el)).toBe(true);
   });
 
   it("places a placeholder in the wave: a new wave after a quiet gap of more than a second, else the running one", () => {
@@ -293,6 +378,14 @@ describe("Skeleton", () => {
     expect(joinWave(5000, 1, 0, 4000).delay).toBe("0ms");
     expect(joinWave(5000, 1, 0, 3999).delay).toBe("-1ms");
     expect(joinWave(9000, 2, 0, 1000).delay).toBe(`${-((8000 - stillMs) % breathMs)}ms`);
+  });
+
+  it("measures a phase gap the short way around the circle, so a near-whole-breath difference reads as close", () => {
+    // 5 and 2395 sit 10ms apart going the other way around a 2400ms breath, not 2390ms apart.
+    expect(phaseGap(5, 2395)).toBe(10);
+    expect(phaseGap(2395, 5)).toBe(10);
+    expect(phaseGap(100, 100)).toBe(0);
+    expect(phaseGap(0, 1200)).toBe(1200);
   });
 
   it("keeps the app's own style beside the wave's phase, on every shape", async () => {

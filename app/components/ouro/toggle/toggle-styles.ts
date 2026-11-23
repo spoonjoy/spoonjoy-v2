@@ -106,12 +106,15 @@ const squareClass = "aspect-square px-0 pointer-fine:min-w-ouro-6";
 
 /**
  * `plain` has no border until it is pressed; `outline` always has one, in the primary tone while pressed.
+ * Forced colours draw no border on an unpressed plain toggle at rest, since its colour is transparent:
+ * pressed keeps its border, in the Highlight colour from toggleBase above.
  *
  * @internal
  * @claim "`plain` has no border until it" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle looks > draws a border with variant outline)
+ * @claim "Forced colours draw no border on an unpressed plain toggle" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle under forced colours > draws no border on an unpressed plain toggle at rest, and keeps the Highlight border once pressed (#3098))
  */
 const looks = {
-  plain: "[--ouro-bd:transparent] [--ouro-bg:transparent] text-foreground",
+  plain: "[--ouro-bd:transparent] [--ouro-bg:transparent] text-foreground forced-colors:not-data-pressed:border-0",
   outline: "[--ouro-bd:var(--border)] [--ouro-bg:transparent] text-foreground data-pressed:[--ouro-bd:color-mix(in_oklab,var(--primary)_45%,transparent)]",
 } as const;
 

@@ -1368,6 +1368,25 @@ describe("Button state layer", () => {
   });
 });
 
+describe("Button under forced colours", () => {
+  it("stays borderless on a plain button at rest, and keeps the outline variant's border (#3103)", async () => {
+    const { host } = await render(
+      <>
+        <Button variant="plain">Plain</Button>
+        <Button variant="outline">Outline</Button>
+      </>,
+    );
+    const [plain, outline] = [...host.querySelectorAll<HTMLElement>("[data-ouro]")];
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      await expect.poll(() => parseFloat(getComputedStyle(outline!).borderTopWidth)).toBeGreaterThan(0);
+      expect(getComputedStyle(plain!).borderTopWidth).toBe("0px");
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+});
+
 describe("Button and a page scroll at the press", () => {
   // A smooth scroll begins as the press goes down, ahead of the button's own handlers. A button that
   // opens a dialog stops it where it is; any other leaves the page alone.

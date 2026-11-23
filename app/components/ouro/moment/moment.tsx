@@ -181,10 +181,10 @@ export interface MomentOwnProps {
   /** The close button's accessible name, for other languages. @default "Dismiss" */
   dismissLabel?: string | undefined;
   /**
-   * Speaks a `success`, `error` or `ask` moment politely to screen readers when it appears: the title,
-   * then the description when it is text. Other kinds are never spoken.
-   * @claim "Other kinds are never spoken." registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment > speaks a success or error moment politely only when asked)
-   * @claim "Speaks a `success`, `error` or `ask`" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment > speaks a success or error moment politely only when asked)
+   * Speaks a `success`, `error`, `ask` or `loading` moment politely to screen readers when it appears: the title,
+   * then the description when it is text. Other kinds stay silent.
+   * @claim "Other kinds stay silent." registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment > speaks a success or error moment politely only when asked)
+   * @claim "Speaks a `success`, `error`, `ask` or `loading`" registry/ouro/components/ouro/moment/moment.test.tsx verify:testExists(registry/ouro/components/ouro/moment/moment.test.tsx::Moment > speaks a success or error moment politely only when asked)
    */
   announce?: boolean | undefined;
   /** Layout only: margins, width, grid placement (`mt-6`). Appearance classes warn in development; use `kind` and `quiet`. */
@@ -247,7 +247,7 @@ export function MomentProvider({ quiet, children }: MomentProviderProps): JSX.El
 
 const levels = [2, 3, 4, 5, 6] as const;
 const sizes = ["default", "hero", "inline"] as const;
-const spoken = new Set<MomentKind>(["success", "error", "ask"]);
+const spoken = new Set<MomentKind>(["success", "error", "ask", "loading"]);
 
 // A slot holds something to render unless it is undefined, null or false.
 const present = (node: ReactNode) => node !== undefined && node !== null && node !== false;
@@ -361,7 +361,7 @@ export function Moment(props: MomentProps): JSX.Element | null {
           cap !== undefined && per !== cap.per && [`cap per "${String(cap.per)}" is not a period; use "day", "week", "month", "ever"`, '<Moment cap={{ times: 1, per: "day" }}>'],
           cap !== undefined && times !== cap.times && [`cap times must be a whole number, 0 or more, got ${String(cap.times)}`, '<Moment cap={{ times: 1, per: "day" }}>'],
           cap !== undefined && key === undefined && ["cap counts showings under dismissKey or id, and this moment has neither", '<Moment dismissKey="caught-up" cap={{ times: 1, per: "day" }}>'],
-          announce === true && !spoken.has(kind) && [`announce speaks only success, error and ask moments, not kind="${kind}"`, '<Moment kind="success" announce>'],
+          announce === true && !spoken.has(kind) && [`announce speaks only success, error, ask and loading moments, not kind="${kind}"`, '<Moment kind="success" announce>'],
           dismissFor !== undefined && !Object.hasOwn(dismissPeriods, dismissFor) && [`dismissFor="${String(dismissFor)}" is not a period; use "hour", "day", "week", "month"`, '<Moment dismissKey="ask" dismissFor="day">'],
           dismissFor !== undefined && dismissKey === undefined && ["dismissFor keeps a dismissal through dismissKey, and this moment has none", '<Moment dismissKey="ask" dismissFor="day">'],
           (icon !== undefined || illustration !== undefined) && [`${icon !== undefined ? "icon" : "illustration"} is not a prop`, "<Moment art={<Illustration />}>"],
