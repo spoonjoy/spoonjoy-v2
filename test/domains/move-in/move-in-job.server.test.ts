@@ -294,10 +294,18 @@ describe("the move-in watch", () => {
     expect(queued.map(({ options }) => options.key)).toEqual([`move-in:${jobId}:watch:2`]);
   });
 
+  it("keeps time by the real clock unless told otherwise", async () => {
+    const { env, jobId } = await setUp();
+    database.sqlite.prepare(`UPDATE "ImportJob" SET "status" = 'running', "updatedAt" = ?`).run(new Date().toISOString());
+    const { jobs, queued } = recordingJobs();
+    await moveInWatchHandler(env, jobs)({ jobId, look: 1 }, { key: "k", attempt: 1 });
+    expect(queued.map(({ type }) => type)).toEqual(["move-in.watch"]);
+  });
+
   it("only looks again at a move-in that is moving, and stops at one that finished, is gone or isn't named", async () => {
     const { env, jobId } = await setUp();
     const { jobs, queued } = recordingJobs();
-    const watch = moveInWatchHandler(env, jobs);
+    const watch = moveInWatchHandler(env, jobs, { now: () => now });
     const context = { key: "k", attempt: 1 };
 
     await watch({ jobId, look: 1 }, context);
