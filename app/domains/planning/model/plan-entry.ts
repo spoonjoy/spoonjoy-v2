@@ -32,6 +32,11 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/** Whether a value is a servings scale a planned meal can have: more than none and at most MAX_SCALE_FACTOR. */
+export function isScaleFactor(value: unknown): value is number {
+  return typeof value === "number" && value > 0 && value <= MAX_SCALE_FACTOR;
+}
+
 /** A new entry from untrusted input (a form, the API or an agent), or the reason it can't be planned. */
 export function validateEntryInput(input: Record<string, unknown>): Validated<PlanEntryInput> {
   const kind = input.kind;
@@ -48,7 +53,7 @@ export function validateEntryInput(input: Record<string, unknown>): Validated<Pl
   if (title.length > MAX_TITLE_LENGTH) return { ok: false, error: "Keep the title under 200 characters." };
   if (note.length > MAX_NOTE_LENGTH) return { ok: false, error: "Keep the note under 2000 characters." };
   const scaleFactor = input.scaleFactor ?? 1;
-  if (typeof scaleFactor !== "number" || !(scaleFactor > 0 && scaleFactor <= MAX_SCALE_FACTOR)) {
+  if (!isScaleFactor(scaleFactor)) {
     return { ok: false, error: "Servings must be more than none and at most 50 times the recipe." };
   }
   return { ok: true, value: { kind, date, mealType, recipeId: recipeId || null, title, note, scaleFactor } };

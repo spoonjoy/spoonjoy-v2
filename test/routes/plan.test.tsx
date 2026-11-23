@@ -300,7 +300,7 @@ describe("meal plan route", () => {
 
       expect(screen.getByRole("heading", { level: 1, name: "Week of Nov 23" })).toBeTruthy();
       const tuesday = screen.getByRole("region", { name: "Tuesday, Nov 24" });
-      expect(within(tuesday).getByRole("link", { name: /Lemon Herb Rice/ }).getAttribute("href")).toBe(`/recipes/${recipe.id}`);
+      expect(within(tuesday).getByRole("link", { name: /Lemon Herb Rice/ }).getAttribute("href")).toBe(`/recipes/${recipe.id}?scale=2`);
       expect(within(tuesday).getByText("Dinner · 2× the recipe")).toBeTruthy();
       expect(within(tuesday).getByText("Eat out")).toBeTruthy();
       expect(within(tuesday).getByText("Lunch · Tacos")).toBeTruthy();
@@ -326,6 +326,15 @@ describe("meal plan route", () => {
       await renderPage();
       expect(within(screen.getByRole("region", { name: "Tuesday, Nov 24" })).getByText("Dinner · Last made Nov 2")).toBeTruthy();
       expect(within(screen.getByRole("region", { name: "Wednesday, Nov 25" })).getByText("Lunch · 2× the recipe · Last made Jun 9, 2025")).toBeTruthy();
+    });
+
+    it("links a meal planned at another scale to the recipe at those servings", async () => {
+      const rice = await db.recipe.create({ data: { ...createTestRecipe(chefId), title: "Scaled Rice" } });
+      await act({ intent: "add-recipe", entryToken: "token-scale-1", date: "2026-11-24", mealType: "dinner", recipeId: rice.id, scaleFactor: "1.5" });
+      await act({ intent: "add-recipe", entryToken: "token-scale-2", date: "2026-11-25", mealType: "dinner", recipeId: rice.id, scaleFactor: "1" });
+      await renderPage();
+      expect(within(screen.getByRole("region", { name: "Tuesday, Nov 24" })).getByRole("link", { name: /Scaled Rice/ })).toHaveAttribute("href", `/recipes/${rice.id}?scale=1.5`);
+      expect(within(screen.getByRole("region", { name: "Wednesday, Nov 25" })).getByRole("link", { name: /Scaled Rice/ })).toHaveAttribute("href", `/recipes/${rice.id}`);
     });
 
     it("keeps a deleted recipe's meal readable without a link", async () => {

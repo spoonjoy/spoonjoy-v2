@@ -19,6 +19,7 @@ import { cookTabStepIndex, readCookTab, writeCookTab } from "~/lib/cook-tab";
 import { recordLocalCookingNow } from "~/lib/cooking-now";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { usePostHog } from "~/lib/use-posthog";
+import { isScaleFactor } from "~/domains/planning";
 
 /** The parts of the recipe page's loader data cook mode reads. */
 export interface RecipeDetailLoaderData {
@@ -276,6 +277,9 @@ export function useRouteCookController(
 
   // Scale state for recipe scaling
   const [scaleFactor, setScaleFactor] = useState(1);
+  // A meal on the plan links here with its servings (?scale=2); the recipe opens at them, over stored progress.
+  const linkedScale = Number(new URLSearchParams(location.search).get("scale") ?? Number.NaN);
+  const plannedScale = isScaleFactor(linkedScale) ? linkedScale : null;
 
   // Track which ingredients have been checked off
   const [checkedIngredients, setCheckedIngredients] = useState<Set<string>>(new Set());
@@ -387,6 +391,7 @@ export function useRouteCookController(
       setCheckedStepOutputs(storedProgress.checkedStepOutputIds);
       setActiveCookStepIndex(storedProgress.activeStepIndex);
     }
+    if (plannedScale !== null) setScaleFactor(plannedScale);
 
     // This tab's own step wins over the one shared by every tab and device.
     const tab = readCookTab(recipe.id);
@@ -399,7 +404,7 @@ export function useRouteCookController(
     setResumeStepNum(resumeIndex > 0 ? steps[resumeIndex]!.stepNum : null);
 
     setLoadedCookProgressRecipeId(recipe.id);
-  }, [recipe.id, cookProgressBounds, cookSessionUserId]);
+  }, [recipe.id, cookProgressBounds, cookSessionUserId, plannedScale]);
 
   useEffect(() => {
     // With cook-session sync on, useCookSessionSync keeps the signed-in cache instead.
