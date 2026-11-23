@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 // @ts-expect-error -- plain ESM module shipped in the image, without types
 import { miniflareOptions, photoUploads, selfHostRateLimits, selfHostVars, settingsFromEnv, workerModules } from "../../self-host/config.mjs";
 
@@ -165,6 +165,23 @@ describe("miniflareOptions", () => {
     expect(options.assets).toEqual({ directory: "/app/build/client", routerConfig: { has_user_worker: true } });
     expect(options.modulesRoot).toBe("/app/build/server");
     expect(options.modules[0]).toEqual({ type: "ESModule", path: "/app/build/server/_worker.js" });
+  });
+
+  it("sends the Worker's outbound requests through the fetch it is given, which the server makes Node's", async () => {
+    const outboundFetch = vi.fn(async () => new Response("from node"));
+    const routed = miniflareOptions({
+      built,
+      env: {},
+      settings: { port: 8080, dataDir: "/data", appDir: "/app" },
+      sessionSecret: "s",
+      version: "1.2.3",
+      serverAssetFiles: [],
+      outboundFetch,
+    });
+    const request = new Request("https://appleid.apple.com/auth/keys");
+    expect(await (await routed.outboundService(request)).text()).toBe("from node");
+    expect(outboundFetch).toHaveBeenCalledWith(request);
+    expect(options.outboundService).toBeUndefined();
   });
 
   it("names the image version as the worker version", () => {
