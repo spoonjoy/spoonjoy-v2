@@ -8,6 +8,8 @@ export * from "./model/plan-rule";
 export * from "./application/plan";
 export * from "./application/feed-link";
 export * from "./application/plan-to-list";
+export * from "./application/plan-rules";
 export * from "./adapters/prisma-plan-store";
 export * from "./adapters/prisma-feed-link-store";
 export * from "./adapters/web-answers";
+export * from "./adapters/prisma-plan-rule-store";
