@@ -1,0 +1,52 @@
+name: Production Deploy Alarm
+
+# A failed Production Deploy on main showed only as a red run, so deploys failed for hours before
+# anyone looked (2026-11-23, from about 04:32Z). Each finished deploy run on main now keeps one open
+# issue labelled main-red: opened on the first failure, commented on each later one, closed by the
+# next successful deploy. A skipped or cancelled run (CI was red, or nothing new to ship) leaves it
+# as it is. This is its own workflow so it holds only issue write access.
+on:
+  workflow_run:
+    workflows: [Production Deploy]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  issues: write
+
+concurrency:
+  group: production-deploy-alarm
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: report
+    if: github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/production-deploy.yml'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Open, update or close the main-red issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DEPLOY_RESULT: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          case "$DEPLOY_RESULT" in
+            success | failure | timed_out | startup_failure | action_required) ;;
+            *) echo "Production Deploy ended $DEPLOY_RESULT; the main-red issue stays as it is."; exit 0 ;;
+          esac
+          title="Production deploys are failing on main"
+          label="main-red"
+          gh label create "$label" --force --color B60205 --description "Main is not reaching production"
+          issue="$(gh issue list --state open --label "$label" --json number,title --jq "map(select(.title == \"$title\")) | first | .number // empty")"
+          if [ "$DEPLOY_RESULT" = "success" ]; then
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --reason completed --comment "Deployed again at $HEAD_SHA: $RUN_URL"
+            fi
+          elif [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "Failed again ($DEPLOY_RESULT) at $HEAD_SHA: $RUN_URL"
+          else
+            gh issue create --title "$title" --label "$label" --body "Production Deploy failed ($DEPLOY_RESULT) at $HEAD_SHA: $RUN_URL. Main is not reaching production until a deploy succeeds; its log shows the failing step. Each later failure comments here, and the next successful deploy on main closes this issue."
+          fi
