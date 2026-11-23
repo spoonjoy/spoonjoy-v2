@@ -235,6 +235,19 @@ describe("startMoveInJob", () => {
     expect(MOVE_IN_WATCH.type).toBe("move-in.watch");
   });
 
+  it("tries the watch again when its first send fails", async () => {
+    const { jobs: recording, queued } = recordingJobs();
+    let failures = 1;
+    const jobs: Jobs = {
+      enqueue: async (kind, payload, options) => {
+        if (kind.type === "move-in.watch" && failures-- > 0) throw new Error("the queue blinked");
+        return recording.enqueue(kind, payload, options);
+      },
+    };
+    await startMoveInJob(jobs, "movein_1");
+    expect(queued.map(({ type }) => type).sort()).toEqual(["move-in.run", "move-in.watch"]);
+  });
+
   it("sends each one even when the other can't go, and says one failed", async () => {
     for (const failing of ["move-in.run", "move-in.watch"]) {
       const { jobs: recording, queued } = recordingJobs();
@@ -262,7 +275,7 @@ describe("the move-in watch", () => {
 
     expect(queued).toEqual([
       { type: "move-in.watch", payload: { jobId, look: 4 }, options: { key: `move-in:${jobId}:watch:4`, delaySeconds: 300 } },
-      { type: "move-in.run", payload: { jobId }, options: { key: `move-in:${jobId}:nudge:${quiet}` } },
+      { type: "move-in.run", payload: { jobId }, options: { key: `move-in:${jobId}:nudge:${quiet}:${Math.floor(now.getTime() / 60_000)}` } },
     ]);
   });
 
@@ -309,9 +322,12 @@ describe("nudgeMoveIn", () => {
     expect(await nudgeMoveIn(jobs, { ...at, updatedAt: quietFor(MOVE_IN_QUIET_MS - 1) }, now)).toBe(false);
     expect(await nudgeMoveIn(jobs, { ...at, status: "done", updatedAt: quietFor(MOVE_IN_QUIET_MS) }, now)).toBe(false);
     expect(await nudgeMoveIn(jobs, { ...at, updatedAt: quietFor(MOVE_IN_QUIET_MS) }, now)).toBe(true);
-    // A nudge for this stretch is waiting now, so it is not queued twice; a later stretch gets its own.
+    // A nudge for this stretch is waiting now, so it is not queued twice that minute; a later stretch gets its own.
     expect(await nudgeMoveIn(jobs, { ...at, updatedAt: quietFor(MOVE_IN_QUIET_MS) }, now)).toBe(false);
     expect(await nudgeMoveIn(jobs, { ...at, updatedAt: quietFor(MOVE_IN_QUIET_MS + 1) }, now)).toBe(true);
+    // A stretch that stays quiet gets a nudge the next minute, even if the last one found a run that then died.
+    const later = new Date(now.getTime() + MOVE_IN_QUIET_MS);
+    expect(await nudgeMoveIn(jobs, { ...at, updatedAt: quietFor(MOVE_IN_QUIET_MS) }, later)).toBe(true);
     expect(MOVE_IN_QUIET_MS).toBe(60_000);
   });
 });
