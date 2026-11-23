@@ -56,6 +56,9 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/roadmap.tsx", "/roadmap", "platform-asset"),
   route("routes/search.tsx", "/search", "user-product", { universalLink: true }),
   route("routes/my-recipes.tsx", "/my-recipes", "user-product", { universalLink: true }),
+  // Tag pages are web-only until the apps have them.
+  route("routes/tags._index.tsx", "/tags", "user-product", { universalLink: false }),
+  route("routes/tags.$slug.tsx", "/tags/:slug", "user-product", { universalLink: false }),
   route("routes/saved-recipes.tsx", "/saved-recipes", "user-product", { universalLink: true }),
   route("routes/chefs.tsx", "/chefs", "user-product", { universalLink: true }),
   route("routes/sitemap.xml.tsx", "/sitemap.xml", "platform-asset"),
@@ -70,6 +73,7 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/recipes.new.tsx", "/recipes/new", "user-product", { universalLink: true }),
   route("routes/recipes.$id.tsx", "/recipes/:id", "user-product", { universalLink: true, publicShareable: true }),
   route("routes/recipes.$id.edit.tsx", "/recipes/:id/edit", "user-product", { universalLink: true }),
+  route("routes/recipes.$id.tags.tsx", "/recipes/:id/tags", "user-product", { universalLink: false }),
   route("routes/recipes.$id.fork.tsx", "/recipes/:id/fork", "user-product", { universalLink: true }),
   route("routes/recipes.$id.steps.new.tsx", "/recipes/:id/steps/new", "user-product", { universalLink: true }),
   route("routes/recipes.$id.steps.$stepId.edit.tsx", "/recipes/:id/steps/:stepId/edit", "user-product", { universalLink: true }),

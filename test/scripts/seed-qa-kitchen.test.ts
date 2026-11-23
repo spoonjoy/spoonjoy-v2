@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { describe, expect, it, vi } from "vitest";
 import { pagerRecipes, pagerRecipe, PAGER_OLDEST_RECIPE, PAGER_FORBIDDEN_WORDS,
   KITCHEN,
+  QA_KITCHEN_TAG,
   SCRATCH_ACCOUNT_COUNT,
   SCRATCH_USER_COUNT,
   scratchIndexCount,
@@ -175,6 +176,17 @@ describe("seed-qa-kitchen", () => {
     expect(db.prepare("SELECT COUNT(*) n FROM ShoppingListItem i JOIN ShoppingList l ON l.id = i.shoppingListId WHERE l.authorId = ? AND i.checked = 0").get(KITCHEN.chef.id)).toEqual({ n: 3 });
     const chef = db.prepare('SELECT hashedPassword FROM "User" WHERE id = ?').get(KITCHEN.chef.id) as any;
     expect(bcrypt.compareSync("new", chef.hashedPassword)).toBe(true);
+  });
+
+  it("tags Lemon Herb Rice Weeknight for chef, and resets tags a journey added", () => {
+    const db = migratedDb();
+    db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+    const tagged = "SELECT o.name, o.slug FROM RecipeOrganizer ro JOIN Organizer o ON o.id = ro.organizerId WHERE ro.recipeId = ? AND o.ownerId = ?";
+    expect(db.prepare(tagged).all(KITCHEN.recipes.lemonRice.id, KITCHEN.chef.id)).toEqual([{ name: QA_KITCHEN_TAG.name, slug: QA_KITCHEN_TAG.slug }]);
+    db.exec(`INSERT INTO Organizer (id, ownerId, kind, name, slug) VALUES ('journey-tag', '${KITCHEN.chef.id}', 'tag', 'Drift', 'drift');`);
+    db.exec(`INSERT INTO RecipeOrganizer (recipeId, organizerId) VALUES ('${KITCHEN.recipes.lemonRice.id}', 'journey-tag');`);
+    expect(() => db.exec(buildKitchenResetSql({ passwords, hash: fastHash }))).not.toThrow();
+    expect(db.prepare(tagged).all(KITCHEN.recipes.lemonRice.id, KITCHEN.chef.id)).toEqual([{ name: QA_KITCHEN_TAG.name, slug: QA_KITCHEN_TAG.slug }]);
   });
 
   it("reuses existing shared units and ingredient refs by name", () => {
