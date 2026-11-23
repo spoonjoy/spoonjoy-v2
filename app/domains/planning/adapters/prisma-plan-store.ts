@@ -2,46 +2,9 @@
 import type { PrismaClient } from "@prisma/client";
 import { readableRecipeWhere } from "~/domains/kitchen";
 import type { PlanStore } from "../application/plan";
-import type { PlanEntry } from "../model/plan-entry";
-import type { MealType } from "../model/meal-type";
+import { ENTRY_SELECT, toEntry } from "./plan-entry-row";
 
 type PlanDb = Pick<PrismaClient, "mealPlan" | "planEntry" | "recipe">;
-
-type EntryRow = {
-  id: string;
-  mealPlanId: string;
-  date: string;
-  mealType: string;
-  position: number;
-  kind: string;
-  recipeId: string | null;
-  recipeTitle: string | null;
-  title: string;
-  note: string;
-  scaleFactor: number;
-  deletedAt: Date | null;
-};
-
-const ENTRY_SELECT = {
-  id: true, mealPlanId: true, date: true, mealType: true, position: true, kind: true, recipeId: true,
-  recipeTitle: true, title: true, note: true, scaleFactor: true, deletedAt: true,
-} as const;
-
-function toEntry(row: EntryRow): PlanEntry {
-  return {
-    id: row.id,
-    date: row.date,
-    // Rows are written through validateEntryInput, so the stored meal type is one of MEAL_TYPES.
-    mealType: row.mealType as MealType,
-    position: row.position,
-    kind: row.kind === "recipe" ? "recipe" : "note",
-    recipeId: row.recipeId,
-    recipeTitle: row.recipeTitle,
-    title: row.title,
-    note: row.note,
-    scaleFactor: row.scaleFactor,
-  };
-}
 
 export function prismaPlanStore(db: PlanDb): PlanStore {
   return {

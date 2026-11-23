@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { getLocalDb } from "~/lib/db.server";
 import {
+  addEntry,
+  feedForToken,
   feedLinkMadeAt,
   hashFeedToken,
   makeFeedLink,
@@ -14,7 +16,7 @@ import {
   type PlanStore,
 } from "~/domains/planning";
 import { cleanupDatabase } from "../../helpers/cleanup";
-import { createTestUser } from "../../utils";
+import { createTestRecipe, createTestUser } from "../../utils";
 
 let db: PrismaClient;
 let plans: PlanStore;
@@ -94,5 +96,61 @@ describe("calendar feed links, stored", () => {
     expect(lookups).toEqual([]);
     expect(await planForFeedToken(counting, "a".repeat(43))).toBeNull();
     expect(lookups).toHaveLength(1);
+  });
+});
+
+describe("the calendar feed behind a link", () => {
+  const now = new Date("2026-11-23T20:00:00Z");
+  const origin = "https://spoonjoy.test";
+
+  beforeEach(async () => {
+    db = await getLocalDb();
+    await cleanupDatabase();
+    plans = prismaPlanStore(db);
+    links = prismaFeedLinkStore(db);
+  });
+
+  afterEach(async () => {
+    await cleanupDatabase();
+  });
+
+  async function plannedCook() {
+    const chef = await cook();
+    const recipe = await db.recipe.create({ data: { ...createTestRecipe(chef.id), title: "Miso soup", servings: "4", description: "Warm." } });
+    const plan = await plans.planFor(chef.id);
+    await db.mealPlan.update({ where: { id: plan.id }, data: { timeZone: "America/Los_Angeles" } });
+    const plan2 = (date: string, id: string, input: Record<string, unknown>) => addEntry(plans, chef.id, id, { date, mealType: "dinner", ...input });
+    await plan2("2026-11-23", "e-soup", { kind: "recipe", recipeId: recipe.id, scaleFactor: 2 });
+    await plan2("2026-11-24", "e-out", { kind: "note", title: "Eating out" });
+    await plan2("2026-10-25", "e-too-old", { kind: "note", title: "Long ago" });
+    await plan2("2026-10-26", "e-oldest", { kind: "note", title: "Four weeks back" });
+    await plan2("2027-02-21", "e-furthest", { kind: "note", title: "Thirteen weeks on" });
+    await plan2("2027-02-22", "e-too-far", { kind: "note", title: "Too far" });
+    await plan2("2026-11-25", "e-gone", { kind: "note", title: "Removed" });
+    await db.planEntry.update({ where: { id: "e-gone" }, data: { deletedAt: now } });
+    return { chef, token: await makeFeedLink(plans, links, chef.id, now) };
+  }
+
+  it("finds nothing for a link that doesn't exist", async () => {
+    expect(await feedForToken(plans, links, { token: "a".repeat(43), params: new URLSearchParams(), origin, now })).toBeNull();
+  });
+
+  it("gives the owner and the plan's live entries from four weeks back to thirteen weeks on, with each recipe's servings", async () => {
+    const { chef, token } = await plannedCook();
+    const feed = await feedForToken(plans, links, { token, params: new URLSearchParams({ summary: "${title} for ${servings}" }), origin, now });
+    expect(feed?.ownerId).toBe(chef.id);
+    const uids = [...(feed?.calendar ?? "").matchAll(/UID:plan-entry-([^@]+)@spoonjoy\.test/g)].map((match) => match[1]).sort();
+    expect(uids).toEqual(["e-furthest", "e-oldest", "e-out", "e-soup"]);
+    expect(feed?.calendar).toContain("SUMMARY:Miso soup for 8\r\n");
+    expect(feed?.calendar).toContain("X-WR-CALNAME:Spoonjoy meal plan\r\n");
+    expect(feed?.entries).toBe(4);
+  });
+
+  it("times meals in the plan's own time zone unless the link asks for another", async () => {
+    const { token } = await plannedCook();
+    const planZone = await feedForToken(plans, links, { token, params: new URLSearchParams({ dinner: "18:30" }), origin, now });
+    expect(planZone?.calendar).toContain("DTSTART:20261124T023000Z\r\n");
+    const asked = await feedForToken(plans, links, { token, params: new URLSearchParams({ dinner: "18:30", tz: "UTC" }), origin, now });
+    expect(asked?.calendar).toContain("DTSTART:20261123T183000Z\r\n");
   });
 });
