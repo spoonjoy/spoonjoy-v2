@@ -872,6 +872,22 @@ describe("main with the HX census", () => {
     expect(exit).toHaveBeenCalledWith(1);
   });
 
+  it("reads a page from the context route file app/routes.ts spreads in", async () => {
+    const io = { log: vi.fn(), error: vi.fn() };
+    const exit = vi.fn();
+    const routesWithContext = ROUTES.replace('  route("chefs", "routes/chefs.tsx"),\n', "  ...communityRoutes,\n")
+      .replace("export default [", 'import communityRoutes from "./route-config/community/routes";\nexport default [');
+    const contextFiles: Record<string, string> = {
+      ...files,
+      "app/routes.ts": routesWithContext,
+      "app/route-config/community/routes.ts": `export default [\n  route("chefs", "routes/chefs.tsx"),\n] satisfies RouteConfig;\n`,
+    };
+    const readdir = vi.fn().mockResolvedValue([fakeFile("e2e/journeys", "chefs.journey.ts"), fakeFile("e2e/journeys/support", "hx-census.ts")]);
+    await main(args, { io, exit, readdir, readFile: vi.fn(async (file: string) => contextFiles[file]) });
+    expect(io.log).toHaveBeenCalledWith(expect.stringContaining('census-missing-page "/chefs" opens the page /chefs (routes/chefs.tsx)'));
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
   it("fails when the census or a route module cannot be read", async () => {
     const io = { log: vi.fn(), error: vi.fn() };
     const exit = vi.fn();
