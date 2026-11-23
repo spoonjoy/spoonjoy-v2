@@ -115,6 +115,13 @@ describe("Self-host Image workflow", () => {
     expect(image.steps[upload].if).toBe("always()");
   });
 
+  it("tries a push three times, since GHCR sometimes answers a layer upload with \"unknown blob\"", () => {
+    const push = stepNamed(image, /Push this arch/).run ?? "";
+    expect(push).toMatch(/for attempt in 1 2 3/);
+    expect(push).toContain('docker push "$IMAGE:$VERSION-$ARCH" && exit 0');
+    expect(push).toMatch(/exit 1\s*$/);
+  });
+
   it("pushes only from main, and publishes the multi-arch tags only after both arches pass", () => {
     for (const step of image.steps.filter((candidate) => /docker (push|login)/.test(candidate.run ?? ""))) {
       expect(step.if).toBe(ON_MAIN);
