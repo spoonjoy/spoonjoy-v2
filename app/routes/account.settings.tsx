@@ -49,7 +49,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return {
     ...settings,
     blockedChefs: blocked.map(({ chef }) => ({ id: chef.id, username: chef.username })),
-    // A self-hosted server's admin gets a way to its settings (app/routes/account.server.tsx).
+    // A self-hosted server's admin gets a way to its settings (app/routes/account.server-settings.tsx).
     serverAdmin: await isServerAdmin(db, context.cloudflare?.env, settings.user.id),
   };
 }

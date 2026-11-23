@@ -83,7 +83,7 @@ export const WEB_ROUTE_MANIFEST = [
   // A file download and the page after deletion stay in the browser.
   route("routes/account.export.ts", "/account/export", "secure-web-handoff"),
   // A self-hosted server's settings, for its admin; spoonjoy.app has no such page.
-  route("routes/account.server.tsx", "/account/server", "intentional-exclude"),
+  route("routes/account.server-settings.tsx", "/account/server", "intentional-exclude"),
   route("routes/account.deleted.tsx", "/account/deleted", "platform-asset"),
   route("routes/developers.tsx", "/developers", "developer-resource"),
   route("routes/developers.playground.tsx", "/developers/playground", "developer-resource"),

@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { db } from "~/lib/db.server";
 import { createUserSessionCookie } from "~/lib/session.server";
 import { gateAccountCreation, serverInviteStatus, signupMode } from "~/lib/server-access.server";
-import ServerSettings, { action, loader, meta } from "~/routes/account.server";
+import ServerSettings, { action, loader, meta } from "~/routes/account.server-settings";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRoutesStub, createTestUser } from "../utils";
 
