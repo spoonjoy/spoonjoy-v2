@@ -223,6 +223,7 @@ function RecipeDetail() {
     : null;
   const isAuthenticated = loaderData.isAuthenticated ?? true;
   const organizersOn = useFlag("organizers");
+  const planOn = useFlag("meal-planner");
   const cookSessionUserId = loaderData.cookSessionUserId ?? null;
   const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;
   const savedInCookbookIds = loaderData.savedInCookbookIds ?? EMPTY_SAVED_COOKBOOK_IDS;
@@ -490,6 +491,9 @@ function RecipeDetail() {
           ) : (
             <MenuItem href={loginRedirect}>Log cook</MenuItem>
           )}
+          {isAuthenticated && planOn ? (
+            <MenuItem href={`/plan?recipe=${encodeURIComponent(recipe.id)}`}>Plan this meal</MenuItem>
+          ) : null}
           {isOwner ? <MenuItem tone="destructive" onClick={() => setIsDeleteDialogOpen(true)}>Delete</MenuItem> : null}
         </Menu>
       </div>
