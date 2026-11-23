@@ -186,6 +186,17 @@ describe("testsNamingPaths", () => {
     expect(readFile).not.toHaveBeenCalled();
   });
 
+  // telemetry-coverage.test.ts audits every file under app/lib and app/routes without importing or
+  // naming them, so a new route file reached it only in the merge queue (pull requests #881 and #882).
+  it("selects a test that declares it scans a folder holding a changed file", () => {
+    // Built from pieces, so this file does not itself declare that it scans those folders.
+    const scanning = { "test/s.test.ts": `// test-changed${": scans"} app/lib/ app/routes/\nrunAudit();` };
+    const read = (file: string) => scanning[file as keyof typeof scanning];
+    expect(testsNamingPaths(["test/s.test.ts"], ["app/routes/plan.tsx"], read)).toEqual(["test/s.test.ts"]);
+    expect(testsNamingPaths(["test/s.test.ts"], ["app/lib/a/b.server.ts"], read)).toEqual(["test/s.test.ts"]);
+    expect(testsNamingPaths(["test/s.test.ts"], ["app/routes.ts", "app/components/x.tsx"], read)).toEqual([]);
+  });
+
   it("matches a path's dots and other pattern characters literally", () => {
     expect(testsNamingPaths(["t"], ["wrangler.json"], () => '"wranglerXjson"')).toEqual([]);
   });
