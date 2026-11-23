@@ -3546,8 +3546,7 @@ describe("Recipes $id Route", () => {
         // 300 ms) and the cook confirms at once. The server answers 404 for a deleted recipe's
         // session, so nothing may be sent from the confirm on: no save, no session start.
         const tomatoes = screen.getAllByRole("checkbox", { name: /tomatoes/ })[0]!;
-        await user.click(screen.getByRole("button", { name: "Manage recipe" }));
-        await user.click(screen.getByRole("button", { name: "Delete" }));
+        await user.click(await recipeMenuItem("Delete"));
         const confirm = await screen.findByRole("button", { name: "Delete" });
         // The released modal removes background controls from the accessibility tree.
         // Keep the pre-modal reference: this deliberately injects an unsent state change,
@@ -4389,10 +4388,13 @@ describe("Recipes $id Route", () => {
       expect(await recipeMenuItem("Edit")).toHaveAttribute("href", "/recipes/recipe-1/edit");
       await userEvent.keyboard("{Escape}");
       expect(screen.queryByRole("link", { name: "Edit recipe" })).not.toBeInTheDocument();
-      expect(screen.getByTestId("recipe-owner-tools")).toBeInTheDocument();
+      // Every owner action is in the header's ⋯ menu, as the Apple app's; no disclosure repeats them on the page.
+      expect(screen.queryByRole("button", { name: /^Manage recipe/ })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Manage recipe" }));
-      expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Recipe actions" }));
+      const items = await screen.findAllByRole("menuitem");
+      expect(items.map((item) => item.textContent)).toEqual(["Edit", "Manage covers", "Make a variation", "Log cook", "Delete"]);
+      expect(items[4]).toHaveAttribute("data-tone", "destructive");
     });
 
     it("renders owner cover history controls and hides them from non-owners", async () => {
@@ -4476,7 +4478,7 @@ describe("Recipes $id Route", () => {
 
       const ownerRender = render(<OwnerStub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Cover History Recipe" });
-      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
+      await user.click(await recipeMenuItem("Manage covers"));
 
       const history = await screen.findByTestId("recipe-cover-history");
       expect(within(history).getByRole("heading", { name: "Recipe covers" })).toBeInTheDocument();
@@ -4567,7 +4569,7 @@ describe("Recipes $id Route", () => {
       expect(screen.getByTestId("cover-provenance-badge")).toHaveTextContent("Original photo");
       expect(within(screen.getByTestId("recipe-image")).getByRole("status")).toHaveTextContent("Styling cover");
 
-      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
+      await user.click(await recipeMenuItem("Manage covers"));
       expect(await screen.findByRole("heading", { name: "Photos" })).toBeInTheDocument();
       expect(screen.getAllByRole("status").map((status) => status.textContent)).toContain("Styling cover");
     });
@@ -5123,8 +5125,7 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "Recipe to Delete" });
       expect(screen.queryByRole("alertdialog", { name: /^Delete ".+"\?$/ })).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
-      await user.click(screen.getByRole("button", { name: "Delete" }));
+      await user.click(await recipeMenuItem("Delete"));
 
       // The dialog names the recipe and what deleting it does, instead of asking the same question twice.
       expect(await screen.findByRole("alertdialog", { name: 'Delete "Recipe to Delete"?' })).toBeInTheDocument();
@@ -5165,8 +5166,7 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Recipe Delete Actions" });
 
-      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
-      await user.click(screen.getByRole("button", { name: "Delete" }));
+      await user.click(await recipeMenuItem("Delete"));
       await user.click(await screen.findByRole("button", { name: "Cancel" }));
       await waitFor(() => {
         expect(screen.queryByRole("alertdialog", { name: /^Delete ".+"\?$/ })).not.toBeInTheDocument();
@@ -5208,8 +5208,7 @@ describe("Recipes $id Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Recipe Delete Confirm" });
-      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
-      await user.click(screen.getByRole("button", { name: "Delete" }));
+      await user.click(await recipeMenuItem("Delete"));
       await user.click(await screen.findByRole("button", { name: "Delete" }));
 
       await waitFor(() => {

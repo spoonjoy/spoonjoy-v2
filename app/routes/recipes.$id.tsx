@@ -26,7 +26,6 @@ import {
 } from "~/lib/recipe-detail.server";
 import { Button } from "~/components/ouro/button/button";
 import { toast } from "~/lib/ouro/toast";
-import { Collapsible } from "~/components/ouro/collapsible/collapsible";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { Dialog as OuroDialog } from "~/components/ouro/dialog/dialog";
 import { Form } from "~/components/ouro/form/form";
@@ -41,7 +40,7 @@ import { Toggle } from "~/components/ouro/toggle/toggle";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
 import { CookTimerTray } from "~/components/recipe/CookTimers";
 import { RecipeProvenance } from "~/components/recipe/RecipeProvenance";
-import { ForkRecipeButton } from "~/components/recipe/ForkRecipeButton";
+import { ForkRecipeButton, ForkRecipeDialog } from "~/components/recipe/ForkRecipeButton";
 import { ReportOrBlockButton } from "~/components/moderation/ReportOrBlockButton";
 import { RecipeCoverHistory } from "~/components/recipe/RecipeCoverHistory";
 import { RecipePhotoStudio } from "~/components/recipe/RecipePhotoStudio";
@@ -336,7 +335,8 @@ function RecipeDetail() {
     setSpoonAnswer(undefined);
     setIsSpoonDialogOpen(true);
   }, []);
-  const [showOwnerTools, setShowOwnerTools] = useState(false);
+  const [isCoversDialogOpen, setIsCoversDialogOpen] = useState(false);
+  const [isVariationDialogOpen, setIsVariationDialogOpen] = useState(false);
   const [newCookbookTitle, setNewCookbookTitle] = useState("");
   // The create's error belongs on the cookbook name field.
   const [createCookbookAnswer, setCreateCookbookAnswer] = useState<{ error?: unknown }>();
@@ -479,11 +479,14 @@ function RecipeDetail() {
           {isOwner ? (
             <MenuItem href={`/recipes/${recipe.id}/edit`}>Edit</MenuItem>
           ) : null}
+          {isOwner ? <MenuItem onClick={() => setIsCoversDialogOpen(true)}>Manage covers</MenuItem> : null}
+          {isOwner ? <MenuItem onClick={() => setIsVariationDialogOpen(true)}>Make a variation</MenuItem> : null}
           {isAuthenticated ? (
             <MenuItem onClick={openSpoonDialog}>Log cook</MenuItem>
           ) : (
             <MenuItem href={loginRedirect}>Log cook</MenuItem>
           )}
+          {isOwner ? <MenuItem tone="destructive" onClick={() => setIsDeleteDialogOpen(true)}>Delete</MenuItem> : null}
         </Menu>
       </div>
     </div>
@@ -537,7 +540,7 @@ function RecipeDetail() {
   }, [addToListFetcher.state, addToListFetcher.data, ingredientCount, scaleFactor, renewAddToListToken]);
 
   // The tab bar is hidden in cook mode so it never covers the step controls.
-  useDockSuppressed(showOwnerTools || isCookMode);
+  useDockSuppressed(isCookMode);
 
   useEffect(() => {
     setAvailableCookbooks(cookbooks);
@@ -657,42 +660,30 @@ function RecipeDetail() {
         provenance={headerProvenance}
       />
 
-      {/* Owner recipe management */}
+      {/* Owner recipe management lives in the header's ⋯ menu, as the Apple app's (desk target.md, Recipe): Edit,
+          Manage covers, Make a variation and Delete. Covers and the variation open their own dialogs here, since the
+          menu's popup closes before they open. */}
       {isOwner && (
-        <div className="print:hidden" data-testid="recipe-owner-tools">
-          <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-            <Collapsible title="Manage recipe" open={showOwnerTools} onOpenChange={setShowOwnerTools}>
-              <div id="recipe-owner-maintenance" className="py-5">
-                <div className="flex flex-wrap gap-3">
-                  <Button href={`/recipes/${recipe.id}/edit`} variant="outline" tone="secondary">
-                    Edit recipe
-                  </Button>
-                  <ForkRecipeButton
-                    recipeId={recipe.id}
-                    recipeTitle={recipe.title}
-                    sourceChefUsername={recipe.chef.username}
-                    isOwner={isOwner}
-                  />
-                  <Button
-                    type="button"
-                    variant="soft" tone="destructive"
-                    onClick={() => setIsDeleteDialogOpen(true)}
-                  >
-                    Delete
-                  </Button>
-                </div>
-                <div className="mt-6 space-y-6">
-                  <RecipePhotoStudio
-                    recipeTitle={recipe.title}
-                    hasActiveCover={Boolean(coverImageUrl ?? recipeCoverImageUrl)}
-                    activeCoverProcessing={activeCoverProcessing}
-                  />
-                  <RecipeCoverHistory covers={coverHistory} spoonImages={spoonImages} />
-                </div>
-              </div>
-            </Collapsible>
-          </div>
-        </div>
+        <>
+          <OuroDialog title="Manage covers" open={isCoversDialogOpen} onOpenChange={setIsCoversDialogOpen} size="lg">
+            <div id="recipe-owner-maintenance" className="space-y-6" data-testid="recipe-owner-tools">
+              <RecipePhotoStudio
+                recipeTitle={recipe.title}
+                hasActiveCover={Boolean(coverImageUrl ?? recipeCoverImageUrl)}
+                activeCoverProcessing={activeCoverProcessing}
+              />
+              <RecipeCoverHistory covers={coverHistory} spoonImages={spoonImages} />
+            </div>
+          </OuroDialog>
+          <ForkRecipeDialog
+            open={isVariationDialogOpen}
+            onOpenChange={setIsVariationDialogOpen}
+            recipeId={recipe.id}
+            recipeTitle={recipe.title}
+            sourceChefUsername={recipe.chef.username}
+            isOwner
+          />
+        </>
       )}
 
       <SpoonDialog
