@@ -154,6 +154,7 @@
         "app/components/recipe/CoverProvenanceBadge.tsx",
         "app/domains/food-knowledge/index.ts",
         "app/domains/food-knowledge/model/quantity.ts",
+        "app/domains/food-knowledge/model/units.ts",
         "app/hooks/use-cooking-now.ts",
         "app/lib/account-deletion.server.ts",
         "app/lib/analytics-server.ts",
@@ -1347,9 +1348,12 @@
         "app/components/recipe/IngredientList.tsx",
         "app/components/recipe/StepCard.tsx",
         "app/components/recipe/StepsSectionHeading.tsx",
+        "app/components/recipe/UnitSystemControl.tsx",
+        "app/components/recipe/use-unit-system.ts",
         "app/components/xray/xray-provider.tsx",
         "app/domains/food-knowledge/index.ts",
         "app/domains/food-knowledge/model/quantity.ts",
+        "app/domains/food-knowledge/model/units.ts",
         "app/hooks/use-viewport-top-var.ts",
         "app/lib/cook-timers.ts",
         "app/lib/cook/local-cook-controller.ts",
@@ -1370,6 +1374,7 @@
         "number-field",
         "page-header",
         "pagination",
+        "segmented-control",
         "switch",
         "text",
         "timer",
@@ -1408,6 +1413,9 @@
         ],
         "pagination": [
           "app/components/cook/RecipeCookView.tsx"
+        ],
+        "segmented-control": [
+          "app/components/recipe/UnitSystemControl.tsx"
         ],
         "switch": [
           "app/routes/test-kitchen.tsx"
@@ -1834,6 +1842,7 @@
         "app/components/recipe/CoverProvenanceBadge.tsx",
         "app/domains/food-knowledge/index.ts",
         "app/domains/food-knowledge/model/quantity.ts",
+        "app/domains/food-knowledge/model/units.ts",
         "app/hooks/use-appending-list.ts",
         "app/hooks/useUrlSyncedInput.ts",
         "app/lib/account-deletion.server.ts",
@@ -1964,6 +1973,7 @@
         "app/components/recipe/StepList.tsx",
         "app/domains/food-knowledge/index.ts",
         "app/domains/food-knowledge/model/quantity.ts",
+        "app/domains/food-knowledge/model/units.ts",
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-write-token.ts",
         "app/hooks/useIngredientParser.ts",
@@ -2128,8 +2138,16 @@
         "app/components/recipe/SpoonsStrip.tsx",
         "app/components/recipe/StepCard.tsx",
         "app/components/recipe/StepsSectionHeading.tsx",
+        "app/components/recipe/UnitSystemControl.tsx",
+        "app/components/recipe/UnitSystemProvider.tsx",
+        "app/components/recipe/use-unit-system.ts",
         "app/domains/food-knowledge/index.ts",
         "app/domains/food-knowledge/model/quantity.ts",
+        "app/domains/food-knowledge/model/units.ts",
+        "app/domains/platform/flags/flags.ts",
+        "app/domains/platform/flags/index.ts",
+        "app/domains/platform/flags/use-flag.ts",
+        "app/domains/platform/index.ts",
         "app/hooks/use-back-navigation.ts",
         "app/hooks/use-cook-session-sync.ts",
         "app/hooks/use-form-errors.ts",
@@ -2256,6 +2274,7 @@
         "popover",
         "radio-group",
         "relative-time",
+        "segmented-control",
         "separator",
         "share-button",
         "show-more",
@@ -2374,6 +2393,9 @@
         "relative-time": [
           "app/components/recipe/SpoonsStrip.tsx"
         ],
+        "segmented-control": [
+          "app/components/recipe/UnitSystemControl.tsx"
+        ],
         "separator": [
           "app/components/moderation/ReportOrBlockButton.tsx"
         ],
@@ -2446,6 +2468,7 @@
         "app/components/recipe/StepList.tsx",
         "app/domains/food-knowledge/index.ts",
         "app/domains/food-knowledge/model/quantity.ts",
+        "app/domains/food-knowledge/model/units.ts",
         "app/hooks/use-form-errors.ts",
         "app/hooks/useIngredientParser.ts",
         "app/lib/analytics-server.ts",
@@ -2598,6 +2621,7 @@
         "app/components/recipe/ParsedIngredientRow.tsx",
         "app/domains/food-knowledge/index.ts",
         "app/domains/food-knowledge/model/quantity.ts",
+        "app/domains/food-knowledge/model/units.ts",
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-write-token.ts",
         "app/hooks/useIngredientParser.ts",
@@ -2724,6 +2748,7 @@
         "app/components/recipe/ParsedIngredientRow.tsx",
         "app/domains/food-knowledge/index.ts",
         "app/domains/food-knowledge/model/quantity.ts",
+        "app/domains/food-knowledge/model/units.ts",
         "app/hooks/useIngredientParser.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -3041,6 +3066,7 @@
         "app/components/recipe/CoverProvenanceBadge.tsx",
         "app/domains/food-knowledge/index.ts",
         "app/domains/food-knowledge/model/quantity.ts",
+        "app/domains/food-knowledge/model/units.ts",
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-resend-lost-submission.ts",
         "app/lib/account-deletion.server.ts",
@@ -3197,6 +3223,7 @@
         "app/components/cookbook/page.tsx",
         "app/domains/food-knowledge/index.ts",
         "app/domains/food-knowledge/model/quantity.ts",
+        "app/domains/food-knowledge/model/units.ts",
         "app/hooks/use-resend-lost-submission.ts",
         "app/hooks/use-write-token.ts",
         "app/lib/analytics-server.ts",
@@ -3609,6 +3636,7 @@
         "app/components/recipe/SpoonsStrip.tsx",
         "app/domains/food-knowledge/index.ts",
         "app/domains/food-knowledge/model/quantity.ts",
+        "app/domains/food-knowledge/model/units.ts",
         "app/hooks/use-appending-list.ts",
         "app/lib/account-deletion.server.ts",
         "app/lib/analytics-server.ts",

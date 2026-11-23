@@ -1,7 +1,8 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { Checklist, type ChecklistItemData } from '~/components/ouro/checklist/checklist'
 import type { IngredientIconKey } from '~/lib/ingredient-affordances'
-import { formatAmount, scaleQuantity } from "~/domains/food-knowledge"
+import { formatAmountIn, scaleQuantity, type UnitSystem } from "~/domains/food-knowledge"
+import { useUnitSystem } from "./use-unit-system"
 
 export interface Ingredient {
   /** Unique identifier */
@@ -110,6 +111,7 @@ export function IngredientList({
   onStepOutputToggle,
   hideLabel = false,
 }: IngredientListProps) {
+  const { system } = useUnitSystem()
   const outputIds = useMemo(() => new Set(stepOutputUses.map((reference) => reference.id)), [stepOutputUses])
   const items: ChecklistItemData[] = uncheckedFirst([
     ...stepOutputUses.map((reference) => ({
@@ -122,7 +124,7 @@ export function IngredientList({
       id: ingredient.id,
       label: ingredient.name,
       description: ingredient.categoryLabel,
-      value: formatScaledAmount(ingredient, scaleFactor) || undefined,
+      value: formatScaledAmount(ingredient, scaleFactor, system) || undefined,
       checked: checkedIds.has(ingredient.id),
     })),
   ])
@@ -143,12 +145,12 @@ export function IngredientList({
   )
 }
 
-/** An ingredient's amount at the recipe's scale: "1 ½ cups", or "" with neither a quantity nor a unit. */
-export function formatScaledAmount(ingredient: Ingredient, scaleFactor: number) {
+/** An ingredient's amount at the recipe's scale, in the cook's units: "1 ½ cups", or "" with neither a quantity nor a unit. */
+export function formatScaledAmount(ingredient: Ingredient, scaleFactor: number, system: UnitSystem = 'original') {
   const hasQuantity = ingredient.quantity != null && !Number.isNaN(ingredient.quantity)
   const scaledQuantity = hasQuantity ? scaleQuantity(ingredient.quantity as number, scaleFactor) : null
 
-  return formatAmount(scaledQuantity, ingredient.unit)
+  return formatAmountIn(system, scaledQuantity, ingredient.unit)
 }
 
 export function formatStepReferenceName(reference: StepReference) {
