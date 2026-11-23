@@ -8,9 +8,9 @@
 // key), except for one deliberate parse on the Add Step page, which must not take the page down.
 import { test as journeyTest, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
-import { pathUrl, waitForHydration } from "./support/navigation";
+import { openDisclosure, pathUrl, waitForHydration } from "./support/navigation";
 import { chooseMenuItem } from "./support/menu";
-import { scratchStorageStatePath } from "./support/personas";
+import { personaStorageStatePath, scratchStorageStatePath } from "./support/personas";
 import { requiredLabel } from "./support/forms";
 import { recordCookSyncRequests } from "./support/cook-sync-evidence";
 
@@ -294,6 +294,70 @@ test.describe("Recipe create and edit", () => {
     await waitForHydration(page);
     await expectCookProgressSynced(page);
     await chooseRecipeAction(page, "Delete");
+    const deleteRecipeDialog = page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ });
+    await deleteRecipeDialog.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page).toHaveURL(pathUrl("/recipes"));
+  });
+
+  // QA has recipe_visibility on (wrangler.json's env.qa SPOONJOY_FLAGS "all"). A recipe the cook
+  // keeps to Only me stays theirs after a reload, while a signed-out visitor and another cook get
+  // a 404 for its page and its API record, and find it in neither search nor the sitemap.
+  test("a recipe kept to Only me is missing for everyone else, on every surface @mutates", async ({
+    page,
+    browser,
+    verifyAfterReload,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    const title = `Journey Secret Stew ${testInfo.project.name} ${Date.now().toString(36)}`;
+
+    await page.goto("/recipes/new");
+    await waitForHydration(page);
+    await page.getByLabel(requiredLabel("Title"), { exact: true }).fill(title);
+    const choice = page.getByRole("radiogroup", { name: "Who can see this recipe" });
+    await choice.getByRole("radio", { name: /^Only me/ }).check();
+    await page.getByRole("button", { name: "Create recipe", exact: true }).click();
+    await expect(page).toHaveURL(RECIPE_URL);
+    const recipePath = new URL(page.url()).pathname;
+    const recipeId = recipePath.split("/").pop()!;
+    await verifyAfterReload(async () => {
+      await expect(page.getByRole("heading", { level: 1, name: title, exact: true })).toBeVisible();
+    });
+    await testInfo.attach("private-recipe-owner-view", { body: await page.screenshot(), contentType: "image/png" });
+
+    // The cook finds it in their own search, so the index holds it and its absence below means something.
+    await page.goto(`/search?q=${encodeURIComponent(title)}`);
+    await expect(page.getByRole("region", { name: "Search results" }).getByRole("link", { name: new RegExp(title) })).toBeVisible();
+
+    const others: Array<{ who: string; storageState: string | { cookies: []; origins: [] } }> = [
+      { who: "signed out", storageState: { cookies: [], origins: [] } },
+      { who: "another cook", storageState: personaStorageStatePath("friend") },
+    ];
+    for (const { who, storageState } of others) {
+      const other = await browser.newContext({ storageState });
+      try {
+        const otherPage = await other.newPage();
+        const response = await otherPage.goto(recipePath);
+        expect(response?.status(), `${who}: recipe page`).toBe(404);
+        await testInfo.attach(`private-recipe-${who.replace(" ", "-")}-view`, { body: await otherPage.screenshot(), contentType: "image/png" });
+
+        await otherPage.goto(`/search?q=${encodeURIComponent(title)}`);
+        await expect(otherPage.getByRole("heading", { name: `Results for "${title}"`, exact: true })).toBeVisible();
+        await expect(otherPage.getByRole("link", { name: new RegExp(title) }), `${who}: search`).toHaveCount(0);
+
+        expect((await other.request.get(`/api/v1/recipes/${recipeId}`)).status(), `${who}: API`).toBe(404);
+        const sitemap = await other.request.get("/sitemap.xml");
+        expect(sitemap.ok()).toBe(true);
+        expect(await sitemap.text(), `${who}: sitemap`).not.toContain(recipeId);
+      } finally {
+        await other.close();
+      }
+    }
+
+    // --- Delete the recipe.
+    await page.goto(recipePath);
+    await waitForHydration(page);
+    await expectCookProgressSynced(page);
+    await (await openMaintenance(page)).getByRole("button", { name: "Delete", exact: true }).click();
     const deleteRecipeDialog = page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ });
     await deleteRecipeDialog.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/recipes"));
