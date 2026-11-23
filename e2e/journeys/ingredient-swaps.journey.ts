@@ -20,7 +20,9 @@ test.describe("Ingredient swaps", () => {
     await verifyAfterReload(async () => {
       await expect(garlic).toHaveAccessibleDescription(/Swap: ⅛ tsp garlic powder per clove/);
     });
-    await testInfo.attach("cook-mode-garlic-swap", { body: await panel.screenshot(), contentType: "image/png" });
+    // On a phone the step list sits below the step text, so bring the garlic row and its swap into view first.
+    await garlic.scrollIntoViewIfNeeded();
+    await testInfo.attach("cook-mode-garlic-swap", { body: await page.screenshot(), contentType: "image/png" });
     await expectAccessible();
   });
 });
