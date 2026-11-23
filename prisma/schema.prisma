@@ -1182,6 +1182,8 @@ model PlatformJobKey {
   status     String    @default("pending")
   // While running: when another delivery may start the job again.
   leaseUntil DateTime?
+  // How many times the handler has run, for maxAttempts.
+  runs       Int       @default(0)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 }
