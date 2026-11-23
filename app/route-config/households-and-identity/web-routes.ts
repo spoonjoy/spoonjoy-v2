@@ -6,6 +6,8 @@ export default [
   // Households are web-only for now: the iPhone app has no household screens to open a link in.
   webRoute("routes/households._index.tsx", "/households", "user-product", { universalLink: false }),
   webRoute("routes/households.$id.tsx", "/households/:id", "user-product", { universalLink: false }),
+  webRoute("routes/households.$id.lists._index.tsx", "/households/:id/lists", "user-product", { universalLink: false }),
+  webRoute("routes/households.$id.lists.$listId.tsx", "/households/:id/lists/:listId", "user-product", { universalLink: false }),
   webRoute("routes/auth.oidc.tsx", "/auth/oidc", "secure-web-handoff"),
   webRoute("routes/auth.oidc.callback.tsx", "/auth/oidc/callback", "secure-web-handoff"),
 ] as const satisfies readonly WebRouteClassification[];
