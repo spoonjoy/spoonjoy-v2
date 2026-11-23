@@ -30,10 +30,12 @@ function summary(manifest, fixtures) {
   ];
   const flat = (counts, prefix = "") =>
     Object.entries(counts).flatMap(([key, value]) => (value && typeof value === "object" ? flat(value, `${prefix}${key}.`) : [[`${prefix}${key}`, value]]));
-  for (const [name] of flat(manifest.kitchens[fixtures[0]?.size ?? "small"]?.counts ?? {})) {
+  const names = [...new Set(Object.values(manifest.kitchens).flatMap((kitchen) => flat(kitchen.counts).map(([key]) => key)))].sort();
+  for (const name of names) {
     const cells = fixtures.map((fixture) => {
-      const expected = flat(manifest.kitchens[fixture.size].counts).find(([key]) => key === name)?.[1];
+      const expected = flat(manifest.kitchens[fixture.size]?.counts ?? {}).find(([key]) => key === name)?.[1];
       const observed = flat(fixture.observed).find(([key]) => key === name)?.[1];
+      if (expected === undefined && observed === undefined) return "-";
       return observed === expected ? String(observed) : `**${observed} (expected ${expected})**`;
     });
     lines.push(`| ${name} | ${cells.join(" | ")} |`);
