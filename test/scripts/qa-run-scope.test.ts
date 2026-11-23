@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -40,6 +41,8 @@ import {
   retryDelayMs,
   runCliIfEntry,
   runIdentity,
+  RUN_DATABASE_PATTERN,
+  RUN_WORKER_PATTERN,
   scopeGeneratedBuildConfig,
   scopeWranglerConfig,
   sweep,
@@ -145,6 +148,25 @@ describe("runIdentity", () => {
     expect(() => runIdentity({ GITHUB_RUN_ATTEMPT: "1" })).toThrow(/whole numbers/);
     expect(() => runIdentity({ GITHUB_RUN_ID: "1" })).toThrow(/whole numbers/);
     expect(() => runIdentity({ GITHUB_RUN_ID: "1", GITHUB_RUN_ATTEMPT: "x" })).toThrow(/whole numbers/);
+  });
+
+  it("gives each later part of a split suite its own stack, and part 1 the plain name", () => {
+    expect(runIdentity({ ...RUN_ENV, SPOONJOY_QA_RUN_PART: "1" })).toEqual(IDENTITY);
+    const second = runIdentity({ ...RUN_ENV, SPOONJOY_QA_RUN_PART: "2" });
+    expect(second).toEqual({
+      workerName: "spoonjoy-v2-qa-run-1001-2-p2",
+      databaseName: "spoonjoy-qa-run-1001-2-p2",
+      baseUrl: "https://spoonjoy-v2-qa-run-1001-2-p2.mendelow-studio.workers.dev",
+    });
+    // The sweep still finds a later part's stack.
+    expect(RUN_WORKER_PATTERN.test(second.workerName)).toBe(true);
+    expect(RUN_DATABASE_PATTERN.test(second.databaseName)).toBe(true);
+  });
+
+  it("refuses a part that is not a single digit from 1 to 9", () => {
+    for (const part of ["", "0", "10", "x", " 2"]) {
+      expect(() => runIdentity({ ...RUN_ENV, SPOONJOY_QA_RUN_PART: part })).toThrow(/single digit from 1 to 9/);
+    }
   });
 });
 
@@ -1343,7 +1365,7 @@ describe("Journeys workflow", () => {
   const step = (name: string) => steps[index(name)];
 
   it("no longer queues runs for one shared QA Worker", () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(["changes", "deploy-shared-qa", "fork-notice", "journeys", "queue-tested"]);
+    expect(Object.keys(workflow.jobs).sort()).toEqual(["changes", "deploy-shared-qa", "fork-notice", "journeys", "journeys-result", "queue-tested"]);
     // The only jobs journeys waits for are the cheap scope and merge-queue lookups, never a QA turn or lock.
     expect(journeys.needs).toEqual(["queue-tested", "changes"]);
     const text = JSON.stringify(steps);
@@ -1464,8 +1486,46 @@ describe("Journeys workflow", () => {
       MODE: "${{ github.event_name == 'pull_request' && needs.changes.outputs.mode || 'full' }}",
     });
     // A job skipped by its own `if` never evaluates an expression name, so the required check's
-    // name must stay a plain string.
-    expect(journeys.name).toBe("journeys");
+    // name must stay a plain string. The required check is journeys-result, which never skips.
+    expect(workflow.jobs["journeys-result"].name).toBe("journeys");
+    expect(workflow.jobs["journeys-result"].if).toBe("always()");
+  });
+
+  it("runs the full suite in two parts, each with its own QA stack, and one part otherwise", () => {
+    expect(journeys.name).toBe("journeys part ${{ matrix.part }}");
+    expect(journeys.strategy).toEqual({
+      "fail-fast": false,
+      matrix: {
+        part: "${{ fromJSON(((github.event_name == 'workflow_dispatch' && inputs.suite == 'explore') || (github.event_name == 'pull_request' && needs.changes.outputs.mode == 'affected')) && '[1]' || '[1, 2]') }}",
+      },
+    });
+    // runIdentity names part 2's stack apart from part 1's.
+    expect(journeys.env).toEqual({ SPOONJOY_QA_RUN_PART: "${{ matrix.part }}" });
+    const suite = step("Run test suite");
+    expect(suite.env).toMatchObject({ PART: "${{ matrix.part }}", PARTS: "${{ strategy.job-total }}" });
+    // Part 1 runs the census first, then its shard of the rest without the personas setup the
+    // census already ran; part 2 runs its shard with the personas setup and no census.
+    expect(suite.run).toContain('pnpm run test:journeys:census || census=$?\n  pnpm run test:journeys:after-census --shard="1/$PARTS"');
+    expect(suite.run).toContain(
+      'pnpm exec playwright test -c playwright.journeys.config.ts \\\n    --project iphone-webkit --project desktop-chrome --grep-invert @ouro-census --shard="$PART/$PARTS"',
+    );
+    const reportUpload = steps.find((candidate) => candidate.name === "Upload journeys report") as unknown as { with: { name: string } };
+    expect(reportUpload.with.name).toBe("journeys-report${{ matrix.part != 1 && format('-part-{0}', matrix.part) || '' }}");
+  });
+
+  it("reports the required journeys check as passed only when every part passed or the suite was skipped", () => {
+    const result = workflow.jobs["journeys-result"];
+    expect(result.needs).toEqual(["journeys"]);
+    expect(result.env).toBeUndefined();
+    expect(JSON.stringify(result)).not.toMatch(/secrets\./);
+    const run: string = result.steps[0].run;
+    expect(result.steps[0].env).toEqual({ RESULT: "${{ needs.journeys.result }}" });
+    const verdict = (value: string) =>
+      spawnSync("bash", ["-c", run], { env: { ...process.env, RESULT: value }, encoding: "utf8" }).status;
+    expect(verdict("success")).toBe(0);
+    expect(verdict("skipped")).toBe(0);
+    expect(verdict("failure")).toBe(1);
+    expect(verdict("cancelled")).toBe(1);
   });
 
   it("cancels only a superseded pull-request run, whose teardown still runs", () => {

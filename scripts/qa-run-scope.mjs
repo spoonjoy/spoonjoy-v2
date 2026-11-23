@@ -11,6 +11,9 @@
 //   - its own Worker, `spoonjoy-v2-qa-run-<run id>-<attempt>`, served at
 //     `https://spoonjoy-v2-qa-run-<run id>-<attempt>.mendelow-studio.workers.dev`, with its own
 //     cook-session Durable Object namespace and per-run secrets;
+//   - when the run splits its suite into parts (SPOONJOY_QA_RUN_PART, 2 to 9), each part after the
+//     first gets a stack of its own, named with `-p<part>` after the attempt; part 1 keeps the
+//     plain name;
 //   - the shared QA R2 bucket and rate-limit namespaces. The seed writes no R2 objects, and every
 //     key the app writes has a timestamp and a random UUID in it, so every R2 key the run's
 //     database references was uploaded by this run; cleanup deletes only keys its own database
@@ -45,7 +48,8 @@
 //             prepare, and fails when more than MAX_RUN_WORKERS run Workers remain.
 //
 // Environment (set by GitHub Actions): GITHUB_ACTIONS, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT,
-// GITHUB_ENV, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
+// GITHUB_ENV, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID; optionally SPOONJOY_QA_RUN_PART, set by
+// the Journeys job for each part of its suite.
 //
 // Local run: prepare, deploy, verify and teardown also run outside GitHub Actions when
 // SPOONJOY_QA_LOCAL_RUN=1 (exactly "1"). Use a throwaway worktree, because prepare rewrites
@@ -76,8 +80,8 @@ import { QA_BASE_URL, QA_D1_DATABASE_ID, QA_D1_DATABASE_NAME } from "./script-en
 export const CANONICAL_WORKER_NAME = "spoonjoy-v2-qa";
 export const RUN_WORKER_PREFIX = "spoonjoy-v2-qa-run-";
 export const RUN_DATABASE_PREFIX = "spoonjoy-qa-run-";
-export const RUN_WORKER_PATTERN = /^spoonjoy-v2-qa-run-\d+-\d+$/;
-export const RUN_DATABASE_PATTERN = /^spoonjoy-qa-run-\d+-\d+$/;
+export const RUN_WORKER_PATTERN = /^spoonjoy-v2-qa-run-\d+-\d+(?:-p[2-9])?$/;
+export const RUN_DATABASE_PATTERN = /^spoonjoy-qa-run-\d+-\d+(?:-p[2-9])?$/;
 // The journeys job times out after 40 minutes, so a run stack older than this belongs to a run
 // that ended without its teardown (cancelled, or the runner died).
 export const STALE_AFTER_MS = 3 * 60 * 60_000;
@@ -148,7 +152,13 @@ export function runIdentity(env) {
   if (!/^\d+$/.test(runId) || !/^\d+$/.test(attempt)) {
     throw new Error("GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT must be whole numbers to name this run's QA stack.");
   }
-  const suffix = `${runId}-${attempt}`;
+  // A Journeys run that splits its suite gives each part its own stack, so the parts run side by
+  // side without sharing a database. Part 1 (or no part) keeps the plain name.
+  const part = env.SPOONJOY_QA_RUN_PART ?? "1";
+  if (!/^[1-9]$/.test(part)) {
+    throw new Error("SPOONJOY_QA_RUN_PART must be a single digit from 1 to 9 to name this part's QA stack.");
+  }
+  const suffix = part === "1" ? `${runId}-${attempt}` : `${runId}-${attempt}-p${part}`;
   const workerName = `${RUN_WORKER_PREFIX}${suffix}`;
   return {
     workerName,

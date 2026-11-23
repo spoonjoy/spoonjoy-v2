@@ -128,10 +128,23 @@ jobs:
   # touch the run's stack after a failure (tail summary, rotate, cleanup) run only if the stack
   # was created. The Cloudflare token is given only to the steps that need it, never to
   # `pnpm install`, which runs dependency install scripts from the pull request's lockfile.
+  #
+  # The full suite runs in two parts side by side, each on its own runner with its own QA stack
+  # (SPOONJOY_QA_RUN_PART names part 2's stack), because in one job it had grown to 25 to 38 minutes
+  # against the 40-minute timeout. Part 1 runs the HX census and the first half of the other
+  # journeys; part 2 runs the personas setup and the second half (Playwright's --shard, which runs
+  # a shard's dependency projects in that shard). The affected specs of a pull request and the
+  # explore suite still run as one part. The required `journeys` check is the `journeys-result`
+  # job below, which passes only when every part passed.
   journeys:
     needs: [queue-tested, changes]
     if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && needs.changes.outputs.journeys != 'false')) }}
-    name: journeys
+    name: journeys part ${{ matrix.part }}
+    strategy:
+      # Each part finishes, pass or fail, so a failed run has both parts' reports.
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(((github.event_name == 'workflow_dispatch' && inputs.suite == 'explore') || (github.event_name == 'pull_request' && needs.changes.outputs.mode == 'affected')) && '[1]' || '[1, 2]') }}
     # Runs in Playwright's image, at the version package.json pins, by digest
     # (test/workflows/playwright-image.test.ts): its browsers and their system packages are in it, so
     # the job installs nothing from Ubuntu's mirror, whose downloads can stall for the whole job. The
@@ -144,6 +157,8 @@ jobs:
       image: mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f # v1.64.0-noble
       options: --user 1001 -v /usr/bin/zstd:/usr/bin/zstd:ro
     timeout-minutes: 40
+    env:
+      SPOONJOY_QA_RUN_PART: ${{ matrix.part }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -340,6 +355,8 @@ jobs:
           MODE: ${{ github.event_name == 'pull_request' && needs.changes.outputs.mode || 'full' }}
           CENSUS: ${{ needs.changes.outputs.census }}
           SPECS: ${{ needs.changes.outputs.specs }}
+          PART: ${{ matrix.part }}
+          PARTS: ${{ strategy.job-total }}
         run: |
           if [ "$SUITE" = "explore" ]; then
             pnpm run explore:qa
@@ -362,12 +379,16 @@ jobs:
             node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts "${deps[@]}" \
               --project iphone-webkit --project desktop-chrome --grep-invert @ouro-census $SPECS
             exit "$census"
-          else
+          elif [ "$PART" = "1" ]; then
             echo "census_ran=true" >> "$GITHUB_OUTPUT"
             census=0
             pnpm run test:journeys:census || census=$?
-            pnpm run test:journeys:after-census
+            pnpm run test:journeys:after-census --shard="1/$PARTS"
             exit "$census"
+          else
+            # No census here, so the personas setup runs as this shard's dependency.
+            node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts \
+              --project iphone-webkit --project desktop-chrome --grep-invert @ouro-census --shard="$PART/$PARTS"
           fi
 
       # Each census worker wrote hx-census/census-actual.<project>.<worker>.json, and the census
@@ -587,7 +608,7 @@ jobs:
         if: ${{ !cancelled() && env.SUITE == 'journeys' && steps.rotate-passwords.outcome == 'success' && steps.cleanup-qa-data.outcome == 'success' && steps.strip-traces.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: journeys-report
+          name: journeys-report${{ matrix.part != 1 && format('-part-{0}', matrix.part) || '' }}
           path: |
             journeys-report/
             test-results/
@@ -599,7 +620,9 @@ jobs:
       # The parity capture (e2e/journeys/parity.desktop.journey.ts): viewport screenshots of the
       # canonical screens on four devices in both schemes, uploaded on every journeys run, pass or
       # fail, for spoonjoy-apple's scripts/parity-sheet.rb. They sit inside test-results/, so they go
-      # up only after the same three gates as the report.
+      # up only after the same three gates as the report. The parity journey is one file, and
+      # Playwright shards by file, so only one part has shots and uploads this name; the other
+      # finds no files and uploads nothing.
       - name: Upload parity shots
         if: ${{ !cancelled() && env.SUITE == 'journeys' && steps.rotate-passwords.outcome == 'success' && steps.cleanup-qa-data.outcome == 'success' && steps.strip-traces.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -640,6 +663,27 @@ jobs:
         if: always()
         continue-on-error: true
         run: node scripts/count-cloudflare-requests.mjs summary "$SPOONJOY_CF_REQUEST_LOG" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # The required `journeys` check: it passes when every part of the suite passed, or when the suite
+  # was skipped (a pull request that needs no journeys, a fork, or a push the merge queue already
+  # tested), as the single job's skipped check did. A failed or cancelled part fails it. Its name
+  # stays a plain string, so the check always reports under the name the ruleset requires.
+  journeys-result:
+    needs: [journeys]
+    if: always()
+    name: journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Pass only when every part of the suite passed or the suite was skipped
+        env:
+          RESULT: ${{ needs.journeys.result }}
+        run: |
+          echo "Journeys parts: $RESULT"
+          case "$RESULT" in
+            success | skipped) ;;
+            *) echo "::error::A part of the Journeys suite did not pass ($RESULT)."; exit 1 ;;
+          esac
 
   # The shared QA Worker (spoonjoy-v2-qa, D1 spoonjoy-qa-2) mirrors main: native journeys and the
   # QA Image Cover Smoke workflow run against it (both create their own accounts by signing up,
