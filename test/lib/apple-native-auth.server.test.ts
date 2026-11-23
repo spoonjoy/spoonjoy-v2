@@ -307,6 +307,20 @@ describe("native Sign in with Apple API", () => {
     expect(claims.email).toBe("native-apple@example.com");
   });
 
+  it("names itself in a User-Agent when it asks Apple for its keys", async () => {
+    const fixture = await nativeAppleTokenFixture({ aud: APPLE_NATIVE_MACOS_CLIENT_ID });
+    const fetcher = fetchAppleKeys(fixture.jwks);
+    await verifyNativeAppleIdentityToken(
+      { identityToken: fixture.identityToken, rawNonce: fixture.rawNonce },
+      { clientIds: APPLE_NATIVE_CLIENT_IDS },
+      { fetcher },
+    );
+
+    expect(fetcher).toHaveBeenCalledWith("https://appleid.apple.com/auth/keys", {
+      headers: { Accept: "application/json", "User-Agent": "Spoonjoy" },
+    });
+  });
+
   it("rejects Apple tokens minted for a different native client id", async () => {
     const fixture = await nativeAppleTokenFixture({ aud: "app.spoonjoy.Other" });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(fixture.jwks), {
