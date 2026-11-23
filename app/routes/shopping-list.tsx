@@ -1,7 +1,15 @@
 import { Heading } from "~/components/ouro/text/heading";
 import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/shopping-list";
-import { formatAmount } from "~/domains/food-knowledge";
+import {
+  formatAmountIn,
+  parseUnitSystem,
+  UNIT_SYSTEMS,
+  unitSystemCookie,
+  unitSystemFromCookie,
+  type UnitSystem,
+} from "~/domains/food-knowledge";
+import { useFlag } from "~/domains/platform";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLoaderData, Form, useSubmit, useFetchers, useActionData, useLocation, useRevalidator, type ShouldRevalidateFunctionArgs } from "react-router";
 import { revalidateUnlessNetworkFailure, submitOrReportLostRequest } from "~/lib/network-failure";
@@ -21,7 +29,7 @@ import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/ouro/button/button";
 import { Ellipsis, Plus } from "lucide-react";
-import { Menu, MenuItem } from "~/components/ouro/menu/menu";
+import { Menu, MenuItem, MenuRadioGroup, MenuRadioItem } from "~/components/ouro/menu/menu";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl } from "~/components/ouro/field/field-parts";
 import { NativeSelect } from "~/components/ouro/select/native-select";
@@ -44,7 +52,9 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  return loadShoppingList({ request, context });
+  const list = await loadShoppingList({ request, context });
+  // The units the cook picked on a recipe or here; the page uses them only while unit conversion is on.
+  return { ...list, unitSystem: unitSystemFromCookie(request.headers.get("Cookie")) };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -147,15 +157,21 @@ export function pendingShoppingItemChanges(
 }
 
 // "⅓ cup", "2 cups", "2": the same rounding as the recipe page, with counted things rounded
-// up to what a shopper can buy.
-export function amountLabel(item: { quantity: number | string | null; unit?: { name: string } | null }) {
-  return formatAmount(item.quantity, item.unit?.name, { roundCountsUp: true });
+// up to what a shopper can buy, in the cook's unit system.
+export function amountLabel(
+  item: { quantity: number | string | null; unit?: { name: string } | null },
+  system: UnitSystem = "original",
+) {
+  return formatAmountIn(system, item.quantity, item.unit?.name, { roundCountsUp: true });
 }
 
 export default function ShoppingList() {
   const actionData = useActionData<ShoppingListActionData>();
   const resendingLostSubmission = useResendLostSubmission(actionData);
-  const { shoppingList, recipes } = useLoaderData<typeof loader>();
+  const { shoppingList, recipes, unitSystem } = useLoaderData<typeof loader>();
+  const unitsEnabled = useFlag("unit-conversion");
+  const [chosenUnits, setChosenUnits] = useState<UnitSystem>(unitSystem);
+  const units = unitsEnabled ? chosenUnits : "original";
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [viewMode, setViewMode] = useState<ShoppingListViewMode>("all");
   const submit = useSubmit();
@@ -329,6 +345,21 @@ export default function ShoppingList() {
                   <MenuItem onClick={() => submit({ intent: "clearCompleted" }, { method: "post" })}>Clear checked</MenuItem>
                 ) : null}
                 <MenuItem tone="destructive" onClick={() => setShowClearDialog(true)}>Clear all</MenuItem>
+                {unitsEnabled ? (
+                  <MenuRadioGroup
+                    label="Units"
+                    value={units}
+                    onValueChange={(value) => {
+                      const next = parseUnitSystem(value);
+                      setChosenUnits(next);
+                      document.cookie = unitSystemCookie(next);
+                    }}
+                  >
+                    {UNIT_SYSTEMS.map((system) => (
+                      <MenuRadioItem key={system.value} value={system.value}>{system.label}</MenuRadioItem>
+                    ))}
+                  </MenuRadioGroup>
+                ) : null}
               </Menu>
             ) : null}
           </div>
@@ -459,7 +490,7 @@ export default function ShoppingList() {
                     >
                       <ChecklistItem
                         label={item.ingredientRef.name}
-                        value={amountLabel(item) || undefined}
+                        value={amountLabel(item, units) || undefined}
                         checked={item.checked}
                         onCheckedChange={() => toggleItem(item)}
                       />

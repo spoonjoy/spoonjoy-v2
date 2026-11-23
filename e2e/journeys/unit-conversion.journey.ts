@@ -83,3 +83,28 @@ test.describe("Unit conversion", () => {
     await expect(page.getByRole("checkbox", { name: "jasmine rice", exact: true })).toHaveAccessibleDescription(amount("235 ml"));
   });
 });
+
+test.describe("Unit conversion on the shopping list", () => {
+  test.use({ storageState: personaStorageStatePath("chef") });
+
+  test("the list's menu switches its amounts to metric, and the choice survives a reload", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
+    // The chef's seeded list holds 1 cup of jasmine rice (scripts/seed-qa-kitchen.mjs).
+    const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
+
+    await page.goto("/shopping-list");
+    await waitForHydration(page);
+    await expect(jasmineRice).toHaveAccessibleDescription(amount("1 cup"));
+
+    await page.getByRole("button", { name: "List actions", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "Metric", exact: true }).click();
+    await expect(page.getByRole("menuitemradio", { name: "Metric", exact: true })).toBeChecked();
+    await page.keyboard.press("Escape");
+    await expect(jasmineRice).toHaveAccessibleDescription(amount("235 ml"));
+
+    await verifyAfterReload(async () => {
+      await expect(jasmineRice).toHaveAccessibleDescription(amount("235 ml"));
+    });
+    await testInfo.attach("shopping-list-metric-after-reload", { body: await page.getByTestId("shopping-list-checklist-board").screenshot(), contentType: "image/png" });
+    await expectAccessible();
+  });
+});
