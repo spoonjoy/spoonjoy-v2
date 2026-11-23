@@ -8,6 +8,7 @@ import { runWithD1WriteRetryReporter } from "../app/lib/d1-write-retry.server";
 import { qaErrorLogsEnabled } from "../app/lib/qa-error-logs.server";
 import { isolateColoReport, isolateRequestReport } from "../app/lib/slow-call.server";
 import { getDb } from "../app/lib/db.server";
+import { consumeJobBatch, d1JobKeys, jobRegistry, type JobKeysDatabase, type JobMessage } from "../app/domains/platform";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
 import { defaultPhotoCache, deliverPhoto, photoKeyFromPath } from "../app/lib/photo-delivery.server";
@@ -351,6 +352,9 @@ async function handleFetch(request: Request, env: CloudflareEnvironment, ctx: Ex
   }
 }
 
+// Each context's job kinds register their handlers here: jobHandlers.on(kind, handler).
+const jobHandlers = jobRegistry();
+
 export default {
   async fetch(request, rawEnv, ctx) {
     // A per-run QA Worker logs which isolate served each request, and, once per isolate, where it
@@ -373,5 +377,16 @@ export default {
   async scheduled(_controller, env, ctx) {
     ctx.waitUntil(runScheduledPhotoSweep(withTransientD1Retry(env)));
     ctx.waitUntil(runScheduledMoveInSweep(withTransientD1Retry(env), new Date()));
+  },
+
+  // Platform jobs on the JOBS queue (app/domains/platform/ports/jobs.ts); a job that runs out of
+  // attempts is reported, and its key freed to be enqueued again.
+  async queue(batch: MessageBatch<JobMessage>, rawEnv: CloudflareEnvironment) {
+    const env = withTransientD1Retry(rawEnv);
+    if (!env.DB) throw new Error("Platform jobs need the DB binding for their keys.");
+    await consumeJobBatch(batch, jobHandlers, d1JobKeys(env.DB as JobKeysDatabase), {
+      onFailed: (message, error) =>
+        captureException(resolvePostHogServerConfig(env), { error, distinctId: "platform-jobs", route: "queue", extras: { type: message.type } }),
+    });
   },
 } satisfies ExportedHandler<CloudflareEnvironment>;

@@ -56,6 +56,26 @@ declare global {
       env: Environment,
       ctx: ExecutionContext
     ): void | Promise<void>;
+    // Typed by each handler with the body its queue carries.
+    queue?(batch: MessageBatch<never>, env: Environment, ctx: ExecutionContext): void | Promise<void>;
+  }
+
+  /** A Cloudflare Queue producer binding: the slice platform jobs use. */
+  interface Queue<Body> {
+    send(body: Body, options?: { delaySeconds?: number }): Promise<void>;
+  }
+
+  /** One delivery of a queued message. */
+  interface QueueMessage<Body> {
+    readonly body: Body;
+    /** 1 on the first delivery. */
+    readonly attempts: number;
+    ack(): void;
+    retry(options?: { delaySeconds?: number }): void;
+  }
+
+  interface MessageBatch<Body> {
+    readonly messages: readonly QueueMessage<Body>[];
   }
 
   /**
@@ -84,6 +104,8 @@ declare global {
     /** "capture" (QA) writes account mail to the EmailOutbox table instead of sending it. */
     SPOONJOY_EMAIL_MODE?: string;
     PHOTOS?: R2Bucket;
+    /** The Cloudflare Queue that carries platform jobs (app/domains/platform/ports/jobs.ts). Absent until a job kind ships. */
+    JOBS?: Queue<import("~/domains/platform").JobMessage>;
     /** Sliding-window throttle for authenticated bearer-token traffic. */
     API_TOKEN_RATE_LIMITER?: RateLimitBinding;
     /** Sliding-window throttle for anonymous IP-based traffic to /api/*. */

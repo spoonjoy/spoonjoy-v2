@@ -1104,3 +1104,13 @@ model HouseholdInvite {
 
   @@index([householdId])
 }
+
+// Platform jobs: one row per job key, so a job is enqueued and run once (migrations/0047_platform_job_keys.sql).
+model PlatformJobKey {
+  key       String   @id
+  type      String
+  // pending or done.
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
