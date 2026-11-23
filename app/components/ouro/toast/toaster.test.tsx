@@ -106,7 +106,7 @@ afterEach(async () => {
   for (const node of mounted) node.remove();
   mounted = [];
   await page.viewport(414, 896);
-  await commands.emulateMedia({ reducedMotion: "no-preference" });
+  await commands.resetMedia();
 });
 
 const warnings = () => warn.mock.calls.map((call: unknown[]) => String(call[0]));

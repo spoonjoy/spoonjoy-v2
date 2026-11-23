@@ -1,22 +1,26 @@
 "use client";
 
 import { Toggle as BaseToggle } from "@base-ui/react/toggle";
-import { useId, useMemo, useState, type JSX, type KeyboardEvent, type Ref } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { devThrow } from "~/lib/ouro/dev";
 import { useDisabledReason } from "~/lib/ouro/disabled-reason";
+import { useMergedRef } from "~/lib/ouro/refs";
+import { useScrollFade } from "~/lib/ouro/scroll-fade";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { Tooltip } from "~/components/ouro/tooltip/tooltip";
 import {
   iconClass,
   looks,
+  overflowScrollerClass,
   shapes,
   sizes,
   squareClass,
   toggleBase,
   toggleHint,
+  toggleOverflowWarning,
   toggleShapeWarning,
   toggleSizeWarning,
   toggleVariantWarning,
@@ -139,6 +143,36 @@ export interface ToggleGroupBaseProps {
    * @claim "`pill` is fully rounded with regular-weight" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > passes shape pill and size xs to every item)
    */
   shape?: "rect" | "pill" | (string & { 'Use "rect" or "pill"; rounded-full is "pill"': never }) | undefined;
+  /**
+   * `wrap`, the default, lets the row of toggles move onto more lines at the width they need.
+   * `scroll` keeps the row one line tall and scrolls it sideways instead, with a soft fade at
+   * whichever edge cuts a toggle off and none once every toggle fits, and its scrollbar hidden.
+   * The roving tab stop still moves with the arrow keys, Home and End, and brings the toggle it
+   * focuses fully into view; the pressed toggle scrolls into view too when the value changes. A
+   * touch pans the row, and a fine pointer's wheel scrolls it too.
+   * Use it for a row of filter chips in a place too narrow for them all.
+   * @default "wrap"
+   * @example
+   * <ToggleGroup
+   *   label="Show"
+   *   hideLabel
+   *   variant="outline"
+   *   shape="pill"
+   *   size="xs"
+   *   overflow="scroll"
+   *   items={[
+   *     { value: "all", label: "All" },
+   *     { value: "unread", label: "Unread" },
+   *   ]}
+   *   value={filter}
+   *   onValueChange={(next) => setFilter(next ?? "all")}
+   * />
+   * @claim "keeps the row one line tall and scrolls it sideways instead" registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx::ToggleGroup overflow scroll > stays one line tall, narrower than the toggles, instead of wrapping)
+   * @claim "with a soft fade at whichever edge cuts a toggle off and none once every toggle fits" registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx::ToggleGroup overflow scroll > fades no side once every toggle fits, and the side that hides one once it doesn't)
+   * @claim "brings the toggle it focuses fully into view" registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx::ToggleGroup overflow scroll > brings the last toggle fully into view when End moves focus to it)
+   * @claim "the pressed toggle scrolls into view too when the value changes" registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx::ToggleGroup overflow scroll > scrolls the pressed toggle into view when the value changes)
+   */
+  overflow?: "wrap" | "scroll" | (string & { 'Use "wrap" or "scroll"': never }) | undefined;
   /** Layout only: margins, grid placement (`mt-4`). Appearance classes warn in development. */
   className?: string | undefined;
   /** Reaches the group element (`role="group"`). */
@@ -256,6 +290,7 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
     variant: variantProp = "plain",
     size: sizeProp = "md",
     shape: shapeProp = "rect",
+    overflow: overflowProp = "wrap",
     className,
     ref,
     multiple,
@@ -271,6 +306,7 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
   const variant = Object.hasOwn(looks, variantProp) ? (variantProp as keyof typeof looks) : "plain";
   const size = Object.hasOwn(sizes, sizeProp) ? (sizeProp as keyof typeof sizes) : "md";
   const shape = Object.hasOwn(shapes, shapeProp) ? (shapeProp as keyof typeof shapes) : "rect";
+  const overflow = overflowProp === "scroll" ? "scroll" : "wrap";
   const duplicate = duplicateValue(items);
   if (duplicate !== undefined) {
     devThrow(
@@ -300,6 +336,7 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
             variant !== variantProp && toggleVariantWarning("ToggleGroup", String(variantProp)),
             size !== sizeProp && toggleSizeWarning("ToggleGroup", String(sizeProp)),
             shape !== shapeProp && toggleShapeWarning("ToggleGroup", String(shapeProp)),
+            overflow !== overflowProp && toggleOverflowWarning(String(overflowProp)),
             !label && ["label is empty, so the group has no name", '<ToggleGroup label="Text style" hideLabel>'],
             !multiple && lists && ["a list of values needs multiple", "<ToggleGroup multiple defaultValue={[…]}>"],
             multiple && strings && ["multiple takes a list of values", `<ToggleGroup multiple value={["${first}"]}>`],
@@ -354,37 +391,92 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
       event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : step ? (at + step + buttons.length) % buttons.length : -1;
     if (target === -1) return;
     event.preventDefault();
-    // Stryker disable next-line OptionalChaining: target is always inside buttons
-    buttons[target]?.focus();
+    const next = buttons[target];
+    // Stryker disable next-line OptionalChaining: next is always inside buttons
+    next?.focus();
+    if (overflow === "scroll") {
+      // Stryker disable next-line OptionalChaining: next is always inside buttons
+      next?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    }
   };
+
+  const groupItems = items.map((item) => (
+    <GroupItem
+      key={item.value}
+      item={item}
+      pressed={pressed.includes(item.value)}
+      onPress={(next) => press(item.value, next)}
+      groupDisabled={disabled}
+      tabIndex={stop?.value === item.value ? 0 : -1}
+      onFocus={() => setFocused(item.value)}
+      variant={variant}
+      shape={shape}
+      size={size}
+    />
+  ));
 
   return (
     <div data-ouro="toggle-group" className={cn("box-border grid min-w-0 content-start justify-items-start gap-2", className)}>
-      <span id={labelId} className={cn("m-0 text-sm leading-5 font-medium text-foreground select-none", hideLabel && "sr-only")}>
+      {/* aria-hidden drops hideLabel's sr-only text from reading order; aria-labelledby still reads a hidden element, so the group keeps its name. */}
+      <span id={labelId} aria-hidden={hideLabel || undefined} className={cn("m-0 text-sm leading-5 font-medium text-foreground select-none", hideLabel && "sr-only")}>
         {label}
       </span>
-      <div
-        ref={ref}
-        role="group"
-        aria-labelledby={labelId}
-        onKeyDown={move}
-        className="m-0 box-border inline-flex max-w-full flex-wrap items-center gap-1"
-      >
-        {items.map((item) => (
-          <GroupItem
-            key={item.value}
-            item={item}
-            pressed={pressed.includes(item.value)}
-            onPress={(next) => press(item.value, next)}
-            groupDisabled={disabled}
-            tabIndex={stop?.value === item.value ? 0 : -1}
-            onFocus={() => setFocused(item.value)}
-            variant={variant}
-            shape={shape}
-            size={size}
-          />
-        ))}
-      </div>
+      {overflow === "scroll" ? (
+        <ScrollRow labelId={labelId} outerRef={ref} onKeyDown={move} pressedKey={pressed.join("\u0000")}>
+          {groupItems}
+        </ScrollRow>
+      ) : (
+        <div
+          ref={ref}
+          role="group"
+          aria-labelledby={labelId}
+          onKeyDown={move}
+          className="m-0 box-border inline-flex max-w-full flex-wrap items-center gap-1"
+        >
+          {groupItems}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * {@link ToggleGroupBaseProps.overflow} `"scroll"`: the one-line row itself, isolated from
+ * {@link ToggleGroup} so the default `"wrap"` row calls {@link useScrollFade} only when it is
+ * mounted, keeping the default row's computed-style reads at the same count as before this
+ * prop. A layout effect keeps the pressed toggle in view, on mount and whenever the value
+ * changes.
+ * @claim "keeping the default row's computed-style reads at the same count as before this prop" registry/ouro/components/ouro/toggle/toggle-group.layout.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.layout.test.tsx::ToggleGroup layout reads > reads no computed style while its items mount or its value changes)
+ *
+ * @internal
+ */
+function ScrollRow(props: {
+  labelId: string;
+  outerRef: Ref<HTMLDivElement> | undefined;
+  onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
+  pressedKey: string;
+  children: ReactNode;
+}): JSX.Element {
+  const { labelId, outerRef, onKeyDown, pressedKey, children } = props;
+  const fadeRef = useRef<HTMLDivElement>(null);
+  useScrollFade(fadeRef);
+  const rowRef = useMergedRef(outerRef, fadeRef);
+  useLayoutEffect(() => {
+    // Stryker disable next-line OptionalChaining: the ref is attached by the time this effect runs
+    const pressedButton = fadeRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    pressedButton?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    // Stryker disable next-line ArrayDeclaration: the ref is stable; only a value change need run this again
+  }, [pressedKey]);
+  return (
+    <div
+      ref={rowRef}
+      data-slot="toggle-group-scroller"
+      role="group"
+      aria-labelledby={labelId}
+      onKeyDown={onKeyDown}
+      className={cn("m-0 box-border flex max-w-full items-center gap-1", overflowScrollerClass)}
+    >
+      {children}
     </div>
   );
 }

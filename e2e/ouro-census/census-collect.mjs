@@ -132,11 +132,18 @@ function collectInPage({ selector, exclusions }) {
     return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility === "visible";
   };
 
+  // Neither assistive technology nor the keyboard can reach an element an aria-hidden or inert
+  // ancestor (or the element itself) takes out of the accessibility tree and the tab order.
+  const hiddenSubtreeSelector = '[aria-hidden="true"], [inert]';
+  /** @param {Element} element */
+  const inHiddenSubtree = (element) => element.closest(hiddenSubtreeSelector) !== null;
+
   axe.teardown();
   axe.setup(document);
   try {
     return [...document.querySelectorAll(selector)]
       .filter((element) => !exclusions.some((exclusion) => element.matches(exclusion)))
+      .filter((element) => !inHiddenSubtree(element))
       .map((element) => {
         const landmark = landmarkOf(element);
         return {

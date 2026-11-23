@@ -348,20 +348,50 @@ describe("Link", () => {
     expect(alone).toEqual([]);
   });
 
-  it("glues only an external link's last word to its icon, keeping its text as given", async () => {
-    const glued = async (node: ReactNode) => {
+  it("keeps the external icon off a line of its own with a word joiner, for plain or rich text", async () => {
+    const iconGlue = async (node: ReactNode) => {
       const { link } = await render(node);
-      const words = [...link.childNodes].filter((n) => !(n instanceof Element && n.classList.contains("sr-only"))).map((n) => n.textContent).join("");
-      return { words, last: link.querySelector(".whitespace-nowrap")?.textContent ?? null };
+      return link.querySelector(".whitespace-nowrap")?.textContent?.codePointAt(0) ?? null;
     };
-    expect(await glued(<Link href="https://ouro.bot" external>Open in the app </Link>)).toEqual({ words: "Open in the app ", last: "app " });
-    expect(await glued(<Link href="https://ouro.bot" external>Open</Link>)).toEqual({ words: "Open", last: "Open" });
-    // Nothing to glue: a blank text, or a link that opens here, keeps its children as they are.
-    expect((await glued(<Link href="https://ouro.bot" external>{"   "}</Link>)).last).toBeNull();
-    expect(await glued(<Link href="/home">Go home</Link>)).toEqual({ words: "Go home", last: null });
-    // Children that aren't one string are drawn as given, with the icon after them.
-    const { link } = await render(<Link href="https://ouro.bot" external><b>The guide</b></Link>);
-    expect([link.querySelector("b")?.textContent, link.querySelector(".whitespace-nowrap"), !!link.querySelector("[data-ouro-external]")]).toEqual(["The guide", null, true]);
+    // The word joiner (U+2060) forbids a line break right before the icon, whatever precedes it.
+    expect(await iconGlue(<Link href="https://ouro.bot" external>Open in the app</Link>)).toBe(0x2060);
+    expect(await iconGlue(<Link href="/home">Go home</Link>)).toBeNull();
+    const { link } = await render(
+      <Link href="https://ouro.bot" external>
+        <b>The guide</b>
+      </Link>,
+    );
+    expect(link.querySelector("b")?.textContent).toBe("The guide");
+    expect(link.querySelector(".whitespace-nowrap")?.textContent?.codePointAt(0)).toBe(0x2060);
+    expect(!!link.querySelector("[data-ouro-external]")).toBe(true);
+  });
+
+  it("keeps an external link's icon on its last word's line across a sweep of container widths", async () => {
+    const text = "Every page here is built with Ouro UI, our open library that helps agents make great interfaces";
+    const { host, link } = await render(
+      <div style={{ width: 150 }}>
+        <Link href="https://ouro.bot" external>
+          {text}
+        </Link>
+      </div>,
+    );
+    const container = host.firstElementChild as HTMLElement;
+    const icon = link.querySelector<SVGElement>("[data-ouro-external]")!;
+    // The last line's own rect, not a single glyph's tight bounding box: a character's box
+    // varies by font and engine (a descender, a dot) and can miss the icon's box by a wide
+    // margin even on the same line, which is what made this flake between font renderers.
+    const words = document.createRange();
+    words.setStart(link, 0);
+    words.setEndBefore(icon);
+    const alone: number[] = [];
+    for (let width = 150; width <= 420; width += 2) {
+      container.style.width = `${width}px`;
+      const last = [...words.getClientRects()].at(-1)!;
+      const box = icon.getBoundingClientRect();
+      const middle = (box.top + box.bottom) / 2;
+      if (middle < last.top || middle > last.bottom) alone.push(width);
+    }
+    expect(alone).toEqual([]);
   });
 
   it("lets app layout classes win", async () => {

@@ -67,7 +67,7 @@ const rootClass =
   // `--ouro-toast-dir` turns every offset below toward the screen's middle.
   "group-data-[edge=top]/toaster:top-0 group-data-[edge=top]/toaster:bottom-auto group-data-[edge=top]/toaster:origin-top " +
   "select-none [-webkit-tap-highlight-color:transparent] " +
-  "rounded-ouro-lg border border-solid border-border bg-popover text-popover-foreground shadow-(--shadow-lg) " +
+  "rounded-ouro-lg border border-solid border-border bg-popover [--ouro-scroller-surface:var(--popover)] text-popover-foreground shadow-(--shadow-lg) " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "[--gap:0.75rem] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))] " +
   "[--height:var(--toast-frontmost-height,var(--toast-height))] " +

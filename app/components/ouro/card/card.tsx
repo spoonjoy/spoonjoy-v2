@@ -152,7 +152,7 @@ const levels = [2, 3, 4, 5, 6] as const;
 const variants = {
   // Where corner-shape is missing, the surface slot paints the background and border instead (see ouro-base.css).
   outline:
-    "rounded-ouro-xl border border-border bg-(--ouro-bg) border-(--ouro-bd) [--ouro-bg:var(--card)] [--ouro-bd:var(--border)] [--ouro-sq-w:1px] [--ouro-sq-r:calc(var(--radius)*var(--ouro-radius-scale,1)*1.4)] text-card-foreground shadow-(--shadow-xs)",
+    "rounded-ouro-xl border border-border bg-(--ouro-bg) border-(--ouro-bd) [--ouro-bg:var(--card)] [--ouro-scroller-surface:var(--card)] [--ouro-bd:var(--border)] [--ouro-sq-w:1px] [--ouro-sq-r:calc(var(--radius)*var(--ouro-radius-scale,1)*1.4)] text-card-foreground shadow-(--shadow-xs)",
   plain: "bg-transparent text-foreground",
 } as const;
 
@@ -213,7 +213,7 @@ const riseBandClass =
   // Muted text halfway to the foreground, which holds 4.5:1 on the glass over any picture.
   "[&_[data-card-reveal]>[data-ouro=text]]:text-[color-mix(in_oklab,var(--muted-foreground)_50%,var(--foreground))]";
 const riseGlassClass =
-  "z-1 [grid-area:1/1] bg-[color-mix(in_oklab,var(--card,var(--background))_78%,transparent)] backdrop-blur-md backdrop-saturate-150 " +
+  "z-1 [grid-area:1/1] [--ouro-scroller-surface:transparent] bg-[color-mix(in_oklab,var(--card,var(--background))_78%,transparent)] backdrop-blur-md backdrop-saturate-150 " +
   "supports-[not(backdrop-filter:blur(1px))]:bg-(--card,var(--background)) " +
   "[@media(prefers-reduced-transparency:reduce)]:bg-(--card,var(--background)) [@media(prefers-reduced-transparency:reduce)]:backdrop-filter-none " +
   "contrast-more:bg-(--card,var(--background)) contrast-more:backdrop-filter-none contrast-more:border-t contrast-more:border-solid contrast-more:border-foreground " +

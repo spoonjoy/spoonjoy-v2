@@ -37,7 +37,7 @@ beforeEach(() => {
 });
 afterEach(async () => {
   vi.restoreAllMocks();
-  await commands.emulateMedia({ reducedMotion: "no-preference" });
+  await commands.resetMedia();
   await page.viewport(1280, 800);
   await act(async () => roots.splice(0).forEach((root) => root.unmount()));
   for (const node of mounted) node.remove();

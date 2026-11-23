@@ -30,5 +30,10 @@ expectTypeOf<{ title: "x"; buttonRef: null }>().not.toExtend<ItemProps>();
 expectTypeOf<{ title: "x"; onSelect: () => void; active: true }>().not.toExtend<ItemProps>();
 expectTypeOf<{ title: "x"; onSelect: () => void; isSelected: true }>().not.toExtend<ItemProps>();
 
+// chevron is a decorative trailing mark, valid only on a linked row.
+expectTypeOf<{ title: "x"; href: "/a"; chevron: true }>().toExtend<ItemProps>();
+expectTypeOf<{ title: "x"; chevron: true }>().not.toExtend<ItemProps>();
+expectTypeOf<{ title: "x"; onSelect: () => void; chevron: true }>().not.toExtend<ItemProps>();
+
 // @ts-expect-error title is required.
 createElement(Item, { description: "Four hours" });

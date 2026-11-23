@@ -28,6 +28,11 @@
  *   bubble (Message), which read them before --ouro-action and the primary color. Unset by default,
  *   so the bubble follows the action color; set both as a pair that passes 4.5:1.
  * - --ouro-layer: the z-index of sheet and dialog portals.
+ * - --ouro-scroller-surface: the opaque fill of the surface a scroller sits on, the page's background
+ *   by default. ScrollArea and MessageList paint their scroll viewport with it, so Chromium on Windows
+ *   (which keeps LCD text on a see-through scroller by not promoting it to the compositor) promotes it
+ *   and scrolls without repainting. Ouro's own surfaces (Card, Popover, Menu, Dialog, Sheet and the like) set it
+ *   to their fill. A scroller on any other surface sets it to that surface's opaque color.
  * - The root type on a very wide screen: 112.5% from 150rem and 125% from 200rem, so a 4K display
  *   at 1x reads at a laptop's size.
  * - --input and --radius, with shadcn's stock values, for an app whose theme has neither:
@@ -196,6 +201,8 @@
    * level the portal still wins, because it is the last child of <body>.
    */
   --ouro-layer: 50;
+  /* The opaque fill of the surface a scroller sits on (ScrollArea, MessageList); see the header. */
+  --ouro-scroller-surface: var(--background);
   /* Liquid Glass, as the switch's lens wears it: the tint over what is behind, the inner rim and the outer hairline. */
   --ouro-glass: #ffffff;
   --ouro-glass-tint: 34%;
@@ -214,6 +221,7 @@
 }
 
 .dark {
+  --ouro-scroller-surface: var(--background);
   --ouro-row-radius: 0.375rem;
   --ouro-row-hover: color-mix(in oklab, var(--foreground) 6%, var(--background));
   --ouro-row-pressed: color-mix(in oklab, var(--foreground) 12%, var(--background));

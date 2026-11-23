@@ -53,7 +53,7 @@ afterEach(async () => {
   await act(async () => roots.splice(0).forEach((root) => root.unmount()));
   for (const node of mounted) node.remove();
   mounted = [];
-  await commands.emulateMedia({ reducedMotion: "no-preference" });
+  await commands.resetMedia();
 });
 
 const popup = () => document.querySelector<HTMLElement>("[data-ouro-presentation]");

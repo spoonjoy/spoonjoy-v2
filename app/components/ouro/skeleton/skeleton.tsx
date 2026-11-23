@@ -234,7 +234,8 @@ function useBreathes(shimmer: boolean): { breathes: boolean; style: CSSPropertie
       const freshDelayMs = Number.parseFloat(joinWave(performance.now(), 1, 0, start).delay);
       const correction = staleDelayMs - freshDelayMs;
       for (const node of nodesRef.current.values()) {
-        for (const animation of node.getAnimations({ subtree: true })) {
+        // jsdom, where apps often run their component tests, has no getAnimations: there is no wave to correct.
+        for (const animation of node.getAnimations?.({ subtree: true }) ?? []) {
           // Stryker disable next-line ConditionalExpression,LogicalOperator: registerNode only ever sees this
           // component's own Bar elements, which carry no animation but the breathe one it applies itself.
           /* istanbul ignore next @preserve -- registerNode only ever sees this component's own Bar elements,

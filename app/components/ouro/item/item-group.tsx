@@ -61,7 +61,7 @@ const variants = {
     "[&>li:not(:last-child)]:border-b [&>li]:border-border [&_[data-ouro=item]]:rounded-none [&_[data-ouro=item]]:border-0 [&_[data-ouro=item]]:px-0 " +
     choosable,
   outline:
-    "rounded-ouro-xl border border-border bg-card text-card-foreground [&>li:not(:last-child)]:border-b [&>li]:border-border " +
+    "rounded-ouro-xl border border-border bg-card [--ouro-scroller-surface:var(--card)] text-card-foreground [&>li:not(:last-child)]:border-b [&>li]:border-border " +
     outlineEnds +
     " [&_[data-ouro=item]]:rounded-none [&_[data-ouro=item]]:border-0 [&_[data-ouro=item]]:px-4",
   plain: `[&_[data-ouro=item]]:rounded-none [&_[data-ouro=item]]:border-0 [&_[data-ouro=item]]:px-0 ${choosable}`,

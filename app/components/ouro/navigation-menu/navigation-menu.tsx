@@ -154,7 +154,7 @@ const chevron = cn("inline-flex motion-safe:transition-[rotate] motion-safe:dura
 // Reduced motion keeps only the fade.
 const positioner = "box-border h-(--positioner-height) w-(--positioner-width) max-w-(--available-width)";
 const popup = cn(
-  "relative box-border h-(--popup-height) w-(--popup-width) origin-(--transform-origin) rounded-ouro-lg bg-popover text-popover-foreground outline-none " +
+  "relative box-border h-(--popup-height) w-(--popup-width) origin-(--transform-origin) rounded-ouro-lg bg-popover text-popover-foreground [--ouro-scroller-surface:var(--popover)] outline-none " +
   "ring-1 ring-border/60 shadow-(--shadow-lg) " +
   "transition-opacity duration-(--ouro-duration-base) data-starting-style:opacity-0 data-ending-style:opacity-0 data-ending-style:duration-(--ouro-duration-fast) " +
     "motion-safe:transition-[opacity,scale] motion-safe:data-starting-style:scale-96 motion-safe:data-ending-style:scale-96",

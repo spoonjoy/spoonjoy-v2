@@ -370,6 +370,26 @@ describe("Collapsible's title width", () => {
   });
 });
 
+describe("Collapsible in a bordered container, under forced colours", () => {
+  it("drops the container's own edge, since each trigger inside already draws its own (#3187)", async () => {
+    try {
+      const view = await render(
+        <div style={{ border: "1px solid black" }} className="forced-colors:border-0!" data-test-surface="">
+          <Collapsible title="Equipment">A heavy pot with a lid, and tongs.</Collapsible>
+        </div>,
+      );
+      const surface = view.host.querySelector<HTMLElement>("[data-test-surface]")!;
+      await commands.emulateMedia({ forcedColors: "active" });
+      expect(matchMedia("(forced-colors: active)").matches).toBe(true);
+      // The container's own edge is gone, so only the trigger's edge remains: it is not doubled.
+      expect(parseFloat(getComputedStyle(surface).borderTopWidth)).toBe(0);
+      expect(parseFloat(getComputedStyle(view.trigger).borderTopWidth)).toBeGreaterThan(0);
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+});
+
 describe("Collapsible development messages", () => {
   it.each([
     ["trigger", { trigger: <button>Open</button> }, "trigger is not a prop", '<Collapsible title="Nutrition facts">'],

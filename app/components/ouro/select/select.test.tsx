@@ -145,7 +145,7 @@ afterEach(async () => {
   for (const node of mounted) node.remove();
   mounted = [];
   await resizeTo(414, 896);
-  await commands.emulateMedia({ reducedMotion: "no-preference" });
+  await commands.resetMedia();
 });
 
 describe("Select", () => {

@@ -72,7 +72,8 @@ const viewports = {
 const verticalFade =
   "data-ouro-scroll-fade-y:[mask-image:linear-gradient(to_bottom,transparent,#000_min(var(--scroll-area-overflow-y-start),2rem),#000_calc(100%-min(var(--scroll-area-overflow-y-end),2rem)),transparent)]"; // fade-ok: fades a scrolling list of rows, not a picture
 
-const focusable = "a[href],button,input,select,textarea,summary,[tabindex]:not([tabindex='-1']),[contenteditable='true']";
+const focusable =
+  "a[href],button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary,[tabindex]:not([tabindex='-1']),[contenteditable='true']";
 
 /**
  * Makes the viewport a tab stop while its content overflows, so a keyboard user can scroll it, and
@@ -84,7 +85,13 @@ function useScrollTabStop(viewportRef: { current: HTMLDivElement | null }): void
   useEffect(() => {
     const viewport = viewportRef.current!;
     const update = () => {
-      viewport.tabIndex = viewport.scrollHeight > viewport.clientHeight || viewport.scrollWidth > viewport.clientWidth ? 0 : -1;
+      const scrollsAtAll = viewport.scrollHeight > viewport.clientHeight || viewport.scrollWidth > viewport.clientWidth;
+      // Content inside can already take focus and scroll the viewport to it, so the viewport itself
+      // needs no extra tab stop; axe's scrollable-region-focusable is satisfied either way. Writing
+      // tabIndex is itself a tabindex mutation the observer below watches, so skip the write once the
+      // value already holds, or setting it would retrigger the observer without end.
+      const stop = scrollsAtAll && !viewport.querySelector(focusable) ? 0 : -1;
+      if (viewport.tabIndex !== stop) viewport.tabIndex = stop;
       const hidden = viewport.scrollHeight - viewport.clientHeight;
       const start = Math.max(0, viewport.scrollTop);
       const end = Math.max(0, hidden - start);
@@ -103,10 +110,16 @@ function useScrollTabStop(viewportRef: { current: HTMLDivElement | null }): void
     observer.observe(viewport);
     observer.observe(viewport.firstElementChild!);
     viewport.addEventListener("scroll", update);
+    // Content can gain or lose focusable elements with no resize (a disabled button turning
+    // enabled), which changes whether the viewport itself still needs the tab stop.
+    const content = new MutationObserver(update);
+    content.observe(viewport, { childList: true, subtree: true, attributes: true, attributeFilter: ["tabindex", "disabled", "href"] });
     // Stryker disable next-line BlockStatement,CallExpression,StringLiteral: cleanup only releases listeners on an element that is going away, which nothing can observe
     return () => {
       // Stryker disable next-line CallExpression: cleanup only releases an observer on an element that is going away, which nothing can observe
       observer.disconnect();
+      // Stryker disable next-line CallExpression: cleanup only releases an observer on an element that is going away, which nothing can observe
+      content.disconnect();
       // Stryker disable next-line CallExpression,StringLiteral: cleanup only releases a listener on an element that is going away, which nothing can observe
       viewport.removeEventListener("scroll", update);
     };
@@ -152,6 +165,12 @@ function useUnnamedRegionCheck(viewportRef: { current: HTMLDivElement | null }, 
  * (pixels hidden), so a parent can draw a hairline once it is scrolled from the start. Its focus ring
  * is drawn over the content, so a header that sticks to the top never hides an edge of it.
  *
+ * The viewport paints `--ouro-scroller-surface`, the fill of the surface behind it (the page's
+ * `--background` by default; Card, Popover, Menu, Select, Combobox, Dialog and Sheet set their own), because
+ * Chromium on Windows keeps a see-through scroller off the compositor where LCD text is on, and repaints
+ * it on every scroll frame (ourostack/ouro-ui#2891). Where the scroller sits on any other fill, set
+ * the token on it (`[--ouro-scroller-surface:var(--muted)]`); on glass, set it to `transparent`.
+ *
  * Use plain page scrolling instead for a page's main content, and `Dialog` or `Sheet`,
  * which scroll their own bodies, for long content in an overlay.
  *
@@ -166,6 +185,7 @@ function useUnnamedRegionCheck(viewportRef: { current: HTMLDivElement | null }, 
  *   <Row gap="sm">{tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}</Row>
  * </ScrollArea>
  * @claim "Content wider than the area fades out" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > fades out at the side that hides more, drawing its focus ring over the fade, and keeps keyboard scrolling)
+ * @claim "The viewport paints `--ouro-scroller-surface`" registry/ouro/components/ouro/scroll-area/scroll-area.surface.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.surface.test.tsx::ScrollArea surface > follows the token an app sets on the surface behind it)
  * @claim "Its focus ring is drawn over the content" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > draws its focus ring whole over content that sticks to an edge, and leaves the pointer to the content)
  * @claim "It keeps the browser's own scrolling" registry/ouro/components/ouro/scroll-area/scroll-area.touch.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.touch.test.tsx::leaves touch scrolling to the browser: the viewport is a native scroll container)
  * @claim "It keeps the browser's own scrolling" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > draws a thin native scrollbar in the theme's muted color, and scrolls only the way it is asked to)
@@ -218,7 +238,7 @@ export function ScrollArea(props: ScrollAreaProps): JSX.Element {
         aria-label={label}
         // While focused, isolate keeps the content's own stacking (a sticky header's z-index) inside the viewport, under the
         // focus ring. Only then: at rest the content stacks with the page, as it always has.
-        className={cn("peer min-h-0 focus-visible:isolate flex-1 rounded-[inherit] outline-none", viewports[orientation], scrollbar, scrollFadeClass, fadeY, contain && "overscroll-contain")}
+        className={cn("peer min-h-0 bg-(--ouro-scroller-surface) focus-visible:isolate flex-1 rounded-[inherit] outline-none", viewports[orientation], scrollbar, scrollFadeClass, fadeY, contain && "overscroll-contain")}
       >
         <div className={orientation === "vertical" ? "min-w-0" : "min-w-fit"}>{children}</div>
       </div>

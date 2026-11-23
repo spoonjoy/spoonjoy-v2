@@ -271,6 +271,88 @@ describe("ScrollArea", () => {
     expect(host.contains(viewport)).toBe(true);
   });
 
+  it("gives no extra tab stop to a scrolling area whose content holds buttons, but keeps one for plain text", async () => {
+    const { viewport: withButtons } = await render(
+      <ScrollArea className="h-40">
+        {lines.map((line) => (
+          <Button key={line}>{line}</Button>
+        ))}
+      </ScrollArea>,
+    );
+    await expect.poll(() => withButtons.scrollHeight).toBeGreaterThan(withButtons.clientHeight);
+    expect(withButtons.tabIndex).toBe(-1);
+    const { viewport: plainText } = await render(<ScrollArea className="h-40">{tall}</ScrollArea>);
+    await expect.poll(() => plainText.tabIndex).toBe(0);
+  });
+
+  it("drops the tab stop once a button is added to content that scrolled with none", async () => {
+    const { viewport, area } = await render(<ScrollArea className="h-40">{tall}</ScrollArea>);
+    await expect.poll(() => viewport.tabIndex).toBe(0);
+    await act(async () => {
+      viewport.prepend(area.ownerDocument.createElement("button"));
+    });
+    await expect.poll(() => viewport.tabIndex).toBe(-1);
+  });
+
+  it("follows a disabled button turning enabled, with no resize", async () => {
+    const { viewport, area } = await render(
+      <ScrollArea className="h-40">
+        <button disabled>Go</button>
+        {tall}
+      </ScrollArea>,
+    );
+    await expect.poll(() => viewport.tabIndex).toBe(0);
+    const button = area.querySelector("button")!;
+    await act(async () => {
+      button.disabled = false;
+    });
+    await expect.poll(() => viewport.tabIndex).toBe(-1);
+    await act(async () => {
+      button.disabled = true;
+    });
+    await expect.poll(() => viewport.tabIndex).toBe(0);
+  });
+
+  it("follows a link gaining or losing its href, with no resize", async () => {
+    const { viewport, area } = await render(
+      <ScrollArea className="h-40">
+        <a>Go</a>
+        {tall}
+      </ScrollArea>,
+    );
+    await expect.poll(() => viewport.tabIndex).toBe(0);
+    const link = area.querySelector("a")!;
+    await act(async () => {
+      link.setAttribute("href", "#top");
+    });
+    await expect.poll(() => viewport.tabIndex).toBe(-1);
+    await act(async () => {
+      link.removeAttribute("href");
+    });
+    await expect.poll(() => viewport.tabIndex).toBe(0);
+  });
+
+  it("follows a tabindex added to or removed from plain content, with no resize", async () => {
+    const { viewport, area } = await render(
+      <ScrollArea className="h-40">
+        <div data-testid="probe" tabIndex={-1}>
+          Go
+        </div>
+        {tall}
+      </ScrollArea>,
+    );
+    await expect.poll(() => viewport.tabIndex).toBe(0);
+    const div = area.querySelector('[data-testid="probe"]')!;
+    await act(async () => {
+      div.setAttribute("tabindex", "0");
+    });
+    await expect.poll(() => viewport.tabIndex).toBe(-1);
+    await act(async () => {
+      div.setAttribute("tabindex", "-1");
+    });
+    await expect.poll(() => viewport.tabIndex).toBe(0);
+  });
+
   it("lets the page scroll on once the area reaches its end, unless contain is set", async () => {
     const { viewport } = await render(
       <ScrollArea className="h-40" label="Method">
@@ -325,7 +407,9 @@ describe("ScrollArea development messages", () => {
 
   it.each([
     ["a label", 0, <ScrollArea className="h-40" label="Method">{tall}</ScrollArea>],
-    ["a focusable child", 0, <ScrollArea className="h-40"><a href="#top">Top</a>{tall}</ScrollArea>],
+    // A focusable child can already take focus and scroll the viewport to it, so the viewport
+    // itself needs no tab stop of its own, and so no name either.
+    ["a focusable child", -1, <ScrollArea className="h-40"><a href="#top">Top</a>{tall}</ScrollArea>],
     ["content that fits", -1, <ScrollArea className="h-40"><p>Short</p></ScrollArea>],
   ] as const)("does not ask for a name with %s", async (_name, tabIndex, node) => {
     const { viewport } = await render(node);
