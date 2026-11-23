@@ -1,7 +1,7 @@
 import type { Route } from "./+types/households.$id";
 import { useState } from "react";
 import { Ellipsis } from "lucide-react";
-import { Form as RouterForm, data, redirect, useActionData, useLoaderData, useSubmit } from "react-router";
+import { Form as RouterForm, data, redirect, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Badge } from "~/components/ouro/badge/badge";
@@ -15,6 +15,7 @@ import { Link } from "~/components/ouro/link/link";
 import { Menu, MenuItem, MenuRadioGroup, MenuRadioItem } from "~/components/ouro/menu/menu";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { SectionHeader } from "~/components/ouro/section-header/section-header";
+import { Spinner } from "~/components/ouro/spinner/spinner";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { Text } from "~/components/ouro/text/text";
 import { TextField } from "~/components/ouro/text-field/text-field";
@@ -107,6 +108,10 @@ export default function HouseholdPage() {
     ? { inviteUrl: actionData.inviteUrl, invitedAs: actionData.invitedAs, inviteDays: actionData.inviteDays }
     : null;
   const submit = useSubmit();
+  // The person whose role change or removal the server is still deciding. Their row keeps the role it has, with a
+  // spinner, until the answer comes back: the new role, or the reason in the alert above and the old role kept.
+  const navigation = useNavigation();
+  const savingFor = navigation.state !== "idle" ? navigation.formData?.get("targetId") : null;
   const [removing, setRemoving] = useState<{ userId: string; username: string } | null>(null);
   // Choosing a role keeps a menu open by default; this one closes once the role is sent.
   const [menuFor, setMenuFor] = useState<string | null>(null);
@@ -139,7 +144,9 @@ export default function HouseholdPage() {
                     <Badge tone={member.role === "owner" ? "primary" : "secondary"} variant="soft">
                       {member.roleLabel}
                     </Badge>
-                    {household.canManage && !member.me ? (
+                    {savingFor === member.userId ? (
+                      <Spinner size="sm" label="Saving" />
+                    ) : household.canManage && !member.me ? (
                       <Menu
                         open={menuFor === member.userId}
                         onOpenChange={(open) => setMenuFor(open ? member.userId : null)}

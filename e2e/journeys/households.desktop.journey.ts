@@ -94,6 +94,9 @@ test.describe("Households", () => {
       await page.getByRole("button", { name: `Actions for ${joiner.username}`, exact: true }).click();
       // Reload only once the change is saved: a reload that wins the race against the POST would drop it.
       await Promise.all([saved(page, householdPath), page.getByRole("menuitemradio", { name: "View-only", exact: true }).click()]);
+      // The row shows the role the server confirmed, without a reload.
+      await expect(people(page).getByText("View-only", { exact: true })).toBeVisible();
+      await expect(people(page).getByRole("status", { name: "Saving" })).toHaveCount(0);
       await verifyAfterReload(async () => {
         await expect(people(page).getByText("View-only", { exact: true })).toBeVisible();
       });
@@ -107,6 +110,7 @@ test.describe("Households", () => {
       await expectAccessible();
       await attachScreenshot(testInfo, page, "owner-remove-dialog");
       await Promise.all([saved(page, householdPath), confirm.getByRole("button", { name: "Remove", exact: true }).click()]);
+      await expect(people(page).getByText(joiner.username, { exact: true })).toHaveCount(0);
       await verifyAfterReload(async () => {
         await expect(people(page).getByText(joiner.username, { exact: true })).toHaveCount(0);
       });
