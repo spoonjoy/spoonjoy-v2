@@ -1,7 +1,8 @@
 // Organizers on recipes (organizers flag, on in QA), as per-run scratch user 1, whose area is recipe editing: a cook
 // makes a recipe, gives it tags, a category and a tool from Organize in the recipe menu, and finds them on the recipe's
 // Organize page, on a tag's own page, in the list of their tags and in the list of their categories, each after a
-// reload; then filters My recipes to the recipe by one of its tags and leaves it out by its tool. Both device projects run at the same time as the same scratch user, so the recipe and every organizer carry
+// reload; then filters My recipes to the recipe by one of its tags and leaves it out by its tool; and last renames a
+// tag, merges the other into it and deletes it from the tag's page. Both device projects run at the same time as the same scratch user, so the recipe and every organizer carry
 // the project name and a timestamp.
 import type { Page, TestInfo } from "@playwright/test";
 import { test, expect } from "./support/journey";
@@ -23,8 +24,8 @@ async function attachScreenshot(page: Page, testInfo: TestInfo, name: string): P
 test.describe("Organizers", () => {
   test.use({ storageState: scratchStorageStatePath(1) });
 
-  test("a cook organizes a recipe, finds it under each tag and category, and filters My recipes by them after a reload @mutates", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
-    test.setTimeout(150_000);
+  test("a cook organizes a recipe, finds it under each tag and category, filters My recipes by them, and renames, merges and deletes a tag, each after a reload @mutates", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
+    test.setTimeout(180_000);
     const suffix = `${testInfo.project.name} ${Date.now().toString(36)}`;
     const title = `Journey Tagged Soup ${suffix}`;
     const cozy = `Cozy ${suffix}`;
@@ -124,5 +125,48 @@ test.describe("Organizers", () => {
       await expect(page.getByRole("button", { name: "Filter (2)", exact: true })).toBeVisible();
     });
     await attachScreenshot(page, testInfo, "my-recipes-without-tool-after-reload");
+
+    // Rename a tag from its page.
+    const snug = `Snug ${suffix}`;
+    await page.goto("/tags");
+    await waitForHydration(page);
+    await yourTags.getByRole("link", { name: cozy, exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1, name: cozy, exact: true })).toBeVisible();
+    await waitForHydration(page);
+    const rename = page.getByRole("form", { name: "Rename this tag", exact: true });
+    await rename.getByLabel("Name", { exact: true }).fill(snug);
+    await rename.getByRole("button", { name: "Rename", exact: true }).click();
+    await verifyAfterReload(async () => {
+      await expect(page.getByRole("heading", { level: 1, name: snug, exact: true })).toBeVisible();
+    });
+    await expectAccessible();
+    await attachScreenshot(page, testInfo, "tag-renamed-after-reload");
+
+    // Merge the other tag into it: the recipe is still under the kept one, and the merged one is gone.
+    await page.goto("/tags");
+    await waitForHydration(page);
+    await yourTags.getByRole("link", { name: quick, exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1, name: quick, exact: true })).toBeVisible();
+    await waitForHydration(page);
+    const merge = page.getByRole("form", { name: "Merge this tag", exact: true });
+    await merge.getByLabel("Merge into", { exact: true }).selectOption({ label: snug });
+    await merge.getByRole("button", { name: "Merge", exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1, name: snug, exact: true })).toBeVisible();
+    await verifyAfterReload(async () => {
+      await expect(page.getByRole("list", { name: `Recipes tagged ${snug}`, exact: true }).getByRole("link", { name: title })).toBeVisible();
+    });
+    await attachScreenshot(page, testInfo, "tag-merged-after-reload");
+
+    // Delete it, after saying yes: the list no longer has either.
+    await waitForHydration(page);
+    await page.getByRole("button", { name: "Delete tag", exact: true }).click();
+    await page.getByRole("alertdialog", { name: `Delete ${snug}?`, exact: true }).getByRole("button", { name: "Delete it", exact: true }).click();
+    await expect(page).toHaveURL(pathUrl("/tags"));
+    await verifyAfterReload(async () => {
+      await expect(page.getByRole("heading", { level: 1, name: "Your tags", exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: snug, exact: true })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: quick, exact: true })).toHaveCount(0);
+    });
+    await attachScreenshot(page, testInfo, "tag-deleted-after-reload");
   });
 });
