@@ -54,6 +54,7 @@ model User {
   cookingNow               CookingNow[]
   mealPlan                 MealPlan?
   plannedEntries           PlanEntry[]
+  organizers               Organizer[]
   contentReports           ContentReport[]
   blocksMade               ChefBlock[]               @relation("ChefBlocker")
   blocksReceived           ChefBlock[]               @relation("ChefBlocked")
@@ -481,6 +482,7 @@ model Recipe {
   covers             RecipeCover[]      @relation("RecipeCoverHistory")
   cookingNow         CookingNow[]
   planEntries        PlanEntry[]
+  organizers         RecipeOrganizer[]
   activeCoverId      String?
   activeCover        RecipeCover?       @relation("RecipeActiveCover", fields: [activeCoverId], references: [id], onDelete: SetNull)
   activeCoverVariant String?
@@ -613,6 +615,35 @@ model RecipeInCookbook {
   @@index([addedById])
   @@index([cookbookId, recipeId])
   @@index([addedById, recipeId])
+}
+
+// The tags, categories and tools a cook sorts recipes by (migration 0043, app/domains/kitchen). The
+// slug is unique per owner and kind; householdId is set once households share organizers.
+model Organizer {
+  id          String            @id @default(cuid())
+  ownerId     String
+  owner       User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  householdId String?
+  kind        String
+  name        String
+  slug        String
+  recipes     RecipeOrganizer[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @default(now()) @updatedAt
+
+  @@unique([ownerId, kind, slug])
+  @@index([householdId])
+}
+
+model RecipeOrganizer {
+  recipeId    String
+  recipe      Recipe    @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  organizerId String
+  organizer   Organizer @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@id([recipeId, organizerId])
+  @@index([organizerId])
 }
 
 model ShoppingList {
