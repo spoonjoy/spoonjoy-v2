@@ -1,0 +1,44 @@
+name: Merge Queue Sweep
+
+# Cancels merge-queue runs whose group the queue has replaced, so they stop holding runners the
+# current groups are waiting for (scripts/cancel-stale-queue-runs.mjs). It runs whenever the queue
+# starts a group, which is when old groups go stale, and every ten minutes to catch a run that was
+# too new to judge the first time. It only cancels merge_group runs whose head commit is no current
+# queue entry's head commit, so it never touches pull request, push or deploy runs.
+on:
+  merge_group:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: merge-queue-sweep
+  cancel-in-progress: true
+
+jobs:
+  sweep:
+    if: github.repository == 'spoonjoy/spoonjoy-v2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/cancel-stale-queue-runs.mjs
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: Cancel stale merge-queue runs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MERGE_QUEUE_BRANCH: main
+        run: node scripts/cancel-stale-queue-runs.mjs
