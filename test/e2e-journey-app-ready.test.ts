@@ -37,6 +37,10 @@ describe("isTransportFailure", () => {
     "page.goto: net::ERR_CONNECTION_RESET at https://example.test/",
     "page.reload: net::ERR_CONNECTION_CLOSED",
     "page.goto: net::ERR_SSL_PROTOCOL_ERROR at https://example.test/",
+    // Playwright's own crash when the connection drops before the TLS peer certificate arrives
+    // (#666: Journeys runs 43057324617 and 43081308988).
+    "page.reload: Cannot read properties of null (reading 'valid_from')",
+    "TypeError: Cannot read properties of null (reading 'valid_from')",
   ])("is a load whose connection was cut: %s", (message) => {
     expect(isTransportFailure(new Error(message))).toBe(true);
   });
@@ -354,6 +358,7 @@ describe("isFetchTransportFailure", () => {
     "write EPIPE",
     "socket hang up",
     "Client network socket disconnected before secure TLS connection was established",
+    "route.fetch: Cannot read properties of null (reading 'valid_from')",
   ])("is a request whose connection dropped: %s", (message) => {
     expect(isFetchTransportFailure(new Error(message))).toBe(true);
   });
@@ -364,6 +369,7 @@ describe("isFetchTransportFailure", () => {
     ["a refused connection", new Error("connect ECONNREFUSED 127.0.0.1:443")],
     ["a closed page", new Error("Target page, context or browser has been closed")],
     ["a drop mentioned only after the first line", new Error("Request context disposed.\n  - read ECONNRESET")],
+    ["another null read", new TypeError("Cannot read properties of null (reading 'status')")],
     ["something that is not an Error", "read ECONNRESET"],
   ])("is not %s", (_label, error) => {
     expect(isFetchTransportFailure(error)).toBe(false);
