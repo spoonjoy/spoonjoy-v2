@@ -95,6 +95,15 @@ describe("tags on recipes", () => {
     expect(await db.organizer.count()).toBe(0);
   });
 
+  it("refuse a tag longer than a tag can be, instead of dropping it", async () => {
+    const chef = await createDrawerUser("tags-long");
+    const recipe = await createDrawerRecipe({ chefId: chef.id, title: "Long soup" });
+    const path = `/recipes/${recipe.id}/tags`;
+    const long = await recipeTagsAction({ request: await signedIn(path, chef.id, tagForm(`Fine, ${"x".repeat(61)}`)), context: ON, params: { id: recipe.id } } as never);
+    expect(long).toMatchObject({ data: { error: "Keep each tag to 60 characters or fewer." }, init: { status: 400 } });
+    expect(await db.organizer.count()).toBe(0);
+  });
+
   it("list the cook's tags with their recipe counts, and open a tag's page with its recipes", async () => {
     const chef = await createDrawerUser("tags-list");
     const soup = await createDrawerRecipe({ chefId: chef.id, title: "Lentil soup", description: "Warming" });

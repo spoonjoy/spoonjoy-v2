@@ -48,7 +48,7 @@ export default function TagsIndex() {
             className="mt-6"
             icon={<Tag aria-hidden="true" />}
             title="No tags yet"
-            description="Open one of your recipes, choose Manage recipe, then Tags."
+            description="Open one of your recipes and choose Tags from its ⋯ menu."
           />
         )}
       </div>

@@ -46,10 +46,10 @@ const PAGER_DISHES = [
   "Garlic Roast Chicken", "Sesame Greens", "Harissa Roast Carrots", "Mushroom Barley Pilaf",
   "Chili Crisp Eggs", "Za'atar Flatbread", "Tamarind Lentils", "Maple Butter Squash",
 ];
-// Words other journeys search for; no fixture title or step may contain one.
 // The one tag the seed gives chef, on Lemon Herb Rice.
 export const QA_KITCHEN_TAG = Object.freeze({ id: "qa-kitchen-tag-weeknight", name: "Weeknight", slug: "weeknight" });
 
+// Words other journeys search for; no fixture title or step may contain one.
 export const PAGER_FORBIDDEN_WORDS = ["saffron", "lemon", "arborio", "tomato", "risotto", "salmon", "rice", "soup", "herb", "miso"];
 // 2020-01-01T00:00Z: fixture recipe n is dated n minutes later, all older than anything else.
 const PAGER_EPOCH_MS = Date.UTC(2020, 0, 1);

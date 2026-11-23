@@ -9,7 +9,7 @@ import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Text } from "~/components/ouro/text/text";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { CookbookPage } from "~/components/cookbook/page";
-import { organizersOnRecipe, organizersRequest, setRecipeOrganizers, tagNamesFromInput } from "~/domains/kitchen";
+import { ORGANIZER_NAME_MAX_LENGTH, organizersOnRecipe, organizersRequest, setRecipeOrganizers, tagNamesFromInput } from "~/domains/kitchen";
 import { OBJECTIONABLE_CONTENT_MESSAGE, containsObjectionableContent } from "~/lib/objectionable-terms";
 
 export function meta({ data }: Route.MetaArgs) {
@@ -36,6 +36,9 @@ export async function action({ request, context, params }: Route.ActionArgs) {
   const names = tagNamesFromInput((await request.formData()).get("tags"));
   if (names.some((name) => containsObjectionableContent(name))) {
     return data({ error: OBJECTIONABLE_CONTENT_MESSAGE }, { status: 400 });
+  }
+  if (names.some((name) => name.trim().length > ORGANIZER_NAME_MAX_LENGTH)) {
+    return data({ error: `Keep each tag to ${ORGANIZER_NAME_MAX_LENGTH} characters or fewer.` }, { status: 400 });
   }
   const result = await setRecipeOrganizers(store, userId, params.id, "tag", names);
   if (!result.ok) notFound();
