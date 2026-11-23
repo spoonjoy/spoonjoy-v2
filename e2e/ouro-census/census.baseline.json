@@ -4582,7 +4582,7 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 1
+          "count": 2
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -4636,6 +4636,10 @@
         },
         {
           "identity": "link \"Download my data\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Households\" [button/root] in main",
           "count": 1
         },
         {
@@ -4694,6 +4698,10 @@
         },
         {
           "identity": "link \"Download my data\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Households\" [button/root] in main",
           "count": 1
         },
         {
