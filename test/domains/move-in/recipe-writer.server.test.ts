@@ -86,7 +86,7 @@ describe("writeMovedInRecipe", () => {
 
   it("adds nothing when the same recipe moves in again", async () => {
     const first = await write(draft());
-    expect(await write(draft(), "job-2")).toEqual({ outcome: "unchanged", recipeId: first.recipeId });
+    expect(await write(draft(), "job-2")).toEqual({ outcome: "unchanged", recipeId: first.recipeId, jobId: "job-1" });
     expect(all(`SELECT "id" FROM "Recipe"`)).toHaveLength(1);
     expect(all(`SELECT "id" FROM "Ingredient"`)).toHaveLength(4);
   });
@@ -155,7 +155,7 @@ describe("writeMovedInRecipe", () => {
           VALUES ('record', 'source-1', 'recipes', 'recipe-1', 'Recipe', 'theirs', 'job-0')`).run();
       });
       const result = await writeMovedInRecipe({ db: db as never, sourceId: "source-1", jobId: "job-1", chefId: "chef-1", draft: draft(), now });
-      expect(result).toEqual({ outcome: "unchanged", recipeId: "theirs" });
+      expect(result).toEqual({ outcome: "unchanged", recipeId: "theirs", jobId: "job-0" });
       expect(all(`SELECT "id" FROM "Recipe"`)).toEqual([{ id: "theirs" }]);
     });
 

@@ -29,7 +29,7 @@ export interface WriteMovedInRecipeInput {
 
 export type WriteMovedInRecipeResult =
   | { outcome: "created"; recipeId: string; title: string; warnings: string[] }
-  | { outcome: "unchanged"; recipeId: string }
+  | { outcome: "unchanged"; recipeId: string; jobId: string }
   | { outcome: "skipped"; recipeId: string; reason: string };
 
 interface SpoonjoyIngredient {
@@ -77,7 +77,7 @@ async function freeTitle(db: D1ReadDatabase, chefId: string, title: string): Pro
 
 async function existing(db: D1ReadDatabase, sourceId: string, sourceKey: string): Promise<WriteMovedInRecipeResult | null> {
   const [[record]] = await d1ReadBatch(db, [[
-    `SELECT "SourceRecord"."targetId" AS "recipeId", "Recipe"."id" AS "liveId" FROM "SourceRecord"
+    `SELECT "SourceRecord"."targetId" AS "recipeId", "SourceRecord"."lastJobId" AS "jobId", "Recipe"."id" AS "liveId" FROM "SourceRecord"
      LEFT JOIN "Recipe" ON "Recipe"."id" = "SourceRecord"."targetId" AND "Recipe"."deletedAt" IS NULL
      WHERE "SourceRecord"."sourceId" = ? AND "SourceRecord"."sourceTable" = ? AND "SourceRecord"."sourceKey" = ?`,
     sourceId,
@@ -87,7 +87,7 @@ async function existing(db: D1ReadDatabase, sourceId: string, sourceKey: string)
   if (!record) return null;
   const recipeId = String(record.recipeId);
   return record.liveId
-    ? { outcome: "unchanged", recipeId }
+    ? { outcome: "unchanged", recipeId, jobId: String(record.jobId) }
     : { outcome: "skipped", recipeId, reason: "You deleted this recipe in Spoonjoy after it moved in." };
 }
 

@@ -75,6 +75,13 @@ describe("sweepMoveInArchives", () => {
     expect(progress?.events.at(-1)).toMatchObject({ kind: "job-failed", level: "error", message: expect.stringMatching(/^This move-in went a day/) });
   });
 
+  it("leaves a quiet job alone while a run has just taken it", async () => {
+    const id = await job("pending-uploads/move-in/chef-1/back.zip");
+    await moveInJobStore(database.binding, () => start).claim(id, at(MOVE_IN_ABANDONED_MS - 1000));
+    const bucket = memoryBucket({ "pending-uploads/move-in/chef-1/back.zip": start });
+    expect(await sweepMoveInArchives({ db: database.binding, bucket, now: at(MOVE_IN_ABANDONED_MS) })).toEqual({ deleted: 0, expired: 0 });
+  });
+
   it("reads every page of a long listing", async () => {
     const objects = Object.fromEntries(Array.from({ length: 3 }, (_, i) => [`pending-uploads/move-in/gone/${i}.zip`, start]));
     const bucket = memoryBucket(objects);
