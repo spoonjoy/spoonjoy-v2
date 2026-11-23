@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bytesSource } from "~/domains/move-in/adapters/archive/zip";
 import {
+  runForAWhile,
   runNextChunk,
   type MoveInCounts,
   type MoveInEvent,
@@ -30,6 +31,7 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
   const sources: Array<Record<string, unknown>> = [];
   const written = new Map<string, string>();
   const photos: Array<{ recipeId: string; bytes: Uint8Array }> = [];
+  const discarded: string[] = [];
   const ports: MoveInPorts = {
     store: {
       loadJob: async (id) => jobs.get(id) ?? null,
@@ -51,6 +53,7 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
       return { outcome: "created", recipeId: `spoonjoy-${draft.sourceKey}`, title: draft.title, warnings: draft.warnings };
     }),
     attachPhoto: async ({ recipeId, bytes }) => void photos.push({ recipeId, bytes }),
+    discardArchive: async (job) => void discarded.push(job.archiveKey as string),
     now: () => new Date("2026-11-23T12:00:00.000Z"),
   };
   const job = () => jobs.get("job-1") as MoveInJob;
@@ -58,7 +61,7 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
     for (let i = 0; i < 20 && !["done", "done-with-issues", "failed"].includes(job().status); i++) await runNextChunk("job-1", ports, { chunkSize });
     return job();
   };
-  return { ports, jobs, job, counts, events, sources, photos, runAll };
+  return { ports, jobs, job, counts, events, sources, photos, discarded, runAll };
 }
 
 describe("runNextChunk", () => {
@@ -88,6 +91,7 @@ describe("runNextChunk", () => {
       "This recipe had no name, so it's called \"Untitled recipe\".",
     ]);
     expect(h.events.at(-1)).toMatchObject({ kind: "job-done", message: "3 recipes moved in." });
+    expect(h.discarded).toEqual(["uploads/job-1.zip"]);
   });
 
   it("calls a move-in with nothing to note done", async () => {
@@ -130,6 +134,13 @@ describe("runNextChunk", () => {
     const h = harness({ zip: new TextEncoder().encode("this is not a zip file at all") });
     expect(await h.runAll()).toMatchObject({ status: "failed", lastError: "broken-zip" });
     expect(h.events.at(-1)).toMatchObject({ level: "error", kind: "job-failed" });
+    expect(h.discarded).toEqual(["uploads/job-1.zip"]);
+  });
+
+  it("finishes even when the upload can't be deleted", async () => {
+    const h = harness();
+    h.ports.discardArchive = () => Promise.reject(new Error("R2 is down"));
+    expect(await h.runAll()).toMatchObject({ status: "done-with-issues", phase: "done" });
   });
 
   it("asks which kitchen when the backup holds several and the email matches none", async () => {
@@ -175,3 +186,23 @@ describe("runNextChunk", () => {
     expect(h.job()).toMatchObject({ status: "running", phase: "inspect" });
   });
 });
+
+describe("runForAWhile", () => {
+  it("runs chunks until the move-in finishes", async () => {
+    const h = harness();
+    h.ports.openArchive = async () => bytesSource(backup());
+    expect(await runForAWhile("job-1", h.ports, { budgetMs: 60_000, chunkSize: 1 })).toMatchObject({ status: "done-with-issues" });
+  });
+
+  it("stops when its time is up and leaves the job to resume", async () => {
+    const h = harness();
+    let ms = 0;
+    h.ports.now = () => new Date((ms += 1000));
+    expect(await runForAWhile("job-1", h.ports, { budgetMs: 2500, chunkSize: 1 })).toMatchObject({ status: "running", phase: "recipes", cursor: "2" });
+  });
+
+  it("returns null for a job that isn't there", async () => {
+    expect(await runForAWhile("nope", harness().ports, { budgetMs: 1000 })).toBeNull();
+  });
+});
+
