@@ -875,7 +875,7 @@ model PhotoSweepRun {
   @@index([startedAt])
 }
 
-// Move-in (app/domains/move-in, migrations/0040_move_in.sql): a kitchen moving in from another app.
+// Move-in (app/domains/move-in, migrations/0041_move_in.sql): a kitchen moving in from another app.
 model ImportSource {
   id            String         @id
   ownerId       String
@@ -901,9 +901,10 @@ model ImportJob {
   kind        String
   sourceId    String?
   source      ImportSource?       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  // queued, running, done, done-with-issues, failed or cancelled.
+  // queued, running, done, done-with-issues or failed.
   status      String              @default("queued")
-  phase       String              @default("receive")
+  // inspect, recipes or done.
+  phase       String              @default("inspect")
   // The phase's resume point, owned by the source adapter.
   cursor      String?
   archiveKey  String?
@@ -913,8 +914,10 @@ model ImportJob {
   startedAt   DateTime?
   finishedAt  DateTime?
   heartbeatAt DateTime?
+  // The run working on the job now; a run that lost its claim can no longer write the job.
+  claimToken  String?
   createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @default(now())
+  updatedAt   DateTime            @default(now()) @updatedAt
   counts      ImportEntityCount[]
   events      ImportEvent[]
 
