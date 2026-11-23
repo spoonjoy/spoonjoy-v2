@@ -2151,6 +2151,92 @@
       ]
     },
     "recipe-owner": {
+      "actions-menu": [
+        {
+          "identity": "button \"Add to list\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Log the first cook\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Recipe actions\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Serves 4\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Share\" [share-button/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
+          "count": 5
+        },
+        {
+          "identity": "checkbox \"Step 1: Cook the rice\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"chicken stock\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"jasmine rice\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"lemon\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"parsley\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Cook mode\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"qa_kitchen_chef\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "menuitem \"Delete\" [menu/item] in main",
+          "count": 1
+        },
+        {
+          "identity": "menuitem \"Edit\" [menu/item] in main",
+          "count": 1
+        },
+        {
+          "identity": "menuitem \"Log cook\" [menu/item] in main",
+          "count": 1
+        },
+        {
+          "identity": "menuitem \"Make a variation\" [menu/item] in main",
+          "count": 1
+        },
+        {
+          "identity": "menuitem \"Manage covers\" [menu/item] in main",
+          "count": 1
+        }
+      ],
       "cook-mode": [
         {
           "identity": "button \"Decrease scale\" [number-field/decrement] in region \"Cook the rice\"",
@@ -2229,25 +2315,95 @@
           "count": 1
         }
       ],
-      "default": [
+      "covers-dialog": [
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 6
+          "count": 5
         },
         {
-          "identity": "button \"\" [file-field/input] in main",
+          "identity": "button \"\" [share-button/trigger] in main",
           "count": 1
         },
+        {
+          "identity": "button \"Close\" [dialog/close] in dialog \"Manage covers\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Generate placeholder cover\" [button/root] in region \"Recipe covers\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Optional Spoon details\" [button/root] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Recipe photo\" [file-field/input] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Save photo\" [button/root] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Use this cover\" [button/root] in region \"Recipe covers\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in region \"Photos\"",
+          "count": 2
+        },
+        {
+          "identity": "checkbox \"\" [checklist/box] in main",
+          "count": 5
+        },
+        {
+          "identity": "checkbox \"\" [checklist/hidden-input] in main",
+          "count": 5
+        },
+        {
+          "identity": "checkbox \"Also log this as a cook\" [checkbox/box] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"Make a styled cover\" [checkbox/box] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "generic \"Photos Recipe covers\" [dialog/content] in dialog \"Manage covers\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [link/root] in main",
+          "count": 2
+        },
+        {
+          "identity": "link \"\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "radio \"No cover\" [choice-card/input] in group \"Active cover\"",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Editorial direction\" [text-field/input] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Placeholder direction\" [text-field/input] in region \"Recipe covers\"",
+          "count": 1
+        }
+      ],
+      "default": [
         {
           "identity": "button \"Add to list\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "button \"Log the first cook\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Manage recipe\" [collapsible/trigger] in main",
           "count": 1
         },
         {
@@ -2265,14 +2421,6 @@
         {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/box] in main",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
-          "count": 2
         },
         {
           "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
@@ -2299,10 +2447,6 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"Cook mode\" [button/root] in main",
           "count": 1
         },
@@ -2315,34 +2459,14 @@
           "count": 1
         },
         {
-          "identity": "link \"USDA FoodData Central\" [link/root] in region \"Nutrition\"",
-          "count": 1
-        },
-        {
           "identity": "link \"qa_kitchen_chef\" [link/root] in main",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [choice-card/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
-          "count": 2
         }
       ],
       "delete-dialog": [
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 11
-        },
-        {
-          "identity": "button \"\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [file-field/input] in main",
-          "count": 1
+          "count": 5
         },
         {
           "identity": "button \"\" [share-button/trigger] in main",
@@ -2357,14 +2481,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checkbox/box] in main",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
-          "count": 2
-        },
-        {
           "identity": "checkbox \"\" [checklist/box] in main",
           "count": 5
         },
@@ -2374,37 +2490,21 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [skip-link/root] in -",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [choice-card/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
-          "count": 2
         }
       ],
       "log-cook-dialog": [
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 11
-        },
-        {
-          "identity": "button \"\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [file-field/input] in main",
-          "count": 1
+          "count": 5
         },
         {
           "identity": "button \"\" [share-button/trigger] in main",
@@ -2427,14 +2527,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checkbox/box] in main",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
-          "count": 2
-        },
-        {
           "identity": "checkbox \"\" [checklist/box] in main",
           "count": 5
         },
@@ -2444,23 +2536,15 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [skip-link/root] in -",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [choice-card/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
-          "count": 2
         },
         {
           "identity": "textbox \"Cooked at\" [field/control] in dialog \"Log a cook\"",
@@ -2475,148 +2559,10 @@
           "count": 1
         }
       ],
-      "manage-open": [
-        {
-          "identity": "button \"Add to list\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Delete\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Generate placeholder cover\" [button/root] in region \"Recipe covers\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Log the first cook\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Make a variation\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Manage recipe\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Optional Spoon details\" [button/root] in region \"Photos\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Recipe actions\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Recipe photo\" [file-field/input] in region \"Photos\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Save photo\" [button/root] in region \"Photos\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Save\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Serves 4\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Share\" [share-button/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Use this cover\" [button/root] in region \"Recipe covers\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in region \"Photos\"",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"Also log this as a cook\" [checkbox/box] in region \"Photos\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"Make a styled cover\" [checkbox/box] in region \"Photos\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"Step 1: Cook the rice\" [checklist/box] in group \"Ingredients\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"chicken stock\" [checklist/box] in group \"Ingredients\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"jasmine rice\" [checklist/box] in group \"Ingredients\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"lemon\" [checklist/box] in group \"Ingredients\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"parsley\" [checklist/box] in group \"Ingredients\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Cook mode\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"Edit recipe\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"Recipes\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"Skip to main content\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "link \"USDA FoodData Central\" [link/root] in region \"Nutrition\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"qa_kitchen_chef\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "radio \"No cover\" [choice-card/input] in group \"Active cover\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Editorial direction\" [text-field/input] in region \"Photos\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Placeholder direction\" [text-field/input] in region \"Recipe covers\"",
-          "count": 1
-        }
-      ],
       "save-dialog": [
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 11
-        },
-        {
-          "identity": "button \"\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [file-field/input] in main",
-          "count": 1
+          "count": 5
         },
         {
           "identity": "button \"\" [share-button/trigger] in main",
@@ -2639,14 +2585,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checkbox/box] in main",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
-          "count": 2
-        },
-        {
           "identity": "checkbox \"\" [checklist/box] in main",
           "count": 5
         },
@@ -2656,23 +2594,15 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [skip-link/root] in -",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [choice-card/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
-          "count": 2
         },
         {
           "identity": "textbox \"Create new cookbook\" [text-field/input] in dialog \"Save to cookbook\"",
@@ -2682,15 +2612,7 @@
       "variation-dialog": [
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 11
-        },
-        {
-          "identity": "button \"\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [file-field/input] in main",
-          "count": 1
+          "count": 5
         },
         {
           "identity": "button \"\" [share-button/trigger] in main",
@@ -2709,14 +2631,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checkbox/box] in main",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
-          "count": 2
-        },
-        {
           "identity": "checkbox \"\" [checklist/box] in main",
           "count": 5
         },
@@ -2726,23 +2640,15 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [skip-link/root] in -",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [choice-card/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
-          "count": 2
         }
       ]
     },
@@ -6673,6 +6579,96 @@
       ]
     },
     "recipe-owner": {
+      "actions-menu": [
+        {
+          "identity": "button \"Add to list\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Log the first cook\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Recipe actions\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Serves 4\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Share\" [share-button/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
+          "count": 5
+        },
+        {
+          "identity": "checkbox \"Step 1: Cook the rice\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"chicken stock\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"jasmine rice\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"lemon\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"parsley\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Cook mode\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"qa_kitchen_chef\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "menuitem \"Close\" [menu/close] in main",
+          "count": 1
+        },
+        {
+          "identity": "menuitem \"Delete\" [menu/item] in main",
+          "count": 1
+        },
+        {
+          "identity": "menuitem \"Edit\" [menu/item] in main",
+          "count": 1
+        },
+        {
+          "identity": "menuitem \"Log cook\" [menu/item] in main",
+          "count": 1
+        },
+        {
+          "identity": "menuitem \"Make a variation\" [menu/item] in main",
+          "count": 1
+        },
+        {
+          "identity": "menuitem \"Manage covers\" [menu/item] in main",
+          "count": 1
+        }
+      ],
       "cook-mode": [
         {
           "identity": "button \"Decrease scale\" [number-field/decrement] in region \"Cook the rice\"",
@@ -6739,25 +6735,95 @@
           "count": 1
         }
       ],
-      "default": [
+      "covers-dialog": [
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 6
+          "count": 5
         },
         {
-          "identity": "button \"\" [file-field/input] in main",
+          "identity": "button \"\" [share-button/trigger] in main",
           "count": 1
         },
+        {
+          "identity": "button \"Close\" [sheet/close] in dialog \"Manage covers\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Generate placeholder cover\" [button/root] in region \"Recipe covers\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Optional Spoon details\" [button/root] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Recipe photo\" [file-field/input] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Save photo\" [button/root] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Use this cover\" [button/root] in region \"Recipe covers\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in region \"Photos\"",
+          "count": 2
+        },
+        {
+          "identity": "checkbox \"\" [checklist/box] in main",
+          "count": 5
+        },
+        {
+          "identity": "checkbox \"\" [checklist/hidden-input] in main",
+          "count": 5
+        },
+        {
+          "identity": "checkbox \"Also log this as a cook\" [checkbox/box] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"Make a styled cover\" [checkbox/box] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "generic \"Photos Recipe covers\" [sheet/content] in dialog \"Manage covers\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [link/root] in main",
+          "count": 2
+        },
+        {
+          "identity": "link \"\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "radio \"No cover\" [choice-card/input] in group \"Active cover\"",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Editorial direction\" [text-field/input] in region \"Photos\"",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Placeholder direction\" [text-field/input] in region \"Recipe covers\"",
+          "count": 1
+        }
+      ],
+      "default": [
         {
           "identity": "button \"Add to list\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "button \"Log the first cook\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Manage recipe\" [collapsible/trigger] in main",
           "count": 1
         },
         {
@@ -6775,14 +6841,6 @@
         {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/box] in main",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
-          "count": 2
         },
         {
           "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
@@ -6809,10 +6867,6 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"Cook mode\" [button/root] in main",
           "count": 1
         },
@@ -6825,34 +6879,14 @@
           "count": 1
         },
         {
-          "identity": "link \"USDA FoodData Central\" [link/root] in region \"Nutrition\"",
-          "count": 1
-        },
-        {
           "identity": "link \"qa_kitchen_chef\" [link/root] in main",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [choice-card/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
-          "count": 2
         }
       ],
       "delete-dialog": [
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 11
-        },
-        {
-          "identity": "button \"\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [file-field/input] in main",
-          "count": 1
+          "count": 5
         },
         {
           "identity": "button \"\" [share-button/trigger] in main",
@@ -6867,14 +6901,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checkbox/box] in main",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
-          "count": 2
-        },
-        {
           "identity": "checkbox \"\" [checklist/box] in main",
           "count": 5
         },
@@ -6884,37 +6910,21 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [skip-link/root] in -",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [choice-card/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
-          "count": 2
         }
       ],
       "log-cook-dialog": [
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 11
-        },
-        {
-          "identity": "button \"\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [file-field/input] in main",
-          "count": 1
+          "count": 5
         },
         {
           "identity": "button \"\" [share-button/trigger] in main",
@@ -6937,14 +6947,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checkbox/box] in main",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
-          "count": 2
-        },
-        {
           "identity": "checkbox \"\" [checklist/box] in main",
           "count": 5
         },
@@ -6958,23 +6960,15 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [skip-link/root] in -",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [choice-card/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
-          "count": 2
         },
         {
           "identity": "textbox \"Cooked at\" [field/control] in dialog \"Log a cook\"",
@@ -6989,148 +6983,10 @@
           "count": 1
         }
       ],
-      "manage-open": [
-        {
-          "identity": "button \"Add to list\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Delete\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Generate placeholder cover\" [button/root] in region \"Recipe covers\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Log the first cook\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Make a variation\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Manage recipe\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Optional Spoon details\" [button/root] in region \"Photos\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Recipe actions\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Recipe photo\" [file-field/input] in region \"Photos\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Save photo\" [button/root] in region \"Photos\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Save\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Serves 4\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Share\" [share-button/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Use this cover\" [button/root] in region \"Recipe covers\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in region \"Photos\"",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"Also log this as a cook\" [checkbox/box] in region \"Photos\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"Make a styled cover\" [checkbox/box] in region \"Photos\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"Step 1: Cook the rice\" [checklist/box] in group \"Ingredients\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"chicken stock\" [checklist/box] in group \"Ingredients\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"jasmine rice\" [checklist/box] in group \"Ingredients\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"lemon\" [checklist/box] in group \"Ingredients\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"parsley\" [checklist/box] in group \"Ingredients\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Cook mode\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"Edit recipe\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"Recipes\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"Skip to main content\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "link \"USDA FoodData Central\" [link/root] in region \"Nutrition\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"qa_kitchen_chef\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "radio \"No cover\" [choice-card/input] in group \"Active cover\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Editorial direction\" [text-field/input] in region \"Photos\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Placeholder direction\" [text-field/input] in region \"Recipe covers\"",
-          "count": 1
-        }
-      ],
       "save-dialog": [
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 11
-        },
-        {
-          "identity": "button \"\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [file-field/input] in main",
-          "count": 1
+          "count": 5
         },
         {
           "identity": "button \"\" [share-button/trigger] in main",
@@ -7153,14 +7009,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checkbox/box] in main",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
-          "count": 2
-        },
-        {
           "identity": "checkbox \"\" [checklist/box] in main",
           "count": 5
         },
@@ -7170,23 +7018,15 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [skip-link/root] in -",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [choice-card/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
-          "count": 2
         },
         {
           "identity": "textbox \"Create new cookbook\" [text-field/input] in dialog \"Save to cookbook\"",
@@ -7196,15 +7036,7 @@
       "variation-dialog": [
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 11
-        },
-        {
-          "identity": "button \"\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [file-field/input] in main",
-          "count": 1
+          "count": 5
         },
         {
           "identity": "button \"\" [share-button/trigger] in main",
@@ -7223,14 +7055,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checkbox/box] in main",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
-          "count": 2
-        },
-        {
           "identity": "checkbox \"\" [checklist/box] in main",
           "count": 5
         },
@@ -7240,23 +7064,15 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
-          "count": 3
+          "count": 2
         },
         {
           "identity": "link \"\" [skip-link/root] in -",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [choice-card/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
-          "count": 2
         }
       ]
     },
