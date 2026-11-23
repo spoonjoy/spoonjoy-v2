@@ -2,3 +2,4 @@
 // client routes import (docs/domains.md).
 export * from "./adapters/organizers-route.server";
 export * from "./adapters/organizer-pages.server";
+export * from "./adapters/organizer-filters.server";

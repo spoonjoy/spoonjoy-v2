@@ -1,5 +1,6 @@
 import { d1ReadBatch, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
 import { mapModel, type ColumnSpec } from "~/lib/d1-models.server";
+import type { OrganizerFilters } from "~/domains/kitchen";
 
 export const MY_RECIPES_PAGE_SIZE = 50;
 const MAX_MY_RECIPES_PAGE_SIZE = 50;
@@ -68,12 +69,15 @@ export async function searchMyRecipes(
     query: rawQuery = "",
     page: rawPage = 1,
     pageSize: rawPageSize = MY_RECIPES_PAGE_SIZE,
+    organizers,
   }: {
     ownerId: string;
     ownerUsername: string;
     query?: string | null;
     page?: number | null;
     pageSize?: number | null;
+    /** Organizers a recipe must have and ones it must not; none narrows nothing. */
+    organizers?: OrganizerFilters;
   },
 ): Promise<MyRecipesSearchResult> {
   const query = normalizeMyRecipesQuery(rawQuery);
@@ -82,6 +86,7 @@ export async function searchMyRecipes(
   const limit = pageSize + 1;
   const offset = (page - 1) * pageSize;
   const owner = { id: ownerId, username: ownerUsername };
+  const clauses = organizerClauses(ownerId, organizers);
 
   const rows = query
     ? await searchFilteredRecipes(database, {
@@ -90,8 +95,9 @@ export async function searchMyRecipes(
       query,
       limit,
       offset,
+      clauses,
     })
-    : await searchUnfilteredRecipes(database, { ownerId, limit, offset });
+    : await searchUnfilteredRecipes(database, { ownerId, limit, offset, clauses });
   const pageRows = rows.slice(0, pageSize);
 
   return {
@@ -104,8 +110,29 @@ export async function searchMyRecipes(
   };
 }
 
-// The owner's recipes (not deleted), newest first. Binds: owner id, limit, offset.
-const UNFILTERED_RECIPES_SQL = `
+// A recipe carries one of the owner's organizers. Binds: owner id, kind, slug.
+const CARRIES_ORGANIZER_SQL = `SELECT 1
+          FROM "RecipeOrganizer" AS recipeOrganizer
+          INNER JOIN "Organizer" AS organizer ON organizer."id" = recipeOrganizer."organizerId"
+          WHERE recipeOrganizer."recipeId" = recipe."id"
+            AND organizer."ownerId" = ? AND organizer."kind" = ? AND organizer."slug" = ?`;
+
+type OrganizerClauses = { sql: string; binds: string[] };
+
+/** The conditions organizer filters add after the owner's id, and their binds, in order. */
+function organizerClauses(ownerId: string, filters: OrganizerFilters | undefined): OrganizerClauses {
+  const sides = [
+    ...(filters?.with ?? []).map((ref) => ({ ref, test: "EXISTS" })),
+    ...(filters?.without ?? []).map((ref) => ({ ref, test: "NOT EXISTS" })),
+  ];
+  return {
+    sql: sides.map(({ test }) => `\n        AND ${test} (${CARRIES_ORGANIZER_SQL})`).join(""),
+    binds: sides.flatMap(({ ref }) => [ownerId, ref.kind, ref.slug]),
+  };
+}
+
+// The owner's recipes (not deleted), newest first. Binds: owner id, the organizer clauses' binds, limit, offset.
+const unfilteredRecipesSql = (clauses: OrganizerClauses) => `
       SELECT
         recipe."id",
         recipe."title",
@@ -113,16 +140,16 @@ const UNFILTERED_RECIPES_SQL = `
         recipe."servings"
       FROM "Recipe" AS recipe
       WHERE recipe."chefId" = ?
-        AND recipe."deletedAt" IS NULL
+        AND recipe."deletedAt" IS NULL${clauses.sql}
       ORDER BY recipe."updatedAt" DESC, recipe."id" DESC
       LIMIT ? OFFSET ?
     `;
 
 // The owner's recipes (not deleted) matching the query in the title, description,
 // servings or an ingredient name, or all of them when the owner's username matches.
-// Binds: owner id, the needle three times, 1 when the username matches (else 0), the
-// needle, limit, offset.
-const FILTERED_RECIPES_SQL = `
+// Binds: owner id, the organizer clauses' binds, the needle three times, 1 when the username
+// matches (else 0), the needle, limit, offset.
+const filteredRecipesSql = (clauses: OrganizerClauses) => `
       SELECT
         recipe."id",
         recipe."title",
@@ -130,7 +157,7 @@ const FILTERED_RECIPES_SQL = `
         recipe."servings"
       FROM "Recipe" AS recipe
       WHERE recipe."chefId" = ?
-        AND recipe."deletedAt" IS NULL
+        AND recipe."deletedAt" IS NULL${clauses.sql}
         AND (
           instr(lower(recipe."title"), ?) > 0
           OR instr(lower(coalesce(recipe."description", '')), ?) > 0
@@ -155,15 +182,18 @@ async function searchUnfilteredRecipes(
     ownerId,
     limit,
     offset,
+    clauses,
   }: {
     ownerId: string;
     limit: number;
     offset: number;
+    clauses: OrganizerClauses;
   },
 ) {
   return database.$queryRawUnsafe<MyRecipesRow[]>(
-    UNFILTERED_RECIPES_SQL,
+    unfilteredRecipesSql(clauses),
     ownerId,
+    ...clauses.binds,
     limit,
     offset,
   );
@@ -177,20 +207,23 @@ async function searchFilteredRecipes(
     query,
     limit,
     offset,
+    clauses,
   }: {
     ownerId: string;
     ownerUsername: string;
     query: string;
     limit: number;
     offset: number;
+    clauses: OrganizerClauses;
   },
 ) {
   const needle = query.toLowerCase();
   const ownerUsernameMatches = ownerUsername.toLowerCase().includes(needle) ? 1 : 0;
 
   return database.$queryRawUnsafe<MyRecipesRow[]>(
-    FILTERED_RECIPES_SQL,
+    filteredRecipesSql(clauses),
     ownerId,
+    ...clauses.binds,
     needle,
     needle,
     needle,
@@ -223,11 +256,13 @@ export async function searchMyRecipesFromD1(
     query: rawQuery = "",
     page: rawPage = 1,
     pageSize: rawPageSize = MY_RECIPES_PAGE_SIZE,
+    organizers,
   }: {
     ownerId: string;
     query?: string | null;
     page?: number | null;
     pageSize?: number | null;
+    organizers?: OrganizerFilters;
   },
 ): Promise<MyRecipesSearchResult> {
   const query = normalizeMyRecipesQuery(rawQuery);
@@ -236,11 +271,12 @@ export async function searchMyRecipesFromD1(
   const limit = pageSize + 1;
   const offset = (page - 1) * pageSize;
   const needle = query.toLowerCase();
+  const clauses = organizerClauses(ownerId, organizers);
 
   const [ownerRows, allRows, matchingRows] = await d1ReadBatch(db, [
     [`SELECT "id", "username" FROM "User" WHERE "id" = ? LIMIT 1`, ownerId],
-    [UNFILTERED_RECIPES_SQL, ownerId, limit, offset],
-    ...(query ? [[FILTERED_RECIPES_SQL, ownerId, needle, needle, needle, 0, needle, limit, offset] as const] : []),
+    [unfilteredRecipesSql(clauses), ownerId, ...clauses.binds, limit, offset],
+    ...(query ? [[filteredRecipesSql(clauses), ownerId, ...clauses.binds, needle, needle, needle, 0, needle, limit, offset] as const] : []),
   ]);
   const ownerRow = ownerRows![0];
   if (!ownerRow) throw new Error("My recipes owner not found");

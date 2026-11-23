@@ -240,6 +240,37 @@ describe("my-recipes-search.server", () => {
     expect(secondPage.hasPreviousPage).toBe(true);
   });
 
+  it("keeps only recipes with every organizer asked for and none of those left out, with or without a query", async () => {
+    const chef = await createChef("filter");
+    const at = (minute: number) => new Date(Date.UTC(2026, 8, 1, 12, minute));
+    const wokSoup = await createRecipe({ chefId: chef.id, title: "Wok soup", updatedAt: at(3) });
+    const quickSoup = await createRecipe({ chefId: chef.id, title: "Quick soup", updatedAt: at(2) });
+    await createRecipe({ chefId: chef.id, title: "Slow stew", updatedAt: at(1) });
+    const organizer = (kind: string, name: string) =>
+      db.organizer.create({ data: { ownerId: chef.id, kind, name, slug: name.toLowerCase() } });
+    const quick = await organizer("tag", "Quick");
+    const wok = await organizer("tool", "Wok");
+    await db.recipeOrganizer.createMany({
+      data: [
+        { recipeId: wokSoup.id, organizerId: quick.id },
+        { recipeId: wokSoup.id, organizerId: wok.id },
+        { recipeId: quickSoup.id, organizerId: quick.id },
+      ],
+    });
+    const titles = async (organizers: Parameters<typeof searchMyRecipes>[1]["organizers"], query = "") =>
+      (await searchMyRecipes(db, { ownerId: chef.id, ownerUsername: chef.username, query, organizers })).recipes.map((recipe) => recipe.title);
+    const quickTag = { kind: "tag" as const, slug: "quick" };
+    const wokTool = { kind: "tool" as const, slug: "wok" };
+
+    expect(await titles({ with: [quickTag], without: [] })).toEqual(["Wok soup", "Quick soup"]);
+    expect(await titles({ with: [quickTag], without: [wokTool] })).toEqual(["Quick soup"]);
+    expect(await titles({ with: [], without: [wokTool] })).toEqual(["Quick soup", "Slow stew"]);
+    expect(await titles({ with: [quickTag, wokTool], without: [] })).toEqual(["Wok soup"]);
+    expect(await titles({ with: [{ kind: "category", slug: "quick" }], without: [] })).toEqual([]);
+    expect(await titles({ with: [quickTag], without: [] }, "wok")).toEqual(["Wok soup"]);
+    expect(await titles(undefined)).toEqual(["Wok soup", "Quick soup", "Slow stew"]);
+  });
+
   it("returns empty pages and no-result searches without extra application filtering", async () => {
     const owner = await createChef("empty_owner");
     await createRecipe({

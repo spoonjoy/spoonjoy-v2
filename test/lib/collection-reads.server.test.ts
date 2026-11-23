@@ -267,6 +267,36 @@ describe("collection reads", () => {
     await expect(searchMyRecipesFromD1(d1.binding, { ownerId: "missing-owner" })).rejects.toThrow("My recipes owner not found");
   });
 
+  it("narrows my recipes by organizers on D1 as the Prisma search does, in one batch", async () => {
+    const { chef } = await seedCollections();
+    const [first, second] = await db.recipe.findMany({ where: { chefId: chef.id, deletedAt: null }, orderBy: { updatedAt: "desc" }, take: 2 });
+    const quick = await db.organizer.create({ data: { ownerId: chef.id, kind: "tag", name: "Quick", slug: "quick" } });
+    const wok = await db.organizer.create({ data: { ownerId: chef.id, kind: "tool", name: "Wok", slug: "wok" } });
+    await db.recipeOrganizer.createMany({
+      data: [
+        { recipeId: first!.id, organizerId: quick.id },
+        { recipeId: first!.id, organizerId: wok.id },
+        { recipeId: second!.id, organizerId: quick.id },
+      ],
+    });
+    const quickTag = { kind: "tag" as const, slug: "quick" };
+    const wokTool = { kind: "tool" as const, slug: "wok" };
+    const cases = [
+      { organizers: { with: [quickTag], without: [] } },
+      { organizers: { with: [quickTag], without: [wokTool] } },
+      { organizers: { with: [], without: [wokTool] } },
+      { organizers: { with: [quickTag], without: [] }, query: first!.title.slice(0, 4) },
+    ];
+    for (const options of cases) {
+      const before = d1.roundTrips();
+      const fromD1 = await searchMyRecipesFromD1(d1.binding, { ownerId: chef.id, ...options });
+      expect(d1.roundTrips() - before).toBe(1);
+      const fromPrisma = await searchMyRecipes(db, { ownerId: chef.id, ownerUsername: chef.username, ...options });
+      expect(fromD1, JSON.stringify(options)).toEqual(fromPrisma);
+      expect(fromPrisma.recipes.length, JSON.stringify(options)).toBeGreaterThan(0);
+    }
+  });
+
   it("fails closed on a D1 error or a malformed row", async () => {
     const { chef } = await seedCollections();
     const failing = { prepare: d1.binding.prepare, batch: async () => { throw new Error("D1_ERROR: lost"); } };

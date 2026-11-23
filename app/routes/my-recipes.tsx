@@ -21,6 +21,9 @@ import { requestD1 } from "~/lib/d1-read.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { RecipesSectionNav } from "~/components/navigation";
+import { organizerFiltersFor } from "~/domains/kitchen/index.server";
+import { OrganizerFilterForm } from "~/components/organizers/organizer-filter-form";
+import { organizerFilterSearch } from "~/components/organizers/organizer-filter-search";
 
 type IngredientLookupDb = {
   ingredient: {
@@ -73,9 +76,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const page = normalizeMyRecipesPage(url.searchParams.get("page"));
   // On the Worker the owner and their recipes come from D1 in one batch; Prisma is only
   // the fallback where there is no binding.
+  const { filters, filterParams, organizerChoices } = await organizerFiltersFor(request, context, userId);
   const d1 = requestD1(context);
   if (d1) {
-    return searchMyRecipesFromD1(d1, { ownerId: userId, query, page });
+    return { ...(await searchMyRecipesFromD1(d1, { ownerId: userId, query, page, organizers: filters })), filterParams, organizerChoices };
   }
   const database = await getRequestDb(context);
 
@@ -83,16 +87,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     where: { id: userId },
     select: { id: true, username: true },
   });
-  return searchMyRecipes(database, {
+  const result = await searchMyRecipes(database, {
     ownerId: chef.id,
     ownerUsername: chef.username,
     query,
     page,
+    organizers: filters,
   });
+  return { ...result, filterParams, organizerChoices };
 }
 
 export default function MyRecipes() {
-  const { query, recipes, page, hasPreviousPage, hasNextPage } = useLoaderData<typeof loader>();
+  const { query, recipes, page, hasPreviousPage, hasNextPage, filterParams, organizerChoices } = useLoaderData<typeof loader>();
+  const filtering = filterParams.length > 0;
   const { pathname } = useLocation();
 
   return (
@@ -112,7 +119,10 @@ export default function MyRecipes() {
         description="Recipes you wrote and keep in your kitchen."
       />
 
-      <DrawerSearch label="Search my recipes" query={query} placeholder="sumac, beans, serves 4" />
+      <DrawerSearch label="Search my recipes" query={query} placeholder="sumac, beans, serves 4" keep={filterParams} />
+      {organizerChoices ? (
+        <OrganizerFilterForm label="Filter my recipes" query={query} filterParams={filterParams} choices={organizerChoices} clearHref={`${pathname}${organizerFilterSearch(query, [], 1)}`} />
+      ) : null}
 
       {recipes.length > 0 ? (
         <ItemGroup aria-label="My recipes" variant="divided" className="mt-6">
@@ -131,10 +141,10 @@ export default function MyRecipes() {
           <Text tone="muted">
             {query
               ? "Try another title, ingredient, serving size, or note."
-              : "Start with the dish you make most often."}
+              : filtering ? "Try fewer filters." : "Start with the dish you make most often."}
           </Text>
         </>}
-          title={query ? "No matching recipes" : "No recipes yet"}
+          title={query || filtering ? "No matching recipes" : "No recipes yet"}
           action={<Button href="/recipes/new">Create recipe</Button>} />
       )}
 
@@ -144,10 +154,7 @@ export default function MyRecipes() {
           label="My recipes pagination"
           page={page}
           hasNextPage={hasNextPage}
-          href={(target) => {
-            const queryHref = myRecipesPageHref(query, target);
-            return queryHref === "." ? pathname : `${pathname}${queryHref}`;
-          }}
+          href={(target) => `${pathname}${organizerFilterSearch(query, filterParams, target)}`}
           previousLabel="Previous page"
           nextLabel="Next page"
         />
@@ -156,22 +163,17 @@ export default function MyRecipes() {
   );
 }
 
-function myRecipesPageHref(query: string, page: number) {
-  const params = new URLSearchParams();
-  if (query) params.set("q", query);
-  if (page > 1) params.set("page", String(page));
-  const search = params.toString();
-  return search ? `?${search}` : ".";
-}
-
 export function DrawerSearch({
   label,
   query,
   placeholder,
+  keep = [],
 }: {
   label: string;
   query: string;
   placeholder: string;
+  /** Other search parameters a new search keeps, such as the list's filters. */
+  keep?: [string, string][];
 }) {
   return (
     <Form method="get" role="search" className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -186,7 +188,8 @@ export function DrawerSearch({
         className="flex-1"
       />
       <Button type="submit" variant="outline" tone="secondary">Search</Button>
-      {query ? <Link href=".">Clear</Link> : null}
+      {query ? <Link href={keep.length ? `?${new URLSearchParams(keep)}` : "."}>Clear</Link> : null}
+      {keep.map(([name, value]) => <input key={`${name}=${value}`} type="hidden" name={name} value={value} />)}
     </Form>
   );
 }
