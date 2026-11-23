@@ -113,7 +113,7 @@ describe("/households/:id/lists", () => {
     expect(payload(await call(listAction, at, "ben", { intent: "check", itemId, checked: "true" }))).toEqual({ done: "checked" });
     expect(payload(await call(listLoader, at, "cal"))).toEqual({
       household: { id: "h1", name: "The Lee kitchen" },
-      list: { id: listId, name: "Groceries", canEdit: false, items: [{ id: itemId, text: "eggs", checked: true, addedBy: "ben_cooks" }] },
+      list: { id: listId, name: "Groceries", canEdit: false, canDelete: false, items: [{ id: itemId, text: "eggs", checked: true, addedBy: "ben_cooks" }] },
     });
     expect(payload(await call(listAction, at, "ben", { intent: "check", itemId, checked: "false" }))).toEqual({ done: "checked" });
     expect(payload(await call(listLoader, at, "ann")).list.items[0].checked).toBe(false);
@@ -181,7 +181,7 @@ describe("household list pages", () => {
         Component: ListPage,
         loader: () => ({
           household: { id: "h1", name: "Home" },
-          list: { id: "l1", name: "Groceries", canEdit: true, items: [{ id: "i1", text: "eggs", checked: server.checked, addedBy: null }] },
+          list: { id: "l1", name: "Groceries", canEdit: true, canDelete: false, items: [{ id: "i1", text: "eggs", checked: server.checked, addedBy: null }] },
         }),
         action: async () => {
           await new Promise<void>((resolve) => (release = resolve));
@@ -211,7 +211,7 @@ describe("household list pages", () => {
       {
         path: "/households/:id/lists/:listId",
         Component: ListPage,
-        loader: () => ({ household: { id: "h1", name: "Home" }, list: { id: "l1", name: "Groceries", canEdit: true, items } }),
+        loader: () => ({ household: { id: "h1", name: "Home" }, list: { id: "l1", name: "Groceries", canEdit: true, canDelete: true, items } }),
         action: async ({ request }: { request: Request }) => {
           const fields = Object.fromEntries(await request.formData()) as Record<string, string>;
           submitted.push(fields);
@@ -242,7 +242,7 @@ describe("household list pages", () => {
       {
         path: "/households/:id/lists/:listId",
         Component: ListPage,
-        loader: () => ({ household: { id: "h1", name: "Home" }, list: { id: "l1", name: "Groceries", canEdit: false, items: [items[0]] } }),
+        loader: () => ({ household: { id: "h1", name: "Home" }, list: { id: "l1", name: "Groceries", canEdit: false, canDelete: false, items: [items[0]] } }),
       },
     ]);
     render(<ViewOnly initialEntries={["/households/h1/lists/l1"]} />);
@@ -261,7 +261,7 @@ describe("household list pages", () => {
           Component: ListPage,
           loader: () => ({
             household: { id: "h1", name: "Home" },
-            list: { id: "l1", name: "Groceries", canEdit, items: [{ id: "i1", text: "eggs", checked: false, addedBy: "deleted-chef" }] },
+            list: { id: "l1", name: "Groceries", canEdit, canDelete: false, items: [{ id: "i1", text: "eggs", checked: false, addedBy: "deleted-chef" }] },
           }),
         },
       ]);
@@ -280,5 +280,23 @@ describe("household list pages", () => {
     render(<Member initialEntries={["/households/h1/lists/l1"]} />);
     expect(await screen.findByRole("textbox", { name: "Add an item" })).toBeTruthy();
     expect(screen.queryByText(VIEW_ONLY_NOTE)).toBeNull();
+  });
+
+  it("shows Delete list only to the list's maker or an owner; another member still adds, ticks and removes", async () => {
+    const Member = createTestRoutesStub([
+      {
+        path: "/households/:id/lists/:listId",
+        Component: ListPage,
+        loader: () => ({
+          household: { id: "h1", name: "Home" },
+          list: { id: "l1", name: "Groceries", canEdit: true, canDelete: false, items: [{ id: "i1", text: "eggs", checked: false, addedBy: null }] },
+        }),
+      },
+    ]);
+    render(<Member initialEntries={["/households/h1/lists/l1"]} />);
+    expect(await screen.findByRole("textbox", { name: "Add an item" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "eggs" }).getAttribute("aria-disabled")).not.toBe("true");
+    expect(screen.getByRole("button", { name: "Remove eggs" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Delete list" })).toBeNull();
   });
 });

@@ -8,8 +8,8 @@ export interface HouseholdListStore {
   roleIn(householdId: string, userId: string): Promise<HouseholdRole | null>;
   /** Oldest first. */
   lists(householdId: string): Promise<HouseholdListSummary[]>;
-  /** The list when it belongs to this household, otherwise null. */
-  list(householdId: string, listId: string): Promise<{ id: string; name: string } | null>;
+  /** The list when it belongs to this household, otherwise null. `createdById` is null once its maker's account is gone. */
+  list(householdId: string, listId: string): Promise<{ id: string; name: string; createdById: string | null } | null>;
   /** In the order they were added. */
   items(listId: string): Promise<HouseholdListItem[]>;
   insertList(row: { id: string; householdId: string; name: string; createdById: string; now: Date }): Promise<void>;
