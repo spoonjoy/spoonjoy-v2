@@ -1,0 +1,30 @@
+{
+  "desktop-chrome": {
+    "add-ingredient-open": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "default": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "remove-ingredient-dialog": [
+      "banner",
+      "nav",
+      "footer"
+    ]
+  },
+  "iphone-webkit": {
+    "add-ingredient-open": [
+      "footer"
+    ],
+    "default": [
+      "footer"
+    ],
+    "remove-ingredient-dialog": [
+      "footer"
+    ]
+  }
+}

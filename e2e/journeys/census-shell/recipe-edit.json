@@ -1,0 +1,22 @@
+{
+  "desktop-chrome": {
+    "default": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "delete-step-dialog": [
+      "banner",
+      "nav",
+      "footer"
+    ]
+  },
+  "iphone-webkit": {
+    "default": [
+      "footer"
+    ],
+    "delete-step-dialog": [
+      "footer"
+    ]
+  }
+}

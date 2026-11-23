@@ -1,0 +1,14 @@
+{
+  "desktop-chrome": {
+    "default": [
+      "banner",
+      "nav",
+      "footer"
+    ]
+  },
+  "iphone-webkit": {
+    "default": [
+      "footer"
+    ]
+  }
+}

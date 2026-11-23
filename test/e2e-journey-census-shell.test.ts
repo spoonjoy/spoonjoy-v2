@@ -1,8 +1,8 @@
 // The HX census checks which parts of the shared shell each page shows, by landmark, not by control
 // (e2e/journeys/support/census-shell.ts), so a new nav link changes no page's record.
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { SHELL_BASELINE_PATH, shellMismatch, visibleShellLandmarks, type ShellBaseline } from "../e2e/journeys/support/census-shell-record";
+import { checkShell, SHELL_RECORD_DIR, visibleShellLandmarks, type ShellRecord } from "../e2e/journeys/support/census-shell-record";
 
 const where = { project: "iphone-webkit", journeyId: "recipe-edit", stateId: "default" };
 
@@ -27,37 +27,39 @@ describe("visibleShellLandmarks", () => {
   });
 });
 
-describe("shellMismatch", () => {
-  const baseline: ShellBaseline = { "iphone-webkit": { "recipe-edit": { default: ["footer"] } } };
+describe("checkShell", () => {
+  const record: ShellRecord = { "iphone-webkit": { default: ["footer"] } };
+  const path = `${SHELL_RECORD_DIR}/recipe-edit.json`;
 
   it("passes a state that shows the landmarks its record names", () => {
-    expect(shellMismatch(baseline, where, ["footer"])).toBeNull();
+    expect(checkShell(record, where, ["footer"])).toBeNull();
   });
 
   it("fails a page whose shell changed, naming the record to set", () => {
-    expect(shellMismatch(baseline, where, ["tabBar", "footer"])).toBe(
-      `This state shows the shell's ["tabBar","footer"], but ${SHELL_BASELINE_PATH} expects ["footer"]. If the change is meant, set "iphone-webkit" › "recipe-edit" › "default": ["tabBar","footer"].`,
-    );
+    expect(checkShell(record, where, ["tabBar", "footer"])).toEqual({
+      kind: "changed",
+      message: `This state shows the shell's ["tabBar","footer"], but ${path} expects ["footer"]. If the change is meant, set "iphone-webkit" › "default": ["tabBar","footer"].`,
+    });
   });
 
-  it("fails a state with no record, naming the record to add", () => {
-    expect(shellMismatch(baseline, { ...where, stateId: "menu" }, [])).toBe(
-      `${SHELL_BASELINE_PATH} has no shell record for this state. If the page is new, add "iphone-webkit" › "recipe-edit" › "menu": [].`,
-    );
+  it("reports a state with no record without failing it, so a new census entry needs nothing else", () => {
+    const unrecorded = { kind: "unrecorded", message: `${path} has no shell record for this state; to check it from now on, add "iphone-webkit" › "menu": [].` };
+    expect(checkShell(record, { ...where, stateId: "menu" }, [])).toEqual(unrecorded);
+    expect(checkShell(undefined, { ...where, stateId: "menu" }, [])?.kind).toBe("unrecorded");
   });
 });
 
-describe("the shell baseline", () => {
-  it("records a state for each page state in the census baseline, apart from the shell's own", () => {
-    const shell = JSON.parse(readFileSync(SHELL_BASELINE_PATH, "utf8")) as ShellBaseline;
+describe("the shell records", () => {
+  it("name only states the census baseline has, one file per page journey", () => {
     const census = JSON.parse(readFileSync("e2e/ouro-census/census.baseline.json", "utf8")) as Record<string, Record<string, Record<string, unknown>>>;
-    for (const [project, journeys] of Object.entries(census)) {
-      const pageStates = Object.entries(journeys)
-        .filter(([journeyId]) => !journeyId.startsWith("shell-"))
-        .flatMap(([journeyId, states]) => Object.keys(states).map((stateId) => `${journeyId}/${stateId}`))
-        .sort();
-      const recorded = Object.entries(shell[project] ?? {}).flatMap(([journeyId, states]) => Object.keys(states).map((stateId) => `${journeyId}/${stateId}`)).sort();
-      expect(recorded).toEqual(pageStates);
+    const files = readdirSync(SHELL_RECORD_DIR);
+    expect(files.length).toBeGreaterThan(40);
+    for (const file of files) {
+      const journeyId = file.replace(/\.json$/, "");
+      expect(journeyId.startsWith("shell-")).toBe(false);
+      const record = JSON.parse(readFileSync(`${SHELL_RECORD_DIR}/${file}`, "utf8")) as ShellRecord;
+      for (const [project, states] of Object.entries(record))
+        expect(Object.keys(states).filter((stateId) => !census[project]?.[journeyId]?.[stateId]), `${file} › ${project}`).toEqual([]);
     }
   });
 });

@@ -1,0 +1,15 @@
+{
+  "desktop-chrome": {
+    "default": [
+      "banner",
+      "nav",
+      "footer"
+    ]
+  },
+  "iphone-webkit": {
+    "default": [
+      "tabBar",
+      "footer"
+    ]
+  }
+}

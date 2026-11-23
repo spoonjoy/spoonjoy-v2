@@ -1,0 +1,59 @@
+{
+  "desktop-chrome": {
+    "cook-mode": [],
+    "default": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "delete-dialog": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "log-cook-dialog": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "manage-open": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "save-dialog": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "variation-dialog": [
+      "banner",
+      "nav",
+      "footer"
+    ]
+  },
+  "iphone-webkit": {
+    "cook-mode": [],
+    "default": [
+      "tabBar",
+      "footer"
+    ],
+    "delete-dialog": [
+      "footer"
+    ],
+    "log-cook-dialog": [
+      "tabBar",
+      "footer"
+    ],
+    "manage-open": [
+      "footer"
+    ],
+    "save-dialog": [
+      "tabBar",
+      "footer"
+    ],
+    "variation-dialog": [
+      "footer"
+    ]
+  }
+}
