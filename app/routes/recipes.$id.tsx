@@ -47,7 +47,6 @@ import { SpoonDialog } from "~/components/recipe/SpoonDialog";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { RecipeCookView, useCookModeReturnFocus } from "~/components/cook/RecipeCookView";
 import { UnitSystemProvider } from "~/components/recipe/UnitSystemProvider";
-import { useFlag } from "~/domains/platform";
 import { useDockSuppressed } from "~/components/navigation";
 import { ShareButton } from "~/components/ouro/share-button/share-button";
 import type { ShareResult } from "~/lib/ouro/share";
@@ -193,9 +192,8 @@ export function ErrorBoundary() {
 // The cook's units hold across the page and cook mode, which replaces it, so the provider sits above both.
 export default function RecipeDetailRoute() {
   const { unitSystem } = useLoaderData<typeof loader>();
-  const unitsEnabled = useFlag("unit-conversion");
   return (
-    <UnitSystemProvider initialSystem={unitSystem} enabled={unitsEnabled}>
+    <UnitSystemProvider initialSystem={unitSystem}>
       <RecipeDetail />
     </UnitSystemProvider>
   );

@@ -6,7 +6,7 @@ export interface UnitSystemValue {
   system: UnitSystem
   /** Switches the page to `system` and keeps it in this browser for every recipe. */
   setSystem: (system: UnitSystem) => void
-  /** Whether the cook may pick a system here (the unit-conversion flag); without it amounts stay as written. */
+  /** Whether there is a system to pick here: inside a provider; outside one amounts stay as written. */
   enabled: boolean
 }
 

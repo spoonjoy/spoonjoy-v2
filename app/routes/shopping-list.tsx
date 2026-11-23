@@ -9,7 +9,6 @@ import {
   unitSystemFromCookie,
   type UnitSystem,
 } from "~/domains/food-knowledge";
-import { useFlag } from "~/domains/platform";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLoaderData, Form, useSubmit, useFetchers, useActionData, useLocation, useRevalidator, type ShouldRevalidateFunctionArgs } from "react-router";
 import { revalidateUnlessNetworkFailure, submitOrReportLostRequest } from "~/lib/network-failure";
@@ -169,9 +168,7 @@ export default function ShoppingList() {
   const actionData = useActionData<ShoppingListActionData>();
   const resendingLostSubmission = useResendLostSubmission(actionData);
   const { shoppingList, recipes, unitSystem } = useLoaderData<typeof loader>();
-  const unitsEnabled = useFlag("unit-conversion");
-  const [chosenUnits, setChosenUnits] = useState<UnitSystem>(unitSystem);
-  const units = unitsEnabled ? chosenUnits : "original";
+  const [units, setUnits] = useState<UnitSystem>(unitSystem);
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [viewMode, setViewMode] = useState<ShoppingListViewMode>("all");
   const submit = useSubmit();
@@ -345,21 +342,19 @@ export default function ShoppingList() {
                   <MenuItem onClick={() => submit({ intent: "clearCompleted" }, { method: "post" })}>Clear checked</MenuItem>
                 ) : null}
                 <MenuItem tone="destructive" onClick={() => setShowClearDialog(true)}>Clear all</MenuItem>
-                {unitsEnabled ? (
-                  <MenuRadioGroup
-                    label="Units"
-                    value={units}
-                    onValueChange={(value) => {
-                      const next = parseUnitSystem(value);
-                      setChosenUnits(next);
-                      document.cookie = unitSystemCookie(next);
-                    }}
-                  >
-                    {UNIT_SYSTEMS.map((system) => (
-                      <MenuRadioItem key={system.value} value={system.value}>{system.label}</MenuRadioItem>
-                    ))}
-                  </MenuRadioGroup>
-                ) : null}
+                <MenuRadioGroup
+                  label="Units"
+                  value={units}
+                  onValueChange={(value) => {
+                    const next = parseUnitSystem(value);
+                    setUnits(next);
+                    document.cookie = unitSystemCookie(next);
+                  }}
+                >
+                  {UNIT_SYSTEMS.map((system) => (
+                    <MenuRadioItem key={system.value} value={system.value}>{system.label}</MenuRadioItem>
+                  ))}
+                </MenuRadioGroup>
               </Menu>
             ) : null}
           </div>

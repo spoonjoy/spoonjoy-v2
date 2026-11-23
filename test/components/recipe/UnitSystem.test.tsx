@@ -22,9 +22,9 @@ function List() {
   )
 }
 
-function renderPage({ enabled, initialSystem = 'original' }: { enabled: boolean; initialSystem?: UnitSystem }) {
+function renderPage({ initialSystem = 'original' }: { initialSystem?: UnitSystem } = {}) {
   return render(
-    <UnitSystemProvider initialSystem={initialSystem} enabled={enabled}>
+    <UnitSystemProvider initialSystem={initialSystem}>
       <UnitSystemControl />
       <List />
     </UnitSystemProvider>
@@ -48,19 +48,18 @@ describe('unit systems on a recipe', () => {
   })
 
   it('show amounts in the system the page starts with', () => {
-    renderPage({ enabled: true, initialSystem: 'metric' })
+    renderPage({ initialSystem: 'metric' })
     expect(screen.getByText('475 ml')).toBeInTheDocument()
   })
 
-  it('keep the picker away, and amounts as written, while unit conversion is off', () => {
-    renderPage({ enabled: false, initialSystem: 'metric' })
-    expect(screen.getByText('2 cups')).toBeInTheDocument()
+  it('show no picker outside a provider', () => {
+    render(<UnitSystemControl />)
     expect(screen.queryByRole('radiogroup', { name: 'Units' })).not.toBeInTheDocument()
   })
 
   it('convert the list when the cook picks a system, and keep the choice in a cookie', async () => {
     const user = userEvent.setup()
-    renderPage({ enabled: true })
+    renderPage()
 
     expect(screen.getByRole('radiogroup', { name: 'Units' })).toBeInTheDocument()
     await user.click(screen.getByRole('radio', { name: 'Metric' }))

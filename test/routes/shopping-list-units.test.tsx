@@ -18,12 +18,12 @@ const listData = {
   recipes: [],
 };
 
-function renderList({ flags, unitSystem }: { flags: string[]; unitSystem: UnitSystem }) {
+function renderList({ unitSystem }: { unitSystem: UnitSystem }) {
   const Stub = createTestRoutesStub([
     {
       id: "root",
       path: "/",
-      loader: () => ({ flags }),
+      loader: () => ({ flags: [] }),
       Component: Outlet,
       children: [{ path: "shopping-list", Component: ShoppingList, loader: () => ({ ...listData, unitSystem }) }],
     },
@@ -47,23 +47,14 @@ describe("shopping list units", () => {
     expect(amountLabel({ quantity: 2, unit: { name: "lbs" } })).toBe("2 lbs");
   });
 
-  it("shows amounts in the cook's units while unit conversion is on", async () => {
-    renderList({ flags: ["unit-conversion"], unitSystem: "metric" });
+  it("shows amounts in the cook's units", async () => {
+    renderList({ unitSystem: "metric" });
     expect(await chicken()).toHaveAccessibleDescription(/905 g$/);
-  });
-
-  it("shows amounts as written, with no units in the menu, while unit conversion is off", async () => {
-    const user = userEvent.setup();
-    renderList({ flags: [], unitSystem: "metric" });
-    expect(await chicken()).toHaveAccessibleDescription(/2 lbs$/);
-    await user.click(screen.getByRole("button", { name: "List actions" }));
-    expect(await screen.findByRole("menuitem", { name: "Clear all" })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitemradio", { name: "Metric" })).not.toBeInTheDocument();
   });
 
   it("switches units from the list's menu and keeps the choice in a cookie", async () => {
     const user = userEvent.setup();
-    renderList({ flags: ["unit-conversion"], unitSystem: "original" });
+    renderList({ unitSystem: "original" });
     expect(await chicken()).toHaveAccessibleDescription(/2 lbs$/);
 
     await user.click(screen.getByRole("button", { name: "List actions" }));
