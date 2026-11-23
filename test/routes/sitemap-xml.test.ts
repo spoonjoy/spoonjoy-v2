@@ -105,4 +105,17 @@ describe("sitemap.xml route", () => {
     // A chef with only thin recipes is not indexable either.
     expect(xml).not.toContain(`/users/${username}`);
   });
+
+  it("lists only what a signed-out visitor may read, leaving private recipes, their cookbooks and their chefs out", async () => {
+    const hidden = await db.recipe.create({ data: { title: "Private Toast", chefId: userId, visibility: "private" } });
+    await db.recipeStep.create({ data: { recipeId: hidden.id, stepNum: 1, description: "Toast it." } });
+    const cookbook = await db.cookbook.create({ data: { title: "Private Book", authorId: userId } });
+    await db.recipeInCookbook.create({ data: { cookbookId: cookbook.id, recipeId: hidden.id, addedById: userId } });
+
+    const { xml } = await fetchSitemap();
+
+    expect(xml).not.toContain(`/recipes/${hidden.id}`);
+    expect(xml).not.toContain(`/cookbooks/${cookbook.id}`);
+    expect(xml).not.toContain(`/users/${username}`);
+  });
 });

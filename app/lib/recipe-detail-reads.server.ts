@@ -17,6 +17,7 @@ import {
 } from "~/lib/d1-models.server";
 import { RECIPE_COVER_DISPLAY_SELECT } from "~/lib/recipe-cover.server";
 import { isOriginCookCandidate, listSpoonsForRecipe, type SpoonWithChef } from "~/lib/recipe-spoon.server";
+import { canRead } from "~/domains/kitchen";
 
 // Reads behind the recipe page (`/recipes/:id`). The Prisma reader is the original
 // sequence of queries; the D1 reader returns the same data in one batch.
@@ -28,6 +29,8 @@ export const RECIPE_DETAIL_INCLUDE = {
       id: true,
       title: true,
       deletedAt: true,
+      chefId: true,
+      visibility: true,
       chef: { select: { username: true } },
     },
   },
@@ -54,7 +57,7 @@ export interface RecipeSpoonImage {
 }
 
 export interface RecipeDetailReads {
-  // Null when the recipe does not exist or is deleted; nothing else is read then.
+  // Null when the recipe does not exist, is deleted or the viewer may not read it (canRead); nothing else is returned then.
   recipe: RecipeDetailRecipe | null;
   // The viewer's cookbooks by title, each with the viewer's membership for this recipe.
   userCookbooks: Array<{ id: string; title: string; recipes: Array<{ id: string }> }>;
@@ -91,10 +94,11 @@ export async function readRecipeDetailWithPrisma(
   database: PrismaClient,
   { recipeId, userId }: RecipeDetailReadInput,
 ): Promise<RecipeDetailReads> {
-  const recipe = await database.recipe.findUnique({ where: { id: recipeId }, include: RECIPE_DETAIL_INCLUDE });
-  if (!recipe || recipe.deletedAt) {
+  const found = await database.recipe.findUnique({ where: { id: recipeId }, include: RECIPE_DETAIL_INCLUDE });
+  if (!found || found.deletedAt || !canRead({ id: userId ?? "" }, found)) {
     return { recipe: null, ...NO_READS };
   }
+  const recipe = withReadableSource(found, userId);
 
   const isOwner = userId !== null && recipe.chefId === userId;
   const userCookbooks = userId
@@ -162,11 +166,25 @@ function presentId(row: D1Row, prefix: string, what: string): boolean {
   return true;
 }
 
-const SOURCE_RECIPE_COLUMNS: ColumnSpec<{ id: string; title: string; deletedAt: Date | null }> = {
+const SOURCE_RECIPE_COLUMNS: ColumnSpec<{
+  id: string;
+  title: string;
+  deletedAt: Date | null;
+  chefId: string;
+  visibility: string;
+}> = {
   id: "string",
   title: "string",
   deletedAt: "dateTime?",
+  chefId: "string",
+  visibility: "string",
 };
+
+// A fork names the recipe it came from only when the viewer may read that recipe too.
+function withReadableSource(recipe: RecipeDetailRecipe, userId: string | null): RecipeDetailRecipe {
+  if (!recipe.sourceRecipe || canRead({ id: userId ?? "" }, recipe.sourceRecipe)) return recipe;
+  return { ...recipe, sourceRecipe: null };
+}
 
 const SOURCE_CHEF_COLUMNS: ColumnSpec<{ username: string }> = { username: "string" };
 
@@ -336,7 +354,7 @@ export async function readRecipeDetailFromD1(
     return { recipe: null, ...NO_READS };
   }
   const base = mapModel(RECIPE_COLUMNS, recipeRow);
-  if (base.deletedAt) {
+  if (base.deletedAt || !canRead({ id: userId ?? "" }, base)) {
     return { recipe: null, ...NO_READS };
   }
   if (!presentId(recipeRow, "chef_", "recipe chef")) throw new Error("D1 recipe chef is missing");
@@ -377,7 +395,7 @@ export async function readRecipeDetailFromD1(
   }
 
   return {
-    recipe,
+    recipe: withReadableSource(recipe, userId),
     userCookbooks: cookbookRows.map((row) => {
       const { id, title, membershipId } = mapModel(USER_COOKBOOK_COLUMNS, row);
       return { id, title, recipes: membershipId === null ? [] : [{ id: membershipId }] };

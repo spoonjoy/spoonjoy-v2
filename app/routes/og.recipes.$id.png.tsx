@@ -9,6 +9,7 @@ import {
   RECIPE_COVER_DISPLAY_SELECT,
 } from "~/lib/recipe-cover.server";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { canRead } from "~/domains/kitchen";
 
 function recipeOgCacheKey(recipe: {
   id: string;
@@ -46,6 +47,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       description: true,
       servings: true,
       deletedAt: true,
+      chefId: true,
+      visibility: true,
       activeCoverId: true,
       activeCoverVariant: true,
       coverMode: true,
@@ -54,7 +57,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     },
   });
 
-  if (!recipe || recipe.deletedAt) {
+  // Link previews are fetched signed out and cached by address, so only a recipe anyone may read gets one.
+  if (!recipe || recipe.deletedAt || !canRead(null, recipe)) {
     throw new Response("Recipe not found", { status: 404 });
   }
   const activeCover = getScopedActiveCover(recipe);

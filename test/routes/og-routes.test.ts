@@ -189,6 +189,40 @@ describe("dynamic OG image routes", () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 
+  it("404s the recipe OG card of a private recipe, which link previews must never show", async () => {
+    const hidden = await db.recipe.create({ data: { title: "Private Toast", chefId: userId, visibility: "private" } });
+
+    await expect(
+      recipeOgLoader({
+        request: new Request(`https://spoonjoy.app/og/recipes/${hidden.id}.png`),
+        params: { id: hidden.id },
+        context: { cloudflare: { env: null } },
+      } as any),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("leaves private recipes off a cookbook's OG card and out of its count", async () => {
+    const cookbook = await db.cookbook.create({ data: { title: "OG Mixed", authorId: userId } });
+    const shown = await db.recipe.create({ data: { title: "Shown Supper", chefId: userId } });
+    const hidden = await db.recipe.create({ data: { title: "Hidden Supper", chefId: userId, visibility: "private" } });
+    await db.recipeInCookbook.createMany({
+      data: [
+        { cookbookId: cookbook.id, recipeId: shown.id, addedById: userId },
+        { cookbookId: cookbook.id, recipeId: hidden.id, addedById: userId },
+      ],
+    });
+
+    const response = await cookbookOgLoader({
+      request: new Request(`https://spoonjoy.app/og/cookbooks/${cookbook.id}.png`),
+      params: { id: cookbook.id },
+      context: { cloudflare: { env: null } },
+    } as any);
+
+    const svg = await expectSvgResponse(response);
+    expect(svg).toContain("1 RECIPE");
+    expect(svg).not.toContain("2 RECIPES");
+  });
+
   it("renders an on-demand SVG card for a cookbook with active recipe covers", async () => {
     const cookbook = await db.cookbook.create({
       data: { title: "OG Weeknights", authorId: userId },
