@@ -324,6 +324,7 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
   const callbackResult = await withD1Unavailable(() => handleAppleOAuthCallback({
     db: database,
     d1: requestD1(context),
+    env,
     appleUser,
     currentUserId,
     redirectTo: stored.redirectTo,
@@ -438,6 +439,7 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
   const callbackResult = await withD1Unavailable(() => handleGitHubOAuthCallback({
     db: database,
     d1: requestD1(context),
+    env,
     githubUser,
     currentUserId,
     redirectTo: stored.redirectTo,
@@ -547,6 +549,7 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
   const callbackResult = await withD1Unavailable(() => handleGoogleOAuthCallback({
     db: database,
     d1: requestD1(context),
+    env,
     googleUser,
     currentUserId,
     redirectTo: stored.redirectTo,

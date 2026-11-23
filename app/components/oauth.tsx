@@ -97,6 +97,7 @@ export function OAuthError({ error, className }: OAuthErrorProps) {
     login_required: 'Please log in before linking a new OAuth provider.',
     oauth_unconfigured: 'OAuth is not configured for this environment yet. Email/password login still works.',
     provider_account_taken: 'That OAuth account is already linked to another Spoonjoy account.',
+    signups_closed: 'This server is invite-only. Ask its owner for an invite link.',
     provider_already_linked: 'That OAuth provider is already linked to your account.',
     temporarily_unavailable: "Spoonjoy's database is busy and didn't save your sign-in. Try again in a moment.",
   }

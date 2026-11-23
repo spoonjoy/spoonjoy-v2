@@ -1,4 +1,5 @@
 import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
+import { gateAccountCreation, type ServerAccessEnv } from "~/lib/server-access.server";
 import { D1WriteUnavailableError, formWriteToken, idForWriteToken, isD1Unavailable, retryD1Write } from "~/lib/d1-write-retry.server";
 import type {
   Prisma,
@@ -138,7 +139,7 @@ export interface SpoonjoyApiContext {
   defaultOwnerEmail?: string;
   allowOwnerEmailFallback?: boolean;
   waitUntil?: (promise: Promise<unknown>) => void;
-  env?: (ImageGenEnv & { DB?: unknown; SPOONJOY_BASE_URL?: string; SESSION_SECRET?: string; NODE_ENV?: string } & VapidEnv & PostHogServerEnv) | null;
+  env?: (ImageGenEnv & { DB?: unknown; SPOONJOY_BASE_URL?: string; SESSION_SECRET?: string; NODE_ENV?: string } & ServerAccessEnv & VapidEnv & PostHogServerEnv) | null;
   bucket?: R2Bucket;
   imageGenRunner?: ImageGenRunner;
   allowLocalImageFallback?: boolean;
@@ -903,12 +904,23 @@ async function getOrCreateOwner(context: SpoonjoyApiContext, email: string) {
   const existing = await findOwnerByEmail(db, email);
   if (existing) return existing;
 
-  return db.user.create({
-    data: {
-      email,
-      username: await uniqueUsername(db, email),
-    },
-  });
+  // A self-hosted server's account-creation gate decides, as for every new account.
+  const gate = await gateAccountCreation(db, context.env);
+  if (!gate.allowed) throw new ApiAuthError(gate.message, 403);
+  let owner;
+  try {
+    owner = await db.user.create({
+      data: {
+        email,
+        username: await uniqueUsername(db, email),
+      },
+    });
+  } catch (error) {
+    await gate.abandoned();
+    throw error;
+  }
+  await gate.created(owner.id);
+  return owner;
 }
 
 /** An optional MCP `idempotencyKey`: null when absent, refused when malformed. */

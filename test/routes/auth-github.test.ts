@@ -384,6 +384,7 @@ describe("GitHub OAuth routes", () => {
     expect(mocks.handleGitHubOAuthCallback).toHaveBeenCalledWith({
       db: { source: "db" },
       d1: null,
+      env: githubEnv,
       githubUser,
       currentUserId: null,
       redirectTo: "/cookbooks",

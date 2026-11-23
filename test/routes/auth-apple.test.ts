@@ -761,6 +761,7 @@ describe("Apple OAuth routes", () => {
     expect(mocks.handleAppleOAuthCallback).toHaveBeenCalledWith({
       db: { source: "db" },
       d1: null,
+      env: appleEnv,
       appleUser,
       currentUserId: null,
       redirectTo: "/cookbooks",

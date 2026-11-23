@@ -44,6 +44,12 @@ export function selfHostVars({ built, env, port, sessionSecret }) {
   for (const [key, value] of Object.entries(env)) {
     if (value !== undefined && PASSED_THROUGH.some((pattern) => pattern.test(key))) vars[key] = value;
   }
+  // This Worker is a self-hosted server: its first account is its admin, who decides who else may
+  // sign up (app/lib/server-access.server.ts). Set after the environment, so nothing turns it off.
+  vars.SPOONJOY_SELF_HOSTED = "true";
+  if (vars.SPOONJOY_SIGNUPS !== undefined && vars.SPOONJOY_SIGNUPS !== "open" && vars.SPOONJOY_SIGNUPS !== "invite") {
+    throw new Error(`SPOONJOY_SIGNUPS must be "open" or "invite"; got "${vars.SPOONJOY_SIGNUPS}".`);
+  }
   let base;
   try {
     base = new URL(vars.SPOONJOY_BASE_URL);

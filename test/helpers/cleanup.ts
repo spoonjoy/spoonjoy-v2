@@ -106,5 +106,7 @@ export async function cleanupDatabase() {
   await db.planEntry.deleteMany({});
   await db.mealPlan.deleteMany({});
   await db.oAuth.deleteMany({});
+  await db.serverInvite.deleteMany({});
+  await db.serverSetting.deleteMany({});
   await db.user.deleteMany({});
 }

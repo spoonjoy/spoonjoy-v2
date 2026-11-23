@@ -63,6 +63,8 @@ model User {
   householdInvitesMade     HouseholdInvite[]
   householdListsMade       HouseholdList[]
   householdListItemsAdded  HouseholdListItem[]
+  serverInvitesMade        ServerInvite[]            @relation("ServerInviteCreator")
+  serverInvitesUsed        ServerInvite[]            @relation("ServerInviteUser")
 
   pushSubscriptions      PushSubscription[]
   nativePushDevices      NativePushDevice[]
@@ -1148,4 +1150,26 @@ model HouseholdListItem {
   updatedAt DateTime      @default(now())
 
   @@index([listId, sortIndex])
+}
+
+// Who may make an account on a self-hosted server (app/lib/server-access.server.ts,
+// migrations/0044_server_access.sql). "admin" is the first account's id; "signups" is open or invite.
+model ServerSetting {
+  key   String @id
+  value String
+}
+
+// An invite link a self-hosted server's admin made: one use, until it expires.
+model ServerInvite {
+  id          String    @id @default(cuid())
+  // SHA-256 of the token in the link; the token itself is shown once and never stored.
+  tokenHash   String    @unique
+  createdById String
+  createdBy   User      @relation("ServerInviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  usedAt      DateTime?
+  usedById    String?
+  usedBy      User?     @relation("ServerInviteUser", fields: [usedById], references: [id], onDelete: SetNull)
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
 }

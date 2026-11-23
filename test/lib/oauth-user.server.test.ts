@@ -3,6 +3,7 @@ import { db } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 import { createTestUser } from "../utils";
+import { INVITE_ONLY_MESSAGE, serverAdminId, setSignupMode } from "~/lib/server-access.server";
 
 // These imports will fail until implementation exists (TDD)
 import {
@@ -120,6 +121,38 @@ describe("oauth-user.server", () => {
   });
 
   describe("createOAuthUser", () => {
+    describe("on a self-hosted server", () => {
+      const env = { SPOONJOY_SELF_HOSTED: "true" };
+      const newcomer = () => ({
+        provider: "google",
+        providerUserId: faker.string.uuid(),
+        providerUsername: "Newcomer",
+        email: faker.internet.email().toLowerCase(),
+        name: "Newcomer",
+      });
+
+      it("makes the first OAuth account the admin", async () => {
+        const result = await createOAuthUser(db, newcomer(), null, env);
+        expect(result.success).toBe(true);
+        expect(await db.serverSetting.findUnique({ where: { key: "admin" } })).toEqual({ key: "admin", value: result.user!.id });
+        expect(await serverAdminId(db, env)).toBe(result.user!.id);
+      });
+
+      it("refuses a new OAuth account once the server is invite-only, and makes nothing", async () => {
+        await createOAuthUser(db, newcomer(), null, env);
+        const refused = await createOAuthUser(db, newcomer(), null, env);
+        expect(refused).toEqual({ success: false, error: "signups_closed", message: INVITE_ONLY_MESSAGE });
+        expect(await db.user.count()).toBe(1);
+        expect(await db.oAuth.count()).toBe(1);
+      });
+
+      it("lets a new OAuth account in while sign-ups are open", async () => {
+        await createOAuthUser(db, newcomer(), null, env);
+        await setSignupMode(db, env, "open");
+        expect((await createOAuthUser(db, newcomer(), null, env)).success).toBe(true);
+      });
+    });
+
     it("should create a new user from OAuth data with name", async () => {
       const oauthData = {
         provider: "google",

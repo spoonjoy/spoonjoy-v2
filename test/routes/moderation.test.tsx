@@ -89,6 +89,20 @@ describe("/moderation", () => {
     expect(((await load(cookie)) as Response).status).toBe(404);
   });
 
+  it("counts a self-hosted server's admin as a moderator, and nobody else there", async () => {
+    const admin = await chef();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const other = await chef();
+    const request = (cookie: string) => new UndiciRequest("http://localhost:3000/moderation", { headers: { Cookie: cookie } });
+    const loadOn = (cookie: string, extra: Record<string, unknown>) =>
+      call(() => loader({ request: request(cookie), context: { cloudflare: { env: env({ SPOONJOY_MODERATOR_USERNAMES: "", ...extra }) } }, params: {} } as never));
+
+    expect(await loadOn(admin.cookie, { SPOONJOY_SELF_HOSTED: "true" })).toEqual({ reports: [] });
+    expect(((await loadOn(other.cookie, { SPOONJOY_SELF_HOSTED: "true" })) as Response).status).toBe(404);
+    // Off a self-hosted server the oldest account is nobody special.
+    expect(((await loadOn(admin.cookie, {})) as Response).status).toBe(404);
+  });
+
   it("lists open reports for a moderator", async () => {
     const mod = await chef("the_mod");
     const reporter = await chef();

@@ -130,6 +130,32 @@ describe("native Sign in with Apple API", () => {
     await cleanupDatabase();
   });
 
+  it("refuses a new Apple ID on an invite-only self-hosted server, and still signs in one it knows", async () => {
+    const fixture = await nativeAppleTokenFixture();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify(fixture.jwks), {
+      headers: { "Content-Type": "application/json" },
+    }));
+    const signIn = (env: Record<string, unknown>) => action(routeArgs(new UndiciRequest("http://localhost/api/v1/auth/apple/native", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identityToken: fixture.identityToken, rawNonce: fixture.rawNonce }),
+    }) as unknown as Request, "auth/apple/native", env));
+    const selfHosted = { SPOONJOY_SELF_HOSTED: "true" };
+    await db.user.create({ data: { email: "owner@example.com", username: "owner" } });
+
+    const refused = await signIn(selfHosted);
+    // The API's existing validation_error, with signups_closed as the provider code, so the apps
+    // show the message without a new error code in the API contract.
+    expect(refused.status).toBe(400);
+    const body = JSON.stringify(await refused.json());
+    expect(body).toContain("This server is invite-only. Ask its owner for an invite link.");
+    expect(body).toContain("signups_closed");
+    expect(await db.user.count()).toBe(1);
+
+    expect((await signIn({})).status).toBe(201);
+    expect((await signIn(selfHosted)).status).toBe(201);
+  });
+
   it("verifies a native Apple identity token and issues Spoonjoy tokens", async () => {
     const fixture = await nativeAppleTokenFixture();
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify(fixture.jwks), {

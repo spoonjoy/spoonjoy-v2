@@ -83,6 +83,18 @@ describe("Self-host Image workflow", () => {
     expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["e2e/self-host/**"]));
   });
 
+  it("runs the fresh server's sign-up and invite checks when the code that decides who may sign up changes", () => {
+    expect(stepNamed(image, /fresh server/).name).toMatch(/sign-ups and invites/);
+    expect(workflow.on.pull_request.paths).toEqual(
+      expect.arrayContaining([
+        "app/lib/server-access.server.ts",
+        "app/routes/signup.tsx",
+        "app/routes/account.server.tsx",
+        "app/lib/oauth-user.server.ts",
+      ]),
+    );
+  });
+
   it("seeds the kitchen through the image's sql command, and masks every password", () => {
     const seed = stepNamed(image, /Seed/).run ?? "";
     expect(seed).toContain("node scripts/self-host-smoke-seed.mjs");
