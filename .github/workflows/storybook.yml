@@ -34,7 +34,10 @@ jobs:
       deployments: write
     
     steps:
+      # Depth 2 keeps a pull request's base (the merge commit's first parent) for the Ouro UI test scope.
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 2
 
       - name: 📦 Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -56,15 +59,40 @@ jobs:
       - name: 📚 Build Storybook
         run: pnpm build-storybook
 
+      # On a pull request or a merge-queue group, the Ouro UI tests and specs below run only when a
+      # change can reach them; otherwise their result is the base commit's, which passed them. It
+      # runs the base commit's copy of scripts/storybook-scope.mjs, so a change cannot set its own
+      # scope, and runs them all when the base has no copy.
+      - name: 🧭 Ouro UI test scope
+        id: scope
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          MERGE_GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "merge_group" ]; then
+            base="$MERGE_GROUP_BASE"
+            git fetch --quiet --no-tags --depth=1 origin "$base"
+          else
+            base="$(git rev-parse HEAD^1)"
+          fi
+          if git show "$base:scripts/storybook-scope.mjs" > "$RUNNER_TEMP/storybook-scope.mjs" 2>/dev/null; then
+            SPOONJOY_OURO_BASE="$base" node "$RUNNER_TEMP/storybook-scope.mjs"
+          else
+            echo "ouro=true" >> "$GITHUB_OUTPUT"
+            echo "The base has no scripts/storybook-scope.mjs, so the Ouro UI tests run."
+          fi
+
       # Ouro UI (app/components/ouro, installed from its shadcn registry) ships its own tests. They
-      # run here, beside the Storybook they use, on every pull request, merge-queue run and push to
-      # main: the Vitest browser tests in Chromium, WebKit and a touch phone with 100% coverage of
+      # run here, beside the Storybook they use, on every push to main and on each pull request and
+      # merge-queue run its scope above selects: the Vitest browser tests in Chromium, WebKit and a touch phone with 100% coverage of
       # the Ouro UI files (vitest.ouro.config.ts), then the Playwright specs in e2e/ouro against
       # the Storybook just built (playwright.ouro.config.ts). Both run under the warning policy.
       - name: 🧪 Ouro UI browser tests and coverage
+        if: steps.scope.outputs.ouro != 'false'
         run: pnpm run verify:clean:test:ouro
 
       - name: 🎭 Ouro UI specs against the built Storybook
+        if: steps.scope.outputs.ouro != 'false'
         run: |
           python3 -m http.server 6006 --bind 127.0.0.1 --directory storybook-static > "$RUNNER_TEMP/storybook-server.log" 2>&1 &
           for _ in $(seq 50); do curl -sf http://127.0.0.1:6006/iframe.html > /dev/null && break; sleep 0.2; done
