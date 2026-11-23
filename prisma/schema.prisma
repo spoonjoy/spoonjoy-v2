@@ -723,6 +723,7 @@ model MealPlan {
   timeZone       String        @default("UTC")
   entries        PlanEntry[]
   calendarFeed   CalendarFeed?
+  rules          PlanRule[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @default(now()) @updatedAt
 
@@ -736,6 +737,20 @@ model CalendarFeed {
   // SHA-256 of the token in the link; the token itself is shown once and never stored.
   tokenHash  String   @unique
   createdAt  DateTime @default(now())
+}
+
+// A plan's rules for random picks (migration 0049, app/domains/planning). Null weekday or mealType means any.
+model PlanRule {
+  id           String   @id
+  mealPlanId   String
+  mealPlan     MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  weekday      Int?
+  mealType     String?
+  // A JSON array of Organizer ids a recipe must all have.
+  organizerIds String   @default("[]")
+  createdAt    DateTime @default(now())
+
+  @@index([mealPlanId])
 }
 
 model PlanEntry {

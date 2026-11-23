@@ -103,6 +103,7 @@ export async function cleanupDatabase() {
   await db.pendingAppleLink.deleteMany({});
   await db.photoUpload.deleteMany({});
   await db.calendarFeed.deleteMany({});
+  await db.planRule.deleteMany({});
   await db.planEntry.deleteMany({});
   await db.mealPlan.deleteMany({});
   await db.oAuth.deleteMany({});
