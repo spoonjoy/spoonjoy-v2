@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { getLocalDb } from "~/lib/db.server";
-import { addEntry, getWeek, prismaPlanStore, removeEntry, todayIn, type PlanStore } from "~/domains/planning";
+import { addEntry, getWeek, moveEntry, prismaPlanStore, removeEntry, todayIn, type PlanStore } from "~/domains/planning";
 import { cleanupDatabase } from "../../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../../utils";
 
@@ -121,5 +121,58 @@ describe("planning a week, stored", () => {
     await getWeek(store, chef.id, "2026-11-24");
     await db.mealPlan.update({ where: { ownerId: chef.id }, data: { firstDayOfWeek: 0 } });
     expect((await getWeek(store, chef.id, "2026-11-24")).start).toBe("2026-11-22");
+  });
+
+  describe("moving an entry", () => {
+    async function plannedWeek() {
+      const chef = await cook();
+      for (const [id, date, mealType] of [["a", "2026-11-23", "dinner"], ["b", "2026-11-23", "dinner"], ["c", "2026-11-23", "dinner"], ["d", "2026-11-24", "lunch"]]) {
+        await addEntry(store, chef.id, id, { kind: "note", title: id, date, mealType });
+      }
+      return chef;
+    }
+
+    async function slot(ownerId: string, date: string, mealType: string) {
+      const week = await getWeek(store, ownerId, date);
+      return week.days.find((day) => day.date === date)!.entries.filter((entry) => entry.mealType === mealType).map((entry) => entry.id);
+    }
+
+    it("reorders an entry inside its own day and meal", async () => {
+      const chef = await plannedWeek();
+      const moved = await moveEntry(store, chef.id, "c", { date: "2026-11-23", mealType: "dinner", index: 0 });
+      expect(moved).toMatchObject({ ok: true, value: { id: "c", date: "2026-11-23", mealType: "dinner", position: 0 } });
+      expect(await slot(chef.id, "2026-11-23", "dinner")).toEqual(["c", "a", "b"]);
+    });
+
+    it("moves an entry to another day and meal, at the asked place, and leaves the rest in order", async () => {
+      const chef = await plannedWeek();
+      await moveEntry(store, chef.id, "a", { date: "2026-11-24", mealType: "lunch", index: 1 });
+      expect(await slot(chef.id, "2026-11-24", "lunch")).toEqual(["d", "a"]);
+      expect(await slot(chef.id, "2026-11-23", "dinner")).toEqual(["b", "c"]);
+    });
+
+    it("puts an entry last when the asked place is past the end, and first when it is below zero or not a number", async () => {
+      const chef = await plannedWeek();
+      await moveEntry(store, chef.id, "a", { date: "2026-11-23", mealType: "dinner", index: 99 });
+      expect(await slot(chef.id, "2026-11-23", "dinner")).toEqual(["b", "c", "a"]);
+      await moveEntry(store, chef.id, "a", { date: "2026-11-23", mealType: "dinner", index: -3 });
+      expect(await slot(chef.id, "2026-11-23", "dinner")).toEqual(["a", "b", "c"]);
+      await moveEntry(store, chef.id, "c", { date: "2026-11-23", mealType: "dinner", index: Number.NaN });
+      expect(await slot(chef.id, "2026-11-23", "dinner")).toEqual(["c", "a", "b"]);
+    });
+
+    it("refuses an entry that isn't on the cook's plan, or a place it can't read", async () => {
+      const chef = await plannedWeek();
+      const other = await cook();
+      await addEntry(store, other.id, "theirs", { kind: "note", title: "Theirs", date: "2026-11-23", mealType: "dinner" });
+      await removeEntry(store, chef.id, "b");
+      const to = { date: "2026-11-25", mealType: "dinner", index: 0 };
+      expect(await moveEntry(store, chef.id, "theirs", to)).toEqual({ ok: false, error: "That meal isn't on your plan." });
+      expect(await moveEntry(store, chef.id, "b", to)).toEqual({ ok: false, error: "That meal isn't on your plan." });
+      expect(await moveEntry(store, chef.id, "missing", to)).toEqual({ ok: false, error: "That meal isn't on your plan." });
+      expect(await moveEntry(store, chef.id, "a", { ...to, date: "soon" })).toEqual({ ok: false, error: "Choose a day for this meal." });
+      expect(await moveEntry(store, chef.id, "a", { ...to, mealType: "brunch" })).toEqual({ ok: false, error: "Choose a meal type." });
+      expect(await slot(other.id, "2026-11-23", "dinner")).toEqual(["theirs"]);
+    });
   });
 });

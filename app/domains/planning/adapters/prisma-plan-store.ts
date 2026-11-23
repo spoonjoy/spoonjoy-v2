@@ -73,5 +73,10 @@ export function prismaPlanStore(db: PlanDb): PlanStore {
       const { count } = await db.planEntry.updateMany({ where: { id: entryId, mealPlanId: planId, deletedAt: null }, data: { deletedAt: new Date() } });
       return count > 0;
     },
+    async placeEntries(planId, placements) {
+      for (const { id, date, mealType, position } of placements) {
+        await db.planEntry.updateMany({ where: { id, mealPlanId: planId }, data: { date, mealType, position } });
+      }
+    },
   };
 }
