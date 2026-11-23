@@ -207,7 +207,7 @@ async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft): 
   const report: Report = { counts: [], events: [] };
   const at = { entity: "recipes", sourceKey: draft.sourceKey };
   const hasPhoto = backup.hasFile(draft.photoPath);
-  // An error here is passed on: the next run tries the recipe again, and recipes() passes it over after RECIPE_TRIES.
+  // An error here is passed on, for bringOrPassOver to try the recipe again or pass it over.
   const result: RecipeWriteResult = await ports.writeRecipe({ sourceId: job.sourceId as string, jobId: job.id, chefId: job.ownerId, draft });
   const target = { ...at, targetId: result.recipeId };
   if (result.outcome === "skipped") {
@@ -239,6 +239,40 @@ async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft): 
   return report;
 }
 
+/** How a passed-over recipe's error reads in its report line: its kind and the start of its message. */
+const ERROR_DETAIL_CHARS = 200;
+
+function describeError(error: unknown): string {
+  const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return text.slice(0, ERROR_DETAIL_CHARS);
+}
+
+/**
+ * Brings one recipe, trying it once more in place if it fails. A recipe that fails twice is reported, with why, and
+ * passed over, so one bad recipe never holds the rest back or sends the move-in through the queue's backoff. Only when
+ * the database itself can't be reached is the error passed on, for the queue to try the whole segment again later.
+ */
+async function bringOrPassOver(run: Run, backup: MealieBackup, draft: RecipeDraft): Promise<Report> {
+  let failure: unknown;
+  for (let tries = 0; tries < 2; tries++) {
+    try {
+      return await bringRecipe(run, backup, draft);
+    } catch (error) {
+      failure = error;
+    }
+  }
+  // A database that can't be reached throws here, and the segment goes back to the queue with the recipe still next.
+  await run.ports.store.loadJob(run.job.id);
+  return {
+    counts: [["recipes", { failed: 1 }]],
+    events: [event("item-failed", `${draft.title} didn't move in this time. Moving the same backup in again tries it once more.`, {
+      entity: "recipes",
+      sourceKey: draft.sourceKey,
+      detail: describeError(failure),
+    })],
+  };
+}
+
 async function recipes(run: Run, { backup, drafts }: Opened, chunkSize: number) {
   const { job, ports } = run;
   const { store } = ports;
@@ -259,7 +293,7 @@ async function recipes(run: Run, { backup, drafts }: Opened, chunkSize: number) 
   }
   const end = Math.min(start + chunkSize, drafts.length);
   for (let i = start; i < end; i++) {
-    const report = await bringRecipe(run, backup, drafts[i]);
+    const report = await bringOrPassOver(run, backup, drafts[i]);
     await store.updateJob(job.id, { cursor: String(i + 1), attempt: 0 }, run.token, report);
     job.attempt = 0;
   }
