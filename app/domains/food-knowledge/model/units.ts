@@ -205,3 +205,37 @@ export function formatAmountIn(
   const unitText = rung.plural && value > 1 && text !== "1" ? rung.plural : rung.singular;
   return `${text} ${unitText}`;
 }
+
+/** An amount as a list or recipe stores it: a quantity (maybe as text) and the unit it is written in. */
+export interface Amount {
+  quantity: number | string | null | undefined;
+  unit: string | null | undefined;
+}
+
+const sameUnitText = (unit: string | null | undefined) => unit?.trim().toLowerCase() ?? "";
+
+/**
+ * Amounts of one food added up, in the first amount's unit: 1 cup and 100 ml make 1.42 cups. Null when they
+ * cannot be added (a volume and a weight, two units nobody can convert, an amount with no number), so a list
+ * keeps them apart.
+ *
+ * @example
+ * combineAmounts([{ quantity: 1, unit: "cup" }, { quantity: 100, unit: "ml" }]) // { quantity: 1.42…, unit: "cup" }
+ * combineAmounts([{ quantity: 1, unit: "cup" }, { quantity: 100, unit: "g" }]) // null
+ */
+export function combineAmounts(amounts: readonly Amount[]): { quantity: number; unit: string | null } | null {
+  if (amounts.length === 0) return null;
+  const quantities = amounts.map(({ quantity }) => (typeof quantity === "string" ? Number.parseFloat(quantity) : quantity));
+  if (quantities.some((quantity) => quantity == null || !Number.isFinite(quantity))) return null;
+  const numbers = quantities as number[];
+  const unit = amounts[0].unit ?? null;
+  const known = resolveUnit(unit);
+  if (known) {
+    const units = amounts.map((amount) => resolveUnit(amount.unit));
+    if (units.some((other) => other?.dimension !== known.dimension)) return null;
+    const base = numbers.reduce((sum, quantity, index) => sum + quantity * units[index]!.toBase, 0);
+    return { quantity: base / known.toBase, unit };
+  }
+  if (amounts.some((amount) => sameUnitText(amount.unit) !== sameUnitText(unit))) return null;
+  return { quantity: numbers.reduce((sum, quantity) => sum + quantity, 0), unit };
+}
