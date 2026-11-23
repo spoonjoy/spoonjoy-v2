@@ -165,8 +165,8 @@ describe("organizers on recipes", () => {
         { path: `/empty${path}`, Component, loader: () => ({ organizers: [] }) },
       ]),
       ...pages.flatMap(({ path, Component }) => [
-        { path, Component, loader: () => ({ organizer: { name: "Cozy", slug: "cozy" }, recipes }) },
-        { path: `/empty${path}`, Component, loader: () => ({ organizer: { name: "Lonely", slug: "lonely" }, recipes: [] }) },
+        { path, Component, loader: () => ({ organizer: { name: "Cozy", slug: "cozy" }, recipes, others: [] }) },
+        { path: `/empty${path}`, Component, loader: () => ({ organizer: { name: "Lonely", slug: "lonely" }, recipes: [], others: [] }) },
       ]),
       {
         path: "/recipes/:id/organize",
