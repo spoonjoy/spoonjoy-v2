@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 // @ts-expect-error -- plain ESM module shipped in the image, without types
 import { checkHealth } from "../../self-host/health.mjs";
 
@@ -18,8 +18,14 @@ describe("checkHealth (the image's HEALTHCHECK)", () => {
   });
 
   it("uses the platform's fetch by default", async () => {
-    // Port 9 (discard) on loopback: nothing answers there in a test run.
-    expect(await checkHealth({ port: 9 })).toBe(1);
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => { asked.push(url); return new Response("{}", { status: 200 }); });
+    try {
+      expect(await checkHealth({ port: 3000 })).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(asked).toEqual(["http://127.0.0.1:3000/health/ready"]);
   });
 
   it("is unhealthy when the server does not answer", async () => {
