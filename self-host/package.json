@@ -1,0 +1,9 @@
+{
+  "name": "spoonjoy-self-host",
+  "private": true,
+  "type": "module",
+  "description": "The runtime the self-hosted image installs: Miniflare at the version the app's wrangler uses (test/self-host/pins.test.ts).",
+  "dependencies": {
+    "miniflare": "4.20260507.1"
+  }
+}
