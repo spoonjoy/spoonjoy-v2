@@ -114,9 +114,13 @@ export const MAX_RUN_WORKERS = 100;
 // [code: 10007]" (seen on run 37917989293). Deploying again is idempotent (assets already
 // uploaded are skipped), so the deploy is retried after these delays. The same bound applies
 // to the exact internal authentication server error seen during run 39088149235, not other
-// authentication or permission failures, and to a lost API connection or an API server error.
+// authentication or permission failures, to a lost API connection or an API server error, and to
+// the "unknown error" (code 10013) Cloudflare answered while enabling the new script's workers.dev
+// subdomain on merge-queue runs 45145294626, 45163811444 and 45176389392; only that request's
+// 10013 is retried, since the script is uploaded by then.
 export const DEPLOY_RETRY_DELAYS_MS = [5_000, 15_000, 30_000];
 const SCRIPT_NOT_FOUND_PATTERN = /\[code: 10007\]/;
+const SUBDOMAIN_UNKNOWN_ERROR_PATTERN = /\/workers\/scripts\/[^/\s)]+\/subdomain\) failed\.\s+An unknown error has occurred\.[^\n]*\[code: 10013\]/;
 const INTERNAL_AUTH_SERVER_ERROR_PATTERN = /Internal authentication error: internal server error\s+\[code: 10500\]/;
 // The connection to Cloudflare's API failed before any answer (undici's "fetch failed" and the
 // socket errors under it), or the API answered a server error with a page instead of JSON, which
@@ -549,6 +553,8 @@ export async function deploy({ env, exec, fs, sleep, log }) {
         ? `Cloudflare did not yet know ${state.workerName} (code 10007)`
         : INTERNAL_AUTH_SERVER_ERROR_PATTERN.test(output)
           ? `Cloudflare reported an internal authentication server error (code 10500) while deploying ${state.workerName}`
+          : SUBDOMAIN_UNKNOWN_ERROR_PATTERN.test(output)
+            ? `Cloudflare answered an unknown error (code 10013) while enabling ${state.workerName}'s workers.dev subdomain`
           : scriptMayExist && MIGRATION_TAG_LAG_PATTERN.test(output)
             ? `Cloudflare had not yet caught up with ${state.workerName}'s Durable Object migrations (code 10079)`
             : serverErrorPage
@@ -556,7 +562,7 @@ export async function deploy({ env, exec, fs, sleep, log }) {
               : API_CONNECTION_FAILURE_PATTERN.test(output)
                 ? `The connection to Cloudflare's API failed while deploying ${state.workerName}`
                 : undefined;
-      if (SCRIPT_NOT_FOUND_PATTERN.test(output) || serverErrorPage || API_CONNECTION_FAILURE_PATTERN.test(output)) scriptMayExist = true;
+      if (SCRIPT_NOT_FOUND_PATTERN.test(output) || SUBDOMAIN_UNKNOWN_ERROR_PATTERN.test(output) || serverErrorPage || API_CONNECTION_FAILURE_PATTERN.test(output)) scriptMayExist = true;
       if (!reason || attempt >= DEPLOY_RETRY_DELAYS_MS.length) throw error;
       const delay = DEPLOY_RETRY_DELAYS_MS[attempt];
       log(`::warning::${reason}; deploying again in ${delay / 1000} s.`);

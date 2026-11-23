@@ -972,10 +972,39 @@ describe("deploy", () => {
     expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(DEPLOY_RETRY_DELAYS_MS.slice(0, 2));
   });
 
+  // Seen on merge-queue Journeys run 45176389392: the script was uploaded, then enabling its
+  // workers.dev subdomain failed with Cloudflare's "unknown error".
+  const subdomainUnknownError = failedDeploy(
+    "✘ [ERROR] A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2/subdomain) failed.\n\n  An unknown error has occurred. If this error persists, please file a report in workers-sdk (https://github.com/cloudflare/workers-sdk/issues) or reach out to your account team. [code: 10013]\n",
+  );
+
+  it("deploys again after Cloudflare's unknown error on the subdomain (code 10013), and then accepts the migrations the first try applied", async () => {
+    const exec = vi.fn()
+      .mockRejectedValueOnce(subdomainUnknownError)
+      .mockRejectedValueOnce(migrationTagLag)
+      .mockResolvedValueOnce({ stdout: "Deployed\n", stderr: "" });
+    const sleep = vi.fn(async () => {});
+    const log = vi.fn();
+
+    expect(await deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log })).toBe(3);
+    expect(log).toHaveBeenCalledWith(`::warning::Cloudflare answered an unknown error (code 10013) while enabling ${IDENTITY.workerName}'s workers.dev subdomain; deploying again in 5 s.`);
+    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(DEPLOY_RETRY_DELAYS_MS.slice(0, 2));
+  });
+
+  it("stops deploying again after a bounded number of subdomain unknown errors", async () => {
+    const exec = vi.fn().mockRejectedValue(subdomainUnknownError);
+    const sleep = vi.fn(async () => {});
+
+    await expect(deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log: vi.fn() })).rejects.toBe(subdomainUnknownError);
+    expect(exec).toHaveBeenCalledTimes(DEPLOY_RETRY_DELAYS_MS.length + 1);
+  });
+
   it.each([
     ["a build error", "✘ [ERROR] Build failed with 1 error:\n  app/entry.ts:1:7: ERROR: Expected \";\" but found \"x\"\n"],
     ["a config error", "✘ [ERROR] Processing wrangler.json configuration:\n  - \"env.qa.d1_databases[0]\" bindings should have a string \"database_id\" field.\n"],
     ["an API error with a JSON answer", "A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2) failed.\n  Script startup exceeded CPU time limit. [code: 10021]\n"],
+    ["an unknown error (code 10013) on a request other than the subdomain", "A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2) failed.\n  An unknown error has occurred. [code: 10013]\n"],
+    ["another error on the subdomain", "A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2/subdomain) failed.\n  Forbidden [code: 10001]\n"],
     ["an API client error page", "✘ [ERROR] Received a malformed response from the API\n  PUT /accounts/x/workers/scripts/y -> 413 Payload Too Large\n"],
     ["an API 501", "✘ [ERROR] Received a malformed response from the API\n  PUT /accounts/x/workers/scripts/y -> 501 Not Implemented\n"],
     ["an app log line that mentions a failed fetch", "✘ [ERROR] Uncaught Error: Image fetch failed\n  at app/lib/safe-image-fetch.server.ts\n"],
