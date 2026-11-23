@@ -291,7 +291,7 @@ export async function handleNativeAppleSignIn(
     throw new NativeAppleAuthError(APPLE_EMAIL_UNAVAILABLE, PENDING_APPLE_LINK_MESSAGE, 409, pendingLink ?? undefined);
   }
   if (callback.error === SIGNUPS_CLOSED) {
-    throw new NativeAppleAuthError(SIGNUPS_CLOSED, callback.message ?? INVITE_ONLY_MESSAGE, 403);
+    throw new NativeAppleAuthError(SIGNUPS_CLOSED, INVITE_ONLY_MESSAGE, 403);
   }
   if (!callback.success || !callback.userId) {
     throw new NativeAppleAuthError(callback.error ?? "apple_sign_in_failed", callback.message ?? "Apple sign-in didn't finish: Spoonjoy returned no account for it.", 409);
