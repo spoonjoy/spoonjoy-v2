@@ -1,7 +1,8 @@
 // A household shared by two people, as scratch index 10 (AGENTS.md's scratch index table): its base
 // account makes a household and an invite link, and its desktop twin opens the link in a second
-// browser and joins. Both see each other in People after a reload. The owner then makes the twin
-// view-only and removes them, and each change shows on the twin's next load. Desktop only: the two accounts are the two people, so an iPhone run at the same
+// browser and joins. Both see each other in People after a reload, and share a shopping list: the twin adds to
+// it and the owner checks it off. The owner then makes the twin view-only and removes them, and each change
+// shows on the twin's next load. Desktop only: the two accounts are the two people, so an iPhone run at the same
 // time would share them. The household's name carries a timestamp, so each run's household is its
 // own. The households flag is on in QA.
 import type { Page, TestInfo } from "@playwright/test";
@@ -100,6 +101,39 @@ test.describe("Households", () => {
         await expect(people(page).getByText("Member", { exact: true })).toBeVisible();
       });
       await attachScreenshot(testInfo, page, "owner-household");
+
+      // The owner makes a shared list; the joiner adds to it, and the owner checks it off. Each sees the other's
+      // change on their next load.
+      await page.getByRole("link", { name: /Shopping lists/ }).click();
+      await expect(page.getByRole("heading", { level: 1, name: "Shopping lists", exact: true })).toBeVisible();
+      await page.getByLabel("List name").fill("Groceries");
+      await page.getByRole("button", { name: "Make list", exact: true }).click();
+      await expect(page.getByRole("heading", { level: 1, name: "Groceries", exact: true })).toBeVisible();
+      const listPath = new URL(page.url()).pathname;
+
+      await joinerPage.goto(listPath);
+      await waitForHydration(joinerPage);
+      await joinerPage.getByLabel("Add an item").fill("2 litres milk");
+      await joinerPage.getByRole("button", { name: "Add", exact: true }).click();
+      await expect(joinerPage.getByRole("checkbox", { name: "2 litres milk" })).toBeVisible();
+
+      await verifyAfterReload(async () => {
+        await expect(page.getByText(`Added by ${joiner.username}`, { exact: true })).toBeVisible();
+      });
+      await Promise.all([saved(page, listPath), page.getByRole("checkbox", { name: "2 litres milk" }).click()]);
+      await expect(page.getByRole("checkbox", { name: "2 litres milk" })).toBeChecked();
+      await verifyAfterReload(async () => {
+        await expect(page.getByRole("checkbox", { name: "2 litres milk" })).toBeChecked();
+      });
+      await expectAccessible();
+      await attachScreenshot(testInfo, page, "owner-shared-list");
+      await joinerPage.reload({ waitUntil: "load" });
+      await expect(joinerPage.getByRole("checkbox", { name: "2 litres milk" })).toBeChecked();
+      await attachScreenshot(testInfo, joinerPage, "joiner-shared-list");
+      await page.goto(householdPath);
+      await waitForHydration(page);
+      await joinerPage.goto(householdPath);
+      await waitForHydration(joinerPage);
 
       // The owner makes the joiner view-only, and the joiner sees it on their next load.
       await page.getByRole("button", { name: `Actions for ${joiner.username}`, exact: true }).click();

@@ -1,6 +1,6 @@
 import type { Route } from "./+types/households.$id";
 import { useState } from "react";
-import { Ellipsis } from "lucide-react";
+import { Ellipsis, ListChecks } from "lucide-react";
 import { Form as RouterForm, data, redirect, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Avatar } from "~/components/ouro/avatar/avatar";
@@ -196,6 +196,19 @@ export default function HouseholdPage() {
             tone="destructive"
           />
         ) : null}
+
+        <section className="mt-10" aria-labelledby="household-shared">
+          <SectionHeader id="household-shared" title="Shared" />
+          <ItemGroup aria-label="Shared" variant="divided" className="mt-2">
+            <Item
+              href={`/households/${household.id}/lists`}
+              title="Shopping lists"
+              description="Lists everyone in the household shops from"
+              media={<ListChecks aria-hidden="true" />}
+              mediaSize="icon"
+            />
+          </ItemGroup>
+        </section>
 
         {household.canInvite ? (
           <section className="mt-10" aria-labelledby="household-invite">

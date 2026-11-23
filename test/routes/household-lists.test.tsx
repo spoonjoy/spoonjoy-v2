@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -170,6 +170,34 @@ describe("household list pages", () => {
     render(<Empty initialEntries={["/households/h1/lists"]} />);
     expect(await screen.findByText("No shared lists yet")).toBeTruthy();
     expect(screen.queryByRole("textbox", { name: "List name" })).toBeNull();
+  });
+
+  it("ticks an item at once, and shows what the server kept once it answers", async () => {
+    let release: () => void = () => {};
+    const server = { checked: false };
+    const Stub = createTestRoutesStub([
+      {
+        path: "/households/:id/lists/:listId",
+        Component: ListPage,
+        loader: () => ({
+          household: { id: "h1", name: "Home" },
+          list: { id: "l1", name: "Groceries", canEdit: true, items: [{ id: "i1", text: "eggs", checked: server.checked, addedBy: null }] },
+        }),
+        action: async () => {
+          await new Promise<void>((resolve) => (release = resolve));
+          return { error: "View-only members can't change shared lists." };
+        },
+      },
+    ]);
+    const user = userEvent.setup();
+    render(<Stub initialEntries={["/households/h1/lists/l1"]} />);
+    const box = () => screen.getByRole("checkbox", { name: "eggs" });
+    await screen.findByRole("heading", { level: 1, name: "Groceries" });
+    await user.click(box());
+    await vi.waitFor(() => expect(box().getAttribute("aria-checked")).toBe("true"));
+    // Refused: the next load still has it unticked, and the tick goes.
+    release();
+    await vi.waitFor(() => expect(box().getAttribute("aria-checked")).toBe("false"));
   });
 
   it("lets a member check items off, remove them and delete the list, and shows view-only members the items alone", async () => {
