@@ -151,7 +151,7 @@ function CookTogether({ households }: { households: { id: string; name: string }
       {households.length > 0 ? (
         <ItemGroup aria-label="Your households" variant="divided" className="mt-2">
           {households.map((household) => (
-            <Item key={household.id} href={`/households/${household.id}`} title={household.name} media={<House />} />
+            <Item key={household.id} href={`/households/${household.id}`} title={household.name} media={<House />} mediaSize="icon" />
           ))}
         </ItemGroup>
       ) : (
