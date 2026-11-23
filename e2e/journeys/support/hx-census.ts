@@ -48,9 +48,9 @@ async function openDialog(trigger: Locator, dialog: Locator) {
   await expect(dialog).toBeVisible();
 }
 
-async function openRecipeMaintenance(page: Page) {
-  await openDisclosure(page.getByRole("button", { name: /^Manage recipe/ }));
-  return page.locator("#recipe-owner-maintenance");
+// The owner's recipe actions are in the header's ⋯ menu, as the Apple app's.
+function chooseRecipeAction(page: Page, name: string) {
+  return chooseMenuItem(page, page.getByTestId("recipe-header-more-action"), name);
 }
 
 async function enterCookMode(page: Page) {
@@ -157,19 +157,32 @@ export const census: Journey[] = [
       DEFAULT,
       // Entering cook mode changes no progress (cooking.journey.ts's history tests do it as the chef).
       { id: "cook-mode", action: enterCookMode },
-      { id: "manage-open", action: async (page) => void (await openRecipeMaintenance(page)) },
+      {
+        id: "actions-menu",
+        action: async (page) => {
+          await page.getByTestId("recipe-header-more-action").click();
+          await expect(page.getByRole("menuitem", { name: "Manage covers", exact: true })).toBeVisible();
+        },
+      },
+      {
+        id: "covers-dialog",
+        action: async (page) => {
+          await chooseRecipeAction(page, "Manage covers");
+          await expect(page.getByRole("dialog", { name: "Manage covers" })).toBeVisible();
+        },
+      },
       {
         id: "delete-dialog",
         action: async (page) => {
-          const maintenance = await openRecipeMaintenance(page);
-          await openDialog(maintenance.getByRole("button", { name: "Delete", exact: true }), page.getByRole("alertdialog", { name: `Delete "${LEMON_RICE_TITLE}"?` }));
+          await chooseRecipeAction(page, "Delete");
+          await expect(page.getByRole("alertdialog", { name: `Delete "${LEMON_RICE_TITLE}"?` })).toBeVisible();
         },
       },
       {
         id: "variation-dialog",
         action: async (page) => {
-          const maintenance = await openRecipeMaintenance(page);
-          await openDialog(maintenance.getByRole("button", { name: "Make a variation", exact: true }), page.getByRole("dialog", { name: `Make a variation of "${LEMON_RICE_TITLE}"?` }));
+          await chooseRecipeAction(page, "Make a variation");
+          await expect(page.getByRole("dialog", { name: `Make a variation of "${LEMON_RICE_TITLE}"?` })).toBeVisible();
         },
       },
       {

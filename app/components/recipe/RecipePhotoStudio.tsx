@@ -124,13 +124,13 @@ export function RecipePhotoStudio({
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          {/* h2: the recipe title is the page's h1 and the Manage recipe disclosure above has no heading. */}
-          <h2
+          {/* h3: under the Manage covers dialog's title, as the cover history's heading beside it. */}
+          <h3
             id="recipe-photo-studio-heading"
             className="font-sj-display text-xl font-semibold leading-7 text-[var(--sj-ink)]"
           >
             Photos
-          </h2>
+          </h3>
           <p className="font-sj-ui text-sm font-semibold text-[var(--sj-brass)]">
             {titleLabel}
           </p>

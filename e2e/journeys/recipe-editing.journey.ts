@@ -8,7 +8,8 @@
 // key), except for one deliberate parse on the Add Step page, which must not take the page down.
 import { test as journeyTest, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
-import { openDisclosure, pathUrl, waitForHydration } from "./support/navigation";
+import { pathUrl, waitForHydration } from "./support/navigation";
+import { chooseMenuItem } from "./support/menu";
 import { scratchStorageStatePath } from "./support/personas";
 import { requiredLabel } from "./support/forms";
 import { recordCookSyncRequests } from "./support/cook-sync-evidence";
@@ -64,9 +65,9 @@ async function expectCookProgressSynced(page: Page) {
   await expect(page.getByTestId("cook-sync-status").locator("p:not([aria-hidden])")).toHaveText("Progress synced");
 }
 
-async function openMaintenance(page: Page) {
-  await openDisclosure(page.getByRole("button", { name: /^Manage recipe/ }));
-  return page.locator("#recipe-owner-maintenance");
+// The owner's recipe actions are in the header's ⋯ menu, as the Apple app's.
+function chooseRecipeAction(page: Page, name: string) {
+  return chooseMenuItem(page, page.getByTestId("recipe-header-more-action"), name);
 }
 
 test.describe("Recipe create and edit", () => {
@@ -138,7 +139,7 @@ test.describe("Recipe create and edit", () => {
 
     // --- Rename it.
     await waitForHydration(page);
-    await (await openMaintenance(page)).getByRole("link", { name: "Edit recipe" }).click();
+    await chooseRecipeAction(page, "Edit");
     await expect(page).toHaveURL(pathUrl(`${recipePath}/edit`));
     await expect(titleField).toHaveValue(title);
     await titleField.fill(renamed);
@@ -238,7 +239,7 @@ test.describe("Recipe create and edit", () => {
     const cachedProgressKeys = await page.evaluate((path) => Object.keys(localStorage).filter((key) =>
       key.startsWith("spoonjoy-cook-progress:") && key.endsWith(`:${path.split("/").at(-1)}`)), recipePath);
     expect(cachedProgressKeys).toHaveLength(1);
-    await (await openMaintenance(page)).getByRole("button", { name: "Delete", exact: true }).click();
+    await chooseRecipeAction(page, "Delete");
     const deleteRecipeDialog = page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ });
     await deleteRecipeDialog.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/recipes"));
@@ -292,7 +293,7 @@ test.describe("Recipe create and edit", () => {
     // --- Delete the recipe.
     await waitForHydration(page);
     await expectCookProgressSynced(page);
-    await (await openMaintenance(page)).getByRole("button", { name: "Delete", exact: true }).click();
+    await chooseRecipeAction(page, "Delete");
     const deleteRecipeDialog = page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ });
     await deleteRecipeDialog.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/recipes"));
