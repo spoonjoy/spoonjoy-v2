@@ -1,22 +1,31 @@
 // The jobs port: work that runs on the server after the request that asked for it, whether or not the
-// person keeps the page open. spoonjoy.app runs jobs on Cloudflare Queues (../adapters/cloudflare-jobs.ts);
-// a self-hosted server runs them in process; tests drain them in memory (../adapters/memory-jobs.ts).
+// person keeps the page open. spoonjoy.app runs jobs on Cloudflare Queues (../adapters/cloudflare-jobs.ts)
+// and tests drain them in memory (../adapters/memory-jobs.ts); a self-hosted server will get an
+// in-process adapter of its own.
 //
 // A job has a kind (defineJob), a payload and a key. Enqueueing a key that is already waiting or done does
-// nothing, and a delivery whose key is done is skipped, so a job runs to completion once however often
-// it is enqueued or delivered. A run that throws is retried after a backoff until its kind's attempts
-// run out; then its key is freed, so the same job can be enqueued again later.
+// nothing. A delivery leases its key before it runs, so one run of a key goes at a time, and a delivery
+// whose key is done is skipped. Queues delivers at least once, and a run can die part-way (its lease then
+// runs out and the next delivery starts again), so handlers must be safe to run again: resume from what
+// is already saved. A run that throws is retried after a backoff until its kind's attempts run out; then
+// its key is freed, so the same job can be enqueued again later. Handlers check their own payloads: a
+// message queued before a payload changed shape still reaches the new handler.
 
 /** One kind of job, and the payload it carries. Define each kind once, beside its handler. */
 export interface JobKind<Payload> {
   readonly type: string;
   readonly maxAttempts: number;
+  /** How long one run may hold its key before another delivery may start it again. */
+  readonly leaseSeconds: number;
   /** Carries the payload's type only; never set. */
   readonly payload?: Payload;
 }
 
-export function defineJob<Payload>(type: string, options: { maxAttempts?: number } = {}): JobKind<Payload> {
-  return { type, maxAttempts: options.maxAttempts ?? 5 };
+/** A Queues consumer runs for at most 15 minutes, so a run's lease outlasts it. */
+const DEFAULT_LEASE_SECONDS = 15 * 60 + 60;
+
+export function defineJob<Payload>(type: string, options: { maxAttempts?: number; leaseSeconds?: number } = {}): JobKind<Payload> {
+  return { type, maxAttempts: options.maxAttempts ?? 5, leaseSeconds: options.leaseSeconds ?? DEFAULT_LEASE_SECONDS };
 }
 
 export interface EnqueueOptions {
@@ -44,6 +53,12 @@ export interface JobMessage {
   payload: unknown;
 }
 
+export function isJobMessage(body: unknown): body is JobMessage {
+  if (typeof body !== "object" || body === null) return false;
+  const { type, key } = body as Record<string, unknown>;
+  return typeof type === "string" && typeof key === "string" && "payload" in body;
+}
+
 export interface RegisteredJob {
   kind: JobKind<unknown>;
   handler: JobHandler<unknown>;
@@ -67,16 +82,24 @@ export function jobRegistry(): JobRegistry {
   return registry;
 }
 
-/** Where job keys are claimed, so a key runs once: D1 on spoonjoy.app. */
+/** Where job keys are claimed and leased, so a key runs once at a time and finishes once: D1 on spoonjoy.app. */
 export interface JobKeys {
-  /** True when the key was free and is now this job's; false when it is already waiting or done. */
+  /**
+   * True when the key was free (or left waiting for over a day, its message lost) and is now this job's;
+   * false when it is already waiting, running or done.
+   */
   claim(key: string, type: string): Promise<boolean>;
-  isDone(key: string): Promise<boolean>;
+  /** Leases the key to this run: "busy" while another run holds an unexpired lease, "done" once it finished. */
+  start(key: string, type: string, leaseSeconds: number): Promise<"started" | "busy" | "done">;
+  /** Gives the lease back after a run that will be retried. */
+  pause(key: string): Promise<void>;
   markDone(key: string): Promise<void>;
   release(key: string): Promise<void>;
 }
 
 const FIRST_RETRY_SECONDS = 10;
+/** How long a delivery waits when another run of its key holds the lease. */
+const BUSY_RETRY_SECONDS = 60;
 const LONGEST_RETRY_SECONDS = 15 * 60;
 
 /** Seconds to wait before running a job again after its `attempt`th run failed. */
@@ -88,17 +111,27 @@ export type JobOutcome =
   | { status: "done" }
   | { status: "skipped"; reason: "already-done" | "unknown-type" }
   | { status: "retry"; delaySeconds: number }
+  | { status: "busy"; delaySeconds: number }
   | { status: "failed"; error: unknown };
 
 /** Runs one delivery of a job: the adapters call this, and act on its outcome. */
 export async function runJob(registry: JobRegistry, keys: JobKeys, message: JobMessage, attempt: number): Promise<JobOutcome> {
   const registered = registry.handlerFor(message.type);
-  if (!registered) return { status: "skipped", reason: "unknown-type" };
-  if (await keys.isDone(message.key)) return { status: "skipped", reason: "already-done" };
+  if (!registered) {
+    // Nothing here runs this kind (renamed, or rolled back): free the key so it can be enqueued again.
+    await keys.release(message.key);
+    return { status: "skipped", reason: "unknown-type" };
+  }
+  const started = await keys.start(message.key, message.type, registered.kind.leaseSeconds);
+  if (started === "done") return { status: "skipped", reason: "already-done" };
+  if (started === "busy") return { status: "busy", delaySeconds: BUSY_RETRY_SECONDS };
   try {
     await registered.handler(message.payload, { key: message.key, attempt });
   } catch (error) {
-    if (attempt < registered.kind.maxAttempts) return { status: "retry", delaySeconds: retryDelaySeconds(attempt) };
+    if (attempt < registered.kind.maxAttempts) {
+      await keys.pause(message.key);
+      return { status: "retry", delaySeconds: retryDelaySeconds(attempt) };
+    }
     await keys.release(message.key);
     return { status: "failed", error };
   }
