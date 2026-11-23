@@ -59,6 +59,15 @@ describe("Self-host Image workflow", () => {
     expect(stepNamed(image, /health check/i).run).toContain(".State.Health.Status");
   });
 
+  it("signs in on the fresh server, with a password, a passkey and the apps' Sign in with Apple, before seeding", () => {
+    const names = image.steps.map((step) => step.name ?? "");
+    const fresh = stepNamed(image, /fresh server/).run ?? "";
+    expect(fresh).toContain(PLAYWRIGHT_CONTAINER.image);
+    expect(fresh).toContain("-c playwright.self-host-fresh.config.ts");
+    expect(names.findIndex((name) => /fresh server/.test(name))).toBeLessThan(names.findIndex((name) => /Seed/.test(name)));
+    expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["e2e/self-host/**", "app/lib/session.server.ts"]));
+  });
+
   it("seeds the kitchen through the image's sql command, and masks every password", () => {
     const seed = stepNamed(image, /Seed/).run ?? "";
     expect(seed).toContain("node scripts/self-host-smoke-seed.mjs");

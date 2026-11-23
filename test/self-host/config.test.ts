@@ -57,6 +57,11 @@ describe("selfHostVars", () => {
     expect(() => selfHostVars({ ...base, env: { SPOONJOY_BASE_URL: "ftp://kitchen.local" } })).toThrow(/SPOONJOY_BASE_URL/);
   });
 
+  it("accepts Sign in with Apple from the Spoonjoy apps out of the box, checked against Apple's public keys", () => {
+    expect(selfHostVars(base).APPLE_NATIVE_CLIENT_IDS).toBe("app.spoonjoy,app.spoonjoy.mac");
+    expect(selfHostVars({ ...base, env: { APPLE_NATIVE_CLIENT_IDS: "com.example.fork" } }).APPLE_NATIVE_CLIENT_IDS).toBe("com.example.fork");
+  });
+
   it("uses a SESSION_SECRET from the environment over the generated one", () => {
     expect(selfHostVars({ ...base, env: { SESSION_SECRET: "mine" } }).SESSION_SECRET).toBe("mine");
   });

@@ -15,6 +15,11 @@ on:
       - scripts/self-host-smoke-seed.mjs
       - scripts/seed-qa-kitchen.mjs
       - playwright.self-host.config.ts
+      - playwright.self-host-fresh.config.ts
+      - e2e/self-host/**
+      - e2e/fixtures.ts
+      - app/lib/session.server.ts
+      - app/lib/apple-native-auth.server.ts
       - playwright.journeys.config.ts
       - e2e/journeys/**
       - migrations/**
@@ -133,6 +138,17 @@ jobs:
           cat "$OUT/memory-idle.json"
           [ "$status" = "healthy" ]
 
+      # The empty server as its owner first meets it, before anything is seeded: sign up with a
+      # password, add a passkey and sign back in with it, and the Spoonjoy apps' Sign in with Apple
+      # checked against Apple's public keys (e2e/self-host, playwright.self-host-fresh.config.ts).
+      - name: Sign in on the fresh server
+        run: |
+          docker run --rm --network host --user "$(id -u):$(id -g)" --ipc host \
+            -v "$PWD:/work" -w /work -e HOME=/tmp -e CI=true \
+            -e SPOONJOY_JOURNEYS_BASE_URL=http://localhost:8080 \
+            mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f \
+            node node_modules/@playwright/test/cli.js test -c playwright.self-host-fresh.config.ts
+
       # The kitchen and this run's scratch users, with fresh passwords, through the image's own
       # `server.mjs sql -` (with the server stopped, as docs/self-hosting.md says to), and the
       # sample cover photos two of its recipes show (assets/sample-covers) through `server.mjs photos`.
@@ -207,7 +223,7 @@ jobs:
 
       - name: Strip network logs from traces
         if: always()
-        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report
+        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report test-results-self-host-fresh
 
       - name: Summary
         if: always()
@@ -235,6 +251,7 @@ jobs:
             self-host-out/
             journeys-report/
             test-results/
+            test-results-self-host-fresh/
           retention-days: 30
           include-hidden-files: false
 

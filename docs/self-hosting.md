@@ -24,7 +24,8 @@ The image runs as the unprivileged `node` user (uid 1000). A named volume needs 
 
 | Setting | What it does | Default |
 | --- | --- | --- |
-| `SPOONJOY_BASE_URL` | The address people use. Set it to your `https://` address behind a reverse proxy, so session cookies are marked Secure and links point at the right place. | `http://localhost:8080` |
+| `SPOONJOY_BASE_URL` | The address people use. Set it to your `https://` address behind a reverse proxy, so session cookies are marked Secure and links point at the right place. On a plain `http://` address, such as `http://192.168.1.20:8080` on a home network, set it to that address so password sign-in works there. | `http://localhost:8080` |
+| `APPLE_NATIVE_CLIENT_IDS` | The app bundle IDs whose Sign in with Apple the server accepts. | `app.spoonjoy,app.spoonjoy.mac` |
 | `PORT` | The port the server listens on inside the container. | `8080` |
 | `SESSION_SECRET` | Signs sign-in cookies. Leave it unset and the server makes one and keeps it in `/data`. | generated |
 | `OPENAI_API_KEY`, `GEMINI_API_KEY` | AI features (ingredient parsing, covers). Without one, ingredient parsing uses the built-in parser. | none |
@@ -34,6 +35,14 @@ The image runs as the unprivileged `node` user (uid 1000). A named volume needs 
 | `POSTHOG_KEY`, `POSTHOG_HOST` | Your own PostHog project, if you want analytics. | off |
 
 Sign in for now works on `http://localhost` or behind HTTPS (set `SPOONJOY_BASE_URL`); plain `http://` on another address is coming with the self-hosted sign-in work.
+
+## Signing in
+
+A new server needs no setup before you sign in:
+
+- **Password.** Sign up at `/signup` with an email, a username and a password.
+- **Passkeys.** Add one under Account settings, then sign in with it. Browsers only offer passkeys on an `https://` address or on `localhost`, so reach the server through a reverse proxy, Tailscale or Cloudflare Tunnel to use them from other devices.
+- **Sign in with Apple from the Spoonjoy apps.** The server checks the app's Apple identity token against Apple's public keys and the app's bundle ID, so it needs no Apple secret.
 
 ## Running SQL
 
@@ -53,7 +62,7 @@ docker run --rm -v spoonjoy-data:/data -v "$PWD/photos:/photos:ro" ghcr.io/spoon
 
 ## How it's checked
 
-The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, seeds the QA kitchen through `server.mjs sql` and its sample cover photos through `server.mjs photos`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, and checks the kitchen is still there after `docker restart`. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
+The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, signs up, adds a passkey and signs back in on the empty server, checks Sign in with Apple is set up, seeds the QA kitchen through `server.mjs sql` and its sample cover photos through `server.mjs photos`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, and checks the kitchen is still there after `docker restart`. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
 
 After each green run on main, the `Self-host Pull` workflow (`.github/workflows/self-host-pull.yml`) pulls `ghcr.io/spoonjoy/spoonjoy:latest` with no login on amd64 and arm64, boots it on an empty volume and waits for its health check, the way a self-hoster would.
 
