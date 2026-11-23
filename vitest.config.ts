@@ -28,6 +28,7 @@ const coverageInclude = [
   "scripts/production-image-key.ts",
   "scripts/native-kill-switches.ts",
   "scripts/run-with-warning-policy.mjs",
+  "scripts/cancel-stale-queue-runs.mjs",
   "scripts/e2e-run-cleanup.mjs",
   "scripts/check-journey-rules.mjs",
   "scripts/generate-ouro-provenance.mjs",
