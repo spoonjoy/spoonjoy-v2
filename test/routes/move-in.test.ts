@@ -204,7 +204,7 @@ describe("the Move in page", () => {
       await post({ intent: "continue", jobId });
       await post({ intent: "continue", jobId });
       expect(jobsQueue?.sent).toHaveLength(3);
-      expect(jobsQueue?.sent.at(-1)).toEqual({ type: "move-in.run", key: `move-in:${jobId}:nudge:${quiet}`, payload: { jobId } });
+      expect(jobsQueue?.sent.at(-1)).toEqual({ type: "move-in.run", key: expect.stringMatching(new RegExp(`^move-in:${jobId}:nudge:${quiet}:\\d+$`)), payload: { jobId } });
     });
 
     it("reports a move-in it couldn't queue, and leaves it for the page to pick up", async () => {

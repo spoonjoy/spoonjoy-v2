@@ -49,7 +49,9 @@ export async function queueMoveIn(jobs: Jobs, job: Position): Promise<boolean> {
  * other could be, since either one gets the move-in going; it throws if either failed.
  */
 export async function startMoveInJob(jobs: Jobs, jobId: string): Promise<void> {
-  const sent = await Promise.allSettled([watchMoveIn(jobs, jobId, 1), queueMoveIn(jobs, { id: jobId, phase: "inspect", cursor: null })]);
+  // The watch is tried twice: without it, only the open page could get a stalled move-in going again.
+  const watch = watchMoveIn(jobs, jobId, 1).catch(() => watchMoveIn(jobs, jobId, 1));
+  const sent = await Promise.allSettled([watch, queueMoveIn(jobs, { id: jobId, phase: "inspect", cursor: null })]);
   const failed = sent.find((result) => result.status === "rejected");
   if (failed) throw failed.reason;
 }
@@ -61,13 +63,15 @@ async function watchMoveIn(jobs: Jobs, jobId: string, look: number): Promise<voi
 /**
  * Queues an unfinished move-in that nothing has written to for MOVE_IN_QUIET_MS, for when its chain of segments broke
  * (a segment out of attempts, or a Worker that died holding it). `updatedAt` is the job's last write, as D1 keeps it
- * (ISO). The key names that quiet stretch rather than the segment, whose own key may be spent already, so one nudge
- * goes out for each stretch however many ask.
+ * (ISO). The key names that quiet stretch and the minute, rather than the segment, whose own key may be spent already:
+ * one nudge a minute goes out however many ask, and a nudge that found a run still holding the move-in, which then died,
+ * doesn't stop the next.
  */
 export async function nudgeMoveIn(jobs: Jobs, job: Pick<MoveInJob, "id"> & { status: MoveInStatus; updatedAt: string }, now: Date): Promise<boolean> {
   if (FINISHED.includes(job.status)) return false;
   if (now.getTime() - Date.parse(job.updatedAt) < MOVE_IN_QUIET_MS) return false;
-  return (await jobs.enqueue(MOVE_IN_JOB, { jobId: job.id }, { key: `move-in:${job.id}:nudge:${job.updatedAt}` })).enqueued;
+  const minute = Math.floor(now.getTime() / MOVE_IN_QUIET_MS);
+  return (await jobs.enqueue(MOVE_IN_JOB, { jobId: job.id }, { key: `move-in:${job.id}:nudge:${job.updatedAt}:${minute}` })).enqueued;
 }
 
 /** A segment held the move-in and moved nothing, so the port runs it again. */
