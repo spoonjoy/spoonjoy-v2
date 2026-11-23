@@ -1,5 +1,5 @@
 import { faker } from "@faker-js/faker";
-import { fireEvent, waitFor } from "@testing-library/react";
+import { configure, fireEvent, waitFor } from "@testing-library/react";
 import { expect } from "vitest";
 import { createRoutesStub } from "react-router";
 import { createElement, type ComponentProps } from "react";
@@ -7,6 +7,15 @@ import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
 
 type StubRouteObject = Parameters<typeof createRoutesStub>[0][number];
+
+// findBy* and waitFor wait 3 s, not Testing Library's 1 s, in every test that loads these helpers.
+// On a loaded CI runner a route stub can still show an empty <div /> after 1 s
+// (test/routes/developers.test.tsx, unit-changed run 45210673048 attempt 2, issue #942).
+// A longer wait changes only how long a failing wait takes. This is set here, not in
+// test/setup.ts: importing Testing Library from the setup file changes when its hooks run
+// and makes route tests that end before their loader settles warn about act(...).
+export const ASYNC_UTIL_TIMEOUT_MS = 3000;
+configure({ asyncUtilTimeout: ASYNC_UTIL_TIMEOUT_MS });
 
 /**
  * Add HydrateFallback to routes to suppress the warning:
