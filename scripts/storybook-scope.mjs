@@ -69,10 +69,75 @@ export function storybookScope({
   return { ouro: false, reason: `No Ouro UI test or spec input changed since ${base}.` };
 }
 
-/* istanbul ignore if -- @preserve CLI boundary delegates to the tested storybookScope above. */
+// Files a story's render reads without a story importing them: Storybook's config (its preview
+// wraps every story), the stories and their MDX docs, the story accessibility spec and its config,
+// the stylesheet, dependencies, the listing's own config and this decision's own rules.
+export const STORY_ALWAYS_RUN_PATHS = Object.freeze([
+  /^\.storybook\//,
+  /^stories\//,
+  /^e2e\/storybook\//,
+  /^playwright\.storybook\.config\.ts$/,
+  /^vitest\.stories-scope\.config\.ts$/,
+  /^app\/styles\//,
+  /^public\//,
+  /^\.github\/workflows\/storybook\.yml$/,
+  /^\.github\/ouro-hx-installed\.json$/,
+  /^scripts\/(?:storybook-scope|run-with-warning-policy)\.mjs$/,
+  /^package\.json$/,
+  /^pnpm-lock\.yaml$/,
+  /^tsconfig[^/]*\.json$/,
+]);
+
+// Decides whether a pull request's story check needs Storybook: it does unless no story, nor
+// Storybook's preview, imports a changed file (vitest.stories-scope.config.ts lists them for
+// Vitest's --changed) and no file in STORY_ALWAYS_RUN_PATHS changed. The job skips Storybook only
+// when this and storybookScope both say so. The merge queue, main and manual runs always build it,
+// so the queue's full run still checks every story before anything merges. Any doubt builds it.
+export function storyScope({
+  env = process.env,
+  run = (command, args) => spawnSync(command, args, { stdio: ["ignore", "ignore", "inherit"] }).status ?? 1,
+  capture = (command, args) => {
+    const result = spawnSync(command, args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+    return { status: result.status ?? 1, stdout: result.stdout ?? "" };
+  },
+  readFile = (file) => readFileSync(file, "utf8"),
+  removeFile = (file) => unlinkSync(file),
+  listFile = path.join(tmpdir(), `spoonjoy-stories-${process.pid}.json`),
+} = {}) {
+  const event = env.GITHUB_EVENT_NAME;
+  if (event !== "pull_request") return { storybook: true, reason: `A ${event} run builds Storybook.` };
+  const base = env.SPOONJOY_OURO_BASE ?? "";
+  if (!SHA_PATTERN.test(base)) return { storybook: true, reason: "No base commit to compare with, so Storybook builds." };
+
+  const diff = capture("git", ["diff", "--name-only", "--no-renames", base, "HEAD"]);
+  if (diff.status !== 0) return { storybook: true, reason: "The diff against the base failed, so Storybook builds." };
+  const changed = diff.stdout.split("\n").filter(Boolean);
+  if (changed.length === 0) return { storybook: true, reason: "No changed file was listed, so Storybook builds." };
+  const read = changed.find((file) => STORY_ALWAYS_RUN_PATHS.some((pattern) => pattern.test(file)));
+  if (read) return { storybook: true, reason: `${read} changed, and Storybook reads it.` };
+
+  const listed = run("pnpm", ["exec", "vitest", "list", "--config", "vitest.stories-scope.config.ts", "--changed", base, "--filesOnly", `--json=${listFile}`]);
+  if (listed !== 0) return { storybook: true, reason: "Listing the affected stories failed, so Storybook builds." };
+  let files;
+  try {
+    files = JSON.parse(readFile(listFile));
+  } finally {
+    removeFile(listFile);
+  }
+  if (!Array.isArray(files)) return { storybook: true, reason: "The story listing was not a file list, so Storybook builds." };
+  if (files.length > 0) return { storybook: true, reason: `${files.length} story file(s) import a changed file.` };
+  return { storybook: false, reason: `No story imports a file changed since ${base}.` };
+}
+
+/* istanbul ignore if -- @preserve CLI boundary delegates to the tested storybookScope and storyScope above. */
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { ouro, reason } = storybookScope();
-  process.stdout.write(`${reason}\n`);
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `ouro=${ouro}\n`);
-  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Ouro UI tests: ${ouro ? "run" : "skipped"}. ${reason}\n`);
+  const stories = storyScope();
+  // The job builds Storybook when a story can reach a change or the Ouro UI tests must run.
+  const storybook = stories.storybook || ouro;
+  for (const line of [reason, stories.reason]) process.stdout.write(`${line}\n`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `ouro=${ouro}\nstorybook=${storybook}\n`);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Ouro UI tests: ${ouro ? "run" : "skipped"}. ${reason}\nStorybook: ${storybook ? "built" : "skipped"}. ${stories.reason}\n`);
+  }
 }
