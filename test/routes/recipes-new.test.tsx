@@ -131,7 +131,7 @@ describe("Recipes New Route", () => {
         params: {},
       } as any);
 
-      expect(result).toEqual({ visibilityDefault: null });
+      expect(result).toEqual({ visibilityDefault: null, visibilityChoices: null });
     });
   });
 
