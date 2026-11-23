@@ -136,7 +136,7 @@ afterEach(async () => {
   mounted = [];
   scrollTo({ top: 0, behavior: "instant" });
   await page.viewport(414, 896);
-  await commands.emulateMedia({ reducedMotion: "no-preference" });
+  await commands.resetMedia();
 });
 
 // Exact geometry, on a bare page: where X-ray breaks an outline's edges, and where it puts a tag.

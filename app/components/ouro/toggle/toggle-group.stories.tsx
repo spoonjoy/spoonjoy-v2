@@ -137,3 +137,35 @@ export const Pills: Story = {
     );
   },
 };
+
+const conversationFilters = [
+  { value: "all", label: "All conversations" },
+  { value: "unread", label: "Unread messages" },
+  { value: "flagged", label: "Flagged for follow-up" },
+  { value: "archived", label: "Archived threads" },
+  { value: "drafts", label: "Saved drafts" },
+];
+
+/** `overflow="scroll"`, in a place too narrow for the chips: one line, scrolled sideways, with a fade at the cut edge. */
+export const ScrollingPills: Story = {
+  render: function Render() {
+    const [filter, setFilter] = useState("all");
+    return (
+      <Surface>
+        <div style={{ maxWidth: 260 }}>
+          <ToggleGroup
+            label="Show"
+            hideLabel
+            variant="outline"
+            shape="pill"
+            size="xs"
+            overflow="scroll"
+            items={conversationFilters}
+            value={filter}
+            onValueChange={(next) => setFilter(next ?? "all")}
+          />
+        </div>
+      </Surface>
+    );
+  },
+};

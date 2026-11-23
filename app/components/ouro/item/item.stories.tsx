@@ -218,3 +218,24 @@ export const BesideDetail: Story = {
   parameters: { mode: "select" },
   render: () => <ListBesideDetail />,
 };
+
+/** A settings list: each row opens its own page, so a trailing chevron reads as tappable. */
+export const WithChevron: Story = {
+  parameters: { mode: "link" },
+  render: () => (
+    <Page>
+      <ItemGroup label="Settings">
+        <Item variant="outline" href="#profile" title="Profile" description="Name, photo and bio" chevron />
+        <Item variant="outline" href="#notifications" title="Notifications" description="Email and push" chevron />
+        <Item
+          variant="outline"
+          href="#account"
+          title="Account"
+          description="Password and sign-in"
+          actions={<Button variant="plain" size="sm">2FA on</Button>}
+          chevron
+        />
+      </ItemGroup>
+    </Page>
+  ),
+};

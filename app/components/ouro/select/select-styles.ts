@@ -141,7 +141,7 @@ const positionerClass =
  */
 const popupClass =
   "box-border flex max-h-(--available-height) min-w-(--anchor-width) flex-col overflow-hidden outline-none " +
-  "rounded-ouro-md border border-solid border-border bg-popover p-1 text-popover-foreground " +
+  "rounded-ouro-md border border-solid border-border bg-popover p-1 text-popover-foreground [--ouro-scroller-surface:var(--popover)] " +
   "shadow-(--shadow-lg) origin-(--transform-origin) " +
   "[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out),scale_var(--ouro-duration-base)_var(--ouro-ease-out)] data-ending-style:duration-(--ouro-duration-fast) " +
   "data-starting-style:opacity-0 data-starting-style:scale-95 data-ending-style:opacity-0 data-ending-style:scale-95 " +

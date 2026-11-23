@@ -146,7 +146,7 @@ describe("Item", () => {
 
   it("reveals its actions with revealActions on hover, on focus anywhere in the row and while a menu of theirs is open, keeping their room", async () => {
     const { item } = await render(
-      <Item href="#soup" title="Lentil soup" description="Forty minutes" actions={<Button variant="plain" size="sm">Edit</Button>} revealActions />,
+      <Item href="#soup" title="Lentil soup" description="Forty minutes" actions={<Button variant="plain" size="sm">Edit</Button>} revealActions chevron />,
     );
     const actions = item.querySelector<HTMLElement>("[data-item-actions]")!;
     const edit = page.getByRole("button", { name: "Edit" });
@@ -197,6 +197,13 @@ describe("Item", () => {
     const { item } = await render(<Item title="Lentil soup" actions={<Button variant="plain" size="sm">Edit</Button>} />);
     expect(getComputedStyle(item.querySelector("[data-item-actions]")!).opacity).toBe("1");
     expect(item.classList.contains("group/item")).toBe(false);
+  });
+
+  it("reveals its actions the same way with revealActions and no chevron, the row's non-link actions branch", async () => {
+    const { item } = await render(
+      <Item title="Lentil soup" actions={<Button variant="plain" size="sm">Edit</Button>} revealActions />,
+    );
+    expect(getComputedStyle(item.querySelector("[data-item-actions]")!).opacity).toBe("0");
   });
 
   it("keeps the actions beside the text on a phone by default", async () => {
@@ -272,6 +279,14 @@ describe("Item", () => {
     expect(title.top).toBeGreaterThanOrEqual(media.bottom);
     expect(save.top).toBeGreaterThanOrEqual(media.bottom);
     expect(save.left).toBeGreaterThan(title.right);
+    // With trailing actions the root reserves their column; without any it collapses to the one column.
+    expect(item.classList.contains("grid-cols-[minmax(0,1fr)_auto]")).toBe(true);
+  });
+
+  it("collapses mediaAbove=always to one grid column with no trailing actions or chevron", async () => {
+    const { item } = await render(<Item media={<img src={pixel} alt="" data-photo="" />} mediaAbove="always" title="Ribs" />);
+    expect(item.classList.contains("grid-cols-[minmax(0,1fr)]")).toBe(true);
+    expect(item.classList.contains("grid-cols-[minmax(0,1fr)_auto]")).toBe(false);
   });
 
   it("stacks the media and the actions together with mediaAbove and stackBelow", async () => {
@@ -546,6 +561,66 @@ describe("Item with href", () => {
     expect(outside!.getAttribute("target")).toBe("_blank");
     expect(outside!.getAttribute("rel")).toBe("noopener noreferrer");
     await expect.element(page.getByRole("link", { name: "Ouro (opens in a new tab)" })).toBeVisible();
+  });
+
+  it("draws no chevron by default, and never on a chosen or plain row", async () => {
+    const { item: linked } = await render(<Item href="/settings/profile" title="Profile" />);
+    expect(linked.querySelector("svg")).toBeNull();
+    // No chevron and no actions: the row takes no trailing grid column, so its one
+    // column is a track Item explicitly sizes, not the browser's unset default.
+    expect(getComputedStyle(linked).gridTemplateColumns.split(" ")).toHaveLength(1);
+    expect(getComputedStyle(linked).gridTemplateColumns).not.toBe("none");
+  });
+
+  it("draws chevron as decorative, after actions on the trailing edge", async () => {
+    const onSave = vi.fn();
+    const { item } = await render(
+      <Item href="/settings/profile" title="Profile" actions={<Button onClick={onSave}>Save</Button>} chevron />,
+    );
+    const trailing = item.querySelector("[data-item-actions]")!.parentElement!;
+    const chevron = trailing.querySelector("svg")!;
+    expect(chevron.getAttribute("aria-hidden")).toBe("true");
+    expect([...trailing.children].indexOf(chevron)).toBe(trailing.children.length - 1);
+    await page.viewport(1280, 800);
+    // The chevron is never a tab stop: tabbing from the link reaches the action, not the chevron.
+    const before = document.createElement("button");
+    item.parentElement!.prepend(before);
+    before.focus();
+    await pressTab();
+    expect(document.activeElement).toBe(item.querySelector("[data-item-link]"));
+    await pressTab();
+    expect(document.activeElement).toBe(page.getByRole("button", { name: "Save" }).element());
+  });
+
+  it("mirrors the chevron for a right-to-left reader", async () => {
+    const { host } = await render(
+      <div dir="rtl">
+        <Item href="/settings/profile" title="Profile" chevron />
+      </div>,
+    );
+    // Tailwind's -scale-x-100 sets the `scale` property, so a negative first value is mirrored.
+    expect(parseFloat(getComputedStyle(host.querySelector("svg")!).scale)).toBeLessThan(0);
+  });
+
+  it("gives a chevron-only row a trailing grid column, with no actions beside it", async () => {
+    const { item } = await render(<Item href="/settings/profile" title="Profile" chevron />);
+    expect(item.querySelector("[data-item-actions]")).toBeNull();
+    expect(item.querySelector("svg")).not.toBeNull();
+    expect(getComputedStyle(item).gridTemplateColumns.split(" ")).toHaveLength(2);
+  });
+
+  it("drops the actions and the chevron under the text below the breakpoint with stackBelow", async () => {
+    await page.viewport(390, 844);
+    await render(
+      <Item href="/settings/profile" title="Profile" description="Signed in" actions={<Button>Save</Button>} chevron stackBelow="sm" />,
+    );
+    const title = page.getByText("Profile").element().getBoundingClientRect();
+    const description = page.getByText("Signed in").element().getBoundingClientRect();
+    const save = page.getByRole("button", { name: "Save" }).element().getBoundingClientRect();
+    expect(save.top).toBeGreaterThanOrEqual(description.bottom);
+    // Stacked below, the trailing row (chevron's wrapper) lines up with the title, not the
+    // trailing edge it uses above the breakpoint.
+    expect(Math.round(save.left)).toBe(Math.round(title.left));
   });
 });
 

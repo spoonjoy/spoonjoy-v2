@@ -487,6 +487,30 @@ describe("Switch look and motion", () => {
     const center = track.getBoundingClientRect().top + 10 - label.closest("[data-ouro-label]")!.getBoundingClientRect().top;
     expect(center).toBeCloseTo(parseFloat(getComputedStyle(label).lineHeight) / 2, 0);
   });
+
+  it("fills the track under forced colours so an on switch stays visible, telling it apart from off in light and dark", async () => {
+    const fills: Record<string, { on: string; off: string }> = {};
+    for (const scheme of ["light", "dark"] as const) {
+      document.documentElement.classList.toggle("dark", scheme === "dark");
+      await commands.emulateMedia({ forcedColors: "active" });
+      try {
+        const { track: off } = await render(<Switch label="Off" />);
+        const { track: on } = await render(<Switch label="On" defaultChecked />);
+        const offStyle = getComputedStyle(off);
+        const onStyle = getComputedStyle(on);
+        // Forced colours would otherwise drop the on track's fill to Canvas, matching the off track.
+        expect(onStyle.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+        expect(onStyle.backgroundColor).not.toBe(offStyle.backgroundColor);
+        fills[scheme] = { on: onStyle.backgroundColor, off: offStyle.backgroundColor };
+      } finally {
+        await commands.emulateMedia({ forcedColors: "none" });
+        document.documentElement.classList.remove("dark");
+      }
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    }
+    expect(fills.light).toBeDefined();
+    expect(fills.dark).toBeDefined();
+  });
 });
 
 describe("Switch development messages", () => {

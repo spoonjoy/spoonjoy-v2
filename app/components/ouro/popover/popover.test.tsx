@@ -57,7 +57,7 @@ afterEach(async () => {
   await act(async () => roots.splice(0).forEach((root) => root.unmount()));
   for (const node of mounted) node.remove();
   mounted = [];
-  await commands.emulateMedia({ reducedMotion: "no-preference" });
+  await commands.resetMedia();
 });
 
 const warnings = () => warn.mock.calls.map((call: unknown[]) => call[0]);

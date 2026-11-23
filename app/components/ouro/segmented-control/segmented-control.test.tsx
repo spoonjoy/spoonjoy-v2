@@ -531,6 +531,28 @@ describe("SegmentedControl", () => {
     }
   });
 
+  it("draws the pressed label in HighlightText under forced colours at rest, not the thumb's own colour", async () => {
+    try {
+      const r = await render(<SegmentedControl label="View" items={items} defaultValue="grid" />);
+      await commands.emulateMedia({ forcedColors: "active" });
+      expect(matchMedia("(forced-colors: active)").matches).toBe(true);
+      const probe = document.body.appendChild(document.createElement("span"));
+      probe.style.cssText = "background-color: Highlight; color: HighlightText";
+      const { backgroundColor: highlight, color: highlightText } = getComputedStyle(probe);
+      probe.remove();
+      await settled(r.root);
+      const pressed = r.segments[1]!;
+      // Without forced-color-adjust: none, the browser's own override can draw the pressed label
+      // the same colour as the thumb behind it (both forced to the page's foreground), reading as
+      // black on black instead of HighlightText on Highlight.
+      expect(getComputedStyle(pressed).color).toBe(highlightText);
+      expect(getComputedStyle(pressed).color).not.toBe(getComputedStyle(r.thumb).backgroundColor);
+      expect(getComputedStyle(r.thumb).backgroundColor).toBe(highlight);
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
   it("keeps HighlightText on the pressed segment under forced colours while the pointer rests on it", async () => {
     try {
       const r = await render(<SegmentedControl label="View" items={items} defaultValue="grid" />);

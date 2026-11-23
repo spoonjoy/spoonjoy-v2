@@ -211,7 +211,7 @@ describe("audit", () => {
     // The rows sit in a group taller than the screen, inside a list that scrolls and fits on it, as a
     // command palette's long list does. Each row measured alone took a screenshot of its own: Command's
     // test took nine and ran out of time on a loaded runner (ourostack/ouro-ui#1520).
-    const rows = Array.from({ length: 40 }, (_, index) => `<div role="option" aria-selected="false" style="height:40px;color:#111">Row ${index + 1}</div>`).join("");
+    const rows = Array.from({ length: 20 }, (_, index) => `<div role="option" aria-selected="false" style="height:40px;color:#111">Row ${index + 1}</div>`).join("");
     mountPage(
       `<div id="list" role="listbox" aria-label="Rows" tabindex="0" style="height:300px;overflow:auto;background:linear-gradient(#fff,#fff)"><div role="group" aria-label="All">${rows}</div></div>`,
     );

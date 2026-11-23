@@ -149,6 +149,15 @@ export type ItemProps = Omit<HTMLAttributes<HTMLElement>, keyof ItemOwnProps | "
         /** A ref to the link's `<a>`, to move focus to it. */
         linkRef?: Ref<HTMLAnchorElement> | undefined;
         /**
+         * A trailing chevron, so a navigable row reads as tappable, as a settings list shows
+         * before the page it opens. Decorative (`aria-hidden`, never a tab stop); it shares
+         * the row's trailing edge with `actions`, after them.
+         * @claim "Decorative (`aria-hidden`, never a tab" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item with href > draws chevron as decorative, after actions on the trailing edge)
+         * @example
+         * <Item href="/settings/profile" title="Profile" chevron />
+         */
+        chevron?: boolean | undefined;
+        /**
          * Marks the row as the page shown, as in a list of sections beside their content: the
          * link reads as the current page (`aria-current="page"`) and the row takes the selected
          * colour. Pass it on every row, `false` on the others, so the rows line up.
@@ -181,6 +190,8 @@ export type ItemProps = Omit<HTMLAttributes<HTMLElement>, keyof ItemOwnProps | "
         external?: never;
         /** Only with `href`. */
         linkRef?: never;
+        /** Only with `href`. */
+        chevron?: never;
       }
     | {
         /** Not without `href`. Add `href` to make the whole row a link. */
@@ -189,6 +200,8 @@ export type ItemProps = Omit<HTMLAttributes<HTMLElement>, keyof ItemOwnProps | "
         external?: never;
         /** Only with `href`. */
         linkRef?: never;
+        /** Only with `href`. */
+        chevron?: never;
         /** Only with `href` or `onSelect`: a row a person can choose. */
         selected?: never;
         /** A handler, which makes the whole row a button. */
@@ -276,6 +289,26 @@ const above = {
   },
 } as const;
 
+// Decorative trailing chevron for a linked row: a navigable row reads as tappable, as a platform
+// disclosure indicator does. Muted, never a tab stop, and mirrored for a right-to-left reader.
+function Chevron(): JSX.Element {
+  return (
+    <svg
+      data-slot="item-chevron"
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-ouro-4 shrink-0 text-muted-foreground rtl:-scale-x-100"
+    >
+      <path d="m6 3 5 5-5 5" />
+    </svg>
+  );
+}
+
 /**
  * One row of a list: leading media, a title with a description, and trailing actions.
  * With `href` the whole row is one link, named by its title, with one tab stop, and the
@@ -308,6 +341,7 @@ export function Item(props: ItemProps): JSX.Element {
     title,
     external,
     linkRef,
+    chevron,
     description,
     media,
     mediaSize: mediaSizeProp = "sm",
@@ -403,12 +437,16 @@ export function Item(props: ItemProps): JSX.Element {
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
   const reveal = revealActions === true && Boolean(actions);
+  // A chevron shares the trailing column with actions (never fading, always after them), so a
+  // chevron-only row still gets the actions' grid column and stacked layout.
+  const showChevron = linked && chevron === true;
+  const hasTrailing = Boolean(actions) || showChevron;
   const hasMedia = media ? "media" : "none";
   // Media above the text at some width: its own row there, and the stacked layout below
   // the smaller of the two breakpoints is the one without media.
   const lifted = media && mediaAbove && mediaSize !== "icon" ? above[mediaAbove] : undefined;
   const stackLayouts: { root: string; actions: string }[] = [];
-  if (stackBelow && actions) {
+  if (stackBelow && hasTrailing) {
     if (!lifted) stackLayouts.push(stacked[hasMedia][stackBelow]);
     else if (mediaAbove === "always") stackLayouts.push(stacked.none[stackBelow]);
     else {
@@ -429,8 +467,8 @@ export function Item(props: ItemProps): JSX.Element {
       "data-choosable": choosable ? "" : undefined,
       className: cn(
         "relative isolate grid min-w-0 list-none items-center gap-x-4 gap-y-2",
-        columns[hasMedia][actions ? "actions" : "none"],
-        lifted?.root[actions ? "actions" : "none"],
+        columns[hasMedia][hasTrailing ? "actions" : "none"],
+        lifted?.root[hasTrailing ? "actions" : "none"],
         stackLayouts.map((layout) => layout.root),
         variants[variant],
         sizes[size],
@@ -494,13 +532,24 @@ export function Item(props: ItemProps): JSX.Element {
         </div>
       )}
     </div>,
-    actions && (
-      <div
-        data-item-actions=""
-        className={cn("flex flex-wrap items-center justify-end gap-2", stackLayouts.map((layout) => layout.actions), reveal && revealActionsClass)}
-      >
-        {actions}
+    showChevron ? (
+      <div data-slot="item-trailing" className={cn("flex flex-wrap items-center justify-end gap-2", stackLayouts.map((layout) => layout.actions))}>
+        {actions && (
+          <div data-item-actions="" data-slot="item-actions" className={cn("flex flex-wrap items-center gap-2", reveal && revealActionsClass)}>
+            {actions}
+          </div>
+        )}
+        <Chevron />
       </div>
+    ) : (
+      actions && (
+        <div
+          data-item-actions=""
+          className={cn("flex flex-wrap items-center justify-end gap-2", stackLayouts.map((layout) => layout.actions), reveal && revealActionsClass)}
+        >
+          {actions}
+        </div>
+      )
     ),
   );
 }

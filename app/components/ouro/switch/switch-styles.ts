@@ -25,6 +25,9 @@ const trackClass =
   "group relative m-0 box-border inline-flex h-ouro-6 w-ouro-10 shrink-0 items-center p-px sm:pointer-fine:h-ouro-5 sm:pointer-fine:w-ouro-9 " +
   "[--ouro-switch-thumb:var(--ouro-size-5)] sm:pointer-fine:[--ouro-switch-thumb:var(--ouro-size-4)] " +
   "[--corner-shape:round] [corner-shape:round] rounded-full border border-solid border-muted-foreground bg-muted data-checked:border-primary data-checked:bg-primary " +
+  // Forced colours drop the fill, so an on track would fall back to Canvas with no checked
+  // state showing; set it explicitly to Highlight, to match the thumb's forced HighlightText.
+  "forced-colors:data-checked:border-[Highlight] forced-colors:data-checked:bg-[Highlight] " +
   // More contrast trades the padding for a 2px hairline, so the thumb keeps its place.
   "contrast-more:border-2 contrast-more:p-0 " +
   "transition-[background-color,border-color] duration-(--ouro-duration-fast) ease-[ease] " +

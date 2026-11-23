@@ -187,6 +187,22 @@ describe("opening and closing", () => {
     expect(popup()!.getAttribute("role")).toBe("dialog");
   });
 
+  it("hands a scroller inside it the popover fill its own surface is painted with (ourostack/ouro-ui#2891)", async () => {
+    document.documentElement.style.setProperty("--popover", "rgb(250, 240, 250)");
+    try {
+      await render(
+        <Sheet title="Save to cookbook" trigger={<Button>Save</Button>}>
+          <Body />
+        </Sheet>,
+      );
+      await userEvent.click(trigger());
+      await expect.element(page.getByRole("dialog", { name: "Save to cookbook" })).toBeVisible();
+      expect(getComputedStyle(popup()!).getPropertyValue("--ouro-scroller-surface").trim()).toBe("rgb(250, 240, 250)");
+    } finally {
+      document.documentElement.style.removeProperty("--popover");
+    }
+  });
+
   it("is modal to assistive technology: aria-modal, with the page behind hidden", async () => {
     const outside = document.createElement("button");
     outside.textContent = "Behind";

@@ -9,6 +9,9 @@ import { Text } from "~/components/ouro/text/text";
 function Surface({ children }: { children: ReactNode }) {
   return (
     <div
+      // Its own edge drops under forced colours: each Collapsible trigger inside already draws
+      // its own, so this edge would only double it.
+      className="forced-colors:border-0!"
       style={{
         background: "var(--background)",
         color: "var(--foreground)",

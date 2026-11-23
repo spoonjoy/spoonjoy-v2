@@ -1,7 +1,22 @@
 import type { ComponentType, SVGProps } from "react";
 import { radiusFor, sizeFor } from "~/lib/ouro/appearance-hints";
+import { cn } from "~/lib/ouro/cn";
+import { scrollFadeClass } from "~/lib/ouro/scroll-fade";
 
-export { iconClass, looks, shapes, sizes, squareClass, toggleBase, toggleHint, toggleShapeWarning, toggleSizeWarning, toggleVariantWarning };
+export {
+  iconClass,
+  looks,
+  overflowScrollerClass,
+  shapes,
+  sizes,
+  squareClass,
+  toggleBase,
+  toggleHint,
+  toggleOverflowWarning,
+  toggleShapeWarning,
+  toggleSizeWarning,
+  toggleVariantWarning,
+};
 export type { ToggleIcon, ToggleShape, ToggleSize, ToggleVariant };
 
 // Class strings, value lists and dev-message helpers shared by Toggle and ToggleGroup, apart
@@ -133,6 +148,22 @@ type ToggleVariant = keyof typeof looks;
 const iconClass = "size-[1.25em] shrink-0";
 
 /**
+ * {@link ToggleGroupBaseProps.overflow} `"scroll"`: the row keeps to one line and scrolls
+ * sideways, with its scrollbar hidden and the fade {@link scrollFadeClass} draws at a cut edge
+ * (a fine pointer's wheel still scrolls it; `overscroll-x-contain` keeps a swipe at either end
+ * from paging back). Forced colours, which flatten the fade, keep an outline around the row
+ * instead, as a second sign that it scrolls.
+ *
+ * @internal
+ */
+const overflowScrollerClass = cn(
+  "flex-nowrap overflow-x-auto overflow-y-hidden overscroll-x-contain " +
+    "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden " +
+    "forced-colors:rounded-ouro-md forced-colors:outline-1 forced-colors:outline-solid forced-colors:-outline-offset-1",
+  scrollFadeClass,
+);
+
+/**
  * The fix for an appearance class on a toggle. Development only.
  *
  * @internal
@@ -174,4 +205,13 @@ function toggleShapeWarning(component: string, shape: string): readonly [string,
  */
 function toggleSizeWarning(component: string, size: string): readonly [string, string] {
   return [`size="${size}" is not a size`, `<${component} size="md">`];
+}
+
+/**
+ * The dev message for an overflow that is not `"wrap"` or `"scroll"`. Development only.
+ *
+ * @internal
+ */
+function toggleOverflowWarning(overflow: string): readonly [string, string] {
+  return [`overflow="${overflow}" is not an overflow`, '<ToggleGroup overflow="scroll">'];
 }

@@ -67,6 +67,8 @@ describe("ToggleGroup", () => {
     const { root, group, toggles } = await render(<ToggleGroup label="Alignment" items={align} />);
     expect(root.getAttribute("data-ouro")).toBe("toggle-group");
     expect(group.getAttribute("aria-labelledby")).toBe(root.querySelector("span")!.id);
+    // Without hideLabel the span stays in reading order: aria-hidden is absent, not "false".
+    expect(root.querySelector("span")!.hasAttribute("aria-hidden")).toBe(false);
     await expect.element(page.getByRole("group", { name: "Alignment" })).toBeVisible();
     expect(toggles.map((toggle) => toggle.textContent)).toEqual(["Left", "Center", "Right"]);
     expect(pressed(toggles)).toEqual([false, false, false]);
@@ -274,6 +276,14 @@ describe("ToggleGroup", () => {
     await expect.element(page.getByRole("group", { name: "Alignment" })).toBeInTheDocument();
   });
 
+  it("names the group with hideLabel's own span, but keeps it out of reading order so the name is heard once", async () => {
+    const { root } = await render(<ToggleGroup label="Show" hideLabel items={align} />);
+    const label = root.querySelector("span")!;
+    expect(label.getAttribute("aria-hidden")).toBe("true");
+    // aria-labelledby still reads a hidden element: the group keeps its name although the span is hidden.
+    await expect.element(page.getByRole("group", { name: "Show" })).toBeInTheDocument();
+  });
+
   it("disables one item, or the whole group", async () => {
     const items = [...align.slice(0, 2), { ...align[2]!, disabled: true }];
     const { toggles, rerender } = await render(<ToggleGroup label="Alignment" items={items} />);
@@ -373,6 +383,13 @@ describe("ToggleGroup development messages", () => {
     expect(warn).toHaveBeenCalledWith('[ouro-ui] ToggleGroup: shape="round" is not a shape. Fix: <ToggleGroup shape="pill">.');
     expect(toggles[0]!.className).toContain("[--ouro-bd:transparent]");
     expect(toggles[0]!.getAttribute("data-shape")).toBe("rect");
+  });
+
+  it("warns for an unknown overflow and renders wrap", async () => {
+    const props = { label: "Alignment", items: align, overflow: "clip" } as unknown as ToggleGroupProps;
+    const { group } = await render(<ToggleGroup {...props} />);
+    expect(warn).toHaveBeenCalledWith('[ouro-ui] ToggleGroup: overflow="clip" is not an overflow. Fix: <ToggleGroup overflow="scroll">.');
+    expect(group.className).toContain("flex-wrap");
   });
 
   it("warns for appearance classes and an empty label", async () => {
