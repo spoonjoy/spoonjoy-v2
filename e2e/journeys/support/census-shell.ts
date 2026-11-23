@@ -50,6 +50,15 @@ async function showShell(page: Page): Promise<void> {
   }, HIDDEN_MARK);
 }
 
+// Shows or hides the marked landmarks without unmarking them. While a dialog is open the rest of the
+// page leaves the accessibility tree, so hideShell's getByRole would no longer find a landmark that
+// was shown for a moment; these find them by the mark instead.
+async function setMarkedShellVisible(page: Page, visible: boolean): Promise<void> {
+  await page.locator(`[${HIDDEN_MARK}]`).evaluateAll((elements, visibility) => {
+    for (const element of elements) (element as HTMLElement).style.visibility = visibility;
+  }, visible ? "" : "hidden");
+}
+
 /** Shows the shared shell again and empties main down to its heading, so the entry counts only the shell. */
 export async function showOnlyShell(page: Page): Promise<void> {
   await showShell(page);
@@ -68,9 +77,9 @@ export async function showOnlyShell(page: Page): Promise<void> {
  * record yet passes with a note in the report. Leaves the shell hidden.
  */
 export async function expectShellLandmarks(page: Page, journeyId: string, stateId: string): Promise<void> {
-  await showShell(page);
+  await setMarkedShellVisible(page, true);
   const actual = visibleShellLandmarks(await collectCensus(page));
-  await hideShell(page);
+  await setMarkedShellVisible(page, false);
   const path = shellRecordPath(journeyId);
   const record = existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as ShellRecord) : undefined;
   const result = checkShell(record, { project: test.info().project.name, journeyId, stateId }, actual);
