@@ -155,6 +155,18 @@ describe("runNextChunk", () => {
     expect(h.photos).toHaveLength(1);
   });
 
+  it("counts what it brought before a stop as its own when it runs the recipes again", async () => {
+    const h = harness();
+    await h.runAll();
+    // The same job, back at its first recipe, as after a stop before its saves.
+    h.jobs.set("job-1", { ...h.job(), status: "running", phase: "recipes", cursor: "0" });
+    for (const entity of ["recipes", "photos"]) h.counts.set(entity, { ...(h.counts.get(entity) as never), created: 0, unchanged: 0 });
+    await h.runAll();
+    expect(h.counts.get("recipes")).toMatchObject({ created: 3, unchanged: 0 });
+    expect(h.counts.get("photos")).toMatchObject({ created: 1, unchanged: 0 });
+    expect(h.photos).toHaveLength(1);
+  });
+
   it("counts a recipe it leaves alone as skipped, with the reason", async () => {
     const h = harness({ write: async ({ draft }) => ({ outcome: "skipped", recipeId: `x-${draft.sourceKey}`, reason: "You deleted this recipe in Spoonjoy after it moved in." }) });
     await h.runAll();

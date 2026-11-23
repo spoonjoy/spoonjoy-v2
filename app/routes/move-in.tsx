@@ -44,16 +44,16 @@ async function signedInWithFlag(request: Request, context: Route.LoaderArgs["con
   const userId = await requireUserId(request, "/login", env);
   if (!isFlagOn("move_in", env, userId)) throw new Response("Not found", { status: 404 });
   if (!env?.DB || !env.PHOTOS) throw new Response("Move-in needs its database and photo storage, and this server has neither.", { status: 503 });
-  return { userId, env: { DB: env.DB, PHOTOS: env.PHOTOS } as unknown as MoveInEnv };
+  return { userId, env: { DB: env.DB, PHOTOS: env.PHOTOS } as unknown as MoveInEnv, workerEnv: env };
 }
 
 /** Keeps the move-in running after the response, inside the request's waitUntil. */
-function keepRunning(context: Route.ActionArgs["context"], env: MoveInEnv, jobId: string, userId: string) {
+function keepRunning(context: Route.ActionArgs["context"], { env, workerEnv }: { env: MoveInEnv; workerEnv: Env }, jobId: string, userId: string) {
   const ctx = context.cloudflare?.ctx;
   if (!ctx) return;
   const run = runForAWhile(jobId, moveInPorts(env, () => new Date()), { budgetMs: RUN_BUDGET_MS }).catch(async (error: unknown) => {
     // The page's next poll resumes the move-in; the report says how often runs stop, and why.
-    await captureException(resolvePostHogServerConfig(getCloudflareEnv(context) ?? {}), {
+    await captureException(resolvePostHogServerConfig(workerEnv), {
       error,
       distinctId: userId,
       route: "/move-in",
@@ -110,7 +110,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
-  const { userId, env } = await signedInWithFlag(request, context);
+  const { userId, env, workerEnv } = await signedInWithFlag(request, context);
   const fail = (code: keyof typeof MOVE_IN_ERROR_MESSAGES, status = 400) => data({ error: MOVE_IN_ERROR_MESSAGES[code] }, { status });
   if (Number(request.headers.get("Content-Length") ?? 0) > MOVE_IN_UPLOAD_MAX_BYTES + 1024 * 1024) return fail("backup-too-large", 413);
 
@@ -118,7 +118,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (form.get("intent") === "continue") {
     const jobId = String(form.get("jobId") ?? "");
     if (!(await readMoveInProgress(env.DB, { ownerId: userId, jobId }))) throw new Response("Not found", { status: 404 });
-    keepRunning(context, env, jobId, userId);
+    keepRunning(context, { env, workerEnv }, jobId, userId);
     return { error: null };
   }
 
@@ -132,7 +132,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     now: new Date(),
   });
   if (!started.ok) return fail(started.code, started.code === "backup-too-large" ? 413 : 400);
-  keepRunning(context, env, started.jobId, userId);
+  keepRunning(context, { env, workerEnv }, started.jobId, userId);
   return redirect(`/move-in?job=${started.jobId}`);
 }
 

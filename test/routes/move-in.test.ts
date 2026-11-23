@@ -59,11 +59,14 @@ async function cookie(userId: string) {
   return (await sessionStorage.commitSession(session)).split(";")[0];
 }
 
+/** What the Worker hands a request; a test can leave the photo bucket or the waitUntil context out. */
+const platform = { photos: true, ctx: true };
+
 function context(flags: string | undefined = "move_in") {
   return {
     cloudflare: {
-      env: { DB: d1.binding, PHOTOS: photos, SPOONJOY_FLAGS: flags },
-      ctx: { waitUntil: (promise: Promise<unknown>) => void waiting.push(promise), passThroughOnException() {} },
+      env: { DB: d1.binding, PHOTOS: platform.photos ? photos : undefined, SPOONJOY_FLAGS: flags },
+      ctx: platform.ctx ? { waitUntil: (promise: Promise<unknown>) => void waiting.push(promise), passThroughOnException() {} } : undefined,
     },
   } as never;
 }
@@ -101,6 +104,8 @@ beforeEach(async () => {
   waiting = [];
   captured.length = 0;
   runFails.with = null;
+  platform.photos = true;
+  platform.ctx = true;
   ownerId = (await createUser(db, "cook@example.com", "cook", "testPassword123")).id;
   otherId = (await createUser(db, "pat@example.com", "pat", "testPassword123")).id;
 });
@@ -177,6 +182,29 @@ describe("the Move in page", () => {
 
   it("refuses an upload bigger than a backup can be before reading it", async () => {
     expect(await post({ app: "mealie", backup: backup() }, { headers: { "Content-Length": String(60 * 1024 * 1024) } })).toMatchObject({ init: { status: 413 } });
+  });
+
+  it("says so when the server has no photo storage", async () => {
+    platform.photos = false;
+    await expect(load("/move-in")).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("starts a move-in that waits for its first run where nothing keeps a request going", async () => {
+    platform.ctx = false;
+    const location = ((await post({ app: "mealie", backup: backup() })) as Response).headers.get("Location") as string;
+    expect(waiting).toEqual([]);
+    const { move } = await load(location);
+    expect(move).toMatchObject({ status: "queued", finished: false, recipes: { found: 0, done: 0 }, photos: { found: 0, in: 0 } });
+  });
+
+  it("asks for an app and a move-in by name", async () => {
+    expect(await post({ backup: backup() })).toMatchObject({ init: { status: 400 } });
+    await expect(post({ intent: "continue" })).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("refuses a backup bigger than a backup can be once it has read it", async () => {
+    const big = new UndiciFile([new Uint8Array(50 * 1024 * 1024 + 1)], "mealie.zip", { type: "application/zip" });
+    expect(await post({ app: "mealie", backup: big })).toMatchObject({ init: { status: 413 } });
   });
 
   it("shows a move-in only to the person it belongs to", async () => {

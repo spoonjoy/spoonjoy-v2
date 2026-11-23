@@ -93,6 +93,14 @@ describe("groups", () => {
     expect(chooseGroup(backup, "pat@example.com")).toBe(keys.group);
   });
 
+  it("chooses among every group when none has recipes yet", () => {
+    const { tables } = mealieDatabase();
+    tables.recipes = [];
+    const backup = readMealieDatabase(tables);
+    expect(chooseGroup(backup, "pat@example.com")).toBe(keys.otherGroup);
+    expect(chooseGroup(backup, null)).toBeNull();
+  });
+
   it("skips a group row with no id and names an unnamed group", () => {
     const { tables } = mealieDatabase();
     tables.groups = [{ id: null, name: "Broken" }, { id: tables.groups[0].id, name: null }];
