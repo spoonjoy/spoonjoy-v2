@@ -2,7 +2,7 @@
 // account makes a household and an invite link, and its desktop twin opens the link in a second
 // browser and joins. Both see each other in People after a reload, and share a shopping list: the twin adds to
 // it and the owner checks it off. The owner then makes the twin view-only and removes them, and each change
-// shows on the twin's next load. Desktop only: the two accounts are the two people, so an iPhone run at the same
+// shows on the twin's next load: view-only, they still read the list but can't change it. Desktop only: the two accounts are the two people, so an iPhone run at the same
 // time would share them. The household's name carries a timestamp, so each run's household is its
 // own. The households flag is on in QA.
 import type { Page, TestInfo } from "@playwright/test";
@@ -116,6 +116,7 @@ test.describe("Households", () => {
       await joinerPage.getByLabel("Add an item").fill("2 litres milk");
       await joinerPage.getByRole("button", { name: "Add", exact: true }).click();
       await expect(joinerPage.getByRole("checkbox", { name: "2 litres milk" })).toBeVisible();
+      await attachScreenshot(testInfo, joinerPage, "joiner-added-item");
 
       await verifyAfterReload(async () => {
         await expect(page.getByText(`Added by ${joiner.username}`, { exact: true })).toBeVisible();
@@ -147,6 +148,15 @@ test.describe("Households", () => {
       });
       await joinerPage.reload({ waitUntil: "load" });
       await expect(people(joinerPage).getByText("View-only", { exact: true })).toBeVisible();
+
+      // Now view-only, the joiner can read the shared list but not change it.
+      await joinerPage.goto(listPath);
+      await waitForHydration(joinerPage);
+      await expect(joinerPage.getByRole("checkbox", { name: "2 litres milk" })).toBeChecked();
+      await expect(joinerPage.getByRole("checkbox", { name: "2 litres milk" })).toBeDisabled();
+      await expect(joinerPage.getByLabel("Add an item")).toHaveCount(0);
+      await expect(joinerPage.getByRole("button", { name: "Delete list", exact: true })).toHaveCount(0);
+      await attachScreenshot(testInfo, joinerPage, "viewer-shared-list");
 
       // The owner removes the joiner, after confirming, and the household is gone from the joiner's list.
       await page.getByRole("button", { name: `Actions for ${joiner.username}`, exact: true }).click();
