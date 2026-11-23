@@ -143,7 +143,6 @@ jobs:
       # checked against Apple's public keys (e2e/self-host, playwright.self-host-fresh.config.ts).
       - name: Sign in on the fresh server
         run: |
-          docker cp .diag/diag.mjs sj:/app/self-host/diag.mjs && docker exec -w /app/self-host sj node diag.mjs || true
           docker run --rm --network host --user "$(id -u):$(id -g)" --ipc host \
             -v "$PWD:/work" -w /work -e HOME=/tmp -e CI=true \
             -e SPOONJOY_JOURNEYS_BASE_URL=http://localhost:8080 \
