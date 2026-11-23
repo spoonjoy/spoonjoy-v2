@@ -9,7 +9,8 @@ const BASE = "b".repeat(40);
 const LIST_FILE = "/tmp/changed.json";
 const LIST_CHANGED = ["pnpm", ["exec", "vitest", "list", "--changed", BASE, "--filesOnly", `--json=${LIST_FILE}`]];
 const LIST_ALL = ["pnpm", ["exec", "vitest", "list", "--filesOnly", `--json=${LIST_FILE}`]];
-const RUN_CHANGED = ["pnpm", ["exec", "vitest", "run", "--changed", BASE]];
+const coverageOf = (diff: string) => ({ SPOONJOY_COVERAGE_CHANGED: diff.split("\n").filter(Boolean).join(",") });
+const RUN_CHANGED = ["pnpm", ["exec", "vitest", "run", "--changed", BASE], coverageOf("app/a.ts\n")];
 
 interface Setup {
   /** What `vitest list --changed` names. */
@@ -26,7 +27,7 @@ interface Setup {
 
 function deps({ imported = [], all = imported, sources = {}, diff = "", diffStatus = 0, statuses = [] }: Setup = {}) {
   let lastList: unknown;
-  const run = vi.fn((_command: string, args: readonly string[]) => {
+  const run = vi.fn((_command: string, args: readonly string[], _env?: Record<string, string>) => {
     if (args[2] === "list") lastList = args.includes("--changed") ? imported : all;
     return statuses.shift() ?? 0;
   });
@@ -58,7 +59,7 @@ describe("testChanged", () => {
       diff: "wrangler.json\napp/a.ts\n",
     });
     expect(testChanged(d)).toBe(0);
-    expect(d.run.mock.calls).toEqual([LIST_CHANGED, LIST_ALL, ["pnpm", ["exec", "vitest", "run", "test/a.test.ts", "test/config/worker-observability.test.ts"]]]);
+    expect(d.run.mock.calls).toEqual([LIST_CHANGED, LIST_ALL, ["pnpm", ["exec", "vitest", "run", "test/a.test.ts", "test/config/worker-observability.test.ts"], coverageOf("wrangler.json\napp/a.ts\n")]]);
     expect(d.log).toHaveBeenCalledWith("1 more test file(s) name a changed file.");
   });
 
@@ -70,7 +71,7 @@ describe("testChanged", () => {
       diff: "vitest.config.ts\n",
     });
     expect(testChanged(d)).toBe(0);
-    expect(d.run).toHaveBeenLastCalledWith("pnpm", ["exec", "vitest", "run", "test/config/warning-policy.test.ts"]);
+    expect(d.run).toHaveBeenLastCalledWith("pnpm", ["exec", "vitest", "run", "test/config/warning-policy.test.ts"], coverageOf("vitest.config.ts"));
     const logged = d.log.mock.calls.map(([line]) => String(line)).join("\n");
     expect(findUnexpectedWarnings(logged)).toEqual([]);
   });
@@ -78,14 +79,14 @@ describe("testChanged", () => {
   it("runs a test that only names a changed file even when no import reaches a test", () => {
     const d = deps({ imported: [], all: [{ file: "/repo/test/workflows/ci.test.ts" }], sources: { "test/workflows/ci.test.ts": "read('.github/workflows/ci.yml')" }, diff: ".github/workflows/ci.yml" });
     expect(testChanged(d)).toBe(0);
-    expect(d.run).toHaveBeenLastCalledWith("pnpm", ["exec", "vitest", "run", "test/workflows/ci.test.ts"]);
+    expect(d.run).toHaveBeenLastCalledWith("pnpm", ["exec", "vitest", "run", "test/workflows/ci.test.ts"], coverageOf(".github/workflows/ci.yml"));
     expect(d.log).toHaveBeenCalledWith(`0 test file(s) are affected by the changes since ${BASE} through imports.`);
   });
 
   it("keeps --changed when every test naming a changed file is already selected", () => {
     const d = deps({ imported: [{ file: "/repo/test/a.test.ts" }], sources: { "test/a.test.ts": "`wrangler.json`" }, diff: "wrangler.json" });
     expect(testChanged(d)).toBe(0);
-    expect(d.run).toHaveBeenLastCalledWith(...RUN_CHANGED);
+    expect(d.run).toHaveBeenLastCalledWith("pnpm", ["exec", "vitest", "run", "--changed", BASE], coverageOf("wrangler.json"));
   });
 
   it("deletes the listing even when it cannot be read", () => {
@@ -147,6 +148,11 @@ describe("testChanged", () => {
   it("returns a real child's exit status", () => {
     expect(runInherited(process.execPath, ["-e", "process.exit(3)"])).toBe(3);
     expect(runInherited(process.execPath, ["-e", "process.kill(process.pid, 'SIGTERM')"])).toBe(1);
+  });
+
+  it("passes extra environment to a real child, on top of its own", () => {
+    const script = "process.exit(process.env.SPOONJOY_COVERAGE_CHANGED === 'app/a.ts' && process.env.PATH ? 0 : 4)";
+    expect(runInherited(process.execPath, ["-e", script], { SPOONJOY_COVERAGE_CHANGED: "app/a.ts" })).toBe(0);
   });
 
   it("captures a real child's output and status", () => {
