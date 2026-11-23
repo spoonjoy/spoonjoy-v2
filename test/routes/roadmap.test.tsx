@@ -32,6 +32,20 @@ describe("/roadmap", () => {
     }
   });
 
+  // The HX census names a link by its accessible name, so a count inside the link would change the
+  // census baseline every time an item moves group, and every pull request that moves one would
+  // conflict with every other.
+  it("names each group link by the group alone, with its count beside the link", async () => {
+    await renderRoadmap();
+    const nav = within(screen.getByRole("navigation", { name: "Roadmap groups" }));
+    const links = nav.getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual(ROADMAP_STATUSES.map((status) => status.title));
+    ROADMAP_STATUSES.forEach((status, index) => {
+      expect(links[index]).toHaveAttribute("href", expect.stringMatching(new RegExp(`#${status.id}$`)));
+      expect(links[index].parentElement).toHaveTextContent(`${status.title} · ${roadmapByStatus(status.id).length}`);
+    });
+  });
+
   it("lists every item in its group, with its benefit and area", async () => {
     await renderRoadmap();
     for (const status of ROADMAP_STATUSES) {
