@@ -18,6 +18,7 @@ export const FLAGS = {
   organizers: {
     description: "Tags, categories and tools on recipes, their pages and filters, smart cookbooks and bulk actions on many recipes.",
   },
+  "shopping-merge-units": { description: "One shopping-list line for a food added in different units, such as a cup and 100 ml of rice." },
 } as const satisfies Record<string, { description: string }>;
 
 export type FlagName = keyof typeof FLAGS & string;

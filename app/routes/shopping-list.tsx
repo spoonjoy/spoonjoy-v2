@@ -40,6 +40,8 @@ import { ChecklistItem, ChecklistRoot } from "~/components/ouro/checklist/checkl
 import { SegmentedControl } from "~/components/ouro/segmented-control/segmented-control";
 import { useWriteToken } from "~/hooks/use-write-token";
 import { SwipeActions } from "~/components/ouro/swipe-actions/swipe-actions";
+import { useFlag } from "~/domains/platform";
+import { mergeShoppingRows } from "~/domains/pantry-and-shopping";
 
 export { __internal__, parseShoppingItemFallback };
 
@@ -168,6 +170,7 @@ export default function ShoppingList() {
   const actionData = useActionData<ShoppingListActionData>();
   const resendingLostSubmission = useResendLostSubmission(actionData);
   const { shoppingList, recipes, unitSystem } = useLoaderData<typeof loader>();
+  const mergeUnits = useFlag("shopping-merge-units");
   const [units, setUnits] = useState<UnitSystem>(unitSystem);
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [viewMode, setViewMode] = useState<ShoppingListViewMode>("all");
@@ -178,7 +181,7 @@ export default function ShoppingList() {
   const addItemInputRef = useRef<HTMLInputElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  type Removal = { id: string; name: string; locationKey: string };
+  type Removal = { id: string; rowIds: string[]; name: string; locationKey: string };
   const [removal, setRemoval] = useState<Removal | null>(null);
   const [removalOpen, setRemovalOpen] = useState(false);
   const removalAuthority = useRef<Removal | null>(null);
@@ -244,8 +247,9 @@ export default function ShoppingList() {
         };
       });
 
-    return orderShoppingItemsForMarket(withOptimistic);
-  }, [shoppingList.items, optimisticCheckedById, optimisticRemovedById]);
+    const lines = mergeUnits ? mergeShoppingRows(withOptimistic) : withOptimistic.map((item) => ({ ...item, rowIds: [item.id] }));
+    return orderShoppingItemsForMarket(lines);
+  }, [shoppingList.items, optimisticCheckedById, optimisticRemovedById, mergeUnits]);
 
   const checkedCount = displayItems.filter((item) => item.checked).length;
   const uncheckedCount = displayItems.length - checkedCount;
@@ -283,15 +287,18 @@ export default function ShoppingList() {
 
   // Each row has its own fetchers (one for checking, one for removing), so rapid taps on
   // different rows each reach the server instead of the later tap cancelling the earlier one.
+  // A merged line checks each of its rows.
   const toggleItem = (item: (typeof displayItems)[number]) => {
-    submit(
-      {
-        intent: "toggleCheck",
-        itemId: item.id,
-        nextChecked: String(!item.checked),
-      },
-      { method: "post", navigate: false, fetcherKey: `${SHOPPING_ITEM_FETCHER_PREFIX}toggle-${item.id}` }
-    );
+    for (const itemId of item.rowIds) {
+      submit(
+        {
+          intent: "toggleCheck",
+          itemId,
+          nextChecked: String(!item.checked),
+        },
+        { method: "post", navigate: false, fetcherKey: `${SHOPPING_ITEM_FETCHER_PREFIX}toggle-${itemId}` }
+      );
+    }
   };
 
   const removeItem = (itemId: string) => {
@@ -310,7 +317,7 @@ export default function ShoppingList() {
     const row = Array.from(boardRef.current!.querySelectorAll<HTMLElement>("[data-shopping-item]"))
       .find((element) => element.dataset.shoppingItem === item.id)!;
     row.querySelector<HTMLButtonElement>(`[data-ouro-control="swipe-actions"][data-ouro-part="menu"]`)!.focus();
-    const selected = { id: item.id, name: item.ingredientRef.name, locationKey: location.key };
+    const selected = { id: item.id, rowIds: item.rowIds, name: item.ingredientRef.name, locationKey: location.key };
     removalAuthority.current = selected;
     setRemoval(selected);
     setRemovalOpen(true);
@@ -326,7 +333,7 @@ export default function ShoppingList() {
     // useSubmit returns void. Consume authority synchronously rather than inventing a
     // promise or allowing repeated clicks to start the existing mutation twice.
     removalAuthority.current = null;
-    removeItem(selected.id);
+    for (const itemId of selected.rowIds) removeItem(itemId);
   };
 
   return (

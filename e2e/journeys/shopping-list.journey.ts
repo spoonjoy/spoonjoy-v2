@@ -457,4 +457,34 @@ test.describe("Shopping list", () => {
       await expect(carrots).toBeHidden();
     });
   });
+
+  test("a food added in two units is one line, in the list's units, after a reload @mutates", async ({
+    page,
+    verifyAfterReload,
+    expectAccessible,
+  }, testInfo) => {
+    await startWithAnEmptyList(page);
+    // "jasmine rice" is a seeded ingredient, so this adds no new name to QA's shared ingredients.
+    await addByHand(page, "1 cup jasmine rice", "jasmine rice", "1 cup");
+    await itemField(page).fill("100 ml jasmine rice");
+    await addSection(page).getByRole("button", { name: "Add to list", exact: true }).click();
+    await expect(itemField(page)).toHaveValue("");
+    // One line for both rows (1 cup is about 237 ml), not a second "jasmine rice" row.
+    await expect(view(page, "All", 1)).toBeVisible();
+    await expect(page.getByRole("checkbox", { name: "jasmine rice", exact: true })).toHaveCount(1);
+
+    await page.getByRole("button", { name: "List actions", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "Metric", exact: true }).click();
+    await expect(page.getByRole("menuitemradio", { name: "Metric", exact: true })).toBeChecked();
+    await page.keyboard.press("Escape");
+    await expect(row(page, "jasmine rice"), FALLBACK_PARSER).toHaveAccessibleDescription(/(^| )335 ml$/);
+
+    await verifyAfterReload(async () => {
+      await expect(page.getByRole("checkbox", { name: "jasmine rice", exact: true })).toHaveCount(1);
+      await expect(row(page, "jasmine rice"), FALLBACK_PARSER).toHaveAccessibleDescription(/(^| )335 ml$/);
+    });
+    await testInfo.attach("shopping-list-merged-units-after-reload", { body: await page.getByTestId("shopping-list-checklist-board").screenshot(), contentType: "image/png" });
+    await expectAccessible();
+    await clearAll(page);
+  });
 });
