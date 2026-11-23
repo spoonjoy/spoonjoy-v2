@@ -24,13 +24,23 @@ export interface PlanStore {
   removeEntry(planId: string, entryId: string): Promise<boolean>;
   /** Sets where each of these entries of this plan sits: its day, meal type and order. */
   placeEntries(planId: string, placements: readonly EntryPlacement[]): Promise<void>;
+  /** When the cook last logged a live cook of each of these recipes; a recipe they never cooked is left out. */
+  lastCooked(chefId: string, recipeIds: readonly string[]): Promise<Array<{ recipeId: string; cookedAt: Date }>>;
 }
 
 export type EntryPlacement = { id: string; date: LocalDate; mealType: MealType; position: number };
 
 export type PlannableRecipe = { id: string; title: string };
 
-export type PlanWeek = { today: LocalDate; start: LocalDate; firstDayOfWeek: number; timeZone: string; days: PlanDay[] };
+export type PlanWeek = {
+  today: LocalDate;
+  start: LocalDate;
+  firstDayOfWeek: number;
+  timeZone: string;
+  days: PlanDay[];
+  /** The day, in the plan's time zone, the cook last made each recipe planned this week, by recipe id. */
+  lastMade: Record<string, LocalDate>;
+};
 
 /** The week holding `date`, or this week where the plan lives when `date` is null. */
 export async function getWeek(store: PlanStore, ownerId: string, date: LocalDate | null, now: Date = new Date()): Promise<PlanWeek> {
@@ -38,7 +48,10 @@ export async function getWeek(store: PlanStore, ownerId: string, date: LocalDate
   const today = todayIn(plan.timeZone, now);
   const start = startOfWeek(date ?? today, plan.firstDayOfWeek);
   const days = planWeek(await store.entriesBetween(plan.id, start, planWeek([], start)[6].date), start);
-  return { today, start, firstDayOfWeek: plan.firstDayOfWeek, timeZone: plan.timeZone, days };
+  const recipeIds = [...new Set(days.flatMap((day) => day.entries.flatMap((entry) => (entry.recipeId ? [entry.recipeId] : []))))];
+  const cooked = recipeIds.length ? await store.lastCooked(ownerId, recipeIds) : [];
+  const lastMade = Object.fromEntries(cooked.map(({ recipeId, cookedAt }) => [recipeId, todayIn(plan.timeZone, cookedAt)]));
+  return { today, start, firstDayOfWeek: plan.firstDayOfWeek, timeZone: plan.timeZone, days, lastMade };
 }
 
 function nextPosition(entries: readonly PlanEntry[], input: PlanEntryInput): number {

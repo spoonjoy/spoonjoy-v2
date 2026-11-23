@@ -142,6 +142,12 @@ export async function action({ request, context }: Route.ActionArgs) {
 const dayHeading = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" });
 const weekdayName = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" });
 const shortDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const longDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+
+/** "Nov 2", or "Jun 9, 2025" when the day falls in another year than today. */
+function madeOn(date: string, today: string) {
+  return (date.slice(0, 4) === today.slice(0, 4) ? shortDate : longDate).format(utc(date));
+}
 
 function utc(date: string) {
   return new Date(`${date}T00:00:00Z`);
@@ -153,9 +159,10 @@ function entryTitle(entry: PlanEntry) {
   return entry.recipeTitle || entry.title;
 }
 
-function entryDescription(entry: PlanEntry) {
+function entryDescription(entry: PlanEntry, lastMade: string | undefined, today: string) {
   const parts = [MEAL_LABEL.get(entry.mealType)];
   if (entry.kind === "recipe" && entry.scaleFactor !== 1) parts.push(`${entry.scaleFactor}× the recipe`);
+  if (lastMade) parts.push(`Last made ${madeOn(lastMade, today)}`);
   if (entry.note) parts.push(entry.note);
   return parts.join(" · ");
 }
@@ -172,7 +179,7 @@ function RemoveEntry({ entry, weekday }: { entry: PlanEntry; weekday: string }) 
   );
 }
 
-function DaySection({ day, today }: { day: PlanDay; today: string }) {
+function DaySection({ day, today, lastMade }: { day: PlanDay; today: string; lastMade: Record<string, string> }) {
   const heading = dayHeading.format(utc(day.date));
   const weekday = weekdayName.format(utc(day.date));
   return (
@@ -180,7 +187,7 @@ function DaySection({ day, today }: { day: PlanDay; today: string }) {
       <SectionHeader title={heading} meta={day.date === today ? "Today" : undefined} />
       <ItemGroup variant="divided" aria-label={`${weekday}'s meals`} empty={<Text tone="muted">Nothing planned yet.</Text>}>
         {day.entries.map((entry) => {
-          const row = { title: entryTitle(entry), description: entryDescription(entry), actions: <RemoveEntry entry={entry} weekday={weekday} /> };
+          const row = { title: entryTitle(entry), description: entryDescription(entry, entry.recipeId ? lastMade[entry.recipeId] : undefined, today), actions: <RemoveEntry entry={entry} weekday={weekday} /> };
           return entry.recipeId ? <Item key={entry.id} href={`/recipes/${entry.recipeId}`} {...row} /> : <Item key={entry.id} {...row} />;
         })}
       </ItemGroup>
@@ -259,7 +266,7 @@ export default function PlanPage() {
       <div className="mt-6 grid gap-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="grid gap-8 md:grid-cols-2">
           {week.days.map((day) => (
-            <DaySection key={day.date} day={day} today={week.today} />
+            <DaySection key={day.date} day={day} today={week.today} lastMade={week.lastMade} />
           ))}
         </div>
 

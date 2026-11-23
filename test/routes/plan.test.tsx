@@ -312,6 +312,22 @@ describe("meal plan route", () => {
       expect(screen.getByRole("link", { name: "This week" }).getAttribute("href")).toBe("/plan");
     });
 
+    it("says when the cook last made a planned recipe, with the year when it wasn't this one", async () => {
+      const rice = await db.recipe.create({ data: { ...createTestRecipe(chefId), title: "Lemon Rice" } });
+      const stew = await db.recipe.create({ data: { ...createTestRecipe(chefId), title: "Old Stew" } });
+      await db.recipeSpoon.createMany({
+        data: [
+          { chefId, recipeId: rice.id, cookedAt: new Date("2026-11-02T18:00:00Z") },
+          { chefId, recipeId: stew.id, cookedAt: new Date("2025-06-09T18:00:00Z") },
+        ],
+      });
+      await act({ intent: "add-recipe", entryToken: "token-last-1", date: "2026-11-24", mealType: "dinner", recipeId: rice.id, scaleFactor: "1" });
+      await act({ intent: "add-recipe", entryToken: "token-last-2", date: "2026-11-25", mealType: "lunch", recipeId: stew.id, scaleFactor: "2" });
+      await renderPage();
+      expect(within(screen.getByRole("region", { name: "Tuesday, Nov 24" })).getByText("Dinner · Last made Nov 2")).toBeTruthy();
+      expect(within(screen.getByRole("region", { name: "Wednesday, Nov 25" })).getByText("Lunch · 2× the recipe · Last made Jun 9, 2025")).toBeTruthy();
+    });
+
     it("keeps a deleted recipe's meal readable without a link", async () => {
       const recipe = await db.recipe.create({ data: { ...createTestRecipe(chefId), title: "Gone Soup" } });
       await act({ intent: "add-recipe", entryToken: "token-recipe-3", date: "2026-11-24", mealType: "dinner", recipeId: recipe.id, scaleFactor: "1" });
