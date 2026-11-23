@@ -10,6 +10,7 @@ export interface MemoryJobs extends Jobs {
 
 export function memoryJobs(registry: JobRegistry): MemoryJobs {
   const status = new Map<string, "pending" | "running" | "done">();
+  const runs = new Map<string, number>();
   const keys: JobKeys = {
     async claim(key) {
       if (status.has(key)) return false;
@@ -18,28 +19,34 @@ export function memoryJobs(registry: JobRegistry): MemoryJobs {
     },
     async start(key) {
       const now = status.get(key);
-      if (now === "done") return "done";
-      if (now === "running") return "busy";
+      if (now === "done") return { state: "done" };
+      if (now === "running") return { state: "busy", retryInSeconds: 0 };
       status.set(key, "running");
-      return "started";
+      const run = (runs.get(key) ?? 0) + 1;
+      runs.set(key, run);
+      return { state: "started", run };
     },
     pause: async (key) => void status.set(key, "pending"),
     markDone: async (key) => void status.set(key, "done"),
-    release: async (key) => void status.delete(key),
+    release: async (key) => {
+      status.delete(key);
+      runs.delete(key);
+    },
   };
-  const waiting: Array<{ message: JobMessage; attempt: number }> = [];
+  const waiting: JobMessage[] = [];
   return {
     async enqueue(kind, payload, { key }) {
       if (!(await keys.claim(key, kind.type))) return { enqueued: false };
-      waiting.push({ message: { type: kind.type, key, payload }, attempt: 1 });
+      waiting.push({ type: kind.type, key, payload });
       return { enqueued: true };
     },
     async drain() {
       const ran: Array<{ type: string; key: string; outcome: JobOutcome }> = [];
+      // A kind with no handler is reported once and dropped, so drain() always ends.
       for (let next = waiting.shift(); next; next = waiting.shift()) {
-        const outcome = await runJob(registry, keys, next.message, next.attempt);
-        ran.push({ type: next.message.type, key: next.message.key, outcome });
-        if (outcome.status === "retry" || outcome.status === "busy") waiting.push({ message: next.message, attempt: next.attempt + 1 });
+        const outcome = await runJob(registry, keys, next);
+        ran.push({ type: next.type, key: next.key, outcome });
+        if (outcome.status === "retry" || outcome.status === "busy") waiting.push(next);
       }
       return ran;
     },

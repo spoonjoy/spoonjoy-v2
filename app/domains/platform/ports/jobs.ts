@@ -5,11 +5,13 @@
 //
 // A job has a kind (defineJob), a payload and a key. Enqueueing a key that is already waiting or done does
 // nothing. A delivery leases its key before it runs, so one run of a key goes at a time, and a delivery
-// whose key is done is skipped. Queues delivers at least once, and a run can die part-way (its lease then
-// runs out and the next delivery starts again), so handlers must be safe to run again: resume from what
-// is already saved. A run that throws is retried after a backoff until its kind's attempts run out; then
-// its key is freed, so the same job can be enqueued again later. Handlers check their own payloads: a
-// message queued before a payload changed shape still reaches the new handler.
+// whose key is done is skipped; one that finds the key leased comes back when the lease is up. Queues
+// delivers at least once, and a run can die part-way (its lease then runs out and the next delivery
+// starts again; a late duplicate of a job that failed can start it again too), so handlers must be safe
+// to run again: resume from what is already saved. A run that throws is retried after a backoff until
+// the key has run maxAttempts times (counted on the key, not by the queue); then its key is freed, so
+// the same job can be enqueued again later. Handlers check their own payloads: a message queued before
+// a payload changed shape still reaches the new handler.
 
 /** One kind of job, and the payload it carries. Define each kind once, beside its handler. */
 export interface JobKind<Payload> {
@@ -89,8 +91,13 @@ export interface JobKeys {
    * false when it is already waiting, running or done.
    */
   claim(key: string, type: string): Promise<boolean>;
-  /** Leases the key to this run: "busy" while another run holds an unexpired lease, "done" once it finished. */
-  start(key: string, type: string, leaseSeconds: number): Promise<"started" | "busy" | "done">;
+  /**
+   * Leases the key to this run, and counts it: `run` is 1 on the key's first run. "busy" while another run
+   * holds an unexpired lease, with the seconds until it is up; "done" once the job finished.
+   */
+  start(key: string, type: string, leaseSeconds: number): Promise<
+    { state: "started"; run: number } | { state: "busy"; retryInSeconds: number } | { state: "done" }
+  >;
   /** Gives the lease back after a run that will be retried. */
   pause(key: string): Promise<void>;
   markDone(key: string): Promise<void>;
@@ -98,8 +105,8 @@ export interface JobKeys {
 }
 
 const FIRST_RETRY_SECONDS = 10;
-/** How long a delivery waits when another run of its key holds the lease. */
-const BUSY_RETRY_SECONDS = 60;
+/** How long a message of a kind this Worker doesn't know waits for a Worker that does (a deploy, a rollback). */
+const UNHANDLED_RETRY_SECONDS = 5 * 60;
 const LONGEST_RETRY_SECONDS = 15 * 60;
 
 /** Seconds to wait before running a job again after its `attempt`th run failed. */
@@ -109,22 +116,21 @@ export function retryDelaySeconds(attempt: number): number {
 
 export type JobOutcome =
   | { status: "done" }
-  | { status: "skipped"; reason: "already-done" | "unknown-type" }
+  | { status: "skipped"; reason: "already-done" }
   | { status: "retry"; delaySeconds: number }
   | { status: "busy"; delaySeconds: number }
+  | { status: "unhandled"; delaySeconds: number }
   | { status: "failed"; error: unknown };
 
 /** Runs one delivery of a job: the adapters call this, and act on its outcome. */
-export async function runJob(registry: JobRegistry, keys: JobKeys, message: JobMessage, attempt: number): Promise<JobOutcome> {
+export async function runJob(registry: JobRegistry, keys: JobKeys, message: JobMessage): Promise<JobOutcome> {
   const registered = registry.handlerFor(message.type);
-  if (!registered) {
-    // Nothing here runs this kind (renamed, or rolled back): free the key so it can be enqueued again.
-    await keys.release(message.key);
-    return { status: "skipped", reason: "unknown-type" };
-  }
+  // A Worker that doesn't know the kind leaves the job and its key alone for one that does.
+  if (!registered) return { status: "unhandled", delaySeconds: UNHANDLED_RETRY_SECONDS };
   const started = await keys.start(message.key, message.type, registered.kind.leaseSeconds);
-  if (started === "done") return { status: "skipped", reason: "already-done" };
-  if (started === "busy") return { status: "busy", delaySeconds: BUSY_RETRY_SECONDS };
+  if (started.state === "done") return { status: "skipped", reason: "already-done" };
+  if (started.state === "busy") return { status: "busy", delaySeconds: started.retryInSeconds };
+  const attempt = started.run;
   try {
     await registered.handler(message.payload, { key: message.key, attempt });
   } catch (error) {

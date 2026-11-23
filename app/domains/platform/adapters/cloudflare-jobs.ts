@@ -2,9 +2,10 @@
 // each job's key and lease. The Worker's queue() handler (workers/app.ts) hands each batch to
 // consumeJobBatch. These take their bindings as arguments and read no env themselves.
 //
-// The JOBS queue's consumer needs max_retries at least the largest kind's maxAttempts, or Queues drops a
-// message before its last attempt reports and frees the key (a key left waiting a day is claimable
-// again), and max_batch_size 1 for long jobs, so one job's run never holds up another's.
+// The JOBS queue's consumer needs max_retries well above the largest kind's maxAttempts, because waiting
+// out a lease or a deploy also counts as a delivery to Queues; if Queues drops a message anyway, its key
+// is claimable again once its lease is up (or after a day waiting). It needs max_batch_size 1 for long
+// jobs, so one job's run never holds up another's.
 import { isJobMessage, retryDelaySeconds, runJob, JobsUnavailableError, type JobKeys, type JobMessage, type JobRegistry, type Jobs } from "../ports/jobs";
 
 /** The slice of a D1 binding the job keys use. */
@@ -52,13 +53,13 @@ export async function consumeJobBatch(batch: MessageBatch<unknown>, registry: Jo
     }
     let outcome;
     try {
-      outcome = await runJob(registry, keys, body, message.attempts);
+      outcome = await runJob(registry, keys, body);
     } catch {
       // The job's bookkeeping failed (D1 dropped a write); deliver it again after the usual wait.
       message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
       continue;
     }
-    if (outcome.status === "retry" || outcome.status === "busy") {
+    if (outcome.status === "retry" || outcome.status === "busy" || outcome.status === "unhandled") {
       message.retry({ delaySeconds: outcome.delaySeconds });
       continue;
     }
@@ -78,6 +79,8 @@ async function reportFailure(options: ConsumeOptions, message: JobMessage, error
 
 /** A key waiting this long has lost its message (a send that failed after the claim, or a dropped delivery). */
 const LOST_AFTER_MS = 24 * 60 * 60 * 1000;
+/** A delivery that finds its key leased comes back this long after the lease is up. */
+const AFTER_LEASE_SECONDS = 5;
 
 export function d1JobKeys(db: JobKeysDatabase, now: () => Date = () => new Date()): JobKeys {
   return {
@@ -87,10 +90,12 @@ export function d1JobKeys(db: JobKeysDatabase, now: () => Date = () => new Date(
       const result = await db
         .prepare(
           `INSERT INTO "PlatformJobKey" ("key", "type", "status", "createdAt", "updatedAt") VALUES (?, ?, 'pending', ?, ?)
-           ON CONFLICT ("key") DO UPDATE SET "type" = excluded."type", "updatedAt" = excluded."updatedAt"
-           WHERE "PlatformJobKey"."status" = 'pending' AND "PlatformJobKey"."updatedAt" < ?`,
+           ON CONFLICT ("key") DO UPDATE SET "type" = excluded."type", "status" = 'pending', "leaseUntil" = NULL, "runs" = 0,
+             "updatedAt" = excluded."updatedAt"
+           WHERE ("PlatformJobKey"."status" = 'pending' AND "PlatformJobKey"."updatedAt" < ?)
+              OR ("PlatformJobKey"."status" = 'running' AND "PlatformJobKey"."leaseUntil" < ?)`,
         )
-        .bind(key, type, at.toISOString(), at.toISOString(), lostBefore)
+        .bind(key, type, at.toISOString(), at.toISOString(), lostBefore, at.toISOString())
         .run();
       return (result.meta.changes ?? 0) > 0;
     },
@@ -100,15 +105,22 @@ export function d1JobKeys(db: JobKeysDatabase, now: () => Date = () => new Date(
       // A delivery whose key has no row (released after a failure, or never claimed) starts it.
       const result = await db
         .prepare(
-          `INSERT INTO "PlatformJobKey" ("key", "type", "status", "leaseUntil", "createdAt", "updatedAt") VALUES (?, ?, 'running', ?, ?, ?)
-           ON CONFLICT ("key") DO UPDATE SET "status" = 'running', "leaseUntil" = excluded."leaseUntil", "updatedAt" = excluded."updatedAt"
-           WHERE "PlatformJobKey"."status" = 'pending' OR ("PlatformJobKey"."status" = 'running' AND "PlatformJobKey"."leaseUntil" < ?)`,
+          `INSERT INTO "PlatformJobKey" ("key", "type", "status", "leaseUntil", "runs", "createdAt", "updatedAt") VALUES (?, ?, 'running', ?, 1, ?, ?)
+           ON CONFLICT ("key") DO UPDATE SET "status" = 'running', "leaseUntil" = excluded."leaseUntil", "runs" = "PlatformJobKey"."runs" + 1,
+             "updatedAt" = excluded."updatedAt"
+           WHERE "PlatformJobKey"."status" = 'pending' OR ("PlatformJobKey"."status" = 'running' AND "PlatformJobKey"."leaseUntil" < ?)
+           RETURNING "runs"`,
         )
         .bind(key, type, leaseUntil, at.toISOString(), at.toISOString(), at.toISOString())
-        .run();
-      if ((result.meta.changes ?? 0) > 0) return "started";
-      const { results } = await db.prepare(`SELECT "status" FROM "PlatformJobKey" WHERE "key" = ?`).bind(key).all<{ status: string }>();
-      return results[0]?.status === "done" ? "done" : "busy";
+        .all<{ runs: number }>();
+      if (result.results[0]) return { state: "started", run: result.results[0].runs };
+      const { results } = await db
+        .prepare(`SELECT "status", "leaseUntil" FROM "PlatformJobKey" WHERE "key" = ?`)
+        .bind(key)
+        .all<{ status: string; leaseUntil: string | null }>();
+      if (results[0]?.status === "done") return { state: "done" };
+      const leaseLeftMs = results[0]?.leaseUntil ? new Date(results[0].leaseUntil).getTime() - at.getTime() : 0;
+      return { state: "busy", retryInSeconds: Math.max(0, Math.ceil(leaseLeftMs / 1000)) + AFTER_LEASE_SECONDS };
     },
     async pause(key) {
       await db
