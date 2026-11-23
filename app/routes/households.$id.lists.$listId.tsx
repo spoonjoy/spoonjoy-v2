@@ -1,7 +1,7 @@
 import type { Route } from "./+types/households.$id.lists.$listId";
 import { useState } from "react";
 import { X } from "lucide-react";
-import { Form as RouterForm, data, redirect, useActionData, useFetchers, useLoaderData, useSubmit } from "react-router";
+import { Form as RouterForm, data, redirect, useActionData, useFetcher, useFetchers, useLoaderData, useSubmit } from "react-router";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Button } from "~/components/ouro/button/button";
 import { Checklist } from "~/components/ouro/checklist/checklist";
@@ -64,15 +64,27 @@ export async function action({ request, context, params }: Route.ActionArgs) {
   return { done: done.as };
 }
 
+const itemFetcherKey = (itemId: string) => `household-list-item-${itemId}`;
+
+/** Why the server refused the last change to an item, from that item's fetcher. */
+function Refusal({ itemId }: { itemId: string }) {
+  const fetcher = useFetcher<typeof action>({ key: itemFetcherKey(itemId) });
+  const refused = fetcher.state === "idle" && fetcher.data && "error" in fetcher.data ? fetcher.data.error : null;
+  return refused ? <Alert tone="destructive" className="mt-6" title={refused} /> : null;
+}
+
 export default function HouseholdListPage() {
   const { household, list } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const [deleting, setDeleting] = useState(false);
-  const send = (fields: Record<string, string>) => submit(fields, { method: "post", navigate: false });
-  // A tick shows at once, and the next load puts back what the server kept if it refused.
+  // Each item's changes go through its own fetcher, so ticking several at once doesn't cancel any.
+  const send = (fields: { intent: string; itemId: string; checked?: string }) =>
+    submit(fields, { method: "post", navigate: false, fetcherKey: itemFetcherKey(fields.itemId) });
+  const fetchers = useFetchers();
+  // A tick shows at once, and the next load puts back what the server kept if it refused, with the reason.
   const ticking = new Map(
-    useFetchers()
+    fetchers
       .filter((fetcher) => fetcher.formData?.get("intent") === "check")
       .map((fetcher) => [String(fetcher.formData?.get("itemId")), fetcher.formData?.get("checked") === "true"]),
   );
@@ -87,6 +99,9 @@ export default function HouseholdListPage() {
         </PageHeader>
 
         {actionData && "error" in actionData ? <Alert tone="destructive" className="mt-6" title={actionData.error} /> : null}
+        {list.items.map((item) => (
+          <Refusal key={item.id} itemId={item.id} />
+        ))}
 
         {list.canEdit ? (
           // Remounts once the new item is in, which clears the field for the next one.

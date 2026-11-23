@@ -172,7 +172,7 @@ describe("household list pages", () => {
     expect(screen.queryByRole("textbox", { name: "List name" })).toBeNull();
   });
 
-  it("ticks an item at once, and shows what the server kept once it answers", async () => {
+  it("ticks an item at once, and unticks it with the reason when the server refuses", async () => {
     let release: () => void = () => {};
     const server = { checked: false };
     const Stub = createTestRoutesStub([
@@ -198,6 +198,7 @@ describe("household list pages", () => {
     // Refused: the next load still has it unticked, and the tick goes.
     await act(async () => release());
     await vi.waitFor(() => expect(box().getAttribute("aria-checked")).toBe("false"));
+    expect(await screen.findByText("View-only members can't change shared lists.")).toBeTruthy();
   });
 
   it("lets a member check items off, remove them and delete the list, and shows view-only members the items alone", async () => {
