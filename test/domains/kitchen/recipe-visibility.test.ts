@@ -10,6 +10,8 @@ import {
   parseRecipeVisibility,
   readableRecipeSql,
   readableRecipeSqlForViewerColumn,
+  readableRecipeSqlForViewerId,
+  readableRecipeSqlOnForViewerId,
   readableRecipeWhere,
   type RecipeViewer,
 } from "~/domains/kitchen";
@@ -148,6 +150,27 @@ describe("readable recipe queries", () => {
       const viewer = { id: viewerId, householdChefIds: new Set(householdOf[viewerId]) };
       const expected = recipes.filter((recipe) => canRead(viewer, recipe)).map((recipe) => recipe.id).sort();
       expect(rows.map((row) => row.id)).toEqual(expected);
+    }
+  });
+
+  it("select in SQL, for a viewer named by id, exactly the recipes canRead allows that viewer and their household", () => {
+    const db = database();
+    db.exec(`CREATE TABLE "HouseholdMember" ("householdId" TEXT NOT NULL, "userId" TEXT NOT NULL, PRIMARY KEY ("householdId", "userId"))`);
+    for (const [householdId, userId] of [["home", CHEF], ["home", HOUSEMATE], ["away", STRANGER]]) {
+      db.prepare(`INSERT INTO "HouseholdMember" ("householdId", "userId") VALUES (?, ?)`).run(householdId, userId);
+    }
+    const householdOf: Record<string, string[]> = { [CHEF]: [HOUSEMATE], [HOUSEMATE]: [CHEF], [STRANGER]: [] };
+    for (const viewerId of [null, "", CHEF, STRANGER, HOUSEMATE]) {
+      const viewer = viewerId ? { id: viewerId, householdChefIds: new Set(householdOf[viewerId]) } : null;
+      const expected = recipes.filter((recipe) => canRead(viewer, recipe)).map((recipe) => recipe.id).sort();
+      const byAlias = readableRecipeSqlForViewerId("r", viewerId);
+      const byColumns = readableRecipeSqlOnForViewerId({ visibility: `r."visibility"`, chefId: `r."chefId"` }, viewerId);
+      for (const readable of [byAlias, byColumns]) {
+        const rows = db
+          .prepare(`SELECT r."id" FROM "Recipe" r WHERE ${readable.sql} ORDER BY r."id"`)
+          .all(...readable.params) as Array<{ id: string }>;
+        expect(rows.map((row) => row.id)).toEqual(expected);
+      }
     }
   });
 
