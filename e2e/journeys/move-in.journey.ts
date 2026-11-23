@@ -12,20 +12,14 @@
 // has, which also makes those move-ins finish with something to look over.
 import { test, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
-import { createHash } from "node:crypto";
 import { bytesSource, openZip } from "../../app/domains/move-in/adapters/archive/zip";
 import { openMealieBackup } from "../../app/domains/move-in/adapters/sources/mealie-backup/backup";
 import { chooseGroup, recipeDrafts } from "../../app/domains/move-in/adapters/sources/mealie-backup/database";
 import { requiredLabel } from "./support/forms";
+import { download } from "./support/move-in-fixtures";
 import { scratchStorageStateForProject } from "./support/personas";
 
 const SCRATCH_INDEX = 11;
-const RELEASE = "https://github.com/spoonjoy/spoonjoy-v2/releases/download/move-in-proof-fixtures-v1";
-// The release's assets can be replaced under the same tag; these pin the generation the counts belong to.
-const DIGESTS: Record<string, string> = {
-  "manifest.json": "95d32baf9cf8b120a0623cd5aec57b18d6d313f16717b5291d7ae65ced65a58f",
-  "move-in-proof-fixtures.zip": "18bb7cbf934fc61b33f1b90d563835dd351fe6cea0546686a82a5e811cbbc9bb",
-};
 // A move-in of a small kitchen polls every few seconds; give it room on a slow QA run.
 const MOVE_IN_MS = 150_000;
 
@@ -40,24 +34,6 @@ const backups = new Map<string, Buffer>();
 const samples = new Map<string, string>();
 /** Every recipe title in each version's kitchen. */
 const titles = new Map<string, Set<string>>();
-
-/** Fetches a release asset, trying again after a blip, and refuses bytes that aren't the pinned ones. */
-async function download(name: string): Promise<Uint8Array> {
-  let failure = "";
-  for (let attempt = 0; attempt < 4; attempt++) {
-    if (attempt) await new Promise((resolve) => setTimeout(resolve, 2000 * 2 ** attempt));
-    const response = await fetch(`${RELEASE}/${name}`).catch((error: Error) => error);
-    if (response instanceof Error || !response.ok) {
-      failure = response instanceof Error ? response.message : `HTTP ${response.status}`;
-      continue;
-    }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    const digest = createHash("sha256").update(bytes).digest("hex");
-    if (digest !== DIGESTS[name]) throw new Error(`The proof fixture ${name} changed (sha256 ${digest}); update DIGESTS with the counts it belongs to`);
-    return bytes;
-  }
-  throw new Error(`The proof fixture ${name} didn't download: ${failure}`);
-}
 
 /** The manifest and each version's small kitchen backup, read once per worker. */
 async function fixtures(): Promise<Manifest> {
