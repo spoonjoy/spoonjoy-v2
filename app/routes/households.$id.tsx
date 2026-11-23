@@ -94,7 +94,8 @@ export async function action({ request, context, params }: Route.ActionArgs) {
   }
   if (intent === "leave") {
     const left = await leave(store, { householdId: params.id, userId });
-    if (!left.ok) return data({ error: left.error }, { status: left.forbidden ? 403 : 400 });
+    // Every refusal to leave is about who is asking (not in it, or the last owner), so it is always 403.
+    if (!left.ok) return data({ error: left.error }, { status: 403 });
     return redirect("/households");
   }
   return data({ error: "Unknown action." }, { status: 400 });
