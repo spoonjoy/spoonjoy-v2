@@ -22,6 +22,7 @@ import type { SearchResult } from "~/lib/search.server";
 // the actual Router/root provider, and the real installed primitives/theme.
 vi.mock("~/lib/route-platform.server", () => ({ getRequestDb: vi.fn() }));
 vi.mock("~/lib/d1-read.server", () => ({ requestD1: vi.fn() }));
+vi.mock("~/domains/households-and-identity", () => ({ kitchenHouseholds: vi.fn() }));
 vi.mock("~/lib/session.server", () => ({ getUserId: vi.fn() }));
 vi.mock("~/lib/kitchen-home.server", () => ({ readKitchenHomeFromD1: vi.fn(), readKitchenHomeWithPrisma: vi.fn() }));
 vi.mock("~/lib/cooking-now-entries.server", () => ({ cookingNowEntry: vi.fn(), readCookingNowEntries: vi.fn() }));
