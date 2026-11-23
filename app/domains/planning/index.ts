@@ -10,3 +10,4 @@ export * from "./application/feed-link";
 export * from "./application/plan-to-list";
 export * from "./adapters/prisma-plan-store";
 export * from "./adapters/prisma-feed-link-store";
+export * from "./adapters/web-answers";
