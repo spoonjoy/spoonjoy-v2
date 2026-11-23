@@ -44,8 +44,10 @@ async function showShell(page: Page): Promise<void> {
 /** Shows the shared shell again and hides the page's main content, so the entry counts only the shell. */
 export async function showOnlyShell(page: Page): Promise<void> {
   await showShell(page);
-  // With main hidden the skip link counts as visible, so the shell's entries list it too.
+  // Main itself and its level-one heading stay visible, so the accessibility audit still finds the
+  // page's main landmark and heading; everything else in main is hidden, so no page control counts.
   await page.getByRole("main").evaluate((main) => {
-    (main as HTMLElement).style.visibility = "hidden";
+    for (const child of Array.from(main.children)) (child as HTMLElement).style.visibility = "hidden";
+    for (const heading of Array.from(main.querySelectorAll("h1"))) (heading as HTMLElement).style.visibility = "visible";
   });
 }
