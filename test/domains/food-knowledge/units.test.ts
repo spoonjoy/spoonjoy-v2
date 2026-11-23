@@ -15,6 +15,8 @@ describe('resolveUnit', () => {
     ['tbsp.', 'tablespoon'],
     ['T', 'tablespoon'],
     ['cups', 'cup'],
+    ['c', 'cup'],
+    ['C.', 'cup'],
     ['fl oz', 'us-fluid-ounce'],
     ['fl. oz.', 'us-fluid-ounce'],
     ['pints', 'us-pint'],
@@ -89,6 +91,16 @@ describe('formatAmountIn', () => {
 
     it('keeps a unit already in the system, in the recipe\'s own spelling', () => {
       expect(formatAmountIn('us', 2, 'pounds')).toBe('2 pounds')
+    })
+
+    it.each([
+      ['us', 1, 'g', '1 g'],
+      ['us', 0.3, 'g', '⅓ g'],
+      ['us', 2, 'g', '2 g'],
+      ['metric', 200, 'mg', '200 mg'],
+      ['us', 0.25, 'ml', '¼ ml'],
+    ] as const)('keeps a tiny amount the %s units would round away or badly: %s %s', (system, quantity, unit, expected) => {
+      expect(formatAmountIn(system, quantity, unit)).toBe(expected)
     })
   })
 
