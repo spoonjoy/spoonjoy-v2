@@ -21,6 +21,7 @@ vi.mock("~/lib/route-platform.server", async (importOriginal) => {
 });
 
 const { action } = await import("~/routes/shopping-list");
+const { shoppingListRecipeAdder } = await import("~/lib/shopping-list.server");
 
 let db: PrismaClient;
 let d1: SqliteD1;
@@ -211,6 +212,21 @@ describe("shopping list actions on a D1 binding", () => {
     expect(item(state, "butter (tbsp)")).toMatchObject({ quantity: 6, sortIndex: 4 });
     expect(item(state, "pepper (tbsp)")).toMatchObject({ quantity: null, sortIndex: 5 });
     expect(item(state, "eggs")).toMatchObject({ checked: true, touched: false });
+  });
+
+  it("adds a recipe for the meal plan through the recipe adder, once per write key on D1 and on each send on Prisma", async () => {
+    const quantities = [];
+    for (const env of [null, { DB: d1.binding }]) {
+      await cleanupDatabase();
+      const kitchen = await seedKitchen();
+      const adder = await shoppingListRecipeAdder({ cloudflare: { env } } as never, kitchen.userId);
+      await adder.addRecipe(kitchen.recipeId, 2, "plan-week-1");
+      await adder.addRecipe(kitchen.recipeId, 2, "plan-week-1");
+      const state = await snapshot(kitchen);
+      quantities.push([item(state, "flour (cups)")?.quantity, item(state, "butter (tbsp)")?.quantity]);
+    }
+    // Flour starts at 2 and the doubled recipe adds 3; butter adds 6. Only D1 keeps write keys.
+    expect(quantities).toEqual([[2 + 3 + 3, 6 + 6], [2 + 3, 6]]);
   });
 
   it("answers another cook's private recipe as not found and adds nothing, as the Prisma path does", async () => {

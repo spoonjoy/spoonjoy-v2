@@ -307,6 +307,19 @@ interface ShoppingListWrites {
   clearAll(): Promise<void>;
 }
 
+/**
+ * The chef's shopping list as a recipe adder for other contexts, such as Planning's plan-to-list. The same `writeKey`
+ * sent again adds nothing more on D1, as with the page's own forms.
+ */
+export async function shoppingListRecipeAdder(context: ShoppingListRouteArgs["context"], userId: string) {
+  const d1 = requestD1(context);
+  const writes = d1 ? await d1ShoppingListWrites(d1, userId) : await prismaShoppingListWrites(await getRequestDb(context), userId);
+  return {
+    addRecipe: (recipeId: string, scaleFactor: number, writeKey: string) =>
+      writes.addRecipe(recipeId, scaleFactor, { token: writeKey, request: { recipeId, scaleFactor } }),
+  };
+}
+
 async function d1ShoppingListWrites(d1: D1ReadDatabase, userId: string): Promise<ShoppingListWrites> {
   const shoppingListId = await ensureShoppingListIdOnD1(d1, userId, new Date());
   return {

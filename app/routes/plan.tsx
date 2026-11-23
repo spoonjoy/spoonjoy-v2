@@ -6,6 +6,7 @@ import {
   MEAL_TYPES,
   addDays,
   addEntry,
+  addPlannedMealsToList,
   getWeek,
   parseLocalDate,
   prismaPlanStore,
@@ -19,6 +20,7 @@ import {
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
+import { shoppingListRecipeAdder } from "~/lib/shopping-list.server";
 import { d1UnavailableWebResponse, formWriteToken, idForWriteToken, retryD1Write } from "~/lib/d1-write-retry.server";
 import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 import { useFormErrors } from "~/hooks/use-form-errors";
@@ -102,6 +104,15 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (intent === "remove") {
       const removed = await retryD1Write({ scope: "plan_entry.remove" }, () => removeEntry(store, userId, fields.entryId ?? ""));
       return data({ intent, removed });
+    }
+    if (intent === "add-week-to-list") {
+      const day = parseLocalDate(fields.week);
+      if (!day) return refused(intent, "Choose a week to shop for.");
+      const { start } = await getWeek(store, userId, day);
+      const listToken = formWriteToken(fields.listToken) ?? crypto.randomUUID();
+      const list = await shoppingListRecipeAdder(context, userId);
+      const added = await addPlannedMealsToList(store, list, userId, { from: start, to: addDays(start, 6) }, `plan-week:${start}:${listToken}`);
+      return data({ intent, added });
     }
     if (intent !== "add-recipe" && intent !== "add-note") return refused(intent, "That isn't something the plan can do.");
     if (containsObjectionableContent(fields.title) || containsObjectionableContent(fields.note)) return refused(intent, OBJECTIONABLE_CONTENT_MESSAGE);
@@ -191,6 +202,25 @@ function DayAndMeal({ days, defaultDay }: { days: PlanDay[]; defaultDay: string 
   );
 }
 
+function count(n: number, noun: string) {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
+/** What "Add this week to my list" did: how many recipes went on the list, and any that are gone. */
+export function WeekListAnswer({ answer }: { answer: PlanActionAnswer }) {
+  if (answer?.intent !== "add-week-to-list" || !answer.added) return null;
+  const { recipes, missing } = answer.added;
+  if (recipes === 0 && missing === 0) {
+    return <Text role="status" tone="muted" className="mt-3">No recipes are planned this week, so nothing went on the list.</Text>;
+  }
+  const gone = missing === 0 ? "" : `; ${count(missing, "recipe")} ${missing === 1 ? "is" : "are"} no longer available`;
+  return (
+    <Text role="status" className="mt-3">
+      Added {count(recipes, "recipe")} to your shopping list{gone}. <Button href="/shopping-list" variant="plain" size="inline">Open the list</Button>
+    </Text>
+  );
+}
+
 export default function PlanPage() {
   const { week, recipes, chosenRecipeId } = useLoaderData<typeof loader>();
   const answer = useActionData<PlanActionAnswer>();
@@ -198,6 +228,7 @@ export default function PlanPage() {
   const noteErrors = useFormErrors(errorsFor(answer, "add-note"), undefined, answer);
   const [recipeToken] = useWriteToken();
   const [noteToken] = useWriteToken();
+  const [listToken] = useWriteToken();
   const entryCount = week.days.reduce((count, day) => count + day.entries.length, 0);
   const formKey = `${week.start}-${entryCount}`;
   const defaultDay = week.days.some((day) => day.date === week.today) ? week.today : week.start;
@@ -215,7 +246,14 @@ export default function PlanPage() {
           <Button href={`/plan?week=${addDays(week.start, -7)}`} variant="outline" tone="secondary" size="sm">Previous week</Button>
           <Button href="/plan" variant="outline" tone="secondary" size="sm">This week</Button>
           <Button href={`/plan?week=${addDays(week.start, 7)}`} variant="outline" tone="secondary" size="sm">Next week</Button>
+          <RouterForm method="post">
+            <input type="hidden" name="intent" value="add-week-to-list" />
+            <input type="hidden" name="week" value={week.start} />
+            <input type="hidden" name="listToken" value={`${listToken}-${formKey}`} />
+            <Button type="submit" size="sm">Add this week to my list</Button>
+          </RouterForm>
         </div>
+        <WeekListAnswer answer={answer} />
       </PageHeader>
 
       <div className="mt-6 grid gap-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
