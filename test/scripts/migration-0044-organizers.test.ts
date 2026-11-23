@@ -4,8 +4,8 @@ import DatabaseSync from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { assertAdditiveMigrationSql } from "../../scripts/deploy-production-canary";
 
-const ROOT_MIGRATION = resolve(__dirname, "../../migrations/0043_organizers.sql");
-const PRISMA_MIGRATION = resolve(__dirname, "../../prisma/migrations/20261123140000_organizers/migration.sql");
+const ROOT_MIGRATION = resolve(__dirname, "../../migrations/0044_organizers.sql");
+const PRISMA_MIGRATION = resolve(__dirname, "../../prisma/migrations/20261123170000_organizers/migration.sql");
 
 function statements(sql: string): string {
   return sql.split("\n").filter((line) => !line.startsWith("--")).join("\n").trim();
@@ -22,7 +22,7 @@ function migrated() {
   return db;
 }
 
-describe("migration 0043 - organizers", () => {
+describe("migration 0044 - organizers", () => {
   const sql = readFileSync(ROOT_MIGRATION, "utf8");
 
   it("runs the same statements as its Prisma mirror", () => {
@@ -30,7 +30,7 @@ describe("migration 0043 - organizers", () => {
   });
 
   it("is additive so the production release can apply it automatically", () => {
-    expect(() => assertAdditiveMigrationSql("0043_organizers.sql", sql)).not.toThrow();
+    expect(() => assertAdditiveMigrationSql("0044_organizers.sql", sql)).not.toThrow();
   });
 
   it("keeps one organizer per owner, kind and slug", () => {
