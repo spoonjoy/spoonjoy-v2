@@ -486,7 +486,7 @@ function RecipeDetail() {
             <MenuItem href={`/recipes/${recipe.id}/edit`}>Edit</MenuItem>
           ) : null}
           {isOwner && organizersOn ? (
-            <MenuItem href={`/recipes/${recipe.id}/tags`}>Tags</MenuItem>
+            <MenuItem href={`/recipes/${recipe.id}/organize`}>Organize</MenuItem>
           ) : null}
           {isOwner ? <MenuItem onClick={() => setIsCoversDialogOpen(true)}>Manage covers</MenuItem> : null}
           {isOwner ? <MenuItem onClick={() => setIsVariationDialogOpen(true)}>Make a variation</MenuItem> : null}

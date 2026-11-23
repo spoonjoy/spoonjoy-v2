@@ -4400,7 +4400,7 @@ describe("Recipes $id Route", () => {
       expect(await screen.findByRole("dialog", { name: 'Make a variation of "My Recipe"?' })).toBeInTheDocument();
     });
 
-    it("offers its cook a Tags item in the recipe menu while the organizers flag is on", async () => {
+    it("offers its cook an Organize item in the recipe menu while the organizers flag is on", async () => {
       const mockData = {
         recipe: { id: "recipe-1", title: "Tagged Recipe", description: null, servings: null, coverImageUrl: null, chef: { id: "user-1", username: "testchef" }, steps: [] },
         isOwner: true,
@@ -4410,7 +4410,7 @@ describe("Recipes $id Route", () => {
       ]);
       render(<On initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Tagged Recipe" });
-      expect(await recipeMenuItem("Tags")).toHaveAttribute("href", "/recipes/recipe-1/tags");
+      expect(await recipeMenuItem("Organize")).toHaveAttribute("href", "/recipes/recipe-1/organize");
       await userEvent.keyboard("{Escape}");
       cleanup();
 
@@ -4418,7 +4418,7 @@ describe("Recipes $id Route", () => {
       render(<Off initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Tagged Recipe" });
       await recipeMenuItem("Edit");
-      expect(screen.queryByRole("menuitem", { name: "Tags" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("menuitem", { name: "Organize" })).not.toBeInTheDocument();
     });
 
     it("renders owner cover history controls and hides them from non-owners", async () => {

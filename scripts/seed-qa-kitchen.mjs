@@ -46,8 +46,11 @@ const PAGER_DISHES = [
   "Garlic Roast Chicken", "Sesame Greens", "Harissa Roast Carrots", "Mushroom Barley Pilaf",
   "Chili Crisp Eggs", "Za'atar Flatbread", "Tamarind Lentils", "Maple Butter Squash",
 ];
-// The one tag the seed gives chef, on Lemon Herb Rice.
-export const QA_KITCHEN_TAG = Object.freeze({ id: "qa-kitchen-tag-weeknight", name: "Weeknight", slug: "weeknight" });
+// The organizers the seed gives chef, all on Lemon Herb Rice: one tag, one category and one tool.
+export const QA_KITCHEN_TAG = Object.freeze({ id: "qa-kitchen-tag-weeknight", kind: "tag", name: "Weeknight", slug: "weeknight" });
+export const QA_KITCHEN_CATEGORY = Object.freeze({ id: "qa-kitchen-category-sides", kind: "category", name: "Sides", slug: "sides" });
+export const QA_KITCHEN_TOOL = Object.freeze({ id: "qa-kitchen-tool-saucepan", kind: "tool", name: "Saucepan", slug: "saucepan" });
+export const QA_KITCHEN_ORGANIZERS = Object.freeze([QA_KITCHEN_TAG, QA_KITCHEN_CATEGORY, QA_KITCHEN_TOOL]);
 
 // Words other journeys search for; no fixture title or step may contain one.
 export const PAGER_FORBIDDEN_WORDS = ["saffron", "lemon", "arborio", "tomato", "risotto", "salmon", "rice", "soup", "herb", "miso"];
@@ -475,11 +478,13 @@ export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.ha
     );
   }
 
-  // 8b. One tag: chef tags Lemon Herb Rice "Weeknight", so /tags and /tags/weeknight have something to show.
-  statements.push(
-    `INSERT INTO Organizer (id, ownerId, kind, name, slug, createdAt, updatedAt) VALUES (${sqlString(QA_KITCHEN_TAG.id)}, ${sqlString(KITCHEN.chef.id)}, 'tag', ${sqlString(QA_KITCHEN_TAG.name)}, ${sqlString(QA_KITCHEN_TAG.slug)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
-    `INSERT INTO RecipeOrganizer (recipeId, organizerId, createdAt) VALUES (${sqlString(KITCHEN.recipes.lemonRice.id)}, ${sqlString(QA_KITCHEN_TAG.id)}, CURRENT_TIMESTAMP);`,
-  );
+  // 8b. Chef's organizers on Lemon Herb Rice, so /tags, /categories, /tools and their pages have something to show.
+  for (const organizer of QA_KITCHEN_ORGANIZERS) {
+    statements.push(
+      `INSERT INTO Organizer (id, ownerId, kind, name, slug, createdAt, updatedAt) VALUES (${sqlString(organizer.id)}, ${sqlString(KITCHEN.chef.id)}, ${sqlString(organizer.kind)}, ${sqlString(organizer.name)}, ${sqlString(organizer.slug)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+      `INSERT INTO RecipeOrganizer (recipeId, organizerId, createdAt) VALUES (${sqlString(KITCHEN.recipes.lemonRice.id)}, ${sqlString(organizer.id)}, CURRENT_TIMESTAMP);`,
+    );
+  }
 
   // 9. Chef's shopping list: three unchecked items.
   const shoppingListId = "qa-kitchen-shoppinglist-chef";

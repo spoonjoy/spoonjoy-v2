@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import { describe, expect, it, vi } from "vitest";
 import { pagerRecipes, pagerRecipe, PAGER_OLDEST_RECIPE, PAGER_FORBIDDEN_WORDS,
   KITCHEN,
-  QA_KITCHEN_TAG,
+  QA_KITCHEN_ORGANIZERS,
   SCRATCH_ACCOUNT_COUNT,
   SCRATCH_USER_COUNT,
   scratchIndexCount,
@@ -178,15 +178,17 @@ describe("seed-qa-kitchen", () => {
     expect(bcrypt.compareSync("new", chef.hashedPassword)).toBe(true);
   });
 
-  it("tags Lemon Herb Rice Weeknight for chef, and resets tags a journey added", () => {
+  it("tags, categorizes and gives a tool to Lemon Herb Rice for chef, and resets organizers a journey added", () => {
     const db = migratedDb();
     db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
-    const tagged = "SELECT o.name, o.slug FROM RecipeOrganizer ro JOIN Organizer o ON o.id = ro.organizerId WHERE ro.recipeId = ? AND o.ownerId = ?";
-    expect(db.prepare(tagged).all(KITCHEN.recipes.lemonRice.id, KITCHEN.chef.id)).toEqual([{ name: QA_KITCHEN_TAG.name, slug: QA_KITCHEN_TAG.slug }]);
+    const organized = "SELECT o.kind, o.name, o.slug FROM RecipeOrganizer ro JOIN Organizer o ON o.id = ro.organizerId WHERE ro.recipeId = ? AND o.ownerId = ? ORDER BY o.kind";
+    const seeded = [...QA_KITCHEN_ORGANIZERS].map(({ kind, name, slug }) => ({ kind, name, slug })).sort((a, b) => a.kind.localeCompare(b.kind));
+    expect(seeded.map((organizer) => organizer.kind)).toEqual(["category", "tag", "tool"]);
+    expect(db.prepare(organized).all(KITCHEN.recipes.lemonRice.id, KITCHEN.chef.id)).toEqual(seeded);
     db.exec(`INSERT INTO Organizer (id, ownerId, kind, name, slug) VALUES ('journey-tag', '${KITCHEN.chef.id}', 'tag', 'Drift', 'drift');`);
     db.exec(`INSERT INTO RecipeOrganizer (recipeId, organizerId) VALUES ('${KITCHEN.recipes.lemonRice.id}', 'journey-tag');`);
     expect(() => db.exec(buildKitchenResetSql({ passwords, hash: fastHash }))).not.toThrow();
-    expect(db.prepare(tagged).all(KITCHEN.recipes.lemonRice.id, KITCHEN.chef.id)).toEqual([{ name: QA_KITCHEN_TAG.name, slug: QA_KITCHEN_TAG.slug }]);
+    expect(db.prepare(organized).all(KITCHEN.recipes.lemonRice.id, KITCHEN.chef.id)).toEqual(seeded);
   });
 
   it("reuses existing shared units and ingredient refs by name", () => {

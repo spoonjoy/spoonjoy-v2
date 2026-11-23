@@ -7,3 +7,4 @@ export * from "./model/organizer";
 export * from "./application/organizers";
 export * from "./adapters/prisma-organizer-store";
 export * from "./adapters/organizers-route.server";
+export * from "./adapters/organizer-pages.server";
