@@ -3181,6 +3181,14 @@
           "count": 1
         },
         {
+          "identity": "radio \"List\" [segmented-control/segment] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Pictures\" [segmented-control/segment] in main",
+          "count": 1
+        },
+        {
           "identity": "searchbox \"Search recipes\" [text-field/input] in search",
           "count": 1
         }
@@ -7660,6 +7668,14 @@
         },
         {
           "identity": "link \"Sunday Za'atar Flatbread\" [item/link] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"List\" [segmented-control/segment] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Pictures\" [segmented-control/segment] in main",
           "count": 1
         },
         {
