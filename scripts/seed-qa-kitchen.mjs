@@ -511,7 +511,7 @@ function scratchCredentials(scratchUsers, scratchPasswords, variant) {
     .map(({ user, password }) => ({ id: user.id, username: user.username, email: user.email, password }));
 }
 
-function credentialsPayload(passwords, scratchUsers, scratchPasswords) {
+export function credentialsPayload(passwords, scratchUsers, scratchPasswords) {
   return {
     chef: { username: KITCHEN.chef.username, email: KITCHEN.chef.email, password: passwords.chef },
     friend: { username: KITCHEN.friend.username, email: KITCHEN.friend.email, password: passwords.friend },

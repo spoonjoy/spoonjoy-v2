@@ -1,0 +1,6 @@
+# The image needs only the build, the migrations and the self-host runtime.
+*
+!build/
+!migrations/
+!self-host/
+self-host/node_modules

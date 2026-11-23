@@ -1,0 +1,270 @@
+# Self-hosted Spoonjoy's image, ghcr.io/spoonjoy/spoonjoy (self-host/Dockerfile, docs/self-hosting.md).
+# Each arch builds natively, boots the image on a clean runner, seeds the QA kitchen through the
+# image's own `sql` command, runs the Journeys sign-in and round-trip smoke set against it with a
+# screenshot of every test, and checks the kitchen survives a restart. Only a push to main pushes,
+# and the multi-arch `latest` and version tags are published only after both arches pass.
+name: Self-host Image
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - self-host/**
+      - .github/workflows/self-host-image.yml
+      - scripts/self-host-smoke-seed.mjs
+      - scripts/seed-qa-kitchen.mjs
+      - playwright.self-host.config.ts
+      - playwright.journeys.config.ts
+      - e2e/journeys/**
+      - migrations/**
+      - wrangler.json
+      - package.json
+      - pnpm-lock.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-host-image-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/spoonjoy/spoonjoy
+  LOCAL_IMAGE: spoonjoy-self-host:smoke
+  OUT: self-host-out
+
+jobs:
+  image:
+    name: image ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    # Both arches name the same version (the commit's), so either one's output is the version.
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      # The version is the commit's UTC date and short hash, so every image on main has its own tag.
+      - name: Name the version
+        id: version
+        run: |
+          version="$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y.%m.%d)-${GITHUB_SHA::7}"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          mkdir -p "$OUT"
+          echo "Version $version"
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The same production build spoonjoy.app deploys. No PostHog key is given, and the client
+      # build is told analytics are off, so the image sends nothing anywhere unless its owner sets
+      # their own POSTHOG_KEY.
+      - name: Build the app
+        env:
+          VITE_POSTHOG_DISABLED: '1'
+        run: pnpm run build
+
+      - name: Build the image
+        run: |
+          start=$(date +%s%3N)
+          docker build -f self-host/Dockerfile --build-arg SPOONJOY_VERSION="$VERSION" -t "$LOCAL_IMAGE" .
+          end=$(date +%s%3N)
+          size=$(docker image inspect "$LOCAL_IMAGE" --format '{{.Size}}')
+          gz=$(docker save "$LOCAL_IMAGE" | gzip -1 | wc -c)
+          echo "{\"imageBuildMs\": $(( end - start )), \"imageBytes\": $size, \"imageGzipBytes\": $gz}" > "$OUT/image.json"
+          cat "$OUT/image.json"
+
+      # From `docker run` on an empty volume (the first start migrates the whole database) to the
+      # first page.
+      - name: Cold boot to the first page
+        run: |
+          docker volume create sj-data
+          start=$(date +%s%3N)
+          docker run -d --name sj -p 8080:8080 -v sj-data:/data --health-start-interval 1s "$LOCAL_IMAGE"
+          code=000
+          for _ in $(seq 1 600); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/ || true)
+            [ "$code" = "200" ] && break
+            sleep 0.1
+          done
+          end=$(date +%s%3N)
+          echo "{\"coldBootToFirstPageMs\": $(( end - start )), \"firstPageStatus\": \"$code\"}" > "$OUT/boot.json"
+          cat "$OUT/boot.json"
+          docker logs sj
+          [ "$code" = "200" ]
+
+      - name: Wait for the image's health check
+        run: |
+          status=starting
+          for _ in $(seq 1 60); do
+            status=$(docker inspect sj --format '{{.State.Health.Status}}')
+            [ "$status" = "healthy" ] && break
+            sleep 1
+          done
+          echo "Health: $status"
+          curl -sf http://localhost:8080/health/ready
+          sleep 2
+          docker stats --no-stream --format '{{json .}}' sj > "$OUT/memory-idle.json"
+          cat "$OUT/memory-idle.json"
+          [ "$status" = "healthy" ]
+
+      # The kitchen and this run's scratch users, with fresh passwords, through the image's own
+      # `server.mjs sql -` (with the server stopped, as docs/self-hosting.md says to).
+      - name: Seed the QA kitchen
+        run: |
+          mkdir -p .self-host
+          node scripts/self-host-smoke-seed.mjs --sql-out .self-host/kitchen.sql --credentials-out .self-host/credentials.json
+          for p in chef friend newbie; do
+            echo "::add-mask::$(jq -r ".${p}.password" .self-host/credentials.json)"
+          done
+          while IFS= read -r password; do
+            echo "::add-mask::$password"
+          done < <(jq -r '(.scratch[]?, .scratchDesktop[]?) | .password' .self-host/credentials.json)
+          docker stop sj
+          docker run --rm -i -v sj-data:/data "$LOCAL_IMAGE" node /app/self-host/server.mjs sql - < .self-host/kitchen.sql
+          rm .self-host/kitchen.sql
+          docker start sj
+          for _ in $(seq 1 600); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health/ready || true)" = "200" ] && break
+            sleep 0.1
+          done
+          curl -sf http://localhost:8080/health/ready
+
+      # Playwright runs in its own image, pinned like the Journeys workflow's
+      # (scripts/deployment-preflight.ts PLAYWRIGHT_CONTAINER), on the host network so it reaches
+      # the container at localhost, with this checkout's dependencies. The server is a throwaway
+      # one; it allows 120 sign-ins a minute for the personas setup's 19 up front.
+      - name: Run the Journeys smoke set against the image
+        run: |
+          docker stop sj
+          docker rm sj
+          docker run -d --name sj -p 8080:8080 -v sj-data:/data -e SPOONJOY_RATE_LIMIT_AUTH_IP_RATE_LIMITER=120 "$LOCAL_IMAGE"
+          for _ in $(seq 1 600); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health/ready || true)" = "200" ] && break
+            sleep 0.1
+          done
+          docker run --rm --network host --user "$(id -u):$(id -g)" --ipc host \
+            -v "$PWD:/work" -w /work -e HOME=/tmp -e CI=true \
+            -e SPOONJOY_JOURNEYS_BASE_URL=http://localhost:8080 \
+            -e SPOONJOY_QA_CREDENTIALS=/work/.self-host/credentials.json \
+            mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f \
+            node node_modules/@playwright/test/cli.js test -c playwright.self-host.config.ts \
+              e2e/journeys/personas.setup.ts e2e/journeys/sign-in.journey.ts e2e/journeys/round-trips.journey.ts
+
+      - name: Check the kitchen survives a restart
+        if: success()
+        run: |
+          start=$(date +%s%3N)
+          docker restart sj
+          for _ in $(seq 1 600); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/ || true)" = "200" ] && break
+            sleep 0.1
+          done
+          end=$(date +%s%3N)
+          curl -sf http://localhost:8080/recipes/qa-kitchen-recipe-risotto -o .self-host/risotto.html
+          grep -q "Saffron Risotto" .self-host/risotto.html
+          rm .self-host/risotto.html
+          echo "{\"restartToFirstPageMs\": $(( end - start ))}" > "$OUT/restart.json"
+          cat "$OUT/restart.json"
+
+      - name: Stop the server
+        if: always()
+        run: |
+          docker logs sj > "$OUT/container.log" 2>&1 || true
+          docker stop sj || true
+
+      # The server is gone, so its passwords and sessions open nothing; the files go all the same.
+      - name: Remove credentials and session files
+        if: always()
+        run: rm -rf .self-host e2e/.auth/journeys-*.json
+
+      - name: Strip network logs from traces
+        if: always()
+        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report
+
+      - name: Summary
+        if: always()
+        run: |
+          node -e '
+            const fs = require("fs");
+            const out = process.env.OUT;
+            const metrics = { arch: process.env.ARCH, version: process.env.VERSION };
+            for (const file of ["image", "boot", "restart"]) {
+              try { Object.assign(metrics, JSON.parse(fs.readFileSync(`${out}/${file}.json`, "utf8"))); } catch {}
+            }
+            try { metrics.memoryIdle = JSON.parse(fs.readFileSync(`${out}/memory-idle.json`, "utf8")).MemUsage; } catch {}
+            fs.writeFileSync(`${out}/metrics.json`, JSON.stringify(metrics, null, 2));
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### ${process.env.ARCH}\n\n\`\`\`json\n${JSON.stringify(metrics, null, 2)}\n\`\`\`\n`);
+          '
+        env:
+          ARCH: ${{ matrix.arch }}
+
+      - name: Upload the report and screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: self-host-${{ matrix.arch }}
+          path: |
+            self-host-out/
+            journeys-report/
+            test-results/
+          retention-days: 30
+          include-hidden-files: false
+
+      - name: Sign in to GitHub's container registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Push this arch's image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          docker tag "$LOCAL_IMAGE" "$IMAGE:$VERSION-$ARCH"
+          docker push "$IMAGE:$VERSION-$ARCH"
+
+  publish:
+    needs: image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Publish latest and the version for both arches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.image.outputs.version }}
+        run: |
+          [ -n "$VERSION" ]
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker buildx imagetools create -t "$IMAGE:latest" -t "$IMAGE:$VERSION" "$IMAGE:$VERSION-amd64" "$IMAGE:$VERSION-arm64"
+          docker buildx imagetools inspect "$IMAGE:$VERSION" | tee -a "$GITHUB_STEP_SUMMARY"
