@@ -39,7 +39,7 @@ function seededCredentials(): string {
 }
 
 describe("Journeys workflow: seed step masks every seeded password", () => {
-  it("masks the 3 persona passwords and all 20 scratch passwords, desktop twins included", () => {
+  it("masks the 3 persona passwords and all 22 scratch passwords, desktop twins included", () => {
     const script = seedStepScript();
     expect(script).toContain("pnpm run seed:qa:kitchen");
 
@@ -48,7 +48,7 @@ describe("Journeys workflow: seed step masks every seeded password", () => {
       scratch: Array<{ password: string }>;
       scratchDesktop: Array<{ password: string }>;
     };
-    expect(SCRATCH_ACCOUNT_COUNT).toBe(20);
+    expect(SCRATCH_ACCOUNT_COUNT).toBe(22);
     expect(parsed.scratch).toHaveLength(SCRATCH_USER_COUNT);
     expect(parsed.scratchDesktop).toHaveLength(SCRATCH_USER_COUNT);
     const scratchPasswords = [...parsed.scratch, ...parsed.scratchDesktop].map((entry) => entry.password);

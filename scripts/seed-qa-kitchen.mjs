@@ -208,9 +208,9 @@ export function generatePersonaPasswords(random = randomBytes) {
   };
 }
 
-// SCRATCH_USER_COUNT counts scratch INDICES (1..10), not accounts: each index is seeded as
+// SCRATCH_USER_COUNT counts scratch INDICES (1..11), not accounts: each index is seeded as
 // SCRATCH_VARIANTS.length accounts, and SCRATCH_ACCOUNT_COUNT below is the total number of
-// accounts (20). The name predates the desktop twins and is kept because journeys, AGENTS.md and
+// accounts (22). The name predates the desktop twins and is kept because journeys, AGENTS.md and
 // the tests refer to it.
 //
 // Number of per-run scratch indices seeded alongside the three kitchen personas. Journeys that
@@ -218,9 +218,9 @@ export function generatePersonaPasswords(random = randomBytes) {
 // throwaway user through /signup, so they stop spending QA's shared auth rate limit
 // (AUTH_IP_RATE_LIMITER, 60/minute in QA — see docs/deployment.md). Each scratch index is owned
 // by exactly one journey area (see AGENTS.md's Validation section for the assignment table) —
-// 10 is exactly today's assignment table; see personas.setup.ts's budget comment for the
+// 11 is exactly today's assignment table; see personas.setup.ts's budget comment for the
 // accounting before raising this further.
-export const SCRATCH_USER_COUNT = 10;
+export const SCRATCH_USER_COUNT = 11;
 
 // Every scratch index is seeded as two accounts: the base account, and a desktop twin.
 // The iphone-webkit and desktop-chrome journey projects run at the same time, and some data is
@@ -234,7 +234,7 @@ export const SCRATCH_VARIANTS = Object.freeze([
   { variant: "desktop", suffix: "d" },
 ]);
 
-// Total scratch ACCOUNTS seeded per run (20): every index (SCRATCH_USER_COUNT), once per variant.
+// Total scratch ACCOUNTS seeded per run (22): every index (SCRATCH_USER_COUNT), once per variant.
 // Use this for anything counted per account, such as passwords or sign-ins.
 export const SCRATCH_ACCOUNT_COUNT = SCRATCH_USER_COUNT * SCRATCH_VARIANTS.length;
 
@@ -263,7 +263,7 @@ const SCRATCH_EMAIL_PREFIX = "codex-e2e-s-";
 // random segment, no timestamp — see SCRATCH_EMAIL_PREFIX on why these stay short) baked into
 // both email and username, so a concurrent run, or a leftover run whose cleanup didn't get to
 // run, can never collide with this run's scratch users: no generated id exceeds 40 characters
-// (the longest today, index 10's desktop twin, is 24; its email is 36). Scratch users are created with
+// (the longest today, index 11's desktop twin, is 24; its email is 36). Scratch users are created with
 // no data (no recipes, cookbooks, or shopping lists), so there is no persona-style drift to reset
 // here — only identity; whatever a journey gives them is removed by the run's cleanup.
 export function generateScratchUsers(count = SCRATCH_USER_COUNT, { random = randomBytes } = {}) {

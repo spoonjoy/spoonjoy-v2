@@ -361,7 +361,7 @@ describe("seed-qa-kitchen", () => {
   describe("scratch users", () => {
     it("generates a base account and a desktop twin for each of SCRATCH_USER_COUNT indices by default, each in the codex-e2e-* / codex_e2e_* disposable namespace, no id over 40 characters", () => {
       const users = generateScratchUsers();
-      expect(SCRATCH_USER_COUNT).toBe(10);
+      expect(SCRATCH_USER_COUNT).toBe(11);
       expect(SCRATCH_ACCOUNT_COUNT).toBe(SCRATCH_USER_COUNT * 2);
       expect(users).toHaveLength(SCRATCH_ACCOUNT_COUNT);
       expect(users.filter((user) => user.variant === "base")).toHaveLength(SCRATCH_USER_COUNT);

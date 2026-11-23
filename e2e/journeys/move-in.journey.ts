@@ -1,4 +1,4 @@
-// Move in on both devices, as scratch user 9's per-device twins (AGENTS.md's scratch index table):
+// Move in on both devices, as scratch user 11's per-device twins (AGENTS.md's scratch index table):
 // for each source app version the move-in proof seeds, drop that version's small kitchen backup on
 // /move-in, watch it move in, and check the finish screen against the proof's manifest: every
 // recipe and every photo it counted. Then drop the same backup again and see nothing come in
@@ -19,7 +19,7 @@ import { chooseGroup, recipeDrafts } from "../../app/domains/move-in/adapters/so
 import { requiredLabel } from "./support/forms";
 import { scratchStorageStateForProject } from "./support/personas";
 
-const SCRATCH_INDEX = 9;
+const SCRATCH_INDEX = 11;
 const RELEASE = "https://github.com/spoonjoy/spoonjoy-v2/releases/download/move-in-proof-fixtures-v1";
 // The release's assets can be replaced under the same tag; these pin the generation the counts belong to.
 const DIGESTS: Record<string, string> = {

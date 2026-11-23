@@ -14,8 +14,8 @@
 // per IP (wrangler.json's `env.qa` — raised from the shared default of 20 specifically because
 // CI's Journeys workflow exercises QA from shared GitHub-hosted runner IPs; see
 // docs/deployment.md's Dedicated QA Environment section. Production stays at 20). This project
-// alone performs 3 persona sign-ins + 20 scratch sign-ins (10 indices, each a base account and a
-// desktop twin) = 23 attempts, all up front, before any journey starts (Playwright runs this
+// alone performs 3 persona sign-ins + 22 scratch sign-ins (11 indices, each a base account and a
+// desktop twin) = 25 attempts, all up front, before any journey starts (Playwright runs this
 // "personas" project to completion first, as every journey project depends on it). The
 // journeys themselves add, at most, 16 more across a full run: sign-in.journey.ts's 4 login
 // submissions (username, email, wrong-password, and the logout test's fresh sign-in) run on
@@ -29,7 +29,7 @@
 // desktop-chrome only for 1; and new-user.journey.ts's 1 rejected /signup (a too-short
 // username, which still counts as an attempt) runs on both devices for 2 — 8 + 2 + 2 + 1 + 1 +
 // 2 = 16. (cook-session-sync.desktop.journey.ts's second browser reuses its stored session and
-// signs in nothing, and neither do households.desktop.journey.ts's two browsers.) That is a nominal 23 + 16 = 39 attempts across the whole run — a little
+// signs in nothing, and neither do households.desktop.journey.ts's two browsers.) That is a nominal 25 + 16 = 41 attempts across the whole run — a little
 // over half of the 60/minute cap even in the worst case where every attempt somehow landed in
 // the same rolling 60-second window, so there is still headroom for another sign-in-heavy
 // journey or scratch index.
@@ -112,6 +112,10 @@ setup("scratch 10", async ({ page }) => {
   await signInScratchAndSave(page, 10);
 });
 
+setup("scratch 11", async ({ page }) => {
+  await signInScratchAndSave(page, 11);
+});
+
 // Desktop twins: each scratch index's second account, which desktop-chrome signs in as when a
 // journey needs its two devices not to share one account (support/personas.ts's
 // scratchStorageStatePathForProject). Seeded for every index, so any area can opt in.
@@ -153,4 +157,8 @@ setup("scratch 9 desktop", async ({ page }) => {
 
 setup("scratch 10 desktop", async ({ page }) => {
   await signInScratchDesktopAndSave(page, 10);
+});
+
+setup("scratch 11 desktop", async ({ page }) => {
+  await signInScratchDesktopAndSave(page, 11);
 });
