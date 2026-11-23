@@ -1,4 +1,7 @@
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
 import { SOURCE_VERSIONS } from "../../scripts/move-in-proof/adapters/mealie/profile.mjs";
@@ -54,5 +57,97 @@ describe("Move-in Proof workflow", () => {
     expect(twice).toBeGreaterThan(0);
     expect(check).toBeGreaterThan(twice);
     expect(workflow.jobs.publish.needs).toBe("manifest");
+  });
+
+  describe("its publish step", () => {
+    const publish = workflow.jobs.publish.steps.find((step) => step.name === "Publish to the release")?.run ?? "";
+    const MANIFEST = '{"kitchens":1}\n';
+    const HARNESS = "scripts/move-in-proof tree-1\n.github/workflows/move-in-proof.yml blob-1\n";
+    const UPLOAD =
+      "release upload move-in-proof-fixtures-v1 --clobber fixtures/move-in-proof-fixtures.zip fixtures/move-in-proof/manifest.json fixtures/move-in-proof-harness.txt";
+
+    /**
+     * Runs the step in a folder holding a fresh manifest, with a gh whose release holds `released`
+     * (asset name to contents) and whose API gives the harness the git object ids tree-1 and blob-1.
+     */
+    function run(released: Record<string, string>) {
+      const dir = mkdtempSync(join(tmpdir(), "move-in-proof-publish-"));
+      try {
+        mkdirSync(join(dir, "fixtures/move-in-proof"), { recursive: true });
+        writeFileSync(join(dir, "fixtures/move-in-proof/manifest.json"), MANIFEST);
+        writeFileSync(join(dir, "fixtures/move-in-proof-fixtures.zip"), "zip");
+        mkdirSync(join(dir, "released"));
+        for (const [name, contents] of Object.entries(released)) writeFileSync(join(dir, "released", name), contents);
+        mkdirSync(join(dir, "bin"));
+        writeFileSync(
+          join(dir, "bin/gh"),
+          `#!/bin/bash
+echo "$*" >> "${dir}/gh.log"
+case "$1 $2" in
+  "api repos/"*) case "$2" in *contents/scripts*) echo tree-1 ;; *) echo blob-1 ;; esac ;;
+  "release view") [ "$4" = "--json" ] && ls "${dir}/released" ;;
+  "release download")
+    while [ $# -gt 0 ]; do case "$1" in --pattern) name="$2" ;; --dir) out="$2" ;; esac; shift; done
+    [ -f "${dir}/released/$name" ] || exit 1
+    cp "${dir}/released/$name" "$out/$name" ;;
+esac
+exit 0
+`,
+        );
+        chmodSync(join(dir, "bin/gh"), 0o755);
+        const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", publish], {
+          cwd: dir,
+          env: {
+            ...process.env,
+            PATH: `${join(dir, "bin")}:${process.env.PATH}`,
+            RELEASE_TAG: "move-in-proof-fixtures-v1",
+            GH_REPO: "spoonjoy/spoonjoy-v2",
+            GITHUB_SHA: "abc123",
+          },
+          encoding: "utf8",
+        });
+        const calls = readFileSync(join(dir, "gh.log"), "utf8").trim().split("\n");
+        const harness = readFileSync(join(dir, "fixtures/move-in-proof-harness.txt"), "utf8");
+        return {
+          status: result.status,
+          stdout: result.stdout,
+          harness,
+          api: calls.filter((call) => call.startsWith("api ")),
+          uploads: calls.filter((call) => call.startsWith("release upload")),
+        };
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+
+    const published = { "move-in-proof-fixtures.zip": "old zip", "manifest.json": MANIFEST, "move-in-proof-harness.txt": HARNESS };
+
+    it("leaves the release's fixtures as they are when the manifest and harness match and the zip is there", () => {
+      const { status, stdout, uploads, harness, api } = run(published);
+      expect(status).toBe(0);
+      expect(api).toEqual([
+        'api repos/spoonjoy/spoonjoy-v2/contents/scripts?ref=abc123 --jq .[] | select(.name == "move-in-proof") | .sha',
+        "api repos/spoonjoy/spoonjoy-v2/contents/.github/workflows/move-in-proof.yml?ref=abc123 --jq .sha",
+      ]);
+      expect(harness).toBe(HARNESS);
+      expect(uploads).toEqual([]);
+      expect(stdout).toContain("the release keeps its fixtures");
+    });
+
+    it("replaces the fixtures when the manifest or harness changed, or the release lacks one of its assets", () => {
+      const cases: Array<Record<string, string>> = [
+        { ...published, "manifest.json": '{"kitchens":0}\n' },
+        { ...published, "move-in-proof-harness.txt": "scripts/move-in-proof tree-0\n.github/workflows/move-in-proof.yml blob-1\n" },
+        { "manifest.json": MANIFEST, "move-in-proof-harness.txt": HARNESS },
+        { "move-in-proof-fixtures.zip": "old zip", "move-in-proof-harness.txt": HARNESS },
+        { "move-in-proof-fixtures.zip": "old zip", "manifest.json": MANIFEST },
+        {},
+      ];
+      for (const released of cases) {
+        const { status, uploads } = run(released);
+        expect(status).toBe(0);
+        expect(uploads).toEqual([UPLOAD]);
+      }
+    });
   });
 });
