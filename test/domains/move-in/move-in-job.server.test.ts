@@ -2,7 +2,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMoveInJob, moveInJobStore, readMoveInPosition } from "~/domains/move-in/adapters/storage/job-store.server";
 import {
-  MOVE_IN_HELD_SECONDS,
   MOVE_IN_JOB,
   MOVE_IN_QUIET_MS,
   MOVE_IN_WATCH,
@@ -149,31 +148,19 @@ describe("the move-in job", () => {
     expect(job(jobId)).toMatchObject({ status: "done", claimToken: null });
   });
 
-  it("looks again once a held move-in's claim could lapse, spending none of its attempts, and runs it then", async () => {
-    const held: Array<{ payload: unknown; options: EnqueueOptions }> = [];
-    const { jobId, jobs, store } = await setUp({
-      jobs: (real) => ({
-        enqueue: async (kind, payload, options) => {
-          if (!options.key.includes(":held:")) return real.enqueue(kind, payload, options);
-          held.push({ payload, options });
-          return { enqueued: true };
-        },
-      }),
-    });
+  it("leaves a held move-in to the run holding it, and a nudge gets it going if that run died", async () => {
+    const { jobId, jobs, store } = await setUp();
     const token = (await store.claim(jobId, now)) as string;
     await queueMoveIn(jobs, { id: jobId, phase: "inspect", cursor: null });
 
-    expect((await jobs.drain()).map(({ outcome }) => outcome.status)).toEqual(["done"]);
-    const window = Math.floor(now.getTime() / 45_000);
-    expect(held).toEqual([
-      { payload: { jobId }, options: { key: `move-in:${jobId}:inspect:-:held:${window}`, delaySeconds: MOVE_IN_HELD_SECONDS } },
-    ]);
-    expect(MOVE_IN_HELD_SECONDS).toBe(50);
+    expect((await jobs.drain()).map(({ key, outcome }) => [key, outcome.status])).toEqual([[`move-in:${jobId}:inspect:-`, "done"]]);
     expect(job(jobId)).toMatchObject({ status: "queued", claimToken: token });
 
-    // By the time the look comes round, the other run has let go.
+    // The run that held it died: its claim lapses, the move-in goes quiet, and the segment's own key is spent.
     await store.release(jobId, token);
-    await jobs.enqueue(MOVE_IN_JOB, held[0].payload as { jobId: string }, held[0].options);
+    expect(await queueMoveIn(jobs, { id: jobId, phase: "inspect", cursor: null })).toBe(false);
+    const quiet = new Date(now.getTime() - MOVE_IN_QUIET_MS).toISOString();
+    expect(await nudgeMoveIn(jobs, { id: jobId, status: "queued", updatedAt: quiet }, now)).toBe(true);
     expect((await jobs.drain()).at(-1)?.outcome.status).toBe("done");
     expect(job(jobId)).toMatchObject({ status: "done-with-issues" });
   });
@@ -186,7 +173,6 @@ describe("the move-in job", () => {
     const ran = await jobs.drain();
 
     expect(ran[0]).toMatchObject({ key: `move-in:${jobId}:inspect:-`, outcome: { status: "retry" } });
-    expect(ran.map(({ key }) => key).filter((key) => key.includes(":held:"))).toEqual([]);
     expect(job(jobId)).toMatchObject({ status: "done-with-issues", claimToken: null });
   });
 
@@ -238,15 +224,29 @@ describe("readMoveInPosition", () => {
 });
 
 describe("startMoveInJob", () => {
-  it("queues the first segment and the watch's first look", async () => {
+  it("queues the watch's first look and the first segment", async () => {
     const { jobs, queued } = recordingJobs();
     await startMoveInJob(jobs, "movein_1");
     expect(queued).toEqual([
-      { type: "move-in.run", payload: { jobId: "movein_1" }, options: { key: "move-in:movein_1:inspect:-" } },
       { type: "move-in.watch", payload: { jobId: "movein_1", look: 1 }, options: { key: "move-in:movein_1:watch:1", delaySeconds: 300 } },
+      { type: "move-in.run", payload: { jobId: "movein_1" }, options: { key: "move-in:movein_1:inspect:-" } },
     ]);
     expect(MOVE_IN_WATCH_SECONDS).toBe(300);
     expect(MOVE_IN_WATCH.type).toBe("move-in.watch");
+  });
+
+  it("sends each one even when the other can't go, and says one failed", async () => {
+    for (const failing of ["move-in.run", "move-in.watch"]) {
+      const { jobs: recording, queued } = recordingJobs();
+      const jobs: Jobs = {
+        enqueue: async (kind, payload, options) => {
+          if (kind.type === failing) throw new Error("the queue is down");
+          return recording.enqueue(kind, payload, options);
+        },
+      };
+      await expect(startMoveInJob(jobs, "movein_1")).rejects.toThrow("the queue is down");
+      expect(queued.map(({ type }) => type)).toEqual([failing === "move-in.run" ? "move-in.watch" : "move-in.run"]);
+    }
   });
 });
 
@@ -261,9 +261,24 @@ describe("the move-in watch", () => {
     await moveInWatchHandler(env, jobs, { now: () => now })({ jobId, look: 3 }, { key: "k", attempt: 1 });
 
     expect(queued).toEqual([
-      { type: "move-in.run", payload: { jobId }, options: { key: `move-in:${jobId}:recipes:2` } },
       { type: "move-in.watch", payload: { jobId, look: 4 }, options: { key: `move-in:${jobId}:watch:4`, delaySeconds: 300 } },
+      { type: "move-in.run", payload: { jobId }, options: { key: `move-in:${jobId}:nudge:${quiet}` } },
     ]);
+  });
+
+  it("has its next look out before a nudge that fails, so the watch goes on", async () => {
+    const { env, jobId } = await setUp();
+    database.sqlite.prepare(`UPDATE "ImportJob" SET "updatedAt" = ?`).run(quiet);
+    const { jobs: recording, queued } = recordingJobs();
+    const jobs: Jobs = {
+      enqueue: async (kind, payload, options) => {
+        if (kind.type === "move-in.run") throw new Error("the queue is down");
+        return recording.enqueue(kind, payload, options);
+      },
+    };
+
+    await expect(moveInWatchHandler(env, jobs, { now: () => now })({ jobId, look: 1 }, { key: "k", attempt: 1 })).rejects.toThrow("the queue is down");
+    expect(queued.map(({ options }) => options.key)).toEqual([`move-in:${jobId}:watch:2`]);
   });
 
   it("only looks again at a move-in that is moving, and stops at one that finished, is gone or isn't named", async () => {
@@ -287,15 +302,16 @@ describe("the move-in watch", () => {
 describe("nudgeMoveIn", () => {
   const quietFor = (ms: number) => new Date(now.getTime() - ms).toISOString();
 
-  it("queues a move-in nothing has moved for a while, and leaves a moving or finished one alone", async () => {
+  it("queues a move-in nothing has moved for a while, once for each quiet stretch, and leaves a moving or finished one alone", async () => {
     const { jobs } = await setUp();
-    const at = { id: "movein_1", phase: "recipes", cursor: "4", status: "running" } as const;
+    const at = { id: "movein_1", status: "running" } as const;
 
     expect(await nudgeMoveIn(jobs, { ...at, updatedAt: quietFor(MOVE_IN_QUIET_MS - 1) }, now)).toBe(false);
     expect(await nudgeMoveIn(jobs, { ...at, status: "done", updatedAt: quietFor(MOVE_IN_QUIET_MS) }, now)).toBe(false);
     expect(await nudgeMoveIn(jobs, { ...at, updatedAt: quietFor(MOVE_IN_QUIET_MS) }, now)).toBe(true);
-    // Its segment is waiting now, so it is not queued twice.
+    // A nudge for this stretch is waiting now, so it is not queued twice; a later stretch gets its own.
     expect(await nudgeMoveIn(jobs, { ...at, updatedAt: quietFor(MOVE_IN_QUIET_MS) }, now)).toBe(false);
+    expect(await nudgeMoveIn(jobs, { ...at, updatedAt: quietFor(MOVE_IN_QUIET_MS + 1) }, now)).toBe(true);
     expect(MOVE_IN_QUIET_MS).toBe(60_000);
   });
 });
