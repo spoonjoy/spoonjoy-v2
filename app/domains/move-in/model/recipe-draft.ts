@@ -35,7 +35,7 @@ export interface RecipeDraft {
   servings: string | null;
   sourceUrl: string | null;
   /** Where the recipe's photo would sit in the source archive, relative to its root. */
-  photoPath: string | null;
+  photoPath: string;
   steps: StepDraft[];
   ingredients: IngredientDraft[];
   notes: Array<{ title: string | null; text: string }>;
