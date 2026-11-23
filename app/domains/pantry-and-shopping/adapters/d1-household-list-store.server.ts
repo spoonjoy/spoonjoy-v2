@@ -31,8 +31,8 @@ export function d1HouseholdListStore(db: D1ReadDatabase): HouseholdListStore {
     },
 
     async list(householdId, listId) {
-      const [row] = await read(`SELECT "id", "name" FROM "HouseholdList" WHERE "id" = ? AND "householdId" = ?`, listId, householdId);
-      return row ? { id: String(row.id), name: String(row.name) } : null;
+      const [row] = await read(`SELECT "id", "name", "createdById" FROM "HouseholdList" WHERE "id" = ? AND "householdId" = ?`, listId, householdId);
+      return row ? { id: String(row.id), name: String(row.name), createdById: row.createdById == null ? null : String(row.createdById) } : null;
     },
 
     async items(listId) {

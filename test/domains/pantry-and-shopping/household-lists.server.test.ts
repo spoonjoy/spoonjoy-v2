@@ -97,6 +97,34 @@ describe("household shopping lists", () => {
     expect(after?.items.map(({ text, checked }) => ({ text, checked }))).toEqual([{ text: "2 litres milk", checked: false }]);
   });
 
+  it("lets only a list's maker or a household owner delete it; other members add, tick and remove items", async () => {
+    const annsList = await listIn("h1", "ann", "Groceries");
+    const bensList = await listIn("h1", "ben", "Party");
+    run(`INSERT INTO "HouseholdMember" ("householdId", "userId", "role") VALUES ('h1', 'dee', 'member')`);
+    const added = await addHouseholdListItem(store, { householdId: "h1", listId: annsList, userId: "dee", text: "eggs", now });
+    if (!added.ok) throw new Error(added.error);
+    const itemId = added.value.id;
+
+    // Another member changes the items, sees no way to delete, and is refused one.
+    expect(await setHouseholdListItemChecked(store, { householdId: "h1", listId: annsList, userId: "dee", itemId, checked: true, now })).toEqual({ ok: true, value: null });
+    expect((await getHouseholdList(store, { householdId: "h1", listId: annsList, userId: "dee" }))?.canDelete).toBe(false);
+    expect(await deleteHouseholdList(store, { householdId: "h1", listId: annsList, userId: "dee" })).toEqual({
+      ok: false,
+      error: "Only the person who made this list or a household owner can delete it.",
+    });
+    expect(await getHouseholdList(store, { householdId: "h1", listId: annsList, userId: "ann" })).not.toBeNull();
+    expect(await removeHouseholdListItem(store, { householdId: "h1", listId: annsList, userId: "dee", itemId })).toEqual({ ok: true, value: null });
+
+    // The maker, a member, can delete their own list; an owner can delete anyone's.
+    expect((await getHouseholdList(store, { householdId: "h1", listId: bensList, userId: "ben" }))?.canDelete).toBe(true);
+    expect((await getHouseholdList(store, { householdId: "h1", listId: annsList, userId: "ben" }))?.canDelete).toBe(false);
+    expect((await getHouseholdList(store, { householdId: "h1", listId: bensList, userId: "ann" }))?.canDelete).toBe(true);
+    expect((await getHouseholdList(store, { householdId: "h1", listId: bensList, userId: "cal" }))?.canDelete).toBe(false);
+    expect(await deleteHouseholdList(store, { householdId: "h1", listId: bensList, userId: "ben" })).toEqual({ ok: true, value: null });
+    expect(await deleteHouseholdList(store, { householdId: "h1", listId: annsList, userId: "ann" })).toEqual({ ok: true, value: null });
+    expect((await listHouseholdLists(store, { householdId: "h1", userId: "ann" }))?.lists).toEqual([]);
+  });
+
   it("keeps view-only members, outsiders and other households' lists from changing anything", async () => {
     const listId = await listIn("h1", "ann", "Groceries");
     const cabin = await listIn("h2", "dee", "Cabin");
@@ -133,7 +161,7 @@ describe("household shopping lists", () => {
   it("deletes a list with its items, and goes when the household goes", async () => {
     const listId = await listIn("h1", "ann", "Groceries");
     await addHouseholdListItem(store, { householdId: "h1", listId, userId: "ann", text: "eggs", now });
-    expect(await deleteHouseholdList(store, { householdId: "h1", listId, userId: "ben" })).toEqual({ ok: true, value: null });
+    expect(await deleteHouseholdList(store, { householdId: "h1", listId, userId: "ann" })).toEqual({ ok: true, value: null });
     expect(database.sqlite.prepare(`SELECT COUNT(*) AS n FROM "HouseholdListItem"`).get()).toEqual({ n: 0 });
 
     const kept = await listIn("h1", "ann", "Again");

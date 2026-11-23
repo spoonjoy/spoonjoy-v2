@@ -141,7 +141,7 @@ export default function HouseholdListPage() {
           empty="Nothing on this list yet"
         />
 
-        {list.canEdit ? (
+        {list.canDelete ? (
           <section className="mt-10" aria-labelledby="list-delete">
             <SectionHeader id="list-delete" title="Delete" />
             <div className="mt-4 flex">

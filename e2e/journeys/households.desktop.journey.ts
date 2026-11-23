@@ -154,10 +154,21 @@ test.describe("Households", () => {
         await expect(page.getByRole("checkbox", { name: "2 litres milk" })).toBeChecked();
       });
       await expectAccessible();
+      // The owner made the list, so the owner can delete it.
+      await expect(page.getByRole("button", { name: "Delete list", exact: true })).toBeVisible();
       await attachScreenshot(testInfo, page, "owner-shared-list");
       await joinerPage.reload({ waitUntil: "load" });
       await expect(joinerPage.getByRole("checkbox", { name: "2 litres milk" })).toBeChecked();
+      // The joiner is a member who didn't make the list: they add, tick and remove items, but can't delete the list,
+      // on the page or by posting to it.
+      await expect(joinerPage.getByRole("button", { name: "Remove 2 litres milk", exact: true })).toBeVisible();
+      await expect(joinerPage.getByRole("button", { name: "Delete list", exact: true })).toHaveCount(0);
       await attachScreenshot(testInfo, joinerPage, "joiner-shared-list");
+      const refused = await joinerPage.request.post(listPath, { form: { intent: "delete" } });
+      expect(refused.status()).toBe(400);
+      await verifyAfterReload(async () => {
+        await expect(page.getByRole("heading", { level: 1, name: "Groceries", exact: true })).toBeVisible();
+      });
       await page.goto(householdPath);
       await waitForHydration(page);
       await joinerPage.goto(householdPath);
