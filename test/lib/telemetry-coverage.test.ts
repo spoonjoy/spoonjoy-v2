@@ -10,6 +10,9 @@
  * rules, orchestrator, allowlist, fs adapter) so the gate is trustworthy and
  * the new code is itself fully covered.
  */
+// The gate audits every server file in these folders without importing them, so a pull request's
+// unit-changed job selects this file when it changes one (scripts/test-changed.mjs).
+// test-changed: scans app/lib/ app/routes/
 
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from "node:fs";

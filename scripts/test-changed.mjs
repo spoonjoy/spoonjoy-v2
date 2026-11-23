@@ -27,17 +27,23 @@ export function runCaptured(command, args) {
   return { status: result.status ?? 1, stdout: result.stdout ?? "" };
 }
 
+// A test that walks folders declares them in a comment, `// test-changed: scans app/lib/ app/routes/`.
+const SCANS_PATTERN = /test-changed: scans ([^\n]+)/g;
+
 /**
  * The test files whose source names one of the changed paths in a quoted string, whole or after a
  * directory (readFileSync("wrangler.json"), "../server.json"): they read that file by path, which
- * the import graph cannot see. A path a test assembles from pieces is not found.
+ * the import graph cannot see. A path a test assembles from pieces is not found, so a test that walks
+ * a folder (the telemetry audit reads every file under app/routes/) declares the folder it scans, and
+ * is selected when a changed path is inside it.
  */
 export function testsNamingPaths(testFiles, changedPaths, readFile) {
   if (changedPaths.length === 0) return [];
   const quoted = changedPaths.map((changed) => new RegExp(`["'\`](?:[^"'\`\n]*/)?${changed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'\`]`));
   return testFiles.filter((file) => {
     const source = readFile(file);
-    return quoted.some((pattern) => pattern.test(source));
+    const scanned = [...source.matchAll(SCANS_PATTERN)].flatMap((match) => match[1].trim().split(/\s+/));
+    return quoted.some((pattern) => pattern.test(source)) || changedPaths.some((changed) => scanned.some((folder) => changed.startsWith(folder)));
   });
 }
 
