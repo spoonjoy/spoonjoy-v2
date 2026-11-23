@@ -32,6 +32,8 @@ model User {
   lastSeenAt               DateTime?
   lastSignInAt             DateTime?
   lastSignInMethod         String?
+  // The visibility a new recipe of theirs starts with: private, household or public.
+  defaultRecipeVisibility  String                    @default("public")
   emailTokens              AccountEmailToken[]
   credentials              UserCredential[]
   OAuth                    OAuth[]
@@ -474,6 +476,8 @@ model Recipe {
   activeCover        RecipeCover?       @relation("RecipeActiveCover", fields: [activeCoverId], references: [id], onDelete: SetNull)
   activeCoverVariant String?
   coverMode          String             @default("auto")
+  // Who may read it: private, household or public (app/domains/kitchen/model/recipe-visibility.ts).
+  visibility         String             @default("public")
 
   sourceRecipeId String?
   sourceRecipe   Recipe? @relation("SourceRecipe", fields: [sourceRecipeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
