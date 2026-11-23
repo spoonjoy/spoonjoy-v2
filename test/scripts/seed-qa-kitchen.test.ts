@@ -361,7 +361,7 @@ describe("seed-qa-kitchen", () => {
   describe("scratch users", () => {
     it("generates a base account and a desktop twin for each of SCRATCH_USER_COUNT indices by default, each in the codex-e2e-* / codex_e2e_* disposable namespace, no id over 40 characters", () => {
       const users = generateScratchUsers();
-      expect(SCRATCH_USER_COUNT).toBe(8);
+      expect(SCRATCH_USER_COUNT).toBe(10);
       expect(SCRATCH_ACCOUNT_COUNT).toBe(SCRATCH_USER_COUNT * 2);
       expect(users).toHaveLength(SCRATCH_ACCOUNT_COUNT);
       expect(users.filter((user) => user.variant === "base")).toHaveLength(SCRATCH_USER_COUNT);
@@ -375,10 +375,10 @@ describe("seed-qa-kitchen", () => {
         expect(user.id.length).toBeLessThanOrEqual(40);
         expect(user.email.length).toBeLessThanOrEqual(40);
       }
-      // The longest are index 6's desktop twin: a 23-character id and a 35-character email, as the
+      // The longest are index 10's desktop twin: a 24-character id and a 36-character email, as the
       // seed's comment says.
-      expect(Math.max(...users.map((user) => user.id.length))).toBe(23);
-      expect(Math.max(...users.map((user) => user.email.length))).toBe(35);
+      expect(Math.max(...users.map((user) => user.id.length))).toBe(24);
+      expect(Math.max(...users.map((user) => user.email.length))).toBe(36);
     });
 
     it("honors a custom count, per variant", () => {

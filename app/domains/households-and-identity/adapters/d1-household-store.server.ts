@@ -146,6 +146,11 @@ export function d1HouseholdStore(db: D1ReadDatabase): HouseholdStore {
       );
     },
 
+    async emailOf(userId) {
+      const [row] = await read(`SELECT lower("email") AS "email" FROM "User" WHERE "id" = ?`, userId);
+      return row ? String(row.email) : null;
+    },
+
     async chefIdsSharingWith(userId) {
       const rows = await read(
         `SELECT DISTINCT o."userId" FROM "HouseholdMember" m

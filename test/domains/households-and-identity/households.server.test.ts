@@ -214,6 +214,8 @@ describe("membership", () => {
     await kitchen();
     expect([...(await householdChefIdsFor(store, "ben"))].sort()).toEqual(["ann", "cal"]);
     expect([...(await householdChefIdsFor(store, "dee"))]).toEqual([]);
+    expect(await store.emailOf("ben")).toBe("ben@example.com");
+    expect(await store.emailOf("nobody")).toBeNull();
   });
 });
 

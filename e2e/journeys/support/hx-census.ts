@@ -321,6 +321,11 @@ export const census: Journey[] = [
   },
   { id: "shopping-list-newbie", enrolled: true, persona: "newbie", path: "/shopping-list", states: [DEFAULT] },
 
+  // Households (the households flag is on in QA). The chef belongs to none, so the list is empty
+  // and the same each run; an invite token that doesn't exist shows the refusal.
+  { id: "households", enrolled: true, persona: "chef", path: "/households", states: [DEFAULT] },
+  { id: "join-invite-unusable", enrolled: true, persona: "chef", path: "/join/hx-census-no-such-invite", states: [DEFAULT] },
+
   // Search and people.
   // An empty search browses the 30 most recent things, which include this run's scratch users
   // (codex_e2e_s_<run token>_<n>); a query that matches nothing measures the page without them.

@@ -11,6 +11,9 @@ export const HOUSEHOLD_ROLES = ["owner", "member", "viewer"] as const;
 
 export type HouseholdRole = (typeof HOUSEHOLD_ROLES)[number];
 
+/** How a role reads on screen. */
+export const HOUSEHOLD_ROLE_LABELS: Record<HouseholdRole, string> = { owner: "Owner", member: "Member", viewer: "View-only" };
+
 export type HouseholdMember = { householdId: string; userId: string; role: HouseholdRole };
 
 export type HouseholdAction = "read" | "edit-shared" | "invite" | "manage-members" | "edit-settings";

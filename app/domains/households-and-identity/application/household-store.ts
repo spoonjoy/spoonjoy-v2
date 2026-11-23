@@ -24,6 +24,8 @@ export interface HouseholdStore {
   setRole(householdId: string, userId: string, role: HouseholdRole): Promise<void>;
   deleteMember(householdId: string, userId: string): Promise<void>;
   revokeInvite(householdId: string, inviteId: string, now: Date): Promise<void>;
+  /** The account's email address, lowercased, or null when it has none. */
+  emailOf(userId: string): Promise<string | null>;
   /** The other users who share at least one household with this one. */
   chefIdsSharingWith(userId: string): Promise<string[]>;
 }
