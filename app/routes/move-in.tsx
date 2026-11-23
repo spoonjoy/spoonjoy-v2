@@ -117,7 +117,7 @@ function view(progress: MoveInProgress, runsOnServer: boolean): MoveInView {
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const { userId, env, workerEnv, jobs } = await signedInWithFlag(request, context);
+  const { userId, env, jobs } = await signedInWithFlag(request, context);
   const jobId = new URL(request.url).searchParams.get("job");
   const maxBytes = MOVE_IN_UPLOAD_MAX_BYTES;
   if (!jobId) return { move: null, maxBytes };
