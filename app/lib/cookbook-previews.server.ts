@@ -7,6 +7,7 @@ import {
   selectColumns,
   type ColumnSpec,
 } from "~/lib/d1-models.server";
+import { readableRecipeSql, type RecipeViewer } from "~/domains/kitchen";
 
 // A cookbook card previews its newest recipes that are not deleted. The kitchen home and
 // the cookbooks page read the previews for many cookbooks in one statement: a window
@@ -30,10 +31,11 @@ const PREVIEW_RECIPE_COLUMNS: ColumnSpec<Omit<PreviewRecipe, "covers">> = {
 
 /**
  * The newest four entries (newest `createdAt` first, then highest id) of each cookbook
- * whose id `cookbookIdsSql` selects, skipping deleted recipes, with each entry's recipe
- * and its active cover. `values` are bound to `cookbookIdsSql`.
+ * whose id `cookbookIdsSql` selects, skipping deleted recipes and those the viewer may not read, with each entry's
+ * recipe and its active cover. `values` are bound to `cookbookIdsSql`.
  */
-export function cookbookPreviewQuery(cookbookIdsSql: string, ...values: unknown[]): D1Query {
+export function cookbookPreviewQuery(viewer: RecipeViewer, cookbookIdsSql: string, ...values: unknown[]): D1Query {
+  const readable = readableRecipeSql("live", viewer);
   return [
     `SELECT ${selectColumns(RECIPE_IN_COOKBOOK_COLUMNS, "e")},
        ${selectColumns(PREVIEW_RECIPE_COLUMNS, "r", "recipe_")},
@@ -43,13 +45,14 @@ export function cookbookPreviewQuery(cookbookIdsSql: string, ...values: unknown[
          PARTITION BY ric."cookbookId" ORDER BY ric."createdAt" DESC, ric."id" DESC
        ) AS "previewRank"
        FROM "RecipeInCookbook" ric
-       JOIN "Recipe" live ON live."id" = ric."recipeId" AND live."deletedAt" IS NULL
+       JOIN "Recipe" live ON live."id" = ric."recipeId" AND live."deletedAt" IS NULL AND ${readable.sql}
        WHERE ric."cookbookId" IN (${cookbookIdsSql})
      ) e
      JOIN "Recipe" r ON r."id" = e."recipeId"
      LEFT JOIN "RecipeCover" rc ON rc."id" = r."activeCoverId" AND rc."recipeId" = r."id"
      WHERE e."previewRank" <= ${COOKBOOK_PREVIEW_RECIPES}
      ORDER BY e."cookbookId", e."previewRank"`,
+    ...readable.params,
     ...values,
   ];
 }

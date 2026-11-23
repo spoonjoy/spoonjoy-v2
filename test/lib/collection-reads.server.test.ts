@@ -213,6 +213,35 @@ describe("collection reads", () => {
     expect(empty!.recipes).toEqual([]);
   });
 
+  it("leaves another cook's private recipe out of browsing, saved recipes and cookbook cards, on D1 as on Prisma", async () => {
+    const { chef, friend, risotto } = await seedCollections();
+    await db.recipe.update({ where: { id: risotto.id }, data: { visibility: "private" } });
+
+    const browse = { query: "", limit: 48 };
+    const browsed = await readPublicRecipesFromD1(d1.binding, browse);
+    expect(browsed).toEqual(await readPublicRecipesWithPrisma(db, browse));
+    expect(browsed.map((recipe) => recipe.id)).not.toContain(risotto.id);
+    await expect(readPublicRecipesFromD1(d1.binding, { query: "saffron risotto", limit: 48 })).resolves.toEqual([]);
+
+    const saved = await readSavedRecipesFromD1(d1.binding, chef.id);
+    expect(saved).toEqual(await readSavedRecipesWithPrisma(db, chef.id));
+    expect(saved.map((recipe) => recipe.id)).not.toContain(risotto.id);
+
+    const cookbooks = await readCookbookListFromD1(d1.binding, chef.id);
+    expect(cookbooks).toEqual(await readCookbookListWithPrisma(db, chef.id));
+    const favourites = cookbooks.find((cookbook) => cookbook.title === "Favourites")!;
+    expect(favourites._count.recipes).toBe(1);
+    expect(favourites.recipes.map((entry) => entry.recipe.id)).not.toContain(risotto.id);
+    expect(favourites.searchableRecipeTitles).toEqual(["Tomato Soup"]);
+
+    // Its cook still finds it in what they saved.
+    const friendsBook = await db.cookbook.findFirstOrThrow({ where: { authorId: friend.id } });
+    await db.recipeInCookbook.create({ data: { cookbookId: friendsBook.id, recipeId: risotto.id, addedById: friend.id } });
+    const own = await readSavedRecipesFromD1(d1.binding, friend.id);
+    expect(own).toEqual(await readSavedRecipesWithPrisma(db, friend.id));
+    expect(own.map((recipe) => recipe.id)).toContain(risotto.id);
+  });
+
   it("reads my recipes as the Prisma search does, in one batch", async () => {
     const { chef, friend } = await seedCollections();
     const cases = [

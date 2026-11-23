@@ -93,8 +93,8 @@ export const SEARCH_TRIGGERS: readonly TriggerSpec[] = [
   trigger("Recipe_update", `AFTER UPDATE ON "Recipe"`, null, [mark("recipe", `NEW."id"`)]),
   trigger(
     "Recipe_update_listing",
-    `AFTER UPDATE OF "title", "deletedAt" ON "Recipe"`,
-    `OLD."title" IS NOT NEW."title" OR OLD."deletedAt" IS NOT NEW."deletedAt"`,
+    `AFTER UPDATE OF "title", "deletedAt", "visibility" ON "Recipe"`,
+    `OLD."title" IS NOT NEW."title" OR OLD."deletedAt" IS NOT NEW."deletedAt" OR OLD."visibility" IS NOT NEW."visibility"`,
     [markSelect("cookbook", `SELECT "cookbookId" AS id FROM "RecipeInCookbook" WHERE "recipeId" = NEW."id"`)],
   ),
   trigger("Recipe_update_chef", `AFTER UPDATE OF "chefId" ON "Recipe"`, `OLD."chefId" IS NOT NEW."chefId"`, [

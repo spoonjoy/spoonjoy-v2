@@ -25,6 +25,7 @@ import {
   type ColumnSpec,
 } from "~/lib/d1-models.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
+import { canRead, readableRecipeSqlOn } from "~/domains/kitchen";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   SEARCH_DIRTY_CLOCK_SCHEMA_SQL,
@@ -110,7 +111,7 @@ interface SearchDirtyRow {
  * also drops the keys of entities that are gone, and the one rebuild on upgrade clears the
  * keys v1 left behind (issue #684).
  */
-const SEARCH_MAINTENANCE_VERSION = "per-entity-triggers-v2";
+const SEARCH_MAINTENANCE_VERSION = "per-entity-triggers-v3";
 
 /** Past this many queued entities, one full rebuild is cheaper than re-indexing each. */
 const MAX_DIRTY_ENTITIES_PER_SEARCH = 200;
@@ -307,6 +308,15 @@ function buildWhereClause(
   } else {
     conditions.push("entityType != 'shopping-list-item'");
   }
+
+  // A recipe is found only by those who may read it. Its document carries its visibility, and a change of visibility
+  // queues the recipe, so the search that follows re-indexes it before answering.
+  const readable = readableRecipeSqlOn(
+    { visibility: `json_extract(metadata, '$.visibility')`, chefId: "ownerId" },
+    viewerId ? { id: viewerId } : null,
+  );
+  conditions.push(`(entityType != 'recipe' OR ${readable.sql})`);
+  values.push(...readable.params);
 
   if (hideFor) {
     // Search entity types are named like report target types (recipe, cookbook, chef).
@@ -666,6 +676,7 @@ function recipeDocuments(sources: SearchSources): SearchDocumentInput[] {
       imageUrl: coverDisplay?.displayUrl ?? null,
       metadata: {
         servings: recipe.servings,
+        visibility: recipe.visibility,
         chefUsername: chef.username,
         ingredientNames,
         stepCount: recipeSteps.length,
@@ -688,7 +699,8 @@ function cookbookDocuments(sources: SearchSources): SearchDocumentInput[] {
     const activeRecipeTitles = uniqueSorted(
       (cookbookLinksByCookbookId.get(cookbook.id) ?? [])
         .map((link) => recipeById.get(link.recipeId)!)
-        .filter((recipe) => !recipe.deletedAt)
+        // One document serves every searcher, so it names only recipes anyone may read.
+        .filter((recipe) => !recipe.deletedAt && canRead(null, recipe))
         .map((recipe) => recipe.title)
     );
 

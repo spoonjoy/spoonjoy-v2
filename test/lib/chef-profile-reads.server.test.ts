@@ -137,6 +137,23 @@ describe("chef profile reads", () => {
     expect(afterUnknown.recipes).toEqual([]);
   });
 
+  it("shows a visitor only the recipes, cookbook entries and cooks of recipes they may read", async () => {
+    const { chef, fan, extras } = await seedChef();
+    const withCover = await db.recipe.findFirstOrThrow({ where: { chefId: chef.id, title: "With cover" } });
+    await db.recipe.updateMany({ where: { id: { in: [extras[2]!.id, withCover.id] } }, data: { visibility: "private" } });
+
+    for (const viewerId of [fan.id, null, chef.id]) {
+      const input = { identifier: chef.username, recipeLimit: null, viewerId };
+      const rows = await readChefProfileFromD1(d1.binding, input);
+      expect(displayed(rows)).toEqual(displayed(await readChefProfileWithPrisma(db, input)));
+      const sees = viewerId === chef.id;
+      expect(rows.recipes.map((recipe) => recipe.title).includes("Extra 7"), String(viewerId)).toBe(sees);
+      expect(rows.recipeCount).toBe(sees ? 5 : 3);
+      expect(rows.cookbooks.find((cookbook) => cookbook.title === "Book")!._count.recipes).toBe(sees ? 4 : 2);
+      expect(rows.recentSpoons.map((spoon) => spoon.recipe.title)).toEqual(sees ? ["Fan's", "With cover"] : ["Fan's"]);
+    }
+  });
+
   it("prefers a username match over another user whose id equals it", async () => {
     const first = await db.user.create({ data: createTestUser() });
     const named = await db.user.create({ data: { ...createTestUser(), username: first.id } });

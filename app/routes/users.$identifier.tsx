@@ -81,7 +81,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   // A page of recipes after the last one shown, as on the public recipe list; one extra
   // row says whether there is another page.
   const after = parseRecipeCursor(url.searchParams.get("after"));
-  const readInput = { identifier, recipeLimit: PROFILE_RECIPE_LIMIT + 1, recipeAfter: after };
+  const readInput = { identifier, recipeLimit: PROFILE_RECIPE_LIMIT + 1, recipeAfter: after, viewerId: currentUserId };
   const {
     profileUser,
     matchedBy,

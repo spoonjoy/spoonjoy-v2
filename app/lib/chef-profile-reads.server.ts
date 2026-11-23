@@ -10,6 +10,7 @@ import {
   type ColumnSpec,
 } from "~/lib/d1-models.server";
 import { COOKBOOK_PREVIEW_RECIPES, cookbookPreviewQuery, cookbookPreviewsById } from "~/lib/cookbook-previews.server";
+import { readableRecipeSql, readableRecipeWhere } from "~/domains/kitchen";
 import { chefGraphCountSql, countFellowChefs, countKitchenVisitors } from "~/lib/fellow-chefs.server";
 import type { KitchenHomeRows } from "~/lib/kitchen-home.server";
 
@@ -38,7 +39,7 @@ export interface ChefProfileRows {
   /** Whether the identifier matched the username (canonical URL) or only the id. */
   matchedBy: "username" | "id" | null;
   recipes: ProfileRecipe[];
-  /** Every recipe the chef has that is not deleted, across all pages. */
+  /** Every recipe the chef has that is not deleted and the viewer may read, across all pages. */
   recipeCount: number;
   cookbooks: ProfileCookbook[];
   recentSpoons: ProfileSpoon[];
@@ -56,6 +57,8 @@ export interface ChefProfileInput {
    * every recipe is on exactly one page.
    */
   recipeAfter?: string | null;
+  /** Who is looking: recipes, cookbook entries and spoons show only recipes they may read. Signed out when absent. */
+  viewerId?: string | null;
 }
 
 const EMPTY: Omit<ChefProfileRows, "profileUser" | "matchedBy"> = {
@@ -78,15 +81,16 @@ const RECIPE_CARD_SELECT = {
 
 export async function readChefProfileWithPrisma(
   database: PrismaClient,
-  { identifier, recipeLimit, recipeAfter = null }: ChefProfileInput,
+  { identifier, recipeLimit, recipeAfter = null, viewerId = null }: ChefProfileInput,
 ): Promise<ChefProfileRows> {
+  const readable = readableRecipeWhere({ id: viewerId ?? "" });
   const userSelect = { id: true, username: true, photoUrl: true, createdAt: true } as const;
   const byUsername = await database.user.findUnique({ where: { username: identifier }, select: userSelect });
   const profileUser = byUsername ?? await database.user.findUnique({ where: { id: identifier }, select: userSelect });
   if (!profileUser) return { profileUser: null, matchedBy: null, ...EMPTY };
   const matchedBy = byUsername ? "username" : "id";
 
-  const liveRecipe = { chefId: profileUser.id, deletedAt: null };
+  const liveRecipe = { chefId: profileUser.id, deletedAt: null, ...readable };
   // Keyset on the cursor row's own values, as on D1. (Prisma's `cursor` option would skip a
   // row when the cursor recipe has since been deleted.) An unknown cursor reads no recipes.
   const cursorRow = recipeAfter
@@ -110,9 +114,9 @@ export async function readChefProfileWithPrisma(
       orderBy: { updatedAt: "desc" },
       include: {
         // A deleted recipe stays in its cookbooks, but the card neither counts nor shows it.
-        _count: { select: { recipes: { where: { recipe: { deletedAt: null } } } } },
+        _count: { select: { recipes: { where: { recipe: { deletedAt: null, ...readable } } } } },
         recipes: {
-          where: { recipe: { deletedAt: null } },
+          where: { recipe: { deletedAt: null, ...readable } },
           take: COOKBOOK_PREVIEW_RECIPES,
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           include: { recipe: { select: RECIPE_CARD_SELECT } },
@@ -120,7 +124,7 @@ export async function readChefProfileWithPrisma(
       },
     }),
     database.recipeSpoon.findMany({
-      where: { chefId: profileUser.id, deletedAt: null },
+      where: { chefId: profileUser.id, deletedAt: null, recipe: readable },
       orderBy: [{ cookedAt: "desc" }, { id: "desc" }],
       take: PROFILE_SPOON_LIMIT,
       include: {
@@ -176,8 +180,12 @@ function activeCover(row: D1Row) {
  */
 export async function readChefProfileFromD1(
   db: D1ReadDatabase,
-  { identifier, recipeLimit, recipeAfter = null }: ChefProfileInput,
+  { identifier, recipeLimit, recipeAfter = null, viewerId = null }: ChefProfileInput,
 ): Promise<ChefProfileRows> {
+  const viewer = { id: viewerId ?? "" };
+  const listed = readableRecipeSql("r", viewer);
+  const live = readableRecipeSql("live", viewer);
+  const counted = readableRecipeSql(undefined, viewer);
   // Plain `?` placeholders, each bound in order: `chefId` takes the identifier twice.
   const chefId = `COALESCE((SELECT "id" FROM "User" WHERE "username" = ?), (SELECT "id" FROM "User" WHERE "id" = ?))`;
   const chef = [identifier, identifier];
@@ -189,27 +197,33 @@ export async function readChefProfileFromD1(
     [
       `SELECT ${selectColumns(RECIPE_CARD_COLUMNS, "r")}, ${coverSelect}
        FROM "Recipe" r ${coverJoin}
-       WHERE r."chefId" = ${chefId} AND r."deletedAt" IS NULL
+       WHERE r."chefId" = ${chefId} AND r."deletedAt" IS NULL AND ${listed.sql}
          ${recipeAfter ? `AND (r."updatedAt", r."id") < (SELECT c."updatedAt", c."id" FROM "Recipe" c WHERE c."id" = ?)` : ""}
        ORDER BY r."updatedAt" DESC, r."id" DESC
        LIMIT ?`,
       ...chef,
+      ...listed.params,
       ...(recipeAfter ? [recipeAfter] : []),
       // SQLite reads a negative LIMIT as no limit.
       recipeLimit ?? -1,
     ],
-    [`SELECT COUNT(*) AS "total" FROM "Recipe" WHERE "chefId" = ${chefId} AND "deletedAt" IS NULL`, ...chef],
+    [
+      `SELECT COUNT(*) AS "total" FROM "Recipe" WHERE "chefId" = ${chefId} AND "deletedAt" IS NULL AND ${counted.sql}`,
+      ...chef,
+      ...counted.params,
+    ],
     [
       `SELECT ${selectColumns(COOKBOOK_COLUMNS, "c")},
          (SELECT COUNT(*) FROM "RecipeInCookbook" ric
-          JOIN "Recipe" live ON live."id" = ric."recipeId" AND live."deletedAt" IS NULL
+          JOIN "Recipe" live ON live."id" = ric."recipeId" AND live."deletedAt" IS NULL AND ${live.sql}
           WHERE ric."cookbookId" = c."id") AS "recipeCount"
        FROM "Cookbook" c
        WHERE c."authorId" = ${chefId}
        ORDER BY c."updatedAt" DESC`,
+      ...live.params,
       ...chef,
     ],
-    cookbookPreviewQuery(`SELECT "id" FROM "Cookbook" WHERE "authorId" = ${chefId}`, ...chef),
+    cookbookPreviewQuery(viewer, `SELECT "id" FROM "Cookbook" WHERE "authorId" = ${chefId}`, ...chef),
     [
       `SELECT ${selectColumns(RECIPE_SPOON_COLUMNS, "sp")},
          ${selectColumns(SPOON_RECIPE_COLUMNS, "r", "recipe_")},
@@ -219,10 +233,11 @@ export async function readChefProfileFromD1(
        JOIN "Recipe" r ON r."id" = sp."recipeId"
        ${coverJoin}
        JOIN "User" u ON u."id" = sp."chefId"
-       WHERE sp."chefId" = ${chefId} AND sp."deletedAt" IS NULL
+       WHERE sp."chefId" = ${chefId} AND sp."deletedAt" IS NULL AND ${listed.sql}
        ORDER BY sp."cookedAt" DESC, sp."id" DESC
        LIMIT ${PROFILE_SPOON_LIMIT}`,
       ...chef,
+      ...listed.params,
     ],
     // The chef-graph CTE names the focal chef six times.
     [chefGraphCountSql("viewer", chefId), ...Array.from({ length: 6 }, () => chef).flat()],

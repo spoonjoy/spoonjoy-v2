@@ -231,7 +231,8 @@ export async function readSavedRecipesWithPrisma(database: PrismaClient, userId:
   const memberships = await database.recipeInCookbook.findMany({
     where: {
       cookbook: { authorId: userId },
-      recipe: { deletedAt: null },
+      // A recipe its cook has since made private leaves the saver's lists.
+      recipe: { deletedAt: null, ...readableRecipeWhere({ id: userId }) },
     },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     include: {
@@ -270,6 +271,7 @@ const SAVED_MEMBERSHIP_COLUMNS: ColumnSpec<{
 
 /** `/saved-recipes` on D1: one statement, filtered by the signed-in user's cookbooks. */
 export async function readSavedRecipesFromD1(db: D1ReadDatabase, userId: string): Promise<SavedRecipe[]> {
+  const readable = readableRecipeSql("r", { id: userId });
   const [rows] = await d1ReadBatch(db, [
     [
       `SELECT ric."recipeId", c."title" AS "cookbookTitle", r."title", r."description", r."servings",
@@ -278,9 +280,10 @@ export async function readSavedRecipesFromD1(db: D1ReadDatabase, userId: string)
        JOIN "Cookbook" c ON c."id" = ric."cookbookId"
        JOIN "Recipe" r ON r."id" = ric."recipeId"
        JOIN "User" u ON u."id" = r."chefId"
-       WHERE c."authorId" = ? AND r."deletedAt" IS NULL
+       WHERE c."authorId" = ? AND r."deletedAt" IS NULL AND ${readable.sql}
        ORDER BY ric."updatedAt" DESC, ric."id" DESC`,
       userId,
+      ...readable.params,
     ],
   ]);
   return savedRecipesFrom(rows!.map((row) => {
@@ -346,17 +349,18 @@ function toCookbookListItem(
 }
 
 export async function readCookbookListWithPrisma(database: PrismaClient, userId: string): Promise<CookbookListItem[]> {
+  const listed = { deletedAt: null, ...readableRecipeWhere({ id: userId }) };
   const cookbooks = await database.cookbook.findMany({
     where: { authorId: userId },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     include: {
       // A deleted recipe stays in its cookbooks, but no card counts it (as on the kitchen home).
-      _count: { select: { recipes: { where: { recipe: { deletedAt: null } } } } },
+      _count: { select: { recipes: { where: { recipe: listed } } } },
       recipes: {
         take: COOKBOOK_PREVIEW_RECIPES,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         where: {
-          recipe: { deletedAt: null },
+          recipe: listed,
         },
         include: {
           recipe: {
@@ -381,7 +385,7 @@ export async function readCookbookListWithPrisma(database: PrismaClient, userId:
     const recipeTitleRows = await database.recipeInCookbook.findMany({
       where: {
         cookbookId: { in: cookbooks.map((cookbook) => cookbook.id) },
-        recipe: { deletedAt: null },
+        recipe: listed,
       },
       // Only the page's search reads these titles; a fixed order keeps both readers equal.
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -416,24 +420,29 @@ const RECIPE_TITLE_COLUMNS: ColumnSpec<{ cookbookId: string; title: string }> = 
  */
 export async function readCookbookListFromD1(db: D1ReadDatabase, userId: string): Promise<CookbookListItem[]> {
   const userCookbookIds = `SELECT "id" FROM "Cookbook" WHERE "authorId" = ?`;
+  const viewer = { id: userId };
+  const live = readableRecipeSql("live", viewer);
+  const listed = readableRecipeSql("r", viewer);
   const [cookbookRows, previewRows, titleRows] = await d1ReadBatch(db, [
     [
       `SELECT ${selectColumns(COOKBOOK_COLUMNS, "c")},
          (SELECT COUNT(*) FROM "RecipeInCookbook" ric
-          JOIN "Recipe" live ON live."id" = ric."recipeId" AND live."deletedAt" IS NULL
+          JOIN "Recipe" live ON live."id" = ric."recipeId" AND live."deletedAt" IS NULL AND ${live.sql}
           WHERE ric."cookbookId" = c."id") AS "recipeCount"
        FROM "Cookbook" c
        WHERE c."authorId" = ?
        ORDER BY c."updatedAt" DESC, c."id" DESC`,
+      ...live.params,
       userId,
     ],
-    cookbookPreviewQuery(userCookbookIds, userId),
+    cookbookPreviewQuery(viewer, userCookbookIds, userId),
     [
       `SELECT ric."cookbookId", r."title"
        FROM "RecipeInCookbook" ric
-       JOIN "Recipe" r ON r."id" = ric."recipeId" AND r."deletedAt" IS NULL
+       JOIN "Recipe" r ON r."id" = ric."recipeId" AND r."deletedAt" IS NULL AND ${listed.sql}
        WHERE ric."cookbookId" IN (${userCookbookIds})
        ORDER BY ric."createdAt" ASC, ric."id" ASC`,
+      ...listed.params,
       userId,
     ],
   ]);
