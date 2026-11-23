@@ -14,6 +14,9 @@ import {
 } from "~/lib/recipe-d1-writes.server";
 import { stepForIngredient } from "~/lib/recipe-import.server";
 import type { IngredientDraft, RecipeDraft } from "../../model/recipe-draft";
+import type { RecipeVisibility } from "~/domains/kitchen";
+
+const MOVED_IN_VISIBILITY: RecipeVisibility = "private";
 
 export const RECIPE_TABLE = "recipes";
 const GATHER_STEP = "Gather the ingredients.";
@@ -126,6 +129,8 @@ export async function writeMovedInRecipe(input: WriteMovedInRecipeInput): Promis
         ),
         activeRecipeTitleFreeGuard(chefId, title),
         recipeInsertStatement({ id: recipeId, title, description: description(draft), servings: draft.servings, sourceUrl: draft.sourceUrl, chefId, now }),
+        // A kitchen moves in private, whatever the cook's default: they choose what to share once it is here.
+        [`UPDATE "Recipe" SET "visibility" = ? WHERE "id" = ?`, MOVED_IN_VISIBILITY, recipeId],
         ...steps.map((step, index) =>
           stepInsertStatement({ recipeId, stepNum: index + 1, stepTitle: step.title, description: step.text, duration: null, now })),
         ...nameUpsertStatements(ingredients, now),
