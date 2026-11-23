@@ -423,6 +423,9 @@ export function createCloudflareApi({ env, fetchImpl, sleep, random = Math.rando
     listQueues: () => listAll("/queues"),
     createQueue: async (name) => (await request("POST", "/queues", { queue_name: name })).result,
     deleteQueue: (id) => request("DELETE", `/queues/${id}`),
+    // A queue has a consumer or two, so the list is not paginated.
+    listQueueConsumers: async (queueId) => (await request("GET", `/queues/${queueId}/consumers`)).result ?? [],
+    deleteQueueConsumer: (queueId, consumerId) => request("DELETE", `/queues/${queueId}/consumers/${consumerId}`),
   };
 }
 
@@ -432,6 +435,19 @@ function isRefusal(error) {
 
 function isNotFound(error) {
   return error instanceof CloudflareApiError && error.status === 404;
+}
+
+// Cloudflare deletes neither a queue a Worker still binds nor a Worker that still consumes a queue,
+// so a run's stack comes down in order: the queue's consumers, then the Worker, then the queue.
+async function detachQueueConsumers(api, queueId) {
+  let consumers;
+  try {
+    consumers = await api.listQueueConsumers(queueId);
+  } catch (error) {
+    if (isNotFound(error)) return;
+    throw error;
+  }
+  for (const consumer of consumers) await deleteTolerating404(() => api.deleteQueueConsumer(queueId, consumer.consumer_id));
 }
 
 // Deletes run stacks older than STALE_AFTER_MS. Never touches the shared QA Worker or database:
@@ -460,13 +476,9 @@ export async function sweepStaleRunStacks({ api, now, log }) {
     log(`${deleted ? "Deleted" : "Already gone:"} stale QA run database ${database.name} (created ${database.created_at}).`);
     swept += 1;
   }
-  // Queues go before Workers: Cloudflare may refuse to delete a Worker that still consumes one.
-  for (const queue of await api.listQueues()) {
-    if (!RUN_QUEUE_PATTERN.test(queue.queue_name ?? "") || !isStale(queue.created_on)) continue;
-    const deleted = await deleteTolerating404(() => api.deleteQueue(queue.queue_id));
-    log(`${deleted ? "Deleted" : "Already gone:"} stale QA run jobs queue ${queue.queue_name} (created ${queue.created_on}).`);
-    swept += 1;
-  }
+  // A stale run's queue lets go of its Worker first, and goes once the Worker has.
+  const staleQueues = (await api.listQueues()).filter((queue) => RUN_QUEUE_PATTERN.test(queue.queue_name ?? "") && isStale(queue.created_on));
+  for (const queue of staleQueues) await detachQueueConsumers(api, queue.queue_id);
   let remaining = 0;
   for (const worker of await api.listWorkers()) {
     if (!RUN_WORKER_PATTERN.test(worker.id ?? "")) continue;
@@ -487,6 +499,11 @@ export async function sweepStaleRunStacks({ api, now, log }) {
       continue;
     }
     log(`${deleted ? "Deleted" : "Already gone:"} stale QA run Worker ${worker.id} (created ${worker.created_on}).`);
+    swept += 1;
+  }
+  for (const queue of staleQueues) {
+    const deleted = await deleteTolerating404(() => api.deleteQueue(queue.queue_id));
+    log(`${deleted ? "Deleted" : "Already gone:"} stale QA run jobs queue ${queue.queue_name} (created ${queue.created_on}).`);
     swept += 1;
   }
   return { swept, remainingRunWorkers: remaining };
@@ -836,14 +853,12 @@ export async function teardown({ env, fs, api, log }) {
   const failures = [];
   const warnings = [];
 
-  // The queue goes first: Cloudflare may refuse to delete a Worker that still consumes one.
+  // The queue lets go of the Worker, the Worker goes, then the queue (detachQueueConsumers says why).
+  let queues = [];
   try {
-    const queues = (await api.listQueues()).filter((queue) => queue.queue_name === identity.queueName);
+    queues = (await api.listQueues()).filter((queue) => queue.queue_name === identity.queueName);
     if (queues.length === 0) warnings.push(`no jobs queue named ${identity.queueName} existed`);
-    for (const queue of queues) {
-      if (await deleteTolerating404(() => api.deleteQueue(queue.queue_id))) log(`Deleted QA run jobs queue ${identity.queueName}.`);
-      else warnings.push(`jobs queue ${identity.queueName} was already deleted`);
-    }
+    for (const queue of queues) await detachQueueConsumers(api, queue.queue_id);
   } catch (error) {
     failures.push(error.message);
   }
@@ -853,6 +868,14 @@ export async function teardown({ env, fs, api, log }) {
     else warnings.push(`no Worker named ${identity.workerName} existed`);
   } catch (error) {
     failures.push(error.message);
+  }
+  for (const queue of queues) {
+    try {
+      if (await deleteTolerating404(() => api.deleteQueue(queue.queue_id))) log(`Deleted QA run jobs queue ${identity.queueName}.`);
+      else warnings.push(`jobs queue ${identity.queueName} was already deleted`);
+    } catch (error) {
+      failures.push(error.message);
+    }
   }
   try {
     const ids = await runDatabaseIds(fs, api, identity);
