@@ -29,6 +29,7 @@ function view(fields: Partial<MoveInView> = {}): MoveInView {
     failure: null,
     notes: [],
     renamed: [],
+    latest: [],
     runsOnServer: false,
     ...fields,
   };
@@ -98,6 +99,57 @@ describe("the Move in page", () => {
     await vi.waitFor(() => expect(action).toHaveBeenCalledTimes(1));
     await act(async () => vi.advanceTimersByTimeAsync(6_000));
     expect(action).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the newest recipes in as they arrive, each with its photo when it has one", async () => {
+    page(view({
+      recipes: { found: 20, done: 12, created: 12, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 },
+      latest: [
+        { id: "r12", title: "Lemon pie", photoUrl: "/photos/covers/import/movein-r12.webp" },
+        { id: "r11", title: "Stew", photoUrl: null },
+      ],
+    }));
+    expect(await screen.findByText("12 of 20 recipes in so far.")).toBeTruthy();
+    const list = screen.getByRole("list", { name: "Just moved in" });
+    const pie = within(list).getByRole("link", { name: "Lemon pie" });
+    expect(pie.getAttribute("href")).toBe("/recipes/r12");
+    expect(pie.closest("li")?.querySelector("img")?.getAttribute("src")).toBe("/photos/covers/import/movein-r12.webp");
+    expect(within(list).getByRole("link", { name: "Stew" }).closest("li")?.querySelector("img")).toBeNull();
+  });
+
+  it("leaves the list out until a recipe is in", async () => {
+    page(view());
+    await screen.findByRole("heading", { level: 2, name: "Moving in" });
+    expect(screen.queryByRole("list", { name: "Just moved in" })).toBeNull();
+  });
+
+  it("asks less often while a server-side move-in shows no change, and not at all while the page is hidden", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const action = vi.fn(() => ({ error: null }));
+    page(view({ runsOnServer: true }), action);
+    await screen.findByRole("heading", { level: 2, name: "Moving in" });
+    // 3 s, then 6 s more, then 12 s more while nothing changes.
+    await act(async () => vi.advanceTimersByTimeAsync(3_000));
+    await vi.waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    expect(action).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTimeAsync(1_500));
+    await vi.waitFor(() => expect(action).toHaveBeenCalledTimes(2));
+    const hidden = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+    expect(action).toHaveBeenCalledTimes(2);
+    hidden.mockRestore();
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    await vi.waitFor(() => expect(action).toHaveBeenCalledTimes(3));
+  });
+
+  it("keeps asking at the same pace when the page is what keeps the move-in going", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const action = vi.fn(() => ({ error: null }));
+    page(view(), action);
+    await screen.findByRole("heading", { level: 2, name: "Moving in" });
+    await act(async () => vi.advanceTimersByTimeAsync(9_500));
+    await vi.waitFor(() => expect(action).toHaveBeenCalledTimes(3));
   });
 
   it("counts recipes as they come in", async () => {
