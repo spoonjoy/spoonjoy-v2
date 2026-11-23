@@ -149,6 +149,40 @@ jobs:
             mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f \
             node node_modules/@playwright/test/cli.js test -c playwright.self-host-fresh.config.ts
 
+      # Sign-in with the owner's own OpenID Connect provider (SPOONJOY_OIDC_*): Dex, pinned by digest,
+      # with the one client and user in e2e/self-host/dex.yaml. The server runs on the host network
+      # here so it reaches Dex at localhost:5556, the address the browser uses and Dex's ID tokens
+      # name as their issuer. The client secret and password are test values that open nothing else.
+      - name: Sign in through an OpenID Connect provider
+        run: |
+          docker run -d --name dex -p 5556:5556 -v "$PWD/e2e/self-host/dex.yaml:/etc/dex/config.yaml:ro" \
+            ghcr.io/dexidp/dex@sha256:65b72ca0f4b0bf6d4ada84ec21da8851782563404ac7b8f926923d27ceced9ab \
+            dex serve /etc/dex/config.yaml
+          for _ in $(seq 1 300); do
+            curl -sf -o /dev/null http://localhost:5556/dex/.well-known/openid-configuration && break
+            sleep 0.1
+          done
+          curl -sf -o /dev/null http://localhost:5556/dex/.well-known/openid-configuration
+          docker stop sj
+          docker rm sj
+          docker run -d --name sj --network host -v sj-data:/data \
+            -e SPOONJOY_OIDC_ISSUER=http://localhost:5556/dex \
+            -e SPOONJOY_OIDC_CLIENT_ID=spoonjoy-self-host \
+            -e SPOONJOY_OIDC_CLIENT_SECRET=spoonjoy-self-host-test-secret \
+            -e "SPOONJOY_OIDC_NAME=Sign in with Dex" \
+            "$LOCAL_IMAGE"
+          for _ in $(seq 1 600); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health/ready || true)" = "200" ] && break
+            sleep 0.1
+          done
+          curl -sf http://localhost:8080/health/ready
+          docker run --rm --network host --user "$(id -u):$(id -g)" --ipc host \
+            -v "$PWD:/work" -w /work -e HOME=/tmp -e CI=true \
+            -e SPOONJOY_JOURNEYS_BASE_URL=http://localhost:8080 \
+            -e "SPOONJOY_SELF_HOST_OIDC_LABEL=Sign in with Dex" \
+            mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f \
+            node node_modules/@playwright/test/cli.js test -c playwright.self-host-fresh.config.ts e2e/self-host/oidc.spec.ts
+
       # The kitchen and this run's scratch users, with fresh passwords, through the image's own
       # `server.mjs sql -` (with the server stopped, as docs/self-hosting.md says to), and the
       # sample cover photos two of its recipes show (assets/sample-covers) through `server.mjs photos`.
@@ -215,6 +249,8 @@ jobs:
         run: |
           docker logs sj > "$OUT/container.log" 2>&1 || true
           docker stop sj || true
+          docker logs dex > "$OUT/dex.log" 2>&1 || true
+          docker stop dex || true
 
       # The server is gone, so its passwords and sessions open nothing; the files go all the same.
       - name: Remove credentials and session files
