@@ -118,6 +118,21 @@ describe("the Move in page", () => {
     expect(within(list).getByRole("link", { name: "Stew" }).closest("li")?.querySelector("img")).toBeNull();
   });
 
+  it("holds a recipe's place with a muted tile the size of a photo until its photo is in", async () => {
+    page(view({
+      recipes: { found: 20, done: 2, created: 2, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 },
+      latest: [{ id: "r12", title: "Lemon pie", photoUrl: "/photos/covers/import/movein-r12.webp" }, { id: "r11", title: "Stew", photoUrl: null }],
+    }));
+    const list = await screen.findByRole("list", { name: "Just moved in" });
+    const tile = within(list).getByRole("link", { name: "Stew" }).closest("li")?.querySelector("svg")?.parentElement;
+    const photo = within(list).getByRole("link", { name: "Lemon pie" }).closest("li")?.querySelector("img")?.parentElement;
+    // The same 40px as a photo, in the muted surface, and hidden from screen readers, which hear the title.
+    expect(tile?.className).toContain("size-ouro-10");
+    expect(photo?.className).toContain("size-ouro-10");
+    expect(tile?.className).toContain("bg-muted");
+    expect(tile?.getAttribute("aria-hidden")).toBe("true");
+  });
+
   it("leaves the list out until a recipe is in", async () => {
     page(view());
     await screen.findByRole("heading", { level: 2, name: "Moving in" });
