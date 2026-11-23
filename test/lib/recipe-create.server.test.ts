@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { faker } from "@faker-js/faker";
-import { createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.server";
+import { cookRecipeVisibilityDefault, createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.server";
 import { createUser } from "~/lib/auth.server";
 import { db } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -198,14 +198,20 @@ describe("recipe create helpers", () => {
       }
     });
 
-    it("creates a recipe at the cook's default when none is chosen, on Prisma and D1 alike", async () => {
+    it("answers a cook's default for new recipes only while recipe_visibility is on for them, else public", async () => {
+      expect(await cookRecipeVisibilityDefault(db, testUserId, { SPOONJOY_FLAGS: "recipe_visibility" })).toBe("public");
       await db.user.update({ where: { id: testUserId }, data: { defaultRecipeVisibility: "private" } });
+      expect(await cookRecipeVisibilityDefault(db, testUserId, { SPOONJOY_FLAGS: "recipe_visibility" })).toBe("private");
+      expect(await cookRecipeVisibilityDefault(db, testUserId, null)).toBe("public");
+    });
+
+    it("creates a recipe at the visibility it is given, on Prisma and D1 alike", async () => {
       const d1 = sqliteD1();
       try {
         for (const [path, binding] of [["prisma", null], ["d1", d1.binding]] as const) {
           const base = { description: null, servings: null, chefId: testUserId, steps: [] };
-          await createRecipeDraft(db, { ...base, id: `${path}-quiet`, title: `${path} quiet` }, binding);
-          await createRecipeDraft(db, { ...base, id: `${path}-loud`, title: `${path} loud`, visibility: "public" }, binding);
+          await createRecipeDraft(db, { ...base, id: `${path}-quiet`, title: `${path} quiet`, visibility: "private" }, binding);
+          await createRecipeDraft(db, { ...base, id: `${path}-loud`, title: `${path} loud` }, binding);
           const rows = await db.recipe.findMany({ where: { id: { in: [`${path}-loud`, `${path}-quiet`] } }, select: { id: true, visibility: true }, orderBy: { id: "asc" } });
           expect(rows).toEqual([{ id: `${path}-loud`, visibility: "public" }, { id: `${path}-quiet`, visibility: "private" }]);
         }

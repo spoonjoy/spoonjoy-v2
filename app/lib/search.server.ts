@@ -25,7 +25,7 @@ import {
   type ColumnSpec,
 } from "~/lib/d1-models.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
-import { canRead, readableRecipeSqlOn } from "~/domains/kitchen";
+import { canRead, readableRecipeSql, readableRecipeSqlOn } from "~/domains/kitchen";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   SEARCH_DIRTY_CLOCK_SCHEMA_SQL,
@@ -58,6 +58,8 @@ export interface SearchOptions {
   query?: string | null;
   scope?: SearchScope;
   viewerId?: string | null;
+  /** Who recipes are read as, for canRead; defaults to viewerId. A caller that may not search the shopping list still reads its own recipes. */
+  readerId?: string | null;
   /** The chef whose blocks and reports hide results (moderation.server.ts); defaults to viewerId. */
   hideFor?: string | null;
   ownerId?: string | null;
@@ -111,7 +113,7 @@ interface SearchDirtyRow {
  * also drops the keys of entities that are gone, and the one rebuild on upgrade clears the
  * keys v1 left behind (issue #684).
  */
-const SEARCH_MAINTENANCE_VERSION = "per-entity-triggers-v3";
+const SEARCH_MAINTENANCE_VERSION = "per-entity-triggers-v4";
 
 /** Past this many queued entities, one full rebuild is cheaper than re-indexing each. */
 const MAX_DIRTY_ENTITIES_PER_SEARCH = 200;
@@ -292,6 +294,7 @@ function buildWhereClause(
   ownerId: string | null | undefined,
   viewerId: string | null | undefined,
   hideFor: string | null | undefined,
+  readerId: string | null | undefined = viewerId,
 ) {
   const values: Array<string | number> = [...entityTypes];
   const placeholders = entityTypes.map(() => "?").join(", ");
@@ -313,7 +316,7 @@ function buildWhereClause(
   // queues the recipe, so the search that follows re-indexes it before answering.
   const readable = readableRecipeSqlOn(
     { visibility: `json_extract(metadata, '$.visibility')`, chefId: "ownerId" },
-    viewerId ? { id: viewerId } : null,
+    readerId ? { id: readerId } : null,
   );
   conditions.push(`(entityType != 'recipe' OR ${readable.sql})`);
   values.push(...readable.params);
@@ -453,7 +456,7 @@ const SEARCH_SHOPPING_ITEM_COLUMNS: ColumnSpec<SearchShoppingItemSource> = {
 const SEARCH_SOURCE_QUERIES: readonly D1Query[] = [
   [
     `SELECT u."id", u."username", u."photoUrl", u."updatedAt",
-       (SELECT COUNT(*) FROM "Recipe" r WHERE r."chefId" = u."id") AS "recipeCount",
+       (SELECT COUNT(*) FROM "Recipe" r WHERE r."chefId" = u."id" AND r."deletedAt" IS NULL AND ${readableRecipeSql("r", null).sql}) AS "recipeCount",
        (SELECT COUNT(*) FROM "Cookbook" c WHERE c."authorId" = u."id") AS "cookbookCount"
      FROM "User" u ORDER BY u.rowid`,
   ],
@@ -567,7 +570,7 @@ function targetedSearchSourceQueries(ids: DirtyEntityIds): D1Query[] {
   return [
     [
       `SELECT u."id", u."username", u."photoUrl", u."updatedAt",
-         (SELECT COUNT(*) FROM "Recipe" r WHERE r."chefId" = u."id") AS "recipeCount",
+         (SELECT COUNT(*) FROM "Recipe" r WHERE r."chefId" = u."id" AND r."deletedAt" IS NULL AND ${readableRecipeSql("r", null).sql}) AS "recipeCount",
          (SELECT COUNT(*) FROM "Cookbook" c WHERE c."authorId" = u."id") AS "cookbookCount"
        FROM "User" u
        WHERE u."id" IN ${IDS}
@@ -1002,7 +1005,13 @@ function planSearch(options: SearchOptions): SearchPlan | null {
     return null;
   }
 
-  const where = buildWhereClause(entityTypes, options.ownerId, options.viewerId, options.hideFor ?? options.viewerId);
+  const where = buildWhereClause(
+    entityTypes,
+    options.ownerId,
+    options.viewerId,
+    options.hideFor ?? options.viewerId,
+    options.readerId ?? options.viewerId,
+  );
 
   if (terms.length === 1) {
     return {

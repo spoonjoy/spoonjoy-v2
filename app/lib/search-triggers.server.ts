@@ -95,7 +95,11 @@ export const SEARCH_TRIGGERS: readonly TriggerSpec[] = [
     "Recipe_update_listing",
     `AFTER UPDATE OF "title", "deletedAt", "visibility" ON "Recipe"`,
     `OLD."title" IS NOT NEW."title" OR OLD."deletedAt" IS NOT NEW."deletedAt" OR OLD."visibility" IS NOT NEW."visibility"`,
-    [markSelect("cookbook", `SELECT "cookbookId" AS id FROM "RecipeInCookbook" WHERE "recipeId" = NEW."id"`)],
+    [
+      markSelect("cookbook", `SELECT "cookbookId" AS id FROM "RecipeInCookbook" WHERE "recipeId" = NEW."id"`),
+      // The chef's document counts their public recipes.
+      mark("chef", `NEW."chefId"`),
+    ],
   ),
   trigger("Recipe_update_chef", `AFTER UPDATE OF "chefId" ON "Recipe"`, `OLD."chefId" IS NOT NEW."chefId"`, [
     mark("chef", `OLD."chefId"`),

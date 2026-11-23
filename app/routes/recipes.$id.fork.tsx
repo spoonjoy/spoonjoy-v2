@@ -1,3 +1,4 @@
+import { isFlagOn } from "~/domains/platform";
 import { redirect, type ActionFunctionArgs, type AppLoadContext } from "react-router";
 import { requireUserId } from "~/lib/session.server";
 import { getRequestDb } from "~/lib/route-platform.server";
@@ -119,6 +120,11 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
   }
 }
 
+// While recipe_visibility is on for the cook, a fork of another cook's recipe starts at their default.
+function forkUsesCookDefault(context: AppLoadContext, viewerId: string): boolean {
+  return isFlagOn("recipe_visibility", context.cloudflare?.env, viewerId);
+}
+
 /** Forks the recipe through Prisma, notifies the source chef, and answers the fork's id. */
 async function forkAndNotify(
   db: Awaited<ReturnType<typeof getRequestDb>>,
@@ -127,7 +133,7 @@ async function forkAndNotify(
   sourceRecipeId: string,
   recipeId: string | undefined,
 ): Promise<string> {
-  const result = await forkRecipe(db, { sourceRecipeId, viewerId, recipeId });
+  const result = await forkRecipe(db, { sourceRecipeId, viewerId, recipeId, useCookDefault: forkUsesCookDefault(context, viewerId) });
   await notifySourceChef(context, viewerId, {
     recipeId: result.recipe.id,
     attribution: result.attribution,
@@ -144,7 +150,7 @@ async function forkOnD1AndNotify(
   sourceRecipeId: string,
   recipeId: string | undefined,
 ): Promise<string> {
-  const result = await forkRecipeOnD1(d1, { sourceRecipeId, viewerId, recipeId });
+  const result = await forkRecipeOnD1(d1, { sourceRecipeId, viewerId, recipeId, useCookDefault: forkUsesCookDefault(context, viewerId) });
   // A fork made by an earlier submission already notified the source chef.
   if (!result.replayed) await notifySourceChef(context, viewerId, result, () => getRequestDb(context));
   return result.recipeId;

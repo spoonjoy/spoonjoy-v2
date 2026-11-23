@@ -1,3 +1,4 @@
+import { readableRecipeWhere } from "~/domains/kitchen";
 import type { PrismaClient } from "@prisma/client";
 
 /** Chef graph activity feed shared by the web Chefs route and the native API (`GET /api/v1/me/chefs`). */
@@ -56,6 +57,8 @@ export async function chefActivity(database: PrismaClient, userId: string, viewe
           recipe: {
             deletedAt: null,
             chefId: { not: userId },
+            // Another cook's recipe that has since gone private drops out, as on Saved recipes.
+            ...readableRecipeWhere({ id: userId }),
           },
         },
         include: {
@@ -88,6 +91,8 @@ export async function chefActivity(database: PrismaClient, userId: string, viewe
           sourceRecipe: {
             deletedAt: null,
             chefId: { not: userId },
+            // Another cook's recipe that has since gone private drops out, as on Saved recipes.
+            ...readableRecipeWhere({ id: userId }),
           },
         },
         include: {
@@ -118,6 +123,8 @@ export async function chefActivity(database: PrismaClient, userId: string, viewe
           recipe: {
             deletedAt: null,
             chefId: { not: userId },
+            // Another cook's recipe that has since gone private drops out, as on Saved recipes.
+            ...readableRecipeWhere({ id: userId }),
           },
         },
         include: {

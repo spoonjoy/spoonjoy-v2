@@ -22,7 +22,8 @@ import {
   validateStepTitle,
   validateUnitName,
 } from "~/lib/validation";
-import { newRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
+import { DEFAULT_RECIPE_VISIBILITY, newRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
+import { isFlagOn, type FlagEnv } from "~/domains/platform";
 
 type TransactionClient = Prisma.TransactionClient;
 type Database = PrismaClientType | TransactionClient;
@@ -332,8 +333,12 @@ async function createRecipeDraftOnD1(d1: D1ReadDatabase, input: CreateRecipeDraf
   return { id: input.id };
 }
 
-/** Who can see a cook's new recipe when they don't choose: their own default, else public. */
-export async function cookRecipeVisibilityDefault(db: PrismaClientType, chefId: string): Promise<RecipeVisibility> {
+/**
+ * Who can see a cook's new recipe when they don't choose: their own default while recipe_visibility is on for them,
+ * else public. With the flag off a stored default never applies, since the cook could not see or change it.
+ */
+export async function cookRecipeVisibilityDefault(db: PrismaClientType, chefId: string, env: object | null | undefined): Promise<RecipeVisibility> {
+  if (!isFlagOn("recipe_visibility", env as FlagEnv, chefId)) return DEFAULT_RECIPE_VISIBILITY;
   const cook = await db.user.findUnique({ where: { id: chefId }, select: { defaultRecipeVisibility: true } });
   return newRecipeVisibility(null, cook?.defaultRecipeVisibility);
 }
@@ -347,7 +352,7 @@ export async function createRecipeDraft(
   draft: CreateRecipeDraftInput,
   d1: D1ReadDatabase | null = null,
 ): Promise<{ id: string }> {
-  const input = { ...draft, visibility: draft.visibility ?? await cookRecipeVisibilityDefault(db, draft.chefId) };
+  const input = draft;
   if (d1) return createRecipeDraftOnD1(d1, input);
 
   // Prisma (no D1 binding): the writes run in sequence against the top-level client.

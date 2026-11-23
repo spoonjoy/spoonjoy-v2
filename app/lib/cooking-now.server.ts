@@ -1,3 +1,4 @@
+import { readableRecipeSqlForViewerColumn, readableRecipeWhere } from "~/domains/kitchen";
 import type { PrismaClient, RecipeCover } from "@prisma/client";
 import { d1EpochMsSql, type D1Query, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
 import { mapModel, RECIPE_COVER_COLUMNS, selectColumns } from "~/lib/d1-models.server";
@@ -158,7 +159,8 @@ export async function listCookingNow(db: CookingNowDb, userId: string, now: numb
       listed: true,
       touchedAt: { gt: BigInt(now - COOKING_NOW_IDLE_MS) },
       OR: [{ allCheckedAt: null }, { allCheckedAt: { gt: BigInt(now - COOKING_NOW_DONE_MS) } }],
-      recipe: { deletedAt: null },
+      // A recipe its cook has since made private drops off everyone else's list.
+      recipe: { deletedAt: null, ...readableRecipeWhere({ id: userId }) },
     },
     orderBy: [{ touchedAt: "desc" }, { recipeId: "asc" }],
     take: COOKING_NOW_LIMIT,
@@ -228,7 +230,7 @@ export function cookingNowD1Query(cook: { sql: string; values: readonly unknown[
        cn."allCheckedAt", cn."touchedAt", r."id", r."title", r."activeCoverId", r."activeCoverVariant", r."coverMode",
        ${selectColumns(RECIPE_COVER_COLUMNS, "rc", "cover_")}
      FROM "CookingNow" cn
-     JOIN "Recipe" r ON r."id" = cn."recipeId" AND r."deletedAt" IS NULL
+     JOIN "Recipe" r ON r."id" = cn."recipeId" AND r."deletedAt" IS NULL AND ${readableRecipeSqlForViewerColumn("r", `cn."userId"`)}
      LEFT JOIN "RecipeCover" rc ON rc."id" = r."activeCoverId" AND rc."recipeId" = r."id"
      WHERE ${cook.sql} AND cn."listed" = 1 AND cn."touchedAt" > ?
        AND (cn."allCheckedAt" IS NULL OR cn."allCheckedAt" > ?)

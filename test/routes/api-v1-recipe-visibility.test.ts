@@ -15,6 +15,7 @@ type Envelope = {
     recipe: RecipeSummary;
     recipes: RecipeSummary[];
     cookbook: { recipeCount: number; recipes: RecipeSummary[] };
+    results: Array<{ type: string; id: string }>;
   };
 };
 
@@ -25,7 +26,7 @@ function routeArgs(request: Request, splat: string) {
 async function get(path: string, token?: string) {
   const response = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
-  }) as unknown as Request, path));
+  }) as unknown as Request, path.split("?")[0]!));
   return { status: response.status, body: await response.json() as Envelope };
 }
 
@@ -65,6 +66,13 @@ describe("private recipes over the REST API", () => {
       expect(answer.status).toBe(404);
       expect(JSON.stringify(answer.body)).not.toContain("Hidden Fig Jam");
     }
+  });
+
+  it("finds it in search for its cook, whose token reads recipes but not the shopping list, and for no one else", async () => {
+    const found = async (token?: string) => (await get("search?q=fig&scope=recipes", token)).body.data.results.map((result) => result.id);
+    expect(await found(cookToken)).toContain(privateId);
+    expect(await found(strangerToken)).not.toContain(privateId);
+    expect(await found()).not.toContain(privateId);
   });
 
   it("leaves it out of the recipe list for anyone but its cook", async () => {

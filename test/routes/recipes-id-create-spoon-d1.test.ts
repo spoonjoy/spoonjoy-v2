@@ -104,6 +104,16 @@ describe("logging a cook on a D1 binding", () => {
     expect(platform.getRequestDb).not.toHaveBeenCalled();
   });
 
+  it("answers another chef's cook of a private recipe as not found and logs nothing, while its owner can log one", async () => {
+    await db.recipe.update({ where: { id: recipeId }, data: { visibility: "private" } });
+    const refused = await post(cookId, { note: "sneaky" }).catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(Response);
+    expect((refused as Response).status).toBe(404);
+    expect(await db.recipeSpoon.count({ where: { recipeId } })).toBe(0);
+
+    await expect(post(ownerId, { note: "mine" })).resolves.toMatchObject({ success: true, isOriginCook: true });
+  });
+
   it("seeds an automatic cover from the owner's first photo, and queues its stylization and fan-out", async () => {
     // The queued work waits on this client, released once the checks below have read the rows.
     let release: (client: typeof db) => void = () => {};

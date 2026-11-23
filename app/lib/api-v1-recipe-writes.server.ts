@@ -1,3 +1,4 @@
+import type { RecipeVisibility } from "~/domains/kitchen";
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import type { ApiV1ErrorCode } from "~/lib/api-v1-contract.server";
 import {
@@ -377,7 +378,7 @@ export async function createNativeRecipe(
   db: Database,
   chefId: string,
   input: NativeRecipeCreateInput,
-  options: { recipeId?: string; d1?: D1ReadDatabase | null; placeholderCoverId?: string } = {},
+  options: { recipeId?: string; d1?: D1ReadDatabase | null; placeholderCoverId?: string; visibility?: RecipeVisibility } = {},
 ): Promise<ApiV1RecipeWriteResult<{ recipeId: string }>> {
   const uniqueTitle = await validateActiveRecipeTitleUnique(db, {
     chefId,
@@ -395,6 +396,7 @@ export async function createNativeRecipe(
       description: input.description,
       servings: input.servings,
       chefId,
+      visibility: options.visibility,
       steps: input.steps,
       // The same processing placeholder the website writes with a new recipe; generation fills it in.
       cover: options.placeholderCoverId
@@ -626,7 +628,7 @@ export async function forkNativeRecipe(
   chefId: string,
   sourceRecipeId: string,
   input: NativeRecipeForkInput,
-  options: { recipeId?: string; d1?: D1ReadDatabase | null } = {},
+  options: { recipeId?: string; d1?: D1ReadDatabase | null; useCookDefault?: boolean } = {},
 ): Promise<ApiV1RecipeWriteResult<{
   recipeId: string;
   fork: {
@@ -642,6 +644,7 @@ export async function forkNativeRecipe(
       viewerId: chefId,
       titleOverride: input.titleOverride,
       recipeId: options.recipeId,
+      useCookDefault: options.useCookDefault,
     }, options.d1 ?? null);
 
     return success({

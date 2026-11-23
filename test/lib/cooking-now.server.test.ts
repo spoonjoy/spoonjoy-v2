@@ -269,6 +269,15 @@ describe("reading the list", () => {
     expect(rows[0]).toMatchObject({ allCheckedAt: null, expiresAt: new Date(T0 - 1000 + COOKING_NOW_IDLE_MS) });
   });
 
+  it("drops another cook's recipe once it is private, and keeps a cook's own private recipe", async () => {
+    const theirs = await recipeWithSteps(otherUserId, "Their recipe");
+    await recordCookingNow(d1.binding, write());
+    await recordCookingNow(d1.binding, write({ recipeId: theirs.id, activeStepId: theirs.stepIds[1], activeStepIndex: 1 }));
+    await db.recipe.updateMany({ where: { id: { in: [recipeId, theirs.id] } }, data: { visibility: "private" } });
+
+    expect(await listed()).toEqual([recipeId]);
+  });
+
   it("orders recipes touched at the same moment by recipe id", async () => {
     const second = await recipeWithSteps(userId);
     await recordCookingNow(d1.binding, write());

@@ -1,3 +1,4 @@
+import { isFlagOn, type FlagEnv } from "~/domains/platform";
 import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
 import { gateAccountCreation, type ServerAccessEnv } from "~/lib/server-access.server";
 import { D1WriteUnavailableError, formWriteToken, idForWriteToken, isD1Unavailable, retryD1Write } from "~/lib/d1-write-retry.server";
@@ -291,9 +292,13 @@ const cookbookSummaryRecipeInclude = {
   },
 } satisfies Prisma.RecipeInCookbookInclude;
 
-// Who is reading, for canRead: the signed-in principal, or signed out.
-function apiViewer(context: SpoonjoyApiContext): RecipeViewer {
-  return context.principal ? { id: context.principal.id } : null;
+// Who is reading, for canRead: the signed-in principal, else the local owner a stdio server runs as, else signed out.
+async function apiViewer(context: SpoonjoyApiContext): Promise<RecipeViewer> {
+  if (context.principal) return { id: context.principal.id };
+  const email = context.defaultOwnerEmail?.toLowerCase();
+  if (!email) return null;
+  const owner = await context.db.user.findUnique({ where: { email }, select: { id: true } });
+  return owner ? { id: owner.id } : null;
 }
 
 function json(value: unknown): unknown {
@@ -1598,7 +1603,7 @@ const searchRecipesTool: SpoonjoyApiOperation = {
       return json({ recipes: [] });
     }
 
-    const viewer = apiViewer(context);
+    const viewer = await apiViewer(context);
     const results = await searchSpoonjoy(context.db, {
       query,
       scope: "recipes",
@@ -1641,7 +1646,7 @@ const searchSpoonjoyTool: SpoonjoyApiOperation = {
     const results = await searchSpoonjoy(context.db, {
       query,
       scope,
-      viewerId: owner?.id ?? apiViewer(context)?.id ?? null,
+      viewerId: owner?.id ?? (await apiViewer(context))?.id ?? null,
       limit: normalizeLimit(args.limit),
     });
 
@@ -1679,7 +1684,7 @@ const getRecipeTool: SpoonjoyApiOperation = {
   ...declaredOperation("get_recipe"),
   requiredScopes: ["recipes:read"],
   async handle(args, context) {
-    const recipe = await findRecipeByIdOrTitle(context.db, args, apiViewer(context));
+    const recipe = await findRecipeByIdOrTitle(context.db, args, await apiViewer(context));
     return json({ recipe: recipe ? formatRecipe(recipe) : null });
   },
 };
@@ -2364,7 +2369,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
         title,
       });
       if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
-      const visibility = await cookRecipeVisibilityDefault(context.db, owner.id);
+      const visibility = await cookRecipeVisibilityDefault(context.db, owner.id, context.env);
       if (imageUrl) {
         await validateRecipeCoverImageSource({
           imageUrl,
@@ -3743,6 +3748,7 @@ async function forkAndNotify(
     sourceRecipeId,
     viewerId,
     titleOverride,
+    useCookDefault: isFlagOn("recipe_visibility", context.env as FlagEnv, viewerId),
   }, d1Binding(context.env?.DB));
 
   // Fire-and-forget: notify the source chef when someone else forked.
