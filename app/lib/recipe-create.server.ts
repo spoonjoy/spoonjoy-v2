@@ -22,7 +22,7 @@ import {
   validateStepTitle,
   validateUnitName,
 } from "~/lib/validation";
-import type { RecipeVisibility } from "~/domains/kitchen";
+import { newRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
 
 type TransactionClient = Prisma.TransactionClient;
 type Database = PrismaClientType | TransactionClient;
@@ -332,15 +332,22 @@ async function createRecipeDraftOnD1(d1: D1ReadDatabase, input: CreateRecipeDraf
   return { id: input.id };
 }
 
+/** Who can see a cook's new recipe when they don't choose: their own default, else public. */
+export async function cookRecipeVisibilityDefault(db: PrismaClientType, chefId: string): Promise<RecipeVisibility> {
+  const cook = await db.user.findUnique({ where: { id: chefId }, select: { defaultRecipeVisibility: true } });
+  return newRecipeVisibility(null, cook?.defaultRecipeVisibility);
+}
+
 /**
  * Creates the recipe with its steps and ingredients. With a D1 binding it is one atomic
  * batch; without one (unit tests, scripts) it runs through Prisma.
  */
 export async function createRecipeDraft(
   db: PrismaClientType,
-  input: CreateRecipeDraftInput,
+  draft: CreateRecipeDraftInput,
   d1: D1ReadDatabase | null = null,
 ): Promise<{ id: string }> {
+  const input = { ...draft, visibility: draft.visibility ?? await cookRecipeVisibilityDefault(db, draft.chefId) };
   if (d1) return createRecipeDraftOnD1(d1, input);
 
   // Prisma (no D1 binding): the writes run in sequence against the top-level client.

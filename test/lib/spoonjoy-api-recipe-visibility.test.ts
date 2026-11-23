@@ -79,4 +79,11 @@ describe("private recipes over MCP", () => {
     const listed = await callSpoonjoyApiOperation("list_cookbooks", {}, stranger.context) as { cookbooks: Array<{ recipeCount: number }> };
     expect(listed.cookbooks.map((cookbook) => cookbook.recipeCount)).toEqual([0]);
   });
+
+  it("create_recipe makes the recipe at the cook's default, so it stays theirs", async () => {
+    await db.user.update({ where: { id: cook.user.id }, data: { defaultRecipeVisibility: "private" } });
+    const made = await callSpoonjoyApiOperation("create_recipe", { title: "Quiet Pear Crumble", steps: [{ description: "Bake" }] }, cook.context) as { recipe: { id: string } };
+    expect((await db.recipe.findUniqueOrThrow({ where: { id: made.recipe.id }, select: { visibility: true } })).visibility).toBe("private");
+    expect(await callSpoonjoyApiOperation("get_recipe", { id: made.recipe.id }, stranger.context)).toEqual({ recipe: null });
+  });
 });

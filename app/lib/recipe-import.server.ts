@@ -14,6 +14,7 @@
  * Cover scheduling and title-collision retry are extended in Unit 4d.
  */
 
+import { cookRecipeVisibilityDefault } from "~/lib/recipe-create.server";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   fetchRecipeHtml,
@@ -751,6 +752,7 @@ async function persistRecipe(
   recipeId?: string,
 ): Promise<{ id: string; recipe: unknown; title: string }> {
   let title = await resolveTitleWithRetry(db, chefId, draft.title, now);
+  const visibility = await cookRecipeVisibilityDefault(db, chefId);
 
   // Parse every ingredient line in one call, outside the transaction.
   const allIngredients = draft.ingredients.length === 0
@@ -794,6 +796,7 @@ async function persistRecipe(
               servings: draft.servings,
               sourceUrl: draft.sourceUrl,
               chefId,
+              visibility,
               now: at,
             }),
             ...draft.steps.map((step, index) => stepInsertStatement({
@@ -841,6 +844,7 @@ async function persistRecipe(
           servings: draft.servings,
           sourceUrl: draft.sourceUrl,
           chefId,
+          visibility,
         },
       }),
       ...draft.steps.map((step, index) => db.recipeStep.create({
