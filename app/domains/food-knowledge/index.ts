@@ -32,3 +32,4 @@ export {
   type NutritionFacts,
   type RecipeNutrition,
 } from "./model/nutrition";
+export { swapsFor } from "./model/swaps";
