@@ -15,6 +15,9 @@ export const FLAGS = {
   households: { description: "Households at /household: members, roles and invites, and the lists, plan and recipes they share." },
   "meal-planner": { description: "The meal planner at /plan: a week of recipes and notes, and its API and MCP tools." },
   recipe_visibility: { description: "Cooks choose who reads each recipe (private or public) and their default for new ones" },
+  organizers: {
+    description: "Tags, categories and tools on recipes, their pages and filters, smart cookbooks and bulk actions on many recipes.",
+  },
 } as const satisfies Record<string, { description: string }>;
 
 export type FlagName = keyof typeof FLAGS & string;
