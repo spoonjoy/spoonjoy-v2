@@ -54,8 +54,10 @@ test.describe("Households", () => {
     await expect(page.getByRole("heading", { level: 1, name, exact: true })).toBeVisible();
     await expect(people(page).getByText(`${owner.username} (you)`, { exact: true })).toBeVisible();
 
-    // The top bar links the cook's households, marked as the current page.
-    const householdsLink = page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Households", exact: true });
+    // The top bar's actions link the cook's households, marked as the current page; the page links
+    // stay out of the Menu button at this width.
+    const householdsLink = page.getByRole("banner").getByRole("link", { name: "Households", exact: true });
+    await expect(page.getByRole("banner").getByRole("button", { name: "Menu", exact: true })).toBeHidden();
     await expect(householdsLink).toHaveAttribute("href", "/households");
     await expect(householdsLink).toHaveAttribute("aria-current", "page");
     await testInfo.attach("households-nav-link", {
