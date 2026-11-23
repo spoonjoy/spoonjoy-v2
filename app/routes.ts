@@ -64,7 +64,6 @@ export default [
   ]),
   route("shopping-list", "routes/shopping-list.tsx"),
   route("join/:token", "routes/join.$token.tsx"),
-  route("move-in", "routes/move-in.tsx"),
   route("account/settings", "routes/account.settings.tsx"),
   route("account/export", "routes/account.export.ts"),
   route("account/deleted", "routes/account.deleted.tsx"),
