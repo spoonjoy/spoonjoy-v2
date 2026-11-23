@@ -909,6 +909,34 @@ describe("deploy", () => {
     expect(log).toHaveBeenLastCalledWith("Deployed\n");
   });
 
+  // Seen on PR Journeys run 45181160164: after a 10007, wrangler failed reading the half-made
+  // script's migration tag.
+  const migrationTagReadFailure = Object.assign(new Error("Command failed: pnpm exec wrangler deploy"), {
+    stdout: "",
+    stderr: "✘ [ERROR] Cannot read properties of null (reading 'tag')\n",
+  });
+
+  it("deploys again when wrangler cannot yet read the half-made script's migration tag", async () => {
+    const exec = vi.fn()
+      .mockRejectedValueOnce(notFound)
+      .mockRejectedValueOnce(migrationTagReadFailure)
+      .mockResolvedValueOnce({ stdout: "Deployed\n", stderr: "" });
+    const sleep = vi.fn(async () => {});
+    const log = vi.fn();
+    expect(await deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log })).toBe(3);
+    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(DEPLOY_RETRY_DELAYS_MS.slice(0, 2));
+    expect(log).toHaveBeenCalledWith(`::warning::Wrangler could not read ${IDENTITY.workerName}'s Durable Object migration tag while Cloudflare catches up; deploying again in 15 s.`);
+    expect(log).toHaveBeenLastCalledWith("Deployed\n");
+  });
+
+  it("does not retry a migration tag read failure on a first deploy", async () => {
+    const exec = vi.fn().mockRejectedValueOnce(migrationTagReadFailure);
+    const sleep = vi.fn(async () => {});
+    await expect(deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log: vi.fn() })).rejects.toBe(migrationTagReadFailure);
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   it("does not retry a migration tag refusal on a first deploy", async () => {
     const exec = vi.fn().mockRejectedValueOnce(migrationTagLag);
     const sleep = vi.fn(async () => {});
