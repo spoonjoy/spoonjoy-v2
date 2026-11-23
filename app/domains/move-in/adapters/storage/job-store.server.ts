@@ -6,6 +6,8 @@ import { FINISHED, type MoveInCounts, type MoveInEvent, type MoveInJob, type Mov
 
 const JOB_COLUMNS = `"id", "ownerId", "kind", "sourceId", "status", "phase", "cursor", "archiveKey", "lastError"`;
 const COUNT_FIELDS = ["found", "created", "updated", "unchanged", "skipped", "failed"] as const;
+/** How long a run may go without a heartbeat before another run may take its job over. */
+export const MOVE_IN_CLAIM_MS = 45_000;
 // The job fields the runner may change, and so the only columns updateJob writes.
 const PATCHABLE = ["sourceId", "status", "phase", "cursor", "archiveKey", "lastError"] as const;
 
@@ -70,6 +72,18 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
          SELECT ?, ?, COALESCE(MAX("seq"), 0) + 1, ?, ?, ?, ?, ?, ?, ? FROM "ImportEvent" WHERE "jobId" = ?`,
         `event_${crypto.randomUUID()}`, jobId, event.level, event.kind, event.entity, event.sourceKey, event.targetId, event.message, d1Timestamp(now()), jobId,
       ]]);
+    },
+
+    async claim(jobId, at) {
+      const [{ changes }] = await d1WriteBatch(db, [[
+        `UPDATE "ImportJob" SET "heartbeatAt" = ? WHERE "id" = ? AND ("heartbeatAt" IS NULL OR "heartbeatAt" < ?)`,
+        d1Timestamp(at), jobId, d1Timestamp(new Date(at.getTime() - MOVE_IN_CLAIM_MS)),
+      ]]);
+      return changes === 1;
+    },
+
+    async release(jobId) {
+      await d1WriteBatch(db, [[`UPDATE "ImportJob" SET "heartbeatAt" = NULL WHERE "id" = ?`, jobId]]);
     },
 
     async hasIssues(jobId) {

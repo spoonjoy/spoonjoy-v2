@@ -32,6 +32,7 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
   const written = new Map<string, string>();
   const photos: Array<{ recipeId: string; bytes: Uint8Array }> = [];
   const discarded: string[] = [];
+  let claimed = false;
   const ports: MoveInPorts = {
     store: {
       loadJob: async (id) => jobs.get(id) ?? null,
@@ -43,6 +44,8 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
       },
       addEvent: async (_jobId, event) => void events.push(event),
       hasIssues: async () => events.some((event) => event.level !== "info"),
+      claim: async () => !claimed && (claimed = true),
+      release: async () => void (claimed = false),
     },
     openArchive: () => bytesSource(zip),
     ownerEmail: async () => email,
@@ -61,7 +64,7 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
     for (let i = 0; i < 20 && !["done", "done-with-issues", "failed"].includes(job().status); i++) await runNextChunk("job-1", ports, { chunkSize });
     return job();
   };
-  return { ports, jobs, job, counts, events, sources, photos, discarded, runAll };
+  return { ports, jobs, job, counts, events, sources, photos, discarded, runAll, isClaimed: () => claimed };
 }
 
 describe("runNextChunk", () => {
@@ -203,6 +206,22 @@ describe("runForAWhile", () => {
 
   it("returns null for a job that isn't there", async () => {
     expect(await runForAWhile("nope", harness().ports, { budgetMs: 1000 })).toBeNull();
+  });
+
+  it("leaves a job another run is working on alone, and lets it go when done", async () => {
+    const h = harness();
+    await h.ports.store.claim("job-1", new Date());
+    expect(await runForAWhile("job-1", h.ports, { budgetMs: 1000 })).toMatchObject({ status: "queued", phase: "inspect" });
+    await h.ports.store.release("job-1");
+    await runForAWhile("job-1", h.ports, { budgetMs: 60_000 });
+    expect(h.isClaimed()).toBe(false);
+  });
+
+  it("lets the job go when a chunk fails", async () => {
+    const h = harness();
+    h.ports.openArchive = () => Promise.reject(new Error("blob store down"));
+    await expect(runForAWhile("job-1", h.ports, { budgetMs: 1000 })).rejects.toThrow("blob store down");
+    expect(h.isClaimed()).toBe(false);
   });
 });
 

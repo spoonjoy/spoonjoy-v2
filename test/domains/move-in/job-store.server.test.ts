@@ -75,6 +75,18 @@ describe("the move-in job store", () => {
     expect(progress?.job).toMatchObject({ id, status: "queued", archiveName: "backup.zip" });
   });
 
+  it("lets one run work on a job at a time, and another take over a run that went quiet", async () => {
+    const store = moveInJobStore(database.binding, () => clock);
+    const id = await create();
+    expect(await store.claim(id, clock)).toBe(true);
+    expect(await store.claim(id, later(30))).toBe(false);
+    await store.updateJob(id, { cursor: "1" });
+    expect(await store.claim(id, later(44))).toBe(false);
+    expect(await store.claim(id, later(2))).toBe(true);
+    await store.release(id);
+    expect(await store.claim(id, clock)).toBe(true);
+  });
+
   it("shows a job only to its owner", async () => {
     const id = await create();
     expect(await readMoveInProgress(database.binding, { ownerId: "chef-2", jobId: id })).toBeNull();
