@@ -155,6 +155,11 @@ function utc(date: string) {
 
 const MEAL_LABEL = new Map<string, string>(MEAL_TYPES.map((type) => [type.id, type.label]));
 
+/** The recipe at the servings the meal was planned for; the recipe page opens at that scale. */
+function recipeHref(recipeId: string, scaleFactor: number) {
+  return scaleFactor === 1 ? `/recipes/${recipeId}` : `/recipes/${recipeId}?scale=${scaleFactor}`;
+}
+
 function entryTitle(entry: PlanEntry) {
   return entry.recipeTitle || entry.title;
 }
@@ -188,7 +193,7 @@ function DaySection({ day, today, lastMade }: { day: PlanDay; today: string; las
       <ItemGroup variant="divided" aria-label={`${weekday}'s meals`} empty={<Text tone="muted">Nothing planned yet.</Text>}>
         {day.entries.map((entry) => {
           const row = { title: entryTitle(entry), description: entryDescription(entry, entry.recipeId ? lastMade[entry.recipeId] : undefined, today), actions: <RemoveEntry entry={entry} weekday={weekday} /> };
-          return entry.recipeId ? <Item key={entry.id} href={`/recipes/${entry.recipeId}`} {...row} /> : <Item key={entry.id} {...row} />;
+          return entry.recipeId ? <Item key={entry.id} href={recipeHref(entry.recipeId, entry.scaleFactor)} {...row} /> : <Item key={entry.id} {...row} />;
         })}
       </ItemGroup>
     </section>

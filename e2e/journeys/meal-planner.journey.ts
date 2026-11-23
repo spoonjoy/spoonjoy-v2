@@ -47,7 +47,7 @@ test.describe("Meal planner", () => {
     await recipeForm(page).getByRole("button", { name: "Add to plan", exact: true }).click();
     await expect(page).toHaveURL(pathUrl(`/plan?week=2027-03-02`));
     const salmon = tuesday.getByRole("link", { name: new RegExp(`^${SALMON.title}`) });
-    await expect(salmon).toHaveAttribute("href", `/recipes/${SALMON.id}`);
+    await expect(salmon).toHaveAttribute("href", `/recipes/${SALMON.id}?scale=2`);
     await expect(tuesday.getByText("Dinner · 2× the recipe", { exact: true })).toBeVisible();
 
     // A note for Thursday's lunch.

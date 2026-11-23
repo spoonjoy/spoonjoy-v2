@@ -22,7 +22,7 @@ function recipeData(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderRecipe(flags: string[], overrides: Record<string, unknown> = {}) {
+function renderRecipe(flags: string[], overrides: Record<string, unknown> = {}, path = "/recipes/recipe-1") {
   const Stub = createTestRoutesStub([
     {
       id: "root",
@@ -32,7 +32,7 @@ function renderRecipe(flags: string[], overrides: Record<string, unknown> = {}) 
       children: [{ path: "recipes/:id", Component: RecipeDetail, loader: () => recipeData(overrides) }],
     },
   ]);
-  render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+  render(<Stub initialEntries={[path]} />);
 }
 
 async function openRecipeActions() {
@@ -60,5 +60,43 @@ describe("recipe page: plan this meal", () => {
     renderRecipe(["meal-planner"], { isAuthenticated: false });
     await openRecipeActions();
     expect(screen.queryByRole("menuitem", { name: "Plan this meal" })).toBeNull();
+  });
+});
+
+describe("recipe page: opened from the meal plan", () => {
+  afterEach(() => {
+    cleanup();
+    // Opening a recipe stores its cook progress, scale included, in this browser.
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  async function scaleShown() {
+    await screen.findByRole("heading", { name: "Plannable Soup" });
+    await userEvent.click(await screen.findByTestId("recipe-serves-trigger"));
+    return ((await screen.findByRole("textbox", { name: "Scale" })) as HTMLInputElement).value;
+  }
+
+  it("opens at the servings the meal was planned for", async () => {
+    renderRecipe(["meal-planner"], {}, "/recipes/recipe-1?scale=2");
+    expect(await scaleShown()).toBe("2");
+  });
+
+  it("opens at the planned servings over the scale this browser kept from an earlier cook", async () => {
+    renderRecipe(["meal-planner"], {}, "/recipes/recipe-1?scale=3");
+    expect(await scaleShown()).toBe("3");
+    cleanup();
+    renderRecipe(["meal-planner"], {}, "/recipes/recipe-1?scale=2");
+    expect(await scaleShown()).toBe("2");
+  });
+
+  it("opens as written when the scale in the link isn't one it can cook", async () => {
+    for (const scale of ["0", "51", "lots"]) {
+      renderRecipe(["meal-planner"], {}, `/recipes/recipe-1?scale=${scale}`);
+      expect(await scaleShown()).toBe("1");
+      cleanup();
+      localStorage.clear();
+      sessionStorage.clear();
+    }
   });
 });
