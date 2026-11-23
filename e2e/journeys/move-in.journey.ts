@@ -152,9 +152,10 @@ async function inTheKitchen(version: string, { page }: Pick<JourneyArgs, "page">
   const photo = main.getByRole("img", { name: `Photo of ${name}`, exact: true });
   await expect(photo).toBeVisible();
   await expect.poll(() => photo.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
-  // Its steps came over too, in order.
+  // Its steps came over too, in order, with the ingredients each one uses linked to it.
   await expect(main.getByRole("heading", { level: 2, name: "Steps", exact: true })).toBeVisible();
-  await expect(main.getByRole("checkbox", { name: /^Step 1: / })).toBeVisible();
+  await expect(main.getByRole("article", { name: "Step 1", exact: true })).toBeVisible();
+  await expect(main.getByRole("article", { name: /^Step \d+$/ }).getByRole("checkbox").first()).toBeVisible();
   await snapshot(page, version, "4-recipe");
 }
 
