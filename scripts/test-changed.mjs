@@ -7,7 +7,8 @@
 // to package.json or the Vitest or Vite config makes Vitest select every test. When no test is
 // affected it says so and passes, because Vitest's own "No test files found" goes to stderr, which
 // the warning gate rightly rejects. The affected tests run in parallel, one SQLite test database per
-// worker process, as the full coverage run does (vitest.config.ts, test/support/worker-db.ts).
+// worker process, as the full coverage run does (vitest.config.ts, test/support/worker-db.ts), and
+// hold the changed files the coverage run measures to its 100% (scripts/coverage-changed.mjs).
 import { spawnSync } from "node:child_process";
 import { readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,8 +18,8 @@ import { fileURLToPath } from "node:url";
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 // A command's exit status, with its output passed straight through; a signal counts as failure.
-export function runInherited(command, args) {
-  return spawnSync(command, args, { stdio: "inherit" }).status ?? 1;
+export function runInherited(command, args, env) {
+  return spawnSync(command, args, { stdio: "inherit", env: env ? { ...process.env, ...env } : process.env }).status ?? 1;
 }
 
 // A command's exit status and standard output; its errors still reach the log.
@@ -91,11 +92,13 @@ export function testChanged({
     return 0;
   }
   log(`${imported.length} test file(s) are affected by the changes since ${base} through imports.`);
-  if (naming.length === 0) return run("pnpm", ["exec", "vitest", "run", "--changed", base]);
+  // vitest.config.ts holds the changed files the full coverage run measures to its 100%.
+  const coverage = { SPOONJOY_COVERAGE_CHANGED: changedPaths.join(",") };
+  if (naming.length === 0) return run("pnpm", ["exec", "vitest", "run", "--changed", base], coverage);
   // A count, not the names: a name such as warning-policy.test.ts trips the warning gate this runs under,
   // and Vitest names each file it runs anyway.
   log(`${naming.length} more test file(s) name a changed file.`);
-  return run("pnpm", ["exec", "vitest", "run", ...imported, ...naming]);
+  return run("pnpm", ["exec", "vitest", "run", ...imported, ...naming], coverage);
 }
 
 /* istanbul ignore if -- @preserve CLI boundary delegates to the tested testChanged above. */

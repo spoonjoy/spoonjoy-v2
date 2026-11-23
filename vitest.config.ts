@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { changedCoverageFiles } from "./scripts/coverage-changed.mjs";
 import { claimRunDbDir, releaseRunDbDirOnExit, sweepStaleRunDbDirs } from "./test/support/worker-db";
 
 const appDirectory = new URL("./app", import.meta.url).pathname;
@@ -36,6 +37,7 @@ const coverageInclude = [
   "scripts/count-cloudflare-requests.mjs",
   "scripts/qa-run-scope.mjs",
   "scripts/test-changed.mjs",
+  "scripts/coverage-changed.mjs",
   "scripts/d1-logical-export.mjs",
   "scripts/journeys-scope.mjs",
   "scripts/move-in-proof/kitchen.mjs",
@@ -81,6 +83,22 @@ const hasFocusedTestFilter = process.argv.some((arg) =>
 // Full coverage gates keep repo-wide thresholds; focused unit coverage reports
 // should not fail because unrelated imported helpers are partially covered.
 const isFocusedCoverageRun = hasCoverageFlag && hasFocusedTestFilter;
+
+const coverageExclude = [
+  "node_modules/**",
+  "test/**/*.{test,spec}.{ts,tsx}",
+  "test/setup.ts",
+  "**/*.config.ts",
+  "**/*.d.ts",
+  "**/types/**",
+  // Covered to 100% by Ouro UI's own browser tests under vitest.ouro.config.ts instead.
+  ...OURO_UI_PATHS,
+];
+// unit-changed (scripts/test-changed.mjs) names the pull request's changed files. Those the full
+// coverage run measures are held to its 100% here, so a gap fails on the pull request instead of
+// costing a merge-queue round.
+const changedCoverage = changedCoverageFiles(process.env.SPOONJOY_COVERAGE_CHANGED, { include: coverageInclude, exclude: coverageExclude });
+const fullThresholds = { statements: 100, branches: 100, functions: 100, lines: 100 };
 
 // One temporary directory per run for each worker process's own copy of prisma/test.db
 // (test/support/worker-db.ts). Set SPOONJOY_TEST_DB_DIR="" to use prisma/test.db directly; that
@@ -133,20 +151,18 @@ export default defineConfig({
       ...OURO_UI_PATHS,
       OURO_BROWSER_TESTS,
     ],
-    coverage: {
+    coverage: changedCoverage.length > 0 ? {
+      enabled: true,
+      provider: "istanbul",
+      reporter: ["text"],
+      include: changedCoverage,
+      exclude: coverageExclude,
+      thresholds: { ...fullThresholds, perFile: true },
+    } : {
       provider: "istanbul",
       reporter: ["text", "json", "html"],
       include: isFocusedCoverageRun ? undefined : [...coverageInclude],
-      exclude: [
-        "node_modules/**",
-        "test/**/*.{test,spec}.{ts,tsx}",
-        "test/setup.ts",
-        "**/*.config.ts",
-        "**/*.d.ts",
-        "**/types/**",
-        // Covered to 100% by Ouro UI's own browser tests under vitest.ouro.config.ts instead.
-        ...OURO_UI_PATHS,
-      ],
+      exclude: coverageExclude,
       thresholds: isFocusedCoverageRun ? undefined : {
         statements: 100,
         branches: 100,
