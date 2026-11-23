@@ -301,22 +301,37 @@ export async function runNextChunk(
  * each chunk), and returns the job as it then stands. A Worker gives a request's waitUntil about 30 seconds, so the
  * budget stays well inside that.
  */
-export async function runForAWhile(jobId: string, ports: MoveInPorts, { budgetMs, chunkSize }: { budgetMs: number; chunkSize?: number }): Promise<MoveInJob | null> {
+export async function runForAWhile(jobId: string, ports: MoveInPorts, options: { budgetMs: number; chunkSize?: number }): Promise<MoveInJob | null> {
+  return (await runMoveInSegment(jobId, ports, options)).job;
+}
+
+/**
+ * Runs the move-in for a while, as runForAWhile does, and says whether this run held it: `claimed` is false when
+ * another run had it, or took it over, so whatever moved meanwhile was that run's work. With `releaseOnError`, a run
+ * that stops with an error lets the job go at once, for a caller whose retries are paced already.
+ */
+export async function runMoveInSegment(
+  jobId: string,
+  ports: MoveInPorts,
+  { budgetMs, chunkSize, releaseOnError = false }: { budgetMs: number; chunkSize?: number; releaseOnError?: boolean },
+): Promise<{ job: MoveInJob | null; claimed: boolean }> {
   const started = ports.now();
   const token = await ports.store.claim(jobId, started);
-  if (!token) return ports.store.loadJob(jobId);
+  if (!token) return { job: await ports.store.loadJob(jobId), claimed: false };
   const cache: RunCache = {};
   try {
     for (;;) {
       const job = await runNextChunk(jobId, ports, { chunkSize, token, cache });
       if (!job || FINISHED.includes(job.status) || ports.now().getTime() - started.getTime() >= budgetMs) {
         await ports.store.release(jobId, token);
-        return job;
+        return { job, claimed: true };
       }
     }
   } catch (error) {
-    if (error instanceof LostClaimError) return ports.store.loadJob(jobId);
-    // An outage keeps hold of the job, so the next try waits out the claim instead of spending an attempt at every poll.
+    if (error instanceof LostClaimError) return { job: await ports.store.loadJob(jobId), claimed: false };
+    // Otherwise an outage keeps hold of the job, so the next poll waits out the claim instead of spending an attempt.
+    // A release that fails too leaves the claim to lapse on its own.
+    if (releaseOnError) await ports.store.release(jobId, token).catch(() => undefined);
     throw error;
   }
 }

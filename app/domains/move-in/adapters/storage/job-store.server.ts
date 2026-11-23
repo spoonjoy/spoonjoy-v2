@@ -126,6 +126,15 @@ export interface MoveInProgress {
   events: Array<MoveInEvent & { seq: number }>;
 }
 
+/** Where the job stands and when it was last written to, or null when there is no such job. */
+export async function readMoveInPosition(
+  db: D1ReadDatabase,
+  jobId: string,
+): Promise<(Pick<MoveInJob, "id" | "phase" | "cursor" | "status"> & { updatedAt: string }) | null> {
+  const [[row]] = await d1ReadBatch(db, [[`SELECT "id", "phase", "cursor", "status", "updatedAt" FROM "ImportJob" WHERE "id" = ?`, jobId]]);
+  return (row as unknown as Awaited<ReturnType<typeof readMoveInPosition>>) ?? null;
+}
+
 /** A job's state, counts and report, or null when the job isn't this owner's. */
 export async function readMoveInProgress(db: D1ReadDatabase, { ownerId, jobId }: { ownerId: string; jobId: string }): Promise<MoveInProgress | null> {
   const [[job], counts, events] = await d1ReadBatch(db, [

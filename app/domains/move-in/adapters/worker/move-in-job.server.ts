@@ -2,52 +2,74 @@
 // closed. Each delivery runs the move-in for a while and queues the next segment from where it
 // stopped. The key names that place, so each segment is queued once however often it is asked
 // for, and a segment that runs twice repeats nothing: the runner resumes from its own cursor.
+// A watch runs beside the segments every few minutes, queues the move-in again if its segments
+// stopped coming, and ends when the move-in does.
 import { defineJob, type JobHandler, type Jobs } from "~/domains/platform";
-import { FINISHED, runForAWhile, type MoveInJob, type MoveInStatus } from "../../application/run-move-in";
+import { FINISHED, runMoveInSegment, type MoveInJob, type MoveInStatus } from "../../application/run-move-in";
+import { MOVE_IN_CLAIM_MS, readMoveInPosition } from "../storage/job-store.server";
 import { moveInPorts, type MoveInEnv } from "./move-in-ports.server";
 
 /** How long one segment runs before it hands over to the next, a stretch the page-driven runs have kept to. */
 export const MOVE_IN_SEGMENT_MS = 20_000;
-/** How long a move-in may go without a write before a look at the page queues it again. */
+/** How long a move-in may go without a write before a look at the page, or its watch, queues it again. */
 export const MOVE_IN_QUIET_MS = 60_000;
+/** How often a move-in's watch looks at it. */
+export const MOVE_IN_WATCH_SECONDS = 5 * 60;
+/** How long a delivery that found the move-in held waits before looking again: a lapsed claim is free by then. */
+export const MOVE_IN_HELD_SECONDS = Math.ceil(MOVE_IN_CLAIM_MS / 1000) + 5;
 
 export interface MoveInJobPayload {
   jobId: string;
 }
 
-// The lease outlasts a segment with room to spare, so a segment whose Worker died is taken over in
-// minutes rather than the port's default quarter of an hour.
-export const MOVE_IN_JOB = defineJob<MoveInJobPayload>("move-in.run", { leaseSeconds: 120 });
+export interface MoveInWatchPayload {
+  jobId: string;
+  /** Which look this is, so each one has its own key. */
+  look: number;
+}
+
+type Position = Pick<MoveInJob, "id" | "phase" | "cursor">;
+
+// The lease outlasts a segment and a slow chunk after it, so a segment whose Worker died is taken over in minutes
+// rather than the port's default quarter of an hour.
+export const MOVE_IN_JOB = defineJob<MoveInJobPayload>("move-in.run", { leaseSeconds: 300 });
+export const MOVE_IN_WATCH = defineJob<MoveInWatchPayload>("move-in.watch", { leaseSeconds: 60 });
 
 /** The key for the segment that starts where the job now stands. */
-export function moveInJobKey(job: Pick<MoveInJob, "id" | "phase" | "cursor">): string {
+export function moveInJobKey(job: Position): string {
   return `move-in:${job.id}:${job.phase}:${job.cursor ?? "-"}`;
 }
 
 /** Queues the segment that starts where the job stands: false when that segment is already queued, running or done. */
-export async function queueMoveIn(jobs: Jobs, job: Pick<MoveInJob, "id" | "phase" | "cursor">): Promise<boolean> {
+export async function queueMoveIn(jobs: Jobs, job: Position): Promise<boolean> {
   return (await jobs.enqueue(MOVE_IN_JOB, { jobId: job.id }, { key: moveInJobKey(job) })).enqueued;
+}
+
+/** Starts a move-in on the queue: its first segment, and the watch that keeps it going. */
+export async function startMoveInJob(jobs: Jobs, jobId: string): Promise<void> {
+  await queueMoveIn(jobs, { id: jobId, phase: "inspect", cursor: null });
+  await watchMoveIn(jobs, jobId, 1);
+}
+
+async function watchMoveIn(jobs: Jobs, jobId: string, look: number): Promise<void> {
+  await jobs.enqueue(MOVE_IN_WATCH, { jobId, look }, { key: `move-in:${jobId}:watch:${look}`, delaySeconds: MOVE_IN_WATCH_SECONDS });
 }
 
 /**
  * Queues an unfinished move-in that nothing has written to for MOVE_IN_QUIET_MS, for when its chain of segments broke
  * (a segment out of attempts, say). `updatedAt` is the job's last write, as D1 keeps it (ISO).
  */
-export async function nudgeMoveIn(
-  jobs: Jobs,
-  job: Pick<MoveInJob, "id" | "phase" | "cursor"> & { status: MoveInStatus; updatedAt: string },
-  now: Date,
-): Promise<boolean> {
+export async function nudgeMoveIn(jobs: Jobs, job: Position & { status: MoveInStatus; updatedAt: string }, now: Date): Promise<boolean> {
   if (FINISHED.includes(job.status)) return false;
   if (now.getTime() - Date.parse(job.updatedAt) < MOVE_IN_QUIET_MS) return false;
   return queueMoveIn(jobs, job);
 }
 
-/** The move-in still holds the claim of another run, so this delivery comes back later. */
-class MoveInHeldError extends Error {
+/** A segment held the move-in and moved nothing, so the port runs it again. */
+class MoveInStalledError extends Error {
   constructor(jobId: string) {
-    super(`Another run is moving ${jobId} in`);
-    this.name = "MoveInHeldError";
+    super(`A segment of ${jobId} moved nothing`);
+    this.name = "MoveInStalledError";
   }
 }
 
@@ -65,10 +87,32 @@ export function moveInJobHandler(
     const ports = moveInPorts(env, now);
     const before = await ports.store.loadJob(payload.jobId);
     if (!before || FINISHED.includes(before.status)) return;
-    // An error is passed on, and the port runs this segment again; the runner resumes from its cursor.
-    const after = await runForAWhile(before.id, ports, { budgetMs, chunkSize });
+    // An error lets the move-in go and is passed on, so the port's backoff paces the next try, which resumes from the
+    // runner's cursor.
+    const { job: after, claimed } = await runMoveInSegment(before.id, ports, { budgetMs, chunkSize, releaseOnError: true });
     if (!after || FINISHED.includes(after.status)) return;
-    if (moveInJobKey(after) === moveInJobKey(before) && after.status === before.status) throw new MoveInHeldError(before.id);
+    if (!claimed) {
+      // Another run holds it. A live one queues what comes after its own segment; one whose Worker died lets go within
+      // the claim's window, so look once more after that, at most once per window for each place the job stands.
+      const window = Math.floor(now().getTime() / MOVE_IN_CLAIM_MS);
+      await jobs.enqueue(MOVE_IN_JOB, { jobId: after.id }, { key: `${moveInJobKey(after)}:held:${window}`, delaySeconds: MOVE_IN_HELD_SECONDS });
+      return;
+    }
+    if (moveInJobKey(after) === moveInJobKey(before)) throw new MoveInStalledError(before.id);
     await queueMoveIn(jobs, after);
+  };
+}
+
+const isWatch = (payload: unknown): payload is MoveInWatchPayload =>
+  isPayload(payload) && Number.isInteger((payload as MoveInWatchPayload).look);
+
+/** Looks at a move-in every few minutes until it finishes, and queues it again whenever its segments stopped coming. */
+export function moveInWatchHandler(env: MoveInEnv, jobs: Jobs, { now = () => new Date() }: { now?: () => Date } = {}): JobHandler<MoveInWatchPayload> {
+  return async (payload) => {
+    if (!isWatch(payload)) return;
+    const job = await readMoveInPosition(env.DB, payload.jobId);
+    if (!job || FINISHED.includes(job.status)) return;
+    await nudgeMoveIn(jobs, job, now());
+    await watchMoveIn(jobs, job.id, payload.look + 1);
   };
 }

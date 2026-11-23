@@ -20,10 +20,10 @@ import {
   MOVE_IN_UPLOAD_MAX_BYTES,
   moveInPorts,
   nudgeMoveIn,
-  queueMoveIn,
   readMoveInProgress,
   runForAWhile,
   startMoveIn,
+  startMoveInJob,
   type MoveInEnv,
   type MoveInProgress,
 } from "~/domains/move-in";
@@ -146,7 +146,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   });
   if (!started.ok) return fail(started.code, started.code === "backup-too-large" ? 413 : 400);
   // A move-in that couldn't be queued waits for the page, which queues it once it has been quiet a while.
-  if (jobs) await queueMoveIn(jobs, { id: started.jobId, phase: "inspect", cursor: null }).catch((error: unknown) => report(workerEnv, userId, "queue", error));
+  if (jobs) await startMoveInJob(jobs, started.jobId).catch((error: unknown) => report(workerEnv, userId, "queue", error));
   else keepRunning(context, { env, workerEnv }, started.jobId, userId);
   return redirect(`/move-in?job=${started.jobId}`);
 }
