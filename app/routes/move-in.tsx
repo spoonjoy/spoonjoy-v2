@@ -27,6 +27,7 @@ import {
   runForAWhile,
   startMoveIn,
   startMoveInJob,
+  timeLeft,
   type MoveInEnv,
   type MoveInProgress,
 } from "~/domains/move-in";
@@ -92,12 +93,15 @@ export interface MoveInView {
   latest: MoveInProgress["latest"];
   /** It runs on the server, so the page can be closed. */
   runsOnServer: boolean;
+  /** "About 4 minutes left", from the rate so far; null until there is enough to go on. */
+  timeLeft: string | null;
 }
 
-function view(progress: MoveInProgress, runsOnServer: boolean): MoveInView {
+function view(progress: MoveInProgress, runsOnServer: boolean, now: Date): MoveInView {
   const recipes = progress.counts.recipes ?? { found: 0, created: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 };
   const photos = progress.counts.photos ?? { found: 0, created: 0, unchanged: 0 };
   const failure = [...progress.events].reverse().find((event) => event.kind === "job-failed")?.message ?? null;
+  const done = recipes.created + recipes.updated + recipes.unchanged + recipes.skipped + recipes.failed;
   return {
     jobId: progress.job.id,
     status: progress.job.status,
@@ -105,7 +109,7 @@ function view(progress: MoveInProgress, runsOnServer: boolean): MoveInView {
     archiveName: progress.job.archiveName,
     recipes: {
       found: recipes.found,
-      done: recipes.created + recipes.updated + recipes.unchanged + recipes.skipped + recipes.failed,
+      done,
       created: recipes.created,
       // Already here: from an earlier move-in, whether it changed since or not.
       already: recipes.updated + recipes.unchanged,
@@ -121,6 +125,7 @@ function view(progress: MoveInProgress, runsOnServer: boolean): MoveInView {
     latest: progress.latest,
     renamed: progress.events.flatMap((event) => (event.kind === "item-renamed" ? [{ seq: event.seq, message: event.message }] : [])),
     runsOnServer,
+    timeLeft: FINISHED.includes(progress.job.status) ? null : timeLeft({ done, found: recipes.found, startedAt: progress.job.createdAt, now }),
   };
 }
 
@@ -131,7 +136,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   if (!jobId) return { move: null, maxBytes };
   const progress = await readMoveInProgress(env.DB, { ownerId: userId, jobId });
   if (!progress) throw new Response("Not found", { status: 404 });
-  return { move: view(progress, jobs !== null), maxBytes };
+  return { move: view(progress, jobs !== null, new Date()), maxBytes };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -242,9 +247,12 @@ function Progress({ move }: { move: MoveInView }) {
       <h2 id="move-in-progress" className="text-lg font-semibold">Moving in</h2>
       <div role="status" className="flex items-center gap-3">
         <Spinner label="Moving in" />
-        <Text>
-          {counted ? `${move.recipes.done} of ${plural(move.recipes.found, "recipe")} in so far.` : "Reading the backup…"}
-        </Text>
+        <div className="flex flex-col">
+          <Text>
+            {counted ? `${move.recipes.done} of ${plural(move.recipes.found, "recipe")} in so far.` : "Reading the backup…"}
+          </Text>
+          {move.timeLeft ? <Text tone="muted">{move.timeLeft}</Text> : null}
+        </div>
       </div>
       {move.latest.length ? (
         <ItemGroup aria-label="Just moved in" variant="divided">

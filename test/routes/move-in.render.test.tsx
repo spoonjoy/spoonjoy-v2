@@ -31,6 +31,7 @@ function view(fields: Partial<MoveInView> = {}): MoveInView {
     renamed: [],
     latest: [],
     runsOnServer: false,
+    timeLeft: null,
     ...fields,
   };
 }
@@ -166,6 +167,13 @@ describe("the Move in page", () => {
   it("counts recipes as they come in", async () => {
     page(view({ recipes: { found: 20, done: 1, created: 1, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 } }));
     expect(await screen.findByText("1 of 20 recipes in so far.")).toBeTruthy();
+    expect(screen.queryByText(/left$/)).toBeNull();
+  });
+
+  it("says how long is left under the count, for anyone listening to the status too", async () => {
+    page(view({ recipes: { found: 500, done: 84, created: 84, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 }, timeLeft: "About 6 minutes left" }));
+    const line = await screen.findByText("About 6 minutes left");
+    expect(line.closest("[role=status]")?.textContent).toContain("84 of 500 recipes in so far.");
   });
 
   it("shows what arrived, and what to look over", async () => {
