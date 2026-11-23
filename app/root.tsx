@@ -21,7 +21,7 @@ import { NonceContext } from "~/lib/nonce";
 import { FOLD_BOOTSTRAP } from "~/lib/fold";
 import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
 import { revalidateUnlessNetworkFailure } from "~/lib/network-failure";
-import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
+import { getConfiguredOAuthProviders, getOidcButtonLabel, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { toAnalyticsPageUrl } from "~/lib/analytics";
 import { applyStorageSchemaMigration, THEME_STORAGE_KEY } from "~/lib/client-storage-schema";
@@ -104,7 +104,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const sourceSha = built === UNKNOWN_SOURCE_SHA ? "main" : built;
   // The feature flags on for this visitor, so components can read them with useFlag.
   const flags = flagsFor(context.cloudflare?.env, userId);
-  return { userId, oauthProviders, sourceSha, flags };
+  const oidcLabel = getOidcButtonLabel(getOAuthEnv(context));
+  return { userId, oauthProviders, oidcLabel, sourceSha, flags };
 }
 
 /**
@@ -141,11 +142,11 @@ const signedOutLinks = [
 ];
 
 /** Signing in from the desktop bar: an HX Popover with the providers, the password form and signup. */
-function LoginPopover({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
+function LoginPopover({ oauthProviders, oidcLabel }: { oauthProviders: OAuthProvider[]; oidcLabel?: string }) {
   return (
     <Popover title="Sign in to SPOONJOY" align="end" trigger={<Button variant="outline" tone="secondary">Log in</Button>}>
       {oauthProviders.length > 0 ? (
-        <OAuthButtonGroup providers={oauthProviders} />
+        <OAuthButtonGroup providers={oauthProviders} oidcLabel={oidcLabel} />
       ) : (
         <Text tone="muted" size="sm">OAuth is not configured here, but email and password sign-in is available.</Text>
       )}
@@ -161,10 +162,13 @@ function LoginPopover({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
 export function AppNavbar({
   userId,
   oauthProviders = [],
+  oidcLabel,
   cookingNowCount = 0,
 }: {
   userId: string | null;
   oauthProviders?: OAuthProvider[];
+  /** The server owner's label for its OpenID Connect button, when one is set up. */
+  oidcLabel?: string;
   /** How many recipes the cook has in progress; the "Cooking" pill shows when there is one. */
   cookingNowCount?: number;
 }) {
@@ -195,7 +199,7 @@ export function AppNavbar({
         <>
           <CookingNowPill count={cookingNowCount} />
           <ColorSchemeToggle />
-          <LoginPopover oauthProviders={oauthProviders} />
+          <LoginPopover oauthProviders={oauthProviders} oidcLabel={oidcLabel} />
           <Button href="/signup">Sign up</Button>
         </>
       )}
@@ -215,7 +219,7 @@ function PopupLayer() {
 }
 
 export default function App() {
-  const { userId, oauthProviders, sourceSha } = useLoaderData<typeof loader>();
+  const { userId, oauthProviders, oidcLabel, sourceSha } = useLoaderData<typeof loader>();
   const location = useLocation();
   const navigation = useNavigation();
   const posthog = usePostHog();
@@ -265,7 +269,7 @@ export default function App() {
         <div className="sj-app-shell relative flex min-h-svh w-full flex-col">
           {userId ? null : <PhoneBrandBar />}
           <div className="sj-desktop-topbar sticky top-0 z-30 hidden lg:block">
-            <AppNavbar userId={userId} oauthProviders={oauthProviders} cookingNowCount={cookingNowCount} />
+            <AppNavbar userId={userId} oauthProviders={oauthProviders} oidcLabel={oidcLabel} cookingNowCount={cookingNowCount} />
           </div>
           {/* The bottom padding clears the phone tab bar (MobileNav): its bottom margin,
               max(1rem, safe-area inset), plus its 4rem height and a gap, so the last thing on a

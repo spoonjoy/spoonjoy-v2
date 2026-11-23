@@ -6,14 +6,14 @@ import { ColorSchemeProvider } from "~/lib/ouro/color-scheme";
 import type { OAuthProvider } from "~/lib/env.server";
 import { AppNavbar } from "~/root";
 
-function renderNavbar(userId: string | null = null, path = "/", oauthProviders: OAuthProvider[] = [], cookingNowCount?: number) {
+function renderNavbar(userId: string | null = null, path = "/", oauthProviders: OAuthProvider[] = [], cookingNowCount?: number, oidcLabel?: string) {
   const router = createMemoryRouter(
     [
       {
         path: "*",
         element: (
           <ColorSchemeProvider storageKey="spoonjoy-theme">
-            <AppNavbar userId={userId} oauthProviders={oauthProviders} cookingNowCount={cookingNowCount} />
+            <AppNavbar userId={userId} oauthProviders={oauthProviders} oidcLabel={oidcLabel} cookingNowCount={cookingNowCount} />
           </ColorSchemeProvider>
         ),
       },
@@ -103,6 +103,15 @@ describe("AppNavbar", () => {
     expect(within(popover).getByText(/OAuth is not configured here/)).toBeInTheDocument();
     expect(within(popover).getByRole("link", { name: "Use Password" })).toHaveAttribute("href", "/login");
     expect(within(popover).getByRole("link", { name: "Create Account" })).toHaveAttribute("href", "/signup");
+  });
+
+  it("labels the server's own OpenID Connect button in the sign-in popover as its owner named it", async () => {
+    renderNavbar(null, "/", ["oidc"], undefined, "Sign in with Keycloak");
+
+    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+
+    const popover = await screen.findByRole("dialog", { name: "Sign in to SPOONJOY" });
+    expect(within(popover).getByRole("link", { name: "Sign in with Keycloak" })).toHaveAttribute("href", "/auth/oidc");
   });
 
   it("offers the configured providers in the sign-in popover", async () => {

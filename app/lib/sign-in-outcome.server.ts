@@ -18,7 +18,7 @@
 export const SIGN_IN_SUCCEEDED_EVENT = "spoonjoy.auth.sign_in_succeeded";
 export const SIGN_IN_FAILED_EVENT = "spoonjoy.auth.sign_in_failed";
 
-export type SignInOutcomeMethod = "password" | "passkey" | "apple" | "google" | "github";
+export type SignInOutcomeMethod = "password" | "passkey" | "apple" | "google" | "github" | "oidc";
 export type SignInPlatform = "web" | "ios" | "macos" | "native";
 
 /** Captures one controlled `spoonjoy.*` event; the auth telemetry sink's `captureEvent` fits. */

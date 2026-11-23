@@ -10,7 +10,7 @@ import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
 import { normalizeUsername, USERNAME_HINT, usernameFormatError } from "~/lib/username";
 import { OAuthButtonGroup, OAuthError } from "~/components/oauth";
 import { Separator } from "~/components/ouro/separator/separator";
-import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
+import { getConfiguredOAuthProviders, getOidcButtonLabel, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { AuthPage } from "~/components/auth/auth-page";
 import { Form } from "~/components/ouro/form/form";
@@ -40,6 +40,8 @@ interface ActionData {
 interface LoaderData {
   oauthError?: string;
   oauthProviders: OAuthProvider[];
+  /** The server owner's label for its OpenID Connect button, when one is set up. */
+  oidcLabel?: string;
 }
 
 export function meta({}: Route.MetaArgs) {
@@ -60,12 +62,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const oauthError = url.searchParams.get("oauthError");
   const oauthProviders = getConfiguredOAuthProviders(getOAuthEnv(context));
+  const oidcLabel = getOidcButtonLabel(getOAuthEnv(context));
 
   if (oauthError) {
-    return { oauthError, oauthProviders } as LoaderData;
+    return { oauthError, oauthProviders, oidcLabel } as LoaderData;
   }
 
-  return { oauthProviders } as LoaderData;
+  return { oauthProviders, oidcLabel } as LoaderData;
 }
 
 // Action - handle signup form submission
@@ -172,7 +175,7 @@ export default function Signup() {
 
         {oauthProviders.length > 0 && (
           <>
-            <OAuthButtonGroup providers={oauthProviders} redirectTo={redirectTo} className="mt-8" />
+            <OAuthButtonGroup providers={oauthProviders} oidcLabel={loaderData?.oidcLabel} redirectTo={redirectTo} className="mt-8" />
             <Separator label="or" className="my-6" data-testid="oauth-separator" />
           </>
         )}

@@ -282,6 +282,17 @@ export default function AccountSettings() {
         )}
 
         <div className="mt-4 space-y-4">
+          {/* A self-hosted server's own OpenID Connect provider (provider "oidc:<issuer>"). */}
+          {user.oauthAccounts.filter((account) => account.provider.startsWith("oidc:")).map((account) => (
+            <div
+              key={account.provider}
+              data-testid="single-sign-on-account"
+              className="flex flex-col gap-1 border-b border-[var(--sj-border)] py-4"
+            >
+              <Text tone="default"><strong className="font-medium">Single sign-on</strong></Text>
+              <Text tone="muted" size="sm">{account.providerUsername}</Text>
+            </div>
+          ))}
           {OAUTH_PROVIDERS.map((provider) => {
             const account = user.oauthAccounts.find((a) => a.provider === provider);
             const isLinked = linkedProviders.has(provider);

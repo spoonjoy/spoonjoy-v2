@@ -1,6 +1,6 @@
 export const OAUTH_PROVIDER_TIMEOUT_MS = 8_000;
 
-export type OAuthProviderCallPhase = "token_exchange" | "userinfo";
+export type OAuthProviderCallPhase = "discovery" | "token_exchange" | "userinfo" | "jwks";
 export type OAuthProviderFailureKind = "client" | "timeout" | "network" | "upstream" | "missing_email";
 export type OAuthProviderFailureCode = "provider_timeout" | "network_error" | "upstream_error";
 

@@ -17,12 +17,14 @@ import {
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { getCurrentSessionIdentity, getOAuthSessionStorage, sanitizeSessionRedirect, type SessionEnv } from "~/lib/session.server";
 
-export type OAuthProvider = "google" | "github" | "apple";
+export type OAuthProvider = "google" | "github" | "apple" | "oidc";
 export type OAuthProviderHint = Extract<OAuthProvider, "google" | "github">;
 
 export interface OAuthStartSessionData {
   state: string;
   codeVerifier?: string;
+  /** OpenID Connect's nonce, which the provider's ID token must carry back. */
+  nonce?: string;
   redirectUri?: string;
   redirectTo: string;
   failureRedirect: string;
@@ -38,6 +40,7 @@ const CALLBACK_PATHS: Record<OAuthProvider, string> = {
   apple: "/auth/apple/callback",
   github: "/auth/github/callback",
   google: "/auth/google/callback",
+  oidc: "/auth/oidc/callback",
 };
 
 function oauthSessionKey(provider: OAuthProvider, key: keyof OAuthStartSessionData) {
@@ -184,7 +187,7 @@ function sameOriginReferer(request: Request): URL | null {
 export function resolveOAuthStartSessionData(
   request: Request,
   state: string,
-  options?: { codeVerifier?: string }
+  options?: { codeVerifier?: string; nonce?: string }
 ): OAuthStartSessionData {
   const url = new URL(request.url);
   const refererUrl = sameOriginReferer(request);
@@ -200,6 +203,7 @@ export function resolveOAuthStartSessionData(
   return {
     state,
     codeVerifier: options?.codeVerifier,
+    ...(options?.nonce ? { nonce: options.nonce } : {}),
     redirectTo: sanitizeInternalRedirect(requestedRedirectTo, defaultRedirectTo),
     failureRedirect: linking
       ? "/account/settings"
@@ -245,6 +249,12 @@ export async function commitOAuthStartSession(
     session.unset(oauthSessionKey(provider, "codeVerifier"));
   }
 
+  if (data.nonce) {
+    session.set(oauthSessionKey(provider, "nonce"), data.nonce);
+  } else {
+    session.unset(oauthSessionKey(provider, "nonce"));
+  }
+
   if (data.redirectUri) {
     session.set(oauthSessionKey(provider, "redirectUri"), data.redirectUri);
   } else {
@@ -280,6 +290,7 @@ export async function readOAuthStartSession(
 
   const codeVerifier = session.get(oauthSessionKey(provider, "codeVerifier"));
   const redirectTo = session.get(oauthSessionKey(provider, "redirectTo"));
+  const nonce = session.get(oauthSessionKey(provider, "nonce"));
   const redirectUri = session.get(oauthSessionKey(provider, "redirectUri"));
   const failureRedirect = session.get(oauthSessionKey(provider, "failureRedirect"));
   const linking = session.get(oauthSessionKey(provider, "linking"));
@@ -289,6 +300,7 @@ export async function readOAuthStartSession(
   return {
     state,
     codeVerifier: typeof codeVerifier === "string" ? codeVerifier : undefined,
+    ...(typeof nonce === "string" && nonce ? { nonce } : {}),
     redirectUri: typeof redirectUri === "string" ? redirectUri : undefined,
     redirectTo: sanitizeInternalRedirect(
       typeof redirectTo === "string" ? redirectTo : null,

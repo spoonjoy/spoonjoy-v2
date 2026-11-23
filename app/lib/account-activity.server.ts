@@ -30,7 +30,7 @@ export interface AccountActivityEnv extends PostHogServerEnv {
   DB?: unknown;
 }
 
-export type AccountSignInMethod = "password" | "passkey" | "apple" | "google" | "github";
+export type AccountSignInMethod = "password" | "passkey" | "apple" | "google" | "github" | "oidc";
 
 const LAST_SEEN_SQL = `UPDATE "User" SET "lastSeenAt" = ? WHERE "id" = ? AND ("lastSeenAt" IS NULL OR ${d1EpochMsSql('"lastSeenAt"')} <= ?)`;
 const SIGN_IN_SQL = `UPDATE "User" SET "lastSignInAt" = ?, "lastSignInMethod" = ?, "lastSeenAt" = ? WHERE "id" = ?`;
