@@ -128,6 +128,14 @@ describe("household shopping lists", () => {
     expect((await listHouseholdLists(store, { householdId: "h1", userId: "ann" }))?.lists).toEqual([]);
   });
 
+  it("leaves a list whose maker's account is gone to the household's owners to delete", async () => {
+    const listId = await listIn("h1", "ben", "Groceries");
+    run(`UPDATE "HouseholdList" SET "createdById" = NULL WHERE "id" = '${listId}'`);
+    expect((await getHouseholdList(store, { householdId: "h1", listId, userId: "ben" }))?.canDelete).toBe(false);
+    expect((await getHouseholdList(store, { householdId: "h1", listId, userId: "ann" }))?.canDelete).toBe(true);
+    expect(await deleteHouseholdList(store, { householdId: "h1", listId, userId: "ann" })).toEqual({ ok: true, value: null });
+  });
+
   it("keeps view-only members, outsiders and other households' lists from changing anything", async () => {
     const listId = await listIn("h1", "ann", "Groceries");
     const cabin = await listIn("h2", "dee", "Cabin");
