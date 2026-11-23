@@ -384,6 +384,22 @@ describe.each<ForkPath>(["prisma", "d1"])("recipe-fork.server (%s)", (path) => {
     await expect(fork({ sourceRecipeId: source.id, viewerId: chefA.id })).resolves.toMatchObject({ recipe: { chefId: chefA.id } });
   });
 
+  it("keeps a cook's fork of their own private recipe private, and makes a fork of a public recipe public", async () => {
+    const chefA = await makeUser();
+    const chefB = await makeUser();
+    const own = await seedSourceRecipe(chefA.id, { title: "Own Secret" });
+    await db.recipe.update({ where: { id: own.id }, data: { visibility: "private" } });
+    const open = await seedSourceRecipe(chefA.id, { title: "Open Stew" });
+
+    const ownFork = await fork({ sourceRecipeId: own.id, viewerId: chefA.id });
+    const openFork = await fork({ sourceRecipeId: open.id, viewerId: chefB.id });
+    const visibilities = await db.recipe.findMany({ where: { id: { in: [ownFork.recipe.id, openFork.recipe.id] } }, select: { id: true, visibility: true } });
+    expect(Object.fromEntries(visibilities.map((row) => [row.id, row.visibility]))).toEqual({
+      [ownFork.recipe.id]: "private",
+      [openFork.recipe.id]: "public",
+    });
+  });
+
   it("copies the source active cover with provenance and active variant", async () => {
     const chefA = await makeUser();
     const chefB = await makeUser();

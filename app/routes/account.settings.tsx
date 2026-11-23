@@ -10,7 +10,7 @@ import {
   type AccountSettingsLoaderData,
 } from "~/lib/account-settings.server";
 import { House, LogOut } from "lucide-react";
-import { useFlag } from "~/domains/platform";
+import { isFlagOn, useFlag } from "~/domains/platform";
 import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
@@ -31,6 +31,8 @@ import { BlockedChefsSection, type BlockedChefRow } from "~/components/moderatio
 import { useSectionFocus } from "~/hooks/use-section-focus";
 import { listBlockedChefs } from "~/lib/moderation.server";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { RecipeVisibilityDefaultSection } from "~/components/account/RecipeVisibilityDefaultSection";
+import { newRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
 
 // The sections a `?section=` link can open at (the apps link to delete-account).
 const SETTINGS_SECTIONS = ["delete-account", "blocked-chefs", "user-info"] as const;
@@ -46,9 +48,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const settings = await loadAccountSettings({ request, context });
   const db = await getRequestDb(context);
   const blocked = await listBlockedChefs(db, settings.user.id);
+  // The cook's default for new recipes, while the choice is on.
+  const recipeVisibilityDefault = isFlagOn("recipe_visibility", context.cloudflare?.env, settings.user.id)
+    ? newRecipeVisibility(null, (await db.user.findUnique({ where: { id: settings.user.id }, select: { defaultRecipeVisibility: true } }))?.defaultRecipeVisibility)
+    : null;
   return {
     ...settings,
     blockedChefs: blocked.map(({ chef }) => ({ id: chef.id, username: chef.username })),
+    recipeVisibilityDefault,
     // A self-hosted server's admin gets a way to its settings (app/routes/account.server-settings.tsx).
     serverAdmin: await isServerAdmin(db, context.cloudflare?.env, settings.user.id),
   };
@@ -84,7 +91,9 @@ const DELETE_INTENTS = ["deleteAccount"] as const;
 const REMOVE_PASSWORD_FIELDS = ["currentPassword"] as const;
 
 export default function AccountSettings() {
-  const { user, oauthError, notifications, blockedChefs = [], serverAdmin = false } = useLoaderData<AccountSettingsLoaderData & { blockedChefs?: BlockedChefRow[]; serverAdmin?: boolean }>();
+  const { user, oauthError, notifications, blockedChefs = [], serverAdmin = false, recipeVisibilityDefault = null } = useLoaderData<
+    AccountSettingsLoaderData & { blockedChefs?: BlockedChefRow[]; serverAdmin?: boolean; recipeVisibilityDefault?: RecipeVisibility | null }
+  >();
   useSectionFocus(SETTINGS_SECTIONS);
   const households = useFlag("households");
   const actionData = useActionData<AccountSettingsActionResult>();
@@ -738,6 +747,8 @@ export default function AccountSettings() {
         initiallySubscribed={notifications.pushSubscribed}
         initialPreferences={notifications.preferences}
       />
+
+      {recipeVisibilityDefault ? <RecipeVisibilityDefaultSection value={recipeVisibilityDefault} /> : null}
 
       <BlockedChefsSection chefs={blockedChefs} />
 

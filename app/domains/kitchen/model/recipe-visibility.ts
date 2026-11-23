@@ -39,3 +39,16 @@ export function canRead(viewer: RecipeViewer, recipe: RecipeAccess): boolean {
   if (recipe.chefId === viewerId) return true;
   return recipe.visibility === "household" && (viewer?.householdChefIds?.has(recipe.chefId) ?? false);
 }
+
+/** The levels a cook can choose today. Household joins when households ship. */
+export const SELECTABLE_RECIPE_VISIBILITIES = ["public", "private"] as const satisfies readonly RecipeVisibility[];
+
+function selectable(value: unknown): RecipeVisibility | null {
+  const level = parseRecipeVisibility(value);
+  return level && (SELECTABLE_RECIPE_VISIBILITIES as readonly string[]).includes(level) ? level : null;
+}
+
+/** A new recipe's visibility: the cook's choice, else their default for new recipes, else public. */
+export function newRecipeVisibility(requested: unknown, cookDefault: unknown): RecipeVisibility {
+  return selectable(requested) ?? selectable(cookDefault) ?? DEFAULT_RECIPE_VISIBILITY;
+}

@@ -195,6 +195,7 @@ async function writeForkOnD1(
             sourceRecipeId: source.id,
             // sourceUrl intentionally NOT propagated
             coverMode: source.coverMode === "none" ? "none" : "auto",
+            visibility: forkVisibility(source, input.viewerId),
             now,
           }),
           ...source.steps.map((step) => stepInsertStatement({
@@ -256,6 +257,7 @@ async function writeForkWithPrisma(
       chefId: input.viewerId,
       sourceRecipeId: source.id,
       // sourceUrl intentionally NOT propagated
+      visibility: forkVisibility(source, input.viewerId),
     },
     select: { id: true },
   });
@@ -320,6 +322,12 @@ async function writeForkWithPrisma(
   }
 
   return created.id;
+}
+
+// A cook's fork of their own recipe keeps its visibility, so forking a private recipe never
+// publishes it; a fork of someone else's recipe starts public, as before.
+function forkVisibility(source: { chefId: string; visibility: string }, viewerId: string): string {
+  return source.chefId === viewerId ? source.visibility : "public";
 }
 
 /**

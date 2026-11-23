@@ -45,6 +45,8 @@ import { parseIngredientsWithRulesFallback } from "~/lib/ingredient-parse-fallba
 import { useEffect, useRef, useState } from "react";
 import { importRecipeForSession, parseSessionImportForm } from "~/lib/recipe-import-session.server";
 import { RecipeImportPanel, type RecipeImportActionData } from "~/components/recipe/RecipeImportPanel";
+import { newRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
+import { isFlagOn } from "~/domains/platform";
 
 interface ActionData {
   parsedIngredients?: ParsedIngredient[];
@@ -70,9 +72,17 @@ export function meta({}: Route.MetaArgs) {
 // An ingredient parse changes no data; don't reload the page after one.
 export const shouldRevalidate = revalidateUnlessIngredientParse;
 
+// The cook's default for new recipes, which the create form starts at; null while the choice is off.
+async function cookVisibilityDefault(context: Route.LoaderArgs["context"], userId: string): Promise<RecipeVisibility | null> {
+  if (!isFlagOn("recipe_visibility", context.cloudflare?.env, userId)) return null;
+  const database = await getRequestDb(context);
+  const cook = await database.user.findUnique({ where: { id: userId }, select: { defaultRecipeVisibility: true } });
+  return newRecipeVisibility(null, cook?.defaultRecipeVisibility);
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
-  await requireUserId(request, "/login", context.cloudflare?.env);
-  return null;
+  const userId = await requireUserId(request, "/login", context.cloudflare?.env);
+  return { visibilityDefault: await cookVisibilityDefault(context, userId) };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -198,6 +208,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     chefId: userId,
     title,
   });
+  const visibilityDefault = await cookVisibilityDefault(context, userId);
   if (!titleUniquenessResult.valid) {
     return data({ errors: { title: titleUniquenessResult.error } }, { status: 400 });
   }
@@ -233,6 +244,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       description: trimmedDescription,
       servings: servings.trim() || null,
       chefId: userId,
+      ...(visibilityDefault ? { visibility: newRecipeVisibility(formData.get("visibility"), visibilityDefault) } : {}),
       steps: recipeSteps,
       cover: uploadedImageUrl
         ? {
@@ -381,7 +393,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   return redirect(`/recipes/${createdId}`);
 }
 
-export default function NewRecipe() {
+export default function NewRecipe({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<ActionData>();
   // A progressive-post response is an initial display baseline, never a client arrival.
   const [initialActionData] = useState(actionData);
@@ -426,6 +438,7 @@ export default function NewRecipe() {
     formData.set("description", recipeData.description || "");
     formData.set("servings", recipeData.servings || "");
     formData.set("steps", JSON.stringify(recipeData.steps));
+    if (recipeData.visibility) formData.set("visibility", recipeData.visibility);
     if (recipeData.imageFile) formData.set("image", recipeData.imageFile);
     saveFetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
   };
@@ -452,6 +465,7 @@ export default function NewRecipe() {
           errors={saveData?.errors}
           answer={saveAnswer}
           loading={isLoading}
+          visibility={loaderData?.visibilityDefault ?? undefined}
         />
       </div>
     </CookbookPage>

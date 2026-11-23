@@ -24,6 +24,8 @@ import { TextArea } from '~/components/ouro/text-field/text-area'
 import { TextField } from '~/components/ouro/text-field/text-field'
 import { useFormErrors } from '~/hooks/use-form-errors'
 import { StepList } from './StepList'
+import { RecipeVisibilityField } from './RecipeVisibilityField'
+import type { RecipeVisibility } from '~/domains/kitchen'
 import { Loader2 } from 'lucide-react'
 import type { StepData } from './StepEditorCard'
 import {
@@ -46,6 +48,8 @@ export interface RecipeBuilderData {
   coverImageUrl: string | null
   imageFile?: File | null
   clearImage?: boolean
+  /** Who can see it; set only when the builder shows the visibility choice. */
+  visibility?: RecipeVisibility
   steps: StepData[]
 }
 
@@ -56,6 +60,8 @@ export interface RecipeBuilderProps {
   disabled?: boolean
   loading?: boolean
   saveRequestSignal?: number
+  /** Shows the visibility choice, starting at this level; leave it out to hide the choice. */
+  visibility?: RecipeVisibility
   /** The actual response accepted by this builder's own save form; absent for SSR display. */
   answer?: object
   errors?: {
@@ -92,6 +98,7 @@ export function RecipeBuilder({
   errors,
   answer,
   showSteps = true,
+  visibility: initialVisibility,
 }: RecipeBuilderProps) {
   const detailErrors = useFormErrors(errors, DETAIL_FIELDS, answer)
 
@@ -108,6 +115,7 @@ export function RecipeBuilder({
   const descriptionRef = useRef<HTMLTextAreaElement>(null)
   const servingsRef = useRef<HTMLInputElement>(null)
   const [title, setTitle] = useState(recipe?.title ?? '')
+  const [visibility, setVisibility] = useState<RecipeVisibility | undefined>(initialVisibility)
 
   useEffect(() => {
     setTitle(titleRef.current!.value)
@@ -143,6 +151,7 @@ export function RecipeBuilder({
       coverImageUrl: recipe?.coverImageUrl ?? '',
       imageFile,
       clearImage: clearImage || undefined,
+      ...(visibility ? { visibility } : {}),
       steps,
     }
     onSave(data)
@@ -238,6 +247,9 @@ export function RecipeBuilder({
             disabled={isDisabled}
             error={errors?.image}
           />
+          {visibility ? (
+            <RecipeVisibilityField value={visibility} onChange={setVisibility} disabled={isDisabled} />
+          ) : null}
           {loading ? (
             <p role="status" className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
               {imageFile ? 'Uploading image...' : 'Saving recipe...'}

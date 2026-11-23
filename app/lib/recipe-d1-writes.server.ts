@@ -15,6 +15,8 @@ export interface RecipeInsert {
   sourceRecipeId?: string | null;
   sourceUrl?: string | null;
   coverMode?: string;
+  /** Who may read it; public when not given, as the column's default. */
+  visibility?: string;
   now: Date;
 }
 
@@ -22,9 +24,9 @@ export function recipeInsertStatement(recipe: RecipeInsert): D1Query {
   const at = d1Timestamp(recipe.now);
   return [
     `INSERT INTO "Recipe" (
-       "id", "title", "description", "servings", "chefId", "sourceRecipeId", "sourceUrl", "coverMode", "createdAt",
-       "updatedAt"
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       "id", "title", "description", "servings", "chefId", "sourceRecipeId", "sourceUrl", "coverMode", "visibility",
+       "createdAt", "updatedAt"
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     recipe.id,
     recipe.title,
     recipe.description,
@@ -33,6 +35,7 @@ export function recipeInsertStatement(recipe: RecipeInsert): D1Query {
     recipe.sourceRecipeId ?? null,
     recipe.sourceUrl ?? null,
     recipe.coverMode ?? "auto",
+    recipe.visibility ?? "public",
     at,
     at,
   ];
@@ -217,6 +220,7 @@ export interface RecipeFields {
   activeCoverId?: string | null;
   activeCoverVariant?: string | null;
   coverMode?: string;
+  visibility?: string;
 }
 
 const RECIPE_FIELD_COLUMNS = [
@@ -227,6 +231,7 @@ const RECIPE_FIELD_COLUMNS = [
   "activeCoverId",
   "activeCoverVariant",
   "coverMode",
+  "visibility",
 ] as const satisfies ReadonlyArray<keyof RecipeFields>;
 
 /** `recipe.update({ where: { id }, data: { ...fields, updatedAt } })`. */

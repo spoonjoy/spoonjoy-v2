@@ -48,6 +48,8 @@ import {
 import { Button } from "~/components/ouro/button/button";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { useEffect, useRef, useState } from "react";
+import { SELECTABLE_RECIPE_VISIBILITIES, parseRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
+import { isFlagOn } from "~/domains/platform";
 
 interface ActionData {
   errors?: {
@@ -153,7 +155,12 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const imported = new URL(request.url).searchParams.get("imported") === "1";
 
-  return { recipe, coverImageUrl, formattedSteps, imported };
+  // The visibility choice shows only while it is on for this cook.
+  const visibility = isFlagOn("recipe_visibility", context.cloudflare?.env, userId)
+    ? (parseRecipeVisibility(recipe.visibility) ?? "private")
+    : null;
+
+  return { recipe, coverImageUrl, formattedSteps, imported, visibility };
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
@@ -371,10 +378,17 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   const cloudflareEnv = getCloudflareEnv(context);
   const photosBucket = cloudflareEnv?.PHOTOS;
-  const updateData: { title: string; description: string | null; servings: string | null } = {
+  // A visibility the cook cannot choose today (or a save while the choice is off) keeps the stored one.
+  const chosenVisibility = isFlagOn("recipe_visibility", cloudflareEnv, userId)
+    ? parseRecipeVisibility(formData.get("visibility"))
+    : null;
+  const updateData: { title: string; description: string | null; servings: string | null; visibility?: RecipeVisibility } = {
     title: title.trim(),
     description: description.trim() || null,
     servings: servings.trim() || null,
+    ...(chosenVisibility && (SELECTABLE_RECIPE_VISIBILITIES as readonly string[]).includes(chosenVisibility)
+      ? { visibility: chosenVisibility }
+      : {}),
   };
   let uploadedImageUrl: string | null = null;
 
@@ -558,7 +572,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function EditRecipe() {
-  const { recipe, coverImageUrl, formattedSteps, imported } = useLoaderData<typeof loader>();
+  const { recipe, coverImageUrl, formattedSteps, imported, visibility } = useLoaderData<typeof loader>();
   const actionData = useActionData<ActionData>();
   const [initialActionData] = useState(actionData);
   const saveFetcher = useFetcher<ActionData>();
@@ -602,6 +616,7 @@ export default function EditRecipe() {
     formData.set("servings", recipeData.servings || "");
     formData.set("steps", JSON.stringify(recipeData.steps));
     formData.set("clearImage", recipeData.clearImage ? "true" : "");
+    if (recipeData.visibility) formData.set("visibility", recipeData.visibility);
     if (recipeData.imageFile) formData.set("image", recipeData.imageFile);
     saveFetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
   };
@@ -653,6 +668,7 @@ export default function EditRecipe() {
           answer={saveAnswer}
           loading={isLoading}
           showSteps={false}
+          visibility={visibility ?? undefined}
         />
 
         <section aria-label="Recipe steps" className="mt-10">
