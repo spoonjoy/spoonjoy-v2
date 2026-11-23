@@ -84,7 +84,8 @@ export function OrganizerPage({ kind, data }: { kind: OrganizerKind; data: Organ
             description={copy.emptyPageDescription}
           />
         )}
-        <OrganizerManage kind={kind} organizer={organizer} others={others} />
+        {/* Keyed by the organizer so its fields, which hold their own values, start over on another organizer's page. */}
+        <OrganizerManage key={organizer.slug} kind={kind} organizer={organizer} others={others} />
       </div>
     </CookbookPage>
   );

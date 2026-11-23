@@ -136,6 +136,7 @@ test.describe("Organizers", () => {
     const rename = page.getByRole("form", { name: "Rename this tag", exact: true });
     await rename.getByLabel("Name", { exact: true }).fill(snug);
     await rename.getByRole("button", { name: "Rename", exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1, name: snug, exact: true })).toBeVisible();
     await verifyAfterReload(async () => {
       await expect(page.getByRole("heading", { level: 1, name: snug, exact: true })).toBeVisible();
     });
