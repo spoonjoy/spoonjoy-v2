@@ -198,6 +198,22 @@ describe("recipe create helpers", () => {
       }
     });
 
+    it("creates a recipe at the cook's default when none is chosen, on Prisma and D1 alike", async () => {
+      await db.user.update({ where: { id: testUserId }, data: { defaultRecipeVisibility: "private" } });
+      const d1 = sqliteD1();
+      try {
+        for (const [path, binding] of [["prisma", null], ["d1", d1.binding]] as const) {
+          const base = { description: null, servings: null, chefId: testUserId, steps: [] };
+          await createRecipeDraft(db, { ...base, id: `${path}-quiet`, title: `${path} quiet` }, binding);
+          await createRecipeDraft(db, { ...base, id: `${path}-loud`, title: `${path} loud`, visibility: "public" }, binding);
+          const rows = await db.recipe.findMany({ where: { id: { in: [`${path}-loud`, `${path}-quiet`] } }, select: { id: true, visibility: true }, orderBy: { id: "asc" } });
+          expect(rows).toEqual([{ id: `${path}-loud`, visibility: "public" }, { id: `${path}-quiet`, visibility: "private" }]);
+        }
+      } finally {
+        d1.close();
+      }
+    });
+
     it("creates recipes, steps, units, ingredient refs, and ingredients in one durable graph", async () => {
       await db.unit.create({ data: { name: "cup" } });
       await db.ingredientRef.create({ data: { name: "flour" } });

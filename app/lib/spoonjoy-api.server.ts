@@ -32,6 +32,7 @@ import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.s
 import { canRead, readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
 import { isFlagOn, likeContainsSearch, type FlagEnv } from "~/domains/platform";
 import { getWeek, parseLocalDate, prismaPlanStore, type PlanEntry } from "~/domains/planning";
+import { cookRecipeVisibilityDefault } from "~/lib/recipe-create.server";
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
 import { d1Binding, d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { deleteNativeRecipe } from "~/lib/api-v1-recipe-writes.server";
@@ -2363,6 +2364,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
         title,
       });
       if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
+      const visibility = await cookRecipeVisibilityDefault(context.db, owner.id);
       if (imageUrl) {
         await validateRecipeCoverImageSource({
           imageUrl,
@@ -2402,6 +2404,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
               servings: optionalString(args.servings) ?? null,
               sourceUrl: optionalString(args.sourceUrl) ?? null,
               chefId: owner.id,
+              visibility,
               now,
             }),
             ...recipeStepsReplaceStatements(recipeId, normalizedReplacementSteps(steps), now),
@@ -2423,6 +2426,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
             servings: optionalString(args.servings) ?? null,
             sourceUrl: optionalString(args.sourceUrl) ?? null,
             chefId: owner.id,
+            visibility,
           },
         });
 

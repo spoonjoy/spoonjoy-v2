@@ -102,6 +102,15 @@ describe("recipe import and recipe page writes on a D1 binding", () => {
       });
     });
 
+    it("imports at the cook's default visibility, on Prisma and D1 alike", async () => {
+      await db.user.update({ where: { id: chefId }, data: { defaultRecipeVisibility: "private" } });
+      const viaPrisma = await importRecipe("Quiet Rice", "https://example.com/q");
+      const viaD1 = await importRecipe("Quiet Rice D1", "https://example.com/r", d1.binding);
+      for (const { recipeId } of [viaPrisma, viaD1]) {
+        expect((await db.recipe.findUniqueOrThrow({ where: { id: recipeId! }, select: { visibility: true } })).visibility).toBe("private");
+      }
+    });
+
     it("takes the next title when another recipe takes it before the write", async () => {
       const racing: D1ReadDatabase = {
         prepare: (sql) => d1.binding.prepare(sql),
