@@ -25,6 +25,7 @@ import {
   type MoveInProgress,
 } from "~/domains/move-in";
 import { isFlagOn } from "~/domains/platform";
+import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { CookbookPage } from "~/components/cookbook/page";
@@ -47,11 +48,17 @@ async function signedInWithFlag(request: Request, context: Route.LoaderArgs["con
 }
 
 /** Keeps the move-in running after the response, inside the request's waitUntil. */
-function keepRunning(context: Route.ActionArgs["context"], env: MoveInEnv, jobId: string) {
+function keepRunning(context: Route.ActionArgs["context"], env: MoveInEnv, jobId: string, userId: string) {
   const ctx = context.cloudflare?.ctx;
   if (!ctx) return;
-  const run = runForAWhile(jobId, moveInPorts(env, () => new Date()), { budgetMs: RUN_BUDGET_MS }).catch((error: unknown) => {
-    console.error("move-in run stopped; the page's next poll resumes it", error);
+  const run = runForAWhile(jobId, moveInPorts(env, () => new Date()), { budgetMs: RUN_BUDGET_MS }).catch(async (error: unknown) => {
+    // The page's next poll resumes the move-in; the report says how often runs stop, and why.
+    await captureException(resolvePostHogServerConfig(getCloudflareEnv(context) ?? {}), {
+      error,
+      distinctId: userId,
+      route: "/move-in",
+      extras: { phase: "run" },
+    });
   });
   ctx.waitUntil(run);
 }
@@ -111,7 +118,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (form.get("intent") === "continue") {
     const jobId = String(form.get("jobId") ?? "");
     if (!(await readMoveInProgress(env.DB, { ownerId: userId, jobId }))) throw new Response("Not found", { status: 404 });
-    keepRunning(context, env, jobId);
+    keepRunning(context, env, jobId, userId);
     return { error: null };
   }
 
@@ -125,7 +132,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     now: new Date(),
   });
   if (!started.ok) return fail(started.code, started.code === "backup-too-large" ? 413 : 400);
-  keepRunning(context, env, started.jobId);
+  keepRunning(context, env, started.jobId, userId);
   return redirect(`/move-in?job=${started.jobId}`);
 }
 
