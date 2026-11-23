@@ -1,7 +1,7 @@
 // Feature flags: how an unfinished feature lands on main without reaching people.
 //
-// Declare a flag in FLAGS below, read it with isFlagOn on the server or useFlag in a component, and delete it as the
-// last step of its feature. Every flag is off unless the environment turns it on:
+// Declare a flag in its own file, ./flags/<name>.ts (copy one that is there), read it with isFlagOn on the server or
+// useFlag in a component, and delete the file as the last step of its feature. Every flag is off unless the environment turns it on:
 // - SPOONJOY_FLAGS turns flags on for everyone: "all" (QA, set in wrangler.json's env.qa) or names separated by commas
 //   or spaces. Production leaves it unset, so production has every flag off.
 // - SPOONJOY_FLAG_USERS turns flags on for chosen users, for dogfooding: JSON from user id to a list of names or "all",
@@ -10,22 +10,18 @@
 //
 // This file does no I/O: callers pass the Worker env and the signed-in user's id, so it runs on server and client alike.
 
-/** Every flag, by name, with what it hides. Keep the names sorted. */
-export const FLAGS = {
-  households: { description: "Households at /households: members, roles and invites, and the lists, plan and recipes they share." },
-  "meal-planner": { description: "The meal planner at /plan: a week of recipes and notes, and its API and MCP tools." },
-  move_in: { description: "The Move in page at /move-in: bring a kitchen over from another recipe app's backup." },
-  recipe_visibility: { description: "Cooks choose who reads each recipe (private or public) and their default for new ones" },
-  organizers: {
-    description: "Tags, categories and tools on recipes, their pages and filters, smart cookbooks and bulk actions on many recipes.",
-  },
-  nutrition: { description: "Calories and macros per serving on a recipe's page, from USDA FoodData Central." },
-  "ingredient-swaps": { description: "What to use instead of an ingredient, shown under it in cook mode." },
-} as const satisfies Record<string, { description: string }>;
+import type { FlagDeclaration, FlagName } from "./define-flag";
 
-export type FlagName = keyof typeof FLAGS & string;
+const declared = import.meta.glob<FlagDeclaration<FlagName>>("./flags/*.ts", { eager: true, import: "default" });
+
+/** Every flag, by name, with what it hides. */
+export const FLAGS = Object.fromEntries(
+  Object.values(declared).map(({ name, description }) => [name, { description }]),
+) as Record<FlagName, { description: string }>;
 
 export const FLAG_NAMES = Object.keys(FLAGS).sort() as FlagName[];
+
+export type { FlagName };
 
 export type FlagEnv = { SPOONJOY_FLAGS?: string; SPOONJOY_FLAG_USERS?: string } | null | undefined;
 

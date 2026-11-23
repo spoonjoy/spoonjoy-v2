@@ -190,7 +190,7 @@ gh workflow run native-kill-switches.yml --ref main -f mode=set -f switches='<th
 
 ### Feature flags
 
-Unfinished features land on main behind a flag declared in `app/domains/platform/flags/flags.ts`; servers read one with `isFlagOn`, components with `useFlag` (the root loader hands each visitor the flags that are on for them). Every flag is off unless a Worker variable turns it on:
+Unfinished features land on main behind a flag declared in its own file, `app/domains/platform/flags/flags/<name>.ts` (copy one that is there); servers read one with `isFlagOn`, components with `useFlag` (the root loader hands each visitor the flags that are on for them). Every flag is off unless a Worker variable turns it on:
 
 - `SPOONJOY_FLAGS` turns flags on for everyone: `all`, or names separated by commas or spaces. `wrangler.json`'s `env.qa` sets `all`, so shared QA and every Journeys run stack have every flag on; production leaves it unset, so production has every flag off.
 - `SPOONJOY_FLAG_USERS` turns flags on for chosen users, for dogfooding: JSON from user id to a list of names or `"all"`, for example `{"<user id>":["meal-planner"]}`. Set it in `wrangler.json`'s `vars` in a pull request, so Production Deploy ships it in a tagged version like any other change.
