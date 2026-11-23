@@ -138,10 +138,12 @@ export default function Roadmap() {
       />
 
       <nav aria-label="Roadmap groups" className="mt-6 flex flex-wrap gap-x-5 gap-y-2 font-sj-ui text-sm">
+        {/* The count sits beside the link, not in it: the HX census names a link by its text, so
+            a count inside would change the census each time an item moves group. */}
         {groups.map((group) => (
-          <Link key={group.id} href={`#${group.id}`} tone="secondary" inline={false}>
-            {group.title} · {group.items.length}
-          </Link>
+          <Text key={group.id} as="span" size="sm" tone="muted">
+            <Link href={`#${group.id}`} tone="secondary" inline={false}>{group.title}</Link> · {group.items.length}
+          </Text>
         ))}
       </nav>
 
