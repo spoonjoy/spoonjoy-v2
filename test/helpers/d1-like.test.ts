@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "./cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
-import { d1Like } from "./d1-like";
+import { d1Glob, d1Like } from "./d1-like";
 import { migratedSqliteD1, type MigratedSqlite } from "./migrated-sqlite";
 
 let database: MigratedSqlite | undefined;
@@ -22,6 +22,23 @@ describe("the test databases' LIKE", () => {
     expect(d1Like("ÉCLAIR", "éclair")).toBe(0);
     expect(d1Like(null, "x")).toBeNull();
     expect(d1Like("x", null)).toBeNull();
+  });
+
+  it("lets _ stand for one character, even one outside the Basic Multilingual Plane, as SQLite does", () => {
+    expect(d1Like("_", "🍋")).toBe(1);
+    expect(d1Like("Lemon _ Rice", "Lemon 🍋 Rice")).toBe(1);
+    expect(d1Like("__", "🍋")).toBe(0);
+  });
+
+  it("globs as SQLite does, and refuses a GLOB pattern over D1's 50 bytes", () => {
+    expect(d1Glob("Soup*", "Soup (2)")).toBe(1);
+    expect(d1Glob("soup*", "Soup (2)")).toBe(0);
+    expect(d1Glob("Soup (?)", "Soup (2)")).toBe(1);
+    expect(d1Glob("[a-c]?", "b🍋")).toBe(1);
+    expect(d1Glob(null, "x")).toBeNull();
+    database = migratedSqliteD1();
+    expect(() => database?.sqlite.prepare(`SELECT 1 WHERE 'x' GLOB ?`).get(`${"a".repeat(50)}*`)).toThrow("LIKE or GLOB pattern too complex");
+    expect(database.sqlite.prepare(`SELECT 'Soup (2)' GLOB ? AS hit`).get("Soup*")).toEqual({ hit: 1 });
   });
 
   it("refuses a pattern over D1's 50 bytes in the migrated database, as D1 does", () => {
