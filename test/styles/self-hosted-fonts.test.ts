@@ -7,6 +7,33 @@ const ROOT = resolve(__dirname, "../..");
 const css = readFileSync(resolve(ROOT, "app/styles/fonts.css"), "utf8");
 const faces = Array.from(css.matchAll(/@font-face \{([^}]*)\}/g), (match) => match[1]);
 const field = (face: string, name: string) => new RegExp(`${name}: ([^;]+);`).exec(face)?.[1];
+const fontFile = (face: string) => /src: url\("\.\.\/fonts\/([a-z0-9-]+\.woff2)"\) format\('woff2'\);/.exec(face)?.[1];
+
+// The table tags in a WOFF2 file's directory (W3C WOFF2, section 5.2). A tag is either an index into
+// the spec's known-tag list or four bytes after the flags; each entry's lengths are UIntBase128s.
+const KNOWN_TAGS = ["cmap", "head", "hhea", "hmtx", "maxp", "name", "OS/2", "post", "cvt ", "fpgm", "glyf", "loca", "prep"];
+function woff2Tables(bytes: Buffer): string[] {
+  const tags: string[] = [];
+  let offset = 48;
+  const base128 = () => {
+    let value = 0;
+    for (;;) {
+      const byte = bytes[offset++];
+      value = value * 128 + (byte & 0x7f);
+      if (!(byte & 0x80)) return value;
+    }
+  };
+  for (let table = 0; table < bytes.readUInt16BE(12); table++) {
+    const flags = bytes[offset++];
+    const index = flags & 0x3f;
+    const tag = index === 63 ? bytes.subarray(offset, (offset += 4)).toString("latin1") : (KNOWN_TAGS[index] ?? `#${index}`);
+    tags.push(tag);
+    base128();
+    const transform = flags >> 6;
+    if (tag === "glyf" || tag === "loca" ? transform === 0 : transform !== 0) base128();
+  }
+  return tags;
+}
 
 describe("self-hosted web fonts", () => {
   it("serves every face from the app's own files, never from Google Fonts", () => {
@@ -14,13 +41,21 @@ describe("self-hosted web fonts", () => {
     // Comments may name Google Fonts; no rule may load from it or any other host.
     expect(css.replace(/\/\*[\s\S]*?\*\//g, "")).not.toMatch(/googleapis|gstatic|https?:/);
     for (const face of faces) {
-      const file = /src: url\("\.\.\/fonts\/([a-z0-9-]+\.woff2)"\) format\('woff2'\);/.exec(face)?.[1];
+      const file = fontFile(face);
       expect(file).toBeDefined();
       const bytes = readFileSync(resolve(ROOT, "app/fonts", file!));
       expect(bytes.subarray(0, 4).toString("latin1")).toBe("wOF2");
     }
     expect(JSON.stringify(links())).not.toMatch(/fonts\.googleapis|fonts\.gstatic/);
     expect(readFileSync(resolve(ROOT, "app/root.tsx"), "utf8")).toContain('import "./styles/fonts.css";');
+  });
+
+  it("ships the hinted build Google served Windows and Linux, which renders there as Google's did", () => {
+    for (const face of faces) {
+      const tables = woff2Tables(readFileSync(resolve(ROOT, "app/fonts", fontFile(face)!)));
+      expect(tables).toContain("glyf");
+      expect(tables).toContain("prep");
+    }
   });
 
   it("gives Storybook the same local files, with no Google Fonts link", () => {
