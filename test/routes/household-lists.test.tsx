@@ -270,6 +270,10 @@ describe("household list pages", () => {
     render(<Viewer initialEntries={["/households/h1/lists/l1"]} />);
     expect(await screen.findByText(VIEW_ONLY_NOTE)).toBeTruthy();
     expect(screen.getByText("Added by Deleted chef")).toBeTruthy();
+    // The tick can't be changed, and a screen reader hears why with the list's checkboxes.
+    const eggs = screen.getByRole("checkbox", { name: "eggs" });
+    expect(eggs).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("group", { name: "Groceries" })).toHaveAccessibleDescription(VIEW_ONLY_NOTE);
     cleanup();
 
     const Member = listFor(true);

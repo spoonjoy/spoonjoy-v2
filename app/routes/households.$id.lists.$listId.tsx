@@ -10,7 +10,6 @@ import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { SectionHeader } from "~/components/ouro/section-header/section-header";
-import { Text } from "~/components/ouro/text/text";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { CookbookPage } from "~/components/cookbook/page";
 import { chefDisplayName } from "~/lib/username";
@@ -118,15 +117,13 @@ export default function HouseholdListPage() {
               <Button type="submit">Add</Button>
             </div>
           </Form>
-        ) : (
-          <Text tone="muted" size="sm" className="mt-6">
-            You can see this list. An owner can let you add to it.
-          </Text>
-        )}
+        ) : null}
 
         <Checklist
           label={list.name}
           hideLabel
+          // A view-only member's boxes are disabled; the reason is the list's description, which a screen reader reads with them.
+          description={list.canEdit ? undefined : "You can see this list. An owner can let you add to it."}
           className="mt-6"
           items={list.items.map((item) => ({
             id: item.id,
