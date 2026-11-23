@@ -97,6 +97,10 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/cookbooks.new.tsx", "/cookbooks/new", "user-product", { universalLink: true }),
   route("routes/cookbooks.$id.tsx", "/cookbooks/:id", "user-product", { universalLink: true, publicShareable: true }),
   route("routes/shopping-list.tsx", "/shopping-list", "user-product", { universalLink: true }),
+  // Households are web-only for now: the iPhone app has no household screens to open a link in.
+  route("routes/households._index.tsx", "/households", "user-product", { universalLink: false }),
+  route("routes/households.$id.tsx", "/households/:id", "user-product", { universalLink: false }),
+  route("routes/join.$token.tsx", "/join/:token", "user-product", { universalLink: false }),
   route("routes/account.settings.tsx", "/account/settings", "user-product", { universalLink: true }),
   // A file download and the page after deletion stay in the browser.
   route("routes/account.export.ts", "/account/export", "secure-web-handoff"),
