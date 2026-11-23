@@ -18,6 +18,13 @@ async function attachScreenshot(testInfo: TestInfo, page: Page, name: string) {
   await testInfo.attach(name, { body: await page.screenshot({ fullPage: true, animations: "disabled" }), contentType: "image/png" });
 }
 
+/** The page's next successful POST to the household, which is when a change made on it is saved. */
+function saved(page: Page, householdPath: string) {
+  return page.waitForResponse(
+    (response) => response.request().method() === "POST" && new URL(response.url()).pathname.startsWith(householdPath) && response.ok(),
+  );
+}
+
 function people(page: Page) {
   return page.getByRole("list", { name: "People" });
 }
@@ -85,7 +92,8 @@ test.describe("Households", () => {
 
       // The owner makes the joiner view-only, and the joiner sees it on their next load.
       await page.getByRole("button", { name: `Actions for ${joiner.username}`, exact: true }).click();
-      await page.getByRole("menuitemradio", { name: "View-only", exact: true }).click();
+      // Reload only once the change is saved: a reload that wins the race against the POST would drop it.
+      await Promise.all([saved(page, householdPath), page.getByRole("menuitemradio", { name: "View-only", exact: true }).click()]);
       await verifyAfterReload(async () => {
         await expect(people(page).getByText("View-only", { exact: true })).toBeVisible();
       });
@@ -98,7 +106,7 @@ test.describe("Households", () => {
       const confirm = page.getByRole("alertdialog", { name: `Remove ${joiner.username}?` });
       await expectAccessible();
       await attachScreenshot(testInfo, page, "owner-remove-dialog");
-      await confirm.getByRole("button", { name: "Remove", exact: true }).click();
+      await Promise.all([saved(page, householdPath), confirm.getByRole("button", { name: "Remove", exact: true }).click()]);
       await verifyAfterReload(async () => {
         await expect(people(page).getByText(joiner.username, { exact: true })).toHaveCount(0);
       });
