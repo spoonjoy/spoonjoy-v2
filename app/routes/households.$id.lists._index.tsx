@@ -36,7 +36,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
   const form = await request.formData();
   if (form.get("intent") !== "create") return data({ error: "Unknown action." }, { status: 400 });
   const made = await createHouseholdList(lists, { householdId: params.id, userId, name: form.get("name"), now: new Date() });
-  if (!made.ok) return data({ error: made.error }, { status: 400 });
+  if (!made.ok) return data({ error: made.error }, { status: made.forbidden ? 403 : 400 });
   return redirect(`/households/${params.id}/lists/${made.value.id}`);
 }
 

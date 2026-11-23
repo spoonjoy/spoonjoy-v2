@@ -100,7 +100,9 @@ describe("/households/:id/lists", () => {
 
   it("says why a list can't be made", async () => {
     const viewOnly = await call(listsAction, { id: "h1" }, "cal", { intent: "create", name: "Mine" });
-    expect(statusOf(viewOnly)).toBe(400);
+    // Not allowed is 403, as the app's other permission refusals are; a request it can't use is 400.
+    expect(statusOf(viewOnly)).toBe(403);
+    expect(statusOf(await call(listsAction, { id: "h1" }, "ann", { intent: "create", name: "  " }))).toBe(400);
     expect(payload(viewOnly)).toEqual({ error: "View-only members can't change shared lists." });
     expect(payload(await call(listsAction, { id: "h1" }, "ann", { intent: "dance" }))).toEqual({ error: "Unknown action." });
   });
@@ -123,6 +125,15 @@ describe("/households/:id/lists", () => {
     expect(payload(await call(listAction, at, "cal", { intent: "remove", itemId }))).toEqual({ error: "View-only members can't change shared lists." });
     expect(payload(await call(listAction, at, "cal", { intent: "delete" }))).toEqual({ error: "View-only members can't change shared lists." });
     expect(payload(await call(listAction, at, "ann", { intent: "dance" }))).toEqual({ error: "Unknown action." });
+    expect(statusOf(await call(listAction, at, "cal", { intent: "delete" }))).toBe(403);
+    expect(statusOf(await call(listAction, at, "ann", { intent: "dance" }))).toBe(400);
+    expect(statusOf(await call(listAction, at, "ann", { intent: "add", text: "  " }))).toBe(400);
+
+    // Ben is a member who didn't make the list: refused a delete with 403, and the list stays.
+    const notTheirs = await call(listAction, at, "ben", { intent: "delete" });
+    expect(statusOf(notTheirs)).toBe(403);
+    expect(payload(notTheirs)).toEqual({ error: "Only the person who made this list or a household owner can delete it." });
+    expect(payload(await call(listLoader, at, "ben")).list.canDelete).toBe(false);
 
     expect(payload(await call(listAction, at, "ann", { intent: "remove", itemId }))).toEqual({ done: "removed" });
     expect(payload(await call(listLoader, at, "ann")).list.items).toEqual([]);

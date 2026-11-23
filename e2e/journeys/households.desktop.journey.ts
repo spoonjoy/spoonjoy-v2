@@ -165,7 +165,7 @@ test.describe("Households", () => {
       await expect(joinerPage.getByRole("button", { name: "Delete list", exact: true })).toHaveCount(0);
       await attachScreenshot(testInfo, joinerPage, "joiner-shared-list");
       const refused = await joinerPage.request.post(listPath, { form: { intent: "delete" } });
-      expect(refused.status()).toBe(400);
+      expect(refused.status()).toBe(403);
       await verifyAfterReload(async () => {
         await expect(page.getByRole("heading", { level: 1, name: "Groceries", exact: true })).toBeVisible();
       });
