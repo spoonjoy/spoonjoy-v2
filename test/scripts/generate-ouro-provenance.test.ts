@@ -220,7 +220,7 @@ describe("main", () => {
     expect(() => main(["--write"], fixture().deps as never, console, readdir as never)).toThrow("Usage: generate-ouro-provenance.mjs [--check]");
   });
 
-  it("matches the committed manifest", { timeout: 60_000 }, () => {
+  it("matches the manifest install wrote", { timeout: 60_000 }, () => {
     const committed = readFileSync(OUTPUT_PATH, "utf8");
     const ouroFiles = listFiles("app/components/ouro/", readdirSync as never);
     expect(serializeProvenance(buildProvenance({ ...defaultDeps, ouroFiles }))).toBe(committed);
@@ -229,7 +229,7 @@ describe("main", () => {
   it("reads and writes real files by default", () => {
     expect(defaultDeps.exists("app/routes.ts")).toBe(true);
     expect(defaultDeps.readFile("app/routes.ts")).toContain("test-kitchen");
-    // Writing the committed manifest over itself changes nothing.
+    // Writing the manifest over itself changes nothing.
     defaultDeps.writeFile(OUTPUT_PATH, readFileSync(OUTPUT_PATH, "utf8"));
     expect(readFileSync(OUTPUT_PATH, "utf8")).toContain('"guide"');
   });
@@ -257,7 +257,7 @@ describe("the command line", () => {
     process.exitCode = exitCode;
   });
 
-  it("checks the committed manifest through the default runner", { timeout: 60_000 }, async () => {
+  it("checks the written manifest through the default runner", { timeout: 60_000 }, async () => {
     const io = { log: vi.fn(), error: vi.fn() };
     const argv = process.argv;
     process.argv = ["node", "/repo/x.mjs", "--check"];

@@ -7,6 +7,7 @@ import { pagerRecipes, pagerRecipe, PAGER_OLDEST_RECIPE, PAGER_FORBIDDEN_WORDS,
   KITCHEN,
   SCRATCH_ACCOUNT_COUNT,
   SCRATCH_USER_COUNT,
+  scratchIndexCount,
   SCRATCH_VARIANTS,
   buildKitchenResetSql,
   buildScratchInvalidationSql,
@@ -361,7 +362,8 @@ describe("seed-qa-kitchen", () => {
   describe("scratch users", () => {
     it("generates a base account and a desktop twin for each of SCRATCH_USER_COUNT indices by default, each in the codex-e2e-* / codex_e2e_* disposable namespace, no id over 40 characters", () => {
       const users = generateScratchUsers();
-      expect(SCRATCH_USER_COUNT).toBe(10);
+      // One index per setup file in e2e/journeys/scratch/.
+      expect(SCRATCH_USER_COUNT).toBe(readdirSync("e2e/journeys/scratch").filter((name) => name.endsWith(".setup.ts")).length);
       expect(SCRATCH_ACCOUNT_COUNT).toBe(SCRATCH_USER_COUNT * 2);
       expect(users).toHaveLength(SCRATCH_ACCOUNT_COUNT);
       expect(users.filter((user) => user.variant === "base")).toHaveLength(SCRATCH_USER_COUNT);
@@ -1057,5 +1059,19 @@ describe("seed-qa-kitchen", () => {
         process.exitCode = originalExitCode;
       }
     });
+  });
+});
+
+describe("scratchIndexCount", () => {
+  it("counts the scratch setup files, numbered 1 to n, and ignores other files", () => {
+    expect(scratchIndexCount(["2-cookbooks.setup.ts", "1-recipe-editing.setup.ts", "README.md"])).toBe(2);
+    expect(scratchIndexCount([])).toBe(0);
+  });
+
+  it("fails when two files take the same index or one is skipped, naming what it found", () => {
+    expect(() => scratchIndexCount(["1-a.setup.ts", "2-b.setup.ts", "2-c.setup.ts"])).toThrow(
+      "e2e/journeys/scratch/ must number its setup files 1 to 3, each once; found 1, 2, 2. Take the next free index.",
+    );
+    expect(() => scratchIndexCount(["1-a.setup.ts", "3-c.setup.ts"])).toThrow("found 1, 3.");
   });
 });

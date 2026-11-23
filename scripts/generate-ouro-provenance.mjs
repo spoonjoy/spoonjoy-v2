@@ -8,6 +8,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
+import { contextRouteImports, inlineContextRoutes } from "./route-sources.mjs";
 
 export const OUTPUT_PATH = "app/generated/ouro-provenance.json";
 /** How Spoonjoy builds with Ouro HX, for the people and agents who read the manifest. */
@@ -175,7 +176,9 @@ function entryFor(file, deps, known) {
 export function buildProvenance({ readFile, exists, ouroFiles }) {
   const known = installedItems(ouroFiles);
   const routes = [];
-  for (const route of parseRoutes(readFile(ROUTES_PATH))) {
+  const source = readFile(ROUTES_PATH);
+  const contexts = Object.fromEntries(contextRouteImports(source, ROUTES_PATH).map(({ file }) => [file, readFile(file)]));
+  for (const route of parseRoutes(inlineContextRoutes(source, ROUTES_PATH, contexts))) {
     if (!exists(route.file)) throw new Error(`${ROUTES_PATH} names ${route.file}, which does not exist`);
     if (!rendersPage(readFile(route.file))) continue;
     routes.push({ path: route.path, ...entryFor(route.file, { readFile, exists }, known) });

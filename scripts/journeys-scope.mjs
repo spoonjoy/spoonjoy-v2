@@ -63,7 +63,8 @@ export const SPEC_FILE = /^e2e\/journeys\/(?!hx-census\.)[A-Za-z0-9_-]+(?:\.(?:m
 // App code: a pull request that changes only these (and journey specs) gets the affected run.
 export const AFFECTED_PATHS = Object.freeze([/^app\//, /^stories\//, /^public\//]);
 // App files that every page uses: a change to one runs the full suite.
-export const APP_WIDE_PATHS = Object.freeze([/^app\/(?:root|routes|entry\.[a-z]+)\.tsx?$/, /^app\/styles\//]);
+// app/route-config/ holds each context's part of app/routes.ts.
+export const APP_WIDE_PATHS = Object.freeze([/^app\/(?:root|routes|entry\.[a-z]+)\.tsx?$/, /^app\/route-config\//, /^app\/styles\//]);
 // Always part of an affected run: signing in and moving around the app.
 export const SMOKE_SPECS = Object.freeze(["e2e/journeys/sign-in.journey.ts", "e2e/journeys/round-trips.journey.ts"]);
 // More than this many selected specs runs the full suite instead.

@@ -1,0 +1,9 @@
+// How the Apple apps and link previews treat each route in ./routes.ts. WEB_ROUTE_MANIFEST
+// (app/lib/web-route-manifest.server.ts) spreads these in.
+import { webRoute, type WebRouteClassification } from "../web-route";
+
+export default [
+  // Households are web-only for now: the iPhone app has no household screens to open a link in.
+  webRoute("routes/households._index.tsx", "/households", "user-product", { universalLink: false }),
+  webRoute("routes/households.$id.tsx", "/households/:id", "user-product", { universalLink: false }),
+] as const satisfies readonly WebRouteClassification[];

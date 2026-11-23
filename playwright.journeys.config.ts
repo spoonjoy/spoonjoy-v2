@@ -32,7 +32,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [
-    { name: "personas", testMatch: /personas\.setup\.ts/, use: { ...devices["Desktop Chrome"] } },
+    { name: "personas", testMatch: /(personas|scratch\/\d+-[a-z0-9-]+)\.setup\.ts/, use: { ...devices["Desktop Chrome"] } },
     // A plain *.journey.ts runs on both devices. *.desktop.journey.ts / *.mobile.journey.ts
     // route to one device only; check:journeys still scans them (they end in .journey.ts).
     {

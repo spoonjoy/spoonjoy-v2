@@ -59,7 +59,7 @@
     }
   },
   "scripts": {
-    "postinstall": "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
+    "postinstall": "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate && node scripts/generate-ouro-provenance.mjs",
     "dev": "react-router dev",
     "api:playground:generate": "tsx scripts/generate-api-playground.ts",
     "provenance:generate": "node scripts/generate-ouro-provenance.mjs",

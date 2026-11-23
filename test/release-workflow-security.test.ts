@@ -458,8 +458,9 @@ describe("CI warning suppression at source", () => {
     // coverage, unit-changed and e2e.
     expect(generateCommands).toHaveLength(3);
     expect(generateCommands.every((index) => index > envIndex)).toBe(true);
+    // Install also writes the Ouro provenance manifest, which is generated, never committed.
     expect(packageJson.scripts.postinstall).toBe(
-      "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
+      "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate && node scripts/generate-ouro-provenance.mjs",
     );
     expect(packageJson.scripts["prisma:generate"]).toBe(
       "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",

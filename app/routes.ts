@@ -1,4 +1,14 @@
 import { type RouteConfig, index, route } from "@react-router/dev/routes";
+import communityAndFederationRoutes from "./route-config/community-and-federation/routes";
+import cookingRoutes from "./route-config/cooking/routes";
+import foodKnowledgeRoutes from "./route-config/food-knowledge/routes";
+import householdsAndIdentityRoutes from "./route-config/households-and-identity/routes";
+import integrationsRoutes from "./route-config/integrations/routes";
+import kitchenRoutes from "./route-config/kitchen/routes";
+import moveInRoutes from "./route-config/move-in/routes";
+import pantryAndShoppingRoutes from "./route-config/pantry-and-shopping/routes";
+import planningRoutes from "./route-config/planning/routes";
+import platformRoutes from "./route-config/platform/routes";
 
 export default [
   index("routes/_index.tsx"),
@@ -55,8 +65,6 @@ export default [
     route(":id", "routes/cookbooks.$id.tsx"),
   ]),
   route("shopping-list", "routes/shopping-list.tsx"),
-  route("households", "routes/households._index.tsx"),
-  route("households/:id", "routes/households.$id.tsx"),
   route("join/:token", "routes/join.$token.tsx"),
   route("account/settings", "routes/account.settings.tsx"),
   route("account/export", "routes/account.export.ts"),
@@ -100,5 +108,17 @@ export default [
   route(".well-known/spoonjoy-release-readiness", "routes/well-known.spoonjoy-release-readiness.tsx"),
   route("photos/*", "routes/photos.$.tsx"),
   route(".well-known/appspecific/com.chrome.devtools.json", "routes/devtools-well-known.tsx"),
+  // Each bounded context's routes, from app/route-config/<context>/routes.ts. Add a new route
+  // there, not here.
+  ...communityAndFederationRoutes,
+  ...cookingRoutes,
+  ...foodKnowledgeRoutes,
+  ...householdsAndIdentityRoutes,
+  ...integrationsRoutes,
+  ...kitchenRoutes,
+  ...moveInRoutes,
+  ...pantryAndShoppingRoutes,
+  ...planningRoutes,
+  ...platformRoutes,
   route("*", "routes/$.tsx"),
 ] satisfies RouteConfig;

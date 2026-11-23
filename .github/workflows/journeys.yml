@@ -344,9 +344,10 @@ jobs:
               [[ "$spec" =~ ^e2e/journeys/[A-Za-z0-9_-]+(\.(mobile|desktop))?\.journey\.ts$ ]] || { echo "::error::Unexpected spec: $spec"; exit 1; }
             done
             census=0
-            # Without the census, the personas setup runs as the journeys' dependency; naming its
-            # file keeps it in the run whatever the file filter does to dependencies.
-            deps=(e2e/journeys/personas.setup.ts)
+            # Without the census, the personas setup (personas.setup.ts and scratch/) runs as the
+            # journeys' dependency; naming its files keeps it in the run whatever the file filter
+            # does to dependencies.
+            deps=(e2e/journeys/personas.setup.ts e2e/journeys/scratch/)
             if [ "$CENSUS" = "true" ]; then
               echo "census_ran=true" >> "$GITHUB_OUTPUT"
               pnpm run test:journeys:census || census=$?
