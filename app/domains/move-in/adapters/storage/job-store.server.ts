@@ -36,7 +36,7 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
   return {
     loadJob: (id) => loadJob(db, id),
 
-    async updateJob(id, patch, token) {
+    async updateJob(id, patch, token, report = {}) {
       const stamp = d1Timestamp(now());
       const fields = PATCHABLE.filter((field) => field in patch);
       const sets = [...fields.map((field) => `"${field}" = ?`), `"updatedAt" = ?`];
@@ -49,21 +49,39 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
       if (token !== undefined) stamped(`"heartbeatAt" = ?`);
       if (patch.status === "running") stamped(`"startedAt" = COALESCE("startedAt", ?)`);
       if (patch.status && FINISHED.includes(patch.status)) stamped(`"finishedAt" = ?`);
-      const fence = token === undefined ? "" : ` AND "claimToken" = ?`;
-      const [{ changes }] = await d1WriteBatch(db, [[
-        `UPDATE "ImportJob" SET ${sets.join(", ")} WHERE "id" = ?${fence}`,
-        ...values, id, ...(token === undefined ? [] : [token]),
-      ]]);
-      if (token !== undefined && changes === 0) throw new LostClaimError();
+      // Every statement holds only while the job is unfinished and, under a claim, still this run's. The batch is one
+      // transaction and the job's own row changes last, so a run that lost its claim writes nothing at all.
+      const fenceSql = `EXISTS (SELECT 1 FROM "ImportJob" WHERE "id" = ? AND "status" NOT IN (${FINISHED.map(() => "?").join(", ")})${token === undefined ? "" : ` AND "claimToken" = ?`})`;
+      const fence = [id, ...FINISHED, ...(token === undefined ? [] : [token])];
+      const statements: Array<[string, ...unknown[]]> = [];
+      if (report.restart) {
+        statements.push([`DELETE FROM "ImportEntityCount" WHERE "jobId" = ? AND ${fenceSql}`, id, ...fence]);
+        statements.push([`DELETE FROM "ImportEvent" WHERE "jobId" = ? AND ${fenceSql}`, id, ...fence]);
+      }
+      for (const [entity, delta] of report.counts ?? []) {
+        statements.push([
+          `INSERT INTO "ImportEntityCount" ("jobId", "entity", ${COUNT_FIELDS.map((field) => `"${field}"`).join(", ")})
+           SELECT ?, ?, ${COUNT_FIELDS.map(() => "?").join(", ")} WHERE ${fenceSql}
+           ON CONFLICT ("jobId", "entity") DO UPDATE SET ${COUNT_FIELDS.map((field) => `"${field}" = "${field}" + excluded."${field}"`).join(", ")}`,
+          id, entity, ...COUNT_FIELDS.map((field) => delta[field] ?? 0), ...fence,
+        ]);
+      }
+      for (const event of report.events ?? []) {
+        // The seq comes from the same statement, so two writers never take the same one: the unique index refuses the second.
+        statements.push([
+          `INSERT INTO "ImportEvent" ("id", "jobId", "seq", "level", "kind", "entity", "sourceKey", "targetId", "message", "detail", "createdAt")
+           SELECT ?, ?, (SELECT COALESCE(MAX("seq"), 0) + 1 FROM "ImportEvent" WHERE "jobId" = ?), ?, ?, ?, ?, ?, ?, ?, ? WHERE ${fenceSql}`,
+          `event_${crypto.randomUUID()}`, id, id, event.level, event.kind, event.entity, event.sourceKey, event.targetId, event.message, event.detail ?? null, stamp, ...fence,
+        ]);
+      }
+      statements.push([`UPDATE "ImportJob" SET ${sets.join(", ")} WHERE "id" = ? AND ${fenceSql}`, ...values, id, ...fence]);
+      const results = await d1WriteBatch(db, statements);
+      if (token !== undefined && results[results.length - 1].changes === 0) throw new LostClaimError();
     },
 
     async sourceInstanceKey(sourceId) {
       const [[row]] = await d1ReadBatch(db, [[`SELECT "instanceKey" FROM "ImportSource" WHERE "id" = ?`, sourceId]]);
       return row ? String(row.instanceKey) : null;
-    },
-
-    async resetCounts(jobId) {
-      await d1WriteBatch(db, [[`DELETE FROM "ImportEntityCount" WHERE "jobId" = ?`, jobId]]);
     },
 
     async ensureSource({ ownerId, kind, instanceKey, label, sourceVersion }) {
@@ -78,28 +96,10 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
       return String(row.id);
     },
 
-    async addCounts(jobId, entity, delta) {
-      const values = COUNT_FIELDS.map((field) => delta[field] ?? 0);
-      await d1WriteBatch(db, [[
-        `INSERT INTO "ImportEntityCount" ("jobId", "entity", ${COUNT_FIELDS.map((field) => `"${field}"`).join(", ")}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT ("jobId", "entity") DO UPDATE SET ${COUNT_FIELDS.map((field) => `"${field}" = "${field}" + excluded."${field}"`).join(", ")}`,
-        jobId, entity, ...values,
-      ]]);
-    },
-
-    async addEvent(jobId, event: MoveInEvent) {
-      // One statement, so two writers never take the same seq: the unique index refuses the second.
-      await d1WriteBatch(db, [[
-        `INSERT INTO "ImportEvent" ("id", "jobId", "seq", "level", "kind", "entity", "sourceKey", "targetId", "message", "detail", "createdAt")
-         SELECT ?, ?, COALESCE(MAX("seq"), 0) + 1, ?, ?, ?, ?, ?, ?, ?, ? FROM "ImportEvent" WHERE "jobId" = ?`,
-        `event_${crypto.randomUUID()}`, jobId, event.level, event.kind, event.entity, event.sourceKey, event.targetId, event.message, event.detail ?? null, d1Timestamp(now()), jobId,
-      ]]);
-    },
-
     async claim(jobId, at) {
       const token = `claim_${crypto.randomUUID()}`;
       const [{ changes }] = await d1WriteBatch(db, [[
-        `UPDATE "ImportJob" SET "heartbeatAt" = ?, "claimToken" = ? WHERE "id" = ? AND ("heartbeatAt" IS NULL OR "heartbeatAt" < ?)`,
+        `UPDATE "ImportJob" SET "heartbeatAt" = ?, "claimToken" = ?, "attempt" = "attempt" + 1 WHERE "id" = ? AND ("heartbeatAt" IS NULL OR "heartbeatAt" < ?)`,
         d1Timestamp(at), token, jobId, d1Timestamp(new Date(at.getTime() - MOVE_IN_CLAIM_MS)),
       ]]);
       return changes === 1 ? token : null;

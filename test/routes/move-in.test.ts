@@ -27,7 +27,7 @@ function memoryBucket() {
       const { offset, length } = options.range;
       return { arrayBuffer: async () => bytes.slice(offset, offset + length).buffer };
     },
-    put: async (key: string, value: Uint8Array) => void (objects[key] = new Uint8Array(value)),
+    put: async (key: string, value: Uint8Array | Blob) => void (objects[key] = value instanceof Blob ? new Uint8Array(await value.arrayBuffer()) : new Uint8Array(value)),
     delete: async (key: string) => void delete objects[key],
   };
 }

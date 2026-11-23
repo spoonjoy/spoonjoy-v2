@@ -3,6 +3,7 @@ import { bytesSource } from "~/domains/move-in/adapters/archive/zip";
 import {
   LostClaimError,
   MAX_ATTEMPTS,
+  RECIPE_TRIES,
   runForAWhile,
   runNextChunk,
   type MoveInCounts,
@@ -31,37 +32,52 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
   const counts = new Map<string, MoveInCounts>();
   const events: MoveInEvent[] = [];
   const sources: Array<Record<string, unknown>> = [];
-  const written = new Map<string, string>();
+  // Each recipe written, by source key: its Spoonjoy id and the job that wrote it.
+  const written = new Map<string, { recipeId: string; jobId: string }>();
   const photos: Array<{ recipeId: string; bytes: Uint8Array }> = [];
   const discarded: string[] = [];
   let holder: string | null = null;
   let tokens = 0;
   let opens = 0;
+  const add = (entity: string, delta: Partial<MoveInCounts>) => {
+    const now = counts.get(entity) ?? { found: 0, created: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 };
+    counts.set(entity, Object.fromEntries(Object.entries(now).map(([key, value]) => [key, value + (delta[key as keyof MoveInCounts] ?? 0)])) as MoveInCounts);
+  };
   const ports: MoveInPorts = {
     store: {
-      loadJob: async (id) => jobs.get(id) ?? null,
-      updateJob: async (id, patch, token) => {
-        if (token !== undefined && token !== holder) throw new LostClaimError();
-        jobs.set(id, { ...(jobs.get(id) as MoveInJob), ...patch });
+      loadJob: async (id) => (jobs.has(id) ? { ...(jobs.get(id) as MoveInJob) } : null),
+      updateJob: async (id, patch, token, report = {}) => {
+        const job = jobs.get(id) as MoveInJob;
+        const lost = (token !== undefined && token !== holder) || ["done", "done-with-issues", "failed"].includes(job.status);
+        if (lost) {
+          if (token !== undefined) throw new LostClaimError();
+          return;
+        }
+        if (report.restart) {
+          counts.clear();
+          events.length = 0;
+        }
+        for (const [entity, delta] of report.counts ?? []) add(entity, delta);
+        events.push(...(report.events ?? []));
+        jobs.set(id, { ...job, ...patch });
       },
-      resetCounts: async () => counts.clear(),
       sourceInstanceKey: async () => (sources.at(-1)?.instanceKey as string | undefined) ?? null,
       ensureSource: async (source) => (sources.push(source), "source-1"),
-      addCounts: async (_jobId, entity, delta) => {
-        const now = counts.get(entity) ?? { found: 0, created: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 };
-        counts.set(entity, Object.fromEntries(Object.entries(now).map(([key, value]) => [key, value + (delta[key as keyof MoveInCounts] ?? 0)])) as MoveInCounts);
-      },
-      addEvent: async (_jobId, event) => void events.push(event),
       hasIssues: async () => events.some((event) => event.level !== "info"),
-      claim: async () => (holder ? null : (holder = `token-${++tokens}`)),
+      claim: async (id) => {
+        if (holder) return null;
+        const job = jobs.get(id);
+        if (job) jobs.set(id, { ...job, attempt: job.attempt + 1 });
+        return (holder = `token-${++tokens}`);
+      },
       release: async (_id, token) => void (holder === token && (holder = null)),
     },
     openArchive: () => (opens++, bytesSource(zip)),
     ownerEmail: async () => email,
-    writeRecipe: write ?? (async ({ draft }: { draft: RecipeDraft }) => {
+    writeRecipe: write ?? (async ({ draft, jobId }: { draft: RecipeDraft; jobId: string }) => {
       const existing = written.get(draft.sourceKey);
-      if (existing) return { outcome: "unchanged", recipeId: existing };
-      written.set(draft.sourceKey, `spoonjoy-${draft.sourceKey}`);
+      if (existing) return { outcome: "unchanged", ...existing };
+      written.set(draft.sourceKey, { recipeId: `spoonjoy-${draft.sourceKey}`, jobId });
       return { outcome: "created", recipeId: `spoonjoy-${draft.sourceKey}`, title: draft.title, warnings: draft.warnings };
     }),
     attachPhoto: async ({ recipeId, bytes }) => void photos.push({ recipeId, bytes }),
@@ -70,8 +86,12 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
     now: () => new Date("2026-11-23T12:00:00.000Z"),
   };
   const job = () => jobs.get("job-1") as MoveInJob;
+  /** Runs chunks as the page's polls would: each takes the job (an attempt) and an outage waits for the next. */
   const runAll = async (chunkSize = 2) => {
-    for (let i = 0; i < 20 && !["done", "done-with-issues", "failed"].includes(job().status); i++) await runNextChunk("job-1", ports, { chunkSize });
+    for (let i = 0; i < 30 && !["done", "done-with-issues", "failed"].includes(job().status); i++) {
+      jobs.set("job-1", { ...job(), attempt: job().attempt + 1 });
+      await runNextChunk("job-1", ports, { chunkSize }).catch(() => undefined);
+    }
     return job();
   };
   return {
@@ -123,10 +143,12 @@ describe("runNextChunk", () => {
   it("adds nothing when the same backup moves in again", async () => {
     const h = harness();
     await h.runAll();
+    // A second job: the recipes are another job's now.
+    for (const [key, record] of h.written) h.written.set(key, { ...record, jobId: "job-0" });
     h.jobs.set("job-1", { ...h.job(), status: "queued", phase: "inspect", cursor: null });
-    h.counts.clear();
     await h.runAll();
     expect(h.counts.get("recipes")).toMatchObject({ found: 3, created: 0, unchanged: 3 });
+    expect(h.counts.get("photos")).toMatchObject({ found: 1, created: 0, unchanged: 1 });
     expect(h.photos).toHaveLength(1);
   });
 
@@ -141,7 +163,7 @@ describe("runNextChunk", () => {
     });
   });
 
-  it("counts a recipe that fails, reports it and carries on", async () => {
+  it("tries a recipe that fails again, then reports it and carries on", async () => {
     const h = harness({ write: async ({ draft }) => { if (draft.title === "Soup") throw new Error("D1 said no"); return { outcome: "created", recipeId: "r", title: draft.title, warnings: [] }; } });
     expect(await h.runAll()).toMatchObject({ status: "done-with-issues" });
     expect(h.counts.get("recipes")).toMatchObject({ created: 2, failed: 1 });
@@ -201,33 +223,38 @@ describe("runNextChunk", () => {
     expect(h.events.find((event) => event.entity === "photos")?.message).toBe("Pancakes moved in without its photo: the photo in the backup is damaged.");
   });
 
-  it("moves the cursor past each recipe, so a stop mid-chunk repeats only the recipe it stopped on", async () => {
+  it("saves after each recipe, so a stop mid-chunk repeats only that recipe and counts it once", async () => {
     const h = harness();
     await runNextChunk("job-1", h.ports);
-    const addCounts = h.ports.store.addCounts;
-    let created = 0;
-    h.ports.store.addCounts = async (jobId, entity, delta) => {
-      if (delta.created && entity === "recipes" && ++created === 2) throw new Error("the Worker stopped");
-      return addCounts(jobId, entity, delta);
+    const updateJob = h.ports.store.updateJob;
+    let saves = 0;
+    h.ports.store.updateJob = async (...args) => {
+      if (args[1].cursor === "2" && ++saves === 1) throw new Error("the Worker stopped");
+      return updateJob(...args);
     };
     await expect(runNextChunk("job-1", h.ports, { chunkSize: 3 })).rejects.toThrow("the Worker stopped");
     expect(h.job()).toMatchObject({ phase: "recipes", cursor: "1" });
+    expect(h.counts.get("recipes")).toMatchObject({ created: 1 });
+    expect(await h.runAll()).toMatchObject({ status: "done-with-issues" });
+    expect(h.counts.get("recipes")).toMatchObject({ found: 3, created: 3, unchanged: 0 });
+    expect(h.counts.get("photos")).toMatchObject({ found: 1, created: 1, unchanged: 0 });
   });
 
   it("brings the photo of a recipe that moved in before without it", async () => {
     const h = harness();
-    h.written.set(keys.pancakes, "already-here");
+    h.written.set(keys.pancakes, { recipeId: "already-here", jobId: "job-0" });
     await h.runAll();
     expect(h.photos).toEqual([{ recipeId: "already-here", bytes: photo }]);
     expect(h.counts.get("photos")).toMatchObject({ found: 1, created: 1, unchanged: 0 });
   });
 
-  it("counts afresh when the inspect phase runs again", async () => {
+  it("reports afresh when the inspect phase runs again", async () => {
     const h = harness();
     await runNextChunk("job-1", h.ports);
     h.jobs.set("job-1", { ...h.job(), phase: "inspect" });
     await runNextChunk("job-1", h.ports);
     expect(h.counts.get("recipes")).toMatchObject({ found: 3 });
+    expect(h.events.filter((event) => event.kind === "phase-done")).toHaveLength(1);
   });
 
   it("keeps to the kitchen it chose when it started", async () => {
@@ -237,15 +264,25 @@ describe("runNextChunk", () => {
     expect(await h.runAll()).toMatchObject({ status: "done-with-issues" });
   });
 
-  it("stops for good after the same outage stops it again and again", async () => {
+  it("stops for good once runs keep taking the job without moving it forward", async () => {
     const h = harness();
     h.ports.openArchive = () => Promise.reject(new Error("blob store down"));
-    for (let i = 1; i < MAX_ATTEMPTS; i++) await expect(runNextChunk("job-1", h.ports)).rejects.toThrow("blob store down");
-    expect(await runNextChunk("job-1", h.ports)).toMatchObject({ status: "failed", lastError: "stuck" });
-    expect(h.events.at(-1)?.message).toMatch(/^The move-in hit the same problem/);
+    for (let i = 0; i < MAX_ATTEMPTS; i++) await expect(runForAWhile("job-1", h.ports, { budgetMs: 1000 })).rejects.toThrow("blob store down");
+    expect(await runForAWhile("job-1", h.ports, { budgetMs: 1000 })).toMatchObject({ status: "failed", lastError: "stuck" });
+    expect(h.events.at(-1)?.message).toMatch(/^The move-in tried five times in a row/);
+    expect(h.discarded).toEqual(["uploads/job-1.zip"]);
   });
 
-  it("starts counting outages again once a recipe moves in", async () => {
+  it("leaves a recipe that fails for the next run until it has been tried enough", async () => {
+    const h = harness({ write: async () => { throw new Error("D1 said no"); } });
+    await runNextChunk("job-1", h.ports);
+    h.jobs.set("job-1", { ...h.job(), attempt: RECIPE_TRIES - 1 });
+    await expect(runNextChunk("job-1", h.ports)).rejects.toThrow("D1 said no");
+    expect(h.job()).toMatchObject({ cursor: "0" });
+    expect(h.counts.get("recipes")).toMatchObject({ failed: 0 });
+  });
+
+  it("starts counting attempts again once a recipe moves in", async () => {
     const h = harness();
     await runNextChunk("job-1", h.ports);
     h.jobs.set("job-1", { ...h.job(), attempt: MAX_ATTEMPTS - 1 });

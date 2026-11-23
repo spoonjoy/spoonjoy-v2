@@ -5,7 +5,7 @@ import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { MOVE_IN_ARCHIVE_PREFIX } from "~/lib/photo-variants";
 import { FINISHED, type MoveInJob } from "../../application/run-move-in";
 import { MOVE_IN_ERROR_MESSAGES } from "../../model/move-in-error";
-import { moveInJobStore } from "../storage/job-store.server";
+import { MOVE_IN_CLAIM_MS, moveInJobStore } from "../storage/job-store.server";
 
 /** How long an upload may wait for its job row: the upload writes the backup first, then the job. */
 export const MOVE_IN_UPLOAD_GRACE_MS = 60 * 60 * 1000;
@@ -37,15 +37,18 @@ export async function sweepMoveInArchives({ db, bucket, now }: { db: D1ReadDatab
   let deleted = 0;
   let expired = 0;
   for (const object of await listArchives(bucket)) {
-    const [[row]] = await d1ReadBatch(db, [[`SELECT "id", "status", "updatedAt" FROM "ImportJob" WHERE "archiveKey" = ?`, object.key]]);
+    const [[row]] = await d1ReadBatch(db, [[`SELECT "id", "status", "updatedAt", "heartbeatAt" FROM "ImportJob" WHERE "archiveKey" = ?`, object.key]]);
     const age = now.getTime() - object.uploaded.getTime();
     if (!row) {
       if (age < MOVE_IN_UPLOAD_GRACE_MS) continue;
     } else if (!FINISHED.includes(row.status as MoveInJob["status"])) {
       if (now.getTime() - new Date(String(row.updatedAt)).getTime() < MOVE_IN_ABANDONED_MS) continue;
+      // A run that has just taken the job is working on it: leave it be.
+      if (row.heartbeatAt && now.getTime() - new Date(String(row.heartbeatAt)).getTime() < MOVE_IN_CLAIM_MS) continue;
       const id = String(row.id);
-      await store.addEvent(id, { level: "error", kind: "job-failed", entity: null, sourceKey: null, targetId: null, message: MOVE_IN_ERROR_MESSAGES.expired });
-      await store.updateJob(id, { status: "failed", lastError: "expired" });
+      await store.updateJob(id, { status: "failed", lastError: "expired" }, undefined, {
+        events: [{ level: "error", kind: "job-failed", entity: null, sourceKey: null, targetId: null, message: MOVE_IN_ERROR_MESSAGES.expired }],
+      });
       expired += 1;
     }
     await bucket.delete(object.key);
