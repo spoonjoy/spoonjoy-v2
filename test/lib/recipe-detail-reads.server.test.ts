@@ -231,6 +231,44 @@ describe("recipe detail reads", () => {
     expect(forOwner).toEqual(await readRecipeDetailWithPrisma(db, { recipeId: recipe.id, userId: owner.id }));
   });
 
+  it("returns a household recipe to its cook's household and no one else, in one D1 batch and from Prisma alike", async () => {
+    const { owner, friend, stranger, recipe } = await seedRecipe();
+    await db.recipe.update({ where: { id: recipe.id }, data: { visibility: "household" } });
+    const home = await db.household.create({ data: { name: "Home" } });
+    await db.householdMember.createMany({
+      data: [owner.id, friend.id].map((userId) => ({ householdId: home.id, userId, role: "member" })),
+    });
+
+    for (const userId of [stranger.id, null]) {
+      const fromD1 = await readRecipeDetailFromD1(d1.binding, { recipeId: recipe.id, userId });
+      expect(fromD1, String(userId)).toMatchObject({ recipe: null, spoons: [], userCookbooks: [] });
+      expect(fromD1).toEqual(await readRecipeDetailWithPrisma(db, { recipeId: recipe.id, userId }));
+    }
+    for (const userId of [owner.id, friend.id]) {
+      const before = d1.roundTrips();
+      const fromD1 = await readRecipeDetailFromD1(d1.binding, { recipeId: recipe.id, userId });
+      expect(d1.roundTrips() - before).toBe(1);
+      expect(fromD1.recipe, userId).toMatchObject({ id: recipe.id, visibility: "household" });
+      expect(fromD1).toEqual(await readRecipeDetailWithPrisma(db, { recipeId: recipe.id, userId }));
+    }
+  });
+
+  it("names a fork's household source to the source cook's household", async () => {
+    const { owner, friend, stranger, recipe, source } = await seedRecipe();
+    await db.recipe.update({ where: { id: source.id }, data: { visibility: "household", deletedAt: null } });
+    const home = await db.household.create({ data: { name: "Home" } });
+    await db.householdMember.createMany({
+      data: [owner.id, friend.id].map((userId) => ({ householdId: home.id, userId, role: "member" })),
+    });
+
+    const forHousemate = await readRecipeDetailFromD1(d1.binding, { recipeId: recipe.id, userId: owner.id });
+    expect(forHousemate.recipe?.sourceRecipe).toMatchObject({ id: source.id });
+    expect(forHousemate).toEqual(await readRecipeDetailWithPrisma(db, { recipeId: recipe.id, userId: owner.id }));
+    const forStranger = await readRecipeDetailFromD1(d1.binding, { recipeId: recipe.id, userId: stranger.id });
+    expect(forStranger.recipe?.sourceRecipe).toBeNull();
+    expect(forStranger).toEqual(await readRecipeDetailWithPrisma(db, { recipeId: recipe.id, userId: stranger.id }));
+  });
+
   it("names a fork's source only to viewers who may read that source", async () => {
     const { owner, friend, recipe, source } = await seedRecipe();
     await db.recipe.update({ where: { id: source.id }, data: { visibility: "private", deletedAt: null } });

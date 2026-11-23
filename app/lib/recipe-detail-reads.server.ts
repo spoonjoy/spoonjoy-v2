@@ -17,7 +17,8 @@ import {
 } from "~/lib/d1-models.server";
 import { RECIPE_COVER_DISPLAY_SELECT } from "~/lib/recipe-cover.server";
 import { isOriginCookCandidate, listSpoonsForRecipe, type SpoonWithChef } from "~/lib/recipe-spoon.server";
-import { canRead } from "~/domains/kitchen";
+import { canRead, type RecipeViewer } from "~/domains/kitchen";
+import { recipeViewerD1Query, recipeViewerFor, recipeViewerFromD1Rows } from "~/lib/recipe-viewer.server";
 
 // Reads behind the recipe page (`/recipes/:id`). The Prisma reader is the original
 // sequence of queries; the D1 reader returns the same data in one batch.
@@ -94,11 +95,14 @@ export async function readRecipeDetailWithPrisma(
   database: PrismaClient,
   { recipeId, userId }: RecipeDetailReadInput,
 ): Promise<RecipeDetailReads> {
-  const found = await database.recipe.findUnique({ where: { id: recipeId }, include: RECIPE_DETAIL_INCLUDE });
-  if (!found || found.deletedAt || !canRead({ id: userId ?? "" }, found)) {
+  const [found, viewer] = await Promise.all([
+    database.recipe.findUnique({ where: { id: recipeId }, include: RECIPE_DETAIL_INCLUDE }),
+    recipeViewerFor(userId, { db: database }),
+  ]);
+  if (!found || found.deletedAt || !canRead(viewer, found)) {
     return { recipe: null, ...NO_READS };
   }
-  const recipe = withReadableSource(found, userId);
+  const recipe = withReadableSource(found, viewer);
 
   const isOwner = userId !== null && recipe.chefId === userId;
   const userCookbooks = userId
@@ -181,8 +185,8 @@ const SOURCE_RECIPE_COLUMNS: ColumnSpec<{
 };
 
 // A fork names the recipe it came from only when the viewer may read that recipe too.
-function withReadableSource(recipe: RecipeDetailRecipe, userId: string | null): RecipeDetailRecipe {
-  if (!recipe.sourceRecipe || canRead({ id: userId ?? "" }, recipe.sourceRecipe)) return recipe;
+function withReadableSource(recipe: RecipeDetailRecipe, viewer: RecipeViewer): RecipeDetailRecipe {
+  if (!recipe.sourceRecipe || canRead(viewer, recipe.sourceRecipe)) return recipe;
   return { ...recipe, sourceRecipe: null };
 }
 
@@ -240,6 +244,7 @@ export async function readRecipeDetailFromD1(
     coverRows,
     spoonImageRows,
     hideRows,
+    householdRows,
   ] = await d1ReadBatch(db, [
     [
       `SELECT ${selectColumns(RECIPE_COLUMNS, "r")},
@@ -347,14 +352,16 @@ export async function readRecipeDetailFromD1(
         ]
       : NO_ROWS,
     userId ? viewerHidesQuery(userId) : NO_ROWS,
+    recipeViewerD1Query(userId),
   ]);
 
+  const viewer = recipeViewerFromD1Rows(userId, householdRows!);
   const recipeRow = recipeRows[0];
   if (!recipeRow) {
     return { recipe: null, ...NO_READS };
   }
   const base = mapModel(RECIPE_COLUMNS, recipeRow);
-  if (base.deletedAt || !canRead({ id: userId ?? "" }, base)) {
+  if (base.deletedAt || !canRead(viewer, base)) {
     return { recipe: null, ...NO_READS };
   }
   if (!presentId(recipeRow, "chef_", "recipe chef")) throw new Error("D1 recipe chef is missing");
@@ -395,7 +402,7 @@ export async function readRecipeDetailFromD1(
   }
 
   return {
-    recipe: withReadableSource(recipe, userId),
+    recipe: withReadableSource(recipe, viewer),
     userCookbooks: cookbookRows.map((row) => {
       const { id, title, membershipId } = mapModel(USER_COOKBOOK_COLUMNS, row);
       return { id, title, recipes: membershipId === null ? [] : [{ id: membershipId }] };

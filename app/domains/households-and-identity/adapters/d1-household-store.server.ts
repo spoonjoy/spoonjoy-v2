@@ -1,7 +1,7 @@
 // The HouseholdStore port on D1 (migrations/0042_households.sql). Joining is one batch: a guard that the invite still
 // works, spending a use and adding the member, so two people racing for the last use can't both get in.
 
-import { d1DateTime, d1NullableDateTime, d1ReadBatch, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
+import { d1DateTime, d1NullableDateTime, d1ReadBatch, type D1Query, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
 import { d1Guard, d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 import type { HouseholdStore, HouseholdMemberView, StoredInvite } from "../application/household-store";
 import type { HouseholdRole } from "../model/household";
@@ -31,6 +31,22 @@ function member(row: D1Row): HouseholdMemberView {
     photoUrl: row.photoUrl as string | null,
     joinedAt: d1DateTime(row.joinedAt, "joinedAt"),
   };
+}
+
+/** chefIdsSharingWith as one statement, for a reader that sends it in a batch with its other reads. */
+export function chefIdsSharingWithD1Query(userId: string): D1Query {
+  return [
+    `SELECT DISTINCT o."userId" FROM "HouseholdMember" m
+     JOIN "HouseholdMember" o ON o."householdId" = m."householdId"
+     WHERE m."userId" = ? AND o."userId" <> ? ORDER BY o."userId"`,
+    userId,
+    userId,
+  ];
+}
+
+/** The ids chefIdsSharingWithD1Query returned. */
+export function chefIdsFromD1Rows(rows: readonly D1Row[]): string[] {
+  return rows.map((row) => String(row.userId));
 }
 
 export function d1HouseholdStore(db: D1ReadDatabase): HouseholdStore {
@@ -156,14 +172,7 @@ export function d1HouseholdStore(db: D1ReadDatabase): HouseholdStore {
     },
 
     async chefIdsSharingWith(userId) {
-      const rows = await read(
-        `SELECT DISTINCT o."userId" FROM "HouseholdMember" m
-         JOIN "HouseholdMember" o ON o."householdId" = m."householdId"
-         WHERE m."userId" = ? AND o."userId" <> ? ORDER BY o."userId"`,
-        userId,
-        userId,
-      );
-      return rows.map((row) => String(row.userId));
+      return chefIdsFromD1Rows(await read(...chefIdsSharingWithD1Query(userId)));
     },
   };
 }
