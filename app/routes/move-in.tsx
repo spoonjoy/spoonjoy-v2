@@ -120,7 +120,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     env,
     ownerId: userId,
     app: String(form.get("app") ?? ""),
-    file: { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) },
+    file: { name: file.name, size: file.size, data: file },
     now: new Date(),
   });
   if (!started.ok) return fail(started.code, started.code === "backup-too-large" ? 413 : 400);

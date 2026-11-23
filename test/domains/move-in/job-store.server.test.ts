@@ -62,11 +62,10 @@ describe("the move-in job store", () => {
   it("adds to the counts and numbers the report's lines in order", async () => {
     const store = moveInJobStore(database.binding, () => clock);
     const id = await create();
-    await store.addCounts(id, "recipes", { found: 3 });
-    await store.addCounts(id, "recipes", { created: 1, skipped: 1 });
-    await store.addEvent(id, info("Found 3 recipes."));
+    await store.updateJob(id, {}, undefined, { counts: [["recipes", { found: 3 }]], events: [info("Found 3 recipes.")] });
+    await store.updateJob(id, {}, undefined, { counts: [["recipes", { created: 1, skipped: 1 }]] });
     expect(await store.hasIssues(id)).toBe(false);
-    await store.addEvent(id, { ...info("Pancakes (2)"), level: "warn", kind: "item-degraded", entity: "recipes", sourceKey: "r1", targetId: "x" });
+    await store.updateJob(id, {}, undefined, { events: [{ ...info("Pancakes (2)"), level: "warn", kind: "item-degraded", entity: "recipes", sourceKey: "r1", targetId: "x" }] });
     expect(await store.hasIssues(id)).toBe(true);
 
     const progress = await readMoveInProgress(database.binding, { ownerId: "chef-1", jobId: id });
@@ -93,23 +92,44 @@ describe("the move-in job store", () => {
     expect(await store.claim(id, clock)).toEqual(expect.any(String));
   });
 
-  it("refuses the writes of a run that lost its claim", async () => {
+  it("refuses every write of a run that lost its claim, counts and report included", async () => {
     const store = moveInJobStore(database.binding, () => clock);
     const id = await create();
     const first = (await store.claim(id, clock)) as string;
     later(50);
     await store.claim(id, clock);
-    await expect(store.updateJob(id, { cursor: "9" }, first)).rejects.toBeInstanceOf(LostClaimError);
+    const report = { counts: [["recipes", { created: 1 }]] as Array<[string, { created: number }]>, events: [info("Pancakes moved in.")] };
+    await expect(store.updateJob(id, { cursor: "9" }, first, report)).rejects.toBeInstanceOf(LostClaimError);
     expect(await store.loadJob(id)).toMatchObject({ cursor: null });
+    expect(await readMoveInProgress(database.binding, { ownerId: "chef-1", jobId: id })).toMatchObject({ counts: {}, events: [] });
+  });
+
+  it("counts each claim as an attempt", async () => {
+    const store = moveInJobStore(database.binding, () => clock);
+    const id = await create();
+    await store.claim(id, clock);
+    await store.claim(id, later(50));
+    expect(await store.loadJob(id)).toMatchObject({ attempt: 2 });
+  });
+
+  it("never changes a finished job", async () => {
+    const store = moveInJobStore(database.binding, () => clock);
+    const id = await create();
+    await store.updateJob(id, { status: "failed", lastError: "expired" });
+    const token = (await store.claim(id, later(60))) as string;
+    await expect(store.updateJob(id, { status: "done" }, token, { events: [info("late")] })).rejects.toBeInstanceOf(LostClaimError);
+    await store.updateJob(id, { status: "done" });
+    expect(await readMoveInProgress(database.binding, { ownerId: "chef-1", jobId: id })).toMatchObject({ job: { status: "failed" }, events: [] });
   });
 
   it("starts the counts over, and remembers the kitchen a source is", async () => {
     const store = moveInJobStore(database.binding, () => clock);
     const id = await create();
-    await store.addCounts(id, "recipes", { found: 3 });
-    await store.resetCounts(id);
-    await store.addCounts(id, "recipes", { found: 3 });
-    expect((await readMoveInProgress(database.binding, { ownerId: "chef-1", jobId: id }))?.counts.recipes).toMatchObject({ found: 3 });
+    await store.updateJob(id, {}, undefined, { counts: [["recipes", { found: 3 }]], events: [info("Found 3 recipes.")] });
+    await store.updateJob(id, {}, undefined, { restart: true, counts: [["recipes", { found: 3 }]], events: [info("Found 3 recipes.")] });
+    const progress = await readMoveInProgress(database.binding, { ownerId: "chef-1", jobId: id });
+    expect(progress?.counts.recipes).toMatchObject({ found: 3 });
+    expect(progress?.events.map((event) => event.message)).toEqual(["Found 3 recipes."]);
     const source = await store.ensureSource({ ownerId: "chef-1", kind: "mealie-backup", instanceKey: "group-1", label: "Home", sourceVersion: "v2.8.0" });
     expect(await store.sourceInstanceKey(source)).toBe("group-1");
     expect(await store.sourceInstanceKey("nope")).toBeNull();
@@ -118,7 +138,7 @@ describe("the move-in job store", () => {
   it("keeps what the system said apart from the report's message", async () => {
     const store = moveInJobStore(database.binding, () => clock);
     const id = await create();
-    await store.addEvent(id, { ...info("Soup didn't move in this time."), level: "error", kind: "item-failed", detail: "D1 said no" });
+    await store.updateJob(id, {}, undefined, { events: [{ ...info("Soup didn't move in this time."), level: "error", kind: "item-failed", detail: "D1 said no" }] });
     const progress = await readMoveInProgress(database.binding, { ownerId: "chef-1", jobId: id });
     expect(progress?.events[0]).not.toHaveProperty("detail");
     expect(database.sqlite.prepare(`SELECT "detail" FROM "ImportEvent"`).get()).toEqual({ detail: "D1 said no" });

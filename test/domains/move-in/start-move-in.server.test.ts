@@ -8,9 +8,21 @@ import { mealieDatabase } from "./support/mealie-database";
 let database: MigratedSqlite;
 const now = new Date("2026-11-23T12:00:00.000Z");
 
+/** An R2 bucket in memory: put (of bytes or a Blob), head, ranged get and delete. */
 function memoryBucket() {
-  const objects: Record<string, unknown> = {};
-  return { objects, put: async (key: string, value: unknown) => void (objects[key] = value) };
+  const objects: Record<string, Uint8Array> = {};
+  return {
+    objects,
+    put: async (key: string, value: Blob | Uint8Array) => void (objects[key] = value instanceof Blob ? new Uint8Array(await value.arrayBuffer()) : value),
+    head: async (key: string) => (objects[key] ? { size: objects[key].length } : null),
+    get: async (key: string, options: { range: { offset: number; length: number } }) => {
+      const bytes = objects[key];
+      if (!bytes) return null;
+      const { offset, length } = options.range;
+      return { arrayBuffer: async () => bytes.slice(offset, offset + length).buffer };
+    },
+    delete: async (key: string) => void delete objects[key],
+  };
 }
 
 function zip(tables: unknown = mealieDatabase().tables) {
@@ -25,7 +37,7 @@ beforeEach(() => {
 afterEach(() => database.close());
 
 const start = (bytes: Uint8Array, bucket = memoryBucket(), name = "mealie_2026.11.23.zip") =>
-  startMoveIn({ env: { DB: database.binding, PHOTOS: bucket } as never, ownerId: "chef-1", app: "mealie", file: { name, bytes }, now });
+  startMoveIn({ env: { DB: database.binding, PHOTOS: bucket } as never, ownerId: "chef-1", app: "mealie", file: { name, size: bytes.length, data: bytes }, now });
 
 describe("startMoveIn", () => {
   it("keeps the backup where it is never served and queues its move-in", async () => {
@@ -50,7 +62,17 @@ describe("startMoveIn", () => {
 
   it("says which email to use when the backup holds several kitchens and none is the person's", async () => {
     database.sqlite.prepare(`UPDATE "User" SET "email" = 'someone@example.com'`).run();
-    expect(await start(zip())).toEqual({ ok: false, code: "pick-a-group" });
+    const bucket = memoryBucket();
+    expect(await start(zip(), bucket)).toEqual({ ok: false, code: "pick-a-group" });
+    expect(bucket.objects).toEqual({});
+  });
+
+  it("takes the upload as the form's file, without copying it first", async () => {
+    const bucket = memoryBucket();
+    const data = new Blob([zip()]);
+    expect(await startMoveIn({ env: { DB: database.binding, PHOTOS: bucket } as never, ownerId: "chef-1", app: "mealie", file: { name: "x.zip", size: data.size, data }, now }))
+      .toEqual({ ok: true, jobId: expect.stringMatching(/^movein_/) });
+    expect(Object.values(bucket.objects)).toEqual([zip()]);
   });
 
   it("refuses a backup larger than it can take", async () => {
@@ -59,12 +81,12 @@ describe("startMoveIn", () => {
 
   it("passes on an outage rather than calling it a bad backup", async () => {
     const down = { prepare: database.binding.prepare, batch: () => Promise.reject(new Error("D1 is down")) };
-    await expect(startMoveIn({ env: { DB: down, PHOTOS: memoryBucket() } as never, ownerId: "chef-1", app: "mealie", file: { name: "x.zip", bytes: zip() }, now }))
+    await expect(startMoveIn({ env: { DB: down, PHOTOS: memoryBucket() } as never, ownerId: "chef-1", app: "mealie", file: { name: "x.zip", size: 1, data: zip() }, now }))
       .rejects.toThrow("D1 is down");
   });
 
   it("refuses an app it can't read yet", async () => {
-    const result = await startMoveIn({ env: { DB: database.binding, PHOTOS: memoryBucket() } as never, ownerId: "chef-1", app: "paprika", file: { name: "x.zip", bytes: zip() }, now });
+    const result = await startMoveIn({ env: { DB: database.binding, PHOTOS: memoryBucket() } as never, ownerId: "chef-1", app: "paprika", file: { name: "x.zip", size: 1, data: zip() }, now });
     expect(result).toEqual({ ok: false, code: "unknown-app" });
   });
 });
