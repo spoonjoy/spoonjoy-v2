@@ -197,8 +197,11 @@ jobs:
           name: move-in-proof-fixtures
           path: fixtures
 
-      # One release per manifest schema; each run replaces its assets, so the move-in lane always
-      # downloads the newest fixtures with: gh release download move-in-proof-fixtures-v1
+      # One release per manifest schema; the move-in lane downloads the fixtures with:
+      # gh release download move-in-proof-fixtures-v1. The generator's zip isn't byte-for-byte the same
+      # run to run, so a run leaves the release as it is when its manifest and the harness that built
+      # it (scripts/move-in-proof and this workflow, by their git object ids) match the release's and
+      # the release still has its zip. A changed kitchen, harness or missing zip replaces the assets.
       - name: Publish to the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -209,4 +212,16 @@ jobs:
               --title "Move-in proof fixtures v1" \
               --notes "Source app exports of the synthetic kitchen, with the manifest of expected counts. Rebuilt weekly by the Move-in Proof workflow."
           fi
-          gh release upload "$RELEASE_TAG" --clobber fixtures/move-in-proof-fixtures.zip fixtures/move-in-proof/manifest.json
+          harness_tree=$(gh api "repos/$GH_REPO/contents/scripts?ref=$GITHUB_SHA" --jq '.[] | select(.name == "move-in-proof") | .sha')
+          harness_workflow=$(gh api "repos/$GH_REPO/contents/.github/workflows/move-in-proof.yml?ref=$GITHUB_SHA" --jq .sha)
+          printf 'scripts/move-in-proof %s\n.github/workflows/move-in-proof.yml %s\n' "$harness_tree" "$harness_workflow" > fixtures/move-in-proof-harness.txt
+          mkdir -p published
+          if gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | grep -x move-in-proof-fixtures.zip > /dev/null \
+            && gh release download "$RELEASE_TAG" --pattern manifest.json --dir published > /dev/null 2>&1 \
+            && gh release download "$RELEASE_TAG" --pattern move-in-proof-harness.txt --dir published > /dev/null 2>&1 \
+            && cmp -s published/manifest.json fixtures/move-in-proof/manifest.json \
+            && cmp -s published/move-in-proof-harness.txt fixtures/move-in-proof-harness.txt; then
+            echo "::notice::The manifest and harness match the release's, so the release keeps its fixtures."
+            exit 0
+          fi
+          gh release upload "$RELEASE_TAG" --clobber fixtures/move-in-proof-fixtures.zip fixtures/move-in-proof/manifest.json fixtures/move-in-proof-harness.txt
