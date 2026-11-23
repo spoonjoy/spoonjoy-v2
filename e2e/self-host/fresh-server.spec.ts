@@ -47,8 +47,8 @@ test.describe("A fresh self-hosted server", () => {
     const response = await request.post("/api/v1/auth/apple/native", {
       data: { identityToken: "eyJhbGciOiJSUzI1NiIsImtpZCI6Im5vdC1hcHBsZSJ9.eyJpc3MiOiJodHRwczovL2FwcGxlaWQuYXBwbGUuY29tIn0.c2ln", rawNonce: "fresh-server-nonce" },
     });
-    expect(response.status()).toBe(401);
     const body = JSON.stringify(await response.json());
+    expect(response.status(), body).toBe(401);
     expect(body).toContain("invalid_token");
     expect(body).toContain("not currently trusted");
   });
