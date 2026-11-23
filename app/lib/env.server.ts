@@ -213,13 +213,12 @@ export function getAppleNativeAuthConfig(env: OAuthEnv): AppleNativeAuthConfig {
 const DEFAULT_OIDC_LABEL = "Continue with single sign-on";
 const DEFAULT_OIDC_SCOPES = ["openid", "email", "profile"];
 
-/**
- * Validates and returns the server owner's OpenID Connect provider.
- * Throws if the issuer, client ID or client secret is missing, or the issuer is not a plain
- * http(s) address.
- */
-export function getOidcConfig(env: OAuthEnv): OidcConfig {
-  const rawIssuer = requireEnvValue(env, "SPOONJOY_OIDC_ISSUER");
+/** Why the server owner's OpenID Connect settings can't be used, or null when they can. */
+function oidcConfigProblem(env: OAuthEnv): string | null {
+  for (const key of ["SPOONJOY_OIDC_ISSUER", "SPOONJOY_OIDC_CLIENT_ID", "SPOONJOY_OIDC_CLIENT_SECRET"] as const) {
+    if (!normalizeEnvValue(env[key])) return `Missing required environment variable: ${key}`;
+  }
+  const rawIssuer = normalizeEnvValue(env.SPOONJOY_OIDC_ISSUER) as string;
   const issuerUrl = URL.canParse(rawIssuer) ? new URL(rawIssuer) : null;
   if (
     !issuerUrl ||
@@ -227,12 +226,23 @@ export function getOidcConfig(env: OAuthEnv): OidcConfig {
     issuerUrl.search ||
     issuerUrl.hash
   ) {
-    throw new Error(`SPOONJOY_OIDC_ISSUER must be an http:// or https:// address with no query; got "${rawIssuer}".`);
+    return `SPOONJOY_OIDC_ISSUER must be an http:// or https:// address with no query; got "${rawIssuer}".`;
   }
+  return null;
+}
+
+/**
+ * Validates and returns the server owner's OpenID Connect provider.
+ * Throws if the issuer, client ID or client secret is missing, or the issuer is not a plain
+ * http(s) address.
+ */
+export function getOidcConfig(env: OAuthEnv): OidcConfig {
+  const problem = oidcConfigProblem(env);
+  if (problem) throw new Error(problem);
   const requestedScopes = normalizeEnvValue(env.SPOONJOY_OIDC_SCOPES)?.split(/[\s,]+/).filter(Boolean);
   const scopes = requestedScopes ?? DEFAULT_OIDC_SCOPES;
   return {
-    issuer: rawIssuer.replace(/\/+$/, ""),
+    issuer: (normalizeEnvValue(env.SPOONJOY_OIDC_ISSUER) as string).replace(/\/+$/, ""),
     clientId: requireEnvValue(env, "SPOONJOY_OIDC_CLIENT_ID"),
     clientSecret: requireEnvValue(env, "SPOONJOY_OIDC_CLIENT_SECRET"),
     label: normalizeEnvValue(env.SPOONJOY_OIDC_NAME) ?? DEFAULT_OIDC_LABEL,
@@ -242,11 +252,7 @@ export function getOidcConfig(env: OAuthEnv): OidcConfig {
 
 /** The OpenID Connect button's label when the provider is configured, otherwise undefined. */
 export function getOidcButtonLabel(env: OAuthEnv): string | undefined {
-  try {
-    return getOidcConfig(env).label;
-  } catch {
-    return undefined;
-  }
+  return oidcConfigProblem(env) ? undefined : getOidcConfig(env).label;
 }
 
 const ALL_OAUTH_ENV_VARS = [

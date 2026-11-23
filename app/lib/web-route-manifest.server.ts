@@ -55,6 +55,8 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/auth.google.callback.tsx", "/auth/google/callback", "secure-web-handoff"),
   route("routes/auth.github.tsx", "/auth/github", "secure-web-handoff"),
   route("routes/auth.github.callback.tsx", "/auth/github/callback", "secure-web-handoff"),
+  route("routes/auth.oidc.tsx", "/auth/oidc", "secure-web-handoff"),
+  route("routes/auth.oidc.callback.tsx", "/auth/oidc/callback", "secure-web-handoff"),
   route("routes/auth.apple.tsx", "/auth/apple", "secure-web-handoff"),
   route("routes/auth.apple.callback.tsx", "/auth/apple/callback", "secure-web-handoff"),
   route("routes/auth.webauthn.register.options.ts", "/auth/webauthn/register/options", "secure-web-handoff"),

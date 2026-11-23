@@ -402,7 +402,13 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     category: "delegated",
     reason:
       "verifyGitHubCallback captures /user|/user/emails non-2xx and token-exchange/network failures via the threaded capture callback, and re-throws truly unexpected errors to the callback route (which captures + flattens). The sole production caller passes verifyCaptureFor(telemetry, provider), so failures reach the auth-telemetry sink with provider+phase+httpStatus. No capture call appears in the file itself (local-callback indirection).",
+  },  {
+    file: "app/lib/oidc.server.ts",
+    category: "delegated",
+    reason:
+      "verifyOidcCallback captures discovery, token-exchange, userinfo and JWKS failures (OAuthProviderCallError) and refused ID tokens via the threaded capture callback, and re-throws unexpected errors to the callback route, which captures them. The other catches turn a malformed token or key into that refused-token error. The sole production caller passes verifyCaptureFor(telemetry, provider). No capture call appears in the file itself.",
   },
+
 
   // --- route-level: client-only swallow (server capture lives elsewhere) ---
   {
