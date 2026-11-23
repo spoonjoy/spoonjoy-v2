@@ -11,7 +11,9 @@
 // This file does no I/O: callers pass the Worker env and the signed-in user's id, so it runs on server and client alike.
 
 /** Every flag, by name, with what it hides. Keep the names sorted. */
-export const FLAGS = {} as const satisfies Record<string, { description: string }>;
+export const FLAGS = {
+  "meal-planner": { description: "The meal planner at /plan: a week of recipes and notes, and its API and MCP tools." },
+} as const satisfies Record<string, { description: string }>;
 
 export type FlagName = keyof typeof FLAGS & string;
 
