@@ -126,7 +126,7 @@ export async function saveRecipeEditOnD1(
   input: {
     recipeId: string;
     chefId: string;
-    fields: { title: string; description: string | null; servings: string | null };
+    fields: { title: string; description: string | null; servings: string | null; visibility?: string };
     cover: RecipeEditCover;
     /** When given, the save applies only if the recipe's updatedAt is still this. */
     expectedUpdatedAt?: Date;

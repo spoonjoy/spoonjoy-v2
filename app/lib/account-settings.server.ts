@@ -43,6 +43,8 @@ import {
   revokeConnectorGrantsByConnectionKeys,
   validateConnectorGrantConnectionKeys,
 } from "~/lib/oauth-server.server";
+import { SELECTABLE_RECIPE_VISIBILITIES, parseRecipeVisibility } from "~/domains/kitchen";
+import { isFlagOn } from "~/domains/platform";
 
 
 // Signing out everywhere keeps the ways the chef signs in. Say so, so a chef recovering from a
@@ -118,6 +120,7 @@ export type AccountSettingsFormIntent =
   | "setPassword"
   | "removePassword"
   | "uploadPhoto"
+  | "setRecipeVisibilityDefault"
   | "deleteAccount";
 
 /** Where "Sign in again" sends a passwordless chef, so they come back to finish deleting. */
@@ -168,6 +171,7 @@ export interface AccountSettingsActionResult {
     | "recent_sign_in_required"
     | "apple_account_mismatch"
     | "rate_limited"
+    | "invalid_visibility"
     | typeof D1_WRITE_UNAVAILABLE_CODE;
   message?: string;
   fieldErrors?: {
@@ -599,6 +603,23 @@ async function handleAccountSettingsIntent({
     await deleteAvatarBestEffort(context, userId, previous?.photoUrl);
 
     return { success: true, intent: "uploadPhoto", photoUrl };
+  }
+
+  if (intent === "setRecipeVisibilityDefault") {
+    // Who can see the cook's new recipes, while the choice is on; household is not offered yet.
+    const visibility = parseRecipeVisibility(formData.get("visibility"));
+    if (
+      !isFlagOn("recipe_visibility", getCloudflareEnv(context), userId)
+      || !visibility
+      || !(SELECTABLE_RECIPE_VISIBILITIES as readonly string[]).includes(visibility)
+    ) {
+      return { success: false, intent: "setRecipeVisibilityDefault", error: "invalid_visibility", message: "Choose public or only me." };
+    }
+    await retryD1Write({ scope: "account.recipe_visibility_default" }, () => database.user.update({
+      where: { id: userId },
+      data: { defaultRecipeVisibility: visibility },
+    }));
+    return { success: true, intent: "setRecipeVisibilityDefault" };
   }
 
   if (intent === "removePhoto") {

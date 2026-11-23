@@ -114,7 +114,7 @@ describe("Recipes New Route", () => {
       });
     });
 
-    it("should return null when logged in", async () => {
+    it("should return no visibility choice when logged in with the choice off", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", testUserId);
       const setCookieHeader = await sessionStorage.commitSession(session);
@@ -131,7 +131,7 @@ describe("Recipes New Route", () => {
         params: {},
       } as any);
 
-      expect(result).toBeNull();
+      expect(result).toEqual({ visibilityDefault: null });
     });
   });
 

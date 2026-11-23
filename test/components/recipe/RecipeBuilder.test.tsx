@@ -167,6 +167,29 @@ describe("RecipeBuilder", () => {
     });
   });
 
+  describe("visibility choice", () => {
+    it("hides the choice unless the page gives a level", () => {
+      const Wrapper = createTestWrapper();
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+      expect(screen.queryByRole("radiogroup", { name: "Who can see this recipe" })).toBeNull();
+    });
+
+    it("starts at the level given and saves the one the cook picks", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({ onSave, visibility: "public" });
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+
+      const group = await screen.findByRole("radiogroup", { name: "Who can see this recipe" });
+      expect(within(group).getByRole("radio", { name: /Public/ })).toBeChecked();
+      await user.click(within(group).getByRole("radio", { name: /Only me/ }));
+      await user.type(screen.getByLabelText(/Title/), "Secret Soup");
+      await user.click(screen.getByRole("button", { name: "Create recipe" }));
+
+      expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ title: "Secret Soup", visibility: "private" }));
+    });
+  });
+
   describe("create mode", () => {
     it("starts with empty form and no steps", () => {
       const Wrapper = createTestWrapper();

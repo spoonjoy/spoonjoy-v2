@@ -4,6 +4,7 @@ import { createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.ser
 import { createUser } from "~/lib/auth.server";
 import { db } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { sqliteD1 } from "../helpers/sqlite-d1";
 
 function expectInvalidSteps(payload: unknown, expectedError: string) {
   const result = parseRecipeStepsJson(typeof payload === "string" ? payload : JSON.stringify(payload));
@@ -182,6 +183,21 @@ describe("recipe create helpers", () => {
   });
 
   describe("createRecipeDraft", () => {
+    it("creates a recipe at the chosen visibility, and public when none is chosen, on Prisma and D1 alike", async () => {
+      const d1 = sqliteD1();
+      try {
+        for (const [path, binding] of [["prisma", null], ["d1", d1.binding]] as const) {
+          const base = { description: null, servings: null, chefId: testUserId, steps: [] };
+          await createRecipeDraft(db, { ...base, id: `${path}-private`, title: `${path} private`, visibility: "private" }, binding);
+          await createRecipeDraft(db, { ...base, id: `${path}-default`, title: `${path} default` }, binding);
+          const rows = await db.recipe.findMany({ where: { id: { in: [`${path}-private`, `${path}-default`] } }, select: { id: true, visibility: true }, orderBy: { id: "asc" } });
+          expect(rows).toEqual([{ id: `${path}-default`, visibility: "public" }, { id: `${path}-private`, visibility: "private" }]);
+        }
+      } finally {
+        d1.close();
+      }
+    });
+
     it("creates recipes, steps, units, ingredient refs, and ingredients in one durable graph", async () => {
       await db.unit.create({ data: { name: "cup" } });
       await db.ingredientRef.create({ data: { name: "flour" } });

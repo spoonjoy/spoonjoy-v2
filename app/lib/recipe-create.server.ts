@@ -22,6 +22,7 @@ import {
   validateStepTitle,
   validateUnitName,
 } from "~/lib/validation";
+import type { RecipeVisibility } from "~/domains/kitchen";
 
 type TransactionClient = Prisma.TransactionClient;
 type Database = PrismaClientType | TransactionClient;
@@ -52,6 +53,8 @@ export interface CreateRecipeDraftInput {
   description: string | null;
   servings: string | null;
   chefId: string;
+  /** Who may read the new recipe; public when not given. */
+  visibility?: RecipeVisibility;
   steps: RecipeStepDraft[];
   /**
    * A cover to create with the recipe; `activeVariant` also makes it the active cover, as
@@ -348,6 +351,7 @@ export async function createRecipeDraft(
       description: input.description,
       servings: input.servings,
       chefId: input.chefId,
+      visibility: input.visibility,
     },
   });
 

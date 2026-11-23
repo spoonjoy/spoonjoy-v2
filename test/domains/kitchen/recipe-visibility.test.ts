@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_RECIPE_VISIBILITY,
   RECIPE_VISIBILITIES,
+  SELECTABLE_RECIPE_VISIBILITIES,
   canRead,
+  newRecipeVisibility,
   parseRecipeVisibility,
   readableRecipeSql,
   readableRecipeWhere,
@@ -28,6 +30,24 @@ describe("recipe visibility", () => {
     for (const value of ["", "friends", null, undefined, 1, {}, ["public"]]) {
       expect(parseRecipeVisibility(value)).toBeNull();
     }
+  });
+});
+
+describe("a new recipe's visibility", () => {
+  it("offers public and private until households ship", () => {
+    expect(SELECTABLE_RECIPE_VISIBILITIES).toEqual(["public", "private"]);
+  });
+
+  it("takes the cook's choice, then their default, then public", () => {
+    expect(newRecipeVisibility("private", "public")).toBe("private");
+    expect(newRecipeVisibility(null, "private")).toBe("private");
+    expect(newRecipeVisibility("", undefined)).toBe("public");
+    expect(newRecipeVisibility("friends", "nonsense")).toBe("public");
+  });
+
+  it("does not take household while it cannot be chosen", () => {
+    expect(newRecipeVisibility("household", "private")).toBe("private");
+    expect(newRecipeVisibility(undefined, "household")).toBe("public");
   });
 });
 
