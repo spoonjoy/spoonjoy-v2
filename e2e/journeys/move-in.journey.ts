@@ -103,9 +103,11 @@ async function moveIn(version: string, { page, expectAccessible }: JourneyArgs):
 
   await dropBackup(page, version);
   const move = page.url();
-  // A small kitchen can finish before the page shows it moving, so progress is captured only when it shows.
-  const moving = main.getByRole("heading", { level: 2, name: "Moving in", exact: true });
-  if (await moving.isVisible()) await snapshot(page, version, "2-progress");
+  // The page says the server has it, which it says only when the move-in went on the jobs queue, so closing the page
+  // proves the server finishes it. The queue takes a moment to deliver, so the page always shows it moving first.
+  await expect(main.getByRole("heading", { level: 2, name: "Moving in", exact: true })).toBeVisible();
+  await expect(main.getByText("You can close this page; your recipes keep moving in without it.", { exact: true })).toBeVisible();
+  await snapshot(page, version, "2-progress");
 
   // Close the page: from here nothing in the browser asks the move-in to go on. Reading the page's
   // HTML never runs or queues it, so the server alone has to finish it before the person comes back.
