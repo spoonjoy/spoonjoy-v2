@@ -267,9 +267,10 @@ function Progress({ move }: { move: MoveInView }) {
 
 function Finished({ move }: { move: MoveInView }) {
   const { created, already, updated } = move.recipes;
+  // When nothing moved or changed, counts of 0 recipes and every photo would read as if something had.
+  const moved = created > 0 || updated > 0;
   const items = [
-    { term: "Recipes moved in", details: String(created) },
-    { term: "Photos", details: `${move.photos.in} of ${move.photos.found}` },
+    ...(moved ? [{ term: "Recipes moved in", details: String(created) }, { term: "Photos", details: `${move.photos.in} of ${move.photos.found}` }] : []),
     ...(move.recipes.skipped ? [{ term: "Left out", details: String(move.recipes.skipped) }] : []),
     ...(move.recipes.failed ? [{ term: "Didn't move in", details: String(move.recipes.failed) }] : []),
   ];
@@ -280,7 +281,7 @@ function Finished({ move }: { move: MoveInView }) {
         <h2 id="move-in-done" className="text-lg font-semibold">{heading}</h2>
         {already ? <Text tone="muted">{`${already} already here, ${updated} changed.`}</Text> : null}
       </div>
-      <DescriptionList items={items} />
+      {items.length ? <DescriptionList items={items} /> : null}
       {move.renamed.length ? (
         <Collapsible title={`${plural(move.renamed.length, "recipe")} got a number, because you already had one by that name`}>
           <ul className="flex list-disc flex-col gap-1 pl-5">
