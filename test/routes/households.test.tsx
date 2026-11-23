@@ -275,7 +275,8 @@ describe("/households/:id", () => {
     await user.click(await screen.findByRole("menuitemradio", { name: "View-only" }));
     await vi.waitFor(() => expect(submitted).toEqual([{ intent: "role", targetId: "ben", role: "viewer" }]));
 
-    await user.click(screen.getByRole("button", { name: "Actions for ben_cooks" }));
+    // The menu comes back once the change is saved.
+    await user.click(await screen.findByRole("button", { name: "Actions for ben_cooks" }));
     await user.click(await screen.findByRole("menuitem", { name: "Remove from household" }));
     const dialog = await screen.findByRole("alertdialog", { name: "Remove ben_cooks?" });
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
@@ -334,7 +335,7 @@ describe("/households/:id", () => {
     expect(within(people()).queryByText("Saving")).toBeNull();
 
     server.refuse = true;
-    await user.click(screen.getByRole("button", { name: "Actions for ben_cooks" }));
+    await user.click(await screen.findByRole("button", { name: "Actions for ben_cooks" }));
     await user.click(await screen.findByRole("menuitemradio", { name: "Member" }));
     expect(await within(people()).findByText("Saving")).toBeTruthy();
     release();
