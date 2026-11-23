@@ -12,7 +12,7 @@ import { claimPendingAppleLinkFromCookie } from "~/lib/pending-apple-link.server
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
 import { OAuthButtonGroup, OAuthError } from "~/components/oauth";
 import { Separator } from "~/components/ouro/separator/separator";
-import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
+import { getConfiguredOAuthProviders, getOidcButtonLabel, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { passwordResetAvailable } from "~/lib/password-reset.server";
 import { AuthPage } from "~/components/auth/auth-page";
@@ -36,6 +36,8 @@ interface ActionData {
 interface LoaderData {
   oauthError?: string;
   oauthProviders: OAuthProvider[];
+  /** The server owner's label for its OpenID Connect button, when one is set up. */
+  oidcLabel?: string;
   /** True where reset links can be mailed, so "Forgot password?" leads somewhere. */
   passwordReset: boolean;
 }
@@ -62,13 +64,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const oauthError = url.searchParams.get("oauthError");
   const oauthProviders = getConfiguredOAuthProviders(getOAuthEnv(context));
+  const oidcLabel = getOidcButtonLabel(getOAuthEnv(context));
   const passwordReset = passwordResetAvailable(context.cloudflare?.env);
 
   if (oauthError) {
-    return { oauthError, oauthProviders, passwordReset } as LoaderData;
+    return { oauthError, oauthProviders, oidcLabel, passwordReset } as LoaderData;
   }
 
-  return { oauthProviders, passwordReset } as LoaderData;
+  return { oauthProviders, oidcLabel, passwordReset } as LoaderData;
 }
 
 // Action - handle login form submission
@@ -168,7 +171,7 @@ export default function Login() {
 
         {oauthProviders.length > 0 && (
           <>
-            <OAuthButtonGroup providers={oauthProviders} redirectTo={redirectTo} className="mt-8" />
+            <OAuthButtonGroup providers={oauthProviders} oidcLabel={loaderData?.oidcLabel} redirectTo={redirectTo} className="mt-8" />
             <Separator label="or" className="my-6" data-testid="oauth-separator" />
           </>
         )}

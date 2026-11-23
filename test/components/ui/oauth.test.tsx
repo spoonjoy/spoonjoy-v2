@@ -17,6 +17,19 @@ describe("OAuthButtonGroup", () => {
     expect(screen.getByRole("link", { name: "Continue with Apple" })).toBeInTheDocument();
   });
 
+  it("labels the server's own OpenID Connect button as its owner named it", () => {
+    renderOAuth(<OAuthButtonGroup providers={["oidc", "github"]} oidcLabel="Sign in with Authentik" redirectTo="/cookbooks" />);
+
+    expect(screen.getByRole("link", { name: "Sign in with Authentik" })).toHaveAttribute("href", "/auth/oidc?redirectTo=%2Fcookbooks");
+    expect(screen.getByRole("link", { name: "Continue with GitHub" })).toBeInTheDocument();
+  });
+
+  it("falls back to a plain single sign-on label", () => {
+    renderOAuth(<OAuthButtonGroup providers={["oidc"]} />);
+
+    expect(screen.getByRole("link", { name: "Continue with single sign-on" })).toHaveAttribute("href", "/auth/oidc");
+  });
+
   it("renders nothing when no providers are configured", () => {
     const { container } = renderOAuth(<OAuthButtonGroup providers={[]} />);
 

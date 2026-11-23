@@ -1,0 +1,23 @@
+# A throwaway OpenID Connect provider for the Self-host Image workflow's sign-in check
+# (e2e/self-host/oidc.spec.ts): Dex with one client and one user, kept in memory. The client secret
+# and password are test values that open nothing else.
+issuer: http://localhost:5556/dex
+storage:
+  type: memory
+web:
+  http: 0.0.0.0:5556
+oauth2:
+  skipApprovalScreen: true
+enablePasswordDB: true
+staticClients:
+  - id: spoonjoy-self-host
+    name: Spoonjoy
+    secret: spoonjoy-self-host-test-secret
+    redirectURIs:
+      - http://localhost:8080/auth/oidc/callback
+staticPasswords:
+  # The password is "owner-test-password".
+  - email: oidc-owner@example.test
+    hash: "$2a$10$yne59oT72z9zZbCEtYIpQu/0DDPlDc.VOse07P9L7reyjHASzz4Q2"
+    username: oidc-owner
+    userID: 6f1d3c2a-6d9e-4c4f-9a57-2f0c9a1b7e10

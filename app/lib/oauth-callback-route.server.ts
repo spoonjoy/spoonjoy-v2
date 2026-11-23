@@ -1,6 +1,6 @@
 import type { AppLoadContext } from "react-router";
 import { createUserSession, getSessionSignIn, getUserId, isSessionIdentityCurrent, type SessionEnv, type SignInMethod } from "~/lib/session.server";
-import { getAppleOAuthConfig, getGitHubOAuthConfig, getGoogleOAuthConfig } from "~/lib/env.server";
+import { getAppleOAuthConfig, getGitHubOAuthConfig, getGoogleOAuthConfig, getOidcConfig } from "~/lib/env.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { recordSignInFailed, recordSignInSucceeded } from "~/lib/sign-in-outcome.server";
@@ -18,6 +18,8 @@ import { handleGitHubOAuthCallback } from "~/lib/github-oauth-callback.server";
 import { verifyGitHubCallback } from "~/lib/github-oauth.server";
 import { handleGoogleOAuthCallback } from "~/lib/google-oauth-callback.server";
 import { verifyGoogleCallback } from "~/lib/google-oauth.server";
+import { handleOidcOAuthCallback } from "~/lib/oidc-callback.server";
+import { oidcProviderKey, verifyOidcCallback } from "~/lib/oidc.server";
 import type { OAuthProviderFailureKind } from "~/lib/oauth-provider-call.server";
 import {
   type AuthFailurePhase,
@@ -565,6 +567,103 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
 
   const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor("google", callbackResult, request, env));
   await recordOAuthSignInSucceeded(telemetry, "google", { action: callbackResult.action, userId: callbackResult.userId }, request, env);
+  response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
+  await appendPendingAppleLinkClaim(response, request, context, callbackResult.userId);
+  return response;
+}
+
+/** The server owner's own OpenID Connect provider (oidc.server.ts). */
+export async function handleOidcCallback(request: Request, context: AppLoadContext) {
+  const env = context.cloudflare?.env;
+  const telemetry = authTelemetryFromContext(context);
+  const url = new URL(request.url);
+  const stored = await readOAuthStartSession(request, "oidc", env);
+  rememberLinkingCallback(request, stored);
+  const failureRedirect = stored?.failureRedirect ?? "/login";
+  const providerError = url.searchParams.get("error");
+  const callbackState = url.searchParams.get("state");
+
+  if (providerError) {
+    return redirectWithCapturedOAuthError(telemetry, request, "oidc", failureRedirect, providerError, "provider_error", env);
+  }
+
+  if (!stored || !callbackState || !isValidOAuthState(stored.state, callbackState)) {
+    return redirectWithCapturedOAuthError(telemetry, request, "oidc", failureRedirect, "invalid_state", "invalid_state", env);
+  }
+
+  if (!stored.codeVerifier || !stored.nonce) {
+    return redirectWithCapturedOAuthError(telemetry, request, "oidc", failureRedirect, "invalid_code_verifier", "invalid_code_verifier", env);
+  }
+
+  let config;
+  let redirectUri: string;
+  try {
+    config = getOidcConfig(getOAuthEnv(context));
+    redirectUri = stored.redirectUri ?? buildOAuthCallbackUrl(request, "oidc", env?.SPOONJOY_BASE_URL);
+  } catch (error) {
+    telemetry.captureException(error, { provider: "oidc", phase: "config" });
+    return redirectWithCapturedOAuthError(telemetry, request, "oidc", failureRedirect, "oauth_unconfigured", "config", env);
+  }
+
+  let verifyResult;
+  try {
+    verifyResult = await verifyOidcCallback(
+      config,
+      redirectUri,
+      { code: url.searchParams.get("code") ?? "", codeVerifier: stored.codeVerifier, nonce: stored.nonce },
+      verifyCaptureFor(telemetry, "oidc"),
+    );
+  } catch (error) {
+    // verifyOidcCallback flattens provider and ID-token failures, so this only fires for a truly
+    // unexpected throw: capture it before flattening to a generic error.
+    telemetry.captureException(error, { provider: "oidc", phase: "verify" });
+    return redirectWithCapturedOAuthError(telemetry, request, "oidc", failureRedirect, "oauth_error", "verify", env);
+  }
+
+  if (!verifyResult.success || !verifyResult.oidcUser) {
+    return redirectWithCapturedOAuthError(
+      telemetry,
+      request,
+      "oidc",
+      failureRedirect,
+      verifyResult.error,
+      "verify",
+      env,
+      oauthFailureTelemetry(verifyResult.error, verifyResult),
+    );
+  }
+
+  const currentUserId = stored.linking ? await currentLinkingUserId(request, stored, env) : null;
+  if (stored.linking && !currentUserId) {
+    return redirectWithCapturedOAuthError(telemetry, request, "oidc", failureRedirect, "login_required", "link_account", env);
+  }
+
+  const database = await getRequestDb(context);
+  const oidcUser = verifyResult.oidcUser;
+  const callbackResult = await withD1Unavailable(() => handleOidcOAuthCallback({
+    db: database,
+    d1: requestD1(context),
+    provider: oidcProviderKey(config),
+    oidcUser,
+    currentUserId,
+    redirectTo: stored.redirectTo,
+  }));
+
+  if (!callbackResult.success || !callbackResult.userId) {
+    return redirectWithCapturedOAuthError(
+      telemetry,
+      request,
+      "oidc",
+      failureRedirect,
+      callbackResult.error,
+      "link_account",
+      env,
+      oauthFailureTelemetry(callbackResult.error),
+    );
+  }
+
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor("oidc", callbackResult, request, env));
+  await recordOAuthSignInSucceeded(telemetry, "oidc", { action: callbackResult.action, userId: callbackResult.userId }, request, env);
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   await appendPendingAppleLinkClaim(response, request, context, callbackResult.userId);
   return response;

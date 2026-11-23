@@ -62,6 +62,17 @@ describe("selfHostVars", () => {
     expect(selfHostVars({ ...base, env: { APPLE_NATIVE_CLIENT_IDS: "com.example.fork" } }).APPLE_NATIVE_CLIENT_IDS).toBe("com.example.fork");
   });
 
+  it("passes the owner's OpenID Connect provider through to the app", () => {
+    const env = {
+      SPOONJOY_OIDC_ISSUER: "https://auth.example.test/realms/kitchen",
+      SPOONJOY_OIDC_CLIENT_ID: "spoonjoy",
+      SPOONJOY_OIDC_CLIENT_SECRET: "test-only-secret",
+      SPOONJOY_OIDC_NAME: "Sign in with Keycloak",
+      SPOONJOY_OIDC_SCOPES: "openid email",
+    };
+    expect(selfHostVars({ ...base, env })).toMatchObject(env);
+  });
+
   it("uses a SESSION_SECRET from the environment over the generated one", () => {
     expect(selfHostVars({ ...base, env: { SESSION_SECRET: "mine" } }).SESSION_SECRET).toBe("mine");
   });

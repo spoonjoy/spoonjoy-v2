@@ -29,7 +29,7 @@ import {
 } from "~/lib/analytics-server";
 
 /** OAuth providers covered by the social-login callback surface. */
-export type AuthProvider = "apple" | "google" | "github";
+export type AuthProvider = "apple" | "google" | "github" | "oidc";
 
 /**
  * Where in an auth flow a failure surfaced. Recorded as a property so a
@@ -43,6 +43,7 @@ export type AuthFailurePhase =
   | "invalid_state"
   | "invalid_code_verifier"
   | "config"
+  | "discovery"
   | "verify"
   | "token_exchange"
   | "userinfo"

@@ -25,8 +25,8 @@ const AUTHENTICATED_AT_KEY = "authenticatedAt";
 const SIGN_IN_METHOD_KEY = "signInMethod";
 
 /** The method a sign-in used, as its session cookie records it. */
-export type SignInMethod = "password" | "passkey" | "google" | "github" | "apple";
-const SIGN_IN_METHODS: readonly SignInMethod[] = ["password", "passkey", "google", "github", "apple"];
+export type SignInMethod = "password" | "passkey" | "google" | "github" | "apple" | "oidc";
+const SIGN_IN_METHODS: readonly SignInMethod[] = ["password", "passkey", "google", "github", "apple", "oidc"];
 
 /** Who a signed session cookie says the visitor is, before any database check. */
 export interface SessionIdentity {

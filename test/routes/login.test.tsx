@@ -50,6 +50,21 @@ describe("Login Route", () => {
   });
 
   describe("loader", () => {
+    it("shows the server owner's OpenID Connect button, with its label, only when it is configured", async () => {
+      const env = {
+        SPOONJOY_OIDC_ISSUER: "https://auth.example.test/application/o/spoonjoy/",
+        SPOONJOY_OIDC_CLIENT_ID: "spoonjoy",
+        SPOONJOY_OIDC_CLIENT_SECRET: "test-only-secret",
+        SPOONJOY_OIDC_NAME: "Sign in with Authentik",
+      };
+      const result = await loader({ request: new UndiciRequest("http://localhost:3000/login"), context: { cloudflare: { env } }, params: {} } as unknown as Parameters<typeof loader>[0]);
+      expect(result).toEqual({ oauthProviders: ["oidc"], oidcLabel: "Sign in with Authentik", passwordReset: false });
+
+      const Stub = createTestRoutesStub([{ path: "/login", Component: Login, loader: () => result }]);
+      render(<Stub initialEntries={["/login"]} />);
+      expect(await screen.findByRole("link", { name: "Sign in with Authentik" })).toHaveAttribute("href", "/auth/oidc");
+    });
+
     it("should return configured OAuth providers when user is not logged in", async () => {
       const request = new UndiciRequest("http://localhost:3000/login");
 

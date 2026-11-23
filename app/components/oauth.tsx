@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { Button } from '~/components/ouro/button/button'
 
-export type OAuthProvider = 'google' | 'github' | 'apple'
+export type OAuthProvider = 'google' | 'github' | 'apple' | 'oidc'
 
 const providerStyles: Record<OAuthProvider, { label: string }> = {
   google: {
@@ -12,6 +12,10 @@ const providerStyles: Record<OAuthProvider, { label: string }> = {
   },
   apple: {
     label: 'Continue with Apple',
+  },
+  // A self-hosted server's own OpenID Connect provider; its owner names the button (SPOONJOY_OIDC_NAME).
+  oidc: {
+    label: 'Continue with single sign-on',
   },
 }
 
@@ -25,10 +29,11 @@ interface OAuthButtonProps {
    * the Referer dropped users on /recipes instead of back where they started.
    */
   redirectTo?: string
+  /** The button's label in place of the provider's own. */
+  label?: string
 }
 
-export function OAuthButton({ provider, className, redirectTo }: OAuthButtonProps) {
-  const { label } = providerStyles[provider]
+export function OAuthButton({ provider, className, redirectTo, label = providerStyles[provider].label }: OAuthButtonProps) {
   const href = redirectTo
     ? `/auth/${provider}?redirectTo=${encodeURIComponent(redirectTo)}`
     : `/auth/${provider}`
@@ -48,15 +53,22 @@ interface OAuthButtonGroupProps {
   providers?: OAuthProvider[]
   className?: string
   redirectTo?: string
+  /** The OpenID Connect button's label, as the server's owner set it. */
+  oidcLabel?: string
 }
 
-export function OAuthButtonGroup({ providers = ['google', 'github', 'apple'], className, redirectTo }: OAuthButtonGroupProps) {
+export function OAuthButtonGroup({ providers = ['google', 'github', 'apple'], className, redirectTo, oidcLabel }: OAuthButtonGroupProps) {
   if (providers.length === 0) return null
 
   return (
     <div className={clsx('flex flex-col gap-3', className)}>
       {providers.map((provider) => (
-        <OAuthButton key={provider} provider={provider} redirectTo={redirectTo} />
+        <OAuthButton
+          key={provider}
+          provider={provider}
+          redirectTo={redirectTo}
+          label={provider === 'oidc' ? oidcLabel : undefined}
+        />
       ))}
     </div>
   )
@@ -78,6 +90,8 @@ export function OAuthError({ error, className }: OAuthErrorProps) {
     email_unverified: 'Your OAuth provider must return a verified email address before Spoonjoy can use it for sign-in.',
     invalid_state: 'Your sign-in session expired, or its security check didn\'t match. Start sign-in again.',
     invalid_code: 'The OAuth provider did not return a usable authorization code. Please try again.',
+    invalid_id_token: "Your sign-in provider's answer didn't pass Spoonjoy's security checks. Start sign-in again, or ask this server's owner to check its sign-in settings.",
+    provider_unavailable: "This server's sign-in provider didn't answer. Try again in a moment.",
     invalid_code_verifier: 'Your OAuth security verifier was missing. Please try again.',
     invalid_request: 'That OAuth callback method is not supported. Please start sign-in again.',
     login_required: 'Please log in before linking a new OAuth provider.',

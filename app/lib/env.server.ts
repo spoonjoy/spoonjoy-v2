@@ -11,6 +11,8 @@
  * - Apple social callback rollout: APPLE_OAUTH_CALLBACK_MODE,
  *   APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED
  * - Native Apple Sign in: APPLE_NATIVE_CLIENT_IDS (or APPLE_NATIVE_CLIENT_ID)
+ * - A server owner's OpenID Connect provider: SPOONJOY_OIDC_ISSUER, SPOONJOY_OIDC_CLIENT_ID,
+ *   SPOONJOY_OIDC_CLIENT_SECRET, and optionally SPOONJOY_OIDC_NAME and SPOONJOY_OIDC_SCOPES
  *
  * Set secrets in production via: wrangler secret put <SECRET_NAME>
  */
@@ -43,7 +45,23 @@ export interface GitHubOAuthConfig {
   clientSecret: string;
 }
 
+/** A server owner's own OpenID Connect provider (Authentik, Authelia, Keycloak and the like). */
+export interface OidcConfig {
+  /** The issuer without a trailing slash; discovery is at `${issuer}/.well-known/openid-configuration`. */
+  issuer: string;
+  clientId: string;
+  clientSecret: string;
+  /** The sign-in button's label. */
+  label: string;
+  scopes: string[];
+}
+
 export interface OAuthEnv {
+  SPOONJOY_OIDC_ISSUER?: string;
+  SPOONJOY_OIDC_CLIENT_ID?: string;
+  SPOONJOY_OIDC_CLIENT_SECRET?: string;
+  SPOONJOY_OIDC_NAME?: string;
+  SPOONJOY_OIDC_SCOPES?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   GITHUB_CLIENT_ID?: string;
@@ -58,7 +76,7 @@ export interface OAuthEnv {
   APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED?: string;
 }
 
-export type OAuthProvider = "google" | "github" | "apple";
+export type OAuthProvider = "google" | "github" | "apple" | "oidc";
 
 export interface VapidConfig {
   publicKey: string;
@@ -192,6 +210,45 @@ export function getAppleNativeAuthConfig(env: OAuthEnv): AppleNativeAuthConfig {
   return { clientIds };
 }
 
+const DEFAULT_OIDC_LABEL = "Continue with single sign-on";
+const DEFAULT_OIDC_SCOPES = ["openid", "email", "profile"];
+
+/**
+ * Validates and returns the server owner's OpenID Connect provider.
+ * Throws if the issuer, client ID or client secret is missing, or the issuer is not a plain
+ * http(s) address.
+ */
+export function getOidcConfig(env: OAuthEnv): OidcConfig {
+  const rawIssuer = requireEnvValue(env, "SPOONJOY_OIDC_ISSUER");
+  const issuerUrl = URL.canParse(rawIssuer) ? new URL(rawIssuer) : null;
+  if (
+    !issuerUrl ||
+    (issuerUrl.protocol !== "https:" && issuerUrl.protocol !== "http:") ||
+    issuerUrl.search ||
+    issuerUrl.hash
+  ) {
+    throw new Error(`SPOONJOY_OIDC_ISSUER must be an http:// or https:// address with no query; got "${rawIssuer}".`);
+  }
+  const requestedScopes = normalizeEnvValue(env.SPOONJOY_OIDC_SCOPES)?.split(/[\s,]+/).filter(Boolean);
+  const scopes = requestedScopes ?? DEFAULT_OIDC_SCOPES;
+  return {
+    issuer: rawIssuer.replace(/\/+$/, ""),
+    clientId: requireEnvValue(env, "SPOONJOY_OIDC_CLIENT_ID"),
+    clientSecret: requireEnvValue(env, "SPOONJOY_OIDC_CLIENT_SECRET"),
+    label: normalizeEnvValue(env.SPOONJOY_OIDC_NAME) ?? DEFAULT_OIDC_LABEL,
+    scopes: scopes.includes("openid") ? scopes : ["openid", ...scopes],
+  };
+}
+
+/** The OpenID Connect button's label when the provider is configured, otherwise undefined. */
+export function getOidcButtonLabel(env: OAuthEnv): string | undefined {
+  try {
+    return getOidcConfig(env).label;
+  } catch {
+    return undefined;
+  }
+}
+
 const ALL_OAUTH_ENV_VARS = [
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
@@ -246,6 +303,10 @@ export function getConfiguredOAuthProviders(env: OAuthEnv): OAuthProvider[] {
     normalizeEnvValue(env.APPLE_PRIVATE_KEY)
   ) {
     providers.push("apple");
+  }
+
+  if (getOidcButtonLabel(env) !== undefined) {
+    providers.push("oidc");
   }
 
   return providers;
