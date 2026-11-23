@@ -473,11 +473,7 @@ function RecipeDetail() {
             triggerTestId="recipe-header-report-action"
           />
         ) : null}
-        {/* On a wide screen the dropdown leaves the page live (the phone's sheet still holds it): a held page
-            stays readable to assistive technology, yet its lines below the fold can't be scrolled into view to
-            check, and the recipe runs long. */}
         <Menu
-          modal={false}
           trigger={(
             <Button variant="outline" tone="secondary" aria-label="Recipe actions" data-testid="recipe-header-more-action">
               <Ellipsis />
