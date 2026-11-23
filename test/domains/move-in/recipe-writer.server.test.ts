@@ -108,7 +108,139 @@ describe("writeMovedInRecipe", () => {
   it("numbers a title the chef already uses", async () => {
     database.sqlite.prepare(`INSERT INTO "Recipe" ("id", "title", "chefId") VALUES ('mine', 'Pancakes', 'chef-1'), ('mine-2', 'Pancakes (2)', 'chef-1')`).run();
     const result = await write(draft());
-    expect(result).toMatchObject({ outcome: "created", title: "Pancakes (3)", warnings: ["You already had a recipe called \"Pancakes\", so this one is \"Pancakes (3)\"."] });
+    expect(result).toEqual({ outcome: "created", recipeId: expect.any(String), title: "Pancakes (3)", renamedFrom: "Pancakes", warnings: [] });
+  });
+
+  describe("when the recipe moved in before", () => {
+    const changed = () => draft({
+      title: "Weekend pancakes",
+      steps: [{ sourceKey: "step-1", title: null, text: "Whisk the flour and milk, then rest it.", ingredientKeys: ["r|flour", "r|milk"] }],
+      ingredients: [ingredient("r|flour", { quantity: 2, unit: "Cup", food: "Flour", plainText: false }), ingredient("r|milk", { note: "1 cup milk" })],
+      sourceUpdatedAt: "2026-02-01T09:00:00",
+    });
+
+    it("changes it in place when the backup changed it and the cook hasn't", async () => {
+      const first = await write(draft());
+      expect(await write(changed(), "job-2")).toEqual({ outcome: "updated", recipeId: first.recipeId });
+      expect(all(`SELECT "id", "title", "description" FROM "Recipe"`)).toEqual([
+        { id: first.recipeId, title: "Weekend pancakes", description: "Fluffy ones.\n\nStorage: Freezes well.\n\nKids love it." },
+      ]);
+      expect(all(`SELECT "stepNum", "description" FROM "RecipeStep"`)).toEqual([{ stepNum: 1, description: "Whisk the flour and milk, then rest it." }]);
+      expect(all(`SELECT "quantity" FROM "Ingredient" ORDER BY "quantity"`)).toEqual([{ quantity: 1 }, { quantity: 2 }]);
+      expect(all(`SELECT "sourceUpdatedAt", "lastJobId" FROM "SourceRecord"`)).toEqual([{ sourceUpdatedAt: "2026-02-01T09:00:00", lastJobId: "job-1" }]);
+      // Moving the changed backup in once more finds it as it is now.
+      expect(await write(changed(), "job-3")).toEqual({ outcome: "unchanged", recipeId: first.recipeId, jobId: "job-1" });
+    });
+
+    it("keeps a numbered title's number while the name in the backup stays the same", async () => {
+      database.sqlite.prepare(`INSERT INTO "Recipe" ("id", "title", "chefId") VALUES ('mine', 'Pancakes', 'chef-1')`).run();
+      const first = await write(draft());
+      expect(await write(draft({ description: "Fluffier ones." }), "job-2")).toEqual({ outcome: "updated", recipeId: first.recipeId });
+      expect(all(`SELECT "title" FROM "Recipe" WHERE "id" = ?`, first.recipeId)).toEqual([{ title: "Pancakes (2)" }]);
+    });
+
+    it("numbers a new name the chef already uses", async () => {
+      const first = await write(draft());
+      database.sqlite.prepare(`INSERT INTO "Recipe" ("id", "title", "chefId") VALUES ('mine', 'Weekend pancakes', 'chef-1')`).run();
+      await write(changed(), "job-2");
+      expect(all(`SELECT "title" FROM "Recipe" WHERE "id" = ?`, first.recipeId)).toEqual([{ title: "Weekend pancakes (2)" }]);
+    });
+
+    it("keeps the cook's version when both the cook and the backup changed it", async () => {
+      const first = await write(draft());
+      database.sqlite.prepare(`UPDATE "Recipe" SET "description" = 'Mine now.'`).run();
+      expect(await write(changed(), "job-2")).toEqual({
+        outcome: "kept",
+        recipeId: first.recipeId,
+        reason: "Pancakes changed in the backup, but you've changed it in Spoonjoy too, so your version stays.",
+      });
+      expect(all(`SELECT "title", "description" FROM "Recipe"`)).toEqual([{ title: "Pancakes", description: "Mine now." }]);
+    });
+
+    it("leaves a recipe the cook changed when the backup didn't change it", async () => {
+      const first = await write(draft());
+      database.sqlite.prepare(`UPDATE "Recipe" SET "description" = 'Mine now.'`).run();
+      expect(await write(draft(), "job-2")).toEqual({ outcome: "unchanged", recipeId: first.recipeId, jobId: "job-1" });
+    });
+
+    it("finds a recipe the cook already changed to match the backup", async () => {
+      const first = await write(draft());
+      await write(changed(), "job-2");
+      // As if the cook had typed the backup's changes in by hand before moving it in again.
+      database.sqlite.prepare(`UPDATE "SourceRecord" SET "contentHash" = 'as it first moved in'`).run();
+      expect(await write(changed(), "job-3")).toEqual({ outcome: "unchanged", recipeId: first.recipeId, jobId: "job-1" });
+    });
+
+    it("leaves a recipe recorded without its content as it is", async () => {
+      const first = await write(draft());
+      database.sqlite.prepare(`UPDATE "SourceRecord" SET "contentHash" = NULL`).run();
+      expect(await write(changed(), "job-2")).toEqual({ outcome: "unchanged", recipeId: first.recipeId, jobId: "job-1" });
+    });
+
+    it("leaves the recipe alone when another run changed it first", async () => {
+      const first = await write(draft());
+      const db = {
+        prepare: database.binding.prepare,
+        batch: async (statements: Array<{ sql: string }>) => {
+          if (statements.some((statement) => statement.sql.includes(`UPDATE "SourceRecord" SET "contentHash"`))) {
+            database.sqlite.prepare(`UPDATE "SourceRecord" SET "contentHash" = 'theirs'`).run();
+            database.sqlite.prepare(`UPDATE "Recipe" SET "description" = 'Theirs.'`).run();
+          }
+          return database.binding.batch(statements as never);
+        },
+      };
+      const result = await writeMovedInRecipe({ db: db as never, sourceId: "source-1", jobId: "job-2", chefId: "chef-1", draft: changed(), now });
+      expect(result).toMatchObject({ outcome: "kept", recipeId: first.recipeId });
+      expect(all(`SELECT "description" FROM "Recipe"`)).toEqual([{ description: "Theirs." }]);
+    });
+  });
+
+  describe("when another copy of the same kitchen moved in before", () => {
+    // Another backup of the same kitchen, from a server whose ids differ (another version, or a fresh install).
+    const writeFromCopy = (recipe: RecipeDraft, jobId = "job-2") =>
+      writeMovedInRecipe({ db: database.binding, sourceId: "source-2", jobId, chefId: "chef-1", draft: recipe, now });
+
+    beforeEach(() => {
+      database.sqlite.prepare(`INSERT INTO "ImportSource" ("id", "ownerId", "kind", "instanceKey", "label") VALUES ('source-2', 'chef-1', 'mealie-backup', 'other', 'Home')`).run();
+    });
+
+    it("finds a recipe with the same name and content, and adds nothing", async () => {
+      const first = await write(draft());
+      expect(await writeFromCopy(draft({ sourceKey: "copy-1" }))).toEqual({ outcome: "unchanged", recipeId: first.recipeId, jobId: "job-1" });
+      expect(all(`SELECT "id" FROM "Recipe"`)).toHaveLength(1);
+      // The copy's recipe now points at it, so the next move-in of the copy finds it by its id.
+      expect(all(`SELECT "sourceId", "targetId", "lastJobId" FROM "SourceRecord" WHERE "sourceKey" = 'copy-1'`)).toEqual([
+        { sourceId: "source-2", targetId: first.recipeId, lastJobId: "job-1" },
+      ]);
+      expect(await writeFromCopy(draft({ sourceKey: "copy-1" }), "job-3")).toEqual({ outcome: "unchanged", recipeId: first.recipeId, jobId: "job-1" });
+    });
+
+    it("finds it under its number", async () => {
+      database.sqlite.prepare(`INSERT INTO "Recipe" ("id", "title", "chefId") VALUES ('mine', 'Pancakes', 'chef-1')`).run();
+      const first = await write(draft());
+      expect(await writeFromCopy(draft({ sourceKey: "copy-1" }))).toMatchObject({ outcome: "unchanged", recipeId: first.recipeId });
+    });
+
+    it("brings a different recipe with the same name under a number", async () => {
+      await write(draft());
+      expect(await writeFromCopy(draft({ sourceKey: "copy-1", description: "Thin ones." }))).toMatchObject({ outcome: "created", title: "Pancakes (2)", renamedFrom: "Pancakes" });
+    });
+
+    it("matches each earlier recipe once", async () => {
+      await write(draft());
+      await writeFromCopy(draft({ sourceKey: "copy-1" }));
+      expect(await writeFromCopy(draft({ sourceKey: "copy-2" }))).toMatchObject({ outcome: "created", title: "Pancakes (2)" });
+    });
+
+    it("never takes a recipe the cook wrote for one that moved in", async () => {
+      database.sqlite.prepare(`INSERT INTO "Recipe" ("id", "title", "description", "chefId") VALUES ('mine', 'Pancakes', 'Fluffy ones.', 'chef-1')`).run();
+      expect(await writeFromCopy(draft({ sourceKey: "copy-1", steps: [], ingredients: [], notes: [] }))).toMatchObject({ outcome: "created", title: "Pancakes (2)" });
+    });
+
+    it("leaves recipes from the same kitchen to their own ids", async () => {
+      await write(draft());
+      expect(await write(draft({ sourceKey: "recipe-2" }))).toMatchObject({ outcome: "created", title: "Pancakes (2)" });
+    });
   });
 
   it("puts ingredients of a recipe with no steps on one step", async () => {

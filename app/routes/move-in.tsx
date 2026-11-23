@@ -8,6 +8,7 @@ import type { Route } from "./+types/move-in";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Button } from "~/components/ouro/button/button";
 import { ChoiceCard } from "~/components/ouro/choice-card/choice-card";
+import { Collapsible } from "~/components/ouro/collapsible/collapsible";
 import { DescriptionList } from "~/components/ouro/description-list/description-list";
 import { FileField } from "~/components/ouro/file-field/file-field";
 import { Form } from "~/components/ouro/form/form";
@@ -75,11 +76,13 @@ export interface MoveInView {
   status: MoveInProgress["job"]["status"];
   finished: boolean;
   archiveName: string | null;
-  recipes: { found: number; done: number; created: number; unchanged: number; skipped: number; failed: number };
+  recipes: { found: number; done: number; created: number; already: number; updated: number; unchanged: number; skipped: number; failed: number };
   /** Photos found in the backup, and how many of those are on their recipes now. */
   photos: { found: number; in: number };
   failure: string | null;
-  notes: Array<{ seq: number; level: "warn" | "error"; message: string }>;
+  notes: Array<{ seq: number; level: "info" | "warn" | "error"; message: string }>;
+  /** Recipes that got a number because the cook already had one by that name. */
+  renamed: Array<{ seq: number; message: string }>;
   /** It runs on the server, so the page can be closed. */
   runsOnServer: boolean;
 }
@@ -97,6 +100,9 @@ function view(progress: MoveInProgress, runsOnServer: boolean): MoveInView {
       found: recipes.found,
       done: recipes.created + recipes.updated + recipes.unchanged + recipes.skipped + recipes.failed,
       created: recipes.created,
+      // Already here: from an earlier move-in, whether it changed since or not.
+      already: recipes.updated + recipes.unchanged,
+      updated: recipes.updated,
       unchanged: recipes.unchanged,
       skipped: recipes.skipped,
       failed: recipes.failed,
@@ -104,7 +110,8 @@ function view(progress: MoveInProgress, runsOnServer: boolean): MoveInView {
     photos: { found: photos.found, in: photos.created + photos.unchanged },
     failure,
     notes: progress.events.flatMap((event) =>
-      event.level === "info" || event.kind === "job-failed" ? [] : [{ seq: event.seq, level: event.level, message: event.message }]),
+      (event.level === "info" && event.kind !== "item-kept") || event.kind === "job-failed" ? [] : [{ seq: event.seq, level: event.level, message: event.message }]),
+    renamed: progress.events.flatMap((event) => (event.kind === "item-renamed" ? [{ seq: event.seq, message: event.message }] : [])),
     runsOnServer,
   };
 }
@@ -217,19 +224,32 @@ function Progress({ move }: { move: MoveInView }) {
 }
 
 function Finished({ move }: { move: MoveInView }) {
+  const { created, already, updated } = move.recipes;
   const items = [
-    { term: "Recipes moved in", details: String(move.recipes.created) },
+    { term: "Recipes moved in", details: String(created) },
     { term: "Photos", details: `${move.photos.in} of ${move.photos.found}` },
-    ...(move.recipes.unchanged ? [{ term: "Already here", details: String(move.recipes.unchanged) }] : []),
     ...(move.recipes.skipped ? [{ term: "Left out", details: String(move.recipes.skipped) }] : []),
     ...(move.recipes.failed ? [{ term: "Didn't move in", details: String(move.recipes.failed) }] : []),
   ];
+  const heading = created ? `${plural(created, "recipe")} moved in` : already ? "Everything was already here" : "Nothing new to move in";
   return (
     <section aria-labelledby="move-in-done" className="flex flex-col gap-6">
-      <h2 id="move-in-done" className="text-lg font-semibold">
-        {move.recipes.created ? `${plural(move.recipes.created, "recipe")} moved in` : "Nothing new to move in"}
-      </h2>
+      <div className="flex flex-col gap-1">
+        <h2 id="move-in-done" className="text-lg font-semibold">{heading}</h2>
+        {already ? <Text tone="muted">{`${already} already here, ${updated} changed.`}</Text> : null}
+      </div>
       <DescriptionList items={items} />
+      {move.renamed.length ? (
+        <Collapsible title={`${plural(move.renamed.length, "recipe")} got a number, because you already had one by that name`}>
+          <ul className="flex list-disc flex-col gap-1 pl-5">
+            {move.renamed.map((note) => (
+              <li key={note.seq}>
+                <Text>{note.message}</Text>
+              </li>
+            ))}
+          </ul>
+        </Collapsible>
+      ) : null}
       {move.notes.length ? (
         <section aria-labelledby="move-in-notes" className="flex flex-col gap-2">
           <h3 id="move-in-notes" className="font-semibold">What to look over</h3>

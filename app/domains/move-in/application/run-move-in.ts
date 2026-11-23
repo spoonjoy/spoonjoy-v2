@@ -42,7 +42,8 @@ export interface MoveInCounts {
 
 export interface MoveInEvent {
   level: "info" | "warn" | "error";
-  kind: "phase-done" | "item-degraded" | "item-skipped" | "item-failed" | "job-done" | "job-failed";
+  /** `item-renamed` and `item-kept` are for the record, not for the cook to look over. */
+  kind: "phase-done" | "item-degraded" | "item-renamed" | "item-kept" | "item-skipped" | "item-failed" | "job-done" | "job-failed";
   entity: string | null;
   sourceKey: string | null;
   targetId: string | null;
@@ -52,9 +53,14 @@ export interface MoveInEvent {
 }
 
 export type RecipeWriteResult =
-  | { outcome: "created"; recipeId: string; title: string; warnings: string[] }
-  /** `jobId` is the job that last brought the recipe in. */
+  /** `renamedFrom` is the backup's name when the cook already had a recipe by that name. */
+  | { outcome: "created"; recipeId: string; title: string; renamedFrom?: string; warnings: string[] }
+  /** `jobId` is the job that first brought the recipe in. */
   | { outcome: "unchanged"; recipeId: string; jobId: string }
+  /** The backup changed a recipe that moved in before, and it changed in place. */
+  | { outcome: "updated"; recipeId: string }
+  /** The backup and the cook both changed it: the cook's version stays. */
+  | { outcome: "kept"; recipeId: string; reason: string }
   | { outcome: "skipped"; recipeId: string; reason: string };
 
 /** Counts to add and report lines to log, saved with the job in one write. */
@@ -114,7 +120,7 @@ function plural(n: number, one: string, many = `${one}s`): string {
 }
 
 function event(kind: MoveInEvent["kind"], message: string, more: Partial<MoveInEvent> = {}): MoveInEvent {
-  const level = kind === "item-failed" || kind === "job-failed" ? "error" : kind.startsWith("item-") ? "warn" : "info";
+  const level = kind === "item-failed" || kind === "job-failed" ? "error" : kind === "item-degraded" || kind === "item-skipped" ? "warn" : "info";
   return { level, kind, entity: null, sourceKey: null, targetId: null, message, ...more };
 }
 
@@ -209,10 +215,15 @@ async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft): 
     report.events.push(event("item-skipped", result.reason, target));
     return report;
   }
-  if (result.outcome === "unchanged") {
+  if (result.outcome === "kept") {
+    report.counts.push(["recipes", { unchanged: 1 }]);
+    report.events.push(event("item-kept", result.reason, target));
+    return report;
+  }
+  if (result.outcome === "unchanged" || result.outcome === "updated") {
     // This job wrote it before a stop that came before the save: it is still this job's new recipe.
-    const ours = result.jobId === job.id;
-    report.counts.push(["recipes", ours ? { created: 1 } : { unchanged: 1 }]);
+    const ours = result.outcome === "unchanged" && result.jobId === job.id;
+    report.counts.push(["recipes", ours ? { created: 1 } : result.outcome === "updated" ? { updated: 1 } : { unchanged: 1 }]);
     if (!hasPhoto) return report;
     // A run that stopped between the recipe and its photo left the photo out; bring it now.
     if (await ports.hasMovedInPhoto(result.recipeId)) report.counts.push(["photos", ours ? { created: 1 } : { unchanged: 1 }]);
@@ -220,6 +231,9 @@ async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft): 
     return report;
   }
   report.counts.push(["recipes", { created: 1 }]);
+  if (result.renamedFrom) {
+    report.events.push(event("item-renamed", `You already had a recipe called "${result.renamedFrom}", so this one is "${result.title}".`, target));
+  }
   for (const warning of result.warnings) report.events.push(event("item-degraded", warning, target));
   if (hasPhoto) await bringPhoto(run, backup, draft, result.recipeId, report);
   return report;
