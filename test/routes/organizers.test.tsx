@@ -128,6 +128,8 @@ describe("organizers on recipes", () => {
     const long = await organize(recipe.id, chef.id, { tags: "Fine", categories: "x".repeat(61) });
     expect(long).toMatchObject({ data: { error: "Keep each category to 60 characters or fewer." }, init: { status: 400 } });
     expect(await db.organizer.count()).toBe(0);
+    // Runs of spaces count once, as the name is stored.
+    expect(await organize(recipe.id, chef.id, { tools: `${"x".repeat(29)}    ${"y".repeat(29)}` })).toEqual({ saved: true });
   });
 
   it("list the cook's organizers of each kind with their recipe counts, and open each one's page with its recipes", async () => {
