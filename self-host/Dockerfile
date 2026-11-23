@@ -4,6 +4,11 @@
 FROM node:22.23.5-trixie-slim@sha256:68c76cfad89921b927eae28ba21407475e29d0ce450afcdbe70c1532db042b64
 
 ARG SPOONJOY_VERSION=dev
+# workerd verifies the Worker's outbound HTTPS (Apple's sign-in keys, AI providers, OAuth) against
+# the system's CA certificates, which the slim base leaves out.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app/self-host
 COPY self-host/package.json self-host/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force

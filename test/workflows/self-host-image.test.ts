@@ -126,6 +126,10 @@ describe("self-host/Dockerfile", () => {
     expect(dockerfile).toMatch(/^FROM node:22[\w.-]*-slim@sha256:[0-9a-f]{64}$/m);
   });
 
+  it("installs the system CA certificates workerd trusts for the Worker's outbound HTTPS", () => {
+    expect(dockerfile).toMatch(/apt-get install -y --no-install-recommends ca-certificates/);
+  });
+
   it("installs the runtime from its lockfile", () => {
     expect(dockerfile).toContain("npm ci --omit=dev");
   });
