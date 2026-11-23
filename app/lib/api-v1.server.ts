@@ -4855,7 +4855,9 @@ async function accountProfilePayload(args: ApiV1RouteArgs, userId: string) {
     photoUrl: privateAccountPhotoUrl(origin, user.photoUrl),
     hasPassword: user.hashedPassword !== null,
     oauthAccounts: user.OAuth.map((account) => ({
-      provider: account.provider,
+      // A self-hosted server's OpenID Connect link is stored as oidc:<issuer> (oidcProviderKey);
+      // apps see the provider kind, not the issuer.
+      provider: account.provider.startsWith("oidc:") ? "oidc" : account.provider,
       providerUsername: account.providerUsername,
     })),
     passkeys: passkeys.map((passkey) => ({

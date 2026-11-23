@@ -706,7 +706,7 @@ const schemas = {
     clientMutationId: shortTextSchema,
   }),
   LinkedAuthProvider: objectSchema(["provider", "providerUsername"], {
-    provider: { type: "string", enum: ["apple", "github", "google"] },
+    provider: { type: "string", enum: ["apple", "github", "google", "oidc"] },
     providerUsername: { type: "string" },
   }),
   PasskeySummary: objectSchema(["id", "name", "transports", "createdAt"], {

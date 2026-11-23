@@ -529,6 +529,8 @@ describe("API v1 OpenAPI document", () => {
     expect(operation(document, "/api/v1/tokens", "GET").security).toEqual([{ bearerAuth: [] }, { cookieAuth: [] }]);
     expect(operation(document, "/api/v1/tokens", "POST").security).toEqual([{ bearerAuth: [] }, { cookieAuth: [] }]);
 
+    expect(document.components.schemas.LinkedAuthProvider.properties.provider.enum)
+      .toEqual(["apple", "github", "google", "oidc"]);
     expect(document.components.schemas.HealthData.properties.principal.oneOf).toEqual([
       { $ref: "#/components/schemas/ApiPrincipalSummary" },
       { type: "null" },
