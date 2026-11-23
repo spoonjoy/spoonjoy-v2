@@ -10,6 +10,7 @@ export {
   type FormatAmountOptions,
 } from "./model/quantity";
 export {
+  combineAmounts,
   formatAmountIn,
   parseUnitSystem,
   resolveUnit,
@@ -17,6 +18,7 @@ export {
   UNIT_SYSTEMS,
   unitSystemCookie,
   unitSystemFromCookie,
+  type Amount,
   type KnownUnit,
   type UnitSystem,
 } from "./model/units";
