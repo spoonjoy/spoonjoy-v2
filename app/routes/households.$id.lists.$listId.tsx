@@ -10,8 +10,10 @@ import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { SectionHeader } from "~/components/ouro/section-header/section-header";
+import { Text } from "~/components/ouro/text/text";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { CookbookPage } from "~/components/cookbook/page";
+import { chefDisplayName } from "~/lib/username";
 // Only the loader and action use these contexts: their indexes also export server code, which the browser bundle
 // must not reach.
 import { householdsRequest } from "~/domains/households-and-identity";
@@ -116,7 +118,11 @@ export default function HouseholdListPage() {
               <Button type="submit">Add</Button>
             </div>
           </Form>
-        ) : null}
+        ) : (
+          <Text tone="muted" size="sm" className="mt-6">
+            You can see this list. An owner can let you add to it.
+          </Text>
+        )}
 
         <Checklist
           label={list.name}
@@ -125,7 +131,7 @@ export default function HouseholdListPage() {
           items={list.items.map((item) => ({
             id: item.id,
             label: item.text,
-            description: item.addedBy ? `Added by ${item.addedBy}` : undefined,
+            description: item.addedBy ? `Added by ${chefDisplayName(item.addedBy)}` : undefined,
             checked: ticking.get(item.id) ?? item.checked,
             disabled: !list.canEdit,
             action: list.canEdit ? (
