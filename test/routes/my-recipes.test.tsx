@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import { db } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import {
   INGREDIENT_LOOKUP_BATCH_SIZE,
@@ -230,6 +231,8 @@ describe("My Recipes drawer route", () => {
           query: "",
           page: 1,
           pageSize: 50,
+          filterParams: [],
+          organizerChoices: null,
           hasPreviousPage: false,
           hasNextPage: false,
           recipes: [
@@ -273,6 +276,8 @@ describe("My Recipes drawer route", () => {
           query: "",
           page: 1,
           pageSize: 50,
+          filterParams: [],
+          organizerChoices: null,
           hasPreviousPage: false,
           hasNextPage: false,
           recipes: [],
@@ -285,6 +290,8 @@ describe("My Recipes drawer route", () => {
           query: "turnip",
           page: 1,
           pageSize: 50,
+          filterParams: [],
+          organizerChoices: null,
           hasPreviousPage: false,
           hasNextPage: false,
           recipes: [],
@@ -314,6 +321,8 @@ describe("My Recipes drawer route", () => {
           query: "turnip greens",
           page: 2,
           pageSize: 50,
+          filterParams: [],
+          organizerChoices: null,
           hasPreviousPage: true,
           hasNextPage: true,
           recipes: [{
@@ -333,6 +342,8 @@ describe("My Recipes drawer route", () => {
           query: "",
           page: 2,
           pageSize: 50,
+          filterParams: [],
+          organizerChoices: null,
           hasPreviousPage: true,
           hasNextPage: false,
           recipes: [{
@@ -352,6 +363,8 @@ describe("My Recipes drawer route", () => {
           query: "",
           page: 1,
           pageSize: 50,
+          filterParams: [],
+          organizerChoices: null,
           hasPreviousPage: false,
           hasNextPage: true,
           recipes: [{
@@ -399,5 +412,155 @@ describe("My Recipes drawer route", () => {
       "href",
       "/my-recipes-paged-first-page?page=2",
     );
+  });
+
+  describe("organizer filters", () => {
+    const ON = { cloudflare: { env: { SPOONJOY_FLAGS: "organizers" } } };
+
+    async function organizedKitchen() {
+      const viewer = await createDrawerUser("my-recipes-filters");
+      const wokSoup = await createDrawerRecipe({ chefId: viewer.id, title: "Wok Soup", updatedAt: new Date("2026-02-03T10:00:00Z") });
+      const quickSoup = await createDrawerRecipe({ chefId: viewer.id, title: "Quick Soup", updatedAt: new Date("2026-02-02T10:00:00Z") });
+      await createDrawerRecipe({ chefId: viewer.id, title: "Slow Stew", updatedAt: new Date("2026-02-01T10:00:00Z") });
+      const quick = await db.organizer.create({ data: { ownerId: viewer.id, kind: "tag", name: "Quick", slug: "quick" } });
+      const wok = await db.organizer.create({ data: { ownerId: viewer.id, kind: "tool", name: "Wok", slug: "wok" } });
+      await db.organizer.create({ data: { ownerId: viewer.id, kind: "tag", name: "Cozy", slug: "cozy" } });
+      await db.recipeOrganizer.createMany({
+        data: [
+          { recipeId: wokSoup.id, organizerId: quick.id },
+          { recipeId: wokSoup.id, organizerId: wok.id },
+          { recipeId: quickSoup.id, organizerId: quick.id },
+        ],
+      });
+      return viewer;
+    }
+
+    const load = async (viewerId: string, search: string, context: unknown = ON) =>
+      loader({
+        request: new UndiciRequest(`http://localhost:3000/my-recipes${search}`, { headers: await sessionHeaders(viewerId) }),
+        context,
+        params: {},
+      } as unknown as Parameters<typeof loader>[0]);
+
+    it("narrow my recipes to those with a tag and without a tool, and offer the cook's own organizers to choose from", async () => {
+      const viewer = await organizedKitchen();
+
+      const result = await load(viewer.id, "?with=tag:quick&without=tool:wok");
+
+      expect(result.recipes.map((recipe: { title: string }) => recipe.title)).toEqual(["Quick Soup"]);
+      expect(result.filterParams).toEqual([["with", "tag:quick"], ["without", "tool:wok"]]);
+      expect(result.organizerChoices).toEqual({
+        tag: [{ name: "Cozy", value: "tag:cozy" }, { name: "Quick", value: "tag:quick" }],
+        category: [],
+        tool: [{ name: "Wok", value: "tool:wok" }],
+      });
+    });
+
+    it("ignore filters and offer no choices while the organizers flag is off", async () => {
+      const viewer = await organizedKitchen();
+
+      const result = await load(viewer.id, "?with=tag:quick", { cloudflare: { env: {} } });
+
+      expect(result.recipes.map((recipe: { title: string }) => recipe.title)).toEqual(["Wok Soup", "Quick Soup", "Slow Stew"]);
+      expect(result.filterParams).toEqual([]);
+      expect(result.organizerChoices).toBeNull();
+    });
+
+    const page = (overrides: Record<string, unknown>) => ({
+      query: "",
+      page: 1,
+      pageSize: 50,
+      hasPreviousPage: false,
+      hasNextPage: false,
+      recipes: [],
+      filterParams: [],
+      organizerChoices: null,
+      ...overrides,
+    });
+
+    it("show a filter with a Has and a Leave out choice for each of the cook's organizers, checked as the address says", async () => {
+      const Stub = createTestRoutesStub([{
+        path: "/my-recipes",
+        Component: MyRecipes,
+        loader: () => page({
+          query: "soup",
+          filterParams: [["with", "tag:quick"]],
+          organizerChoices: { tag: [{ name: "Quick", value: "tag:quick" }], category: [], tool: [{ name: "Wok", value: "tool:wok" }] },
+        }),
+      }]);
+
+      render(<Stub initialEntries={["/my-recipes?q=soup&with=tag:quick"]} />);
+
+      const filter = await screen.findByRole("form", { name: "Filter my recipes" });
+      const has = within(filter).getByRole("group", { name: "Has" });
+      const leaveOut = within(filter).getByRole("group", { name: "Leave out" });
+      expect(within(has).getByRole("checkbox", { name: "Quick" })).toBeChecked();
+      expect(within(has).getByRole("checkbox", { name: "Wok" })).not.toBeChecked();
+      expect(within(leaveOut).getByRole("checkbox", { name: "Wok" })).not.toBeChecked();
+      const sent = new FormData(filter as HTMLFormElement);
+      expect(sent.getAll("with")).toEqual(["tag:quick"]);
+      expect(sent.getAll("without")).toEqual([]);
+      expect(sent.get("q")).toBe("soup");
+      expect(within(filter).getByRole("button", { name: "Apply filters" })).toBeInTheDocument();
+      const search = new FormData(screen.getByRole("search") as HTMLFormElement);
+      expect([...search.entries()]).toEqual([["q", "soup"], ["with", "tag:quick"]]);
+      expect(within(screen.getByRole("search")).getByRole("link", { name: "Clear" })).toHaveAttribute("href", "/my-recipes?with=tag%3Aquick");
+      expect(within(filter).getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/my-recipes?q=soup");
+      expect(screen.getByRole("heading", { name: "No matching recipes" })).toBeInTheDocument();
+    });
+
+    it("show no filter when the cook has no organizers or the flag is off", async () => {
+      const Stub = createTestRoutesStub([
+        { path: "/none", Component: MyRecipes, loader: () => page({ organizerChoices: { tag: [], category: [], tool: [] } }) },
+        { path: "/off", Component: MyRecipes, loader: () => page({}) },
+      ]);
+
+      render(<Stub initialEntries={["/none"]} />);
+      expect(await screen.findByRole("heading", { level: 1, name: "My Recipes" })).toBeInTheDocument();
+      expect(screen.queryByRole("form", { name: "Filter my recipes" })).not.toBeInTheDocument();
+      cleanup();
+      render(<Stub initialEntries={["/off"]} />);
+      expect(await screen.findByRole("heading", { level: 1, name: "My Recipes" })).toBeInTheDocument();
+      expect(screen.queryByRole("form", { name: "Filter my recipes" })).not.toBeInTheDocument();
+    });
+
+    it("offer the filter closed with nothing to clear until one is chosen, and suggest fewer filters when none match", async () => {
+      const choices = { tag: [{ name: "Quick", value: "tag:quick" }], category: [], tool: [] };
+      const Stub = createTestRoutesStub([
+        { path: "/unfiltered", Component: MyRecipes, loader: () => page({ organizerChoices: choices }) },
+        { path: "/filtered", Component: MyRecipes, loader: () => page({ organizerChoices: choices, filterParams: [["with", "tag:quick"]] }) },
+      ]);
+
+      render(<Stub initialEntries={["/unfiltered"]} />);
+      const filter = await screen.findByRole("form", { name: "Filter my recipes" });
+      expect(within(filter).getByRole("button", { name: "Filter", expanded: false })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Clear filters" })).not.toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "No recipes yet" })).toBeInTheDocument();
+      cleanup();
+
+      render(<Stub initialEntries={["/filtered"]} />);
+      expect(await screen.findByRole("button", { name: "Filter (1)", expanded: true })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "No matching recipes" })).toBeInTheDocument();
+      expect(screen.getByText("Try fewer filters.")).toBeInTheDocument();
+    });
+
+    it("keep the filters in page links", async () => {
+      const Stub = createTestRoutesStub([{
+        path: "/my-recipes",
+        Component: MyRecipes,
+        loader: () => page({
+          page: 1,
+          hasNextPage: true,
+          recipes: [{ id: "r", title: "Wok Soup", description: null, servings: null, chef: { id: "c", username: "ari" }, ingredientNames: [] }],
+          filterParams: [["without", "tool:wok"]],
+          organizerChoices: { tag: [], category: [], tool: [{ name: "Wok", value: "tool:wok" }] },
+        }),
+      }]);
+
+      render(<Stub initialEntries={["/my-recipes?without=tool:wok"]} />);
+
+      expect(await screen.findByRole("link", { name: /next page/i })).toHaveAttribute("href", "/my-recipes?without=tool%3Awok&page=2");
+      expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/my-recipes");
+    });
   });
 });

@@ -1,7 +1,7 @@
 // Organizers on recipes (organizers flag, on in QA), as per-run scratch user 1, whose area is recipe editing: a cook
 // makes a recipe, gives it tags, a category and a tool from Organize in the recipe menu, and finds them on the recipe's
 // Organize page, on a tag's own page, in the list of their tags and in the list of their categories, each after a
-// reload. Both device projects run at the same time as the same scratch user, so the recipe and every organizer carry
+// reload; then filters My recipes to the recipe by one of its tags and leaves it out by its tool. Both device projects run at the same time as the same scratch user, so the recipe and every organizer carry
 // the project name and a timestamp.
 import type { Page, TestInfo } from "@playwright/test";
 import { test, expect } from "./support/journey";
@@ -23,8 +23,8 @@ async function attachScreenshot(page: Page, testInfo: TestInfo, name: string): P
 test.describe("Organizers", () => {
   test.use({ storageState: scratchStorageStatePath(1) });
 
-  test("a cook organizes a recipe and finds it under each tag and category after a reload @mutates", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
-    test.setTimeout(120_000);
+  test("a cook organizes a recipe, finds it under each tag and category, and filters My recipes by them after a reload @mutates", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
+    test.setTimeout(150_000);
     const suffix = `${testInfo.project.name} ${Date.now().toString(36)}`;
     const title = `Journey Tagged Soup ${suffix}`;
     const cozy = `Cozy ${suffix}`;
@@ -97,5 +97,32 @@ test.describe("Organizers", () => {
     });
     await expectAccessible();
     await attachScreenshot(page, testInfo, "your-categories-after-reload");
+
+    // My recipes, searched to this run's recipe, filtered to the recipe's tag: it's there.
+    await page.goto(`/my-recipes?q=${encodeURIComponent(suffix)}`);
+    await waitForHydration(page);
+    const filter = page.getByRole("form", { name: "Filter my recipes", exact: true });
+    await filter.getByRole("button", { name: "Filter", exact: true }).click();
+    await filter.getByRole("group", { name: "Has", exact: true }).getByRole("checkbox", { name: quick, exact: true }).click();
+    await filter.getByRole("button", { name: "Apply filters", exact: true }).click();
+    await expect(page).toHaveURL(/[?&]with=tag%3A/);
+    const mine = page.getByRole("list", { name: "My recipes", exact: true });
+    await verifyAfterReload(async () => {
+      await expect(mine.getByRole("link", { name: title })).toBeVisible();
+      await expect(filter.getByRole("group", { name: "Has", exact: true }).getByRole("checkbox", { name: quick, exact: true })).toBeChecked();
+    });
+    await expectAccessible();
+    await attachScreenshot(page, testInfo, "my-recipes-with-tag-after-reload");
+
+    // Leaving out the recipe's tool takes it away.
+    await waitForHydration(page);
+    await filter.getByRole("group", { name: "Leave out", exact: true }).getByRole("checkbox", { name: pot, exact: true }).click();
+    await filter.getByRole("button", { name: "Apply filters", exact: true }).click();
+    await expect(page).toHaveURL(/[?&]without=tool%3A/);
+    await verifyAfterReload(async () => {
+      await expect(page.getByRole("heading", { name: "No matching recipes", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Filter (2)", exact: true })).toBeVisible();
+    });
+    await attachScreenshot(page, testInfo, "my-recipes-without-tool-after-reload");
   });
 });

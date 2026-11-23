@@ -285,6 +285,8 @@ export const census: Journey[] = [
   { id: "tools", enrolled: true, persona: "chef", path: "/tools", states: [DEFAULT] },
   { id: "tool", enrolled: true, persona: "chef", path: `/tools/${QA_KITCHEN_TOOL.slug}`, states: [DEFAULT] },
   { id: "recipe-organize", enrolled: true, persona: "chef", path: `${LEMON_RICE}/organize`, states: [DEFAULT] },
+  // My recipes with the filter open: Lemon Herb Rice has the tag, and nothing is left out.
+  { id: "my-recipes-filtered", enrolled: true, persona: "chef", path: `/my-recipes?with=tag:${QA_KITCHEN_TAG.slug}`, states: [DEFAULT] },
 
   // Cookbooks.
   { id: "cookbooks", enrolled: true, persona: "chef", path: "/cookbooks", states: [DEFAULT] },
