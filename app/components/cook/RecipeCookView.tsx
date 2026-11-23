@@ -263,6 +263,7 @@ function CookModePanel({
                       as in the Apple app (desk target.md, Cook step). */}
                   <IngredientList
                     hideLabel
+                    showSwaps
                     ingredients={ingredients}
                     stepOutputUses={stepOutputUses}
                     scaleFactor={scaleFactor}
