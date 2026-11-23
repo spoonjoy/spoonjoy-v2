@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { foodNutritionFor, gramsOf, recipeNutrition } from '~/domains/food-knowledge'
+import { foodNutritionFor, formatGrams, gramsOf, recipeNutrition } from '~/domains/food-knowledge'
 
 describe('foodNutritionFor', () => {
   it.each([
@@ -80,5 +80,13 @@ describe('recipeNutrition', () => {
 
   it('weighs nothing in a recipe of foods it does not know', () => {
     expect(recipeNutrition([{ name: 'saffron', quantity: 1, unit: 'pinch' }], 4)).toMatchObject({ weighed: 0, of: 1, total: { kcal: 0 } })
+  })
+})
+
+describe('formatGrams', () => {
+  it('writes grams to a tenth below 10 and whole above', () => {
+    expect(formatGrams(0.04)).toBe('0 g')
+    expect(formatGrams(9.94)).toBe('9.9 g')
+    expect(formatGrams(12.4)).toBe('12 g')
   })
 })
