@@ -129,9 +129,15 @@ describe("readable recipe queries", () => {
     }
   });
 
-  it("select in SQL, for a viewer named by a column, exactly the recipes canRead allows that viewer outside a household", () => {
+  it("select in SQL, for a viewer named by a column, exactly the recipes canRead allows that viewer and their household", () => {
     const db = database();
     db.exec(`CREATE TABLE "Viewer" ("userId" TEXT NOT NULL)`);
+    db.exec(`CREATE TABLE "HouseholdMember" ("householdId" TEXT NOT NULL, "userId" TEXT NOT NULL, PRIMARY KEY ("householdId", "userId"))`);
+    // CHEF and HOUSEMATE share one household; STRANGER is alone in another.
+    for (const [householdId, userId] of [["home", CHEF], ["home", HOUSEMATE], ["away", STRANGER]]) {
+      db.prepare(`INSERT INTO "HouseholdMember" ("householdId", "userId") VALUES (?, ?)`).run(householdId, userId);
+    }
+    const householdOf: Record<string, string[]> = { [CHEF]: [HOUSEMATE], [HOUSEMATE]: [CHEF], [STRANGER]: [] };
     for (const viewerId of [CHEF, STRANGER, HOUSEMATE]) {
       db.exec(`DELETE FROM "Viewer"`);
       db.prepare(`INSERT INTO "Viewer" ("userId") VALUES (?)`).run(viewerId);
@@ -139,7 +145,8 @@ describe("readable recipe queries", () => {
       const rows = db
         .prepare(`SELECT r."id" FROM "Recipe" r JOIN "Viewer" v ON ${readable} ORDER BY r."id"`)
         .all() as Array<{ id: string }>;
-      const expected = recipes.filter((recipe) => canRead({ id: viewerId }, recipe)).map((recipe) => recipe.id).sort();
+      const viewer = { id: viewerId, householdChefIds: new Set(householdOf[viewerId]) };
+      const expected = recipes.filter((recipe) => canRead(viewer, recipe)).map((recipe) => recipe.id).sort();
       expect(rows.map((row) => row.id)).toEqual(expected);
     }
   });

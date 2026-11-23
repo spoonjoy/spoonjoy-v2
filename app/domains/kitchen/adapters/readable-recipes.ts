@@ -27,10 +27,13 @@ export function readableRecipeSqlOn(
 
 /**
  * readableRecipeSql for a viewer named by a column of the same row (a cook's own list joined to recipes), with no
- * bound values. It does not know the viewer's household, so household recipes read only for their cook.
+ * bound values. It finds the viewer's household with a subquery on HouseholdMember: a household recipe reads for its
+ * cook and for anyone who shares a household with them, as canRead says.
  */
 export function readableRecipeSqlForViewerColumn(alias: string, viewerColumn: string): string {
-  return `(${alias}."visibility" = 'public' OR ${alias}."chefId" = ${viewerColumn})`;
+  const sharesHousehold = `EXISTS (SELECT 1 FROM "HouseholdMember" hv JOIN "HouseholdMember" hc ON hc."householdId" = hv."householdId"
+    WHERE hv."userId" = ${viewerColumn} AND hc."userId" = ${alias}."chefId")`;
+  return `(${alias}."visibility" = 'public' OR ${alias}."chefId" = ${viewerColumn} OR (${alias}."visibility" = 'household' AND ${sharesHousehold}))`;
 }
 
 type ReadableRecipeWhere =
