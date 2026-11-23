@@ -51,6 +51,22 @@ describe("organizers, stored", () => {
     expect(names(await organizersOnRecipe(store, other.id, "tag"))).toEqual(["Vegetarian"]);
   });
 
+  it("lets two saves of the same new tags on one recipe both succeed, with one tag and one link each", async () => {
+    const chef = await cook();
+    const recipe = await recipeOf(chef.id);
+    const results = await Promise.all([
+      setRecipeOrganizers(store, chef.id, recipe.id, "tag", ["Cozy", "Quick"]),
+      setRecipeOrganizers(store, chef.id, recipe.id, "tag", ["Cozy", "Quick"]),
+    ]);
+    expect(results.map((result) => result.ok && names(result.organizers))).toEqual([["Cozy", "Quick"], ["Cozy", "Quick"]]);
+    expect(await db.organizer.count({ where: { ownerId: chef.id } })).toBe(2);
+    expect(names(await organizersOnRecipe(store, recipe.id, "tag"))).toEqual(["Cozy", "Quick"]);
+  });
+
+  it("still fails a write that breaks something other than uniqueness", async () => {
+    await expect(store.create("no-such-cook", "tag", [{ name: "Orphan", slug: "orphan" }])).rejects.toMatchObject({ code: "P2003" });
+  });
+
   it("replaces a recipe's tags with the new set, and leaves its categories and tools alone", async () => {
     const chef = await cook();
     const recipe = await recipeOf(chef.id);
