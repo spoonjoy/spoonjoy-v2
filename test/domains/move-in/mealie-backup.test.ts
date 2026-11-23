@@ -33,6 +33,9 @@ describe("openMealieBackup", () => {
     expect(backup.database.version.label).toBe("v3.31.0");
     expect(await backup.readFile(`data/recipes/${keys.pancakes}/images/original.webp`)).toEqual(photo);
     expect(await backup.readFile(`data/recipes/${keys.soup}/images/original.webp`)).toBeNull();
+    expect(backup.hasFile(`data/recipes/${keys.pancakes}/images/original.webp`)).toBe(true);
+    expect(backup.hasFile(`data/recipes/${keys.soup}/images/original.webp`)).toBe(false);
+    expect(backup.hasFile("data/.secret")).toBe(false);
   });
 
   it("steps into one top folder, as when a zip is unzipped and zipped again", async () => {

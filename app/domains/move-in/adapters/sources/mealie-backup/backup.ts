@@ -16,6 +16,8 @@ export interface MealieBackup {
   database: MealieDatabase;
   /** A file under the backup's root (for example `data/recipes/<id>/images/original.webp`), or null. */
   readFile(path: string): Promise<Uint8Array | null>;
+  /** Whether that file is in the backup, without reading it. */
+  hasFile(path: string): boolean;
 }
 
 function asMoveInError(error: unknown): unknown {
@@ -49,12 +51,16 @@ export async function openMealieBackup(source: RangeSource): Promise<MealieBacku
       throw new MoveInError("broken-zip", "database.json is not JSON");
     }
     const database = readMealieDatabase(json);
+    const entryAt = (path: string) => {
+      const clean = cleanPath(path);
+      if (clean.split("/").includes("..") || NEVER_READ.some((pattern) => pattern.test(clean))) return undefined;
+      return archive.get(`${root}${clean}`);
+    };
     return {
       database,
+      hasFile: (path) => entryAt(path) !== undefined,
       async readFile(path) {
-        const clean = cleanPath(path);
-        if (clean.split("/").includes("..") || NEVER_READ.some((pattern) => pattern.test(clean))) return null;
-        const entry = archive.get(`${root}${clean}`);
+        const entry = entryAt(path);
         if (!entry) return null;
         try {
           return await archive.read(entry, { maxBytes: FILE_MAX_BYTES });
