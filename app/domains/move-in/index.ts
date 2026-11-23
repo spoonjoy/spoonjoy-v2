@@ -28,3 +28,10 @@ export {
   type MoveInStatus,
 } from "./application/run-move-in";
 export { runScheduledMoveInSweep } from "./adapters/worker/sweep-move-in-archives.server";
+export {
+  MOVE_IN_JOB,
+  moveInJobHandler,
+  nudgeMoveIn,
+  queueMoveIn,
+  type MoveInJobPayload,
+} from "./adapters/worker/move-in-job.server";

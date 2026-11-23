@@ -175,6 +175,19 @@ describe("Cloudflare worker app", () => {
     expect(captureException).toHaveBeenCalledWith(expect.anything(), { error, distinctId: "platform-jobs", route: "queue", extras: { type: "demo.kind" } });
   });
 
+  it("registers the move-in job only when the Worker has both the database and photo storage", async () => {
+    const batch = { queue: "spoonjoy-jobs-qa", messages: [] } as unknown as MessageBatch<unknown>;
+    const handlersWith = async (bindings: Partial<CloudflareEnvironment>) => {
+      consumeJobBatch.mockClear();
+      await worker.queue!(batch, versionedEnvironment({ DB: { prepare: vi.fn() } as unknown as D1Database, JOBS: { send: vi.fn(), sendBatch: vi.fn() } as never, ...bindings }), context());
+      const [, registry] = consumeJobBatch.mock.calls[0] as unknown as [unknown, { handlerFor(type: string): unknown }];
+      return registry;
+    };
+    expect((await handlersWith({ PHOTOS: {} as never })).handlerFor("move-in.run")).toBeDefined();
+    // Without photo storage the kind stays unregistered, so the queue leaves its jobs for a Worker that can run them.
+    expect((await handlersWith({})).handlerFor("move-in.run")).toBeUndefined();
+  });
+
   it("configures React Router with the statically imported server build, evaluated at Worker startup", () => {
     expect(configuredServerBuild).toMatchObject(serverBuildMarker);
     expect(configuredMode).toBe(import.meta.env.MODE);

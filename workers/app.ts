@@ -8,12 +8,12 @@ import { runWithD1WriteRetryReporter } from "../app/lib/d1-write-retry.server";
 import { qaErrorLogsEnabled } from "../app/lib/qa-error-logs.server";
 import { isolateColoReport, isolateRequestReport } from "../app/lib/slow-call.server";
 import { getDb } from "../app/lib/db.server";
-import { consumeJobBatch, d1JobKeys, jobRegistry, type JobKeysDatabase } from "../app/domains/platform";
+import { consumeJobBatch, d1JobKeys, jobRegistry, queueJobs, type JobKeysDatabase, type Jobs } from "../app/domains/platform";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
 import { defaultPhotoCache, deliverPhoto, photoKeyFromPath } from "../app/lib/photo-delivery.server";
 import { isServablePhotoKey, runScheduledPhotoSweep } from "../app/lib/photo-lifecycle.server";
-import { runScheduledMoveInSweep } from "../app/domains/move-in";
+import { MOVE_IN_JOB, moveInJobHandler, runScheduledMoveInSweep, type MoveInEnv } from "../app/domains/move-in";
 import { serveReleaseAssetFallback } from "../app/lib/release-assets.server";
 import { generateNonce, withSecurityHeaders } from "../app/lib/security-headers.server";
 import {
@@ -352,8 +352,12 @@ async function handleFetch(request: Request, env: CloudflareEnvironment, ctx: Ex
   }
 }
 
-// Each context's job kinds register their handlers here: jobHandlers.on(kind, handler).
-const jobHandlers = jobRegistry();
+// Each context's job kinds register their handlers here, with the bindings they need, for each batch.
+function jobHandlers(env: CloudflareEnvironment, jobs: Jobs) {
+  const registry = jobRegistry();
+  if (env.DB && env.PHOTOS) registry.on(MOVE_IN_JOB, moveInJobHandler({ DB: env.DB, PHOTOS: env.PHOTOS } as unknown as MoveInEnv, jobs));
+  return registry;
+}
 
 export default {
   async fetch(request, rawEnv, ctx) {
@@ -384,7 +388,8 @@ export default {
   async queue(batch: MessageBatch<unknown>, rawEnv: CloudflareEnvironment) {
     const env = withTransientD1Retry(rawEnv);
     if (!env.DB) throw new Error("Platform jobs need the DB binding for their keys.");
-    await consumeJobBatch(batch, jobHandlers, d1JobKeys(env.DB as JobKeysDatabase), {
+    const keys = d1JobKeys(env.DB as JobKeysDatabase);
+    await consumeJobBatch(batch, jobHandlers(env, queueJobs(env.JOBS, keys)), keys, {
       onFailed: (message, error) =>
         captureException(resolvePostHogServerConfig(env), { error, distinctId: "platform-jobs", route: "queue", extras: { type: message.type } }),
     });
