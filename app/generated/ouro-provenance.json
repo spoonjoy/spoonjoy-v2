@@ -3291,6 +3291,200 @@
       }
     },
     {
+      "path": "/households",
+      "file": "app/routes/households._index.tsx",
+      "sources": [
+        "app/routes/households._index.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/domains/households-and-identity/adapters/d1-household-store.server.ts",
+        "app/domains/households-and-identity/adapters/households-route.server.ts",
+        "app/domains/households-and-identity/application/household-store.ts",
+        "app/domains/households-and-identity/application/households.server.ts",
+        "app/domains/households-and-identity/index.ts",
+        "app/domains/households-and-identity/model/household.ts",
+        "app/domains/households-and-identity/model/invite.ts",
+        "app/domains/platform/flags/flags.ts",
+        "app/domains/platform/flags/index.ts",
+        "app/domains/platform/flags/use-flag.ts",
+        "app/domains/platform/index.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/objectionable-terms.ts",
+        "app/lib/session.server.ts"
+      ],
+      "components": [
+        "alert",
+        "button",
+        "empty",
+        "form",
+        "item",
+        "item-group",
+        "page-header",
+        "section-header",
+        "text-field"
+      ],
+      "renders": {
+        "alert": [
+          "app/routes/households._index.tsx"
+        ],
+        "button": [
+          "app/routes/households._index.tsx"
+        ],
+        "empty": [
+          "app/routes/households._index.tsx"
+        ],
+        "form": [
+          "app/routes/households._index.tsx"
+        ],
+        "item": [
+          "app/routes/households._index.tsx"
+        ],
+        "item-group": [
+          "app/routes/households._index.tsx"
+        ],
+        "page-header": [
+          "app/routes/households._index.tsx"
+        ],
+        "section-header": [
+          "app/routes/households._index.tsx"
+        ],
+        "text-field": [
+          "app/routes/households._index.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/households/:id",
+      "file": "app/routes/households.$id.tsx",
+      "sources": [
+        "app/routes/households.$id.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/domains/households-and-identity/adapters/d1-household-store.server.ts",
+        "app/domains/households-and-identity/adapters/households-route.server.ts",
+        "app/domains/households-and-identity/application/household-store.ts",
+        "app/domains/households-and-identity/application/households.server.ts",
+        "app/domains/households-and-identity/index.ts",
+        "app/domains/households-and-identity/model/household.ts",
+        "app/domains/households-and-identity/model/invite.ts",
+        "app/domains/platform/flags/flags.ts",
+        "app/domains/platform/flags/index.ts",
+        "app/domains/platform/flags/use-flag.ts",
+        "app/domains/platform/index.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/session.server.ts"
+      ],
+      "components": [
+        "alert",
+        "avatar",
+        "badge",
+        "button",
+        "copy-button",
+        "form",
+        "item",
+        "item-group",
+        "link",
+        "native-select",
+        "page-header",
+        "section-header",
+        "text",
+        "text-field"
+      ],
+      "renders": {
+        "alert": [
+          "app/routes/households.$id.tsx"
+        ],
+        "avatar": [
+          "app/routes/households.$id.tsx"
+        ],
+        "badge": [
+          "app/routes/households.$id.tsx"
+        ],
+        "button": [
+          "app/routes/households.$id.tsx"
+        ],
+        "copy-button": [
+          "app/routes/households.$id.tsx"
+        ],
+        "form": [
+          "app/routes/households.$id.tsx"
+        ],
+        "item": [
+          "app/routes/households.$id.tsx"
+        ],
+        "item-group": [
+          "app/routes/households.$id.tsx"
+        ],
+        "link": [
+          "app/routes/households.$id.tsx"
+        ],
+        "native-select": [
+          "app/routes/households.$id.tsx"
+        ],
+        "page-header": [
+          "app/routes/households.$id.tsx"
+        ],
+        "section-header": [
+          "app/routes/households.$id.tsx"
+        ],
+        "text": [
+          "app/routes/households.$id.tsx"
+        ],
+        "text-field": [
+          "app/routes/households.$id.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/join/:token",
+      "file": "app/routes/join.$token.tsx",
+      "sources": [
+        "app/routes/join.$token.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/domains/households-and-identity/adapters/d1-household-store.server.ts",
+        "app/domains/households-and-identity/adapters/households-route.server.ts",
+        "app/domains/households-and-identity/application/household-store.ts",
+        "app/domains/households-and-identity/application/households.server.ts",
+        "app/domains/households-and-identity/index.ts",
+        "app/domains/households-and-identity/model/household.ts",
+        "app/domains/households-and-identity/model/invite.ts",
+        "app/domains/platform/flags/flags.ts",
+        "app/domains/platform/flags/index.ts",
+        "app/domains/platform/flags/use-flag.ts",
+        "app/domains/platform/index.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/session.server.ts"
+      ],
+      "components": [
+        "alert",
+        "button",
+        "empty",
+        "form",
+        "page-header"
+      ],
+      "renders": {
+        "alert": [
+          "app/routes/join.$token.tsx"
+        ],
+        "button": [
+          "app/routes/join.$token.tsx"
+        ],
+        "empty": [
+          "app/routes/join.$token.tsx"
+        ],
+        "form": [
+          "app/routes/join.$token.tsx"
+        ],
+        "page-header": [
+          "app/routes/join.$token.tsx"
+        ]
+      }
+    },
+    {
       "path": "/account/settings",
       "file": "app/routes/account.settings.tsx",
       "sources": [
