@@ -24,10 +24,11 @@ function view(fields: Partial<MoveInView> = {}): MoveInView {
     status: "running",
     finished: false,
     archiveName: "mealie.zip",
-    recipes: { found: 0, done: 0, created: 0, unchanged: 0, skipped: 0, failed: 0 },
+    recipes: { found: 0, done: 0, created: 0, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 },
     photos: { found: 0, in: 0 },
     failure: null,
     notes: [],
+    renamed: [],
     runsOnServer: false,
     ...fields,
   };
@@ -83,6 +84,11 @@ describe("the Move in page", () => {
     await vi.waitFor(() => expect(action).toHaveBeenCalled());
   });
 
+  it("says the page can be closed when the move-in runs on the server", async () => {
+    page(view({ runsOnServer: true }));
+    expect(await screen.findByText("You can close this page; your recipes keep moving in without it.")).toBeTruthy();
+  });
+
   it("asks once at a time while a slow answer is on its way", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const action = vi.fn(() => new Promise(() => undefined));
@@ -95,7 +101,7 @@ describe("the Move in page", () => {
   });
 
   it("counts recipes as they come in", async () => {
-    page(view({ recipes: { found: 20, done: 1, created: 1, unchanged: 0, skipped: 0, failed: 0 } }));
+    page(view({ recipes: { found: 20, done: 1, created: 1, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 } }));
     expect(await screen.findByText("1 of 20 recipes in so far.")).toBeTruthy();
   });
 
@@ -103,34 +109,53 @@ describe("the Move in page", () => {
     page(view({
       status: "done-with-issues",
       finished: true,
-      recipes: { found: 4, done: 4, created: 1, unchanged: 1, skipped: 1, failed: 1 },
+      recipes: { found: 5, done: 5, created: 1, already: 2, updated: 1, unchanged: 1, skipped: 1, failed: 1 },
       photos: { found: 2, in: 1 },
       notes: [
         { seq: 1, level: "warn", message: "Soup moved in without its photo." },
         { seq: 2, level: "error", message: "Stew didn't move in this time." },
+        { seq: 3, level: "info", message: "Pie changed in the backup, but you've changed it in Spoonjoy too, so your version stays." },
       ],
+      renamed: [{ seq: 4, message: 'You already had a recipe called "Soup", so this one is "Soup (2)".' }],
     }));
     expect(await screen.findByRole("heading", { level: 2, name: "1 recipe moved in" })).toBeTruthy();
-    for (const [term, details] of [["Recipes moved in", "1"], ["Photos", "1 of 2"], ["Already here", "1"], ["Left out", "1"], ["Didn't move in", "1"]]) {
+    expect(screen.getByText("2 already here, 1 changed.")).toBeTruthy();
+    expect(screen.queryByText("Already here")).toBeNull();
+    for (const [term, details] of [["Recipes moved in", "1"], ["Photos", "1 of 2"], ["Left out", "1"], ["Didn't move in", "1"]]) {
       expect(screen.getByText(term).nextElementSibling?.textContent).toBe(details);
     }
     const notes = screen.getByRole("heading", { level: 3, name: "What to look over" }).parentElement as HTMLElement;
     expect(within(notes).getByText("Soup moved in without its photo.")).toBeTruthy();
     expect(within(notes).getByText("Stew didn't move in this time.")).toBeTruthy();
+    expect(within(notes).getByText(/so your version stays\.$/)).toBeTruthy();
+    // Renamed recipes fold into one line the cook can open, apart from what to look over.
+    const renamed = screen.getByRole("button", { name: "1 recipe got a number, because you already had one by that name" });
+    expect(within(notes).queryByText(/this one is "Soup \(2\)"/)).toBeNull();
+    await act(async () => renamed.click());
+    expect(await screen.findByText('You already had a recipe called "Soup", so this one is "Soup (2)".')).toBeTruthy();
     expect(screen.getByRole("link", { name: "See your recipes" }).getAttribute("href")).toBe("/my-recipes");
     expect(screen.getByRole("link", { name: "Move in another backup" }).getAttribute("href")).toBe("/move-in");
   });
 
   it("leaves out the rows with nothing to count", async () => {
-    page(view({ status: "done", finished: true, recipes: { found: 2, done: 2, created: 2, unchanged: 0, skipped: 0, failed: 0 }, photos: { found: 1, in: 1 } }));
+    page(view({ status: "done", finished: true, recipes: { found: 2, done: 2, created: 2, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 }, photos: { found: 1, in: 1 } }));
     expect(await screen.findByRole("heading", { level: 2, name: "2 recipes moved in" })).toBeTruthy();
-    expect(screen.queryByText("Already here")).toBeNull();
+    expect(screen.queryByText(/already here/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /got a number/ })).toBeNull();
+  });
+
+  it("says when everything was already here", async () => {
+    page(view({ status: "done", finished: true, recipes: { found: 2, done: 2, created: 0, already: 2, updated: 0, unchanged: 2, skipped: 0, failed: 0 }, photos: { found: 0, in: 0 } }));
+    expect(await screen.findByRole("heading", { level: 2, name: "Everything was already here" })).toBeTruthy();
+    expect(screen.getByText("2 already here, 0 changed.")).toBeTruthy();
+    expect(screen.queryByRole("heading", { level: 3, name: "What to look over" })).toBeNull();
+    expect(screen.queryByText("Left out")).toBeNull();
   });
 
   it("says when nothing new came in", async () => {
-    page(view({ status: "done", finished: true, recipes: { found: 2, done: 2, created: 0, unchanged: 2, skipped: 0, failed: 0 }, photos: { found: 0, in: 0 } }));
+    page(view({ status: "done", finished: true, recipes: { found: 1, done: 1, created: 0, already: 0, updated: 0, unchanged: 0, skipped: 1, failed: 0 }, photos: { found: 0, in: 0 } }));
     expect(await screen.findByRole("heading", { level: 2, name: "Nothing new to move in" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { level: 3, name: "What to look over" })).toBeNull();
-    expect(screen.queryByText("Left out")).toBeNull();
+    expect(screen.queryByText(/already here/)).toBeNull();
+    expect(screen.getByText("Left out").nextElementSibling?.textContent).toBe("1");
   });
 });
