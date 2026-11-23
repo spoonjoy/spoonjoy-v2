@@ -369,6 +369,10 @@ export function createCloudflareApi({ env, fetchImpl, sleep, random = Math.rando
   };
 }
 
+function isRefusal(error) {
+  return error instanceof CloudflareApiError && error.status >= 400 && error.status < 500 && error.status !== 404;
+}
+
 function isNotFound(error) {
   return error instanceof CloudflareApiError && error.status === 404;
 }
@@ -406,7 +410,18 @@ export async function sweepStaleRunStacks({ api, now, log }) {
       remaining += 1;
       continue;
     }
-    const deleted = await deleteTolerating404(() => api.deleteWorker(worker.id));
+    // Cloudflare can refuse one Worker for good (403 while it is still a queue's consumer, seen for
+    // three run Workers on 2026-11-23). Skipping it, counted as still in use, keeps that one Worker
+    // from stopping every later sweep; any other failure still fails the sweep.
+    let deleted;
+    try {
+      deleted = await deleteTolerating404(() => api.deleteWorker(worker.id));
+    } catch (error) {
+      if (!isRefusal(error)) throw error;
+      log(`::warning::Could not delete stale QA run Worker ${worker.id} (created ${worker.created_on}): ${error.message}`);
+      remaining += 1;
+      continue;
+    }
     log(`${deleted ? "Deleted" : "Already gone:"} stale QA run Worker ${worker.id} (created ${worker.created_on}).`);
     swept += 1;
   }
