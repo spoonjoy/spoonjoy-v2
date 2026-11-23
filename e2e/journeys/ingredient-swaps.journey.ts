@@ -20,8 +20,8 @@ test.describe("Ingredient swaps", () => {
     await verifyAfterReload(async () => {
       await expect(garlic).toHaveAccessibleDescription(/Swap: ⅛ tsp garlic powder per clove/);
     });
-    // On a phone the step list sits below the step text, so bring the garlic row and its swap into view first.
-    await garlic.scrollIntoViewIfNeeded();
+    // On a phone the step list sits below the step text and under cook mode's footer, so centre the swap first.
+    await panel.getByText(/Swap: ⅛ tsp garlic powder per clove/).evaluate((element) => element.scrollIntoView({ block: "center" }));
     await testInfo.attach("cook-mode-garlic-swap", { body: await page.screenshot(), contentType: "image/png" });
     await expectAccessible();
   });
