@@ -690,4 +690,5 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm run deploy:qa
+        # Shared QA's jobs queue must exist before a deploy can bind it.
+        run: node scripts/qa-run-scope.mjs shared-queue && pnpm run deploy:qa

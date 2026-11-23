@@ -11,6 +11,8 @@
 //   - its own Worker, `spoonjoy-v2-qa-run-<run id>-<attempt>`, served at
 //     `https://spoonjoy-v2-qa-run-<run id>-<attempt>.mendelow-studio.workers.dev`, with its own
 //     cook-session Durable Object namespace and per-run secrets;
+//   - its own jobs queue, `spoonjoy-jobs-qa-run-<run id>-<attempt>`, which its Worker sends to
+//     and consumes;
 //   - the shared QA R2 bucket and rate-limit namespaces. The seed writes no R2 objects, and every
 //     key the app writes has a timestamp and a random UUID in it, so every R2 key the run's
 //     database references was uploaded by this run; cleanup deletes only keys its own database
@@ -24,8 +26,8 @@
 // while it runs, and a copy would let cleanup delete R2 objects shared QA still references.
 //
 // How the rest of the workflow follows: `prepare` rewrites this CI checkout's wrangler.json
-// `env.qa` (Worker name, D1 binding, SPOONJOY_BASE_URL, plus SPOONJOY_QA_ERROR_LOGS=1, which only a
-// per-run Worker carries) and the generated build/server/wrangler.json
+// `env.qa` (Worker name, D1 binding, jobs queue, SPOONJOY_BASE_URL, plus SPOONJOY_QA_ERROR_LOGS=1,
+// which only a per-run Worker carries) and the generated build/server/wrangler.json
 // to the run's identity, after the QA preflight has checked both against the shared QA identity.
 // Every later `--env qa` command (migrations, deploy, seed, rotate, cleanup) then targets the
 // run's own stack with no other change. Only identity fields change; anything else differing is
@@ -33,16 +35,18 @@
 // by accident; SPOONJOY_QA_LOCAL_RUN=1 is the explicit opt-in for a local run (see below).
 //
 // Commands (node scripts/qa-run-scope.mjs <command>):
-//   prepare   sweep stale run stacks, create this run's empty D1, rewrite the configs, write the
-//             per-run secrets file, export the run's base URL.
+//   prepare   sweep stale run stacks, create this run's empty D1 and its jobs queue, rewrite the
+//             configs, write the per-run secrets file, export the run's base URL.
 //   deploy    deploy this build to the run's Worker with the run's secrets, retrying code 10007
 //             or the specific internal authentication server error (code 10500).
 //   verify    after deploy: the run's Worker has its secrets, its D1 has no pending migration,
 //             and the URL serves /health and a hashed asset.
-//   teardown  delete this run's Worker and D1 (always; a failure only warns, and a later sweep
-//             deletes anything older than STALE_AFTER_MS).
+//   teardown  delete this run's jobs queue, Worker and D1 (always; a failure only warns, and a
+//             later sweep deletes anything older than STALE_AFTER_MS).
 //   sweep     delete run stacks older than STALE_AFTER_MS; run on a schedule as well as by each
 //             prepare, and fails when more than MAX_RUN_WORKERS run Workers remain.
+//   shared-queue  create shared QA's jobs queue if it is missing; main runs it before deploying
+//             shared QA, since a deploy cannot bind a queue that does not exist.
 //
 // Environment (set by GitHub Actions): GITHUB_ACTIONS, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT,
 // GITHUB_ENV, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
@@ -78,6 +82,13 @@ export const RUN_WORKER_PREFIX = "spoonjoy-v2-qa-run-";
 export const RUN_DATABASE_PREFIX = "spoonjoy-qa-run-";
 export const RUN_WORKER_PATTERN = /^spoonjoy-v2-qa-run-\d+-\d+$/;
 export const RUN_DATABASE_PATTERN = /^spoonjoy-qa-run-\d+-\d+$/;
+// Background jobs (app/domains/platform, the Jobs port) go through a Cloudflare queue bound as
+// JOBS. Shared QA has its own; each run gets one too, so a run's Worker only ever takes its own
+// run's jobs, which would otherwise land on a Worker running different code against another database.
+export const JOBS_BINDING = "JOBS";
+export const SHARED_QA_QUEUE = "spoonjoy-jobs-qa";
+export const RUN_QUEUE_PREFIX = "spoonjoy-jobs-qa-run-";
+export const RUN_QUEUE_PATTERN = /^spoonjoy-jobs-qa-run-\d+-\d+$/;
 // The journeys job times out after 40 minutes, so a run stack older than this belongs to a run
 // that ended without its teardown (cancelled, or the runner died).
 export const STALE_AFTER_MS = 3 * 60 * 60_000;
@@ -148,6 +159,7 @@ export function runIdentity(env) {
     workerName,
     databaseName: `${RUN_DATABASE_PREFIX}${suffix}`,
     baseUrl: `https://${workerName}${WORKERS_DEV_SUFFIX}`,
+    queueName: `${RUN_QUEUE_PREFIX}${suffix}`,
   };
 }
 
@@ -166,9 +178,9 @@ export function requireGitHubActions(env) {
   }
 }
 
-function assertRunNames({ workerName, databaseName }) {
-  if (!RUN_WORKER_PATTERN.test(workerName) || !RUN_DATABASE_PATTERN.test(databaseName)) {
-    throw new Error(`Refusing to touch ${workerName} / ${databaseName}: not a per-run QA stack name.`);
+function assertRunNames({ workerName, databaseName, queueName }) {
+  if (!RUN_WORKER_PATTERN.test(workerName) || !RUN_DATABASE_PATTERN.test(databaseName) || !RUN_QUEUE_PATTERN.test(queueName)) {
+    throw new Error(`Refusing to touch ${workerName} / ${databaseName} / ${queueName}: not a per-run QA stack name.`);
   }
 }
 
@@ -183,7 +195,22 @@ function d1Binding(config, where) {
   return binding;
 }
 
+// The JOBS producer and the one consumer that takes from the same queue.
+function jobsQueue(config, where) {
+  const producer = Array.isArray(config?.queues?.producers)
+    ? config.queues.producers.find((entry) => entry?.binding === JOBS_BINDING)
+    : undefined;
+  const consumers = Array.isArray(config?.queues?.consumers)
+    ? config.queues.consumers.filter((entry) => producer && entry?.queue === producer.queue)
+    : [];
+  if (!producer || consumers.length !== 1) throw new Error(`${where} has no ${JOBS_BINDING} queue with one consumer.`);
+  return { producer, consumer: consumers[0] };
+}
+
 function assertCanonicalQa(section, where) {
+  if (jobsQueue(section, where).producer.queue !== SHARED_QA_QUEUE) {
+    throw new Error(`${where} does not use shared QA's jobs queue ${SHARED_QA_QUEUE}; refusing to rewrite it.`);
+  }
   const db = d1Binding(section, where);
   if (db.database_id !== QA_D1_DATABASE_ID || db.database_name !== QA_D1_DATABASE_NAME) {
     throw new Error(`${where} does not bind the shared QA database; refusing to rewrite it.`);
@@ -208,6 +235,9 @@ function withRunIdentity(section, identity, databaseId) {
   const db = d1Binding(next, "rewritten config");
   db.database_name = identity.databaseName;
   db.database_id = databaseId;
+  const queue = jobsQueue(next, "rewritten config");
+  queue.producer.queue = identity.queueName;
+  queue.consumer.queue = identity.queueName;
   return next;
 }
 
@@ -224,6 +254,11 @@ function withoutIdentity(section) {
       delete entry.database_name;
       delete entry.database_id;
     }
+  }
+  const producer = copy.queues?.producers?.find?.((entry) => entry?.binding === JOBS_BINDING);
+  if (producer) {
+    for (const entry of copy.queues.consumers ?? []) if (entry?.queue === producer.queue) delete entry.queue;
+    delete producer.queue;
   }
   return copy;
 }
@@ -366,6 +401,9 @@ export function createCloudflareApi({ env, fetchImpl, sleep, random = Math.rando
     listWorkers: async () => (await request("GET", "/workers/scripts")).result ?? [],
     // force: the run's Worker owns a Durable Object namespace, which is deleted with it.
     deleteWorker: (name) => request("DELETE", `/workers/scripts/${name}?force=true`),
+    listQueues: () => listAll("/queues"),
+    createQueue: async (name) => (await request("POST", "/queues", { queue_name: name })).result,
+    deleteQueue: (id) => request("DELETE", `/queues/${id}`),
   };
 }
 
@@ -397,6 +435,13 @@ export async function sweepStaleRunStacks({ api, now, log }) {
     if (!RUN_DATABASE_PATTERN.test(database.name ?? "") || !isStale(database.created_at)) continue;
     const deleted = await deleteTolerating404(() => api.deleteDatabase(database.uuid));
     log(`${deleted ? "Deleted" : "Already gone:"} stale QA run database ${database.name} (created ${database.created_at}).`);
+    swept += 1;
+  }
+  // Queues go before Workers: Cloudflare may refuse to delete a Worker that still consumes one.
+  for (const queue of await api.listQueues()) {
+    if (!RUN_QUEUE_PATTERN.test(queue.queue_name ?? "") || !isStale(queue.created_on)) continue;
+    const deleted = await deleteTolerating404(() => api.deleteQueue(queue.queue_id));
+    log(`${deleted ? "Deleted" : "Already gone:"} stale QA run jobs queue ${queue.queue_name} (created ${queue.created_on}).`);
     swept += 1;
   }
   let remaining = 0;
@@ -478,6 +523,18 @@ async function createRunDatabase(api, name) {
   }
 }
 
+// Creates a queue. Like a database, a create retried after a 5xx can find the first try worked, so
+// on failure the queue is looked up by its exact name and reused if it exists.
+async function createQueueOnce(api, name) {
+  try {
+    return await api.createQueue(name);
+  } catch (error) {
+    const existing = (await api.listQueues()).find((queue) => queue.queue_name === name);
+    if (!existing) throw error;
+    return existing;
+  }
+}
+
 export async function prepare({ env, fs, api, now, log, secrets }) {
   requireGitHubActions(env);
   const identity = runIdentity(env);
@@ -509,6 +566,13 @@ export async function prepare({ env, fs, api, now, log, secrets }) {
   const databaseId = created?.uuid ?? "";
   if (!/^[0-9a-f-]{36}$/.test(databaseId)) throw new Error("Cloudflare did not return the new database's id.");
   log(`Created QA run database ${identity.databaseName} (${databaseId}).`);
+
+  // A queue left by an earlier try of this same attempt may hold that try's jobs: replaced, never reused.
+  for (const queue of await api.listQueues()) {
+    if (queue.queue_name === identity.queueName) await deleteTolerating404(() => api.deleteQueue(queue.queue_id));
+  }
+  await createQueueOnce(api, identity.queueName);
+  log(`Created QA run jobs queue ${identity.queueName}.`);
 
   const state = { ...identity, databaseId };
   writeJson(fs, STATE_FILE, state);
@@ -733,6 +797,17 @@ export async function teardown({ env, fs, api, log }) {
   const failures = [];
   const warnings = [];
 
+  // The queue goes first: Cloudflare may refuse to delete a Worker that still consumes one.
+  try {
+    const queues = (await api.listQueues()).filter((queue) => queue.queue_name === identity.queueName);
+    if (queues.length === 0) warnings.push(`no jobs queue named ${identity.queueName} existed`);
+    for (const queue of queues) {
+      if (await deleteTolerating404(() => api.deleteQueue(queue.queue_id))) log(`Deleted QA run jobs queue ${identity.queueName}.`);
+      else warnings.push(`jobs queue ${identity.queueName} was already deleted`);
+    }
+  } catch (error) {
+    failures.push(error.message);
+  }
   try {
     const deleted = await deleteTolerating404(() => api.deleteWorker(identity.workerName));
     if (deleted) log(`Deleted QA run Worker ${identity.workerName}.`);
@@ -773,6 +848,18 @@ export function defaultSleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Shared QA's queue is made once and kept; this only creates it when it is missing.
+export async function ensureSharedQueue({ env, api, log }) {
+  requireGitHubActions(env);
+  if ((await api.listQueues()).some((queue) => queue.queue_name === SHARED_QA_QUEUE)) {
+    log(`Shared QA's jobs queue ${SHARED_QA_QUEUE} is already there.`);
+    return false;
+  }
+  await createQueueOnce(api, SHARED_QA_QUEUE);
+  log(`Created shared QA's jobs queue ${SHARED_QA_QUEUE}.`);
+  return true;
+}
+
 export async function main(argv = process.argv.slice(2), deps = {}) {
   const {
     env = process.env,
@@ -791,7 +878,8 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   if (command === "verify") return verify({ env, exec, fs, fetchImpl, now, sleep, log });
   if (command === "teardown") return teardown({ env, fs, api: api(), log });
   if (command === "sweep") return sweep({ api: api(), now, log });
-  throw new Error("Usage: qa-run-scope.mjs <prepare|deploy|verify|teardown|sweep>");
+  if (command === "shared-queue") return ensureSharedQueue({ env, api: api(), log });
+  throw new Error("Usage: qa-run-scope.mjs <prepare|deploy|verify|teardown|sweep|shared-queue>");
 }
 
 export function isCliEntry(moduleUrl, argv1 = process.argv[1]) {
