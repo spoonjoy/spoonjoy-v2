@@ -17,6 +17,7 @@ import {
 } from "~/domains/planning";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
+import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { d1UnavailableWebResponse, formWriteToken, idForWriteToken, retryD1Write } from "~/lib/d1-write-retry.server";
 import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 import { useFormErrors } from "~/hooks/use-form-errors";
@@ -73,6 +74,21 @@ function fieldsOf(form: FormData): Fields {
   return fields;
 }
 
+/** Reports a failure the plan can't answer to PostHog, without holding up the response. */
+function reportFailure(context: Route.ActionArgs["context"], request: Request, userId: string, intent: string | undefined, error: unknown) {
+  const cloudflare = (context as { cloudflare?: { ctx?: { waitUntil?: (promise: Promise<unknown>) => void } } }).cloudflare;
+  const config = resolvePostHogServerConfig(getCloudflareEnv(context) ?? {});
+  const capture = captureException(config, {
+    error,
+    distinctId: userId,
+    route: new URL(request.url).pathname,
+    method: request.method,
+    extras: { action: `plan_${intent ?? "unknown"}`.replace("-", "_") },
+  });
+  if (cloudflare?.ctx?.waitUntil) cloudflare.ctx.waitUntil(capture);
+  else void capture;
+}
+
 function refused(intent: string | undefined, general: string) {
   return data({ ...(intent ? { intent } : {}), errors: { general } }, { status: 400 });
 }
@@ -107,6 +123,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   } catch (error) {
     const unavailable = d1UnavailableWebResponse(error, intent);
     if (unavailable) return unavailable;
+    reportFailure(context, request, userId, intent, error);
     throw error;
   }
 }

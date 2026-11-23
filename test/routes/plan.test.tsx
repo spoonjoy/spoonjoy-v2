@@ -1,4 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("~/lib/analytics-server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/lib/analytics-server")>()),
+  captureException: vi.fn(() => Promise.resolve()),
+}));
+
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { createTestRoutesStub, createTestRecipe, createTestUser } from "../utils";
@@ -9,6 +15,7 @@ import { OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 import PlanPage, { action, loader, meta } from "~/routes/plan";
 import { errorsFor } from "~/domains/planning";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { captureException } from "~/lib/analytics-server";
 
 const FLAGS_ON = { SPOONJOY_FLAGS: "meal-planner" };
 let chefId: string;
@@ -192,6 +199,19 @@ describe("meal plan route", () => {
     it("lets any other failure through", async () => {
       vi.spyOn(db.planEntry, "updateMany").mockRejectedValueOnce(new Error("boom"));
       await expect(act({ intent: "remove", entryId: "x" })).rejects.toThrow("boom");
+    });
+
+    it("reports an unexpected failure with the plan action that hit it", async () => {
+      const waitUntil = vi.fn();
+      const failure = new Error("boom");
+      vi.spyOn(db.planEntry, "updateMany").mockRejectedValueOnce(failure);
+      const withTelemetry = { cloudflare: { env: { ...FLAGS_ON, POSTHOG_KEY: "phc_test" }, ctx: { waitUntil } } } as never;
+      await expect(action({ request: post({ intent: "remove", entryId: "x" }), context: withTelemetry, params: {} } as never)).rejects.toBe(failure);
+      expect(captureException).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: true }),
+        expect.objectContaining({ error: failure, distinctId: chefId, route: "/plan", method: "POST", extras: { action: "plan_remove" } }),
+      );
+      expect(waitUntil).toHaveBeenCalledTimes(1);
     });
   });
 
