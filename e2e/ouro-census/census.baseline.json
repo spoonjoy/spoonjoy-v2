@@ -1513,6 +1513,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Start a household\" [link/root] in region \"Cook together\"",
+          "count": 1
+        },
+        {
           "identity": "link \"Start cooking\" [button/root] in region \"On the counter\"",
           "count": 1
         },
@@ -1546,6 +1550,10 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Start a household\" [link/root] in region \"Cook together\"",
           "count": 1
         }
       ]
@@ -5983,6 +5991,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Start a household\" [link/root] in region \"Cook together\"",
+          "count": 1
+        },
+        {
           "identity": "link \"Start cooking\" [button/root] in region \"On the counter\"",
           "count": 1
         },
@@ -6016,6 +6028,10 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Start a household\" [link/root] in region \"Cook together\"",
           "count": 1
         }
       ]
