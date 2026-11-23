@@ -1,4 +1,5 @@
 import { readableRecipeSqlForViewerColumn, readableRecipeWhere } from "~/domains/kitchen";
+import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 import type { PrismaClient, RecipeCover } from "@prisma/client";
 import { d1EpochMsSql, type D1Query, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
 import { mapModel, RECIPE_COVER_COLUMNS, selectColumns } from "~/lib/d1-models.server";
@@ -149,18 +150,19 @@ export interface CookingNowRow {
   expiresAt: Date;
 }
 
-type CookingNowDb = Pick<PrismaClient, "cookingNow" | "recipeSpoon">;
+type CookingNowDb = Pick<PrismaClient, "cookingNow" | "recipeSpoon" | "householdMember">;
 
 /** The cook's Cooking now list, most recently touched first. */
 export async function listCookingNow(db: CookingNowDb, userId: string, now: number = Date.now()): Promise<CookingNowRow[]> {
+  const viewer = await recipeViewerFor(userId, { db });
   const rows = await db.cookingNow.findMany({
     where: {
       userId,
       listed: true,
       touchedAt: { gt: BigInt(now - COOKING_NOW_IDLE_MS) },
       OR: [{ allCheckedAt: null }, { allCheckedAt: { gt: BigInt(now - COOKING_NOW_DONE_MS) } }],
-      // A recipe its cook has since made private drops off everyone else's list.
-      recipe: { deletedAt: null, ...readableRecipeWhere({ id: userId }) },
+      // A recipe its cook has since made private, or kept to a household this cook left, drops off their list.
+      recipe: { deletedAt: null, ...readableRecipeWhere(viewer) },
     },
     orderBy: [{ touchedAt: "desc" }, { recipeId: "asc" }],
     take: COOKING_NOW_LIMIT,

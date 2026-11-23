@@ -278,6 +278,19 @@ describe("reading the list", () => {
     expect(await listed()).toEqual([recipeId]);
   });
 
+  it("keeps a household recipe from a cook who shares a household, and drops it for everyone else", async () => {
+    const theirs = await recipeWithSteps(otherUserId, "Their household recipe");
+    await db.recipe.update({ where: { id: theirs.id }, data: { visibility: "household" } });
+    await recordCookingNow(d1.binding, write({ recipeId: theirs.id, activeStepId: theirs.stepIds[1], activeStepIndex: 1 }));
+    expect(await listed()).toEqual([]);
+
+    const home = await db.household.create({ data: { name: "Home" } });
+    await db.householdMember.createMany({
+      data: [userId, otherUserId].map((member) => ({ householdId: home.id, userId: member, role: "member" })),
+    });
+    expect(await listed()).toEqual([theirs.id]);
+  });
+
   it("orders recipes touched at the same moment by recipe id", async () => {
     const second = await recipeWithSteps(userId);
     await recordCookingNow(d1.binding, write());
