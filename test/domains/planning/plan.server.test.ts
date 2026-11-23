@@ -108,6 +108,14 @@ describe("planning a week, stored", () => {
     expect((await getWeek(store, chef.id, "2026-11-24")).days[1].entries[0]).toMatchObject({ kind: "recipe", recipeId: null, recipeTitle: "Gone Soup" });
   });
 
+  it("opens on this week, in the plan's own time zone, when no week is asked for", async () => {
+    const chef = await cook();
+    await getWeek(store, chef.id, null);
+    await db.mealPlan.update({ where: { ownerId: chef.id }, data: { timeZone: "America/Los_Angeles" } });
+    const week = await getWeek(store, chef.id, null, new Date("2026-11-24T03:30:00Z"));
+    expect(week).toMatchObject({ today: "2026-11-23", start: "2026-11-23", timeZone: "America/Los_Angeles" });
+  });
+
   it("starts the week on the plan's own first day", async () => {
     const chef = await cook();
     await getWeek(store, chef.id, "2026-11-24");

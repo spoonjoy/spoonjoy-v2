@@ -1,6 +1,6 @@
 // Planning use cases. They take a PlanStore port, so the same rules run against D1 in the Worker, SQLite in tests
 // and the local adapter a self-hosted server uses.
-import { startOfWeek, type LocalDate } from "../model/local-date";
+import { startOfWeek, todayIn, type LocalDate } from "../model/local-date";
 import { planWeek, validateEntryInput, type PlanDay, type PlanEntry, type PlanEntryInput, type Validated } from "../model/plan-entry";
 
 export type PlanSettings = { id: string; firstDayOfWeek: number; timeZone: string };
@@ -21,13 +21,15 @@ export interface PlanStore {
   removeEntry(planId: string, entryId: string): Promise<boolean>;
 }
 
-export type PlanWeek = { start: LocalDate; firstDayOfWeek: number; timeZone: string; days: PlanDay[] };
+export type PlanWeek = { today: LocalDate; start: LocalDate; firstDayOfWeek: number; timeZone: string; days: PlanDay[] };
 
-export async function getWeek(store: PlanStore, ownerId: string, date: LocalDate): Promise<PlanWeek> {
+/** The week holding `date`, or this week where the plan lives when `date` is null. */
+export async function getWeek(store: PlanStore, ownerId: string, date: LocalDate | null, now: Date = new Date()): Promise<PlanWeek> {
   const plan = await store.planFor(ownerId);
-  const start = startOfWeek(date, plan.firstDayOfWeek);
+  const today = todayIn(plan.timeZone, now);
+  const start = startOfWeek(date ?? today, plan.firstDayOfWeek);
   const days = planWeek(await store.entriesBetween(plan.id, start, planWeek([], start)[6].date), start);
-  return { start, firstDayOfWeek: plan.firstDayOfWeek, timeZone: plan.timeZone, days };
+  return { today, start, firstDayOfWeek: plan.firstDayOfWeek, timeZone: plan.timeZone, days };
 }
 
 function nextPosition(entries: readonly PlanEntry[], input: PlanEntryInput): number {
