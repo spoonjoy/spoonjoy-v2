@@ -19,8 +19,7 @@
 // it. An inactive
 // line is skipped: the element is judged by its other lines, and passes as inactive only when it
 // has no other line.
-// A line an ancestor's hidden overflow cuts off, all but a sliver (a line-clamp's cut lines), is
-// not painted and is not measured.
+// A line a line-clamp cuts off is not painted and is not measured.
 import type { Locator, Page } from "@playwright/test";
 import sharp from "sharp";
 import { formatRgb, parseCssColor, requiredTextContrast, worstContrastOver, type Rgb, type Rgba } from "./contrast";
@@ -91,22 +90,18 @@ function installHelpers(): void {
     for (let node = walker.nextNode(); node; node = walker.nextNode()) if (visibleText(node)) all.push(node as Text);
     return all;
   };
-  // A line outside an ancestor that hides its overflow is never painted: the lines a
-  // line-clamp cuts off still have boxes, below the clamped element's own. Scrolling can't show it
-  // (unlike a line in a scroll container, which is scrolled into view), so it is not text on the page.
+  // A line a line-clamp cuts off is never painted, though it still has a box below the clamped
+  // element's own, and scrolling the element into view never shows it. A glyph run's box reaches a
+  // couple of pixels past its line box (WebKit: a clamped title's third line starts 2px above the
+  // clamp's edge), so a line showing less than a quarter of its height inside the clamp is cut off.
+  // Only a clamp counts: other hidden overflow can be scrolled, and lineInView scrolls a line into view.
   const clippedAway = (node: Text, rect: DOMRect) => {
     for (let box = node.parentElement; box; box = box.parentElement) {
-      const style = getComputedStyle(box);
-      const hides = (overflow: string) => overflow === "hidden" || overflow === "clip";
-      if (!hides(style.overflowX) && !hides(style.overflowY)) continue;
-      // A glyph run's box reaches a couple of pixels past its line box (WebKit: a clamped title's
-      // third line starts 2px above the clamp's edge), so a line showing less than a quarter of
-      // itself is cut off; one showing more is measured.
+      const style = getComputedStyle(box) as CSSStyleDeclaration & { webkitLineClamp?: string };
+      const clamp = style.webkitLineClamp ?? style.getPropertyValue("-webkit-line-clamp");
+      if (!clamp || clamp === "none") continue;
       const clip = box.getBoundingClientRect();
-      const shownY = Math.min(rect.bottom, clip.bottom) - Math.max(rect.top, clip.top);
-      const shownX = Math.min(rect.right, clip.right) - Math.max(rect.left, clip.left);
-      if (hides(style.overflowY) && shownY < rect.height / 4) return true;
-      if (hides(style.overflowX) && shownX < rect.width / 4) return true;
+      return Math.min(rect.bottom, clip.bottom) - Math.max(rect.top, clip.top) < rect.height / 4;
     }
     return false;
   };
