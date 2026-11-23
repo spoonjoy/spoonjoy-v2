@@ -282,6 +282,67 @@ describe("/households/:id", () => {
     await vi.waitFor(() => expect(submitted[1]).toEqual({ intent: "remove", targetId: "ben" }));
   });
 
+  it("shows a row saving until the server answers, then its role, and keeps the old role with the reason when refused", async () => {
+    const server = { benRole: "member" as "member" | "viewer", refuse: false };
+    let release: () => void = () => {};
+    const labels = { owner: "Owner", member: "Member", viewer: "View-only" } as const;
+    const Stub = createTestRoutesStub([
+      {
+        path: "/households/:id",
+        Component: HouseholdPage,
+        loader: () => ({
+          household: {
+            id: "h1",
+            name: "Home",
+            myRole: "owner",
+            canInvite: false,
+            canManage: true,
+            roleChoices: [
+              { value: "owner", label: "Owner" },
+              { value: "member", label: "Member" },
+              { value: "viewer", label: "View-only" },
+            ],
+            members: [
+              { userId: "ann", username: "ann_cooks", photoUrl: null, role: "owner", roleLabel: "Owner", me: true },
+              { userId: "ben", username: "ben_cooks", photoUrl: null, role: server.benRole, roleLabel: labels[server.benRole], me: false },
+            ],
+          },
+        }),
+        action: async ({ request }: { request: Request }) => {
+          const role = (await request.formData()).get("role") as "member" | "viewer";
+          await new Promise<void>((resolve) => (release = resolve));
+          if (server.refuse) return { error: "Only an owner can change roles." };
+          server.benRole = role;
+          return { done: "role" };
+        },
+      },
+    ]);
+    const user = userEvent.setup();
+    render(<Stub initialEntries={["/households/h1"]} />);
+    await screen.findByRole("heading", { level: 1, name: "Home" });
+    const people = () => screen.getByRole("list", { name: "People" });
+
+    await user.click(screen.getByRole("button", { name: "Actions for ben_cooks" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "View-only" }));
+    // While the server decides, the row says it's saving and still shows the role it has.
+    expect(await within(people()).findByText("Saving")).toBeTruthy();
+    expect(within(people()).getByText("Member")).toBeTruthy();
+    expect(within(people()).queryByText("View-only")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Actions for ben_cooks" })).toBeNull();
+    release();
+    expect(await within(people()).findByText("View-only")).toBeTruthy();
+    expect(within(people()).queryByText("Saving")).toBeNull();
+
+    server.refuse = true;
+    await user.click(screen.getByRole("button", { name: "Actions for ben_cooks" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Member" }));
+    expect(await within(people()).findByText("Saving")).toBeTruthy();
+    release();
+    expect(await screen.findByText("Only an owner can change roles.")).toBeTruthy();
+    expect(within(people()).getByText("View-only")).toBeTruthy();
+    expect(within(people()).queryByText("Saving")).toBeNull();
+  });
+
   it("gives someone who can't manage people no member menus", async () => {
     const Stub = createTestRoutesStub([
       {
