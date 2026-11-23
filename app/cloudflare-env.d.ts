@@ -18,10 +18,13 @@ declare global {
     httpMetadata?: {
       contentType?: string;
     };
+    arrayBuffer(): Promise<ArrayBuffer>;
   }
 
   interface R2Bucket {
-    get(key: string): Promise<R2ObjectBody | null>;
+    get(key: string, options?: { range?: { offset: number; length: number } }): Promise<R2ObjectBody | null>;
+    /** The object's size and metadata without its body, or null when there is no such key. */
+    head(key: string): Promise<{ size: number } | null>;
     put(
       key: string,
       value: Blob | ArrayBuffer | ArrayBufferView | ReadableStream,

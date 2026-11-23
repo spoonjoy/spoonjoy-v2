@@ -57,10 +57,12 @@ export interface MoveInPorts {
     /** Whether the job has logged a warning or an error. */
     hasIssues(jobId: string): Promise<boolean>;
   };
-  openArchive(job: MoveInJob): RangeSource;
+  openArchive(job: MoveInJob): RangeSource | Promise<RangeSource>;
   ownerEmail(ownerId: string): Promise<string | null>;
   writeRecipe(input: { sourceId: string; jobId: string; chefId: string; draft: RecipeDraft }): Promise<RecipeWriteResult>;
   attachPhoto(input: { ownerId: string; recipeId: string; bytes: Uint8Array }): Promise<void>;
+  /** Deletes the uploaded backup; it holds the other app's accounts, so it is kept no longer than the job needs it. */
+  discardArchive(job: MoveInJob): Promise<void>;
   now(): Date;
 }
 
@@ -82,7 +84,7 @@ interface Opened {
 }
 
 async function open(job: MoveInJob, ports: MoveInPorts): Promise<Opened> {
-  const backup = await openMealieBackup(ports.openArchive(job));
+  const backup = await openMealieBackup(await ports.openArchive(job));
   const groupKey = chooseGroup(backup.database, await ports.ownerEmail(job.ownerId));
   if (!groupKey) throw new MoveInError("pick-a-group");
   return { backup, groupKey, drafts: recipeDrafts(backup.database, groupKey) };
@@ -167,6 +169,12 @@ async function recipes(job: MoveInJob, ports: MoveInPorts, { backup, drafts }: O
   const status = (await store.hasIssues(job.id)) ? "done-with-issues" : "done";
   await store.addEvent(job.id, event("job-done", `${plural(drafts.length, "recipe")} moved in.`));
   await store.updateJob(job.id, { status, phase: "done", cursor: null });
+  await discard(job, ports);
+}
+
+// A backup left behind is swept with other unused uploads, so a failed delete never holds the job up.
+async function discard(job: MoveInJob, ports: MoveInPorts) {
+  await ports.discardArchive(job).catch(() => undefined);
 }
 
 /** Does the job's next piece of work and returns the job as it then stands, or null when there is no such job. */
@@ -183,6 +191,19 @@ export async function runNextChunk(jobId: string, ports: MoveInPorts, { chunkSiz
     if (!(error instanceof MoveInError)) throw error;
     await store.addEvent(job.id, event("job-failed", MOVE_IN_ERROR_MESSAGES[error.code]));
     await store.updateJob(job.id, { status: "failed", lastError: error.code });
+    await discard(job, ports);
   }
   return store.loadJob(jobId);
+}
+
+/**
+ * Runs chunks until the job finishes or `budgetMs` has passed, checked after each chunk, and returns the job as it
+ * then stands. A Worker gives a request's waitUntil about 30 seconds, so the budget stays well inside that.
+ */
+export async function runForAWhile(jobId: string, ports: MoveInPorts, { budgetMs, chunkSize }: { budgetMs: number; chunkSize?: number }): Promise<MoveInJob | null> {
+  const started = ports.now().getTime();
+  for (;;) {
+    const job = await runNextChunk(jobId, ports, { chunkSize });
+    if (!job || FINISHED.includes(job.status) || ports.now().getTime() - started >= budgetMs) return job;
+  }
 }
