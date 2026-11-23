@@ -10,12 +10,12 @@ import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { SpoonAuthError, SpoonNotFoundError } from "~/lib/recipe-spoon.server";
-import { readableRecipeSql } from "~/domains/kitchen";
+import { readableRecipeSqlForViewerId } from "~/domains/kitchen";
 
 // A recipe the chef may not read answers as one that is gone. Its placeholders are the recipe's
 // id, then the chef's.
 function activeRecipeFor(userId: string): { sql: string; params: unknown[] } {
-  const readable = readableRecipeSql(undefined, { id: userId });
+  const readable = readableRecipeSqlForViewerId(undefined, userId);
   return { sql: `"id" = ? AND "deletedAt" IS NULL AND ${readable.sql}`, params: readable.params };
 }
 const OWNED_COOKBOOK = `EXISTS (SELECT 1 FROM "Cookbook" WHERE "id" = ? AND "authorId" = ?)`;

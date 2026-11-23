@@ -1,4 +1,5 @@
 import { readableRecipeWhere } from "~/domains/kitchen";
+import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/cookbooks.$id";
 import { redirect, useLoaderData, useActionData, Form as RouterForm, data, useSubmit, type AppLoadContext, type ShouldRevalidateFunctionArgs } from "react-router";
@@ -297,7 +298,7 @@ async function handleCookbookAction(
     if (recipeId) {
       // Another cook's private recipe answers as missing.
       const recipe = await database.recipe.findFirst({
-        where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: userId }) },
+        where: { id: recipeId, deletedAt: null, ...readableRecipeWhere(await recipeViewerFor(userId, { db: database })) },
         select: { id: true },
       });
       if (!recipe) {

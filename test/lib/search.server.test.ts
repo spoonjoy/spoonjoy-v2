@@ -12,7 +12,7 @@ import {
   toSearchTerms,
 } from "~/lib/search.server";
 import { cleanupDatabase } from "../helpers/cleanup";
-import { createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
+import { createTestUser, getOrCreateIngredientRef, getOrCreateUnit, shareHousehold } from "../utils";
 
 async function createChef(usernamePrefix: string) {
   return db.user.create({
@@ -534,6 +534,25 @@ describe("search.server", () => {
     const bunBook = cookbooks.find((result) => result.id === cookbook.id);
     expect(bunBook?.metadata).toMatchObject({ recipeCount: 0, recipeTitles: [] });
     expect(await searchSpoonjoy(db, { query: "secret saffron", scope: "cookbooks", viewerId: stranger.id })).toEqual([]);
+  });
+
+  it("finds a household recipe for its cook and their household, and for no one else", async () => {
+    const chef = await createChef("homecook");
+    const housemate = await createChef("homemate");
+    const stranger = await createChef("homestranger");
+    await shareHousehold(db, chef.id, housemate.id);
+    const kept = await createSearchableRecipe(chef.id, "Household Quince Paste", "quince");
+    await rebuildSearchIndex(db);
+    await db.recipe.update({ where: { id: kept.id }, data: { visibility: "household" } });
+
+    for (const viewerId of [chef.id, housemate.id]) {
+      const results = await searchSpoonjoy(db, { query: "quince", scope: "recipes", viewerId });
+      expect(results.map((result) => result.id), viewerId).toContain(kept.id);
+    }
+    for (const viewerId of [stranger.id, null]) {
+      const results = await searchSpoonjoy(db, { query: "quince", scope: "recipes", viewerId });
+      expect(results.map((result) => result.id), String(viewerId)).not.toContain(kept.id);
+    }
   });
 
   it("counts only a chef's public recipes, and recounts when one goes private", async () => {

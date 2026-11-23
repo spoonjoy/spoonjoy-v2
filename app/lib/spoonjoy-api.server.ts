@@ -32,6 +32,7 @@ import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.s
 import { canRead, readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
 import { isFlagOn, likeContainsSearch, type FlagEnv } from "~/domains/platform";
 import { addEntry, getWeek, parseLocalDate, prismaPlanStore, removeEntry, type PlanEntry } from "~/domains/planning";
+import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 import { cookRecipeVisibilityDefault } from "~/lib/recipe-create.server";
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
 import { d1Binding, d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
@@ -293,11 +294,16 @@ const cookbookSummaryRecipeInclude = {
 
 // Who is reading, for canRead: the signed-in principal, else the local owner a stdio server runs as, else signed out.
 async function apiViewer(context: SpoonjoyApiContext): Promise<RecipeViewer> {
-  if (context.principal) return { id: context.principal.id };
+  if (context.principal) return readerFor(context, context.principal.id);
   const email = context.defaultOwnerEmail?.toLowerCase();
   if (!email) return null;
   const owner = await context.db.user.findUnique({ where: { email }, select: { id: true } });
-  return owner ? { id: owner.id } : null;
+  return readerFor(context, owner?.id);
+}
+
+/** This user as a recipe reader, with the cooks who share a household with them. */
+function readerFor(context: SpoonjoyApiContext, userId: string | null | undefined): Promise<RecipeViewer> {
+  return recipeViewerFor(userId, { db: context.db });
 }
 
 function json(value: unknown): unknown {
@@ -1049,12 +1055,12 @@ function formatApiCredential(credential: ApiCredentialRecord) {
 }
 
 // These tools read only the caller's own cookbooks, so the cookbook's author is the reader.
-function activeCookbookRecipes(cookbook: CookbookWithRecipes) {
-  return cookbook.recipes.filter((item) => !item.recipe.deletedAt && canRead({ id: cookbook.authorId }, item.recipe));
+function activeCookbookRecipes(cookbook: CookbookWithRecipes, author: RecipeViewer) {
+  return cookbook.recipes.filter((item) => !item.recipe.deletedAt && canRead(author, item.recipe));
 }
 
-function formatCookbookSummary(cookbook: CookbookWithRecipes) {
-  const recipes = activeCookbookRecipes(cookbook);
+function formatCookbookSummary(cookbook: CookbookWithRecipes, author: RecipeViewer) {
+  const recipes = activeCookbookRecipes(cookbook, author);
 
   return {
     id: cookbook.id,
@@ -1111,10 +1117,10 @@ function formatDeletedRecipe(recipe: { id: string; title: string; deletedAt: Dat
   };
 }
 
-function formatCookbook(cookbook: CookbookWithRecipes) {
+function formatCookbook(cookbook: CookbookWithRecipes, author: RecipeViewer) {
   return {
-    ...formatCookbookSummary(cookbook),
-    recipes: activeCookbookRecipes(cookbook).map((item) => ({
+    ...formatCookbookSummary(cookbook, author),
+    recipes: activeCookbookRecipes(cookbook, author).map((item) => ({
       relationId: item.id,
       addedById: item.addedById,
       addedAt: item.createdAt.toISOString(),
@@ -1697,7 +1703,7 @@ const listRecipeCoversTool: SpoonjoyApiOperation = {
     const limit = normalizeBrowseLimit(args.limit);
     const offset = normalizeOffset(args.offset);
     const recipe = await context.db.recipe.findFirst({
-      where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: principal.id }) },
+      where: { id: recipeId, deletedAt: null, ...readableRecipeWhere(await readerFor(context, principal.id)) },
       select: {
         id: true,
         title: true,
@@ -2742,7 +2748,7 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
     const owner = await getOrCreateOwner(context, email);
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
     const recipe = await context.db.recipe.findFirst({
-      where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: owner.id }) },
+      where: { id: recipeId, deletedAt: null, ...readableRecipeWhere(await readerFor(context, owner.id)) },
       select: { id: true },
     });
     if (!recipe) throw new Error("Recipe not found");
@@ -2916,7 +2922,7 @@ const listCookbooksTool: SpoonjoyApiOperation = {
       ? await context.db.recipeInCookbook.findMany({
           where: {
             cookbookId: { in: cookbookIds },
-            recipe: { deletedAt: null, ...readableRecipeWhere({ id: owner.id }) },
+            recipe: { deletedAt: null, ...readableRecipeWhere(await readerFor(context, owner.id)) },
           },
           orderBy: { createdAt: "desc" },
           include: cookbookSummaryRecipeInclude,
@@ -2948,7 +2954,7 @@ const getCookbookTool: SpoonjoyApiOperation = {
     const owner = await getOrCreateOwner(context, email);
     const cookbook = await findOwnerCookbook(context.db, owner.id, args);
 
-    return json({ cookbook: cookbook ? formatCookbook(cookbook) : null });
+    return json({ cookbook: cookbook ? formatCookbook(cookbook, await readerFor(context, cookbook.authorId)) : null });
   },
 };
 
@@ -2998,7 +3004,7 @@ const createCookbookTool: SpoonjoyApiOperation = {
 
     return json({
       created: result.created,
-      cookbook: formatCookbook(result.cookbook),
+      cookbook: formatCookbook(result.cookbook, await readerFor(context, result.cookbook.authorId)),
       ...(idempotencyKey ? { mutation: { idempotencyKey, replayed: replayed !== null } } : {}),
     });
   },
@@ -3016,7 +3022,7 @@ const addRecipeToCookbookTool: SpoonjoyApiOperation = {
     if (!cookbook) throw new Error("Cookbook not found");
 
     const recipe = await context.db.recipe.findFirst({
-      where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: owner.id }) },
+      where: { id: recipeId, deletedAt: null, ...readableRecipeWhere(await readerFor(context, owner.id)) },
       select: { id: true },
     });
     if (!recipe) throw new Error("Recipe not found");
@@ -3059,7 +3065,7 @@ const addRecipeToCookbookTool: SpoonjoyApiOperation = {
       }
     }
 
-    return json({ added: result.added, cookbook: formatCookbook(result.cookbook) });
+    return json({ added: result.added, cookbook: formatCookbook(result.cookbook, await readerFor(context, result.cookbook.authorId)) });
   },
 };
 
@@ -3087,7 +3093,7 @@ const removeRecipeFromCookbookTool: SpoonjoyApiOperation = {
       cookbook: await reloadOwnerCookbook(context.db, owner.id, cookbook.id),
     };
 
-    return json({ removed: result.removed, cookbook: formatCookbook(result.cookbook) });
+    return json({ removed: result.removed, cookbook: formatCookbook(result.cookbook, await readerFor(context, result.cookbook.authorId)) });
   },
 };
 
@@ -3577,7 +3583,7 @@ const listSpoonsForRecipeTool: SpoonjoyApiOperation = {
     const offset = typeof args.offset === "number" ? args.offset : undefined;
     // A recipe the caller may not read answers as one that does not exist.
     const access = await context.db.recipe.findUnique({ where: { id: recipeId }, select: { chefId: true, visibility: true } });
-    if (access && !canRead({ id: principal.id }, access)) throw new SpoonNotFoundError(`Recipe ${recipeId} not found`);
+    if (access && !canRead(await readerFor(context, principal.id), access)) throw new SpoonNotFoundError(`Recipe ${recipeId} not found`);
     const spoons = await listSpoonsForRecipe(context.db, recipeId, {
       limit,
       offset,
@@ -3615,7 +3621,7 @@ const listSpoonsByChefTool: SpoonjoyApiOperation = {
     const spoons = await listSpoonsByChef(context.db, chefIdOrUsername, {
       limit,
       offset,
-      viewer: { id: principal.id },
+      viewer: await readerFor(context, principal.id),
     });
     return json({
       spoons: spoons.map((spoon) => {

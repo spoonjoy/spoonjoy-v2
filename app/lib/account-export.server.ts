@@ -1,4 +1,5 @@
 import { canRead, readableRecipeWhere } from "~/domains/kitchen";
+import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 import type { PrismaClient } from "@prisma/client";
 
 // A copy of everything a person put into Spoonjoy, as one JSON document they can download from
@@ -8,7 +9,7 @@ import type { PrismaClient } from "@prisma/client";
 
 export const ACCOUNT_EXPORT_FORMAT = "spoonjoy.account-export.v1";
 
-type ExportDb = Pick<PrismaClient, "user" | "recipe" | "cookbook" | "shoppingList" | "recipeSpoon">;
+type ExportDb = Pick<PrismaClient, "user" | "recipe" | "cookbook" | "shoppingList" | "recipeSpoon" | "householdMember">;
 
 function iso(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null;
@@ -95,6 +96,7 @@ export async function buildAccountExport(
   origin: string,
   now: Date = new Date(),
 ): Promise<AccountExport | null> {
+  const viewer = await recipeViewerFor(userId, { db });
   const user = await db.user.findUnique({
     where: { id: userId },
     select: {
@@ -131,7 +133,7 @@ export async function buildAccountExport(
       include: {
         recipes: {
           // Another cook's recipe that has since gone private is left out, as on the cookbook's page.
-          where: { recipe: readableRecipeWhere({ id: userId }) },
+          where: { recipe: readableRecipeWhere(viewer) },
           orderBy: { createdAt: "asc" },
           include: { recipe: { select: { id: true, title: true, chef: { select: { username: true } } } } },
         },
@@ -227,7 +229,7 @@ export async function buildAccountExport(
       id: spoon.id,
       recipeId: spoon.recipeId,
       // The cook's own notes stay; the title of another cook's recipe gone private does not.
-      recipeTitle: canRead({ id: userId }, spoon.recipe) ? spoon.recipe.title : PRIVATE_RECIPE_TITLE,
+      recipeTitle: canRead(viewer, spoon.recipe) ? spoon.recipe.title : PRIVATE_RECIPE_TITLE,
       cookedAt: iso(spoon.cookedAt),
       note: spoon.note,
       nextTime: spoon.nextTime,

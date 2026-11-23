@@ -2,7 +2,7 @@
 // everything the decisions need (the recipe and its active cover, whether this chef has cooked it
 // before, and the cook's username); one write batch then adds the spoon and, when its photo
 // becomes the recipe's cover, the cover and the recipe's new cover choice together.
-import { readableRecipeSql } from "~/domains/kitchen";
+import { readableRecipeSqlForViewerId } from "~/domains/kitchen";
 import { d1ReadBatch, d1NullableDateTime, type D1Query, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
@@ -124,7 +124,7 @@ export async function createSpoonOnD1(
 ): Promise<CreateSpoonOnD1Result> {
   const spoonId = input.id ?? crypto.randomUUID();
   // Another cook's private recipe answers as missing, as on the Prisma path.
-  const readable = readableRecipeSql(undefined, { id: input.chefId });
+  const readable = readableRecipeSqlForViewerId(undefined, input.chefId);
   const [recipeRows, coverRows, priorRows, spoonerRows, existingRows] = await d1ReadBatch(d1, [
     [
       `SELECT "id", "title", "chefId", "coverMode", "activeCoverId", "activeCoverVariant" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL AND ${readable.sql}`,

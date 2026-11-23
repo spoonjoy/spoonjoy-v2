@@ -5,6 +5,7 @@ import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/l
 import { newReservationId as cuidShapedId } from "~/lib/api-idempotency.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { canRead, readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
+import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 
 export class SpoonValidationError extends Error {
   status = 400;
@@ -121,7 +122,7 @@ async function originCookAndAccess(
     select: { chefId: true, visibility: true },
   });
   if (!recipe) return { isOriginCook: false, readable: true };
-  if (recipe.chefId !== chefId) return { isOriginCook: false, readable: canRead({ id: chefId }, recipe) };
+  if (recipe.chefId !== chefId) return { isOriginCook: false, readable: canRead(await recipeViewerFor(chefId, { db }), recipe) };
   return { isOriginCook: !(await hasPriorNonDeletedSpoon(db, chefId, recipeId)), readable: true };
 }
 

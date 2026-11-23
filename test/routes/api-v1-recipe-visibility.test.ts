@@ -4,6 +4,7 @@ import { loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { shareHousehold } from "../utils";
 
 // A private recipe reads, over the REST API, only for its cook: to anyone else it is not there.
 
@@ -97,5 +98,49 @@ describe("private recipes over the REST API", () => {
     expect((await get(`cookbooks/${bookId}`, cookToken)).body.data.cookbook.recipeCount).toBe(2);
     expect((await get(`recipes/${privateId}/spoons`, strangerToken)).status).toBe(404);
     expect((await get(`recipes/${privateId}/spoons`, cookToken)).status).toBe(200);
+  });
+});
+
+describe("household recipes over the REST API", () => {
+  let cookToken: string;
+  let housemateToken: string;
+  let strangerToken: string;
+  let keptId: string;
+  let bookId: string;
+
+  beforeEach(async () => {
+    db = await getLocalDb();
+    await cleanupDatabase();
+    const cook = await db.user.create({ data: { email: "rest_home_cook@example.com", username: "rest_home_cook" } });
+    const housemate = await db.user.create({ data: { email: "rest_housemate@example.com", username: "rest_housemate" } });
+    const stranger = await db.user.create({ data: { email: "rest_home_stranger@example.com", username: "rest_home_stranger" } });
+    await shareHousehold(db, cook.id, housemate.id);
+    const scopes = ["recipes:read", "cookbooks:read"];
+    cookToken = (await createApiCredential(db, cook.id, "Cook reader", { scopes })).token;
+    housemateToken = (await createApiCredential(db, housemate.id, "Housemate reader", { scopes })).token;
+    strangerToken = (await createApiCredential(db, stranger.id, "Stranger reader", { scopes })).token;
+    keptId = (await db.recipe.create({ data: { title: "Household Plum Jam", chefId: cook.id, visibility: "household" } })).id;
+    await db.recipe.create({ data: { title: "Open Plum Jam", chefId: stranger.id } });
+    bookId = (await db.cookbook.create({ data: { title: "Housemate Jams", authorId: housemate.id } })).id;
+    await db.recipeInCookbook.create({ data: { recipeId: keptId, cookbookId: bookId, addedById: housemate.id } });
+  });
+
+  afterEach(async () => {
+    await cleanupDatabase();
+  });
+
+  it("reads its page, the recipe list and a cookbook for its cook's household, and is not found for anyone else", async () => {
+    for (const token of [cookToken, housemateToken]) {
+      expect((await get(`recipes/${keptId}`, token)).body.data.recipe.title).toBe("Household Plum Jam");
+      expect((await get("recipes", token)).body.data.recipes.map((recipe) => recipe.title).sort()).toEqual(["Household Plum Jam", "Open Plum Jam"]);
+      expect((await get(`cookbooks/${bookId}`, token)).body.data.cookbook.recipeCount).toBe(1);
+      expect((await get(`recipes/${keptId}/spoons`, token)).status).toBe(200);
+    }
+    for (const token of [strangerToken, undefined]) {
+      expect((await get(`recipes/${keptId}`, token)).status).toBe(404);
+      expect((await get("recipes", token)).body.data.recipes.map((recipe) => recipe.title)).toEqual(["Open Plum Jam"]);
+      expect((await get(`cookbooks/${bookId}`, token)).body.data.cookbook.recipeCount).toBe(0);
+      expect((await get(`recipes/${keptId}/spoons`, token)).status).toBe(404);
+    }
   });
 });

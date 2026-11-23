@@ -26,7 +26,8 @@ import {
   type RecipeCoverStatus,
   type RecipeCoverVariant,
 } from "~/lib/recipe-cover.server";
-import { canRead, newRecipeVisibility } from "~/domains/kitchen";
+import { canRead, newRecipeVisibility, type RecipeViewer } from "~/domains/kitchen";
+import { recipeViewerD1Query, recipeViewerFor, recipeViewerFromD1Rows } from "~/lib/recipe-viewer.server";
 
 export class ForkSourceNotFoundError extends Error {
   constructor(sourceRecipeId: string) {
@@ -345,12 +346,12 @@ export async function forkRecipe(
   input: ForkRecipeInput,
   d1: D1ReadDatabase | null = null,
 ): Promise<ForkedRecipeResult> {
-  const source = await db.recipe.findUnique({
-    where: { id: input.sourceRecipeId },
-    include: sourceInclude,
-  });
+  const [source, viewer] = await Promise.all([
+    db.recipe.findUnique({ where: { id: input.sourceRecipeId }, include: sourceInclude }),
+    recipeViewerFor(input.viewerId, { db }),
+  ]);
   // A recipe the cook may not read forks as one that does not exist.
-  if (!source || source.deletedAt || !canRead({ id: input.viewerId }, source)) {
+  if (!source || source.deletedAt || !canRead(viewer, source)) {
     throw new ForkSourceNotFoundError(input.sourceRecipeId);
   }
 
@@ -437,9 +438,9 @@ function titleSet(rows: ReadonlyArray<Record<string, unknown>>): Set<string> {
 export async function readForkSourceFromD1(
   d1: D1ReadDatabase,
   input: Pick<ForkRecipeInput, "sourceRecipeId" | "viewerId" | "titleOverride">,
-): Promise<{ source: ForkSource; stepOutputUses: ForkStepOutputUse[]; takenTitles: Set<string> } | null> {
+): Promise<{ source: ForkSource; stepOutputUses: ForkStepOutputUse[]; takenTitles: Set<string>; viewer: RecipeViewer } | null> {
   const override = input.titleOverride?.trim() || null;
-  const [[recipeRow], stepRows, ingredientRows, useRows, titleRows] = await d1ReadBatch(d1, [
+  const [[recipeRow], stepRows, ingredientRows, useRows, titleRows, householdRows] = await d1ReadBatch(d1, [
     [
       `SELECT ${selectColumns(RECIPE_COLUMNS, "r")}, u."id" AS "chef_id", u."username" AS "chef_username",
          ${selectColumns(RECIPE_COVER_COLUMNS, "c", "cover_")}
@@ -453,6 +454,7 @@ export async function readForkSourceFromD1(
     [`SELECT ${selectColumns(INGREDIENT_COLUMNS, "i")} FROM "Ingredient" i WHERE i."recipeId" = ? ORDER BY i."rowid"`, input.sourceRecipeId],
     [`SELECT "outputStepNum", "inputStepNum" FROM "StepOutputUse" WHERE "recipeId" = ? ORDER BY "rowid"`, input.sourceRecipeId],
     takenTitlesQuery(input.viewerId, override, input.sourceRecipeId),
+    recipeViewerD1Query(input.viewerId),
   ]);
   if (!recipeRow) return null;
 
@@ -473,7 +475,7 @@ export async function readForkSourceFromD1(
     outputStepNum: row.outputStepNum as number,
     inputStepNum: row.inputStepNum as number,
   }));
-  return { source, stepOutputUses, takenTitles: titleSet(titleRows) };
+  return { source, stepOutputUses, takenTitles: titleSet(titleRows), viewer: recipeViewerFromD1Rows(input.viewerId, householdRows!) };
 }
 
 /**
@@ -483,7 +485,7 @@ export async function readForkSourceFromD1(
  */
 export async function forkRecipeOnD1(d1: D1ReadDatabase, input: ForkRecipeInput): Promise<ForkedRecipeSummary> {
   const read = await readForkSourceFromD1(d1, input);
-  if (!read || read.source.deletedAt || !canRead({ id: input.viewerId }, read.source)) {
+  if (!read || read.source.deletedAt || !canRead(read.viewer, read.source)) {
     throw new ForkSourceNotFoundError(input.sourceRecipeId);
   }
   const { source, stepOutputUses } = read;

@@ -15,7 +15,8 @@ import {
 } from "~/lib/cookbook-previews.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { searchSpoonjoy, searchSpoonjoyFromD1 } from "~/lib/search.server";
-import { readableRecipeSql, readableRecipeWhere } from "~/domains/kitchen";
+import { readableRecipeSql, readableRecipeSqlForViewerId, readableRecipeWhere } from "~/domains/kitchen";
+import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 
 // Reads behind the recipe, saved-recipe and cookbook lists (`/recipes`, `/saved-recipes`,
 // `/cookbooks`). Each page has the original Prisma reads, used where there is no D1
@@ -228,11 +229,12 @@ function savedRecipesFrom(memberships: SavedMembership[]): SavedRecipe[] {
 }
 
 export async function readSavedRecipesWithPrisma(database: PrismaClient, userId: string): Promise<SavedRecipe[]> {
+  const viewer = await recipeViewerFor(userId, { db: database });
   const memberships = await database.recipeInCookbook.findMany({
     where: {
       cookbook: { authorId: userId },
       // A recipe its cook has since made private leaves the saver's lists.
-      recipe: { deletedAt: null, ...readableRecipeWhere({ id: userId }) },
+      recipe: { deletedAt: null, ...readableRecipeWhere(viewer) },
     },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     include: {
@@ -271,7 +273,7 @@ const SAVED_MEMBERSHIP_COLUMNS: ColumnSpec<{
 
 /** `/saved-recipes` on D1: one statement, filtered by the signed-in user's cookbooks. */
 export async function readSavedRecipesFromD1(db: D1ReadDatabase, userId: string): Promise<SavedRecipe[]> {
-  const readable = readableRecipeSql("r", { id: userId });
+  const readable = readableRecipeSqlForViewerId("r", userId);
   const [rows] = await d1ReadBatch(db, [
     [
       `SELECT ric."recipeId", c."title" AS "cookbookTitle", r."title", r."description", r."servings",
@@ -349,7 +351,7 @@ function toCookbookListItem(
 }
 
 export async function readCookbookListWithPrisma(database: PrismaClient, userId: string): Promise<CookbookListItem[]> {
-  const listed = { deletedAt: null, ...readableRecipeWhere({ id: userId }) };
+  const listed = { deletedAt: null, ...readableRecipeWhere(await recipeViewerFor(userId, { db: database })) };
   const cookbooks = await database.cookbook.findMany({
     where: { authorId: userId },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
@@ -420,9 +422,8 @@ const RECIPE_TITLE_COLUMNS: ColumnSpec<{ cookbookId: string; title: string }> = 
  */
 export async function readCookbookListFromD1(db: D1ReadDatabase, userId: string): Promise<CookbookListItem[]> {
   const userCookbookIds = `SELECT "id" FROM "Cookbook" WHERE "authorId" = ?`;
-  const viewer = { id: userId };
-  const live = readableRecipeSql("live", viewer);
-  const listed = readableRecipeSql("r", viewer);
+  const live = readableRecipeSqlForViewerId("live", userId);
+  const listed = readableRecipeSqlForViewerId("r", userId);
   const [cookbookRows, previewRows, titleRows] = await d1ReadBatch(db, [
     [
       `SELECT ${selectColumns(COOKBOOK_COLUMNS, "c")},
@@ -435,7 +436,7 @@ export async function readCookbookListFromD1(db: D1ReadDatabase, userId: string)
       ...live.params,
       userId,
     ],
-    cookbookPreviewQuery(viewer, userCookbookIds, userId),
+    cookbookPreviewQuery(userId, userCookbookIds, userId),
     [
       `SELECT ric."cookbookId", r."title"
        FROM "RecipeInCookbook" ric

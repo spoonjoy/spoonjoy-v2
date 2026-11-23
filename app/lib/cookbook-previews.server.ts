@@ -7,7 +7,7 @@ import {
   selectColumns,
   type ColumnSpec,
 } from "~/lib/d1-models.server";
-import { readableRecipeSql, type RecipeViewer } from "~/domains/kitchen";
+import { readableRecipeSqlForViewerId } from "~/domains/kitchen";
 
 // A cookbook card previews its newest recipes that are not deleted. The kitchen home and
 // the cookbooks page read the previews for many cookbooks in one statement: a window
@@ -34,8 +34,8 @@ const PREVIEW_RECIPE_COLUMNS: ColumnSpec<Omit<PreviewRecipe, "covers">> = {
  * whose id `cookbookIdsSql` selects, skipping deleted recipes and those the viewer may not read, with each entry's
  * recipe and its active cover. `values` are bound to `cookbookIdsSql`.
  */
-export function cookbookPreviewQuery(viewer: RecipeViewer, cookbookIdsSql: string, ...values: unknown[]): D1Query {
-  const readable = readableRecipeSql("live", viewer);
+export function cookbookPreviewQuery(viewerId: string | null, cookbookIdsSql: string, ...values: unknown[]): D1Query {
+  const readable = readableRecipeSqlForViewerId("live", viewerId);
   return [
     `SELECT ${selectColumns(RECIPE_IN_COOKBOOK_COLUMNS, "e")},
        ${selectColumns(PREVIEW_RECIPE_COLUMNS, "r", "recipe_")},

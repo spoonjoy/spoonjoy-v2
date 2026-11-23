@@ -25,7 +25,7 @@ import {
   type ColumnSpec,
 } from "~/lib/d1-models.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
-import { canRead, readableRecipeSql, readableRecipeSqlOn } from "~/domains/kitchen";
+import { canRead, readableRecipeSql, readableRecipeSqlOnForViewerId } from "~/domains/kitchen";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   SEARCH_DIRTY_CLOCK_SCHEMA_SQL,
@@ -314,10 +314,7 @@ function buildWhereClause(
 
   // A recipe is found only by those who may read it. Its document carries its visibility, and a change of visibility
   // queues the recipe, so the search that follows re-indexes it before answering.
-  const readable = readableRecipeSqlOn(
-    { visibility: `json_extract(metadata, '$.visibility')`, chefId: "ownerId" },
-    readerId ? { id: readerId } : null,
-  );
+  const readable = readableRecipeSqlOnForViewerId({ visibility: `json_extract(metadata, '$.visibility')`, chefId: "ownerId" }, readerId);
   conditions.push(`(entityType != 'recipe' OR ${readable.sql})`);
   values.push(...readable.params);
 
