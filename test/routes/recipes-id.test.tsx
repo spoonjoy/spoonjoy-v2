@@ -4360,7 +4360,7 @@ describe("Recipes $id Route", () => {
       expect(screen.getAllByText("Step 2").length).toBeGreaterThan(0);
     });
 
-    it("should show delete button for owners", async () => {
+    it("puts every owner action in the header's ⋯ menu, with no disclosure under the actions", async () => {
       const mockData = {
         recipe: {
           id: "recipe-1",
