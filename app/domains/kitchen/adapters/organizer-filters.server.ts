@@ -32,6 +32,12 @@ export async function organizerFiltersFor(
       .map(({ name, slug }) => ({ name, value: organizerRefValue({ kind, slug }) }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   ])) as OrganizerChoices;
-  const filters = parseOrganizerFilters(new URL(request.url).searchParams);
+  // A filter for an organizer the cook no longer has (a stale bookmark) is dropped, so every filter has a box to untick.
+  const known = new Set(Object.values(organizerChoices).flat().map((choice) => choice.value));
+  const parsed = parseOrganizerFilters(new URL(request.url).searchParams);
+  const filters = {
+    with: parsed.with.filter((ref) => known.has(organizerRefValue(ref))),
+    without: parsed.without.filter((ref) => known.has(organizerRefValue(ref))),
+  };
   return { filters, filterParams: organizerFilterParams(filters), organizerChoices };
 }
