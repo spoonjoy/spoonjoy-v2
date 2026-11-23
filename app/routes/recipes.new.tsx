@@ -46,7 +46,7 @@ import { useEffect, useRef, useState } from "react";
 import { importRecipeForSession, parseSessionImportForm } from "~/lib/recipe-import-session.server";
 import { RecipeImportPanel, type RecipeImportActionData } from "~/components/recipe/RecipeImportPanel";
 import { newRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
-import { isFlagOn } from "~/domains/platform";
+import { recipeVisibilityChoices } from "~/lib/recipe-visibility-choices";
 
 interface ActionData {
   parsedIngredients?: ParsedIngredient[];
@@ -72,17 +72,22 @@ export function meta({}: Route.MetaArgs) {
 // An ingredient parse changes no data; don't reload the page after one.
 export const shouldRevalidate = revalidateUnlessIngredientParse;
 
-// The cook's default for new recipes, which the create form starts at; null while the choice is off.
-async function cookVisibilityDefault(context: Route.LoaderArgs["context"], userId: string): Promise<RecipeVisibility | null> {
-  if (!isFlagOn("recipe_visibility", context.cloudflare?.env, userId)) return null;
+// The levels the cook can choose and their default for new recipes, which the create form starts at; nulls while the
+// choice is off.
+async function cookVisibility(
+  context: Route.LoaderArgs["context"],
+  userId: string,
+): Promise<{ visibilityDefault: RecipeVisibility | null; visibilityChoices: readonly RecipeVisibility[] | null }> {
+  const choices = recipeVisibilityChoices(context.cloudflare?.env, userId);
+  if (!choices) return { visibilityDefault: null, visibilityChoices: null };
   const database = await getRequestDb(context);
   const cook = await database.user.findUnique({ where: { id: userId }, select: { defaultRecipeVisibility: true } });
-  return newRecipeVisibility(null, cook?.defaultRecipeVisibility);
+  return { visibilityDefault: newRecipeVisibility(null, cook?.defaultRecipeVisibility, choices), visibilityChoices: choices };
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
-  return { visibilityDefault: await cookVisibilityDefault(context, userId) };
+  return await cookVisibility(context, userId);
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -208,7 +213,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     chefId: userId,
     title,
   });
-  const visibilityDefault = await cookVisibilityDefault(context, userId);
+  const { visibilityDefault, visibilityChoices } = await cookVisibility(context, userId);
   if (!titleUniquenessResult.valid) {
     return data({ errors: { title: titleUniquenessResult.error } }, { status: 400 });
   }
@@ -244,7 +249,9 @@ export async function action({ request, context }: Route.ActionArgs) {
       description: trimmedDescription,
       servings: servings.trim() || null,
       chefId: userId,
-      ...(visibilityDefault ? { visibility: newRecipeVisibility(formData.get("visibility"), visibilityDefault) } : {}),
+      ...(visibilityDefault && visibilityChoices
+        ? { visibility: newRecipeVisibility(formData.get("visibility"), visibilityDefault, visibilityChoices) }
+        : {}),
       steps: recipeSteps,
       cover: uploadedImageUrl
         ? {
@@ -466,6 +473,7 @@ export default function NewRecipe({ loaderData }: Route.ComponentProps) {
           answer={saveAnswer}
           loading={isLoading}
           visibility={loaderData?.visibilityDefault ?? undefined}
+          visibilityChoices={loaderData?.visibilityChoices ?? undefined}
         />
       </div>
     </CookbookPage>

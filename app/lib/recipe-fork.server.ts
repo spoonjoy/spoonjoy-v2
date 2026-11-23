@@ -26,7 +26,7 @@ import {
   type RecipeCoverStatus,
   type RecipeCoverVariant,
 } from "~/lib/recipe-cover.server";
-import { canRead, newRecipeVisibility, type RecipeViewer } from "~/domains/kitchen";
+import { DEFAULT_RECIPE_VISIBILITY, canRead, newRecipeVisibility, type RecipeViewer, type RecipeVisibility } from "~/domains/kitchen";
 import { recipeViewerD1Query, recipeViewerFor, recipeViewerFromD1Rows } from "~/lib/recipe-viewer.server";
 
 export class ForkSourceNotFoundError extends Error {
@@ -55,8 +55,11 @@ export interface ForkRecipeInput {
   viewerId: string;
   titleOverride?: string | null;
   recipeId?: string;
-  /** While recipe_visibility is on for the cook: a fork of another cook's recipe starts at the cook's default. */
-  useCookDefault?: boolean;
+  /**
+   * The levels the forking cook can choose (recipeVisibilityChoices): a fork of another cook's recipe starts at their
+   * default when it is one of these. Null or absent while they cannot choose, so the fork starts public.
+   */
+  visibilityChoices?: readonly RecipeVisibility[] | null;
 }
 
 const sourceInclude = {
@@ -168,7 +171,7 @@ async function writeForkOnD1(
   input: ForkRecipeInput,
   baseTitle: string,
   chooseTitle: (attempt: number) => Promise<string>,
-  cookDefault: unknown,
+  cookDefault: RecipeVisibility,
 ): Promise<{ recipeId: string; title: string; replayed?: true }> {
   const recipeId = input.recipeId ?? crypto.randomUUID();
   const activeVariant = source.coverMode === "none" ? null : copyableActiveVariant(source);
@@ -249,7 +252,7 @@ async function writeForkWithPrisma(
   stepOutputUses: ForkStepOutputUse[],
   input: ForkRecipeInput,
   baseTitle: string,
-  cookDefault: unknown,
+  cookDefault: RecipeVisibility,
 ): Promise<string> {
   // Prisma (no D1 binding): the writes run in sequence against the top-level client.
   const { title } = await resolveTitle(db, input.viewerId, baseTitle);
@@ -329,12 +332,14 @@ async function writeForkWithPrisma(
   return created.id;
 }
 
-// A cook's fork of their own recipe keeps its visibility, so forking a private recipe never
-// publishes it; a fork of someone else's recipe starts public, as before.
 // A cook's fork of their own recipe keeps its level, so forking never publishes a private recipe. A fork of another
-// cook's recipe is a new recipe of theirs: their default while they can choose it, else public.
-function forkVisibility(source: { chefId: string; visibility: string }, viewerId: string, cookDefault: unknown): string {
-  return source.chefId === viewerId ? source.visibility : newRecipeVisibility(null, cookDefault);
+// cook's recipe is a new recipe of theirs: their default while they can choose it (forkCookDefault), else public.
+function forkVisibility(source: { chefId: string; visibility: string }, viewerId: string, cookDefault: RecipeVisibility): string {
+  return source.chefId === viewerId ? source.visibility : cookDefault;
+}
+
+function forkCookDefault(input: Pick<ForkRecipeInput, "visibilityChoices">, stored: unknown): RecipeVisibility {
+  return input.visibilityChoices ? newRecipeVisibility(null, stored, input.visibilityChoices) : DEFAULT_RECIPE_VISIBILITY;
 }
 
 /**
@@ -363,9 +368,9 @@ export async function forkRecipe(
   const override = input.titleOverride?.trim();
   const baseTitle = override && override.length > 0 ? override : source.title;
 
-  const cookDefault = input.useCookDefault
+  const cookDefault = forkCookDefault(input, input.visibilityChoices
     ? (await db.user.findUnique({ where: { id: input.viewerId }, select: { defaultRecipeVisibility: true } }))?.defaultRecipeVisibility
-    : null;
+    : null);
   const createdId = d1
     ? (await writeForkOnD1(d1, source, stepOutputUses, input, baseTitle, async () => (
       (await resolveTitle(db, input.viewerId, baseTitle)).title
@@ -492,9 +497,9 @@ export async function forkRecipeOnD1(d1: D1ReadDatabase, input: ForkRecipeInput)
   const override = input.titleOverride?.trim();
   const baseTitle = override && override.length > 0 ? override : source.title;
 
-  const cookDefault = input.useCookDefault
+  const cookDefault = forkCookDefault(input, input.visibilityChoices
     ? (await d1ReadBatch(d1, [[`SELECT "defaultRecipeVisibility" FROM "User" WHERE "id" = ?`, input.viewerId]]))[0][0]?.defaultRecipeVisibility
-    : null;
+    : null);
   const { recipeId, title, replayed } = await writeForkOnD1(d1, source, stepOutputUses, input, baseTitle, async (attempt) => {
     if (attempt === 1) return firstFreeTitle(baseTitle, read.takenTitles);
     const [rows] = await d1ReadBatch(d1, [takenTitlesQuery(input.viewerId, baseTitle, source.id)]);
