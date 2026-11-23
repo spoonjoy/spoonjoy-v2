@@ -166,6 +166,8 @@ jobs:
       # Dex's user is refused, then signs up from the invite link the last step left. The server runs on the host network
       # here so it reaches Dex at localhost:5556, the address the browser uses and Dex's ID tokens
       # name as their issuer. The client secret and password are test values that open nothing else.
+      # Playwright empties its output folder on start, so this run writes to its own and the fresh
+      # server's screenshots survive.
       - name: Sign in through an OpenID Connect provider
         run: |
           docker run -d --name dex -p 5556:5556 -v "$PWD/e2e/self-host/dex.yaml:/etc/dex/config.yaml:ro" \
@@ -195,7 +197,7 @@ jobs:
             -e "SPOONJOY_SELF_HOST_OIDC_LABEL=Sign in with Dex" \
             -e SPOONJOY_SELF_HOST_INVITE_FILE=.self-host/oidc-invite.txt \
             mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f \
-            node node_modules/@playwright/test/cli.js test -c playwright.self-host-fresh.config.ts e2e/self-host/oidc.spec.ts
+            node node_modules/@playwright/test/cli.js test -c playwright.self-host-fresh.config.ts e2e/self-host/oidc.spec.ts --output test-results-self-host-oidc
 
       # The kitchen and this run's scratch users, with fresh passwords, through the image's own
       # `server.mjs sql -` (with the server stopped, as docs/self-hosting.md says to), and the
@@ -273,7 +275,7 @@ jobs:
 
       - name: Strip network logs from traces
         if: always()
-        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report test-results-self-host-fresh
+        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report test-results-self-host-fresh test-results-self-host-oidc
 
       - name: Summary
         if: always()
@@ -302,6 +304,7 @@ jobs:
             journeys-report/
             test-results/
             test-results-self-host-fresh/
+            test-results-self-host-oidc/
           retention-days: 30
           include-hidden-files: false
 
