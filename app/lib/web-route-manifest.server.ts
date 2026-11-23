@@ -79,8 +79,6 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/cookbooks.$id.tsx", "/cookbooks/:id", "user-product", { universalLink: true, publicShareable: true }),
   route("routes/shopping-list.tsx", "/shopping-list", "user-product", { universalLink: true }),
   route("routes/join.$token.tsx", "/join/:token", "user-product", { universalLink: false }),
-  // Web only until the iPhone app has a Move in screen: a universal link would open the app on nothing.
-  route("routes/move-in.tsx", "/move-in", "user-product", { universalLink: false }),
   route("routes/account.settings.tsx", "/account/settings", "user-product", { universalLink: true }),
   // A file download and the page after deletion stay in the browser.
   route("routes/account.export.ts", "/account/export", "secure-web-handoff"),
