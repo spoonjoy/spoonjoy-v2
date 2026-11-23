@@ -51,7 +51,7 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
         const lost = (token !== undefined && token !== holder) || ["done", "done-with-issues", "failed"].includes(job.status);
         if (lost) {
           if (token !== undefined) throw new LostClaimError();
-          return;
+          return 0;
         }
         if (report.restart) {
           counts.clear();
@@ -60,6 +60,7 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
         for (const [entity, delta] of report.counts ?? []) add(entity, delta);
         events.push(...(report.events ?? []));
         jobs.set(id, { ...job, ...patch });
+        return 1;
       },
       sourceInstanceKey: async () => (sources.at(-1)?.instanceKey as string | undefined) ?? null,
       ensureSource: async (source) => (sources.push(source), "source-1"),
@@ -98,6 +99,8 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
     ports, jobs, job, counts, events, sources, photos, discarded, written, runAll,
     isClaimed: () => holder !== null,
     steal: () => void (holder = "another-run"),
+    /** The claim's time runs out, as if a while had passed. */
+    expire: () => void (holder = null),
     opens: () => opens,
   };
 }
@@ -169,7 +172,7 @@ describe("runNextChunk", () => {
     expect(h.counts.get("recipes")).toMatchObject({ created: 2, failed: 1 });
     expect(h.events.find((event) => event.kind === "item-failed")).toMatchObject({
       message: "Soup didn't move in this time. Moving the same backup in again tries it once more.",
-      detail: "D1 said no",
+      detail: `It stopped the move-in ${RECIPE_TRIES} times in a row.`,
       level: "error",
     });
   });
@@ -267,7 +270,10 @@ describe("runNextChunk", () => {
   it("stops for good once runs keep taking the job without moving it forward", async () => {
     const h = harness();
     h.ports.openArchive = () => Promise.reject(new Error("blob store down"));
-    for (let i = 0; i < MAX_ATTEMPTS; i++) await expect(runForAWhile("job-1", h.ports, { budgetMs: 1000 })).rejects.toThrow("blob store down");
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      await expect(runForAWhile("job-1", h.ports, { budgetMs: 1000 })).rejects.toThrow("blob store down");
+      h.expire();
+    }
     expect(await runForAWhile("job-1", h.ports, { budgetMs: 1000 })).toMatchObject({ status: "failed", lastError: "stuck" });
     expect(h.events.at(-1)?.message).toMatch(/^The move-in tried five times in a row/);
     expect(h.discarded).toEqual(["uploads/job-1.zip"]);
@@ -285,7 +291,7 @@ describe("runNextChunk", () => {
   it("starts counting attempts again once a recipe moves in", async () => {
     const h = harness();
     await runNextChunk("job-1", h.ports);
-    h.jobs.set("job-1", { ...h.job(), attempt: MAX_ATTEMPTS - 1 });
+    h.jobs.set("job-1", { ...h.job(), attempt: RECIPE_TRIES - 1 });
     await runNextChunk("job-1", h.ports, { chunkSize: 1 });
     expect(h.job()).toMatchObject({ attempt: 0, cursor: "1" });
   });
@@ -339,11 +345,37 @@ describe("runForAWhile", () => {
     expect(h.isClaimed()).toBe(true);
   });
 
-  it("lets the job go when a chunk fails", async () => {
+  it("keeps hold of the job when a chunk fails, so the next try waits out the claim", async () => {
     const h = harness();
     h.ports.openArchive = () => Promise.reject(new Error("blob store down"));
     await expect(runForAWhile("job-1", h.ports, { budgetMs: 1000 })).rejects.toThrow("blob store down");
-    expect(h.isClaimed()).toBe(false);
+    expect(h.isClaimed()).toBe(true);
+    expect(await runForAWhile("job-1", h.ports, { budgetMs: 1000 })).toMatchObject({ attempt: 1 });
+  });
+
+  it("passes over a recipe that keeps stopping the run, even one that never gets to fail, and moves the rest in", async () => {
+    const h = harness();
+    const write = h.ports.writeRecipe;
+    const tried: string[] = [];
+    // A recipe whose run dies before it can fail, as when it takes the Worker down.
+    h.ports.writeRecipe = async (input) => {
+      tried.push(input.draft.title);
+      if (input.draft.title === "Soup") throw new Error("the Worker ran out of memory");
+      return write(input);
+    };
+    let job = null;
+    for (let i = 0; i < 10 && !["done", "done-with-issues", "failed"].includes(h.job().status); i++) {
+      job = await runForAWhile("job-1", h.ports, { budgetMs: 60_000, chunkSize: 1 }).catch(() => null);
+      h.expire();
+    }
+    expect(h.job()).toMatchObject({ status: "done-with-issues" });
+    expect(job === null || job.status === "done-with-issues").toBe(true);
+    expect(h.counts.get("recipes")).toMatchObject({ found: 3, created: 2, failed: 1 });
+    expect(tried.filter((title) => title === "Soup")).toHaveLength(RECIPE_TRIES);
+    expect(h.events.find((event) => event.kind === "item-failed")).toMatchObject({
+      level: "error",
+      message: "Soup didn't move in this time. Moving the same backup in again tries it once more.",
+    });
   });
 });
 

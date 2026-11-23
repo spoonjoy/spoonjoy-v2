@@ -85,6 +85,18 @@ describe("startMoveIn", () => {
       .rejects.toThrow("D1 is down");
   });
 
+  it("deletes the backup again when the job can't be saved", async () => {
+    const bucket = memoryBucket();
+    const failing = {
+      prepare: database.binding.prepare,
+      batch: (statements: Array<{ sql: string }>) =>
+        statements.some((statement) => statement.sql.includes(`INSERT INTO "ImportJob"`)) ? Promise.reject(new Error("D1 is down")) : database.binding.batch(statements as never),
+    };
+    await expect(startMoveIn({ env: { DB: failing, PHOTOS: bucket } as never, ownerId: "chef-1", app: "mealie", file: { name: "x.zip", size: 1, data: zip() }, now }))
+      .rejects.toThrow("D1 is down");
+    expect(bucket.objects).toEqual({});
+  });
+
   it("refuses an app it can't read yet", async () => {
     const result = await startMoveIn({ env: { DB: database.binding, PHOTOS: memoryBucket() } as never, ownerId: "chef-1", app: "paprika", file: { name: "x.zip", size: 1, data: zip() }, now });
     expect(result).toEqual({ ok: false, code: "unknown-app" });
