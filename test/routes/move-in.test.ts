@@ -221,6 +221,20 @@ describe("the Move in page", () => {
       expect((await load(location)).move).toMatchObject({ status: "queued", finished: false, runsOnServer: true });
     });
 
+    it("says how long is left from the rate so far while it runs, and nothing once it's finished", async () => {
+      const { location, jobId } = await started();
+      // 100 of 500 in 130 s: 400 more at that rate is 520 s, about 9 minutes (away from a minute's edge, so the test's own time doesn't tip it).
+      const twoMinutesAgo = new Date(Date.now() - 130_000).toISOString();
+      await d1.binding.prepare(`UPDATE "ImportJob" SET "createdAt" = ?, "status" = 'running'`).bind(twoMinutesAgo).run();
+      await d1.binding
+        .prepare(`INSERT INTO "ImportEntityCount" ("jobId", "entity", "found", "created", "updated", "unchanged", "skipped", "failed") VALUES (?, 'recipes', 500, 100, 0, 0, 0, 0)`)
+        .bind(jobId)
+        .run();
+      expect((await load(location)).move?.timeLeft).toBe("About 9 minutes left");
+      await d1.binding.prepare(`UPDATE "ImportJob" SET "status" = 'done'`).run();
+      expect((await load(location)).move?.timeLeft).toBeNull();
+    });
+
     it("queues a move-in again from the page only once nothing has moved it for a minute", async () => {
       const { jobId } = await started();
       expect(await post({ intent: "continue", jobId })).toEqual({ error: null });
