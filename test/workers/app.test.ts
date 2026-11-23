@@ -70,6 +70,12 @@ vi.mock("../../app/lib/photo-lifecycle.server", async (importOriginal) => ({
   runScheduledPhotoSweep,
 }));
 
+const consumeJobBatch = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock("../../app/domains/platform", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../app/domains/platform")>()),
+  consumeJobBatch,
+}));
+
 const worker = (await import("../../workers/app")).default;
 const { resetIsolateForTests } = await import("../../app/lib/slow-call.server");
 const WORKER_VERSION_ID = "22222222-2222-4222-8222-222222222222";
@@ -147,6 +153,26 @@ describe("Cloudflare worker app", () => {
     await worker.scheduled!({ cron: "23 */6 * * *", scheduledTime: 0, noRetry: () => undefined } as ScheduledController, env, ctx);
     expect(runScheduledPhotoSweep).toHaveBeenCalledWith(env);
     expect(ctx.waitUntil).toHaveBeenCalledWith(runScheduledPhotoSweep.mock.results[0].value);
+  });
+
+  it("needs the DB binding to run a batch of platform jobs", async () => {
+    const batch = { queue: "spoonjoy-jobs", messages: [] } as unknown as MessageBatch<unknown>;
+    await expect(worker.queue!(batch, versionedEnvironment(), context())).rejects.toThrow("Platform jobs need the DB binding for their keys.");
+    expect(consumeJobBatch).not.toHaveBeenCalled();
+  });
+
+  it("runs a batch of platform jobs against the DB's job keys, and reports a job out of attempts to PostHog", async () => {
+    consumeJobBatch.mockClear();
+    captureException.mockClear();
+    const batch = { queue: "spoonjoy-jobs", messages: [] } as unknown as MessageBatch<unknown>;
+    const env = versionedEnvironment({ DB: { prepare: vi.fn() } as unknown as D1Database });
+    await worker.queue!(batch, env, context());
+    expect(consumeJobBatch).toHaveBeenCalledTimes(1);
+    const [sentBatch, , , options] = consumeJobBatch.mock.calls[0] as unknown as [MessageBatch<unknown>, unknown, unknown, { onFailed(message: { type: string }, error: unknown): unknown }];
+    expect(sentBatch).toBe(batch);
+    const error = new Error("out of attempts");
+    await options.onFailed({ type: "demo.kind" }, error);
+    expect(captureException).toHaveBeenCalledWith(expect.anything(), { error, distinctId: "platform-jobs", route: "queue", extras: { type: "demo.kind" } });
   });
 
   it("configures React Router with the statically imported server build, evaluated at Worker startup", () => {
