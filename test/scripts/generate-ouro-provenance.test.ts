@@ -1,4 +1,6 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   OUTPUT_PATH,
@@ -232,6 +234,17 @@ describe("main", () => {
     // Writing the manifest over itself changes nothing.
     defaultDeps.writeFile(OUTPUT_PATH, readFileSync(OUTPUT_PATH, "utf8"));
     expect(readFileSync(OUTPUT_PATH, "utf8")).toContain('"guide"');
+  });
+
+  it("creates the folder it writes into, since a fresh clone has no app/generated/", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "provenance-"));
+    try {
+      const file = path.join(root, "app", "generated", "ouro-provenance.json");
+      defaultDeps.writeFile(file, "{}\n");
+      expect(readFileSync(file, "utf8")).toBe("{}\n");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
