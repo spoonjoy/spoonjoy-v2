@@ -71,6 +71,8 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/moderation.tsx", "/moderation", "intentional-exclude"),
   // A web showcase with no counterpart in the apps, so it stays in the browser.
   route("routes/test-kitchen.tsx", "/test-kitchen", "platform-asset"),
+  // The public roadmap is a web page with no counterpart in the apps.
+  route("routes/roadmap.tsx", "/roadmap", "platform-asset"),
   route("routes/search.tsx", "/search", "user-product", { universalLink: true }),
   route("routes/my-recipes.tsx", "/my-recipes", "user-product", { universalLink: true }),
   route("routes/saved-recipes.tsx", "/saved-recipes", "user-product", { universalLink: true }),
