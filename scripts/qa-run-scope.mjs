@@ -220,6 +220,8 @@ function jobsQueue(config, where) {
     ? config.queues.consumers.filter((entry) => producer && entry?.queue === producer.queue)
     : [];
   if (!producer || consumers.length !== 1) throw new Error(`${where} has no ${JOBS_BINDING} queue with one consumer.`);
+  // A dead-letter queue would be shared by every run, and this script names only the one queue each run has.
+  if (consumers[0].dead_letter_queue !== undefined) throw new Error(`${where} gives the ${JOBS_BINDING} consumer a dead-letter queue; a run can't have its own.`);
   return { producer, consumer: consumers[0] };
 }
 
@@ -402,7 +404,8 @@ export function createCloudflareApi({ env, fetchImpl, sleep, random = Math.rando
       const result = payload.result ?? [];
       items.push(...result);
       const totalPages = payload.result_info?.total_pages;
-      if (result.length < 100 || (typeof totalPages === "number" && page >= totalPages)) break;
+      // The page count, where the API gives one, also covers an API that pages in smaller pages than asked for.
+      if (result.length === 0 || (typeof totalPages === "number" ? page >= totalPages : result.length < 100)) break;
     }
     return items;
   }
@@ -673,7 +676,8 @@ function readState(fs) {
 function assertWranglerIsRunScoped(fs, state) {
   const qa = readJson(fs, WRANGLER_CONFIG).env?.qa;
   const db = d1Binding(qa, "wrangler.json env.qa");
-  if (qa.name !== state.workerName || db.database_id !== state.databaseId) {
+  const queue = jobsQueue(qa, "wrangler.json env.qa");
+  if (qa.name !== state.workerName || db.database_id !== state.databaseId || queue.producer.queue !== state.queueName) {
     throw new Error("wrangler.json env.qa does not name this run's QA stack.");
   }
 }

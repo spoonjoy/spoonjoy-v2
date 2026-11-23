@@ -269,6 +269,10 @@ describe("scopeWranglerConfig", () => {
     delete noConsumer.env.qa.queues;
     expect(() => scopeWranglerConfig(noConsumer, IDENTITY, RUN_DB_ID)).toThrow(/no JOBS queue with one consumer/);
 
+    const deadLetters = structuredClone(REAL_WRANGLER);
+    deadLetters.env.qa.queues.consumers[0].dead_letter_queue = "spoonjoy-jobs-qa-dead";
+    expect(() => scopeWranglerConfig(deadLetters, IDENTITY, RUN_DB_ID)).toThrow(/dead-letter queue; a run can't have its own/);
+
     const noDb = structuredClone(REAL_WRANGLER);
     noDb.env.qa.d1_databases = [];
     expect(() => scopeWranglerConfig(noDb, IDENTITY, RUN_DB_ID)).toThrow(/no D1 binding named DB/);
@@ -414,6 +418,17 @@ describe("createCloudflareApi", () => {
     const shortApi = createCloudflareApi({ env: RUN_ENV, fetchImpl: short, sleep: vi.fn() });
     expect(await shortApi.listDatabases()).toEqual([]);
     expect(await shortApi.listWorkers()).toEqual([]);
+
+    // Smaller pages than asked for still come in full when the API says how many there are.
+    const small = [
+      { success: true, result: [{ name: "a" }], result_info: { total_pages: 2 } },
+      { success: true, result: [{ name: "b" }], result_info: { total_pages: 2 } },
+    ];
+    const smallApi = createCloudflareApi({ env: RUN_ENV, fetchImpl: vi.fn(async () => jsonResponse(200, small.shift())), sleep: vi.fn() });
+    expect(await smallApi.listQueues()).toEqual([{ name: "a" }, { name: "b" }]);
+    const empty = vi.fn(async () => jsonResponse(200, { success: true, result: [], result_info: { total_pages: 5 } }));
+    expect(await createCloudflareApi({ env: RUN_ENV, fetchImpl: empty, sleep: vi.fn() }).listQueues()).toEqual([]);
+    expect(empty).toHaveBeenCalledTimes(1);
 
     const endless = vi.fn(async () => jsonResponse(200, { success: true, result: full }));
     const endlessApi = createCloudflareApi({ env: RUN_ENV, fetchImpl: endless, sleep: vi.fn() });
@@ -998,6 +1013,14 @@ describe("verify", () => {
     const files = scopedFiles();
     files.store.set(WRANGLER_CONFIG, JSON.stringify(REAL_WRANGLER));
     await expect(verify({ env: RUN_ENV, exec: verifyExec().exec, fs: files.fs, fetchImpl: site(LIVE), log: vi.fn() }))
+      .rejects.toThrow(/does not name this run's QA stack/);
+
+    const sharedQueue = scopedFiles();
+    const config = JSON.parse(sharedQueue.store.get(WRANGLER_CONFIG) as string);
+    config.env.qa.queues.producers[0].queue = "spoonjoy-jobs-qa";
+    config.env.qa.queues.consumers[0].queue = "spoonjoy-jobs-qa";
+    sharedQueue.store.set(WRANGLER_CONFIG, JSON.stringify(config));
+    await expect(verify({ env: RUN_ENV, exec: verifyExec().exec, fs: sharedQueue.fs, fetchImpl: site(LIVE), log: vi.fn() }))
       .rejects.toThrow(/does not name this run's QA stack/);
 
     const wrongDb = scopedFiles({ databaseId: QA_D1_DATABASE_ID });
