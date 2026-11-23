@@ -149,9 +149,22 @@ describe("recipe page actions on D1", () => {
   });
 
   it("assertActiveRecipeOnD1 passes an active recipe and answers 404 for a deleted one", async () => {
-    await assertActiveRecipeOnD1(d1.binding, recipeId);
+    await assertActiveRecipeOnD1(d1.binding, recipeId, chefId);
     await db.recipe.update({ where: { id: recipeId }, data: { deletedAt: new Date() } });
-    expect(await status(assertActiveRecipeOnD1(d1.binding, recipeId))).toBe(404);
+    expect(await status(assertActiveRecipeOnD1(d1.binding, recipeId, chefId))).toBe(404);
+  });
+
+  it("answers another cook's private recipe as not found and saves nothing, while its cook can save it", async () => {
+    await db.recipe.update({ where: { id: recipeId }, data: { visibility: "private" } });
+    expect(await status(assertActiveRecipeOnD1(d1.binding, recipeId, chefId))).toBe(404);
+    expect(await status(addRecipeToCookbookOnD1(d1.binding, { userId: chefId, cookbookId, recipeId }))).toBe(404);
+    expect(await status(createCookbookWithRecipeOnD1(d1.binding, { userId: chefId, recipeId, title: "Secret Breads" }))).toBe(404);
+    expect(await memberships()).toEqual([]);
+    expect(await db.cookbook.count({ where: { authorId: chefId } })).toBe(1);
+
+    await assertActiveRecipeOnD1(d1.binding, recipeId, otherId);
+    await createCookbookWithRecipeOnD1(d1.binding, { userId: otherId, recipeId, title: "My Breads" });
+    expect(await db.recipeInCookbook.count({ where: { recipeId } })).toBe(1);
   });
 
   it("assertOwnedActiveRecipeOnD1 returns the owner's recipe title and refuses a row whose title is not text", async () => {

@@ -91,6 +91,7 @@ import { FOOD_IMAGE_SIZE_MESSAGE, FOOD_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-i
 import { sanitizeImagePromptAddition } from "~/lib/image-gen.server";
 import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.server";
 import { d1UnavailableWebResponse, formWriteToken, idForWriteToken, isD1Unavailable, retryD1Write } from "~/lib/d1-write-retry.server";
+import { readableRecipeWhere } from "~/domains/kitchen";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -530,7 +531,7 @@ async function handleCreateSpoon(
 ) {
   const { photoFile, note, nextTime, cookedAt, useAsRecipeCover } = spoonFormFields(formData);
   // A recipe in the trash takes no new cooks, as on the API.
-  await assertActiveRecipe(database, recipeId);
+  await assertActiveRecipe(database, recipeId, userId);
 
   const { bucket, env, vapidEnv, waitUntil } = getCloudflareCtx(context);
   // Resolve once: threaded into both the spoon notify and the origin-cook
@@ -1459,11 +1460,11 @@ async function handleRecipeDetailActionOnD1(
     if (intent === "createCookbookAndSave") {
       const title = formData.get("title")?.toString()?.trim();
       if (!title) {
-        await assertActiveRecipeOnD1(d1, recipeId);
+        await assertActiveRecipeOnD1(d1, recipeId, userId);
         return { kind: "response", response: data({ error: "Title is required", intent: "createCookbookAndSave" }, { status: 400 }) };
       }
       if (containsObjectionableContent(title)) {
-        await assertActiveRecipeOnD1(d1, recipeId);
+        await assertActiveRecipeOnD1(d1, recipeId, userId);
         return { kind: "response", response: data({ error: OBJECTIONABLE_CONTENT_MESSAGE, intent: "createCookbookAndSave" }, { status: 400 }) };
       }
       try {
@@ -1555,7 +1556,7 @@ async function handleRecipeDetailIntent(
   }
 
   if (intent === "createCookbookAndSave") {
-    await assertActiveRecipe(database, id);
+    await assertActiveRecipe(database, id, userId);
 
     // Validation failures are answered, not thrown, so the Save dialog shows them instead of the
     // route's error boundary replacing the recipe page.
@@ -1621,7 +1622,7 @@ async function handleRecipeDetailIntent(
         return { success: true };
       }
 
-      await assertActiveRecipe(database, id);
+      await assertActiveRecipe(database, id, userId);
 
       try {
         await addRecipeToCookbook({
@@ -1942,12 +1943,14 @@ async function writeExistingRecipeOnD1(
   }
 }
 
+// A recipe the chef may not read answers as one that is gone.
 async function assertActiveRecipe(
   database: Awaited<ReturnType<typeof getRequestDb>>,
   recipeId: string,
+  userId: string,
 ) {
   const recipe = await database.recipe.findFirst({
-    where: { id: recipeId, deletedAt: null },
+    where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: userId }) },
     select: { id: true },
   });
   if (!recipe) {

@@ -372,6 +372,18 @@ describe.each<ForkPath>(["prisma", "d1"])("recipe-fork.server (%s)", (path) => {
     ).rejects.toBeInstanceOf(ForkSourceNotFoundError);
   });
 
+  it("treats another cook's private recipe as missing, and lets its cook fork their own", async () => {
+    const chefA = await makeUser();
+    const chefB = await makeUser();
+    const source = await seedSourceRecipe(chefA.id, { title: "Private Ribs" });
+    await db.recipe.update({ where: { id: source.id }, data: { visibility: "private" } });
+
+    await expect(
+      fork({ sourceRecipeId: source.id, viewerId: chefB.id }),
+    ).rejects.toBeInstanceOf(ForkSourceNotFoundError);
+    await expect(fork({ sourceRecipeId: source.id, viewerId: chefA.id })).resolves.toMatchObject({ recipe: { chefId: chefA.id } });
+  });
+
   it("copies the source active cover with provenance and active variant", async () => {
     const chefA = await makeUser();
     const chefB = await makeUser();

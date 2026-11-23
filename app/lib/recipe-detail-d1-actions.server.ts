@@ -10,8 +10,14 @@ import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { SpoonAuthError, SpoonNotFoundError } from "~/lib/recipe-spoon.server";
+import { readableRecipeSql } from "~/domains/kitchen";
 
-const ACTIVE_RECIPE = `EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL)`;
+// A recipe the chef may not read answers as one that is gone. Its placeholders are the recipe's
+// id, then the chef's.
+function activeRecipeFor(userId: string): { sql: string; params: unknown[] } {
+  const readable = readableRecipeSql(undefined, { id: userId });
+  return { sql: `"id" = ? AND "deletedAt" IS NULL AND ${readable.sql}`, params: readable.params };
+}
 const OWNED_COOKBOOK = `EXISTS (SELECT 1 FROM "Cookbook" WHERE "id" = ? AND "authorId" = ?)`;
 
 function recipeNotFound(): Response {
@@ -40,19 +46,20 @@ export async function addRecipeToCookbookOnD1(
   const now = d1Timestamp(new Date());
   const { userId, cookbookId, recipeId } = input;
   const membershipId = crypto.randomUUID();
+  const active = activeRecipeFor(userId);
   const [cookbook, recipe] = await retryD1Write({ scope: "cookbook.add_recipe" }, () => d1WriteBatch(d1, [
     [`SELECT "authorId" FROM "Cookbook" WHERE "id" = ?`, cookbookId],
-    [`SELECT "id" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL`, recipeId],
+    [`SELECT "id" FROM "Recipe" WHERE ${active.sql}`, recipeId, ...active.params],
     [
       `INSERT INTO "RecipeInCookbook" ("id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt")
-       SELECT ?, ?, ?, ?, ?, ? WHERE ${OWNED_COOKBOOK} AND ${ACTIVE_RECIPE}
+       SELECT ?, ?, ?, ?, ?, ? WHERE ${OWNED_COOKBOOK} AND EXISTS (SELECT 1 FROM "Recipe" WHERE ${active.sql})
        ON CONFLICT ("cookbookId", "recipeId") DO NOTHING`,
       membershipId, cookbookId, recipeId, userId, now, now,
-      cookbookId, userId, recipeId,
+      cookbookId, userId, recipeId, ...active.params,
     ],
     [
-      `UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ? AND "authorId" = ? AND ${ACTIVE_RECIPE}`,
-      now, cookbookId, userId, recipeId,
+      `UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ? AND "authorId" = ? AND EXISTS (SELECT 1 FROM "Recipe" WHERE ${active.sql})`,
+      now, cookbookId, userId, recipeId, ...active.params,
     ],
   ]));
   assertCookbookChecks(cookbook.rows, userId, recipe.rows);
@@ -100,17 +107,18 @@ export async function createCookbookWithRecipeOnD1(
       },
     },
     async () => {
+      const active = activeRecipeFor(userId);
       const [recipe] = await d1WriteBatch(d1, [
-        [`SELECT "id" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL`, recipeId],
+        [`SELECT "id" FROM "Recipe" WHERE ${active.sql}`, recipeId, ...active.params],
         [
           `INSERT INTO "Cookbook" ("id", "title", "authorId", "createdAt", "updatedAt")
-           SELECT ?, ?, ?, ?, ? WHERE ${ACTIVE_RECIPE}`,
-          cookbookId, title, userId, now, now, recipeId,
+           SELECT ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM "Recipe" WHERE ${active.sql})`,
+          cookbookId, title, userId, now, now, recipeId, ...active.params,
         ],
         [
           `INSERT INTO "RecipeInCookbook" ("id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt")
-           SELECT ?, ?, ?, ?, ?, ? WHERE ${ACTIVE_RECIPE}`,
-          membershipId, cookbookId, recipeId, userId, now, now, recipeId,
+           SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM "Recipe" WHERE ${active.sql})`,
+          membershipId, cookbookId, recipeId, userId, now, now, recipeId, ...active.params,
         ],
       ]);
       return recipe.rows.length > 0;
@@ -120,9 +128,10 @@ export async function createCookbookWithRecipeOnD1(
   return { id: cookbookId, title };
 }
 
-/** Throws the Save dialog's 404 when the recipe is gone (it is checked before the title). */
-export async function assertActiveRecipeOnD1(d1: D1ReadDatabase, recipeId: string): Promise<void> {
-  const [recipe] = await d1WriteBatch(d1, [[`SELECT "id" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL`, recipeId]]);
+/** Throws the Save dialog's 404 when the recipe is gone or the chef may not read it (it is checked before the title). */
+export async function assertActiveRecipeOnD1(d1: D1ReadDatabase, recipeId: string, userId: string): Promise<void> {
+  const active = activeRecipeFor(userId);
+  const [recipe] = await d1WriteBatch(d1, [[`SELECT "id" FROM "Recipe" WHERE ${active.sql}`, recipeId, ...active.params]]);
   if (recipe.rows.length === 0) throw recipeNotFound();
 }
 

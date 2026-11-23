@@ -5,6 +5,7 @@ import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { coalesceShoppingRecipeIngredients } from "~/lib/shopping-list-mutations.server";
 import { d1WriteOnceClaim, type D1WriteOnceClaim, type D1WriteOnceKey } from "~/lib/d1-write-once.server";
+import { readableRecipeSql } from "~/domains/kitchen";
 
 // The shopping list page's writes (`/shopping-list` actions) on the request's D1 binding, with no
 // Prisma client. Each intent is one D1 batch, and a batch is one SQLite transaction, so the reads
@@ -275,7 +276,11 @@ export async function putShoppingListItemOnceOnD1(
   return { id, created: results.at(-1)!.rows[0]!.note === id };
 }
 
-const RECIPE_SQL = `SELECT "id" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL`;
+// A recipe the shopper may not read adds as one that does not exist.
+function recipeSqlFor(readerId: string): { sql: string; params: unknown[] } {
+  const readable = readableRecipeSql(undefined, { id: readerId });
+  return { sql: `SELECT "id" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL AND ${readable.sql}`, params: readable.params };
+}
 
 const RECIPE_INGREDIENTS_SQL = `SELECT i."id", i."stepNum", i."ingredientRefId", i."unitId", i."quantity", r."name" AS "ingredientName"
   FROM "Ingredient" i
@@ -285,15 +290,16 @@ const RECIPE_INGREDIENTS_SQL = `SELECT i."id", i."stepNum", i."ingredientRefId",
 
 /**
  * Adds a recipe's ingredients, scaled and combined by identity, in one batch. Returns false when
- * the recipe does not exist or was deleted. Under the add's write-once key, a retry or resubmit
+ * the recipe does not exist, was deleted or is one the shopper may not read. Under the add's write-once key, a retry or resubmit
  * adds nothing more.
  */
 export async function addRecipeToShoppingListOnD1(
   db: D1ReadDatabase,
-  input: { shoppingListId: string; recipeId: string; scaleFactor: number; writeKey: D1WriteOnceKey; now: Date },
+  input: { shoppingListId: string; readerId: string; recipeId: string; scaleFactor: number; writeKey: D1WriteOnceKey; now: Date },
 ): Promise<boolean> {
+  const recipe = recipeSqlFor(input.readerId);
   const [recipes, rows] = await d1ReadBatch(db, [
-    [RECIPE_SQL, input.recipeId],
+    [recipe.sql, input.recipeId, ...recipe.params],
     [RECIPE_INGREDIENTS_SQL, input.recipeId],
   ]);
   if (recipes.length === 0) return false;

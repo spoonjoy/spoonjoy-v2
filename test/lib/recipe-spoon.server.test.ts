@@ -56,6 +56,15 @@ describe("recipe-spoon.server", () => {
   });
 
   describe("createSpoon", () => {
+    it("treats another cook's private recipe as missing, and logs its own cook's", async () => {
+      const chef = await makeUser();
+      const cook = await makeUser();
+      const recipe = await db.recipe.create({ data: { ...createTestRecipe(chef.id), chefId: chef.id, visibility: "private" } });
+      await expect(createSpoon(db, { chefId: cook.id, recipeId: recipe.id, note: "sneaky" })).rejects.toBeInstanceOf(SpoonNotFoundError);
+      expect(await db.recipeSpoon.count({ where: { recipeId: recipe.id } })).toBe(0);
+      await expect(createSpoon(db, { chefId: chef.id, recipeId: recipe.id, note: "mine" })).resolves.toMatchObject({ isOriginCook: true });
+    });
+
     it("creates a spoon with only a note for a non-owner cook", async () => {
       const chef = await makeUser();
       const cook = await makeUser();
