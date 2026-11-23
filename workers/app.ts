@@ -8,7 +8,8 @@ import { runWithD1WriteRetryReporter } from "../app/lib/d1-write-retry.server";
 import { qaErrorLogsEnabled } from "../app/lib/qa-error-logs.server";
 import { isolateColoReport, isolateRequestReport } from "../app/lib/slow-call.server";
 import { getDb } from "../app/lib/db.server";
-import { consumeJobBatch, d1JobKeys, jobRegistry, queueJobs, type JobKeysDatabase, type Jobs } from "../app/domains/platform";
+import { jobRegistry, type Jobs } from "../app/domains/platform";
+import { consumeJobBatch, d1JobKeys, expireDoneJobKeys, jobKeysDatabase, queueJobs } from "../app/domains/platform/index.server";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
 import { defaultPhotoCache, deliverPhoto, photoKeyFromPath } from "../app/lib/photo-delivery.server";
@@ -381,18 +382,23 @@ export default {
   },
 
   // The cron trigger in wrangler.json. The photo sweep runs in PHOTO_SWEEP_MODE, which is a dry
-  // run unless that setting is exactly "apply" (see app/lib/photo-lifecycle.server.ts).
+  // run unless that setting is exactly "apply" (see app/lib/photo-lifecycle.server.ts). Old job keys
+  // are expired alongside it.
   async scheduled(_controller, env, ctx) {
     ctx.waitUntil(runScheduledPhotoSweep(withTransientD1Retry(env)));
     ctx.waitUntil(runScheduledMoveInSweep(withTransientD1Retry(env), new Date()));
+    // Done job keys older than JOB_KEY_KEPT_DAYS are forgotten, so the table doesn't grow without end.
+    const jobKeys = jobKeysDatabase(env.DB);
+    if (jobKeys) ctx.waitUntil(expireDoneJobKeys(jobKeys));
   },
 
   // Platform jobs on the JOBS queue (app/domains/platform/ports/jobs.ts); a job that runs out of
   // attempts is reported, and its key freed to be enqueued again.
   async queue(batch: MessageBatch<unknown>, rawEnv: CloudflareEnvironment) {
     const env = withTransientD1Retry(rawEnv);
-    if (!env.DB) throw new Error("Platform jobs need the DB binding for their keys.");
-    const keys = d1JobKeys(env.DB as JobKeysDatabase);
+    const db = jobKeysDatabase(env.DB);
+    if (!db) throw new Error("Platform jobs need the DB binding for their keys.");
+    const keys = d1JobKeys(db);
     await consumeJobBatch(batch, jobHandlers(env, queueJobs(env.JOBS, keys)), keys, {
       onFailed: (message, error) =>
         captureException(resolvePostHogServerConfig(env), { error, distinctId: "platform-jobs", route: "queue", extras: { type: message.type } }),

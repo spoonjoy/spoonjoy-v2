@@ -1,10 +1,10 @@
 // The jobs port: work that runs on the server after the request that asked for it, whether or not the
-// person keeps the page open. spoonjoy.app runs jobs on Cloudflare Queues (../adapters/cloudflare-jobs.ts)
+// person keeps the page open. spoonjoy.app runs jobs on Cloudflare Queues (../adapters/cloudflare-jobs.server.ts)
 // and tests drain them in memory (../adapters/memory-jobs.ts); a self-hosted server will get an
 // in-process adapter of its own.
 //
 // A job has a kind (defineJob), a payload and a key. Enqueueing a key that is already waiting or done does
-// nothing. A delivery leases its key before it runs, so one run of a key goes at a time, and a delivery
+// nothing; a done key is kept for 30 days, so a key is deduplicated for 30 days after its job is done. A delivery leases its key before it runs, so one run of a key goes at a time, and a delivery
 // whose key is done is skipped; one that finds the key leased comes back when the lease is up. Queues
 // delivers at least once, and a run can die part-way (its lease then runs out and the next delivery
 // starts again; a late duplicate of a job that failed can start it again too), so handlers must be safe

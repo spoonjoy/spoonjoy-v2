@@ -8,7 +8,7 @@ import { createOpenAIClient } from "~/lib/openai-client.server";
 import { sendPush } from "~/lib/web-push.server";
 import type { JobMessage } from "../ports/jobs";
 import { PlatformUnavailableError, type GenerateJsonInput, type Platform } from "../ports/ports";
-import { d1JobKeys, queueJobs, type JobKeysDatabase } from "./cloudflare-jobs";
+import { d1JobKeys, jobKeysDatabase, queueJobs } from "./cloudflare-jobs.server";
 
 export type CloudflarePlatformEnv = TransactionalEmailEnv & {
   DB?: D1Database;
@@ -74,8 +74,9 @@ export function cloudflarePlatform(env: CloudflarePlatformEnv): Platform {
     },
     jobs: {
       async enqueue(kind, payload, options) {
-        if (!env.DB) throw new PlatformUnavailableError("jobs", "the DB binding");
-        return queueJobs(env.JOBS, d1JobKeys(env.DB as unknown as JobKeysDatabase)).enqueue(kind, payload, options);
+        const db = jobKeysDatabase(env.DB);
+        if (!db) throw new PlatformUnavailableError("jobs", "the DB binding");
+        return queueJobs(env.JOBS, d1JobKeys(db)).enqueue(kind, payload, options);
       },
     },
   };
