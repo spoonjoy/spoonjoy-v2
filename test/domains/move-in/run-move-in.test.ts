@@ -204,15 +204,49 @@ describe("runNextChunk", () => {
     });
   });
 
-  it("tries a recipe that fails again, then reports it and carries on", async () => {
-    const h = harness({ write: async ({ draft }) => { if (draft.title === "Soup") throw new Error("D1 said no"); return { outcome: "created", recipeId: "r", title: draft.title, warnings: [] }; } });
-    expect(await h.runAll()).toMatchObject({ status: "done-with-issues" });
+  it("tries a recipe that fails once more in place, then reports it with why and carries on in the same pass", async () => {
+    const tried: string[] = [];
+    const h = harness({ write: async ({ draft }) => {
+      tried.push(draft.title);
+      if (draft.title === "Soup") throw new TypeError("D1 said no");
+      return { outcome: "created", recipeId: `r-${draft.sourceKey}`, title: draft.title, warnings: [] };
+    } });
+    await runNextChunk("job-1", h.ports);
+    expect(await runNextChunk("job-1", h.ports, { chunkSize: 3 })).toMatchObject({ status: "done-with-issues" });
+    expect(tried.filter((title) => title === "Soup")).toHaveLength(2);
     expect(h.counts.get("recipes")).toMatchObject({ created: 2, failed: 1 });
     expect(h.events.find((event) => event.kind === "item-failed")).toMatchObject({
       message: "Soup didn't move in this time. Moving the same backup in again tries it once more.",
-      detail: `It stopped the move-in ${RECIPE_TRIES} times in a row.`,
+      detail: "TypeError: D1 said no",
       level: "error",
     });
+  });
+
+  it("keeps the first lines of a long error", async () => {
+    const h = harness({ write: async () => { throw new Error("x".repeat(500)); } });
+    await runNextChunk("job-1", h.ports);
+    await runNextChunk("job-1", h.ports, { chunkSize: 1 });
+    expect(h.events.find((event) => event.kind === "item-failed")?.detail).toBe(`Error: ${"x".repeat(193)}`);
+  });
+
+  it("reports a thrown value that isn't an error by what it says", async () => {
+    const h = harness({ write: async () => { throw "the store said no"; } });
+    await runNextChunk("job-1", h.ports);
+    await runNextChunk("job-1", h.ports, { chunkSize: 1 });
+    expect(h.events.find((event) => event.kind === "item-failed")?.detail).toBe("the store said no");
+  });
+
+  it("brings a recipe that fails once on its second try", async () => {
+    let fails = 1;
+    const h = harness({ write: async ({ draft }) => {
+      if (draft.title === "Soup" && fails-- > 0) throw new Error("a blip");
+      return { outcome: "created", recipeId: `r-${draft.sourceKey}`, title: draft.title, warnings: [] };
+    } });
+    await runNextChunk("job-1", h.ports);
+    // Its tags staying behind is the only issue.
+    expect(await runNextChunk("job-1", h.ports, { chunkSize: 3 })).toMatchObject({ phase: "done" });
+    expect(h.counts.get("recipes")).toMatchObject({ created: 3, failed: 0 });
+    expect(h.events.some((event) => event.kind === "item-failed")).toBe(false);
   });
 
   it("stops with the fix-it message when the file is not a backup", async () => {
@@ -317,11 +351,18 @@ describe("runNextChunk", () => {
     expect(h.discarded).toEqual(["uploads/job-1.zip"]);
   });
 
-  it("leaves a recipe that fails for the next run until it has been tried enough", async () => {
+  it("passes a recipe's error on, and the recipe with it, when the database can't be reached either", async () => {
     const h = harness({ write: async () => { throw new Error("D1 said no"); } });
     await runNextChunk("job-1", h.ports);
-    h.jobs.set("job-1", { ...h.job(), attempt: RECIPE_TRIES - 1 });
-    await expect(runNextChunk("job-1", h.ports)).rejects.toThrow("D1 said no");
+    const load = h.ports.store.loadJob;
+    let loads = 0;
+    // The chunk's own read works; the look after the recipe fails twice doesn't.
+    h.ports.store.loadJob = async (id) => {
+      if (++loads > 1) throw new Error("D1 is down");
+      return load(id);
+    };
+    await expect(runNextChunk("job-1", h.ports)).rejects.toThrow("D1 is down");
+    h.ports.store.loadJob = load;
     expect(h.job()).toMatchObject({ cursor: "0" });
     expect(h.counts.get("recipes")).toMatchObject({ failed: 0 });
   });
@@ -409,29 +450,32 @@ describe("runForAWhile", () => {
     expect(await runMoveInSegment("job-1", h.ports, { budgetMs: 0 })).toMatchObject({ claimed: false, job: { phase: "recipes" } });
   });
 
-  it("passes over a recipe that keeps stopping the run, even one that never gets to fail, and moves the rest in", async () => {
+  it("passes over a recipe whose runs died before it could fail, and moves the rest in", async () => {
     const h = harness();
-    const write = h.ports.writeRecipe;
-    const tried: string[] = [];
-    // A recipe whose run dies before it can fail, as when it takes the Worker down.
-    h.ports.writeRecipe = async (input) => {
-      tried.push(input.draft.title);
-      if (input.draft.title === "Soup") throw new Error("the Worker ran out of memory");
-      return write(input);
-    };
-    let job = null;
-    for (let i = 0; i < 10 && !["done", "done-with-issues", "failed"].includes(h.job().status); i++) {
-      job = await runForAWhile("job-1", h.ports, { budgetMs: 60_000, chunkSize: 1 }).catch(() => null);
-      h.expire();
-    }
-    expect(h.job()).toMatchObject({ status: "done-with-issues" });
-    expect(job === null || job.status === "done-with-issues").toBe(true);
+    await runNextChunk("job-1", h.ports);
+    // Each run that took the job died on the recipe at the cursor, as when it takes the Worker down.
+    h.jobs.set("job-1", { ...h.job(), attempt: RECIPE_TRIES });
+    expect(await runForAWhile("job-1", h.ports, { budgetMs: 60_000, chunkSize: 1 })).toMatchObject({ status: "done-with-issues" });
     expect(h.counts.get("recipes")).toMatchObject({ found: 3, created: 2, failed: 1 });
-    expect(tried.filter((title) => title === "Soup")).toHaveLength(RECIPE_TRIES);
     expect(h.events.find((event) => event.kind === "item-failed")).toMatchObject({
       level: "error",
-      message: "Soup didn't move in this time. Moving the same backup in again tries it once more.",
+      message: expect.stringMatching(/ didn't move in this time\. Moving the same backup in again tries it once more\.$/),
+      detail: `It stopped the move-in ${RECIPE_TRIES} times in a row.`,
     });
   });
-});
 
+  it("moves the rest of a kitchen in, in one segment and without the queue's backoff, when one recipe always throws", async () => {
+    const tried: string[] = [];
+    const h = harness({ write: async ({ draft }) => {
+      tried.push(draft.title);
+      if (draft.title === "Soup") throw new Error("LIKE or GLOB pattern too complex");
+      return { outcome: "created", recipeId: `r-${draft.sourceKey}`, title: draft.title, warnings: [] };
+    } });
+    const { job, claimed } = await runMoveInSegment("job-1", h.ports, { budgetMs: 60_000, chunkSize: 1, releaseOnError: true });
+    expect(claimed).toBe(true);
+    expect(job).toMatchObject({ status: "done-with-issues" });
+    expect(h.counts.get("recipes")).toMatchObject({ created: 2, failed: 1 });
+    expect(tried.filter((title) => title === "Soup")).toHaveLength(2);
+    expect(h.events.find((event) => event.kind === "item-failed")?.detail).toBe("Error: LIKE or GLOB pattern too complex");
+  });
+});
