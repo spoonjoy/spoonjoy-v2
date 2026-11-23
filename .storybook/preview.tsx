@@ -3,6 +3,8 @@ import type { Preview } from '@storybook/react-vite'
 import { withThemeByClassName } from '@storybook/addon-themes'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { OuroProvider } from '../app/lib/ouro/ouro-provider'
+// The same self-hosted web fonts as the app (app/styles/fonts.css), so stories render as the app does.
+import '../app/styles/fonts.css'
 import '../app/styles/tailwind.css'
 
 type RouterParameters = {

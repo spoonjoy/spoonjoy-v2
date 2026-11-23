@@ -23,6 +23,11 @@ describe("self-hosted web fonts", () => {
     expect(readFileSync(resolve(ROOT, "app/root.tsx"), "utf8")).toContain('import "./styles/fonts.css";');
   });
 
+  it("gives Storybook the same local files, with no Google Fonts link", () => {
+    expect(readFileSync(resolve(ROOT, ".storybook/preview.tsx"), "utf8")).toContain("import '../app/styles/fonts.css'");
+    expect(existsSync(resolve(ROOT, ".storybook/preview-head.html"))).toBe(false);
+  });
+
   it("keeps the families, weights and font-display the Google Fonts request asked for", () => {
     const weights = (family: string) =>
       Array.from(new Set(faces.filter((face) => field(face, "font-family") === `'${family}'`).map((face) => field(face, "font-weight")))).sort();
