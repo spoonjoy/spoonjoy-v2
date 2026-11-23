@@ -19,7 +19,7 @@ export async function organizersRequest(
   return { userId, store: prismaOrganizerStore(db), db };
 }
 
-/** Splits a comma-separated list of tags as typed into one name per entry. */
-export function tagNamesFromInput(value: FormDataEntryValue | null): string[] {
+/** Splits a comma-separated list of tags, categories or tools as typed into one name per entry. */
+export function organizerNamesFromInput(value: FormDataEntryValue | null): string[] {
   return typeof value === "string" ? value.split(",") : [];
 }

@@ -16,7 +16,7 @@
 import path from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import type { CensusState, Journey as OuroCensusJourney } from "../../ouro-census/census-page.mjs";
-import { KITCHEN, QA_KITCHEN_TAG } from "../../../scripts/seed-qa-kitchen.mjs";
+import { KITCHEN, QA_KITCHEN_CATEGORY, QA_KITCHEN_TAG, QA_KITCHEN_TOOL } from "../../../scripts/seed-qa-kitchen.mjs";
 import { expect } from "./journey";
 import { chooseMenuItem } from "./menu";
 import { openDisclosure } from "./navigation";
@@ -276,11 +276,15 @@ export const census: Journey[] = [
   { id: "my-recipes", enrolled: true, persona: "chef", path: "/my-recipes", states: [DEFAULT] },
   { id: "saved-recipes", enrolled: true, persona: "chef", path: "/saved-recipes", states: [DEFAULT] },
 
-  // Tags (organizers flag, on in QA): chef's seeded Weeknight tag on Lemon Herb Rice.
+  // Organizers (organizers flag, on in QA): chef's seeded tag, category and tool, all on Lemon Herb Rice.
   { id: "tags", enrolled: true, persona: "chef", path: "/tags", states: [DEFAULT] },
   { id: "tags-newbie", enrolled: true, persona: "newbie", path: "/tags", states: [DEFAULT] },
   { id: "tag", enrolled: true, persona: "chef", path: `/tags/${QA_KITCHEN_TAG.slug}`, states: [DEFAULT] },
-  { id: "recipe-tags", enrolled: true, persona: "chef", path: `${LEMON_RICE}/tags`, states: [DEFAULT] },
+  { id: "categories", enrolled: true, persona: "chef", path: "/categories", states: [DEFAULT] },
+  { id: "category", enrolled: true, persona: "chef", path: `/categories/${QA_KITCHEN_CATEGORY.slug}`, states: [DEFAULT] },
+  { id: "tools", enrolled: true, persona: "chef", path: "/tools", states: [DEFAULT] },
+  { id: "tool", enrolled: true, persona: "chef", path: `/tools/${QA_KITCHEN_TOOL.slug}`, states: [DEFAULT] },
+  { id: "recipe-organize", enrolled: true, persona: "chef", path: `${LEMON_RICE}/organize`, states: [DEFAULT] },
 
   // Cookbooks.
   { id: "cookbooks", enrolled: true, persona: "chef", path: "/cookbooks", states: [DEFAULT] },
