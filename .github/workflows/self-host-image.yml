@@ -23,7 +23,7 @@ on:
       - app/lib/server-access.server.ts
       - app/lib/oauth-user.server.ts
       - app/routes/signup.tsx
-      - app/routes/account.server.tsx
+      - app/routes/account.server-settings.tsx
       - playwright.journeys.config.ts
       - e2e/journeys/**
       - migrations/**

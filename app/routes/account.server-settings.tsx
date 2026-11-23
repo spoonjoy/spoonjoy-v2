@@ -1,5 +1,5 @@
 import { data, useFetcher, useLoaderData } from "react-router";
-import type { Route } from "./+types/account.server";
+import type { Route } from "./+types/account.server-settings";
 import { Button } from "~/components/ouro/button/button";
 import { CopyButton } from "~/components/ouro/copy-button/copy-button";
 import { LocalDate } from "~/components/ouro/local-date/local-date";

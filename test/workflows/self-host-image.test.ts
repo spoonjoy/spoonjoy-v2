@@ -89,7 +89,7 @@ describe("Self-host Image workflow", () => {
       expect.arrayContaining([
         "app/lib/server-access.server.ts",
         "app/routes/signup.tsx",
-        "app/routes/account.server.tsx",
+        "app/routes/account.server-settings.tsx",
         "app/lib/oauth-user.server.ts",
       ]),
     );
