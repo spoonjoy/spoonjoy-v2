@@ -31,12 +31,22 @@ interface OAuthButtonProps {
   redirectTo?: string
   /** The button's label in place of the provider's own. */
   label?: string
+  /**
+   * A self-hosted server's invite link this sign-up came from. The provider's sign-in carries it
+   * to the account-creation gate, and a refusal comes back to the same invite page.
+   */
+  invite?: string
 }
 
-export function OAuthButton({ provider, className, redirectTo, label = providerStyles[provider].label }: OAuthButtonProps) {
-  const href = redirectTo
-    ? `/auth/${provider}?redirectTo=${encodeURIComponent(redirectTo)}`
-    : `/auth/${provider}`
+export function OAuthButton({ provider, className, redirectTo, label = providerStyles[provider].label, invite }: OAuthButtonProps) {
+  const params = new URLSearchParams()
+  if (redirectTo) params.set('redirectTo', redirectTo)
+  if (invite) {
+    params.set('invite', invite)
+    params.set('failureRedirect', `/signup?${new URLSearchParams({ invite })}`)
+  }
+  const query = params.toString()
+  const href = query ? `/auth/${provider}?${query}` : `/auth/${provider}`
 
   // Force a browser document request for the same-origin OAuth start route.
   // Client-side routing treats the provider redirect as a data navigation, while
@@ -55,9 +65,11 @@ interface OAuthButtonGroupProps {
   redirectTo?: string
   /** The OpenID Connect button's label, as the server's owner set it. */
   oidcLabel?: string
+  /** A self-hosted server's invite link this sign-up came from (OAuthButton). */
+  invite?: string
 }
 
-export function OAuthButtonGroup({ providers = ['google', 'github', 'apple'], className, redirectTo, oidcLabel }: OAuthButtonGroupProps) {
+export function OAuthButtonGroup({ providers = ['google', 'github', 'apple'], className, redirectTo, oidcLabel, invite }: OAuthButtonGroupProps) {
   if (providers.length === 0) return null
 
   return (
@@ -68,6 +80,7 @@ export function OAuthButtonGroup({ providers = ['google', 'github', 'apple'], cl
           provider={provider}
           redirectTo={redirectTo}
           label={provider === 'oidc' ? oidcLabel : undefined}
+          invite={invite}
         />
       ))}
     </div>

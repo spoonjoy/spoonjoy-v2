@@ -20,6 +20,8 @@ export interface GitHubOAuthCallbackParams {
   d1?: D1ReadDatabase | null;
   /** The Worker's settings: on a self-hosted server a new account must pass its account-creation gate */
   env?: ServerAccessEnv | null;
+  /** The invite link sign-up started from, which lets a new account onto an invite-only server */
+  inviteToken?: string | null;
   githubUser: GitHubUser;
   currentUserId?: string | null;
   redirectTo?: string | null;
@@ -42,7 +44,7 @@ export interface GitHubOAuthCallbackResult {
 export async function handleGitHubOAuthCallback(
   params: GitHubOAuthCallbackParams
 ): Promise<GitHubOAuthCallbackResult> {
-  const { db, d1 = null, env = null, githubUser, currentUserId } = params;
+  const { db, d1 = null, env = null, inviteToken = null, githubUser, currentUserId } = params;
   const redirectTo = params.redirectTo ?? "/recipes";
 
   if (currentUserId) {
@@ -119,7 +121,7 @@ export async function handleGitHubOAuthCallback(
     email: githubUser.email,
     name: githubUser.name ?? githubUser.login,
     emailVerified: githubUser.emailVerified,
-  }, d1, env);
+  }, d1, env, inviteToken);
 
   if (!createResult.success || !createResult.user) {
     return {

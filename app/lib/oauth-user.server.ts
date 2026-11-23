@@ -241,13 +241,14 @@ async function writeOAuthUser(
  * no lockout.
  *
  * On a self-hosted server (`env`) the account-creation gate decides first; an invite-only server
- * answers `signups_closed`.
+ * answers `signups_closed` unless `inviteToken` is an invite that still works.
  */
 export async function createOAuthUser(
   db: PrismaClient,
   oauthData: OAuthUserData,
   d1: D1ReadDatabase | null = null,
   env: ServerAccessEnv | null = null,
+  inviteToken: string | null = null,
 ): Promise<CreateOAuthUserResult> {
   // Handle missing email from provider (e.g., Apple "Hide My Email")
   if (!oauthData.email) {
@@ -266,7 +267,7 @@ export async function createOAuthUser(
     return ACCOUNT_EXISTS;
   }
 
-  const gate = await gateAccountCreation(db, env);
+  const gate = await gateAccountCreation(db, env, { inviteToken });
   if (!gate.allowed) return { success: false, error: gate.code, message: gate.message };
   let created = false;
   try {

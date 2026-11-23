@@ -30,6 +30,8 @@ export interface GoogleOAuthCallbackParams {
   d1?: D1ReadDatabase | null;
   /** The Worker's settings: on a self-hosted server a new account must pass its account-creation gate */
   env?: ServerAccessEnv | null;
+  /** The invite link sign-up started from, which lets a new account onto an invite-only server */
+  inviteToken?: string | null;
   /** Google user data from verified callback */
   googleUser: GoogleUser;
   /** Current logged-in user ID (null if not logged in) */
@@ -78,7 +80,7 @@ export interface GoogleOAuthCallbackResult {
 export async function handleGoogleOAuthCallback(
   params: GoogleOAuthCallbackParams
 ): Promise<GoogleOAuthCallbackResult> {
-  const { db, d1 = null, env = null, googleUser, currentUserId, redirectTo } = params;
+  const { db, d1 = null, env = null, inviteToken = null, googleUser, currentUserId, redirectTo } = params;
 
   // Default redirect destination
   const defaultRedirect = redirectTo ?? "/";
@@ -174,7 +176,7 @@ export async function handleGoogleOAuthCallback(
     email: googleUser.email,
     name: googleUser.name,
     emailVerified: googleUser.emailVerified,
-  }, d1, env);
+  }, d1, env, inviteToken);
 
   if (!createResult.success) {
     return {

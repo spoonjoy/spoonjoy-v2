@@ -33,6 +33,9 @@ export interface OAuthStartSessionData {
   // Session version of the user who started linking, so a callback that falls
   // back to linkingUserId can refuse a session revoked in the meantime.
   linkingSessionVersion?: number;
+  // The invite link a sign-up on a self-hosted server started from (`?invite=`), which the
+  // account-creation gate takes in place of open sign-ups. Never kept for linking.
+  inviteToken?: string;
 }
 
 const OAUTH_SESSION_PREFIX = "oauth";
@@ -199,6 +202,7 @@ export function resolveOAuthStartSessionData(
   const requestedRedirectTo =
     url.searchParams.get("redirectTo") ?? refererUrl?.searchParams.get("redirectTo");
   const requestedFailureRedirect = url.searchParams.get("failureRedirect");
+  const inviteToken = url.searchParams.get("invite")?.trim();
 
   return {
     state,
@@ -209,6 +213,7 @@ export function resolveOAuthStartSessionData(
       ? "/account/settings"
       : sanitizeInternalRedirect(requestedFailureRedirect, defaultFailureRedirect),
     linking,
+    ...(inviteToken && !linking ? { inviteToken } : {}),
   };
 }
 
@@ -261,6 +266,12 @@ export async function commitOAuthStartSession(
     session.unset(oauthSessionKey(provider, "redirectUri"));
   }
 
+  if (data.inviteToken) {
+    session.set(oauthSessionKey(provider, "inviteToken"), data.inviteToken);
+  } else {
+    session.unset(oauthSessionKey(provider, "inviteToken"));
+  }
+
   if (data.linkingUserId) {
     session.set(oauthSessionKey(provider, "linkingUserId"), data.linkingUserId);
   } else {
@@ -296,6 +307,7 @@ export async function readOAuthStartSession(
   const linking = session.get(oauthSessionKey(provider, "linking"));
   const linkingUserId = session.get(oauthSessionKey(provider, "linkingUserId"));
   const linkingSessionVersion = session.get(oauthSessionKey(provider, "linkingSessionVersion"));
+  const inviteToken = session.get(oauthSessionKey(provider, "inviteToken"));
 
   return {
     state,
@@ -313,6 +325,7 @@ export async function readOAuthStartSession(
     linking: linking === "true",
     linkingUserId: typeof linkingUserId === "string" ? linkingUserId : undefined,
     linkingSessionVersion: typeof linkingSessionVersion === "number" ? linkingSessionVersion : undefined,
+    ...(typeof inviteToken === "string" && inviteToken ? { inviteToken } : {}),
   };
 }
 

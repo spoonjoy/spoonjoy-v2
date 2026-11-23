@@ -69,11 +69,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const oauthError = url.searchParams.get("oauthError");
   const inviteToken = url.searchParams.get("invite");
   // On a self-hosted server that is invite-only, a stranger reads why they can't sign up, and an
-  // invite link signs one person up with a password (they can link a provider in settings later).
+  // invite link signs one person up, with a password or one of the server's sign-in providers.
   const env = context.cloudflare?.env;
   const door = isSelfHosted(env) ? await signupDoor(await getRequestDb(context), env, inviteToken) : { door: "open" as const };
-  const oauthProviders = door.door === "open" ? getConfiguredOAuthProviders(getOAuthEnv(context)) : [];
-  const oidcLabel = door.door === "open" ? getOidcButtonLabel(getOAuthEnv(context)) : undefined;
+  // A stranger on an invite-only server gets no provider buttons; an invite link offers them too.
+  const providersOffered = door.door !== "closed";
+  const oauthProviders = providersOffered ? getConfiguredOAuthProviders(getOAuthEnv(context)) : [];
+  const oidcLabel = providersOffered ? getOidcButtonLabel(getOAuthEnv(context)) : undefined;
   const access = door.door === "closed" ? { signupsClosed: door.message } : door.door === "invite" ? { invite: inviteToken! } : {};
 
   if (oauthError) {
@@ -203,7 +205,7 @@ export default function Signup() {
 
         {oauthProviders.length > 0 && (
           <>
-            <OAuthButtonGroup providers={oauthProviders} oidcLabel={loaderData?.oidcLabel} redirectTo={redirectTo} className="mt-8" />
+            <OAuthButtonGroup providers={oauthProviders} oidcLabel={loaderData?.oidcLabel} redirectTo={redirectTo} invite={loaderData?.invite} className="mt-8" />
             <Separator label="or" className="my-6" data-testid="oauth-separator" />
           </>
         )}
