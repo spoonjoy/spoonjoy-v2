@@ -63,3 +63,26 @@ export function newRecipeVisibility(
 ): RecipeVisibility {
   return selectable(requested, levels) ?? selectable(cookDefault, levels) ?? DEFAULT_RECIPE_VISIBILITY;
 }
+
+/**
+ * Who can read a fork. A cook's fork of their own recipe keeps its level. A fork of another cook's public recipe is a
+ * new recipe of theirs, at their default. Any other level the forking cook could read (a household recipe) keeps the
+ * fork to that cook alone: their households need not be the source cook's, so forking never widens who reads it.
+ */
+export function forkedRecipeVisibility(
+  source: { chefId: string; visibility: unknown },
+  viewerId: string,
+  cookDefault: RecipeVisibility,
+): RecipeVisibility {
+  if (source.chefId === viewerId) return parseRecipeVisibility(source.visibility) ?? "private";
+  return source.visibility === "public" ? cookDefault : "private";
+}
+
+/**
+ * The levels to offer on a recipe's editor: the cook's choices, plus the recipe's own level when it is not one of them
+ * (a Household recipe while households is off), so the editor always shows who can read it now.
+ */
+export function editorRecipeVisibilities(choices: readonly RecipeVisibility[], stored: RecipeVisibility): readonly RecipeVisibility[] {
+  if (choices.includes(stored)) return choices;
+  return SELECTABLE_WITH_HOUSEHOLD.filter((level) => level === stored || choices.includes(level));
+}
