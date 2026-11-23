@@ -1709,6 +1709,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Add this week to my list\" [button/root] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Add to plan\" [button/root] in region \"Plan a recipe\"",
           "count": 1
         },
@@ -6346,6 +6350,10 @@
       "default": [
         {
           "identity": "button \"Add note\" [button/root] in region \"Add a note\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Add this week to my list\" [button/root] in main",
           "count": 1
         },
         {
