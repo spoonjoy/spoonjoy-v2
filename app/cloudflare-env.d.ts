@@ -56,8 +56,8 @@ declare global {
       env: Environment,
       ctx: ExecutionContext
     ): void | Promise<void>;
-    // Typed by each handler with the body its queue carries.
-    queue?(batch: MessageBatch<never>, env: Environment, ctx: ExecutionContext): void | Promise<void>;
+    // A queue's bodies are whatever was sent; the handler checks them.
+    queue?(batch: MessageBatch<unknown>, env: Environment, ctx: ExecutionContext): void | Promise<void>;
   }
 
   /** A Cloudflare Queue producer binding: the slice platform jobs use. */

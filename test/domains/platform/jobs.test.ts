@@ -27,8 +27,15 @@ function keysInMemory(): JobKeys & { rows: Map<string, string> } {
       rows.set(key, "pending");
       return true;
     },
-    async isDone(key) {
-      return rows.get(key) === "done";
+    async start(key) {
+      const status = rows.get(key);
+      if (status === "done") return "done";
+      if (status === "running") return "busy";
+      rows.set(key, "running");
+      return "started";
+    },
+    async pause(key) {
+      rows.set(key, "pending");
     },
     async markDone(key) {
       rows.set(key, "done");
@@ -81,8 +88,19 @@ describe("running one job", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("skips a job no handler is registered for", async () => {
-    expect(await runJob(jobRegistry(), keysInMemory(), message(), 1)).toEqual({ status: "skipped", reason: "unknown-type" });
+  it("skips a job no handler is registered for, and frees its key", async () => {
+    const keys = keysInMemory();
+    await keys.claim("move-in:job-1", "move-in.run");
+    expect(await runJob(jobRegistry(), keys, message(), 1)).toEqual({ status: "skipped", reason: "unknown-type" });
+    expect(keys.rows.has("move-in:job-1")).toBe(false);
+  });
+
+  it("waits while another delivery of the same key is running, so a key's handler runs once at a time", async () => {
+    const keys = keysInMemory();
+    keys.rows.set("move-in:job-1", "running");
+    const handler = vi.fn(async () => {});
+    expect(await runJob(jobRegistry().on(moveIn, handler), keys, message(), 1)).toEqual({ status: "busy", delaySeconds: 60 });
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it("retries a failed run after its backoff until its attempts run out, then frees its key", async () => {
@@ -94,6 +112,7 @@ describe("running one job", () => {
     });
     expect(await runJob(registry, keys, message(), 1)).toEqual({ status: "retry", delaySeconds: 10 });
     expect(await runJob(registry, keys, message(), 2)).toEqual({ status: "retry", delaySeconds: 20 });
+    // Between runs the key is free for the next delivery to start.
     expect(keys.rows.get("move-in:job-1")).toBe("pending");
     expect(await runJob(registry, keys, message(), 3)).toEqual({ status: "failed", error });
     // A failed job can be enqueued again under the same key.
@@ -141,12 +160,26 @@ describe("the Cloudflare Queues adapter", () => {
       ack: vi.fn(),
       retry: vi.fn(),
     });
-    const messages = [delivery("a", "ok", 1), delivery("b", "ok", 1), delivery("c", "fails", 2), delivery("d", "fails", 3)];
-    const failed = vi.fn();
+    const malformed = { body: { nope: true }, attempts: 1, ack: vi.fn(), retry: vi.fn() };
+    const messages = [delivery("a", "ok", 1), delivery("b", "ok", 1), delivery("c", "fails", 2), delivery("d", "fails", 3), malformed];
+    const failed = vi.fn(() => {
+      throw new Error("PostHog is down");
+    });
     await consumeJobBatch({ messages } as never, registry, keys, { onFailed: failed });
     expect(messages.map((m) => [m.ack.mock.calls.length, m.retry.mock.calls]))
-      .toEqual([[1, []], [1, []], [0, [[{ delaySeconds: 20 }]]], [1, []]]);
+      .toEqual([[1, []], [1, []], [0, [[{ delaySeconds: 20 }]]], [1, []], [1, []]]);
     expect(failed).toHaveBeenCalledWith(messages[3].body, expect.objectContaining({ message: "not yet" }));
+  });
+
+  it("retries a message whose bookkeeping throws, instead of failing the whole batch", async () => {
+    const keys = { ...keysInMemory(), markDone: vi.fn(async () => {
+      throw new Error("D1 dropped the write");
+    }) };
+    await keys.claim("a", "move-in.run");
+    const registry = jobRegistry().on(moveIn, async () => {});
+    const message = { body: { type: "move-in.run", key: "a", payload: { jobId: "ok" } }, attempts: 1, ack: vi.fn(), retry: vi.fn() };
+    await consumeJobBatch({ messages: [message] } as never, registry, keys);
+    expect([message.ack.mock.calls.length, message.retry.mock.calls]).toEqual([0, [[{ delaySeconds: 10 }]]]);
   });
 });
 
@@ -157,16 +190,39 @@ describe("the D1 job keys", () => {
   });
   afterEach(() => database.close());
 
-  it("claims a key once, marks it done, and frees it", async () => {
-    const keys = d1JobKeys(database.binding, () => new Date("2026-11-23T12:00:00.000Z"));
-    expect(await keys.claim("move-in:job-1", "move-in.run")).toBe(true);
-    expect(await keys.claim("move-in:job-1", "move-in.run")).toBe(false);
-    expect(await keys.isDone("move-in:job-1")).toBe(false);
-    await keys.markDone("move-in:job-1");
-    expect(await keys.isDone("move-in:job-1")).toBe(true);
-    expect(database.sqlite.prepare(`SELECT "type", "status" FROM "PlatformJobKey" WHERE "key" = ?`).get("move-in:job-1")).toEqual({ type: "move-in.run", status: "done" });
-    await keys.release("move-in:job-1");
-    expect(await keys.claim("move-in:job-1", "move-in.run")).toBe(true);
+  let clock = new Date("2026-11-23T12:00:00.000Z");
+  const later = (seconds: number) => (clock = new Date(clock.getTime() + seconds * 1000));
+  const status = (key: string) => database.sqlite.prepare(`SELECT "type", "status" FROM "PlatformJobKey" WHERE "key" = ?`).get(key);
+
+  it("claims a key once, leases it to one run at a time, marks it done, and frees it", async () => {
+    clock = new Date("2026-11-23T12:00:00.000Z");
+    const keys = d1JobKeys(database.binding, () => clock);
+    expect(await keys.claim("k", "move-in.run")).toBe(true);
+    expect(await keys.claim("k", "move-in.run")).toBe(false);
+    expect(await keys.start("k", "move-in.run", 600)).toBe("started");
+    expect(await keys.start("k", "move-in.run", 600)).toBe("busy");
+    // A run that died without a word loses its lease once the lease runs out.
+    later(601);
+    expect(await keys.start("k", "move-in.run", 600)).toBe("started");
+    await keys.pause("k");
+    expect(status("k")).toEqual({ type: "move-in.run", status: "pending" });
+    expect(await keys.start("k", "move-in.run", 600)).toBe("started");
+    await keys.markDone("k");
+    expect(await keys.start("k", "move-in.run", 600)).toBe("done");
+    expect(await keys.claim("k", "move-in.run")).toBe(false);
+    await keys.release("k");
+    expect(await keys.claim("k", "move-in.run")).toBe(true);
+  });
+
+  it("starts a delivery whose key has no row, and lets a key left pending for a day be claimed again", async () => {
+    clock = new Date("2026-11-23T12:00:00.000Z");
+    const keys = d1JobKeys(database.binding, () => clock);
+    expect(await keys.start("orphan", "move-in.run", 600)).toBe("started");
+    expect(await keys.claim("lost", "move-in.run")).toBe(true);
+    later(23 * 3600);
+    expect(await keys.claim("lost", "move-in.run")).toBe(false);
+    later(3600 + 1);
+    expect(await keys.claim("lost", "move-in.run")).toBe(true);
   });
 });
 
