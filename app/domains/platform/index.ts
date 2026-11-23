@@ -3,3 +3,6 @@
 export * from "./flags";
 export * from "./model";
 export * from "./ports/ports";
+export * from "./ports/jobs";
+export { consumeJobBatch, d1JobKeys, queueJobs, type ConsumeOptions, type JobKeysDatabase } from "./adapters/cloudflare-jobs";
+export { memoryJobs, type MemoryJobs } from "./adapters/memory-jobs";
