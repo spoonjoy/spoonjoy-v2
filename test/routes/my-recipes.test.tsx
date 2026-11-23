@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { db } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import {
@@ -456,6 +456,15 @@ describe("My Recipes drawer route", () => {
       });
     });
 
+    it("drop a filter for an organizer the cook no longer has", async () => {
+      const viewer = await organizedKitchen();
+
+      const result = await load(viewer.id, "?with=tag:gone&without=tool:wok");
+
+      expect(result.filterParams).toEqual([["without", "tool:wok"]]);
+      expect(result.recipes.map((recipe: { title: string }) => recipe.title)).toEqual(["Quick Soup", "Slow Stew"]);
+    });
+
     it("ignore filters and offer no choices while the organizers flag is off", async () => {
       const viewer = await organizedKitchen();
 
@@ -542,6 +551,26 @@ describe("My Recipes drawer route", () => {
       expect(await screen.findByRole("button", { name: "Filter (1)", expanded: true })).toBeInTheDocument();
       expect(screen.getByRole("heading", { name: "No matching recipes" })).toBeInTheDocument();
       expect(screen.getByText("Try fewer filters.")).toBeInTheDocument();
+    });
+
+    it("untick the boxes when Clear filters moves to the unfiltered list without a reload", async () => {
+      const choices = { tag: [{ name: "Quick", value: "tag:quick" }], category: [], tool: [] };
+      const Stub = createTestRoutesStub([{
+        path: "/my-recipes",
+        Component: MyRecipes,
+        loader: ({ request }: { request: Request }) => page({
+          organizerChoices: choices,
+          filterParams: new URL(request.url).searchParams.has("with") ? [["with", "tag:quick"]] : [],
+        }),
+      }]);
+
+      render(<Stub initialEntries={["/my-recipes?with=tag:quick"]} />);
+      const has = await screen.findByRole("group", { name: "Has" });
+      expect(within(has).getByRole("checkbox", { name: "Quick" })).toBeChecked();
+      fireEvent.click(screen.getByRole("link", { name: "Clear filters" }));
+      await screen.findByRole("button", { name: "Filter", expanded: false });
+      fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+      expect(within(screen.getByRole("group", { name: "Has" })).getByRole("checkbox", { name: "Quick" })).not.toBeChecked();
     });
 
     it("keep the filters in page links", async () => {
