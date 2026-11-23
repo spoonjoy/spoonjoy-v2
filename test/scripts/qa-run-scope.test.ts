@@ -491,6 +491,42 @@ describe("sweepStaleRunStacks", () => {
     await expect(sweepStaleRunStacks({ api: broken, now, log })).rejects.toThrow("d1 500");
   });
 
+  it("skips a stale run Worker Cloudflare refuses to delete, counting it as in use, and sweeps the rest", async () => {
+    const refusing = createCloudflareApi({
+      env: RUN_ENV,
+      fetchImpl: vi.fn(async () => ({
+        ok: false,
+        status: 403,
+        json: async () => ({ success: false, errors: [{ message: "Cannot delete this Worker as it is a consumer for a Queue." }] }),
+      })),
+      sleep: vi.fn(),
+    });
+    const deleteWorker = vi.fn(async (id: string) => (id === "spoonjoy-v2-qa-run-1-1" ? refusing.deleteWorker(id) : undefined));
+    const api = fakeApi({
+      listWorkers: vi.fn(async () => [
+        { id: "spoonjoy-v2-qa-run-1-1", created_on: old },
+        { id: "spoonjoy-v2-qa-run-2-1", created_on: old },
+      ]),
+      deleteWorker,
+    });
+    const log = vi.fn();
+
+    expect(await sweepStaleRunStacks({ api, now, log })).toEqual({ swept: 1, remainingRunWorkers: 1 });
+    expect(deleteWorker.mock.calls).toEqual([["spoonjoy-v2-qa-run-1-1"], ["spoonjoy-v2-qa-run-2-1"]]);
+    expect(log.mock.calls[0][0]).toMatch(/^::warning::Could not delete stale QA run Worker spoonjoy-v2-qa-run-1-1 \(created .*\): Cloudflare API DELETE .* returned 403/);
+    expect(log).toHaveBeenLastCalledWith(`Deleted stale QA run Worker spoonjoy-v2-qa-run-2-1 (created ${old}).`);
+  });
+
+  it("still fails the sweep when deleting a stale run Worker fails any other way", async () => {
+    const api = fakeApi({
+      listWorkers: vi.fn(async () => [{ id: "spoonjoy-v2-qa-run-1-1", created_on: old }]),
+      deleteWorker: vi.fn(async () => {
+        throw new Error("network down");
+      }),
+    });
+    await expect(sweepStaleRunStacks({ api, now, log: vi.fn() })).rejects.toThrow("network down");
+  });
+
   it("fails loudly once more than 100 run Workers are in use", async () => {
     const workers = (count: number) => Array.from({ length: count }, (_, index) => ({ id: `spoonjoy-v2-qa-run-${index}-1`, created_on: fresh }));
     const log = vi.fn();
