@@ -608,6 +608,24 @@ describe("Avatar colors", () => {
     }
   });
 
+  it("lifts the tile off a dark page, on every hue and on brand, and keeps the initials readable", async () => {
+    document.documentElement.classList.add("dark");
+    const { host } = await render(
+      <>
+        {names.map((name) => (
+          <Avatar key={name} name={name} />
+        ))}
+        <Avatar name="Ana Lind" color="brand" />
+      </>,
+    );
+    const page = toRgb(token("background"));
+    for (const avatar of host.querySelectorAll<HTMLElement>('[data-ouro="avatar"]')) {
+      const fill = toRgb(getComputedStyle(surface(avatar)).backgroundColor);
+      expect(ratio(fill, page)).toBeGreaterThanOrEqual(1.5);
+      expect(ratio(toRgb(getComputedStyle(avatar).color), fill)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("tints with the theme's primary for brand, and uses the secondary surface for neutral", async () => {
     const { host } = await render(
       <>
@@ -626,6 +644,13 @@ describe("Avatar colors", () => {
     probe.remove();
     expect(neutralFill).toBe(token("secondary"));
     expect(neutral!.color).toBe(token("secondary-foreground"));
+  });
+
+  it("draws a neutral avatar's initials in the theme's secondary foreground, not the colour it inherits", async () => {
+    const { host } = await render(<Avatar name="Ana Lind" color="neutral" />);
+    host.style.setProperty("--secondary-foreground", "rgb(12, 34, 56)");
+    host.style.color = "rgb(200, 100, 50)";
+    expect(getComputedStyle(host.querySelector<HTMLElement>('[data-ouro="avatar"]')!).color).toBe("rgb(12, 34, 56)");
   });
 });
 
