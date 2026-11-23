@@ -98,6 +98,9 @@ const coverageExclude = [
 // coverage run measures are held to its 100% here, so a gap fails on the pull request instead of
 // costing a merge-queue round.
 const changedCoverage = changedCoverageFiles(process.env.SPOONJOY_COVERAGE_CHANGED, { include: coverageInclude, exclude: coverageExclude });
+// Only this run measures them: a test that starts its own Vitest (the warning-policy tests do) must
+// not inherit the list, or the two runs write the same coverage folder and the inner one fails.
+delete process.env.SPOONJOY_COVERAGE_CHANGED;
 const fullThresholds = { statements: 100, branches: 100, functions: 100, lines: 100 };
 
 // One temporary directory per run for each worker process's own copy of prisma/test.db
