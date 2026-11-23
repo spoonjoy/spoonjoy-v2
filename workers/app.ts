@@ -384,12 +384,20 @@ export default {
   // The cron trigger in wrangler.json. The photo sweep runs in PHOTO_SWEEP_MODE, which is a dry
   // run unless that setting is exactly "apply" (see app/lib/photo-lifecycle.server.ts). Old job keys
   // are expired alongside it.
-  async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(runScheduledPhotoSweep(withTransientD1Retry(env)));
-    ctx.waitUntil(runScheduledMoveInSweep(withTransientD1Retry(env), new Date()));
-    // Done job keys older than JOB_KEY_KEPT_DAYS are forgotten, so the table doesn't grow without end.
+  async scheduled(_controller, rawEnv, ctx) {
+    const env = withTransientD1Retry(rawEnv);
+    ctx.waitUntil(runScheduledPhotoSweep(env));
+    ctx.waitUntil(runScheduledMoveInSweep(env, new Date()));
+    // Done job keys older than JOB_KEY_KEPT_DAYS are forgotten, so the table doesn't grow without end;
+    // a sweep that fails is reported, and the next one catches up.
     const jobKeys = jobKeysDatabase(env.DB);
-    if (jobKeys) ctx.waitUntil(expireDoneJobKeys(jobKeys));
+    if (jobKeys) {
+      ctx.waitUntil(
+        expireDoneJobKeys(jobKeys).catch((error: unknown) =>
+          captureException(resolvePostHogServerConfig(env), { error, distinctId: "platform-jobs", route: "scheduled", extras: { sweep: "job-keys" } }),
+        ),
+      );
+    }
   },
 
   // Platform jobs on the JOBS queue (app/domains/platform/ports/jobs.ts); a job that runs out of
