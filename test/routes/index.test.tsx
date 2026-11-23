@@ -139,6 +139,8 @@ describe("Kitchen Index Route", () => {
       expect(result.cookbooks).toHaveLength(1);
       expect(result.cookbooks[0]._count.recipes).toBe(1);
       expect(result.cookbooks[0].recipes[0].recipe.coverImageUrl).toBeNull();
+      // No households flag here, so no Cook together section.
+      expect(result.households).toBeNull();
     });
 
     it("uses explicit active cover display data for kitchen recipes and cookbook previews", async () => {
@@ -321,6 +323,7 @@ describe("Kitchen Index Route", () => {
         recipes: [],
         cookbooks: [],
         cookingNow: [],
+        households: null,
         renderedAt: expect.any(Number),
       });
     });
@@ -345,6 +348,7 @@ describe("Kitchen Index Route", () => {
         recipes: [],
         cookbooks: [],
         cookingNow: [],
+        households: null,
         renderedAt: expect.any(Number),
       });
     });
@@ -745,6 +749,51 @@ describe("Kitchen Index Route", () => {
       await screen.findByText("Image Dish");
       expect(container.querySelector('img[src="https://example.com/dish.jpg"]')).not.toBeNull();
       expect(screen.queryByText(/Serves/)).not.toBeInTheDocument();
+    });
+
+    it("shows the owner's households under Cook together, or a way to start one, only when the loader passes them", async () => {
+      const ownerKitchen = (households: { id: string; name: string }[] | null) => () => ({
+        tab: "recipes",
+        isOwner: true,
+        viewer: { id: "viewer-1", username: "chef", email: "chef@example.com", photoUrl: null },
+        kitchenUser: { id: "viewer-1", username: "chef", photoUrl: null },
+        recipes: [],
+        cookbooks: [],
+        households,
+      });
+      const kitchen = (households: { id: string; name: string }[] | null) =>
+        createTestRoutesStub([{ path: "/", Component: Index, loader: ownerKitchen(households) }]);
+
+      const Two = kitchen([
+        { id: "h1", name: "The Lee kitchen" },
+        { id: "h2", name: "Cabin weekends" },
+      ]);
+      const { unmount } = render(<Two initialEntries={["/"]} />);
+      const section = await screen.findByRole("region", { name: "Cook together" });
+      expect(within(section).getByRole("heading", { name: "Cook together" })).toBeInTheDocument();
+      const list = within(section).getByRole("list", { name: "Your households" });
+      expect(within(list).getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
+        [expect.stringContaining("The Lee kitchen"), "/households/h1"],
+        [expect.stringContaining("Cabin weekends"), "/households/h2"],
+      ]);
+      expect(within(section).queryByRole("link", { name: "Start a household" })).not.toBeInTheDocument();
+      // Below the action row: the section follows the kitchen's header.
+      const header = screen.getByRole("link", { name: "Kitchen settings" }).closest("header")!;
+      expect(header.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      unmount();
+
+      const None = kitchen([]);
+      const { unmount: unmountNone } = render(<None initialEntries={["/"]} />);
+      const empty = await screen.findByRole("region", { name: "Cook together" });
+      expect(within(empty).getByText("Share shopping lists, a meal plan and recipes with the people you cook with.")).toBeInTheDocument();
+      expect(within(empty).getByRole("link", { name: "Start a household" })).toHaveAttribute("href", "/households");
+      expect(within(empty).queryByRole("list")).not.toBeInTheDocument();
+      unmountNone();
+
+      const Off = kitchen(null);
+      render(<Off initialEntries={["/"]} />);
+      expect(await screen.findByRole("link", { name: "Kitchen settings" })).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "Cook together" })).not.toBeInTheDocument();
     });
 
     it("renders visitor kitchen with read-only controls hidden", async () => {

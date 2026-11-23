@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { BookOpen, Download, Ellipsis, Play, Plus, Search as SearchIcon, Settings, Users, Utensils } from "lucide-react";
+import { BookOpen, Download, Ellipsis, House, Play, Plus, Search as SearchIcon, Settings, Users, Utensils } from "lucide-react";
 import { chefDisplayName } from "~/lib/username";
 import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
@@ -32,12 +32,18 @@ export function KitchenHome({
   isOwner,
   recipes,
   cookbooks,
+  households = null,
   cookingNow,
 }: {
   kitchenUser: { id: string; username: string; photoUrl: string | null };
   isOwner: boolean;
   recipes: KitchenRecipe[];
   cookbooks: KitchenCookbook[];
+  /**
+   * The owner's households for Cook together, read by the route loader (the households flag is on): an empty list
+   * offers to start one, and null leaves the section out.
+   */
+  households?: { id: string; name: string }[] | null;
   /** The owner's recipes in progress, above everything else in their kitchen. */
   cookingNow?: ReactNode;
 }) {
@@ -100,6 +106,12 @@ export function KitchenHome({
           </div>
         </header>
 
+        {isOwner && households ? (
+          <div className="mt-8" data-fold-page="right">
+            <CookTogether households={households} />
+          </div>
+        ) : null}
+
         {isOwner && recipes.length === 0 && cookbooks.length === 0 ? (
           <div className="mt-8" data-fold-page="right">
             <TableIsSet />
@@ -128,6 +140,27 @@ export function KitchenHome({
         )}
       </section>
     </CookbookPage>
+  );
+}
+
+/** The cook's households, each linking to its page, or one line and a way to start the first. */
+function CookTogether({ households }: { households: { id: string; name: string }[] }) {
+  return (
+    <section aria-label="Cook together">
+      <SectionHeader title="Cook together" />
+      {households.length > 0 ? (
+        <ItemGroup aria-label="Your households" variant="divided" className="mt-2">
+          {households.map((household) => (
+            <Item key={household.id} href={`/households/${household.id}`} title={household.name} media={<House />} />
+          ))}
+        </ItemGroup>
+      ) : (
+        <Text tone="muted" className="mt-2">
+          Share shopping lists, a meal plan and recipes with the people you cook with.{" "}
+          <Link href="/households">Start a household</Link>
+        </Text>
+      )}
+    </section>
   );
 }
 

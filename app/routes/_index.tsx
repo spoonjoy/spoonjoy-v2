@@ -14,6 +14,7 @@ import { hidesChef, withoutHidden } from "~/lib/moderation.server";
 import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
 import { KitchenHome, absoluteKitchenUrl } from "~/components/cookbook/KitchenHome";
+import { kitchenHouseholds } from "~/domains/households-and-identity";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { HERO_IMAGE_PROPS } from "~/lib/image-loading";
 import { cookingNowEntry } from "~/lib/cooking-now-entries.server";
@@ -112,6 +113,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       recipes: [],
       cookbooks: [],
       cookingNow: [] as CookingNowEntry[],
+      households: null,
       renderedAt: Date.now(),
     };
   }
@@ -144,6 +146,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       recipes: [],
       cookbooks: [],
       cookingNow: [] as CookingNowEntry[],
+      households: null,
       renderedAt: Date.now(),
     };
   }
@@ -176,6 +179,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   const isOwner = viewer?.id === kitchenUser.id;
   return {
+    // The owner's households for Cook together, or null (flag off, or another chef's kitchen) to leave it out.
+    households: isOwner ? await kitchenHouseholds(context, kitchenUser.id) : null,
     tab,
     viewer,
     kitchenUser,
@@ -189,7 +194,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export default function Index() {
-  const { kitchenUser, isOwner, recipes, cookbooks, cookingNow = [], renderedAt } = useLoaderData<typeof loader>();
+  const { kitchenUser, isOwner, recipes, cookbooks, cookingNow = [], households, renderedAt } = useLoaderData<typeof loader>();
 
   if (!kitchenUser) {
     return (
@@ -268,6 +273,7 @@ export default function Index() {
       isOwner={isOwner}
       recipes={recipes}
       cookbooks={cookbooks}
+      households={households}
       cookingNow={
         cookingNow.length > 0 ? <CookingNowStrip entries={cookingNow} now={renderedAt} /> : null
       }

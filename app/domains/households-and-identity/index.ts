@@ -5,4 +5,4 @@ export * from "./model/invite";
 export * from "./application/household-store";
 export * from "./application/households.server";
 export { d1HouseholdStore } from "./adapters/d1-household-store.server";
-export { householdsRequest } from "./adapters/households-route.server";
+export { householdsRequest, kitchenHouseholds } from "./adapters/households-route.server";

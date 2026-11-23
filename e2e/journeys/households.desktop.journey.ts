@@ -4,7 +4,7 @@
 // view-only and removes them, and each change shows on the twin's next load. Desktop only: the two accounts are the two people, so an iPhone run at the same
 // time would share them. The household's name carries a timestamp, so each run's household is its
 // own. The households flag is on in QA.
-import type { Page, TestInfo } from "@playwright/test";
+import type { Locator, Page, TestInfo } from "@playwright/test";
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
 import { waitForHydrationOnLoad } from "./support/app-ready";
 import { pathUrl, waitForHydration } from "./support/navigation";
@@ -23,6 +23,30 @@ function saved(page: Page, householdPath: string) {
   return page.waitForResponse(
     (response) => response.request().method() === "POST" && new URL(response.url()).pathname.startsWith(householdPath) && response.ok(),
   );
+}
+
+async function attachLocatorScreenshot(testInfo: TestInfo, locator: Locator, name: string) {
+  await testInfo.attach(name, { body: await locator.screenshot({ animations: "disabled" }), contentType: "image/png" });
+}
+
+/** Opens `name` from the Kitchen's Cook together list at the given size, then checks it after a reload. */
+async function openFromKitchen(
+  page: Page,
+  testInfo: TestInfo,
+  { name, householdPath, width, height, shot }: { name: string; householdPath: string; width: number; height: number; shot: string },
+) {
+  await page.setViewportSize({ width, height });
+  await page.goto("/");
+  await waitForHydration(page);
+  const cookTogether = page.getByRole("region", { name: "Cook together" });
+  const household = cookTogether.getByRole("list", { name: "Your households" }).getByRole("link", { name, exact: true });
+  await expect(household).toBeVisible();
+  await expect(cookTogether.getByRole("link", { name: "Start a household", exact: true })).toHaveCount(0);
+  await attachLocatorScreenshot(testInfo, cookTogether, shot);
+  await household.click();
+  await expect(page).toHaveURL(pathUrl(householdPath));
+  await page.reload({ waitUntil: "load" });
+  await expect(page.getByRole("heading", { level: 1, name, exact: true })).toBeVisible();
 }
 
 function people(page: Page) {
@@ -116,6 +140,21 @@ test.describe("Households", () => {
       });
       await joinerPage.goto("/households");
       await expect(joinerPage.getByRole("link", { name })).toHaveCount(0);
+
+      // With no household left, the joiner's Kitchen offers to start one under Cook together, on desktop and at 390px.
+      await joinerPage.goto("/");
+      await waitForHydration(joinerPage);
+      const joinerCookTogether = joinerPage.getByRole("region", { name: "Cook together" });
+      await expect(joinerCookTogether.getByRole("list", { name: "Your households" })).toHaveCount(0);
+      await expect(joinerCookTogether.getByRole("link", { name: "Start a household", exact: true })).toBeVisible();
+      await attachLocatorScreenshot(testInfo, joinerCookTogether, "kitchen-start-a-household-desktop");
+      await joinerPage.setViewportSize({ width: 390, height: 844 });
+      await expect(joinerCookTogether.getByRole("link", { name: "Start a household", exact: true })).toBeVisible();
+      await attachLocatorScreenshot(testInfo, joinerCookTogether, "kitchen-start-a-household-390");
+      await joinerCookTogether.getByRole("link", { name: "Start a household", exact: true }).click();
+      await expect(joinerPage).toHaveURL(pathUrl("/households"));
+      await joinerPage.reload({ waitUntil: "load" });
+      await expect(joinerPage.getByRole("heading", { level: 1, name: "Cook together", exact: true })).toBeVisible();
     } catch (error) {
       throw appendConsoleIssues(error, joinerConsole.issues);
     } finally {
@@ -127,5 +166,11 @@ test.describe("Households", () => {
     // The owner's list still has it.
     await page.goto("/households");
     await expect(page.getByRole("link", { name: new RegExp(name) })).toBeVisible();
+
+    // The owner's Kitchen lists it under Cook together, on desktop and at 390px, and it opens the household,
+    // which is still there after a reload.
+    await openFromKitchen(page, testInfo, { name, householdPath, width: 1280, height: 720, shot: "kitchen-cook-together-desktop" });
+    await openFromKitchen(page, testInfo, { name, householdPath, width: 390, height: 844, shot: "kitchen-cook-together-390" });
+    await attachScreenshot(testInfo, page, "household-from-kitchen-390");
   });
 });
