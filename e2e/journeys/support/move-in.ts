@@ -5,7 +5,7 @@
 // the published proof fixtures (scripts/move-in-proof, release move-in-proof-fixtures-v1), read from
 // the public release and checked against the pinned manifest. Each version's kitchen has its own ids
 // (checked below), and each journey moves into its own fresh scratch account.
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "./journey";
 import { bytesSource } from "../../../app/domains/move-in/adapters/archive/zip";
 import { openMealieBackup } from "../../../app/domains/move-in/adapters/sources/mealie-backup/backup";
@@ -67,12 +67,27 @@ async function dropBackup(page: Page, version: string) {
 
 export type JourneyArgs = Pick<Parameters<Parameters<typeof test>[2]>[0], "page" | "expectAccessible">;
 
-/** Attaches a full-page screenshot to the report, named for the version, so a reviewer can see each state. */
+/**
+ * Attaches a screenshot to the report, named for the version, so a reviewer can see each state. On a
+ * phone it shows only the screen, as the cook sees it: a full-page shot draws the floating tab bar in
+ * the middle of the page, over whatever sits there.
+ */
 async function snapshot(page: Page, version: string, state: string) {
   await test.info().attach(`move-in-${version}-${state}`, {
-    body: await page.screenshot({ fullPage: true, animations: "disabled" }),
+    body: await page.screenshot({ fullPage: !test.info().project.use.isMobile, animations: "disabled" }),
     contentType: "image/png",
   });
+}
+
+/** Scrolls the control into view and checks nothing, such as the floating tab bar, sits over its middle. */
+async function reachable(control: Locator) {
+  const onTop = await control.evaluate((element) => {
+    element.scrollIntoView({ block: "center" });
+    const box = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return hit !== null && element.contains(hit);
+  });
+  expect(onTop, "something covers the middle of the control").toBe(true);
 }
 
 /**
@@ -104,6 +119,8 @@ export async function moveIn(version: string, { page, expectAccessible }: Journe
   await finished();
   await expectAccessible();
   await snapshot(page, version, "3-finished");
+  await reachable(main.getByRole("link", { name: "See your recipes", exact: true }));
+  await snapshot(page, version, "3-see-your-recipes");
   return finished;
 }
 
@@ -112,15 +129,16 @@ export async function moveIn(version: string, { page, expectAccessible }: Journe
  * Returns that check, for the test to run again after a reload.
  */
 export async function moveInAgain(version: string, { page }: Pick<JourneyArgs, "page">): Promise<() => Promise<void>> {
-  const { recipes, recipesWithPhoto } = (await fixtures()).kitchens.small.counts;
+  const { recipes } = (await fixtures()).kitchens.small.counts;
   const main = page.getByRole("main");
   await main.getByRole("link", { name: "Move in another backup", exact: true }).click();
   await dropBackup(page, version);
   const nothingAdded = async () => {
     await expect(main.getByRole("heading", { level: 2, name: "Everything was already here", exact: true })).toBeVisible({ timeout: MOVE_IN_MS });
     await expect(main.getByText(`${recipes} already here, 0 changed.`, { exact: true })).toBeVisible();
-    await expect(detail(page, "Recipes moved in")).toHaveText("0");
-    await expect(detail(page, "Photos")).toHaveText(`${recipesWithPhoto} of ${recipesWithPhoto}`);
+    // Nothing moved, so the page shows no counts that would read as if recipes or photos did.
+    await expect(main.locator("dt", { hasText: "Recipes moved in" })).toHaveCount(0);
+    await expect(main.locator("dt", { hasText: "Photos" })).toHaveCount(0);
   };
   await nothingAdded();
   await snapshot(page, version, "5-moved-in-again");
