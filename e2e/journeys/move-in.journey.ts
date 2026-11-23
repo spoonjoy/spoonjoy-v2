@@ -100,6 +100,14 @@ async function dropBackup(page: Page, version: string) {
 
 type JourneyArgs = Pick<Parameters<Parameters<typeof test>[2]>[0], "page" | "expectAccessible">;
 
+/** Attaches a full-page screenshot to the report, named for the version, so a reviewer can see each state. */
+async function snapshot(page: Page, version: string, state: string) {
+  await test.info().attach(`move-in-${version}-${state}`, {
+    body: await page.screenshot({ fullPage: true, animations: "disabled" }),
+    contentType: "image/png",
+  });
+}
+
 /**
  * Moves the version's small kitchen in and checks the finish screen against the manifest. Returns
  * that check, for the test to run again after a reload.
@@ -115,8 +123,12 @@ async function moveIn(version: string, { page, expectAccessible }: JourneyArgs):
   await expect(main.getByRole("heading", { level: 1, name: "Bring your kitchen with you." })).toBeVisible();
   await expect(main.getByRole("radio", { name: /^Mealie/ })).toBeChecked();
   await expectAccessible();
+  await snapshot(page, version, "1-before-a-file");
 
   await dropBackup(page, version);
+  // A small kitchen can finish before the first poll, so progress is captured only when it shows.
+  const moving = main.getByRole("heading", { level: 2, name: "Moving in", exact: true });
+  if (await moving.isVisible()) await snapshot(page, version, "2-progress");
   const finished = async () => {
     await expect(main.getByRole("heading", { level: 2, name: `${recipes} recipes moved in`, exact: true })).toBeVisible({ timeout: MOVE_IN_MS });
     await expect(detail(page, "Recipes moved in")).toHaveText(String(recipes));
@@ -124,6 +136,7 @@ async function moveIn(version: string, { page, expectAccessible }: JourneyArgs):
   };
   await finished();
   await expectAccessible();
+  await snapshot(page, version, "3-finished");
   return finished;
 }
 
@@ -163,6 +176,10 @@ async function inTheKitchen(version: string, { page }: Pick<JourneyArgs, "page">
   const photo = main.getByRole("img", { name: `Photo of ${name}`, exact: true });
   await expect(photo).toBeVisible();
   await expect.poll(() => photo.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  // Its steps came over too, in order.
+  await expect(main.getByRole("heading", { level: 2, name: "Steps", exact: true })).toBeVisible();
+  await expect(main.getByRole("checkbox", { name: /^Step 1: / })).toBeVisible();
+  await snapshot(page, version, "4-recipe");
 }
 
 test.describe("Move in", () => {
