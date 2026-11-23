@@ -54,6 +54,15 @@ test.describe("Households", () => {
     await expect(page.getByRole("heading", { level: 1, name, exact: true })).toBeVisible();
     await expect(people(page).getByText(`${owner.username} (you)`, { exact: true })).toBeVisible();
 
+    // The top bar links the cook's households, marked as the current page.
+    const householdsLink = page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Households", exact: true });
+    await expect(householdsLink).toHaveAttribute("href", "/households");
+    await expect(householdsLink).toHaveAttribute("aria-current", "page");
+    await testInfo.attach("households-nav-link", {
+      body: await page.locator('[data-ouro="navbar"]').screenshot({ animations: "disabled" }),
+      contentType: "image/png",
+    });
+
     // An invite link for a member.
     await page.getByRole("button", { name: "Make invite link", exact: true }).click();
     const linkField = page.getByLabel("Invite link");

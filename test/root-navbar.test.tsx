@@ -26,6 +26,25 @@ function renderNavbar(userId: string | null = null, path = "/", oauthProviders: 
   );
 }
 
+function renderNavbarWithFlags(flags: string[], userId: string | null, path: string) {
+  const router = createMemoryRouter(
+    [
+      {
+        id: "root",
+        path: "*",
+        loader: () => ({ flags }),
+        element: (
+          <ColorSchemeProvider storageKey="spoonjoy-theme">
+            <AppNavbar userId={userId} />
+          </ColorSchemeProvider>
+        ),
+      },
+    ],
+    { initialEntries: [path], hydrationData: { loaderData: { root: { flags } } } },
+  );
+  return render(<RouterProvider router={router} />);
+}
+
 describe("AppNavbar", () => {
   it("clears cached cook progress when the cook logs out", async () => {
     window.localStorage.setItem("spoonjoy-cook-progress:user:user-1:recipe-1", "{}");
@@ -163,6 +182,27 @@ describe("AppNavbar", () => {
 
     const centerLinks = within(nav).getAllByRole("link").map((link) => link.textContent);
     expect(centerLinks.slice(0, 2)).toEqual(["Kitchen", "Recipes"]);
+  });
+
+  it("links signed-in cooks to their households after the shopping list when the households flag is on", () => {
+    renderNavbarWithFlags(["households"], "chef-1", "/households/household-1");
+
+    const nav = screen.getByRole("navigation", { name: "Main navigation" });
+    const households = within(nav).getByRole("link", { name: "Households" });
+    expect(households).toHaveAttribute("href", "/households");
+    expect(households).toHaveAttribute("aria-current", "page");
+    const labels = within(nav).getAllByRole("link").map((link) => link.textContent);
+    expect(labels[labels.indexOf("Shopping List") + 1]).toBe("Households");
+  });
+
+  it("leaves Households out of the bar when the households flag is off", () => {
+    renderNavbarWithFlags([], "chef-1", "/");
+    expect(screen.queryByRole("link", { name: "Households" })).not.toBeInTheDocument();
+  });
+
+  it("leaves Households out of the bar for signed-out visitors even with the flag on", () => {
+    renderNavbarWithFlags(["households"], null, "/");
+    expect(screen.queryByRole("link", { name: "Households" })).not.toBeInTheDocument();
   });
 
   it("keeps Recipes unmarked on the kitchen home page", () => {
