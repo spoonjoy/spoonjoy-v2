@@ -196,10 +196,15 @@ describe("/households/:id", () => {
     const id = await makeHousehold();
     await call(joinAction, `/join/${await makeInvite(id)}`, "ben", {});
     const refused = await call(householdAction, `/households/${id}`, "ben", { intent: "invite", role: "member" });
-    expect(statusOf(refused)).toBe(400);
+    // Refusals about who is asking are 403, like the app's other permission refusals; input it can't use is 400.
+    expect(statusOf(refused)).toBe(403);
     expect(payload(refused)).toEqual({ error: "Only an owner can invite people." });
+    const badInvite = await call(householdAction, `/households/${id}`, "ann", { intent: "invite", role: "owner" });
+    expect(statusOf(badInvite)).toBe(400);
     const owner = await call(householdAction, `/households/${id}`, "ann", { intent: "leave" });
+    expect(statusOf(owner)).toBe(403);
     expect(payload(owner)).toEqual({ error: "Make someone else an owner before you leave." });
+    expect(statusOf(await call(householdAction, `/households/${id}`, "ann", { intent: "dance" }))).toBe(400);
     const left = (await call(householdAction, `/households/${id}`, "ben", { intent: "leave" })) as Response;
     expect(left.headers.get("Location")).toBe("/households");
     expect(payload(await call(householdAction, `/households/${id}`, "ann", { intent: "dance" }))).toEqual({ error: "Unknown action." });
@@ -220,11 +225,16 @@ describe("/households/:id", () => {
     ]);
 
     const refused = await call(householdAction, `/households/${id}`, "ben", { intent: "role", targetId: "ann", role: "viewer" });
-    expect(statusOf(refused)).toBe(400);
+    expect(statusOf(refused)).toBe(403);
     expect(payload(refused)).toEqual({ error: "Only an owner can change roles." });
-    expect(payload(await call(householdAction, `/households/${id}`, "ben", { intent: "remove", targetId: "ann" }))).toEqual({
-      error: "Only an owner can remove people.",
-    });
+    const notRemoved = await call(householdAction, `/households/${id}`, "ben", { intent: "remove", targetId: "ann" });
+    expect(statusOf(notRemoved)).toBe(403);
+    expect(payload(notRemoved)).toEqual({ error: "Only an owner can remove people." });
+    expect(statusOf(await call(householdAction, `/households/${id}`, "ann", { intent: "role", targetId: "ann", role: "member" }))).toBe(403);
+    expect(statusOf(await call(householdAction, `/households/${id}`, "ann", { intent: "remove", targetId: "ann" }))).toBe(403);
+    expect(statusOf(await call(householdAction, `/households/${id}`, "ann", { intent: "role", targetId: "ben", role: "chef" }))).toBe(400);
+    expect(statusOf(await call(householdAction, `/households/${id}`, "ann", { intent: "role", role: "viewer" }))).toBe(400);
+    expect(statusOf(await call(householdAction, `/households/${id}`, "ann", { intent: "remove" }))).toBe(400);
 
     expect(payload(await call(householdAction, `/households/${id}`, "ann", { intent: "role", role: "viewer" }))).toEqual({
       error: "That person isn't in this household.",

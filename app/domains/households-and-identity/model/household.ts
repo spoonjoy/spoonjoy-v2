@@ -18,7 +18,8 @@ export type HouseholdMember = { householdId: string; userId: string; role: House
 
 export type HouseholdAction = "read" | "edit-shared" | "invite" | "manage-members" | "edit-settings";
 
-export type Validated<T> = { ok: true; value: T } | { ok: false; error: string };
+/** A refusal with `forbidden` is about who is asking or who they're acting on (403), not about what they sent (400). */
+export type Validated<T> = { ok: true; value: T } | { ok: false; error: string; forbidden?: true };
 
 export const MAX_HOUSEHOLD_NAME_LENGTH = 80;
 
@@ -63,8 +64,8 @@ export function changeRole(
   targetId: string,
   role: HouseholdRole,
 ): Validated<HouseholdMember> {
-  if (!can(find(members, actorId), "manage-members")) return { ok: false, error: "Only an owner can change roles." };
-  if (actorId === targetId) return { ok: false, error: "Ask another owner to change your role." };
+  if (!can(find(members, actorId), "manage-members")) return { ok: false, error: "Only an owner can change roles.", forbidden: true };
+  if (actorId === targetId) return { ok: false, error: "Ask another owner to change your role.", forbidden: true };
   const target = find(members, targetId);
   if (!target) return { ok: false, error: "That person isn't in this household." };
   return { ok: true, value: { ...target, role } };
@@ -73,9 +74,9 @@ export function changeRole(
 /** The membership to end when `userId` leaves, or why they can't yet. The last person may always leave. */
 export function leaveHousehold(members: readonly HouseholdMember[], userId: string): Validated<HouseholdMember> {
   const leaving = find(members, userId);
-  if (!leaving) return { ok: false, error: "You aren't in this household." };
+  if (!leaving) return { ok: false, error: "You aren't in this household.", forbidden: true };
   if (leaving.role === "owner" && members.length > 1 && ownerCount(members) === 1) {
-    return { ok: false, error: "Make someone else an owner before you leave." };
+    return { ok: false, error: "Make someone else an owner before you leave.", forbidden: true };
   }
   return { ok: true, value: leaving };
 }
@@ -86,11 +87,11 @@ export function removeMember(
   actorId: string,
   targetId: string,
 ): Validated<HouseholdMember> {
-  if (!can(find(members, actorId), "manage-members")) return { ok: false, error: "Only an owner can remove people." };
-  if (actorId === targetId) return { ok: false, error: "Leave the household instead." };
+  if (!can(find(members, actorId), "manage-members")) return { ok: false, error: "Only an owner can remove people.", forbidden: true };
+  if (actorId === targetId) return { ok: false, error: "Leave the household instead.", forbidden: true };
   const target = find(members, targetId);
   if (!target) return { ok: false, error: "That person isn't in this household." };
-  if (target.role === "owner") return { ok: false, error: "Change their role before removing another owner." };
+  if (target.role === "owner") return { ok: false, error: "Change their role before removing another owner.", forbidden: true };
   return { ok: true, value: target };
 }
 

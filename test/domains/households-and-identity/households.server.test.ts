@@ -138,10 +138,12 @@ describe("invites", () => {
     expect(await createInvite(store, { householdId: id, userId: "ben", input: {}, now })).toEqual({
       ok: false,
       error: "Only an owner can invite people.",
+      forbidden: true,
     });
     expect(await revokeInvite(store, { householdId: id, userId: "ben", inviteId: invite.id, now })).toEqual({
       ok: false,
       error: "Only an owner can turn off invites.",
+      forbidden: true,
     });
     expect(await revokeInvite(store, { householdId: id, userId: "ann", inviteId: "missing", now })).toEqual({
       ok: false,
@@ -184,11 +186,13 @@ describe("membership", () => {
     expect(await changeMemberRole(store, { householdId: id, userId: "ben", targetId: "cal", role: "owner" })).toEqual({
       ok: false,
       error: "Only an owner can change roles.",
+      forbidden: true,
     });
     expect(await removeFromHousehold(store, { householdId: id, userId: "ann", targetId: "cal" })).toEqual({ ok: true, value: null });
     expect(await removeFromHousehold(store, { householdId: id, userId: "ben", targetId: "ann" })).toEqual({
       ok: false,
       error: "Only an owner can remove people.",
+      forbidden: true,
     });
     expect((await getHousehold(store, id, "ann"))?.members.map((m) => [m.userId, m.role])).toEqual([
       ["ann", "owner"],
@@ -202,6 +206,7 @@ describe("membership", () => {
     expect(await leave(store, { householdId: id, userId: "ann" })).toEqual({
       ok: false,
       error: "Make someone else an owner before you leave.",
+      forbidden: true,
     });
     await changeMemberRole(store, { householdId: id, userId: "ann", targetId: "ben", role: "owner" });
     expect((await leave(store, { householdId: id, userId: "ann" })).ok).toBe(true);
