@@ -2,6 +2,7 @@ import { Timer } from 'lucide-react'
 import { Badge } from '~/components/ouro/badge/badge'
 import { cookTimeLabel } from '~/lib/recipe-cook-time'
 import { formatScaledAmount, formatStepReferenceName, IngredientList, type Ingredient, type StepReference } from './IngredientList'
+import { useUnitSystem } from './use-unit-system'
 
 export interface StepCardProps {
   /** Step number (1-indexed) */
@@ -54,6 +55,7 @@ export function StepCard({
   duration,
 }: StepCardProps) {
   const time = cookTimeLabel([duration])
+  const { system } = useUnitSystem()
   return (
     <article
       className="sj-step-card px-5 py-8 sm:px-8 sm:py-10"
@@ -111,7 +113,7 @@ export function StepCard({
               ))}
               {ingredients.map((ingredient) => (
                 <li key={ingredient.id}>
-                  {[formatScaledAmount(ingredient, scaleFactor), ingredient.name].filter(Boolean).join(' ')}
+                  {[formatScaledAmount(ingredient, scaleFactor, system), ingredient.name].filter(Boolean).join(' ')}
                 </li>
               ))}
             </ul>

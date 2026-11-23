@@ -8,6 +8,7 @@ import { CookStepTimer, CookTimerTray } from "~/components/recipe/CookTimers";
 import { IngredientList, type Ingredient, type StepReference } from "~/components/recipe/IngredientList";
 import { StepCard } from "~/components/recipe/StepCard";
 import { StepsSectionHeading } from "~/components/recipe/StepsSectionHeading";
+import { UnitSystemControl } from "~/components/recipe/UnitSystemControl";
 import type { CookTimer } from "~/lib/cook-timers";
 import { useViewportTopVar } from "~/hooks/use-viewport-top-var";
 import {
@@ -278,7 +279,7 @@ function CookModePanel({
               )}
             </div>
 
-            <div className="mx-auto w-full max-w-[24rem]">
+            <div className="mx-auto flex w-full max-w-[24rem] flex-col gap-4">
               <NumberField
                 label="Scale"
                 value={scaleFactor}
@@ -290,6 +291,7 @@ function CookModePanel({
                   if (next !== null) onScaleChange(next);
                 }}
               />
+              <UnitSystemControl />
             </div>
           </div>
         </div>

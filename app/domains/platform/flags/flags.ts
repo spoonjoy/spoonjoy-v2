@@ -18,6 +18,9 @@ export const FLAGS = {
   organizers: {
     description: "Tags, categories and tools on recipes, their pages and filters, smart cookbooks and bulk actions on many recipes.",
   },
+  "unit-conversion": {
+    description: "Recipe amounts in metric, US or imperial units, picked on the recipe page and in cook mode.",
+  },
 } as const satisfies Record<string, { description: string }>;
 
 export type FlagName = keyof typeof FLAGS & string;

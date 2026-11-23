@@ -1,3 +1,5 @@
+import { isFlagOn } from "~/domains/platform";
+import { unitSystemFromCookie, type UnitSystem } from "~/domains/food-knowledge";
 import type { AppLoadContext } from "react-router";
 import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 import { data, redirect } from "react-router";
@@ -412,6 +414,10 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     // Cook progress syncs across the signed-in cook's devices where cook-session protocol v1 is
     // enabled (COOK_SESSION_PROTOCOL=v1); elsewhere it stays in this browser only.
     cookSessionUserId: userId && context.cloudflare?.env?.COOK_SESSION_PROTOCOL === "v1" ? userId : null,
+    // The cook's unit system from their cookie, so the page first renders in it; as written while unit conversion is off.
+    unitSystem: isFlagOn("unit-conversion", context.cloudflare?.env, userId)
+      ? unitSystemFromCookie(request.headers.get("Cookie"))
+      : ("original" as UnitSystem),
   };
 }
 

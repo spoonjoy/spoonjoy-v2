@@ -16,6 +16,7 @@ import type { CookSyncStatus } from '~/lib/cook-session-sync'
 import { SyncStatus } from '~/components/ouro/sync-status/sync-status'
 import { cookSyncStatusProps } from '~/lib/cook-sync-status'
 import { HERO_IMAGE_PROPS } from '~/lib/image-loading'
+import { UnitSystemControl } from './UnitSystemControl'
 
 function normalizeCoverPlaceholderLabel(label: string) {
   return label === 'Awaiting first chef photo' ? 'Awaiting first photo' : label
@@ -226,7 +227,7 @@ export function RecipeHeader({
                 </Button>
               )}
             >
-              <div className="w-64 max-w-full">
+              <div className="flex w-72 max-w-full flex-col gap-4">
                 <NumberField
                   label="Scale"
                   description={scaledServingsLabel}
@@ -239,6 +240,7 @@ export function RecipeHeader({
                     if (next !== null) onScaleChange(next)
                   }}
                 />
+                <UnitSystemControl />
               </div>
             </Popover>
           </div>

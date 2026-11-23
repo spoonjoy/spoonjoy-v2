@@ -826,3 +826,30 @@ describe("loadRecipeDetail when the recipe is gone", () => {
     });
   });
 });
+
+describe("loadRecipeDetail unitSystem", () => {
+  beforeEach(async () => {
+    await cleanupDatabase();
+  });
+
+  afterEach(async () => {
+    await cleanupDatabase();
+  });
+
+  async function loadWith(env: { SPOONJOY_FLAGS?: string } | null) {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({ data: { title: "Pancakes", chefId: chef.id } });
+    const request = new UndiciRequest(`http://localhost/recipes/${recipe.id}`, {
+      headers: { Cookie: "theme=dark; sj_units=metric" },
+    }) as unknown as Request;
+    return loadRecipeDetail({ request, params: { id: recipe.id }, context: { cloudflare: { env } } as unknown as Parameters<typeof loadRecipeDetail>[0]["context"] });
+  }
+
+  it("is the cook's system from their cookie while unit conversion is on", async () => {
+    expect((await loadWith({ SPOONJOY_FLAGS: "unit-conversion" })).unitSystem).toBe("metric");
+  });
+
+  it("is the recipe as written while unit conversion is off, whatever the cookie says", async () => {
+    expect((await loadWith(null)).unitSystem).toBe("original");
+  });
+});
