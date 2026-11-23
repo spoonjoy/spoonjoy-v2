@@ -61,6 +61,8 @@ model User {
   householdsCreated        Household[]
   householdMemberships     HouseholdMember[]
   householdInvitesMade     HouseholdInvite[]
+  householdListsMade       HouseholdList[]
+  householdListItemsAdded  HouseholdListItem[]
 
   pushSubscriptions      PushSubscription[]
   nativePushDevices      NativePushDevice[]
@@ -1071,6 +1073,7 @@ model Household {
   updatedAt   DateTime          @default(now())
   members     HouseholdMember[]
   invites     HouseholdInvite[]
+  lists       HouseholdList[]
 }
 
 model HouseholdMember {
@@ -1103,4 +1106,36 @@ model HouseholdInvite {
   createdAt   DateTime  @default(now())
 
   @@index([householdId])
+}
+
+// A household's shared shopping lists (migration 0046, app/domains/pantry-and-shopping), apart from each cook's own
+// ShoppingList. Items are what to buy, as written.
+model HouseholdList {
+  id          String              @id @default(cuid())
+  householdId String
+  household   Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  name        String
+  createdById String?
+  createdBy   User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @default(now())
+  items       HouseholdListItem[]
+
+  @@index([householdId])
+}
+
+model HouseholdListItem {
+  id        String        @id @default(cuid())
+  listId    String
+  list      HouseholdList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  text      String
+  checked   Boolean       @default(false)
+  checkedAt DateTime?
+  sortIndex Int           @default(0)
+  addedById String?
+  addedBy   User?         @relation(fields: [addedById], references: [id], onDelete: SetNull)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @default(now())
+
+  @@index([listId, sortIndex])
 }
