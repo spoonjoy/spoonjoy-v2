@@ -134,7 +134,8 @@ jobs:
           [ "$status" = "healthy" ]
 
       # The kitchen and this run's scratch users, with fresh passwords, through the image's own
-      # `server.mjs sql -` (with the server stopped, as docs/self-hosting.md says to).
+      # `server.mjs sql -` (with the server stopped, as docs/self-hosting.md says to), and the
+      # sample cover photos two of its recipes show (assets/sample-covers) through `server.mjs photos`.
       - name: Seed the QA kitchen
         run: |
           mkdir -p .self-host
@@ -148,6 +149,7 @@ jobs:
           docker stop sj
           docker run --rm -i -v sj-data:/data "$LOCAL_IMAGE" node /app/self-host/server.mjs sql - < .self-host/kitchen.sql
           rm .self-host/kitchen.sql
+          docker run --rm -v sj-data:/data -v "$PWD/assets/sample-covers:/covers:ro" "$LOCAL_IMAGE" node /app/self-host/server.mjs photos /covers samples/covers/
           docker start sj
           for _ in $(seq 1 600); do
             [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health/ready || true)" = "200" ] && break

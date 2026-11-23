@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error -- plain ESM module shipped in the image, without types
-import { miniflareOptions, selfHostRateLimits, selfHostVars, settingsFromEnv, workerModules } from "../../self-host/config.mjs";
+import { miniflareOptions, photoUploads, selfHostRateLimits, selfHostVars, settingsFromEnv, workerModules } from "../../self-host/config.mjs";
 
 const built = {
   compatibility_date: "2024-12-01",
@@ -166,5 +166,28 @@ describe("miniflareOptions", () => {
     expect(options.bindings.CF_VERSION_METADATA).toMatchObject({ id: "1.2.3", tag: "1.2.3" });
     expect(options.bindings.SESSION_SECRET).toBe("s");
     expect(options.ratelimits.AUTH_IP_RATE_LIMITER).toEqual({ simple: { limit: 20, period: 60 } });
+  });
+});
+
+describe("photoUploads", () => {
+  it("puts each image in a folder under the prefix, with its content type, in name order", () => {
+    expect(photoUploads(["penne-ragu.jpg", ".DS_Store", "chickpeas.webp", "a.PNG", "b.jpeg"], "/covers", "samples/covers/")).toEqual([
+      { path: "/covers/a.PNG", key: "samples/covers/a.PNG", contentType: "image/png" },
+      { path: "/covers/b.jpeg", key: "samples/covers/b.jpeg", contentType: "image/jpeg" },
+      { path: "/covers/chickpeas.webp", key: "samples/covers/chickpeas.webp", contentType: "image/webp" },
+      { path: "/covers/penne-ragu.jpg", key: "samples/covers/penne-ragu.jpg", contentType: "image/jpeg" },
+    ]);
+  });
+
+  it("puts images at the top of the store when there is no prefix", () => {
+    expect(photoUploads(["a.jpg"], "dir")).toEqual([{ path: "dir/a.jpg", key: "a.jpg", contentType: "image/jpeg" }]);
+  });
+
+  it("refuses a file that isn't a JPEG, PNG or WebP image", () => {
+    expect(() => photoUploads(["notes.txt"], "dir", "")).toThrow("dir/notes.txt is not a JPEG, PNG or WebP image.");
+  });
+
+  it("refuses a folder with no images", () => {
+    expect(() => photoUploads([".keep"], "dir", "")).toThrow("dir has no images.");
   });
 });

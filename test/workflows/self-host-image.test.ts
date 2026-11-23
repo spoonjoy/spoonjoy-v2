@@ -63,6 +63,8 @@ describe("Self-host Image workflow", () => {
     const seed = stepNamed(image, /Seed/).run ?? "";
     expect(seed).toContain("node scripts/self-host-smoke-seed.mjs");
     expect(seed).toMatch(/server\.mjs sql -/);
+    expect(seed).toMatch(/server\.mjs photos \/covers samples\/covers\//);
+    expect(seed).toContain("assets/sample-covers:/covers:ro");
     expect(seed).toContain("::add-mask::");
   });
 

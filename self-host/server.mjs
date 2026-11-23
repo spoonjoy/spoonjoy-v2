@@ -5,11 +5,14 @@
 //   node self-host/server.mjs             serve on PORT (8080), migrating the database first
 //   node self-host/server.mjs sql <file>  run a SQL file (or - for stdin) against the database, with
 //                                         the server stopped; the file runs whole or not at all
+//   node self-host/server.mjs photos <dir> [prefix]
+//                                         put each image in a folder into the photo store, under
+//                                         prefix, with the server stopped
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Miniflare } from "miniflare";
-import { miniflareOptions, settingsFromEnv } from "./config.mjs";
+import { miniflareOptions, photoUploads, settingsFromEnv } from "./config.mjs";
 import { startCronTimers } from "./cron.mjs";
 import { applyMigrations, migrationFiles, splitSql } from "./migrations.mjs";
 
@@ -57,8 +60,23 @@ if (command === "sql") {
   log("sql", { file, statements: statements.length, migrationsRun: migrations.ran });
   await mf.dispose();
   process.exit(0);
+} else if (command === "photos") {
+  const [dir, prefix = ""] = args;
+  if (!dir) {
+    console.error("Usage: server.mjs photos <dir> [prefix]");
+    await mf.dispose();
+    process.exit(2);
+  }
+  const photos = await mf.getR2Bucket("PHOTOS");
+  const uploads = photoUploads(readdirSync(dir), dir, prefix);
+  for (const upload of uploads) {
+    await photos.put(upload.key, readFileSync(upload.path), { httpMetadata: { contentType: upload.contentType } });
+  }
+  log("photos", { dir, prefix, photos: uploads.length });
+  await mf.dispose();
+  process.exit(0);
 } else if (command !== "serve") {
-  console.error(`Unknown command "${command}". Commands: serve, sql <file>.`);
+  console.error(`Unknown command "${command}". Commands: serve, sql <file>, photos <dir> [prefix].`);
   await mf.dispose();
   process.exit(2);
 }

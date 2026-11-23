@@ -111,3 +111,20 @@ export function miniflareOptions({ built, env, settings, sessionSecret, version,
     cachePersist: path.join(dataDir, "cache"),
   };
 }
+
+const PHOTO_TYPES = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp" };
+
+// The images in a folder, each with the photo store key it goes under and its content type, for
+// `server.mjs photos <folder> [prefix]`. Hidden files are skipped; anything else must be an image.
+export function photoUploads(fileNames, dir, prefix = "") {
+  const uploads = [...fileNames]
+    .filter((name) => !name.startsWith("."))
+    .sort()
+    .map((name) => {
+      const contentType = PHOTO_TYPES[path.extname(name).toLowerCase()];
+      if (!contentType) throw new Error(`${dir}/${name} is not a JPEG, PNG or WebP image.`);
+      return { path: path.join(dir, name), key: `${prefix}${name}`, contentType };
+    });
+  if (uploads.length === 0) throw new Error(`${dir} has no images.`);
+  return uploads;
+}
