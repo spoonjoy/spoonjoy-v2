@@ -24,8 +24,14 @@ async function waitForHydrationIfApp(page: Page): Promise<void> {
 // Cloudflare's edge was cut: the TCP connection or its TLS handshake was reset (Journeys runs
 // 40588634127 and 40592921397, while the run's Worker tail dropped too). Chrome words it
 // net::ERR_CONNECTION_RESET or _CLOSED, WebKit "Connection reset by peer". An answer of any status,
-// and a timeout, are not transport failures.
-const TRANSPORT_FAILURE = /Connection reset by peer|Peer failed to perform TLS handshake|net::ERR_(?:CONNECTION_(?:RESET|CLOSED)|SSL_PROTOCOL_ERROR)\b/;
+// and a timeout, are not transport failures. Playwright itself crashes with "Cannot read properties
+// of null (reading 'valid_from')" when the connection drops before the TLS peer certificate arrives
+// (valid_from is a certificate field the app never reads; #666, Journeys runs 43057324617 and
+// 43081308988), so that is a cut connection too.
+const CERTIFICATE_LOST = String.raw`Cannot read properties of null \(reading 'valid_from'\)`;
+const TRANSPORT_FAILURE = new RegExp(
+  String.raw`Connection reset by peer|Peer failed to perform TLS handshake|net::ERR_(?:CONNECTION_(?:RESET|CLOSED)|SSL_PROTOCOL_ERROR)\b|` + CERTIFICATE_LOST,
+);
 
 /**
  * True when a page.goto or page.reload failed because its connection was reset before any answer.
@@ -207,7 +213,9 @@ function reportAssetRecovered(path: string, status: number, attempt: number, ray
 // resource" and the journey fails on a page that did nothing wrong. Routed through Playwright, the
 // request is made by Node, which words a dropped connection like this. An answer of any status is
 // not one, and neither is any other error.
-const FETCH_TRANSPORT_FAILURE = /\b(?:ECONNRESET|EPIPE)\b|socket hang up|Client network socket disconnected before secure TLS connection was established/;
+const FETCH_TRANSPORT_FAILURE = new RegExp(
+  String.raw`\b(?:ECONNRESET|EPIPE)\b|socket hang up|Client network socket disconnected before secure TLS connection was established|` + CERTIFICATE_LOST,
+);
 
 /** True when route.fetch had no answer within its timeout. */
 export function isFetchTimeout(error: unknown): boolean {
