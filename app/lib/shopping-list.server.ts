@@ -34,6 +34,7 @@ import {
   setShoppingListItemCheckedOnD1,
 } from "~/lib/shopping-list-d1-actions.server";
 import { readableRecipeWhere } from "~/domains/kitchen";
+import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 
 type ShoppingListItemPosition = {
   id: string;
@@ -402,7 +403,7 @@ async function prismaShoppingListWrites(database: PrismaClient, userId: string):
 
     async addRecipe(recipeId, scaleFactor) {
       const recipe = await database.recipe.findFirst({
-        where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: userId }) },
+        where: { id: recipeId, deletedAt: null, ...readableRecipeWhere(await recipeViewerFor(userId, { db: database })) },
         include: {
           steps: {
             include: {

@@ -9,7 +9,8 @@ import {
   selectColumns,
   type ColumnSpec,
 } from "~/lib/d1-models.server";
-import { readableRecipeSql, readableRecipeWhere } from "~/domains/kitchen";
+import { readableRecipeSqlForViewerId, readableRecipeWhere } from "~/domains/kitchen";
+import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 
 // Reads behind a cookbook's page (`/cookbooks/:id`). The Prisma reader is the fallback
 // where there is no D1 binding (unit tests, scripts); the D1 reader returns the same data
@@ -50,13 +51,14 @@ export async function readCookbookPageWithPrisma(
   database: PrismaClient,
   { cookbookId, viewerId }: CookbookPageInput,
 ): Promise<CookbookPageRows> {
+  const viewer = await recipeViewerFor(viewerId, { db: database });
   const cookbook = await database.cookbook.findUnique({
     where: { id: cookbookId },
     include: {
       author: { select: { id: true, username: true } },
       recipes: {
         // A cookbook shows each viewer only the recipes they may read.
-        where: { recipe: { deletedAt: null, ...readableRecipeWhere({ id: viewerId ?? "" }) } },
+        where: { recipe: { deletedAt: null, ...readableRecipeWhere(viewer) } },
         include: {
           recipe: {
             select: {
@@ -128,7 +130,7 @@ export async function readCookbookPageFromD1(
   db: D1ReadDatabase,
   { cookbookId, viewerId }: CookbookPageInput,
 ): Promise<CookbookPageRows> {
-  const readable = readableRecipeSql("r", { id: viewerId ?? "" });
+  const readable = readableRecipeSqlForViewerId("r", viewerId);
   const [cookbookRows, entryRows, availableRows, hideRows] = await d1ReadBatch(db, [
     [
       `SELECT ${selectColumns(COOKBOOK_COLUMNS, "c")}, ${selectColumns(AUTHOR_COLUMNS, "a", "author_")}

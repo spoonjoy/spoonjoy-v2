@@ -92,6 +92,7 @@ import { sanitizeImagePromptAddition } from "~/lib/image-gen.server";
 import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.server";
 import { d1UnavailableWebResponse, formWriteToken, idForWriteToken, isD1Unavailable, retryD1Write } from "~/lib/d1-write-retry.server";
 import { readableRecipeWhere } from "~/domains/kitchen";
+import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -1950,7 +1951,7 @@ async function assertActiveRecipe(
   userId: string,
 ) {
   const recipe = await database.recipe.findFirst({
-    where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: userId }) },
+    where: { id: recipeId, deletedAt: null, ...readableRecipeWhere(await recipeViewerFor(userId, { db: database })) },
     select: { id: true },
   });
   if (!recipe) {

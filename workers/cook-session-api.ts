@@ -7,7 +7,7 @@
 // the recipe in D1 (it exists, is not deleted, the submitted step is one of its steps, and only
 // ids that belong to it are passed on) so the object never has to trust client-supplied recipe
 // content.
-import { readableRecipeSql } from "../app/domains/kitchen";
+import { readableRecipeSqlForViewerId } from "../app/domains/kitchen";
 import { recordCookingNow } from "../app/lib/cooking-now.server";
 import { d1Binding } from "../app/lib/d1-read.server";
 import { isD1Unavailable } from "../app/lib/d1-write-retry.server";
@@ -60,7 +60,7 @@ function recipeNotFound(): Response {
 
 /** Whether the recipe is there for this cook: not in the trash, and theirs or one they may read. */
 async function recipeExists(db: CookD1Database, recipeId: string, userId: string): Promise<boolean> {
-  const readable = readableRecipeSql(undefined, { id: userId });
+  const readable = readableRecipeSqlForViewerId(undefined, userId);
   const row = await db.prepare(`SELECT id FROM "Recipe" WHERE id = ? AND deletedAt IS NULL AND ${readable.sql}`)
     .bind(recipeId, ...readable.params)
     .first<{ id: string }>();

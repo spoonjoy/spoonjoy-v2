@@ -1,3 +1,4 @@
+import type { PrismaClient } from "@prisma/client";
 import { faker } from "@faker-js/faker";
 import { configure, fireEvent, waitFor } from "@testing-library/react";
 import { expect } from "vitest";
@@ -182,4 +183,14 @@ export function queryShownAlert(container?: HTMLElement): HTMLElement | null {
 export async function chooseImage(input: HTMLElement, file: File): Promise<void> {
   fireEvent.change(input, { target: { files: [file] } });
   await waitFor(() => expect((input as HTMLInputElement).files?.[0]).toBe(file));
+}
+
+/** Puts these users in one new household, so each reads the others' household recipes. */
+export async function shareHousehold(
+  db: Pick<PrismaClient, "household" | "householdMember">,
+  ...userIds: string[]
+): Promise<string> {
+  const household = await db.household.create({ data: { name: "Test household" } });
+  await db.householdMember.createMany({ data: userIds.map((userId) => ({ householdId: household.id, userId, role: "member" })) });
+  return household.id;
 }

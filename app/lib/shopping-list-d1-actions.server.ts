@@ -5,7 +5,7 @@ import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { coalesceShoppingRecipeIngredients } from "~/lib/shopping-list-mutations.server";
 import { d1WriteOnceClaim, type D1WriteOnceClaim, type D1WriteOnceKey } from "~/lib/d1-write-once.server";
-import { readableRecipeSql } from "~/domains/kitchen";
+import { readableRecipeSqlForViewerId } from "~/domains/kitchen";
 
 // The shopping list page's writes (`/shopping-list` actions) on the request's D1 binding, with no
 // Prisma client. Each intent is one D1 batch, and a batch is one SQLite transaction, so the reads
@@ -278,7 +278,7 @@ export async function putShoppingListItemOnceOnD1(
 
 // A recipe the shopper may not read adds as one that does not exist.
 function recipeSqlFor(readerId: string): { sql: string; params: unknown[] } {
-  const readable = readableRecipeSql(undefined, { id: readerId });
+  const readable = readableRecipeSqlForViewerId(undefined, readerId);
   return { sql: `SELECT "id" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL AND ${readable.sql}`, params: readable.params };
 }
 

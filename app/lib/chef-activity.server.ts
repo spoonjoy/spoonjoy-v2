@@ -1,4 +1,5 @@
 import { readableRecipeWhere } from "~/domains/kitchen";
+import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 import type { PrismaClient } from "@prisma/client";
 
 /** Chef graph activity feed shared by the web Chefs route and the native API (`GET /api/v1/me/chefs`). */
@@ -48,6 +49,7 @@ function compareActivity(a: ChefActivityRow, b: ChefActivityRow) {
 }
 
 export async function chefActivity(database: PrismaClient, userId: string, viewer: ChefRef) {
+  const readable = readableRecipeWhere(await recipeViewerFor(userId, { db: database }));
   const [outboundSpoons, inboundSpoons, outboundForks, inboundForks, outboundSaves, inboundSaves] =
     await Promise.all([
       database.recipeSpoon.findMany({
@@ -57,8 +59,8 @@ export async function chefActivity(database: PrismaClient, userId: string, viewe
           recipe: {
             deletedAt: null,
             chefId: { not: userId },
-            // Another cook's recipe that has since gone private drops out, as on Saved recipes.
-            ...readableRecipeWhere({ id: userId }),
+            // Another cook's recipe they may no longer read (private, or kept to a household they left) drops out.
+            ...readable,
           },
         },
         include: {
@@ -91,8 +93,8 @@ export async function chefActivity(database: PrismaClient, userId: string, viewe
           sourceRecipe: {
             deletedAt: null,
             chefId: { not: userId },
-            // Another cook's recipe that has since gone private drops out, as on Saved recipes.
-            ...readableRecipeWhere({ id: userId }),
+            // Another cook's recipe they may no longer read (private, or kept to a household they left) drops out.
+            ...readable,
           },
         },
         include: {
@@ -123,8 +125,8 @@ export async function chefActivity(database: PrismaClient, userId: string, viewe
           recipe: {
             deletedAt: null,
             chefId: { not: userId },
-            // Another cook's recipe that has since gone private drops out, as on Saved recipes.
-            ...readableRecipeWhere({ id: userId }),
+            // Another cook's recipe they may no longer read (private, or kept to a household they left) drops out.
+            ...readable,
           },
         },
         include: {

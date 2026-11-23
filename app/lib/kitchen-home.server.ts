@@ -7,7 +7,8 @@ import {
   cookbookPreviewQuery,
   cookbookPreviewsById,
 } from "~/lib/cookbook-previews.server";
-import { readableRecipeSql, readableRecipeWhere } from "~/domains/kitchen";
+import { readableRecipeSqlForViewerId, readableRecipeWhere } from "~/domains/kitchen";
+import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 import { cookingNowD1Query, cookingNowRowsFromD1, listCookingNow, type CookingNowRow } from "~/lib/cooking-now.server";
 
 // Reads behind the kitchen home page (`/`, `/?chef=…`). The Prisma reader is the
@@ -68,7 +69,7 @@ export async function readKitchenHomeWithPrisma(
   }
 
   // A visitor sees only the recipes they may read; the cook sees all of theirs.
-  const listed = { deletedAt: null, ...readableRecipeWhere({ id: viewerId ?? "" }) };
+  const listed = { deletedAt: null, ...readableRecipeWhere(await recipeViewerFor(viewerId, { db: database })) };
   const [recipes, cookbooks, cookingNow] = await Promise.all([
     database.recipe.findMany({
       where: { chefId: kitchenUser.id, ...listed },
@@ -161,9 +162,8 @@ export async function readKitchenHomeFromD1(
   const owner = kitchenUserCondition(kitchenUserWhere);
   const ownerId = `(SELECT "id" FROM "User" WHERE ${owner.sql})`;
   const coverSelect = selectColumns(RECIPE_COVER_COLUMNS, "rc", "cover_");
-  const reader = { id: viewerId ?? "" };
-  const listed = readableRecipeSql("r", reader);
-  const live = readableRecipeSql("live", reader);
+  const listed = readableRecipeSqlForViewerId("r", viewerId);
+  const live = readableRecipeSqlForViewerId("live", viewerId);
   const [viewerRows, kitchenUserRows, recipeRows, cookbookRows, previewRows, cookingNowRows, hideRows] = await d1ReadBatch(db, [
     viewerId
       ? [`SELECT "id", "username", "email", "photoUrl" FROM "User" WHERE "id" = ? LIMIT 1`, viewerId]
@@ -188,7 +188,7 @@ export async function readKitchenHomeFromD1(
       ...live.params,
       owner.value,
     ],
-    cookbookPreviewQuery(reader, `SELECT "id" FROM "Cookbook" WHERE "authorId" = ${ownerId}`, owner.value),
+    cookbookPreviewQuery(viewerId ?? null, `SELECT "id" FROM "Cookbook" WHERE "authorId" = ${ownerId}`, owner.value),
     // Only the owner sees their Cooking now list, so the cook must be both the viewer and the owner.
     viewerId
       ? cookingNowD1Query({ sql: `cn."userId" = ? AND cn."userId" = ${ownerId}`, values: [viewerId, owner.value] }, now)

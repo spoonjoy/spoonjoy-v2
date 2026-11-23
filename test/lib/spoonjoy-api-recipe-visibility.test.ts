@@ -5,6 +5,7 @@ import { getLocalDb } from "~/lib/db.server";
 import { callSpoonjoyApiOperation, type SpoonjoyApiContext } from "~/lib/spoonjoy-api.server";
 import type { ApiPrincipal } from "~/lib/api-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { shareHousehold } from "../utils";
 
 // A private recipe reads, over MCP, only for its cook: to anyone else it is not there.
 
@@ -111,5 +112,55 @@ describe("private recipes over MCP", () => {
     expect(mine.recipe?.title).toBe("Secret Plum Tart");
     const found = await callSpoonjoyApiOperation("search_recipes", { query: "Plum" }, local) as { recipes: Array<{ id: string }> };
     expect(found.recipes.map((recipe) => recipe.id)).toEqual([privateId]);
+  });
+});
+
+describe("household recipes over MCP", () => {
+  let cook: Awaited<ReturnType<typeof makeChef>>;
+  let housemate: Awaited<ReturnType<typeof makeChef>>;
+  let stranger: Awaited<ReturnType<typeof makeChef>>;
+  let keptId: string;
+
+  beforeEach(async () => {
+    db = await getLocalDb();
+    await cleanupDatabase();
+    cook = await makeChef("household_cook");
+    housemate = await makeChef("household_mate");
+    stranger = await makeChef("household_stranger");
+    await shareHousehold(db, cook.user.id, housemate.user.id);
+    const recipe = await db.recipe.create({
+      data: { title: "Household Pear Tart", chefId: cook.user.id, visibility: "household", steps: { create: [{ stepNum: 1, description: "Bake" }] } },
+    });
+    keptId = recipe.id;
+    await db.recipeSpoon.create({ data: { recipeId: recipe.id, chefId: cook.user.id, cookedAt: new Date() } });
+  });
+
+  afterEach(async () => {
+    await cleanupDatabase();
+  });
+
+  it("get_recipe, search_recipes, list_spoons_for_recipe and get_cookbook read it for its cook's household and no one else", async () => {
+    const book = await db.cookbook.create({ data: { title: "Shared Tarts", authorId: housemate.user.id } });
+    await db.recipeInCookbook.create({ data: { recipeId: keptId, cookbookId: book.id, addedById: housemate.user.id } });
+    const strangerBook = await db.cookbook.create({ data: { title: "Stranger Tarts", authorId: stranger.user.id } });
+    await db.recipeInCookbook.create({ data: { recipeId: keptId, cookbookId: strangerBook.id, addedById: stranger.user.id } });
+
+    for (const reader of [cook, housemate]) {
+      const got = await callSpoonjoyApiOperation("get_recipe", { id: keptId }, reader.context) as { recipe: { title: string } | null };
+      expect(got.recipe?.title, reader.user.username).toBe("Household Pear Tart");
+      const found = await callSpoonjoyApiOperation("search_recipes", { query: "Pear" }, reader.context) as { recipes: Array<{ id: string }> };
+      expect(found.recipes.map((recipe) => recipe.id)).toEqual([keptId]);
+      const cooks = await callSpoonjoyApiOperation("list_spoons_for_recipe", { recipeId: keptId }, reader.context) as { spoons: unknown[] };
+      expect(cooks.spoons).toHaveLength(1);
+    }
+    const shared = await callSpoonjoyApiOperation("get_cookbook", { cookbookId: book.id }, housemate.context) as { cookbook: { recipeCount: number } };
+    expect(shared.cookbook.recipeCount).toBe(1);
+
+    expect(await callSpoonjoyApiOperation("get_recipe", { id: keptId }, stranger.context)).toEqual({ recipe: null });
+    const missed = await callSpoonjoyApiOperation("search_recipes", { query: "Pear" }, stranger.context) as { recipes: unknown[] };
+    expect(missed.recipes).toEqual([]);
+    await expect(callSpoonjoyApiOperation("list_spoons_for_recipe", { recipeId: keptId }, stranger.context)).rejects.toThrow("not found");
+    const theirs = await callSpoonjoyApiOperation("get_cookbook", { cookbookId: strangerBook.id }, stranger.context) as { cookbook: { recipeCount: number } };
+    expect(theirs.cookbook.recipeCount).toBe(0);
   });
 });

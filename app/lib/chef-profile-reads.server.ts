@@ -10,7 +10,8 @@ import {
   type ColumnSpec,
 } from "~/lib/d1-models.server";
 import { COOKBOOK_PREVIEW_RECIPES, cookbookPreviewQuery, cookbookPreviewsById } from "~/lib/cookbook-previews.server";
-import { readableRecipeSql, readableRecipeWhere } from "~/domains/kitchen";
+import { readableRecipeSqlForViewerId, readableRecipeWhere } from "~/domains/kitchen";
+import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 import { chefGraphCountSql, countFellowChefs, countKitchenVisitors } from "~/lib/fellow-chefs.server";
 import type { KitchenHomeRows } from "~/lib/kitchen-home.server";
 
@@ -83,7 +84,7 @@ export async function readChefProfileWithPrisma(
   database: PrismaClient,
   { identifier, recipeLimit, recipeAfter = null, viewerId = null }: ChefProfileInput,
 ): Promise<ChefProfileRows> {
-  const readable = readableRecipeWhere({ id: viewerId ?? "" });
+  const readable = readableRecipeWhere(await recipeViewerFor(viewerId, { db: database }));
   const userSelect = { id: true, username: true, photoUrl: true, createdAt: true } as const;
   const byUsername = await database.user.findUnique({ where: { username: identifier }, select: userSelect });
   const profileUser = byUsername ?? await database.user.findUnique({ where: { id: identifier }, select: userSelect });
@@ -183,10 +184,9 @@ export async function readChefProfileFromD1(
   db: D1ReadDatabase,
   { identifier, recipeLimit, recipeAfter = null, viewerId = null }: ChefProfileInput,
 ): Promise<ChefProfileRows> {
-  const viewer = { id: viewerId ?? "" };
-  const listed = readableRecipeSql("r", viewer);
-  const live = readableRecipeSql("live", viewer);
-  const counted = readableRecipeSql(undefined, viewer);
+  const listed = readableRecipeSqlForViewerId("r", viewerId);
+  const live = readableRecipeSqlForViewerId("live", viewerId);
+  const counted = readableRecipeSqlForViewerId(undefined, viewerId);
   // Plain `?` placeholders, each bound in order: `chefId` takes the identifier twice.
   const chefId = `COALESCE((SELECT "id" FROM "User" WHERE "username" = ?), (SELECT "id" FROM "User" WHERE "id" = ?))`;
   const chef = [identifier, identifier];
@@ -224,7 +224,7 @@ export async function readChefProfileFromD1(
       ...live.params,
       ...chef,
     ],
-    cookbookPreviewQuery(viewer, `SELECT "id" FROM "Cookbook" WHERE "authorId" = ${chefId}`, ...chef),
+    cookbookPreviewQuery(viewerId, `SELECT "id" FROM "Cookbook" WHERE "authorId" = ${chefId}`, ...chef),
     [
       `SELECT ${selectColumns(RECIPE_SPOON_COLUMNS, "sp")},
          ${selectColumns(SPOON_RECIPE_COLUMNS, "r", "recipe_")},

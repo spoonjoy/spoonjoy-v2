@@ -18,7 +18,7 @@ import {
 import { createUserSessionCookie } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
-import { createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
+import { createTestUser, getOrCreateIngredientRef, getOrCreateUnit, shareHousehold } from "../utils";
 
 let db: PrismaClient;
 let d1: SqliteD1;
@@ -211,6 +211,33 @@ describe("collection reads", () => {
     const tied = weeknight!.recipes.slice(0, 2).map((entry) => entry.id);
     expect(tied).toEqual([...tied].sort().reverse());
     expect(empty!.recipes).toEqual([]);
+  });
+
+  it("keeps a household recipe in saved recipes and cookbook cards for its cook's household only, on D1 as on Prisma", async () => {
+    const { chef, friend, stranger, risotto } = await seedCollections();
+    await db.recipe.update({ where: { id: risotto.id }, data: { visibility: "household" } });
+    await shareHousehold(db, chef.id, friend.id);
+    const strangersBook = await db.cookbook.create({ data: { title: "Stranger's", authorId: stranger.id } });
+    await db.recipeInCookbook.create({ data: { cookbookId: strangersBook.id, recipeId: risotto.id, addedById: stranger.id } });
+
+    const browse = { query: "", limit: 48 };
+    const browsed = await readPublicRecipesFromD1(d1.binding, browse);
+    expect(browsed).toEqual(await readPublicRecipesWithPrisma(db, browse));
+    expect(browsed.map((recipe) => recipe.id)).not.toContain(risotto.id);
+
+    const saved = await readSavedRecipesFromD1(d1.binding, chef.id);
+    expect(saved).toEqual(await readSavedRecipesWithPrisma(db, chef.id));
+    expect(saved.map((recipe) => recipe.id)).toContain(risotto.id);
+    const cookbooks = await readCookbookListFromD1(d1.binding, chef.id);
+    expect(cookbooks).toEqual(await readCookbookListWithPrisma(db, chef.id));
+    expect(cookbooks.find((cookbook) => cookbook.title === "Favourites")!._count.recipes).toBe(2);
+
+    const strangerSaved = await readSavedRecipesFromD1(d1.binding, stranger.id);
+    expect(strangerSaved).toEqual(await readSavedRecipesWithPrisma(db, stranger.id));
+    expect(strangerSaved).toEqual([]);
+    const strangerBooks = await readCookbookListFromD1(d1.binding, stranger.id);
+    expect(strangerBooks).toEqual(await readCookbookListWithPrisma(db, stranger.id));
+    expect(strangerBooks[0]).toMatchObject({ _count: { recipes: 0 }, recipes: [] });
   });
 
   it("leaves another cook's private recipe out of browsing, saved recipes and cookbook cards, on D1 as on Prisma", async () => {
