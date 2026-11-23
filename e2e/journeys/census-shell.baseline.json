@@ -1,0 +1,853 @@
+{
+  "desktop-chrome": {
+    "account-deleted": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "account-settings": {
+      "crop-photo-dialog": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "delete-account-open": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "agent-connect": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "agent-connect-request": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "chef-profile": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "chef-profile-own": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "chefs": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "cookbook": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "delete-cookbook-dialog": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "owner-tools-open": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "remove-recipe-dialog": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "cookbook-new": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "cookbooks": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "cookbooks-newbie": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "developers": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "developers-playground": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "fellow-chefs": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "forgot-password": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "home-chef": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "home-newbie": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "home-signed-out": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "households": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "join-invite-unusable": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "kitchen-visitors": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "log-out": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "mcp": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "my-recipes": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "not-found": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "oauth-authorize": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "oauth-callback": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "privacy": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "recipe-edit": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "delete-step-dialog": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "recipe-friend": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "fork-dialog": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "recipe-new": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "from-photo": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "paste-text": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "recipe-owner": {
+      "cook-mode": [],
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "delete-dialog": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "log-cook-dialog": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "manage-open": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "save-dialog": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "variation-dialog": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "recipe-signed-out": {
+      "cook-mode": [],
+      "cook-mode-next-step": [],
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "recipes": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "reset-password": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "roadmap": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "saved-recipes": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "search-no-results": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "search-results": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "shopping-list": {
+      "clear-all-dialog": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "item-actions-menu": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "remove-item-dialog": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "shopping-list-newbie": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "sign-in": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "sign-up": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "step-edit": {
+      "add-ingredient-open": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "remove-ingredient-dialog": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "step-edit-uses-output": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "uses-output-open": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "step-new": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "uses-output-open": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "support": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "terms": {
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    },
+    "test-kitchen": {
+      "cook-mode": [],
+      "default": [
+        "banner",
+        "nav",
+        "footer"
+      ],
+      "xray": [
+        "banner",
+        "nav",
+        "footer"
+      ]
+    }
+  },
+  "iphone-webkit": {
+    "account-deleted": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "account-settings": {
+      "crop-photo-dialog": [
+        "tabBar",
+        "footer"
+      ],
+      "default": [
+        "tabBar",
+        "footer"
+      ],
+      "delete-account-open": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "agent-connect": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "agent-connect-request": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "chef-profile": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "chef-profile-own": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "chefs": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "cookbook": {
+      "default": [
+        "tabBar",
+        "footer"
+      ],
+      "delete-cookbook-dialog": [
+        "tabBar",
+        "footer"
+      ],
+      "owner-tools-open": [
+        "tabBar",
+        "footer"
+      ],
+      "remove-recipe-dialog": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "cookbook-new": {
+      "default": [
+        "footer"
+      ]
+    },
+    "cookbooks": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "cookbooks-newbie": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "developers": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "developers-playground": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "fellow-chefs": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "forgot-password": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "home-chef": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "home-newbie": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "home-signed-out": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "households": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "join-invite-unusable": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "kitchen-visitors": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "log-out": {
+      "default": [
+        "footer"
+      ]
+    },
+    "mcp": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "my-recipes": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "not-found": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "oauth-authorize": {
+      "default": [
+        "footer"
+      ]
+    },
+    "oauth-callback": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "privacy": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "recipe-edit": {
+      "default": [
+        "footer"
+      ],
+      "delete-step-dialog": [
+        "footer"
+      ]
+    },
+    "recipe-friend": {
+      "default": [
+        "tabBar",
+        "footer"
+      ],
+      "fork-dialog": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "recipe-new": {
+      "default": [
+        "footer"
+      ],
+      "from-photo": [
+        "footer"
+      ],
+      "paste-text": [
+        "footer"
+      ]
+    },
+    "recipe-owner": {
+      "cook-mode": [],
+      "default": [
+        "tabBar",
+        "footer"
+      ],
+      "delete-dialog": [
+        "footer"
+      ],
+      "log-cook-dialog": [
+        "tabBar",
+        "footer"
+      ],
+      "manage-open": [
+        "footer"
+      ],
+      "save-dialog": [
+        "tabBar",
+        "footer"
+      ],
+      "variation-dialog": [
+        "footer"
+      ]
+    },
+    "recipe-signed-out": {
+      "cook-mode": [],
+      "cook-mode-next-step": [],
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "recipes": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "reset-password": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "roadmap": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "saved-recipes": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "search-no-results": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "search-results": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "shopping-list": {
+      "clear-all-dialog": [
+        "tabBar",
+        "footer"
+      ],
+      "default": [
+        "tabBar",
+        "footer"
+      ],
+      "item-actions-menu": [
+        "tabBar",
+        "footer"
+      ],
+      "remove-item-dialog": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "shopping-list-newbie": {
+      "default": [
+        "tabBar",
+        "footer"
+      ]
+    },
+    "sign-in": {
+      "default": [
+        "banner",
+        "footer"
+      ]
+    },
+    "sign-up": {
+      "default": [
+        "banner",
+        "footer"
+      ]
+    },
+    "step-edit": {
+      "add-ingredient-open": [
+        "footer"
+      ],
+      "default": [
+        "footer"
+      ],
+      "remove-ingredient-dialog": [
+        "footer"
+      ]
+    },
+    "step-edit-uses-output": {
+      "default": [
+        "footer"
+      ],
+      "uses-output-open": [
+        "footer"
+      ]
+    },
+    "step-new": {
+      "default": [
+        "footer"
+      ],
+      "uses-output-open": [
+        "footer"
+      ]
+    },
+    "support": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "terms": {
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    },
+    "test-kitchen": {
+      "cook-mode": [
+        "tabBar"
+      ],
+      "default": [
+        "banner",
+        "tabBar",
+        "footer"
+      ],
+      "xray": [
+        "banner",
+        "tabBar",
+        "footer"
+      ]
+    }
+  }
+}

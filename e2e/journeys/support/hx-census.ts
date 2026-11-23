@@ -21,7 +21,7 @@ import { expect } from "./journey";
 import { chooseMenuItem } from "./menu";
 import { openDisclosure } from "./navigation";
 import { personaStorageStatePath, type PersonaName } from "./personas";
-import { showOnlyShell } from "./census-shell";
+import { expectShellLandmarks, showOnlyShell } from "./census-shell";
 
 export type CensusPersona = "signed-out" | PersonaName;
 
@@ -392,5 +392,16 @@ export function censusStorageState(persona: CensusPersona): string | { cookies: 
 
 /** The census as HX's kit takes it: each journey visited with its persona's stored session. */
 export function censusJourneys(): OuroCensusJourney[] {
-  return census.map(({ persona, ...journey }) => ({ ...journey, storageState: censusStorageState(persona) }));
+  return census.map(({ persona, ...journey }) => ({
+    ...journey,
+    storageState: censusStorageState(persona),
+    // After its action, a page's state checks which shell landmarks it shows (support/census-shell.ts).
+    states: journey.id.startsWith("shell-") ? journey.states : journey.states.map((state) => ({
+      ...state,
+      action: async (page: Page) => {
+        await state.action?.(page);
+        await expectShellLandmarks(page, journey.id, state.id);
+      },
+    })),
+  }));
 }

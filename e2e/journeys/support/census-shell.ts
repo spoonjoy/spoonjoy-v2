@@ -5,7 +5,16 @@
 // (`hideShell`, run after each load, before the state's action) and counts it once per persona in
 // its own journeys (`showOnlyShell`). Hidden here means `visibility: hidden`: the page keeps its
 // layout, and the census and the accessibility audit both skip what a person can't see.
-import type { Locator, Page } from "@playwright/test";
+//
+// Which parts of the shell a page shows is still checked, page by page: after each state's action,
+// `expectShellLandmarks` shows the shell for a moment, reads which of its landmarks have a visible
+// control, and holds that to e2e/journeys/census-shell.baseline.json. It records the landmarks, not
+// their controls, so a new nav link changes no page's record, while a tab bar that comes back on an
+// editing page, or a footer that goes missing, fails.
+import { readFileSync } from "node:fs";
+import { test, type Locator, type Page } from "@playwright/test";
+import { collectCensus } from "../../ouro-census/census-page.mjs";
+import { SHELL_BASELINE_PATH, shellMismatch, visibleShellLandmarks, type ShellBaseline } from "./census-shell-record";
 
 function shellLandmarks(page: Page): Locator[] {
   return [
@@ -52,4 +61,14 @@ export async function showOnlyShell(page: Page): Promise<void> {
     heading.textContent = main.querySelector("h1")?.textContent?.trim() || document.title;
     main.replaceChildren(heading);
   });
+}
+
+/** Fails unless the state shows the shell landmarks its baseline record names; leaves the shell hidden. */
+export async function expectShellLandmarks(page: Page, journeyId: string, stateId: string): Promise<void> {
+  await showShell(page);
+  const actual = visibleShellLandmarks(await collectCensus(page));
+  await hideShell(page);
+  const baseline = JSON.parse(readFileSync(SHELL_BASELINE_PATH, "utf8")) as ShellBaseline;
+  const mismatch = shellMismatch(baseline, { project: test.info().project.name, journeyId, stateId }, actual);
+  if (mismatch) throw new Error(mismatch);
 }
