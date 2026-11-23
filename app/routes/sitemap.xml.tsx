@@ -2,6 +2,10 @@ import type { Route } from "./+types/sitemap.xml";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { buildSitemapXml, type SitemapEntry } from "~/lib/sitemap.server";
+import { readableRecipeWhere } from "~/domains/kitchen";
+
+// Search engines read as a signed-out visitor, so the sitemap lists only what one may read.
+const INDEXABLE_RECIPE = { deletedAt: null, steps: { some: {} }, ...readableRecipeWhere(null) };
 
 // Public, indexable static pages.
 const STATIC_PATHS = ["/", "/test-kitchen", "/roadmap", "/privacy", "/terms", "/developers", "/api/docs"];
@@ -17,21 +21,21 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const [recipes, cookbooks, chefs] = await Promise.all([
     // Only recipes with real content (at least one step) — skips thin drafts.
     database.recipe.findMany({
-      where: { deletedAt: null, steps: { some: {} } },
+      where: INDEXABLE_RECIPE,
       select: { id: true, updatedAt: true },
       orderBy: { updatedAt: "desc" },
       take: MAX_PER_TYPE,
     }),
-    // Only non-empty cookbooks.
+    // Only cookbooks holding a recipe a visitor may read.
     database.cookbook.findMany({
-      where: { recipes: { some: {} } },
+      where: { recipes: { some: { recipe: readableRecipeWhere(null) } } },
       select: { id: true, updatedAt: true },
       orderBy: { updatedAt: "desc" },
       take: MAX_PER_TYPE,
     }),
     // Only chefs who have at least one indexable recipe.
     database.user.findMany({
-      where: { recipes: { some: { deletedAt: null, steps: { some: {} } } } },
+      where: { recipes: { some: INDEXABLE_RECIPE } },
       select: { username: true },
       take: MAX_PER_TYPE,
     }),

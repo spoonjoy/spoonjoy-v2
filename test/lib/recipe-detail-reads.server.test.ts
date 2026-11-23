@@ -217,6 +217,34 @@ describe("recipe detail reads", () => {
     await expect(readRecipeDetailWithPrisma(db, { recipeId: recipe.id, userId: owner.id })).resolves.toEqual(empty);
   });
 
+  it("returns a private recipe only to its cook, from D1 and Prisma alike", async () => {
+    const { owner, friend, stranger, recipe } = await seedRecipe();
+    await db.recipe.update({ where: { id: recipe.id }, data: { visibility: "private" } });
+
+    for (const userId of [friend.id, stranger.id, null]) {
+      const fromD1 = await readRecipeDetailFromD1(d1.binding, { recipeId: recipe.id, userId });
+      expect(fromD1, String(userId)).toMatchObject({ recipe: null, spoons: [], userCookbooks: [], shoppingListItems: [] });
+      expect(fromD1).toEqual(await readRecipeDetailWithPrisma(db, { recipeId: recipe.id, userId }));
+    }
+    const forOwner = await readRecipeDetailFromD1(d1.binding, { recipeId: recipe.id, userId: owner.id });
+    expect(forOwner.recipe).toMatchObject({ id: recipe.id, visibility: "private" });
+    expect(forOwner).toEqual(await readRecipeDetailWithPrisma(db, { recipeId: recipe.id, userId: owner.id }));
+  });
+
+  it("names a fork's source only to viewers who may read that source", async () => {
+    const { owner, friend, recipe, source } = await seedRecipe();
+    await db.recipe.update({ where: { id: source.id }, data: { visibility: "private", deletedAt: null } });
+
+    for (const userId of [owner.id, null]) {
+      const fromD1 = await readRecipeDetailFromD1(d1.binding, { recipeId: recipe.id, userId });
+      expect(fromD1.recipe?.sourceRecipe, String(userId)).toBeNull();
+      expect(fromD1).toEqual(await readRecipeDetailWithPrisma(db, { recipeId: recipe.id, userId }));
+    }
+    const forSourceCook = await readRecipeDetailFromD1(d1.binding, { recipeId: recipe.id, userId: friend.id });
+    expect(forSourceCook.recipe?.sourceRecipe).toMatchObject({ id: source.id, title: "Grandma's Rice" });
+    expect(forSourceCook).toEqual(await readRecipeDetailWithPrisma(db, { recipeId: recipe.id, userId: friend.id }));
+  });
+
   it("fails closed on a D1 error or a malformed row", async () => {
     const { owner, recipe } = await seedRecipe();
     const failing = { prepare: d1.binding.prepare, batch: async () => { throw new Error("D1_ERROR: lost"); } };

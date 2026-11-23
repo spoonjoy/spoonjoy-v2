@@ -8,6 +8,7 @@ import {
   RECIPE_COVER_DISPLAY_SELECT,
 } from "~/lib/recipe-cover.server";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { readableRecipeWhere } from "~/domains/kitchen";
 
 function coverCachePart(recipe: {
   id: string;
@@ -28,6 +29,7 @@ function coverCachePart(recipe: {
   };
 }
 
+// Link previews are fetched signed out, so a cookbook card shows and counts only recipes anyone may read.
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const id = params.id;
   const database = await getRequestDb(context);
@@ -38,7 +40,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       title: true,
       author: { select: { username: true } },
       recipes: {
-        where: { recipe: { deletedAt: null } },
+        where: { recipe: { deletedAt: null, ...readableRecipeWhere(null) } },
         orderBy: { createdAt: "desc" },
         take: 4,
         select: {
@@ -72,7 +74,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     );
   });
   const activeRecipeCount = await database.recipeInCookbook.count({
-    where: { cookbookId: id, recipe: { deletedAt: null } },
+    where: { cookbookId: id, recipe: { deletedAt: null, ...readableRecipeWhere(null) } },
   });
 
   return createCookbookOgImageResponse(
