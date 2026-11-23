@@ -68,6 +68,21 @@ describe("Self-host Image workflow", () => {
     expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["e2e/self-host/**", "app/lib/session.server.ts"]));
   });
 
+  it("signs in through a real OpenID Connect provider, Dex pinned by digest, before seeding", () => {
+    const names = image.steps.map((step) => step.name ?? "");
+    const oidc = stepNamed(image, /OpenID Connect/).run ?? "";
+    expect(oidc).toMatch(/ghcr\.io\/dexidp\/dex@sha256:[0-9a-f]{64}/);
+    expect(oidc).toContain("e2e/self-host/dex.yaml");
+    expect(oidc).toContain("SPOONJOY_OIDC_ISSUER=http://localhost:5556/dex");
+    // The server and the browser both reach Dex at localhost:5556, the issuer its ID tokens name.
+    expect(oidc).toMatch(/docker run -d --name sj --network host/);
+    expect(oidc).toContain(PLAYWRIGHT_CONTAINER.image);
+    expect(oidc).toContain("e2e/self-host/oidc.spec.ts");
+    expect(names.findIndex((name) => /OpenID Connect/.test(name))).toBeLessThan(names.findIndex((name) => /Seed/.test(name)));
+    expect(stepNamed(image, /Stop the server/).run).toContain("docker stop dex");
+    expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["e2e/self-host/**"]));
+  });
+
   it("seeds the kitchen through the image's sql command, and masks every password", () => {
     const seed = stepNamed(image, /Seed/).run ?? "";
     expect(seed).toContain("node scripts/self-host-smoke-seed.mjs");

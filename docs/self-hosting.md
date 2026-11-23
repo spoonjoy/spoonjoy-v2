@@ -44,6 +44,30 @@ A new server needs no setup before you sign in:
 - **Passkeys.** Add one under Account settings, then sign in with it. Browsers only offer passkeys on an `https://` address or on `localhost`, so reach the server through a reverse proxy, Tailscale or Cloudflare Tunnel to use them from other devices.
 - **Sign in with Apple from the Spoonjoy apps.** The server checks the app's Apple identity token against Apple's public keys and the app's bundle ID, so it needs no Apple secret.
 
+## Signing in with your own identity provider
+
+If you already run an OpenID Connect provider, such as Authentik, Authelia or Keycloak, people can sign in to Spoonjoy with it. Register Spoonjoy there as a confidential client with this redirect (callback) URL:
+
+```
+<SPOONJOY_BASE_URL>/auth/oidc/callback
+```
+
+For example `https://recipes.example.com/auth/oidc/callback`. Then give the container these settings:
+
+| Setting | What it does | Default |
+| --- | --- | --- |
+| `SPOONJOY_OIDC_ISSUER` | The provider's issuer address. Spoonjoy reads `<issuer>/.well-known/openid-configuration` to find the rest. | none |
+| `SPOONJOY_OIDC_CLIENT_ID` | The client ID the provider gave Spoonjoy. | none |
+| `SPOONJOY_OIDC_CLIENT_SECRET` | The client secret the provider gave Spoonjoy. | none |
+| `SPOONJOY_OIDC_NAME` | The sign-in button's label, such as `Sign in with Authentik`. | `Continue with single sign-on` |
+| `SPOONJOY_OIDC_SCOPES` | The scopes Spoonjoy asks for, separated by spaces. `openid` is always added. | `openid email profile` |
+
+With the first three set, the button shows on the sign-in and sign-up pages. Sign-in uses the authorization-code flow with PKCE, and Spoonjoy checks the ID token's signature against the provider's published keys, along with its issuer, audience, expiry and nonce.
+
+The first time someone signs in, Spoonjoy makes them an account from the provider's email address. If an account with that email already exists, it is joined only when the provider says the email is verified and the account's owner has verified it in Spoonjoy too; otherwise they sign in the way they usually do. Accounts are linked to the issuer, so pointing `SPOONJOY_OIDC_ISSUER` at another provider later doesn't sign anyone in to an account made through the old one.
+
+The provider's sign-in needs the server on an `https://` address or on `localhost`.
+
 ## Running SQL
 
 `server.mjs sql` runs a SQL file against the database, whole or not at all, after bringing it up to date. Stop the server first:
@@ -62,7 +86,7 @@ docker run --rm -v spoonjoy-data:/data -v "$PWD/photos:/photos:ro" ghcr.io/spoon
 
 ## How it's checked
 
-The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, signs up, adds a passkey and signs back in on the empty server, checks Sign in with Apple is set up, seeds the QA kitchen through `server.mjs sql` and its sample cover photos through `server.mjs photos`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, and checks the kitchen is still there after `docker restart`. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
+The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, signs up, adds a passkey and signs back in on the empty server, checks Sign in with Apple is set up, signs in through a Dex OpenID Connect provider, seeds the QA kitchen through `server.mjs sql` and its sample cover photos through `server.mjs photos`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, and checks the kitchen is still there after `docker restart`. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
 
 After each green run on main, the `Self-host Pull` workflow (`.github/workflows/self-host-pull.yml`) pulls `ghcr.io/spoonjoy/spoonjoy:latest` with no login on amd64 and arm64, boots it on an empty volume and waits for its health check, the way a self-hoster would.
 
