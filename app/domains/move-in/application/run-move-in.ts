@@ -56,6 +56,10 @@ export interface MoveInPorts {
     addEvent(jobId: string, event: MoveInEvent): Promise<void>;
     /** Whether the job has logged a warning or an error. */
     hasIssues(jobId: string): Promise<boolean>;
+    /** Takes the job for this run unless another run has shown signs of life lately; false when it is taken. */
+    claim(jobId: string, at: Date): Promise<boolean>;
+    /** Lets the job go, so the next run can take it at once. */
+    release(jobId: string): Promise<void>;
   };
   openArchive(job: MoveInJob): RangeSource | Promise<RangeSource>;
   ownerEmail(ownerId: string): Promise<string | null>;
@@ -201,9 +205,14 @@ export async function runNextChunk(jobId: string, ports: MoveInPorts, { chunkSiz
  * then stands. A Worker gives a request's waitUntil about 30 seconds, so the budget stays well inside that.
  */
 export async function runForAWhile(jobId: string, ports: MoveInPorts, { budgetMs, chunkSize }: { budgetMs: number; chunkSize?: number }): Promise<MoveInJob | null> {
-  const started = ports.now().getTime();
-  for (;;) {
-    const job = await runNextChunk(jobId, ports, { chunkSize });
-    if (!job || FINISHED.includes(job.status) || ports.now().getTime() - started >= budgetMs) return job;
+  const started = ports.now();
+  if (!(await ports.store.claim(jobId, started))) return ports.store.loadJob(jobId);
+  try {
+    for (;;) {
+      const job = await runNextChunk(jobId, ports, { chunkSize });
+      if (!job || FINISHED.includes(job.status) || ports.now().getTime() - started.getTime() >= budgetMs) return job;
+    }
+  } finally {
+    await ports.store.release(jobId);
   }
 }
