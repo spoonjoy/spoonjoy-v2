@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -172,7 +172,7 @@ describe("/households/:id", () => {
   it("shows a household to its members only", async () => {
     const id = await makeHousehold();
     const seen = payload(await call(householdLoader, `/households/${id}`, "ann"));
-    expect(seen.household).toMatchObject({ id, name: "The Lee kitchen", myRole: "owner", canInvite: true });
+    expect(seen.household).toMatchObject({ id, name: "The Lee kitchen", myRole: "owner", canInvite: true, canManage: true });
     expect(seen.household.members).toEqual([
       { userId: "ann", username: "ann_cooks", photoUrl: null, role: "owner", roleLabel: "Owner", me: true },
     ]);
@@ -203,6 +203,108 @@ describe("/households/:id", () => {
     const left = (await call(householdAction, `/households/${id}`, "ben", { intent: "leave" })) as Response;
     expect(left.headers.get("Location")).toBe("/households");
     expect(payload(await call(householdAction, `/households/${id}`, "ann", { intent: "dance" }))).toEqual({ error: "Unknown action." });
+  });
+
+  it("lets an owner change someone's role and remove them, and no one else", async () => {
+    const id = await makeHousehold();
+    await call(joinAction, `/join/${await makeInvite(id)}`, "ben", {});
+    expect(payload(await call(householdLoader, `/households/${id}`, "ann")).household.canManage).toBe(true);
+    expect(payload(await call(householdLoader, `/households/${id}`, "ben")).household.canManage).toBe(false);
+
+    const changed = await call(householdAction, `/households/${id}`, "ann", { intent: "role", targetId: "ben", role: "viewer" });
+    expect(payload(changed)).toEqual({ done: "role" });
+    const seen = payload(await call(householdLoader, `/households/${id}`, "ann"));
+    expect(seen.household.members.map((m: { userId: string; role: string }) => [m.userId, m.role])).toEqual([
+      ["ann", "owner"],
+      ["ben", "viewer"],
+    ]);
+
+    const refused = await call(householdAction, `/households/${id}`, "ben", { intent: "role", targetId: "ann", role: "viewer" });
+    expect(statusOf(refused)).toBe(400);
+    expect(payload(refused)).toEqual({ error: "Only an owner can change roles." });
+    expect(payload(await call(householdAction, `/households/${id}`, "ben", { intent: "remove", targetId: "ann" }))).toEqual({
+      error: "Only an owner can remove people.",
+    });
+
+    expect(payload(await call(householdAction, `/households/${id}`, "ann", { intent: "role", role: "viewer" }))).toEqual({
+      error: "That person isn't in this household.",
+    });
+    expect(payload(await call(householdAction, `/households/${id}`, "ann", { intent: "remove" }))).toEqual({
+      error: "That person isn't in this household.",
+    });
+    expect(payload(await call(householdAction, `/households/${id}`, "ann", { intent: "remove", targetId: "ben" }))).toEqual({ done: "removed" });
+    expect(statusOf(await call(householdLoader, `/households/${id}`, "ben"))).toBe(404);
+  });
+
+  it("gives owners a menu on everyone else's row to change their role or remove them", async () => {
+    const submitted: Array<Record<string, string>> = [];
+    const Stub = createTestRoutesStub([
+      {
+        path: "/households/:id",
+        Component: HouseholdPage,
+        loader: () => ({
+          household: {
+            id: "h1",
+            name: "Home",
+            myRole: "owner",
+            canInvite: true,
+            canManage: true,
+            roleChoices: [
+              { value: "owner", label: "Owner" },
+              { value: "member", label: "Member" },
+              { value: "viewer", label: "View-only" },
+            ],
+            members: [
+              { userId: "ann", username: "ann_cooks", photoUrl: null, role: "owner", roleLabel: "Owner", me: true },
+              { userId: "ben", username: "ben_cooks", photoUrl: null, role: "member", roleLabel: "Member", me: false },
+            ],
+          },
+        }),
+        action: async ({ request }: { request: Request }) => {
+          submitted.push(Object.fromEntries((await request.formData()) as unknown as Iterable<[string, string]>));
+          return { done: "role" };
+        },
+      },
+    ]);
+    const user = userEvent.setup();
+    render(<Stub initialEntries={["/households/h1"]} />);
+    await screen.findByRole("heading", { level: 1, name: "Home" });
+    expect(screen.queryByRole("button", { name: "Actions for ann_cooks" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Actions for ben_cooks" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "View-only" }));
+    await vi.waitFor(() => expect(submitted).toEqual([{ intent: "role", targetId: "ben", role: "viewer" }]));
+
+    await user.click(screen.getByRole("button", { name: "Actions for ben_cooks" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Remove from household" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Remove ben_cooks?" });
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+    await vi.waitFor(() => expect(submitted[1]).toEqual({ intent: "remove", targetId: "ben" }));
+  });
+
+  it("gives someone who can't manage people no member menus", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/households/:id",
+        Component: HouseholdPage,
+        loader: () => ({
+          household: {
+            id: "h1",
+            name: "Home",
+            myRole: "member",
+            canInvite: false,
+            canManage: false,
+            members: [
+              { userId: "ann", username: "ann_cooks", photoUrl: null, role: "owner", roleLabel: "Owner", me: false },
+              { userId: "ben", username: "ben_cooks", photoUrl: null, role: "member", roleLabel: "Member", me: true },
+            ],
+          },
+        }),
+      },
+    ]);
+    render(<Stub initialEntries={["/households/h1"]} />);
+    await screen.findByRole("heading", { level: 1, name: "Home" });
+    expect(screen.queryByRole("button", { name: "Actions for ann_cooks" })).toBeNull();
   });
 
   it("shows people, the invite form for owners and a new link once", async () => {
