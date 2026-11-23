@@ -210,19 +210,31 @@ function Progress({ move }: { move: MoveInView }) {
   const { jobId, runsOnServer } = move;
   const done = move.recipes.done;
   // Asks how the move-in is going, from 3 s after the last change. A move-in this page keeps going
-  // is asked at that pace; a server-side one less often each time it shows no change, and never
-  // while the page is out of sight. A change in the count starts the pace over.
+  // is asked at that pace, seen or not. A server-side one is asked less often each time it shows no
+  // change, not at all while the page is out of sight, and at once when the page is back in view. A
+  // change in the count starts the pace over.
   useEffect(() => {
     let wait = POLL_MS;
     let timer: ReturnType<typeof setTimeout>;
     const ask = () => {
       const current = latest.current;
-      if (current.state === "idle" && document.visibilityState !== "hidden") current.submit({ intent: "continue", jobId }, { method: "post", encType: "multipart/form-data" });
+      const unseen = runsOnServer && document.visibilityState === "hidden";
+      if (current.state === "idle" && !unseen) current.submit({ intent: "continue", jobId }, { method: "post", encType: "multipart/form-data" });
       if (runsOnServer) wait = Math.min(wait * 2, POLL_MAX_MS);
       timer = setTimeout(ask, wait);
     };
+    const back = () => {
+      if (document.visibilityState !== "visible") return;
+      clearTimeout(timer);
+      wait = POLL_MS;
+      ask();
+    };
     timer = setTimeout(ask, wait);
-    return () => clearTimeout(timer);
+    if (runsOnServer) document.addEventListener("visibilitychange", back);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", back);
+    };
   }, [jobId, runsOnServer, done]);
   const counted = move.recipes.found > 0;
   return (

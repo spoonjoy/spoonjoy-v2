@@ -138,18 +138,29 @@ describe("the Move in page", () => {
     const hidden = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
     expect(action).toHaveBeenCalledTimes(2);
+    // Back in view, it asks at once.
     hidden.mockRestore();
-    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    await act(async () => void document.dispatchEvent(new Event("visibilitychange")));
     await vi.waitFor(() => expect(action).toHaveBeenCalledTimes(3));
+    // A change of view that leaves it hidden asks nothing.
+    const stillHidden = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await act(async () => void document.dispatchEvent(new Event("visibilitychange")));
+    expect(action).toHaveBeenCalledTimes(3);
+    stillHidden.mockRestore();
   });
 
-  it("keeps asking at the same pace when the page is what keeps the move-in going", async () => {
+  it("keeps asking at the same pace, seen or not, when the page is what keeps the move-in going", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const action = vi.fn(() => ({ error: null }));
     page(view(), action);
     await screen.findByRole("heading", { level: 2, name: "Moving in" });
     await act(async () => vi.advanceTimersByTimeAsync(9_500));
     await vi.waitFor(() => expect(action).toHaveBeenCalledTimes(3));
+    // Out of sight too, since nothing else moves it along.
+    const hidden = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await act(async () => vi.advanceTimersByTimeAsync(3_000));
+    await vi.waitFor(() => expect(action).toHaveBeenCalledTimes(4));
+    hidden.mockRestore();
   });
 
   it("counts recipes as they come in", async () => {
