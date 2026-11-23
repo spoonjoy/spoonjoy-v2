@@ -124,7 +124,12 @@ export interface MoveInProgress {
   job: Omit<MoveInJob, "archiveKey"> & { archiveName: string | null; createdAt: string; updatedAt: string; finishedAt: string | null };
   counts: Record<string, MoveInCounts>;
   events: Array<MoveInEvent & { seq: number }>;
+  /** The newest recipes this move-in brought in that are still in the kitchen, newest first, with their photos. */
+  latest: Array<{ id: string; title: string; photoUrl: string | null }>;
 }
+
+/** How many of a move-in's newest recipes its page shows while it runs. */
+export const MOVE_IN_LATEST = 5;
 
 /** Where the job stands and when it was last written to, or null when there is no such job. */
 export async function readMoveInPosition(
@@ -137,15 +142,25 @@ export async function readMoveInPosition(
 
 /** A job's state, counts and report, or null when the job isn't this owner's. */
 export async function readMoveInProgress(db: D1ReadDatabase, { ownerId, jobId }: { ownerId: string; jobId: string }): Promise<MoveInProgress | null> {
-  const [[job], counts, events] = await d1ReadBatch(db, [
+  const [[job], counts, events, latest] = await d1ReadBatch(db, [
     [`SELECT ${PROGRESS_COLUMNS} FROM "ImportJob" WHERE "id" = ? AND "ownerId" = ?`, jobId, ownerId],
     [`SELECT * FROM "ImportEntityCount" WHERE "jobId" = ? ORDER BY "entity"`, jobId],
     [`SELECT "seq", "level", "kind", "entity", "sourceKey", "targetId", "message" FROM "ImportEvent" WHERE "jobId" = ? ORDER BY "seq"`, jobId],
+    // A move-in's records are all under its source, so this reads one source's records, not every one.
+    [
+      `SELECT r."id", r."title", c."imageUrl" AS "photoUrl" FROM "SourceRecord" s
+       JOIN "Recipe" r ON r."id" = s."targetId" AND r."chefId" = ? AND r."deletedAt" IS NULL
+       LEFT JOIN "RecipeCover" c ON c."id" = r."activeCoverId"
+       WHERE s."sourceId" = (SELECT "sourceId" FROM "ImportJob" WHERE "id" = ? AND "ownerId" = ?) AND s."lastJobId" = ? AND s."targetType" = 'Recipe'
+       ORDER BY r."createdAt" DESC, s.rowid DESC LIMIT ?`,
+      ownerId, jobId, ownerId, jobId, MOVE_IN_LATEST,
+    ],
   ]);
   if (!job) return null;
   return {
     job: job as unknown as MoveInProgress["job"],
     counts: Object.fromEntries(counts.map((row) => [String(row.entity), Object.fromEntries(COUNT_FIELDS.map((field) => [field, Number(row[field])])) as unknown as MoveInCounts])),
     events: events as unknown as MoveInProgress["events"],
+    latest: latest.map((row) => ({ id: String(row.id), title: String(row.title), photoUrl: row.photoUrl as string | null })),
   };
 }

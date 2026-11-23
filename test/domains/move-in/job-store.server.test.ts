@@ -157,4 +157,35 @@ describe("the move-in job store", () => {
     const id = await create();
     expect(await readMoveInProgress(database.binding, { ownerId: "chef-2", jobId: id })).toBeNull();
   });
+
+  it("lists the newest recipes a move-in brought, with their photos, and only that move-in's own", async () => {
+    const id = await create();
+    const other = await create();
+    const sql = database.sqlite;
+    sql.prepare(`INSERT INTO "ImportSource" ("id", "ownerId", "kind", "instanceKey", "label") VALUES ('src-1', 'chef-1', 'mealie-backup', 'k', 'Kitchen')`).run();
+    sql.prepare(`UPDATE "ImportJob" SET "sourceId" = 'src-1' WHERE "id" IN (?, ?)`).run(id, other);
+    const recipe = (recipeId: string, title: string, minute: number, { job = id, chef = "chef-1", deleted = false, photo = false } = {}) => {
+      sql.prepare(`INSERT INTO "Recipe" ("id", "title", "chefId", "deletedAt", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(recipeId, title, chef, deleted ? "2026-11-23T13:00:00.000Z" : null, `2026-11-23T12:0${minute}:00.000Z`, `2026-11-23T12:0${minute}:00.000Z`);
+      sql.prepare(`INSERT INTO "SourceRecord" ("id", "sourceId", "sourceTable", "sourceKey", "targetType", "targetId", "lastJobId") VALUES (?, 'src-1', 'recipes', ?, 'Recipe', ?, ?)`)
+        .run(`rec-${recipeId}`, recipeId, recipeId, job);
+      if (photo) {
+        sql.prepare(`INSERT INTO "RecipeCover" ("id", "recipeId", "imageUrl", "sourceType") VALUES (?, ?, ?, 'import')`).run(`cover-${recipeId}`, recipeId, `/photos/covers/import/movein-${recipeId}.webp`);
+        sql.prepare(`UPDATE "Recipe" SET "activeCoverId" = ? WHERE "id" = ?`).run(`cover-${recipeId}`, recipeId);
+      }
+    };
+    for (let n = 1; n <= 6; n++) recipe(`r${n}`, `Recipe ${n}`, n, { photo: n % 2 === 0 });
+    recipe("gone", "Deleted", 7, { deleted: true });
+    recipe("theirs", "Another move-in's", 8, { job: other });
+
+    const progress = await readMoveInProgress(database.binding, { ownerId: "chef-1", jobId: id });
+    expect(progress?.latest).toEqual([
+      { id: "r6", title: "Recipe 6", photoUrl: "/photos/covers/import/movein-r6.webp" },
+      { id: "r5", title: "Recipe 5", photoUrl: null },
+      { id: "r4", title: "Recipe 4", photoUrl: "/photos/covers/import/movein-r4.webp" },
+      { id: "r3", title: "Recipe 3", photoUrl: null },
+      { id: "r2", title: "Recipe 2", photoUrl: "/photos/covers/import/movein-r2.webp" },
+    ]);
+    expect((await readMoveInProgress(database.binding, { ownerId: "chef-1", jobId: await create() }))?.latest).toEqual([]);
+  });
 });
