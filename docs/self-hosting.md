@@ -45,9 +45,15 @@ docker run --rm -i -v spoonjoy-data:/data ghcr.io/spoonjoy/spoonjoy:latest node 
 docker start spoonjoy
 ```
 
+`server.mjs photos <folder> [prefix]` puts each JPEG, PNG or WebP image in a folder into the photo store, under the prefix you give. Stop the server for this too:
+
+```sh
+docker run --rm -v spoonjoy-data:/data -v "$PWD/photos:/photos:ro" ghcr.io/spoonjoy/spoonjoy:latest node /app/self-host/server.mjs photos /photos
+```
+
 ## How it's checked
 
-The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, seeds the QA kitchen through `server.mjs sql`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, and checks the kitchen is still there after `docker restart`. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
+The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, seeds the QA kitchen through `server.mjs sql` and its sample cover photos through `server.mjs photos`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, and checks the kitchen is still there after `docker restart`. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
 
 ## Building it yourself
 
