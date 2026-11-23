@@ -1,7 +1,22 @@
 // @vitest-environment node
 // The Move in page: behind the move_in flag, it takes a backup zip, starts the move-in, keeps it
 // running in the request's waitUntil, and shows the owner (and only the owner) how it went.
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const captured = vi.hoisted(() => [] as Array<{ error: unknown; distinctId: string; route?: string }>);
+const runFails = vi.hoisted(() => ({ with: null as Error | null }));
+vi.mock("~/domains/move-in", async (importOriginal) => {
+  const real = await importOriginal<typeof import("~/domains/move-in")>();
+  return {
+    ...real,
+    runForAWhile: (...args: Parameters<typeof real.runForAWhile>) =>
+      runFails.with ? Promise.reject(runFails.with) : real.runForAWhile(...args),
+  };
+});
+vi.mock("~/lib/analytics-server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/lib/analytics-server")>()),
+  captureException: async (_config: unknown, input: { error: unknown; distinctId: string; route?: string }) => void captured.push(input),
+}));
 import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 const UndiciFile = File;
 type UndiciFile = File;
@@ -84,6 +99,8 @@ beforeEach(async () => {
   d1 = sqliteD1();
   photos = memoryBucket();
   waiting = [];
+  captured.length = 0;
+  runFails.with = null;
   ownerId = (await createUser(db, "cook@example.com", "cook", "testPassword123")).id;
   otherId = (await createUser(db, "pat@example.com", "pat", "testPassword123")).id;
 });
@@ -141,6 +158,13 @@ describe("the Move in page", () => {
     expect(await post({ intent: "continue", jobId })).toEqual({ error: null });
     expect(waiting).toHaveLength(1);
     await Promise.all(waiting);
+  });
+
+  it("reports a run that stops with an error, for the next poll to resume", async () => {
+    runFails.with = new Error("storage is down");
+    await post({ app: "mealie", backup: backup() });
+    await Promise.all(waiting);
+    expect(captured).toEqual([{ error: runFails.with, distinctId: ownerId, route: "/move-in", extras: { phase: "run" } }]);
   });
 
   it("says what to do when no file is chosen, or the file isn't a backup", async () => {
