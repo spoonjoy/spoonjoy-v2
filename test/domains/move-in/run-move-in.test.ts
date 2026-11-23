@@ -5,6 +5,7 @@ import {
   MAX_ATTEMPTS,
   RECIPE_TRIES,
   runForAWhile,
+  runMoveInSegment,
   runNextChunk,
   type MoveInCounts,
   type MoveInEvent,
@@ -351,6 +352,24 @@ describe("runForAWhile", () => {
     await expect(runForAWhile("job-1", h.ports, { budgetMs: 1000 })).rejects.toThrow("blob store down");
     expect(h.isClaimed()).toBe(true);
     expect(await runForAWhile("job-1", h.ports, { budgetMs: 1000 })).toMatchObject({ attempt: 1 });
+  });
+
+  it("lets the job go when a chunk fails, for a caller whose retries are paced already, even if the release fails too", async () => {
+    const h = harness();
+    h.ports.openArchive = () => Promise.reject(new Error("blob store down"));
+    await expect(runMoveInSegment("job-1", h.ports, { budgetMs: 1000, releaseOnError: true })).rejects.toThrow("blob store down");
+    expect(h.isClaimed()).toBe(false);
+
+    h.ports.store.release = () => Promise.reject(new Error("D1 down"));
+    await expect(runMoveInSegment("job-1", h.ports, { budgetMs: 1000, releaseOnError: true })).rejects.toThrow("blob store down");
+    expect(h.isClaimed()).toBe(true);
+  });
+
+  it("says whether the run held the job", async () => {
+    const h = harness();
+    expect(await runMoveInSegment("job-1", h.ports, { budgetMs: 0, chunkSize: 1 })).toMatchObject({ claimed: true, job: { phase: "recipes" } });
+    await h.ports.store.claim("job-1", new Date());
+    expect(await runMoveInSegment("job-1", h.ports, { budgetMs: 0 })).toMatchObject({ claimed: false, job: { phase: "recipes" } });
   });
 
   it("passes over a recipe that keeps stopping the run, even one that never gets to fail, and moves the rest in", async () => {

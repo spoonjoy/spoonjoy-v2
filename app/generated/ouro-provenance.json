@@ -3641,6 +3641,7 @@
         "app/domains/move-in/adapters/storage/job-store.server.ts",
         "app/domains/move-in/adapters/storage/photo-writer.server.ts",
         "app/domains/move-in/adapters/storage/recipe-writer.server.ts",
+        "app/domains/move-in/adapters/worker/move-in-job.server.ts",
         "app/domains/move-in/adapters/worker/move-in-ports.server.ts",
         "app/domains/move-in/adapters/worker/start-move-in.server.ts",
         "app/domains/move-in/adapters/worker/sweep-move-in-archives.server.ts",

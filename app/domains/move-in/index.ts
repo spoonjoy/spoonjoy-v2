@@ -30,8 +30,11 @@ export {
 export { runScheduledMoveInSweep } from "./adapters/worker/sweep-move-in-archives.server";
 export {
   MOVE_IN_JOB,
+  MOVE_IN_WATCH,
   moveInJobHandler,
+  moveInWatchHandler,
   nudgeMoveIn,
-  queueMoveIn,
+  startMoveInJob,
   type MoveInJobPayload,
+  type MoveInWatchPayload,
 } from "./adapters/worker/move-in-job.server";

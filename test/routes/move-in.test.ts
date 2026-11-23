@@ -185,21 +185,25 @@ describe("the Move in page", () => {
     it("hands the move-in to the queue, runs none of it in the request, and says the page can close", async () => {
       const { location, jobId } = await started();
       expect(waiting).toEqual([]);
-      expect(jobsQueue?.sent).toEqual([{ type: "move-in.run", key: `move-in:${jobId}:inspect:-`, payload: { jobId } }]);
+      expect(jobsQueue?.sent).toEqual([
+        { type: "move-in.run", key: `move-in:${jobId}:inspect:-`, payload: { jobId } },
+        { type: "move-in.watch", key: `move-in:${jobId}:watch:1`, payload: { jobId, look: 1 } },
+      ]);
       expect((await load(location)).move).toMatchObject({ status: "queued", finished: false, runsOnServer: true });
     });
 
     it("queues a move-in again from the page only once nothing has moved it for a minute", async () => {
       const { jobId } = await started();
       expect(await post({ intent: "continue", jobId })).toEqual({ error: null });
-      expect(jobsQueue?.sent).toHaveLength(1);
+      expect(jobsQueue?.sent).toHaveLength(2);
       expect(waiting).toEqual([]);
 
       // Its segment ran out of attempts, which frees the key, and the job has been quiet since.
       await d1.binding.prepare(`DELETE FROM "PlatformJobKey"`).run();
       await d1.binding.prepare(`UPDATE "ImportJob" SET "updatedAt" = ?`).bind(new Date(Date.now() - 61_000).toISOString()).run();
       await post({ intent: "continue", jobId });
-      expect(jobsQueue?.sent).toHaveLength(2);
+      expect(jobsQueue?.sent).toHaveLength(3);
+      expect(jobsQueue?.sent.at(-1)).toEqual({ type: "move-in.run", key: `move-in:${jobId}:inspect:-`, payload: { jobId } });
     });
 
     it("reports a move-in it couldn't queue, and leaves it for the page to pick up", async () => {
