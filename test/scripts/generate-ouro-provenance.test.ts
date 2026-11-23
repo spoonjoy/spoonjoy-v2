@@ -1,4 +1,5 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -249,6 +250,21 @@ describe("main", () => {
 });
 
 describe("the command line", () => {
+  it("writes the manifest in a fresh clone that has no app/generated/ folder", () => {
+    const clone = mkdtempSync(path.join(tmpdir(), "provenance-clone-"));
+    try {
+      // What a clone has: the tracked files the generator reads, and none it writes.
+      const tracked = execFileSync("git", ["ls-files", "app", "actions", "scripts/generate-ouro-provenance.mjs", "scripts/route-sources.mjs"], { encoding: "utf8" });
+      for (const file of tracked.split("\n").filter(Boolean)) cpSync(file, path.join(clone, file));
+      symlinkSync(path.resolve("node_modules"), path.join(clone, "node_modules"));
+      expect(existsSync(path.join(clone, "app", "generated"))).toBe(false);
+      execFileSync(process.execPath, ["scripts/generate-ouro-provenance.mjs"], { cwd: clone, stdio: "pipe" });
+      expect(readFileSync(path.join(clone, OUTPUT_PATH), "utf8")).toBe(readFileSync(OUTPUT_PATH, "utf8"));
+    } finally {
+      rmSync(clone, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("runs nothing when imported", async () => {
     expect(await runCliIfEntry()).toBe(false);
   });
