@@ -12,6 +12,7 @@
 
 /** Every flag, by name, with what it hides. Keep the names sorted. */
 export const FLAGS = {
+  households: { description: "Households at /household: members, roles and invites, and the lists, plan and recipes they share." },
   "meal-planner": { description: "The meal planner at /plan: a week of recipes and notes, and its API and MCP tools." },
 } as const satisfies Record<string, { description: string }>;
 
