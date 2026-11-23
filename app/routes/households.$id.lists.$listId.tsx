@@ -1,7 +1,7 @@
 import type { Route } from "./+types/households.$id.lists.$listId";
 import { useState } from "react";
 import { X } from "lucide-react";
-import { Form as RouterForm, data, redirect, useActionData, useLoaderData, useSubmit } from "react-router";
+import { Form as RouterForm, data, redirect, useActionData, useFetchers, useLoaderData, useSubmit } from "react-router";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Button } from "~/components/ouro/button/button";
 import { Checklist } from "~/components/ouro/checklist/checklist";
@@ -70,6 +70,12 @@ export default function HouseholdListPage() {
   const submit = useSubmit();
   const [deleting, setDeleting] = useState(false);
   const send = (fields: Record<string, string>) => submit(fields, { method: "post", navigate: false });
+  // A tick shows at once, and the next load puts back what the server kept if it refused.
+  const ticking = new Map(
+    useFetchers()
+      .filter((fetcher) => fetcher.formData?.get("intent") === "check")
+      .map((fetcher) => [String(fetcher.formData?.get("itemId")), fetcher.formData?.get("checked") === "true"]),
+  );
 
   return (
     <CookbookPage>
@@ -101,7 +107,7 @@ export default function HouseholdListPage() {
             id: item.id,
             label: item.text,
             description: item.addedBy ? `Added by ${item.addedBy}` : undefined,
-            checked: item.checked,
+            checked: ticking.get(item.id) ?? item.checked,
             disabled: !list.canEdit,
             action: list.canEdit ? (
               <Button variant="plain" tone="secondary" aria-label={`Remove ${item.text}`} onClick={() => send({ intent: "remove", itemId: item.id })}>
