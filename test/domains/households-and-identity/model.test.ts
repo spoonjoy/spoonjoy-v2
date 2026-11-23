@@ -55,10 +55,11 @@ describe("household membership changes", () => {
   });
 
   it("refuses a role change from a non-owner or on yourself", () => {
-    expect(changeRole(kitchen, "ben", "cal", "member")).toEqual({ ok: false, error: "Only an owner can change roles." });
+    expect(changeRole(kitchen, "ben", "cal", "member")).toEqual({ ok: false, error: "Only an owner can change roles.", forbidden: true });
     expect(changeRole(kitchen, "ann", "ann", "member")).toEqual({
       ok: false,
       error: "Ask another owner to change your role.",
+      forbidden: true,
     });
     expect(changeRole(kitchen, "ann", "zed", "member")).toEqual({ ok: false, error: "That person isn't in this household." });
   });
@@ -69,22 +70,24 @@ describe("household membership changes", () => {
     expect(leaveHousehold(kitchen, "ann")).toEqual({
       ok: false,
       error: "Make someone else an owner before you leave.",
+      forbidden: true,
     });
     expect(leaveHousehold(twoOwners, "ann")).toEqual({ ok: true, value: owner });
     expect(leaveHousehold([owner], "ann")).toEqual({ ok: true, value: owner });
     expect(leaveHousehold(kitchen, "ben")).toEqual({ ok: true, value: member });
-    expect(leaveHousehold(kitchen, "zed")).toEqual({ ok: false, error: "You aren't in this household." });
+    expect(leaveHousehold(kitchen, "zed")).toEqual({ ok: false, error: "You aren't in this household.", forbidden: true });
   });
 
   it("lets an owner remove someone else, but not another owner", () => {
     const twoOwners = [owner, { ...member, role: "owner" as const }, viewer];
     expect(removeMember(kitchen, "ann", "cal")).toEqual({ ok: true, value: viewer });
-    expect(removeMember(kitchen, "ben", "cal")).toEqual({ ok: false, error: "Only an owner can remove people." });
+    expect(removeMember(kitchen, "ben", "cal")).toEqual({ ok: false, error: "Only an owner can remove people.", forbidden: true });
     expect(removeMember(twoOwners, "ann", "ben")).toEqual({
       ok: false,
       error: "Change their role before removing another owner.",
+      forbidden: true,
     });
-    expect(removeMember(kitchen, "ann", "ann")).toEqual({ ok: false, error: "Leave the household instead." });
+    expect(removeMember(kitchen, "ann", "ann")).toEqual({ ok: false, error: "Leave the household instead.", forbidden: true });
     expect(removeMember(kitchen, "ann", "zed")).toEqual({ ok: false, error: "That person isn't in this household." });
   });
 });

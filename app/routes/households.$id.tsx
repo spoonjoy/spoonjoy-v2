@@ -70,7 +70,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
   if (intent === "invite") {
     const role = form.get("role");
     const made = await createInvite(store, { householdId: params.id, userId, input: { role }, now: new Date() });
-    if (!made.ok) return data({ error: made.error }, { status: 400 });
+    if (!made.ok) return data({ error: made.error }, { status: made.forbidden ? 403 : 400 });
     return {
       inviteUrl: new URL(`/join/${made.value.token}`, request.url).href,
       invitedAs: made.value.invite.role === "viewer" ? "view-only" : "as a member",
@@ -84,17 +84,17 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       targetId: String(form.get("targetId") ?? ""),
       role: form.get("role"),
     });
-    if (!changed.ok) return data({ error: changed.error }, { status: 400 });
+    if (!changed.ok) return data({ error: changed.error }, { status: changed.forbidden ? 403 : 400 });
     return { done: "role" as const };
   }
   if (intent === "remove") {
     const removed = await removeFromHousehold(store, { householdId: params.id, userId, targetId: String(form.get("targetId") ?? "") });
-    if (!removed.ok) return data({ error: removed.error }, { status: 400 });
+    if (!removed.ok) return data({ error: removed.error }, { status: removed.forbidden ? 403 : 400 });
     return { done: "removed" as const };
   }
   if (intent === "leave") {
     const left = await leave(store, { householdId: params.id, userId });
-    if (!left.ok) return data({ error: left.error }, { status: 400 });
+    if (!left.ok) return data({ error: left.error }, { status: left.forbidden ? 403 : 400 });
     return redirect("/households");
   }
   return data({ error: "Unknown action." }, { status: 400 });

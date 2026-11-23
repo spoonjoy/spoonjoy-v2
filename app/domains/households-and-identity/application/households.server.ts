@@ -31,6 +31,11 @@ function fail<T>(error: string): Validated<T> {
   return { ok: false, error };
 }
 
+/** A refusal about who is asking, which the routes answer with 403. */
+function forbid<T>(error: string): Validated<T> {
+  return { ok: false, error, forbidden: true };
+}
+
 export function generateInviteToken(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
@@ -71,7 +76,7 @@ export async function createInvite(
   { householdId, userId, input, now }: { householdId: string; userId: string; input: Record<string, unknown>; now: Date },
 ): Promise<Validated<{ invite: HouseholdInvite; token: string }>> {
   const me = (await store.members(householdId)).find((member) => member.userId === userId);
-  if (!can(me, "invite")) return fail("Only an owner can invite people.");
+  if (!can(me, "invite")) return forbid("Only an owner can invite people.");
   const checked = validateInviteInput(input, now);
   if (!checked.ok) return checked;
   const token = generateInviteToken();
@@ -121,7 +126,7 @@ export async function revokeInvite(
   { householdId, userId, inviteId, now }: { householdId: string; userId: string; inviteId: string; now: Date },
 ): Promise<Validated<null>> {
   const me = (await store.members(householdId)).find((member) => member.userId === userId);
-  if (!can(me, "invite")) return fail("Only an owner can turn off invites.");
+  if (!can(me, "invite")) return forbid("Only an owner can turn off invites.");
   if (!(await store.invites(householdId)).some((invite) => invite.id === inviteId)) {
     return fail("That invite isn't in this household.");
   }
