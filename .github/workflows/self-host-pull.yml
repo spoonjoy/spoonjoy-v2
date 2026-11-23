@@ -1,0 +1,94 @@
+# What a self-hoster gets: ghcr.io/spoonjoy/spoonjoy:latest pulled with no login on amd64 and
+# arm64, booted on an empty volume, healthy and serving pages (docs/self-hosting.md). It runs after
+# each green Self-host Image run on main, which publishes `latest`, and by hand.
+name: Self-host Pull
+
+on:
+  workflow_run:
+    workflows: ["Self-host Image"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  IMAGE: ghcr.io/spoonjoy/spoonjoy
+
+jobs:
+  pull:
+    name: pull ${{ matrix.arch }}
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    env:
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Ask GHCR for an anonymous pull token
+        run: |
+          token=$(curl -s "https://ghcr.io/token?scope=repository:spoonjoy/spoonjoy:pull" | jq -r '.token // empty')
+          if [ -z "$token" ]; then
+            echo "::error::$IMAGE is not public: GHCR gives no anonymous pull token for it."
+            exit 1
+          fi
+          curl -sf -H "Authorization: Bearer $token" https://ghcr.io/v2/spoonjoy/spoonjoy/tags/list | jq -c .
+
+      - name: Pull latest with no login
+        run: |
+          docker logout ghcr.io || true
+          start=$(date +%s)
+          docker pull "$IMAGE:latest"
+          echo "PULL_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          arch=$(docker image inspect "$IMAGE:latest" --format '{{.Architecture}}')
+          echo "Pulled $arch"
+          [ "$arch" = "$ARCH" ]
+
+      - name: Boot it on an empty volume and wait for its health check
+        run: |
+          start=$(date +%s%3N)
+          docker run -d --name sj -p 8080:8080 -v sj-data:/data "$IMAGE:latest"
+          for _ in $(seq 1 600); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health/ready || true)" = "200" ] && break
+            sleep 0.1
+          done
+          first_page_ms=$(( $(date +%s%3N) - start ))
+          curl -sf http://localhost:8080/health/ready
+          status=starting
+          for _ in $(seq 1 90); do
+            status=$(docker inspect sj --format '{{.State.Health.Status}}')
+            [ "$status" = "healthy" ] && break
+            sleep 1
+          done
+          echo "Health: $status"
+          [ "$status" = "healthy" ]
+          curl -sf http://localhost:8080/ -o home.html
+          grep -qi spoonjoy home.html
+          version=$(docker image inspect "$IMAGE:latest" --format '{{index .Config.Labels "org.opencontainers.image.version"}}')
+          {
+            echo "### $IMAGE:latest on $ARCH, pulled with no login"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version | $version |"
+            echo "| Pull | ${PULL_SECONDS} s |"
+            echo "| \`docker run\` to the first page | ${first_page_ms} ms |"
+            echo "| Health | $status |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Show the server's log
+        if: always()
+        run: docker logs sj 2>&1 | tail -50 || true
+
+      - name: Stop the server
+        if: always()
+        run: |
+          docker rm -f sj || true
+          docker volume rm sj-data || true
