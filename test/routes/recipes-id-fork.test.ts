@@ -126,7 +126,7 @@ describe("recipes.$id.fork action", () => {
       sourceRecipeId: "abc",
       viewerId: "viewer-1",
       // No flags in the context, so the fork does not start at the cook's default.
-      useCookDefault: false,
+      visibilityChoices: null,
     });
   });
 

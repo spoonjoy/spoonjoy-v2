@@ -628,7 +628,7 @@ export async function forkNativeRecipe(
   chefId: string,
   sourceRecipeId: string,
   input: NativeRecipeForkInput,
-  options: { recipeId?: string; d1?: D1ReadDatabase | null; useCookDefault?: boolean } = {},
+  options: { recipeId?: string; d1?: D1ReadDatabase | null; visibilityChoices?: readonly RecipeVisibility[] | null } = {},
 ): Promise<ApiV1RecipeWriteResult<{
   recipeId: string;
   fork: {
@@ -644,7 +644,7 @@ export async function forkNativeRecipe(
       viewerId: chefId,
       titleOverride: input.titleOverride,
       recipeId: options.recipeId,
-      useCookDefault: options.useCookDefault,
+      visibilityChoices: options.visibilityChoices,
     }, options.d1 ?? null);
 
     return success({

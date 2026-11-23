@@ -5,12 +5,12 @@ import { createRoutesStub } from "react-router";
 import { RecipeVisibilityDefaultSection } from "~/components/account/RecipeVisibilityDefaultSection";
 
 describe("RecipeVisibilityDefaultSection", () => {
-  function setup(answer: { success: boolean; intent: string; message?: string }) {
+  function setup(answer: { success: boolean; intent: string; message?: string }, choices?: Array<"public" | "household" | "private">) {
     const posted: Array<Record<string, string>> = [];
     const Stub = createRoutesStub([
       {
         path: "/account/settings",
-        Component: () => <RecipeVisibilityDefaultSection value="public" />,
+        Component: () => <RecipeVisibilityDefaultSection value="public" choices={choices} />,
         action: async ({ request }) => {
           posted.push(Object.fromEntries((await request.formData()).entries()) as Record<string, string>);
           return answer;
@@ -41,5 +41,23 @@ describe("RecipeVisibilityDefaultSection", () => {
     await user.click(await screen.findByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Choose public or only me.");
+  });
+
+  it("offers Household as the default only when it is a choice", async () => {
+    const user = userEvent.setup();
+    const posted = setup({ success: true, intent: "setRecipeVisibilityDefault" }, ["public", "household", "private"]);
+
+    const group = await screen.findByRole("radiogroup", { name: "Who can see your new recipes" });
+    await user.click(within(group).getByRole("radio", { name: /Household/ }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Saved.");
+    expect(posted).toEqual([{ intent: "setRecipeVisibilityDefault", visibility: "household" }]);
+  });
+
+  it("leaves Household out when it is not a choice", async () => {
+    setup({ success: true, intent: "setRecipeVisibilityDefault" });
+    const group = await screen.findByRole("radiogroup", { name: "Who can see your new recipes" });
+    expect(within(group).queryByRole("radio", { name: /Household/ })).toBeNull();
   });
 });

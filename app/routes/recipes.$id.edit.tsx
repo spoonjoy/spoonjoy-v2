@@ -48,8 +48,8 @@ import {
 import { Button } from "~/components/ouro/button/button";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { useEffect, useRef, useState } from "react";
-import { SELECTABLE_RECIPE_VISIBILITIES, parseRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
-import { isFlagOn } from "~/domains/platform";
+import { parseRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
+import { recipeVisibilityChoices } from "~/lib/recipe-visibility-choices";
 
 interface ActionData {
   errors?: {
@@ -155,12 +155,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const imported = new URL(request.url).searchParams.get("imported") === "1";
 
-  // The visibility choice shows only while it is on for this cook.
-  const visibility = isFlagOn("recipe_visibility", context.cloudflare?.env, userId)
-    ? (parseRecipeVisibility(recipe.visibility) ?? "private")
-    : null;
+  // The visibility choice shows only while it is on for this cook, with household only while households is too.
+  const visibilityChoices = recipeVisibilityChoices(context.cloudflare?.env, userId);
+  const visibility = visibilityChoices ? (parseRecipeVisibility(recipe.visibility) ?? "private") : null;
 
-  return { recipe, coverImageUrl, formattedSteps, imported, visibility };
+  return { recipe, coverImageUrl, formattedSteps, imported, visibility, visibilityChoices };
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
@@ -379,14 +378,13 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const cloudflareEnv = getCloudflareEnv(context);
   const photosBucket = cloudflareEnv?.PHOTOS;
   // A visibility the cook cannot choose today (or a save while the choice is off) keeps the stored one.
-  const chosenVisibility = isFlagOn("recipe_visibility", cloudflareEnv, userId)
-    ? parseRecipeVisibility(formData.get("visibility"))
-    : null;
+  const visibilityChoices = recipeVisibilityChoices(cloudflareEnv, userId);
+  const chosenVisibility = visibilityChoices ? parseRecipeVisibility(formData.get("visibility")) : null;
   const updateData: { title: string; description: string | null; servings: string | null; visibility?: RecipeVisibility } = {
     title: title.trim(),
     description: description.trim() || null,
     servings: servings.trim() || null,
-    ...(chosenVisibility && (SELECTABLE_RECIPE_VISIBILITIES as readonly string[]).includes(chosenVisibility)
+    ...(chosenVisibility && visibilityChoices?.includes(chosenVisibility)
       ? { visibility: chosenVisibility }
       : {}),
   };
@@ -572,7 +570,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function EditRecipe() {
-  const { recipe, coverImageUrl, formattedSteps, imported, visibility } = useLoaderData<typeof loader>();
+  const { recipe, coverImageUrl, formattedSteps, imported, visibility, visibilityChoices } = useLoaderData<typeof loader>();
   const actionData = useActionData<ActionData>();
   const [initialActionData] = useState(actionData);
   const saveFetcher = useFetcher<ActionData>();
@@ -669,6 +667,7 @@ export default function EditRecipe() {
           loading={isLoading}
           showSteps={false}
           visibility={visibility ?? undefined}
+          visibilityChoices={visibilityChoices ?? undefined}
         />
 
         <section aria-label="Recipe steps" className="mt-10">

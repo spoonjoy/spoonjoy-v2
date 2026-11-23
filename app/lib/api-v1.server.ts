@@ -1,5 +1,4 @@
 import { cookRecipeVisibilityDefault } from "~/lib/recipe-create.server";
-import { isFlagOn } from "~/domains/platform";
 import { authenticateUserByEmailOrUsername, lookupUserIdByEmailOrUsername } from "~/lib/auth.server";
 import { recordAccountSignIn, touchLastSeen, type AccountActivityEnv } from "~/lib/account-activity.server";
 import {
@@ -42,6 +41,7 @@ import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { loadApiRecipeFromD1, loadApiRecipeWithPrisma } from "~/lib/api-recipe-reads.server";
 import { canRead, readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
 import { likeContainsSearch } from "~/domains/platform";
+import { recipeVisibilityChoices } from "~/lib/recipe-visibility-choices";
 import { recipeViewerFor, type RecipeViewerSources } from "~/lib/recipe-viewer.server";
 import { d1WriteBatch } from "~/lib/d1-write.server";
 import { d1WriteOnceKey } from "~/lib/d1-write-once.server";
@@ -6804,7 +6804,7 @@ async function handleRecipeFork(args: ApiV1RouteArgs, requestId: string, princip
     const forked = recipeWriteResultOrThrow(await forkNativeRecipe(db, principal.id, sourceRecipeId, parsed.data, {
       recipeId: reservation.id,
       d1: requestD1(args.context),
-      useCookDefault: isFlagOn("recipe_visibility", args.context.cloudflare?.env, principal.id),
+      visibilityChoices: recipeVisibilityChoices(args.context.cloudflare?.env, principal.id),
     }));
     await notifyNativeRecipeFork(args, db, {
       appliedTitle: forked.data.fork.appliedTitle,
