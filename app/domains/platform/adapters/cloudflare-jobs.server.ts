@@ -1,6 +1,7 @@
 // The jobs port on spoonjoy.app: Cloudflare Queues carry the jobs, and D1's PlatformJobKey table holds
 // each job's key and lease. The Worker's queue() handler (workers/app.ts) hands each batch to
-// consumeJobBatch. These take their bindings as arguments and read no env themselves.
+// consumeJobBatch, and its scheduled() handler expires old keys with expireDoneJobKeys. These take their
+// bindings as arguments and read no env themselves. Import them from "~/domains/platform/index.server".
 //
 // The JOBS queue's consumer needs max_retries well above the largest kind's maxAttempts, because waiting
 // out a lease or a deploy also counts as a delivery to Queues; if Queues drops a message anyway, its key
@@ -17,6 +18,14 @@ export interface JobKeysDatabase {
       all<Row>(): Promise<{ results: Row[] }>;
     };
   };
+}
+
+/**
+ * The job keys' database, from an environment's `DB` (typed unknown, as every binding here is), or null when that is
+ * not a D1 binding: checked once here, so no caller casts it.
+ */
+export function jobKeysDatabase(candidate: unknown): JobKeysDatabase | null {
+  return candidate && typeof (candidate as Partial<JobKeysDatabase>).prepare === "function" ? (candidate as JobKeysDatabase) : null;
 }
 
 export function queueJobs(queue: Queue<JobMessage> | undefined, keys: JobKeys): Jobs {
@@ -76,6 +85,16 @@ async function reportFailure(options: ConsumeOptions, message: JobMessage, error
   } catch {
     // The reporter is the telemetry; there's nowhere left to send its own failure.
   }
+}
+
+/** A done key is kept this many days, so the same job enqueued again within them does nothing. */
+export const JOB_KEY_KEPT_DAYS = 30;
+
+/** Forgets the keys of jobs done more than JOB_KEY_KEPT_DAYS ago; the scheduled sweep runs it. Resolves to how many. */
+export async function expireDoneJobKeys(db: JobKeysDatabase, now: () => Date = () => new Date()): Promise<number> {
+  const before = new Date(now().getTime() - JOB_KEY_KEPT_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const result = await db.prepare(`DELETE FROM "PlatformJobKey" WHERE "status" = 'done' AND "updatedAt" < ?`).bind(before).run();
+  return result.meta.changes ?? 0;
 }
 
 /** A key waiting this long has lost its message (a send that failed after the claim, or a dropped delivery). */

@@ -1,18 +1,9 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  consumeJobBatch,
-  d1JobKeys,
-  defineJob,
-  jobRegistry,
-  memoryJobs,
-  PlatformUnavailableError,
-  queueJobs,
-  retryDelaySeconds,
-  runJob,
-  type JobKeys,
-  type JobMessage,
-} from "~/domains/platform";
+import * as platform from "~/domains/platform";
+import { defineJob, jobRegistry, PlatformUnavailableError, retryDelaySeconds, runJob, type JobKeys, type JobMessage } from "~/domains/platform";
+import * as platformServer from "~/domains/platform/index.server";
+import { consumeJobBatch, d1JobKeys, expireDoneJobKeys, JOB_KEY_KEPT_DAYS, jobKeysDatabase, memoryJobs, queueJobs } from "~/domains/platform/index.server";
 import { migratedSqliteD1, type MigratedSqlite } from "../../helpers/migrated-sqlite";
 
 const moveIn = defineJob<{ jobId: string }>("move-in.run", { maxAttempts: 3 });
@@ -273,6 +264,37 @@ describe("the D1 job keys", () => {
     expect(await keys.claim("k", "move-in.run")).toBe(true);
     expect(status("k")).toEqual({ type: "move-in.run", status: "pending" });
   });
+
+  it("forgets a done key once it has been done for 30 days, and keeps every other key", async () => {
+    clock = new Date("2026-11-23T12:00:00.000Z");
+    const keys = d1JobKeys(database.binding, () => clock);
+    for (const key of ["old", "recent", "waiting", "running"]) await keys.claim(key, "move-in.run");
+    await keys.start("old", "move-in.run", 60);
+    await keys.markDone("old");
+    await keys.start("running", "move-in.run", 60 * 60 * 24 * 60);
+    later(JOB_KEY_KEPT_DAYS * 24 * 60 * 60 - 1);
+    await keys.start("recent", "move-in.run", 60);
+    await keys.markDone("recent");
+    later(2);
+    expect(await expireDoneJobKeys(database.binding, () => clock)).toBe(1);
+    expect(status("old")).toBeUndefined();
+    expect(status("recent")).toEqual({ type: "move-in.run", status: "done" });
+    expect(status("waiting")).toEqual({ type: "move-in.run", status: "pending" });
+    expect(status("running")).toEqual({ type: "move-in.run", status: "running" });
+    // Forgotten, the same job can be enqueued again.
+    expect(await keys.claim("old", "move-in.run")).toBe(true);
+  });
+
+  it("takes the job keys' database only from a binding that is one", () => {
+    expect(jobKeysDatabase(database.binding)).toBe(database.binding);
+    for (const candidate of [undefined, null, {}, { prepare: "no" }]) expect(jobKeysDatabase(candidate)).toBeNull();
+  });
+
+  it("expires by the real clock unless told otherwise, and counts none when D1 says nothing changed", async () => {
+    expect(await expireDoneJobKeys(database.binding)).toBe(0);
+    const silent = { prepare: () => ({ bind: () => ({ run: async () => ({ meta: {} }), all: async () => ({ results: [] }) }) }) };
+    expect(await expireDoneJobKeys(silent)).toBe(0);
+  });
 });
 
 describe("the test adapter", () => {
@@ -307,5 +329,16 @@ describe("the test adapter", () => {
     const jobs = memoryJobs(jobRegistry());
     await jobs.enqueue(welcome, { userId: "u" }, { key: "welcome:u" });
     expect((await jobs.drain()).map((ran) => ran.outcome.status)).toEqual(["unhandled"]);
+  });
+
+});
+
+describe("Platform's two barrels", () => {
+  it("keeps every adapter out of the port's barrel, behind the server one", () => {
+    for (const adapter of ["queueJobs", "consumeJobBatch", "d1JobKeys", "expireDoneJobKeys", "memoryJobs"]) {
+      expect(Object.keys(platform)).not.toContain(adapter);
+      expect(Object.keys(platformServer)).toContain(adapter);
+    }
+    expect(Object.keys(platform)).toEqual(expect.arrayContaining(["defineJob", "jobRegistry", "runJob"]));
   });
 });
