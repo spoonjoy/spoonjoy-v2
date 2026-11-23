@@ -167,7 +167,8 @@ describe("shopping list loader on a D1 binding", () => {
     expect(getRequestDb).not.toHaveBeenCalled();
     // The session version check, then one batch for the page.
     expect(d1.roundTrips()).toBe(2);
-    expect(result).toEqual(await readShoppingListWithPrisma(db, user.id));
+    // The page also carries the cook's units, from a cookie this request does not have.
+    expect(result).toEqual({ ...(await readShoppingListWithPrisma(db, user.id)), unitSystem: "original" });
   });
 });
 
