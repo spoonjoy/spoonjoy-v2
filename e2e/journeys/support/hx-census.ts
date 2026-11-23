@@ -21,6 +21,7 @@ import { expect } from "./journey";
 import { chooseMenuItem } from "./menu";
 import { openDisclosure } from "./navigation";
 import { personaStorageStatePath, type PersonaName } from "./personas";
+import { showOnlyShell } from "./census-shell";
 
 export type CensusPersona = "signed-out" | PersonaName;
 
@@ -84,6 +85,10 @@ function editStep(page: Page, stepNum: number) {
  */
 export const census: Journey[] = [
   // Home, sign-in and the public pages.
+  // The shared shell (banner, footer, navigations), counted once for a visitor and once for a cook,
+  // and left out of every other entry (support/census-shell.ts). Friends and new cooks see the cook's.
+  { id: "shell-signed-out", enrolled: true, persona: "signed-out", path: "/", states: [{ id: "shell", action: showOnlyShell }] },
+  { id: "shell-signed-in", enrolled: true, persona: "chef", path: "/", states: [{ id: "shell", action: showOnlyShell }] },
   { id: "home-signed-out", enrolled: true, persona: "signed-out", path: "/", states: [DEFAULT] },
   { id: "home-chef", enrolled: true, persona: "chef", path: "/", states: [DEFAULT] },
   { id: "home-newbie", enrolled: true, persona: "newbie", path: "/", states: [DEFAULT] },

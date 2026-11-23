@@ -1,7 +1,7 @@
 // The HX census journey (AGENTS.md, "The HX census"): HX's census kit (ouro-census, installed under
 // e2e/ouro-census/) runs every state of every journey in support/hx-census.ts, on both device
 // projects, as that journey's persona. Each state loads the journey's page fresh, waits for
-// hydration, runs the state's action (which only opens things), and fails unless its visible
+// hydration, hides the shared shell (support/census-shell.ts), runs the state's action (which only opens things), and fails unless its visible
 // controls equal e2e/ouro-census/census.baseline.json (and, for an enrolled journey, every control
 // is HX's).
 //
@@ -16,6 +16,7 @@ import type { TestInfo } from "@playwright/test";
 import { censusTests } from "../ouro-census/census-page.mjs";
 import { test as journeyTest } from "./support/journey";
 import { CENSUS_PROJECTS, censusJourneys } from "./support/hx-census";
+import { hideShell } from "./support/census-shell";
 import { waitForHydration } from "./support/navigation";
 
 const NOT_FOUND_PATH = "/hx-census-page-that-does-not-exist";
@@ -66,5 +67,10 @@ censusTests({
   projects: CENSUS_PROJECTS,
   componentsDir: "app/components/ouro",
   resultsDir: "hx-census",
-  prepare: waitForHydration,
+  // Each page's entry leaves out the shared shell, which its own journeys count once
+  // (support/census-shell.ts).
+  prepare: async (page) => {
+    await waitForHydration(page);
+    await hideShell(page);
+  },
 });
