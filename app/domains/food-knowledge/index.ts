@@ -24,6 +24,7 @@ export {
 } from "./model/units";
 export {
   foodNutritionFor,
+  formatGrams,
   gramsOf,
   NUTRITION_SOURCE,
   recipeNutrition,

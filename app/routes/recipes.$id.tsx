@@ -1,4 +1,6 @@
 import type { Route } from "./+types/recipes.$id";
+import { RecipeNutrition } from "~/components/recipe/RecipeNutrition";
+import { useFlag } from "~/domains/platform";
 import { chefDisplayName } from "~/lib/username";
 import { recipePageTitle } from "~/lib/seo-titles";
 import { shareImageMeta } from "~/lib/og-metadata";
@@ -269,6 +271,7 @@ function RecipeDetail() {
   // adds the ingredients once; a success makes a fresh token for the next add.
   const [addToListToken, renewAddToListToken] = useWriteToken();
   const lastHandledLoggedSpoonId = useRef<string | null>(null);
+  const nutritionOn = useFlag("nutrition");
   const ingredientCount = recipe.steps.reduce((count, step) => count + step.ingredients.length, 0);
 
   // PostHog: Track recipe view on mount
@@ -800,6 +803,19 @@ function RecipeDetail() {
           <p className="hidden font-sj-ui text-sm text-[var(--sj-ink-soft)] print:mt-6 print:block" data-testid="recipe-print-source">
             From Spoonjoy: {loaderData.canonicalUrl}
           </p>
+        ) : null}
+
+        {nutritionOn ? (
+          <RecipeNutrition
+            servings={recipe.servings}
+            ingredients={recipe.steps.flatMap((step) =>
+              step.ingredients.map((ingredient) => ({
+                name: ingredient.ingredientRef.name,
+                quantity: ingredient.quantity,
+                unit: ingredient.unit?.name,
+              })),
+            )}
+          />
         ) : null}
 
         <div className="mt-10 space-y-4 print:hidden" data-testid="recipe-cooks">

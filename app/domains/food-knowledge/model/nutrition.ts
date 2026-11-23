@@ -94,3 +94,8 @@ export function recipeNutrition(
   const perServing = servings && servings > 0 ? Object.fromEntries(KEYS.map((key) => [key, total[key] / servings])) as unknown as NutritionFacts : null;
   return { total, perServing, weighed, of: ingredients.length };
 }
+
+/** Grams as a nutrition label writes them: to a tenth below 10 g ("6.8 g"), whole from there ("75 g"). */
+export function formatGrams(grams: number): string {
+  return grams < 10 ? `${Math.round(grams * 10) / 10} g` : `${Math.round(grams)} g`;
+}

@@ -18,6 +18,7 @@ export const FLAGS = {
   organizers: {
     description: "Tags, categories and tools on recipes, their pages and filters, smart cookbooks and bulk actions on many recipes.",
   },
+  nutrition: { description: "Calories and macros per serving on a recipe's page, from USDA FoodData Central." },
 } as const satisfies Record<string, { description: string }>;
 
 export type FlagName = keyof typeof FLAGS & string;
