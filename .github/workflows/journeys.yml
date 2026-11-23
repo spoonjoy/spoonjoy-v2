@@ -386,9 +386,24 @@ jobs:
             pnpm run test:journeys:after-census --shard="1/$PARTS"
             exit "$census"
           else
-            # No census here, so the personas setup runs as this shard's dependency.
-            node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts \
-              --project iphone-webkit --project desktop-chrome --grep-invert @ouro-census --shard="$PART/$PARTS"
+            # No census here, so this part signs the personas in first, then runs its shard on those
+            # sign-ins. Part 2 also runs the Move in journeys (tag @move-in, left out of every shard):
+            # each moves a whole kitchen in, so they run in a process of their own beside the shard,
+            # on this part's stack and sign-ins, with one worker and their own report and results
+            # folders; their log lines stream with a [move-in] prefix.
+            node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts --project personas
+            move_in_pid=""
+            if [ "$PART" = "2" ]; then
+              pnpm run test:journeys:move-in > >(sed -u 's/^/[move-in] /') 2>&1 &
+              move_in_pid=$!
+            fi
+            rest=0
+            node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts --no-deps \
+              --project iphone-webkit --project desktop-chrome --grep-invert "@ouro-census|@move-in" --shard="$PART/$PARTS" || rest=$?
+            move_in=0
+            if [ -n "$move_in_pid" ]; then wait "$move_in_pid" || move_in=$?; fi
+            [ "$rest" -ne 0 ] && exit "$rest"
+            exit "$move_in"
           fi
 
       # Each census worker wrote hx-census/census-actual.<project>.<worker>.json, and the census
@@ -574,7 +589,7 @@ jobs:
       - name: Strip network logs from traces
         id: strip-traces
         if: always()
-        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report explore-report hx-census-test-results hx-census-report
+        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report explore-report hx-census-test-results hx-census-report move-in-test-results move-in-report
 
       # The artifact is public to any signed-in GitHub user. It can contain:
       #   - journeys-report/ or explore-report/: the HTML report, whose step titles include
@@ -614,6 +629,8 @@ jobs:
             test-results/
             hx-census-report/
             hx-census-test-results/
+            move-in-report/
+            move-in-test-results/
           retention-days: 30
           include-hidden-files: false
 
