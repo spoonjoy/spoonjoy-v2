@@ -18,10 +18,12 @@ import { migratedSqliteD1, type MigratedSqlite } from "../../helpers/migrated-sq
 const moveIn = defineJob<{ jobId: string }>("move-in.run", { maxAttempts: 3 });
 const welcome = defineJob<{ userId: string }>("welcome.send");
 
-function keysInMemory(): JobKeys & { rows: Map<string, string> } {
+function keysInMemory(): JobKeys & { rows: Map<string, string>; runs: Map<string, number> } {
   const rows = new Map<string, string>();
+  const runs = new Map<string, number>();
   return {
     rows,
+    runs,
     async claim(key) {
       if (rows.has(key)) return false;
       rows.set(key, "pending");
@@ -29,10 +31,12 @@ function keysInMemory(): JobKeys & { rows: Map<string, string> } {
     },
     async start(key) {
       const status = rows.get(key);
-      if (status === "done") return "done";
-      if (status === "running") return "busy";
+      if (status === "done") return { state: "done" };
+      if (status === "running") return { state: "busy", retryInSeconds: 75 };
       rows.set(key, "running");
-      return "started";
+      const run = (runs.get(key) ?? 0) + 1;
+      runs.set(key, run);
+      return { state: "started", run };
     },
     async pause(key) {
       rows.set(key, "pending");
@@ -74,7 +78,7 @@ describe("running one job", () => {
     const keys = keysInMemory();
     await keys.claim("move-in:job-1", "move-in.run");
     const handler = vi.fn(async () => {});
-    const outcome = await runJob(jobRegistry().on(moveIn, handler), keys, message(), 1);
+    const outcome = await runJob(jobRegistry().on(moveIn, handler), keys, message());
     expect(outcome).toEqual({ status: "done" });
     expect(handler).toHaveBeenCalledWith({ jobId: "job-1" }, { key: "move-in:job-1", attempt: 1 });
     expect(keys.rows.get("move-in:job-1")).toBe("done");
@@ -84,37 +88,39 @@ describe("running one job", () => {
     const keys = keysInMemory();
     keys.rows.set("move-in:job-1", "done");
     const handler = vi.fn(async () => {});
-    expect(await runJob(jobRegistry().on(moveIn, handler), keys, message(), 1)).toEqual({ status: "skipped", reason: "already-done" });
+    expect(await runJob(jobRegistry().on(moveIn, handler), keys, message())).toEqual({ status: "skipped", reason: "already-done" });
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("skips a job no handler is registered for, and frees its key", async () => {
+  it("leaves a job no handler here knows for a later delivery, without touching its key", async () => {
+    // During a deploy or rollback, a Worker that doesn't know the kind may get its message.
     const keys = keysInMemory();
-    await keys.claim("move-in:job-1", "move-in.run");
-    expect(await runJob(jobRegistry(), keys, message(), 1)).toEqual({ status: "skipped", reason: "unknown-type" });
-    expect(keys.rows.has("move-in:job-1")).toBe(false);
+    keys.rows.set("move-in:job-1", "running");
+    expect(await runJob(jobRegistry(), keys, message())).toEqual({ status: "unhandled", delaySeconds: 300 });
+    expect(keys.rows.get("move-in:job-1")).toBe("running");
   });
 
   it("waits while another delivery of the same key is running, so a key's handler runs once at a time", async () => {
     const keys = keysInMemory();
     keys.rows.set("move-in:job-1", "running");
     const handler = vi.fn(async () => {});
-    expect(await runJob(jobRegistry().on(moveIn, handler), keys, message(), 1)).toEqual({ status: "busy", delaySeconds: 60 });
+    // It comes back once the other run's lease is up, not before, so waiting never uses up attempts.
+    expect(await runJob(jobRegistry().on(moveIn, handler), keys, message())).toEqual({ status: "busy", delaySeconds: 75 });
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("retries a failed run after its backoff until its attempts run out, then frees its key", async () => {
+  it("retries a failed run after its backoff until its runs reach maxAttempts, then frees its key", async () => {
     const keys = keysInMemory();
     await keys.claim("move-in:job-1", "move-in.run");
     const error = new Error("D1 was busy");
     const registry = jobRegistry().on(moveIn, async () => {
       throw error;
     });
-    expect(await runJob(registry, keys, message(), 1)).toEqual({ status: "retry", delaySeconds: 10 });
-    expect(await runJob(registry, keys, message(), 2)).toEqual({ status: "retry", delaySeconds: 20 });
+    expect(await runJob(registry, keys, message())).toEqual({ status: "retry", delaySeconds: 10 });
+    expect(await runJob(registry, keys, message())).toEqual({ status: "retry", delaySeconds: 20 });
     // Between runs the key is free for the next delivery to start.
     expect(keys.rows.get("move-in:job-1")).toBe("pending");
-    expect(await runJob(registry, keys, message(), 3)).toEqual({ status: "failed", error });
+    expect(await runJob(registry, keys, message())).toEqual({ status: "failed", error });
     // A failed job can be enqueued again under the same key.
     expect(keys.rows.has("move-in:job-1")).toBe(false);
   });
@@ -161,13 +167,14 @@ describe("the Cloudflare Queues adapter", () => {
       retry: vi.fn(),
     });
     const malformed = { body: { nope: true }, attempts: 1, ack: vi.fn(), retry: vi.fn() };
-    const messages = [delivery("a", "ok", 1), delivery("b", "ok", 1), delivery("c", "fails", 2), delivery("d", "fails", 3), malformed];
+    keys.runs.set("d", 2);
+    const messages = [delivery("a", "ok", 1), delivery("b", "ok", 1), delivery("c", "fails", 4), delivery("d", "fails", 1), malformed];
     const failed = vi.fn(() => {
       throw new Error("PostHog is down");
     });
     await consumeJobBatch({ messages } as never, registry, keys, { onFailed: failed });
     expect(messages.map((m) => [m.ack.mock.calls.length, m.retry.mock.calls]))
-      .toEqual([[1, []], [1, []], [0, [[{ delaySeconds: 20 }]]], [1, []], [1, []]]);
+      .toEqual([[1, []], [1, []], [0, [[{ delaySeconds: 10 }]]], [1, []], [1, []]]);
     expect(failed).toHaveBeenCalledWith(messages[3].body, expect.objectContaining({ message: "not yet" }));
   });
 
@@ -199,16 +206,18 @@ describe("the D1 job keys", () => {
     const keys = d1JobKeys(database.binding, () => clock);
     expect(await keys.claim("k", "move-in.run")).toBe(true);
     expect(await keys.claim("k", "move-in.run")).toBe(false);
-    expect(await keys.start("k", "move-in.run", 600)).toBe("started");
-    expect(await keys.start("k", "move-in.run", 600)).toBe("busy");
+    expect(await keys.start("k", "move-in.run", 600)).toEqual({ state: "started", run: 1 });
+    later(100);
+    // Another delivery waits out the lease, and a few seconds more.
+    expect(await keys.start("k", "move-in.run", 600)).toEqual({ state: "busy", retryInSeconds: 505 });
     // A run that died without a word loses its lease once the lease runs out.
-    later(601);
-    expect(await keys.start("k", "move-in.run", 600)).toBe("started");
+    later(501);
+    expect(await keys.start("k", "move-in.run", 600)).toEqual({ state: "started", run: 2 });
     await keys.pause("k");
     expect(status("k")).toEqual({ type: "move-in.run", status: "pending" });
-    expect(await keys.start("k", "move-in.run", 600)).toBe("started");
+    expect(await keys.start("k", "move-in.run", 600)).toEqual({ state: "started", run: 3 });
     await keys.markDone("k");
-    expect(await keys.start("k", "move-in.run", 600)).toBe("done");
+    expect(await keys.start("k", "move-in.run", 600)).toEqual({ state: "done" });
     expect(await keys.claim("k", "move-in.run")).toBe(false);
     await keys.release("k");
     expect(await keys.claim("k", "move-in.run")).toBe(true);
@@ -217,12 +226,23 @@ describe("the D1 job keys", () => {
   it("starts a delivery whose key has no row, and lets a key left pending for a day be claimed again", async () => {
     clock = new Date("2026-11-23T12:00:00.000Z");
     const keys = d1JobKeys(database.binding, () => clock);
-    expect(await keys.start("orphan", "move-in.run", 600)).toBe("started");
+    expect(await keys.start("orphan", "move-in.run", 600)).toEqual({ state: "started", run: 1 });
     expect(await keys.claim("lost", "move-in.run")).toBe(true);
     later(23 * 3600);
     expect(await keys.claim("lost", "move-in.run")).toBe(false);
     later(3600 + 1);
     expect(await keys.claim("lost", "move-in.run")).toBe(true);
+  });
+
+  it("lets a key whose run died, its lease run out and its message gone, be claimed again", async () => {
+    clock = new Date("2026-11-23T12:00:00.000Z");
+    const keys = d1JobKeys(database.binding, () => clock);
+    await keys.claim("k", "move-in.run");
+    await keys.start("k", "move-in.run", 600);
+    expect(await keys.claim("k", "move-in.run")).toBe(false);
+    later(601);
+    expect(await keys.claim("k", "move-in.run")).toBe(true);
+    expect(status("k")).toEqual({ type: "move-in.run", status: "pending" });
   });
 });
 
