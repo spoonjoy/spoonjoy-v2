@@ -163,14 +163,22 @@ async function readForms(db: D1ReadDatabase, recipeIds: string[]): Promise<Map<s
   return forms;
 }
 
+/**
+ * Matches `title` and every title that starts "title (", as a range rather than LIKE: D1 refuses a LIKE pattern over 50
+ * bytes, so a long name stopped its recipe on every try. Its values bind after the SQL's own.
+ */
+function titleOrNumbered(column: string, title: string): [string, string, string, string] {
+  return [`(${column} = ? OR (${column} >= ? AND ${column} < ?))`, title, `${title} (`, `${title} )`];
+}
+
 /** The title to use: `title` if the chef has no other recipe called that, otherwise the first free "title (n)". */
 async function freeTitle(db: D1ReadDatabase, chefId: string, title: string, recipeId = ""): Promise<string> {
+  const [match, ...values] = titleOrNumbered(`"title"`, title);
   const [rows] = await d1ReadBatch(db, [[
-    `SELECT "title" FROM "Recipe" WHERE "chefId" = ? AND "id" != ? AND "deletedAt" IS NULL AND ("title" = ? OR "title" LIKE ?)`,
+    `SELECT "title" FROM "Recipe" WHERE "chefId" = ? AND "id" != ? AND "deletedAt" IS NULL AND ${match}`,
     chefId,
     recipeId,
-    title,
-    `${title} (%)`,
+    ...values,
   ]]);
   const taken = new Set(rows.map((row) => String(row.title)));
   if (!taken.has(title)) return title;
@@ -216,16 +224,16 @@ async function sameRecipeFromACopy(
   db: D1ReadDatabase,
   { sourceId, chefId, title, hash }: { sourceId: string; chefId: string; title: string; hash: string },
 ): Promise<{ recipeId: string; jobId: string; updatedAt: string } | null> {
+  const [match, ...values] = titleOrNumbered(`"Recipe"."title"`, title);
   const [candidates] = await d1ReadBatch(db, [[
     `SELECT "Recipe"."id" AS "recipeId", MIN("SourceRecord"."lastJobId") AS "jobId" FROM "Recipe"
      JOIN "SourceRecord" ON "SourceRecord"."targetType" = 'Recipe' AND "SourceRecord"."targetId" = "Recipe"."id" AND "SourceRecord"."sourceId" != ?
-     WHERE "Recipe"."chefId" = ? AND "Recipe"."deletedAt" IS NULL AND ("Recipe"."title" = ? OR "Recipe"."title" LIKE ?)
+     WHERE "Recipe"."chefId" = ? AND "Recipe"."deletedAt" IS NULL AND ${match}
        AND NOT EXISTS (SELECT 1 FROM "SourceRecord" AS "mine" WHERE "mine"."sourceId" = ? AND "mine"."targetId" = "Recipe"."id")
      GROUP BY "Recipe"."id" ORDER BY "Recipe"."createdAt", "Recipe"."id"`,
     sourceId,
     chefId,
-    title,
-    `${title} (%)`,
+    ...values,
     sourceId,
   ]]);
   const forms = await readForms(db, candidates.map((row) => String(row.recipeId)));

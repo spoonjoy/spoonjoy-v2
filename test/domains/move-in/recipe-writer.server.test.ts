@@ -111,6 +111,14 @@ describe("writeMovedInRecipe", () => {
     expect(result).toEqual({ outcome: "created", recipeId: expect.any(String), title: "Pancakes (3)", renamedFrom: "Pancakes", warnings: [] });
   });
 
+  it("moves in and numbers a title too long for a LIKE pattern on D1", async () => {
+    // "<title> (%)" is over D1's 50-byte LIKE limit, which stopped these recipes on every try.
+    const title = "Savory Tender Cantaloupe And Dried Chinese Broccoli Salad";
+    database.sqlite.prepare(`INSERT INTO "Recipe" ("id", "title", "chefId") VALUES ('mine', ?, 'chef-1'), ('mine-2', ?, 'chef-1'), ('other', 'Savory Tender', 'chef-1')`).run(title, `${title} (2)`);
+    const result = await write(draft({ title }));
+    expect(result).toEqual({ outcome: "created", recipeId: expect.any(String), title: `${title} (3)`, renamedFrom: title, warnings: [] });
+  });
+
   describe("when the recipe moved in before", () => {
     const changed = () => draft({
       title: "Weekend pancakes",
@@ -263,6 +271,15 @@ describe("writeMovedInRecipe", () => {
     it("never takes a recipe the cook wrote for one that moved in", async () => {
       database.sqlite.prepare(`INSERT INTO "Recipe" ("id", "title", "description", "chefId") VALUES ('mine', 'Pancakes', 'Fluffy ones.', 'chef-1')`).run();
       expect(await writeFromCopy(draft({ sourceKey: "copy-1", steps: [], ingredients: [], notes: [] }))).toMatchObject({ outcome: "created", title: "Pancakes (2)" });
+    });
+
+    it("finds a recipe with a name too long for a LIKE pattern on D1", async () => {
+      const title = "Creamy Crunchy Jerusalem Artichoke And Mangosteens Bowl";
+      // Another of the cook's recipes, so the name is compared with one that isn't it.
+      database.sqlite.prepare(`INSERT INTO "Recipe" ("id", "title", "chefId") VALUES ('other', 'Creamy Crunchy', 'chef-1')`).run();
+      const first = await write(draft({ title }));
+      expect(await writeFromCopy(draft({ sourceKey: "copy-1", title }))).toEqual({ outcome: "unchanged", recipeId: first.recipeId, jobId: "job-1" });
+      expect(all(`SELECT "title" FROM "Recipe" WHERE "id" != 'other'`)).toEqual([{ title }]);
     });
 
     it("finds a recipe whose own name ends in a number", async () => {
