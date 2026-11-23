@@ -85,6 +85,19 @@ describe("selfHostVars", () => {
     expect(withKey.POSTHOG_HOST).toBe("https://ph.example.com");
   });
 
+  it("says the Worker is self-hosted, so its first account is its admin, whatever the environment says", () => {
+    expect(built.vars).not.toHaveProperty("SPOONJOY_SELF_HOSTED");
+    expect(selfHostVars(base).SPOONJOY_SELF_HOSTED).toBe("true");
+    expect(selfHostVars({ ...base, env: { SPOONJOY_SELF_HOSTED: "false" } }).SPOONJOY_SELF_HOSTED).toBe("true");
+  });
+
+  it("passes SPOONJOY_SIGNUPS through, and refuses a value that isn't open or invite", () => {
+    expect(selfHostVars(base)).not.toHaveProperty("SPOONJOY_SIGNUPS");
+    expect(selfHostVars({ ...base, env: { SPOONJOY_SIGNUPS: "open" } }).SPOONJOY_SIGNUPS).toBe("open");
+    expect(selfHostVars({ ...base, env: { SPOONJOY_SIGNUPS: "invite" } }).SPOONJOY_SIGNUPS).toBe("invite");
+    expect(() => selfHostVars({ ...base, env: { SPOONJOY_SIGNUPS: "closed" } })).toThrow(/SPOONJOY_SIGNUPS must be "open" or "invite"/);
+  });
+
   it("names no moderators unless the owner does", () => {
     expect(selfHostVars(base).SPOONJOY_MODERATOR_USERNAMES).toBe("");
     expect(selfHostVars({ ...base, env: { SPOONJOY_MODERATOR_USERNAMES: "me" } }).SPOONJOY_MODERATOR_USERNAMES).toBe("me");

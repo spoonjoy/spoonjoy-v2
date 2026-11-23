@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { D1Query, D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Guard, d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
+import { gateAccountCreation, type ServerAccessEnv } from "~/lib/server-access.server";
 
 export interface OAuthUserData {
   provider: string;
@@ -238,11 +239,15 @@ async function writeOAuthUser(
  * the second write fails on the unique email or provider identity. That request then signs
  * in to the account the first one created instead of failing, so there is one account and
  * no lockout.
+ *
+ * On a self-hosted server (`env`) the account-creation gate decides first; an invite-only server
+ * answers `signups_closed`.
  */
 export async function createOAuthUser(
   db: PrismaClient,
   oauthData: OAuthUserData,
   d1: D1ReadDatabase | null = null,
+  env: ServerAccessEnv | null = null,
 ): Promise<CreateOAuthUserResult> {
   // Handle missing email from provider (e.g., Apple "Hide My Email")
   if (!oauthData.email) {
@@ -261,6 +266,25 @@ export async function createOAuthUser(
     return ACCOUNT_EXISTS;
   }
 
+  const gate = await gateAccountCreation(db, env);
+  if (!gate.allowed) return { success: false, error: gate.code, message: gate.message };
+  let created = false;
+  try {
+    const result = await writeOAuthUserWithRetries(db, d1, oauthData, normalizedEmail);
+    created = result.success && Boolean(result.user);
+    if (created) await gate.created(result.user!.id);
+    return result;
+  } finally {
+    if (!created) await gate.abandoned();
+  }
+}
+
+async function writeOAuthUserWithRetries(
+  db: PrismaClient,
+  d1: D1ReadDatabase | null,
+  oauthData: OAuthUserData,
+  normalizedEmail: string,
+): Promise<CreateOAuthUserResult> {
   for (let attempt = 1; ; attempt++) {
     // Generate a unique username
     const username = await generateUsername(db, oauthData.name, oauthData.email);

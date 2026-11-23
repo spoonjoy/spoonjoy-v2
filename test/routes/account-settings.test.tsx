@@ -433,6 +433,37 @@ describe("Account Settings Route", () => {
     });
   });
 
+  describe("a self-hosted server's admin", () => {
+    const loadAs = async (env: Record<string, string> | null) => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const headers = new Headers({ Cookie: (await sessionStorage.commitSession(session)).split(";")[0] });
+      return loader({ request: new UndiciRequest("http://localhost:3000/account/settings", { headers }), context: { cloudflare: { env } }, params: {} } as never);
+    };
+
+    it("is told so in the loader, which nobody is on spoonjoy.app", async () => {
+      expect((await loadAs({ SPOONJOY_SELF_HOSTED: "true" })).serverAdmin).toBe(true);
+      expect((await loadAs(null)).serverAdmin).toBe(false);
+    });
+
+    it("sees a link to the server's settings, which others don't", async () => {
+      const mockData = (serverAdmin: boolean) => ({
+        user: { id: testUserId, email: testUserEmail.toLowerCase(), username: testUsername, hasPassword: true, oauthAccounts: [], passkeys: [] },
+        notifications: { pushSubscribed: false },
+        serverAdmin,
+      });
+      const Stub = createTestRoutesStub([{ path: "/account/settings", Component: AccountSettings, loader: () => mockData(true) }]);
+      render(<Stub initialEntries={["/account/settings"]} />);
+      const section = await screen.findByTestId("server-settings-section");
+      expect(within(section).getByRole("link", { name: "Server settings" })).toHaveAttribute("href", "/account/server");
+      cleanup();
+      const Plain = createTestRoutesStub([{ path: "/account/settings", Component: AccountSettings, loader: () => mockData(false) }]);
+      render(<Plain initialEntries={["/account/settings"]} />);
+      await screen.findByRole("heading", { name: /account settings/i });
+      expect(screen.queryByTestId("server-settings-section")).not.toBeInTheDocument();
+    });
+  });
+
   describe("component", () => {
     it("should render account settings page with heading", async () => {
       const mockData = {

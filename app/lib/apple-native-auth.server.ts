@@ -1,4 +1,5 @@
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { INVITE_ONLY_MESSAGE, SIGNUPS_CLOSED, type ServerAccessEnv } from "~/lib/server-access.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { normalizeCredentialScopes } from "~/lib/api-auth.server";
@@ -265,7 +266,7 @@ export async function handleNativeAppleSignIn(
   db: Database,
   input: NativeAppleCredentialInput,
   config: AppleNativeAuthConfig,
-  options: { issuer: string; fetcher?: typeof fetch; now?: Date; d1?: D1ReadDatabase | null },
+  options: { issuer: string; fetcher?: typeof fetch; now?: Date; d1?: D1ReadDatabase | null; env?: ServerAccessEnv | null },
 ): Promise<NativeAppleAuthResult> {
   const verified = await verifyNativeAppleIdentityToken(input, config, {
     fetcher: options.fetcher,
@@ -274,6 +275,7 @@ export async function handleNativeAppleSignIn(
   const callback = await handleAppleOAuthCallback({
     db,
     d1: options.d1,
+    env: options.env,
     appleUser: verified,
     currentUserId: null,
     redirectTo: null,
@@ -287,6 +289,9 @@ export async function handleNativeAppleSignIn(
       providerUsername: verified.fullName,
     }, { now: options.now });
     throw new NativeAppleAuthError(APPLE_EMAIL_UNAVAILABLE, PENDING_APPLE_LINK_MESSAGE, 409, pendingLink ?? undefined);
+  }
+  if (callback.error === SIGNUPS_CLOSED) {
+    throw new NativeAppleAuthError(SIGNUPS_CLOSED, callback.message ?? INVITE_ONLY_MESSAGE, 403);
   }
   if (!callback.success || !callback.userId) {
     throw new NativeAppleAuthError(callback.error ?? "apple_sign_in_failed", callback.message ?? "Apple sign-in didn't finish: Spoonjoy returned no account for it.", 409);

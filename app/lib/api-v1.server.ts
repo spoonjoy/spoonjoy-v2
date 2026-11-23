@@ -7436,6 +7436,7 @@ async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: s
       {
         issuer: resolveIssuerOrigin(args.request.url, args.context.cloudflare?.env?.SPOONJOY_BASE_URL),
         d1: requestD1(args.context),
+        env: args.context.cloudflare?.env,
       },
     );
     outcome.succeeded(result.userId, result.action === "user_created");

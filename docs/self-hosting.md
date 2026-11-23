@@ -29,7 +29,8 @@ The image runs as the unprivileged `node` user (uid 1000). A named volume needs 
 | `PORT` | The port the server listens on inside the container. | `8080` |
 | `SESSION_SECRET` | Signs sign-in cookies. Leave it unset and the server makes one and keeps it in `/data`. | generated |
 | `OPENAI_API_KEY`, `GEMINI_API_KEY` | AI features (ingredient parsing, covers). Without one, ingredient parsing uses the built-in parser. | none |
-| `SPOONJOY_MODERATOR_USERNAMES` | Comma-separated usernames who may review reports at `/moderation`. | none |
+| `SPOONJOY_SIGNUPS` | `open` lets anyone who reaches the server sign up; `invite` lets only people with an invite link. Set, it overrides the switch in Server settings. | the switch, invite-only at first |
+| `SPOONJOY_MODERATOR_USERNAMES` | Comma-separated usernames who may review reports at `/moderation`, besides the server's admin. | none |
 | `SPOONJOY_RATE_LIMIT_<NAME>` | Raises one of the per-minute limits (`AUTH_IP_RATE_LIMITER`, `API_IP_RATE_LIMITER`, `API_TOKEN_RATE_LIMITER`, `INGREDIENT_PARSE_RATE_LIMITER`), for a household that all reaches the server from one address. | spoonjoy.app's |
 | `PHOTO_SWEEP_MODE` | `apply` lets the photo cleanup move unused photos aside; `off` stops it. | dry run |
 | `POSTHOG_KEY`, `POSTHOG_HOST` | Your own PostHog project, if you want analytics. | off |
@@ -68,6 +69,17 @@ The first time someone signs in, Spoonjoy makes them an account from the provide
 
 The provider's sign-in needs the server on an `https://` address or on `localhost`.
 
+## Who can sign up
+
+The first account made on a new server is its admin. After that the server is invite-only, so someone who finds it on the internet can't make an account.
+
+- **Server settings.** The admin finds them under Account settings, at `/account/server`. **Open sign-ups** lets anyone sign up; **Make invite-only** turns that off again. People who already have an account always sign in.
+- **Invite links.** **Make an invite link** shows a link to copy once. It signs up one account at `/signup?invite=…` and stops working after it's used, after seven days, or when the admin revokes it. Spoonjoy keeps only a hash of it. An invite signs up with a password; the new cook can link Google, GitHub or Apple in Account settings afterwards.
+- **Everything else is refused.** While the server is invite-only, a new account through a password, Google, GitHub, Apple on the web or in the apps is refused with "This server is invite-only. Ask its owner for an invite link."
+- **Moderation.** The admin can review reports at `/moderation`.
+
+If the admin's account is deleted, the oldest remaining account becomes admin.
+
 ## Running SQL
 
 `server.mjs sql` runs a SQL file against the database, whole or not at all, after bringing it up to date. Stop the server first:
@@ -86,7 +98,7 @@ docker run --rm -v spoonjoy-data:/data -v "$PWD/photos:/photos:ro" ghcr.io/spoon
 
 ## How it's checked
 
-The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, signs up, adds a passkey and signs back in on the empty server, checks Sign in with Apple is set up, signs in through a Dex OpenID Connect provider, seeds the QA kitchen through `server.mjs sql` and its sample cover photos through `server.mjs photos`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, and checks the kitchen is still there after `docker restart`. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
+The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, signs up, adds a passkey and signs back in on the empty server, checks the first account is the admin, that a stranger is refused once sign-ups are off and that an invite link signs up one person and then stops working, checks Sign in with Apple is set up, signs in through a Dex OpenID Connect provider, seeds the QA kitchen through `server.mjs sql` and its sample cover photos through `server.mjs photos`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, and checks the kitchen is still there after `docker restart`. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
 
 After each green run on main, the `Self-host Pull` workflow (`.github/workflows/self-host-pull.yml`) pulls `ghcr.io/spoonjoy/spoonjoy:latest` with no login on amd64 and arm64, boots it on an empty volume and waits for its health check, the way a self-hoster would.
 

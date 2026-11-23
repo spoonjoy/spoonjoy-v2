@@ -18,8 +18,10 @@ import { TextField } from "~/components/ouro/text-field/text-field";
 import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
+import { Alert } from "~/components/ouro/alert/alert";
 import { useFormErrors } from "~/hooks/use-form-errors";
 import { useRedirectToWithHash } from "~/hooks/use-redirect-hash";
+import { gateAccountCreation, isSelfHosted, signupDoor } from "~/lib/server-access.server";
 
 interface ActionData {
   errors?: {
@@ -42,6 +44,10 @@ interface LoaderData {
   oauthProviders: OAuthProvider[];
   /** The server owner's label for its OpenID Connect button, when one is set up. */
   oidcLabel?: string;
+  // A self-hosted server that is invite-only: the message shown instead of the form.
+  signupsClosed?: string;
+  // The invite link this page was opened with, when it lets this person sign up.
+  invite?: string;
 }
 
 export function meta({}: Route.MetaArgs) {
@@ -61,14 +67,20 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // Check for OAuth error in URL search params
   const url = new URL(request.url);
   const oauthError = url.searchParams.get("oauthError");
-  const oauthProviders = getConfiguredOAuthProviders(getOAuthEnv(context));
-  const oidcLabel = getOidcButtonLabel(getOAuthEnv(context));
+  const inviteToken = url.searchParams.get("invite");
+  // On a self-hosted server that is invite-only, a stranger reads why they can't sign up, and an
+  // invite link signs one person up with a password (they can link a provider in settings later).
+  const env = context.cloudflare?.env;
+  const door = isSelfHosted(env) ? await signupDoor(await getRequestDb(context), env, inviteToken) : { door: "open" as const };
+  const oauthProviders = door.door === "open" ? getConfiguredOAuthProviders(getOAuthEnv(context)) : [];
+  const oidcLabel = door.door === "open" ? getOidcButtonLabel(getOAuthEnv(context)) : undefined;
+  const access = door.door === "closed" ? { signupsClosed: door.message } : door.door === "invite" ? { invite: inviteToken! } : {};
 
   if (oauthError) {
-    return { oauthError, oauthProviders, oidcLabel } as LoaderData;
+    return { oauthError, oauthProviders, oidcLabel, ...access } as LoaderData;
   }
 
-  return { oauthProviders, oidcLabel } as LoaderData;
+  return { oauthProviders, oidcLabel, ...access } as LoaderData;
 }
 
 // Action - handle signup form submission
@@ -130,10 +142,17 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ errors, values: { email, username } }, { status: 400 });
   }
 
+  const inviteToken = formData.get("invite")?.toString() || new URL(request.url).searchParams.get("invite");
+  const gate = await gateAccountCreation(database, context.cloudflare?.env, { inviteToken });
+  if (!gate.allowed) {
+    return data({ errors: { general: gate.message }, values: { email, username } }, { status: 403 });
+  }
+
   let user: Awaited<ReturnType<typeof createUser>>;
   try {
     user = await createUser(database, email, username, password);
   } catch (error) {
+    await gate.abandoned();
     // The database was briefly unavailable: say so above the form, which keeps what was typed.
     if (!isD1Unavailable(error)) throw error;
     return data(
@@ -141,6 +160,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       { status: 503, headers: d1UnavailableHeaders() },
     );
   }
+
+  await gate.created(user.id);
 
   // A new account lands where it came from (the recipe someone tapped Save on, an app asking for
   // access), sanitised as log-in does, or else in its own Kitchen, which starts with what to do
@@ -173,6 +194,13 @@ export default function Signup() {
         {/* OAuth error messages */}
         <OAuthError error={loaderData?.oauthError} className="mt-4" />
 
+        {loaderData?.signupsClosed ? (
+          <Alert tone="warning" title={loaderData.signupsClosed} className="mt-8" data-testid="signups-closed" />
+        ) : null}
+        {loaderData?.invite ? (
+          <Alert tone="primary" title="You're invited to this Spoonjoy server." description="This link signs up one account." className="mt-8" />
+        ) : null}
+
         {oauthProviders.length > 0 && (
           <>
             <OAuthButtonGroup providers={oauthProviders} oidcLabel={loaderData?.oidcLabel} redirectTo={redirectTo} className="mt-8" />
@@ -185,6 +213,7 @@ export default function Signup() {
             username or password reaches the action and shows the app's message, not the browser's.
             An empty field or a malformed email is stopped in the browser, with its message under
             the field. */}
+        {loaderData?.signupsClosed ? null : (
         <Form
           method="post"
           errors={formErrors}
@@ -226,10 +255,13 @@ export default function Signup() {
             required
           />
 
+          {loaderData?.invite ? <input type="hidden" name="invite" value={loaderData.invite} /> : null}
+
           <Button type="submit" className="w-full">
             Sign up
           </Button>
         </Form>
+        )}
 
         <Text tone="muted" align="center" className="mt-6">
           Already have an account?{" "}

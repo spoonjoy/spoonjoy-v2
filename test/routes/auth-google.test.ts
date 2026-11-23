@@ -422,6 +422,7 @@ describe("Google OAuth routes", () => {
     expect(mocks.handleGoogleOAuthCallback).toHaveBeenCalledWith({
       db: { source: "db" },
       d1: null,
+      env: googleEnv,
       googleUser,
       currentUserId: null,
       redirectTo: "/cookbooks",

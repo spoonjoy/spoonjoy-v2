@@ -26,9 +26,10 @@ import {
 } from "~/lib/moderation.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
+import { isServerAdmin } from "~/lib/server-access.server";
 
 // Reports and blocks post here from the recipe, chef and settings pages. Moderators (the
-// SPOONJOY_MODERATOR_USERNAMES chefs) also read the open reports here and act on each one; to
+// SPOONJOY_MODERATOR_USERNAMES chefs, and a self-hosted server's admin) also read the open reports here and act on each one; to
 // anyone else the page does not exist.
 
 export function meta({}: Route.MetaArgs) {
@@ -40,7 +41,9 @@ async function currentChef(request: Request, context: Route.LoaderArgs["context"
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const db = await getRequestDb(context);
   const user = await db.user.findUnique({ where: { id: userId }, select: { username: true } });
-  return { env, userId, db, username: user?.username ?? "", moderator: isModerator(env, user?.username) };
+  // A self-hosted server's admin moderates it too (app/lib/server-access.server.ts).
+  const moderator = isModerator(env, user?.username) || (await isServerAdmin(db, context.cloudflare?.env, userId));
+  return { env, userId, db, username: user?.username ?? "", moderator };
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {

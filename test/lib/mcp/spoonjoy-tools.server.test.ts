@@ -1301,6 +1301,15 @@ describe("spoonjoy MCP tools", () => {
     expect(fallback.imageUrl).toBe(`data:image/png;base64,${b64(VALID_PNG_BYTES)}`);
   });
 
+  it("makes no owner account on an invite-only self-hosted server", async () => {
+    await context.db.user.create({ data: { email: uniqueEmail("admin"), username: `admin-${faker.string.alphanumeric(8).toLowerCase()}` } });
+    const selfHosted = { ...context, env: { SPOONJOY_SELF_HOSTED: "true" } } as SpoonjoyMcpContext;
+    await expect(callSpoonjoyMcpTool("create_api_token", { name: "Owner token" }, selfHosted)).rejects.toThrow(
+      "This server is invite-only. Ask its owner for an invite link.",
+    );
+    await expect(context.db.user.count()).resolves.toBe(1);
+  });
+
   it("uses the account an owner email already has in another case instead of creating a second one", async () => {
     const email = context.defaultOwnerEmail!;
     const mixedCase = await context.db.user.create({

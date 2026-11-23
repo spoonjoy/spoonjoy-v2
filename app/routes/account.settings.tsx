@@ -12,6 +12,8 @@ import {
 import { LogOut } from "lucide-react";
 import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/ouro/button/button";
+import { Link } from "~/components/ouro/link/link";
+import { isServerAdmin } from "~/lib/server-access.server";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
@@ -41,8 +43,14 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const settings = await loadAccountSettings({ request, context });
-  const blocked = await listBlockedChefs(await getRequestDb(context), settings.user.id);
-  return { ...settings, blockedChefs: blocked.map(({ chef }) => ({ id: chef.id, username: chef.username })) };
+  const db = await getRequestDb(context);
+  const blocked = await listBlockedChefs(db, settings.user.id);
+  return {
+    ...settings,
+    blockedChefs: blocked.map(({ chef }) => ({ id: chef.id, username: chef.username })),
+    // A self-hosted server's admin gets a way to its settings (app/routes/account.server.tsx).
+    serverAdmin: await isServerAdmin(db, context.cloudflare?.env, settings.user.id),
+  };
 }
 
 export async function action({ request, context }: Route.ActionArgs): Promise<AccountSettingsActionResponse> {
@@ -75,7 +83,7 @@ const DELETE_INTENTS = ["deleteAccount"] as const;
 const REMOVE_PASSWORD_FIELDS = ["currentPassword"] as const;
 
 export default function AccountSettings() {
-  const { user, oauthError, notifications, blockedChefs = [] } = useLoaderData<AccountSettingsLoaderData & { blockedChefs?: BlockedChefRow[] }>();
+  const { user, oauthError, notifications, blockedChefs = [], serverAdmin = false } = useLoaderData<AccountSettingsLoaderData & { blockedChefs?: BlockedChefRow[]; serverAdmin?: boolean }>();
   useSectionFocus(SETTINGS_SECTIONS);
   const actionData = useActionData<AccountSettingsActionResult>();
   const [initialActionData] = useState(actionData);
@@ -722,6 +730,13 @@ export default function AccountSettings() {
       />
 
       <BlockedChefsSection chefs={blockedChefs} />
+
+      {serverAdmin ? (
+        <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="server-settings-section" title="This server">
+          <Text tone="muted" className="mt-1">You made this server's first account, so you decide who else can join it.</Text>
+          <Link href="/account/server" className="mt-3 inline-block">Server settings</Link>
+        </Card>
+      ) : null}
 
       <AccountDataSection
         username={user.username}

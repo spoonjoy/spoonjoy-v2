@@ -10,6 +10,7 @@ import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
+import { INVITE_ONLY_MESSAGE, createServerInvite, serverAdminId, setSignupMode } from "~/lib/server-access.server";
 
 // Helper to extract data from React Router's data() response
 function extractResponseData(response: any): { data: any; status: number } {
@@ -632,7 +633,121 @@ describe("Signup Route", () => {
     );
   });
 
+  describe("on a self-hosted server", () => {
+    const env = { SPOONJOY_SELF_HOSTED: "true" };
+
+    async function signUpOn(serverEnv: Record<string, string> | null, query = "", invite?: string) {
+      const formData = new FormData();
+      formData.set("email", `chef-${faker.string.alphanumeric(10)}@example.com`.toLowerCase());
+      formData.set("username", `chef_${faker.string.alphanumeric(10)}`);
+      formData.set("password", "Valid-Test-Password-42!");
+      formData.set("confirmPassword", "Valid-Test-Password-42!");
+      if (invite) formData.set("invite", invite);
+      return action({
+        request: new Request(`http://localhost:3000/signup${query}`, { method: "POST", body: formData }),
+        context: { cloudflare: { env: serverEnv } },
+        params: {},
+      } as never);
+    }
+
+    const loadSignup = (serverEnv: Record<string, string> | null, query = "") =>
+      loader({ request: new UndiciRequest(`http://localhost:3000/signup${query}`), context: { cloudflare: { env: serverEnv } }, params: {} } as never);
+
+    it("makes its first account the admin and lets it in", async () => {
+      expect(await loadSignup(env)).toEqual({ oauthProviders: [] });
+      const response = (await signUpOn(env)) as Response;
+      expect(response.status).toBe(302);
+      const [user] = await db.user.findMany();
+      expect(await serverAdminId(db, env)).toBe(user.id);
+    });
+
+    it("refuses a stranger once it is invite-only, and says so before they type anything", async () => {
+      await signUpOn(env);
+      expect(await loadSignup(env)).toEqual({ oauthProviders: [], signupsClosed: INVITE_ONLY_MESSAGE });
+      const { data: body, status } = extractResponseData(await signUpOn(env));
+      expect(status).toBe(403);
+      expect(body.errors.general).toBe(INVITE_ONLY_MESSAGE);
+      expect(await db.user.count()).toBe(1);
+    });
+
+    it("lets one person in with an invite link, and refuses the link the second time", async () => {
+      await signUpOn(env);
+      const [admin] = await db.user.findMany();
+      const { token } = await createServerInvite(db, admin.id);
+      expect(await loadSignup(env, `?invite=${token}`)).toEqual({ oauthProviders: [], invite: token });
+      expect(((await signUpOn(env, `?invite=${token}`)) as Response).status).toBe(302);
+      expect(await db.user.count()).toBe(2);
+      expect(await loadSignup(env, `?invite=${token}`)).toEqual({
+        oauthProviders: [],
+        signupsClosed: "This invite link has already been used. " + INVITE_ONLY_MESSAGE,
+      });
+      expect(extractResponseData(await signUpOn(env, "", token)).status).toBe(403);
+    });
+
+    it("keeps the invite when the sign-up it was for fails on a taken email", async () => {
+      await signUpOn(env);
+      const [admin] = await db.user.findMany();
+      const { token } = await createServerInvite(db, admin.id);
+      const formData = new FormData();
+      formData.set("email", admin.email);
+      formData.set("username", "fresh_name_123");
+      formData.set("password", "Valid-Test-Password-42!");
+      formData.set("confirmPassword", "Valid-Test-Password-42!");
+      formData.set("invite", token);
+      const result = await action({ request: new Request("http://localhost:3000/signup", { method: "POST", body: formData }), context: { cloudflare: { env } }, params: {} } as never);
+      expect(extractResponseData(result).status).toBe(400);
+      expect(((await signUpOn(env, "", token)) as Response).status).toBe(302);
+    });
+
+    it("lets anyone in while the admin has sign-ups open", async () => {
+      await signUpOn(env);
+      await setSignupMode(db, env, "open");
+      expect(await loadSignup(env)).toEqual({ oauthProviders: [] });
+      expect(((await signUpOn(env)) as Response).status).toBe(302);
+    });
+  });
+
+  it("on spoonjoy.app lets everyone sign up and records no admin or switch", async () => {
+    for (let i = 0; i < 2; i++) {
+      const formData = new FormData();
+      formData.set("email", `cook-${faker.string.alphanumeric(10)}@example.com`.toLowerCase());
+      formData.set("username", `cook_${faker.string.alphanumeric(10)}`);
+      formData.set("password", "Valid-Test-Password-42!");
+      formData.set("confirmPassword", "Valid-Test-Password-42!");
+      const response = await action({ request: new Request("http://localhost:3000/signup", { method: "POST", body: formData }), context: { cloudflare: { env: { SPOONJOY_SIGNUPS: "invite" } } }, params: {} } as never);
+      expect((response as Response).status).toBe(302);
+    }
+    expect(await db.user.count()).toBe(2);
+    expect(await db.serverSetting.count()).toBe(0);
+  });
+
   describe("component", () => {
+    it("shows an invite-only server's message in place of the form", async () => {
+      const Stub = createTestRoutesStub([
+        { path: "/signup", Component: Signup, loader: () => ({ oauthProviders: [], signupsClosed: INVITE_ONLY_MESSAGE }) },
+      ]);
+      render(<Stub initialEntries={["/signup"]} />);
+      expect(await screen.findByText(INVITE_ONLY_MESSAGE)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Sign up" })).not.toBeInTheDocument();
+    });
+
+    it("explains an invite-only server when a provider's sign-in comes back refused", async () => {
+      const Stub = createTestRoutesStub([
+        { path: "/signup", Component: Signup, loader: () => ({ oauthProviders: [], oauthError: "signups_closed" }) },
+      ]);
+      render(<Stub initialEntries={["/signup?oauthError=signups_closed"]} />);
+      expect(await screen.findByText(INVITE_ONLY_MESSAGE)).toBeInTheDocument();
+    });
+
+    it("sends the invite with the form when opened from an invite link", async () => {
+      const Stub = createTestRoutesStub([
+        { path: "/signup", Component: Signup, loader: () => ({ oauthProviders: [], invite: "invite-token" }) },
+      ]);
+      const { container } = render(<Stub initialEntries={["/signup?invite=invite-token"]} />);
+      expect(await screen.findByText("You're invited to this Spoonjoy server.")).toBeInTheDocument();
+      expect(container.querySelector('input[name="invite"]')).toHaveValue("invite-token");
+    });
+
     it("should render signup form", async () => {
       const Stub = createTestRoutesStub([
         {
