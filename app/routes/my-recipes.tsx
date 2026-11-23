@@ -22,6 +22,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { RecipesSectionNav } from "~/components/navigation";
 import { organizerFiltersFor } from "~/domains/kitchen/index.server";
+import { OrganizerBrowseLinks } from "~/components/organizers/organizer-browse-links";
 import { OrganizerFilterForm } from "~/components/organizers/organizer-filter-form";
 import { organizerFilterSearch } from "~/components/organizers/organizer-filter-search";
 
@@ -121,6 +122,7 @@ export default function MyRecipes() {
       />
 
       <DrawerSearch label="Search my recipes" query={query} placeholder="sumac, beans, serves 4" keep={filterParams} />
+      {organizerChoices ? <OrganizerBrowseLinks label="Browse my recipes by" /> : null}
       {organizerChoices ? (
         // Keyed by the filters so its boxes, which hold their own state, start over after a move without a reload.
         <OrganizerFilterForm key={new URLSearchParams(filterParams).toString()} label="Filter my recipes" query={query} filterParams={filterParams} choices={organizerChoices} clearHref={`${pathname}${organizerFilterSearch(query, [], 1)}`} />

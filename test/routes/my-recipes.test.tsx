@@ -518,6 +518,23 @@ describe("My Recipes drawer route", () => {
       expect(screen.getByRole("heading", { name: "No matching recipes" })).toBeInTheDocument();
     });
 
+    it("link to the cook's tags, categories and tools while the flag is on, even before they have any", async () => {
+      const Stub = createTestRoutesStub([
+        { path: "/none", Component: MyRecipes, loader: () => page({ organizerChoices: { tag: [], category: [], tool: [] } }) },
+        { path: "/off", Component: MyRecipes, loader: () => page({}) },
+      ]);
+
+      render(<Stub initialEntries={["/none"]} />);
+      const browse = await screen.findByRole("navigation", { name: "Browse my recipes by" });
+      expect(within(browse).getByRole("link", { name: "Tags" })).toHaveAttribute("href", "/tags");
+      expect(within(browse).getByRole("link", { name: "Categories" })).toHaveAttribute("href", "/categories");
+      expect(within(browse).getByRole("link", { name: "Tools" })).toHaveAttribute("href", "/tools");
+      cleanup();
+      render(<Stub initialEntries={["/off"]} />);
+      expect(await screen.findByRole("heading", { level: 1, name: "My Recipes" })).toBeInTheDocument();
+      expect(screen.queryByRole("navigation", { name: "Browse my recipes by" })).not.toBeInTheDocument();
+    });
+
     it("show no filter when the cook has no organizers or the flag is off", async () => {
       const Stub = createTestRoutesStub([
         { path: "/none", Component: MyRecipes, loader: () => page({ organizerChoices: { tag: [], category: [], tool: [] } }) },
