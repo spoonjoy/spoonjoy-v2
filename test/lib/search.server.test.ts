@@ -550,6 +550,32 @@ describe("search.server", () => {
     expect(await count()).toMatchObject({ recipeCount: 0 });
   });
 
+  it("fills another cook's page to its limit with recipes they may read, however many private ones would rank first", async () => {
+    const chef = await createChef("fillcook");
+    const stranger = await createChef("fillstranger");
+    // The private recipes sort first by title and are newest, so a filter after the limit would leave the page short.
+    const open: string[] = [];
+    for (const title of ["Zesty Quince Loaf", "Zany Quince Cake", "Zippy Quince Tart"]) {
+      open.push((await createSearchableRecipe(chef.id, title, "quince")).id);
+    }
+    const kept: string[] = [];
+    for (const title of ["Aged Quince Paste", "Amber Quince Jam", "Apple Quince Crumble", "Autumn Quince Pie"]) {
+      const recipe = await createSearchableRecipe(chef.id, title, "quince");
+      await db.recipe.update({ where: { id: recipe.id }, data: { visibility: "private" } });
+      kept.push(recipe.id);
+    }
+    await rebuildSearchIndex(db);
+
+    // One word, several words (a pantry search) and no words at all each take a different query.
+    for (const query of ["quince", "quince batter", ""]) {
+      const found = await searchSpoonjoy(db, { query, scope: "recipes", ownerId: chef.id, viewerId: stranger.id, limit: 3 });
+      expect(found.map((result) => result.id).sort(), `stranger, "${query}"`).toEqual([...open].sort());
+      const own = await searchSpoonjoy(db, { query, scope: "recipes", ownerId: chef.id, viewerId: chef.id, limit: 3 });
+      expect(own, `cook, "${query}"`).toHaveLength(3);
+      expect(own.every((result) => kept.includes(result.id)), `cook, "${query}"`).toBe(true);
+    }
+  });
+
   it("keeps shopping-list search private to the signed-in owner", async () => {
     const owner = await createChef("shopper");
     const otherOwner = await createChef("other_shopper");
