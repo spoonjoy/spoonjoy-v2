@@ -167,7 +167,7 @@ describe("miniflareOptions", () => {
     expect(options.modules[0]).toEqual({ type: "ESModule", path: "/app/build/server/_worker.js" });
   });
 
-  it("sends the Worker's outbound requests through the fetch it is given, which the server makes Node's", async () => {
+  it("sends the Worker's outbound requests through the fetch it is given, without workerd's CF-Worker header", async () => {
     const outboundFetch = vi.fn(async () => new Response("from node"));
     const routed = miniflareOptions({
       built,
@@ -178,10 +178,36 @@ describe("miniflareOptions", () => {
       serverAssetFiles: [],
       outboundFetch,
     });
-    const request = new Request("https://appleid.apple.com/auth/keys");
+    const request = new Request("https://appleid.apple.com/auth/keys", {
+      headers: { Accept: "application/json", "CF-Worker": "worker.example.com", "User-Agent": "Spoonjoy" },
+    });
     expect(await (await routed.outboundService(request)).text()).toBe("from node");
-    expect(outboundFetch).toHaveBeenCalledWith(request);
+    const [url, init] = outboundFetch.mock.calls[0] as unknown as [string, RequestInit & { headers: Headers }];
+    expect(url).toBe("https://appleid.apple.com/auth/keys");
+    expect(init.method).toBe("GET");
+    expect(init.redirect).toBe("follow");
+    expect(init.headers.get("cf-worker")).toBeNull();
+    expect(init.headers.get("accept")).toBe("application/json");
+    expect(init.headers.get("user-agent")).toBe("Spoonjoy");
     expect(options.outboundService).toBeUndefined();
+  });
+
+  it("passes a request's body on", async () => {
+    const outboundFetch = vi.fn(async () => new Response("ok"));
+    const routed = miniflareOptions({
+      built,
+      env: {},
+      settings: { port: 8080, dataDir: "/data", appDir: "/app" },
+      sessionSecret: "s",
+      version: "1.2.3",
+      serverAssetFiles: [],
+      outboundFetch,
+    });
+    await routed.outboundService(new Request("https://api.example.com/v1", { method: "POST", body: "hello" }));
+    const [, init] = outboundFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.method).toBe("POST");
+    expect(await new Response(init.body).text()).toBe("hello");
+    expect(init).toMatchObject({ duplex: "half" });
   });
 
   it("names the image version as the worker version", () => {

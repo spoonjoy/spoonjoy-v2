@@ -87,6 +87,12 @@ export function workerModules(serverDir, assetFiles) {
   ];
 }
 
+function outboundInit(request) {
+  const headers = new Headers(request.headers);
+  headers.delete("cf-worker");
+  return { method: request.method, headers, body: request.body, duplex: "half", redirect: request.redirect };
+}
+
 export function miniflareOptions({ built, env, settings, sessionSecret, version, serverAssetFiles, outboundFetch }) {
   const { appDir, dataDir, port } = settings;
   const serverDir = path.join(appDir, "build/server");
@@ -112,9 +118,10 @@ export function miniflareOptions({ built, env, settings, sessionSecret, version,
     r2Persist: path.join(dataDir, "r2"),
     durableObjectsPersist: path.join(dataDir, "do"),
     cachePersist: path.join(dataDir, "cache"),
-    // The Worker's own fetches (Apple's sign-in keys, AI providers, OAuth) go out through Node.
-    // Apple's key server answered workerd's direct requests from a self-hosted server with a 403.
-    ...(outboundFetch ? { outboundService: (request) => outboundFetch(request) } : {}),
+    // The Worker's own fetches (Apple's sign-in keys, AI providers, OAuth) go out through Node,
+    // without the CF-Worker header workerd adds to each one: Apple's key server answers a request
+    // carrying it from outside Cloudflare with a 403.
+    ...(outboundFetch ? { outboundService: (request) => outboundFetch(request.url, outboundInit(request)) } : {}),
   };
 }
 
