@@ -292,18 +292,20 @@ const biteClass =
 
 // Each hue tints the surface and colors the initials, mixed toward the theme's background and
 // foreground so the pair keeps at least 4.5:1 in light and dark.
-const hues = [
-  "bg-[color-mix(in_oklab,var(--avatar-1)_18%,var(--background))] text-[color-mix(in_oklab,var(--avatar-1)_70%,var(--foreground))]",
-  "bg-[color-mix(in_oklab,var(--avatar-2)_18%,var(--background))] text-[color-mix(in_oklab,var(--avatar-2)_70%,var(--foreground))]",
-  "bg-[color-mix(in_oklab,var(--avatar-3)_18%,var(--background))] text-[color-mix(in_oklab,var(--avatar-3)_70%,var(--foreground))]",
-  "bg-[color-mix(in_oklab,var(--avatar-4)_18%,var(--background))] text-[color-mix(in_oklab,var(--avatar-4)_70%,var(--foreground))]",
-  "bg-[color-mix(in_oklab,var(--avatar-5)_18%,var(--background))] text-[color-mix(in_oklab,var(--avatar-5)_70%,var(--foreground))]",
-  "bg-[color-mix(in_oklab,var(--avatar-6)_18%,var(--background))] text-[color-mix(in_oklab,var(--avatar-6)_70%,var(--foreground))]",
-  "bg-[color-mix(in_oklab,var(--avatar-7)_18%,var(--background))] text-[color-mix(in_oklab,var(--avatar-7)_70%,var(--foreground))]",
-  "bg-[color-mix(in_oklab,var(--avatar-8)_18%,var(--background))] text-[color-mix(in_oklab,var(--avatar-8)_70%,var(--foreground))]",
+// A tint is its surface classes (with the dark scheme's own step) and its ink.
+type Tint = readonly [fill: string, ink: string];
+const hues: readonly Tint[] = [
+  ["bg-[color-mix(in_oklab,var(--avatar-1)_18%,var(--background))] dark:bg-[color-mix(in_oklab,var(--avatar-1)_46%,var(--background))]", "text-[color-mix(in_oklab,var(--avatar-1)_70%,var(--foreground))] dark:text-[color-mix(in_oklab,var(--avatar-1)_18%,var(--foreground))]"],
+  ["bg-[color-mix(in_oklab,var(--avatar-2)_18%,var(--background))] dark:bg-[color-mix(in_oklab,var(--avatar-2)_46%,var(--background))]", "text-[color-mix(in_oklab,var(--avatar-2)_70%,var(--foreground))] dark:text-[color-mix(in_oklab,var(--avatar-2)_18%,var(--foreground))]"],
+  ["bg-[color-mix(in_oklab,var(--avatar-3)_18%,var(--background))] dark:bg-[color-mix(in_oklab,var(--avatar-3)_46%,var(--background))]", "text-[color-mix(in_oklab,var(--avatar-3)_70%,var(--foreground))] dark:text-[color-mix(in_oklab,var(--avatar-3)_18%,var(--foreground))]"],
+  ["bg-[color-mix(in_oklab,var(--avatar-4)_18%,var(--background))] dark:bg-[color-mix(in_oklab,var(--avatar-4)_46%,var(--background))]", "text-[color-mix(in_oklab,var(--avatar-4)_70%,var(--foreground))] dark:text-[color-mix(in_oklab,var(--avatar-4)_18%,var(--foreground))]"],
+  ["bg-[color-mix(in_oklab,var(--avatar-5)_18%,var(--background))] dark:bg-[color-mix(in_oklab,var(--avatar-5)_46%,var(--background))]", "text-[color-mix(in_oklab,var(--avatar-5)_70%,var(--foreground))] dark:text-[color-mix(in_oklab,var(--avatar-5)_18%,var(--foreground))]"],
+  ["bg-[color-mix(in_oklab,var(--avatar-6)_18%,var(--background))] dark:bg-[color-mix(in_oklab,var(--avatar-6)_46%,var(--background))]", "text-[color-mix(in_oklab,var(--avatar-6)_70%,var(--foreground))] dark:text-[color-mix(in_oklab,var(--avatar-6)_18%,var(--foreground))]"],
+  ["bg-[color-mix(in_oklab,var(--avatar-7)_18%,var(--background))] dark:bg-[color-mix(in_oklab,var(--avatar-7)_46%,var(--background))]", "text-[color-mix(in_oklab,var(--avatar-7)_70%,var(--foreground))] dark:text-[color-mix(in_oklab,var(--avatar-7)_18%,var(--foreground))]"],
+  ["bg-[color-mix(in_oklab,var(--avatar-8)_18%,var(--background))] dark:bg-[color-mix(in_oklab,var(--avatar-8)_46%,var(--background))]", "text-[color-mix(in_oklab,var(--avatar-8)_70%,var(--foreground))] dark:text-[color-mix(in_oklab,var(--avatar-8)_18%,var(--foreground))]"],
 ] as const;
-const brand = "bg-[color-mix(in_oklab,var(--primary)_18%,var(--background))] text-[color-mix(in_oklab,var(--primary)_70%,var(--foreground))]";
-const neutral = "bg-secondary text-secondary-foreground";
+const brand: Tint = ["bg-[color-mix(in_oklab,var(--primary)_18%,var(--background))] dark:bg-[color-mix(in_oklab,var(--primary)_46%,var(--background))]", "text-[color-mix(in_oklab,var(--primary)_70%,var(--foreground))] dark:text-[color-mix(in_oklab,var(--primary)_18%,var(--foreground))]"];
+const neutral: Tint = ["bg-secondary", "text-secondary-foreground"];
 
 const shapes = ["circle", "square", "agent"] as const;
 
@@ -383,9 +385,9 @@ function initialsOf(name: string): string {
  * One member's slice of a group's avatar: their picture once it loads, else their initial (one
  * letter, which a slice has room for) in their hue. A quarter's letter is smaller than a half's.
  */
-function GroupSlice({ member, tint, quarter }: { member: AvatarMember; tint: string | undefined; quarter: boolean }): JSX.Element {
+function GroupSlice({ member, tint, quarter }: { member: AvatarMember; tint: Tint | undefined; quarter: boolean }): JSX.Element {
   const image = useImageStatus(member.src);
-  const [fill, ink] = (tint ?? hueOf(member.idForColor ?? member.name)).split(" ") as [string, string];
+  const [fill, ink] = tint ?? hueOf(member.idForColor ?? member.name);
   const loaded = image === "loaded";
   return (
     <span
@@ -415,7 +417,7 @@ function GroupSlice({ member, tint, quarter }: { member: AvatarMember; tint: str
  * @claim "an FNV hash, mixed by MurmurHash3's" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar colors > maps each name to its hue, the same in every browser and on the server)
  * @claim "Without the mix, keys that differ" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar colors > spreads ids that differ only in their last character across the hues)
  */
-function hueOf(key: string): string {
+function hueOf(key: string): Tint {
   let hash = 0x811c9dc5;
   for (const char of key.trim().toLowerCase()) {
     hash ^= char.codePointAt(0)!;
@@ -634,7 +636,7 @@ export function Avatar(props: AvatarProps): JSX.Element {
   const glyph = icon !== undefined && icon !== null ? icon : shape === "agent" ? <AgentGlyph /> : undefined;
   const iconShown = glyph !== undefined;
   const tint = color === "neutral" ? neutral : color === "brand" ? brand : hueOf(idForColor ?? name);
-  const [fill, ink] = tint.split(" ") as [string, string];
+  const [fill, ink] = tint;
   return (
     <span
       {...rest}

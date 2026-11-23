@@ -32,6 +32,16 @@ function animationPhase(el: Element): number {
   return Number(effect.getComputedTiming().localTime) - Number(effect.getTiming().delay);
 }
 
+/**
+ * A late placeholder computes its delay from a live clock read in a layout effect, but a
+ * busy host can hold the document's own animation timeline at an older tick until the next
+ * paint, so the two reads land that much apart even though both track the same wave from
+ * then on. A run with the main thread held for 80ms before the second mount read back a gap
+ * of about 80ms; this bound gives a loaded runner room past the single CI miss this guards
+ * (177ms) while staying a small slice of a breath (2400ms), so a real desync still fails it.
+ */
+const phaseGapMs = 500;
+
 let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -252,16 +262,28 @@ describe("Skeleton", () => {
     const root = roots.at(-1)!;
     await expect.poll(() => phase(first)).toBeGreaterThan(1300);
     const late = await render(<Skeleton />);
-    // Both are read in one task, so they share a frame's time.
+    // Both are read in one task, so they share close to a frame's time.
     const [a, b] = [phase(first), phase(late)];
-    expect(Math.abs(a - b)).toBeLessThan(150);
+    expect(Math.abs(a - b)).toBeLessThan(phaseGapMs);
     // A remount (a new key) while the others breathe keeps the phase.
     await act(async () => root.render(<Skeleton key="again" />));
     const again = mounted.at(-2)!.querySelector<HTMLElement>('[data-ouro="skeleton"]')!;
-    expect(Math.abs(phase(again) - phase(late))).toBeLessThan(150);
+    expect(Math.abs(phase(again) - phase(late))).toBeLessThan(phaseGapMs);
     await commands.emulateMedia({ reducedMotion: "reduce" });
     expect(getComputedStyle(late).animationName).toBe("none");
     expect(late.getAnimations()).toEqual([]);
+  });
+
+  it("joins the shared phase past a host that holds the main thread before the mount", async () => {
+    const phase = animationPhase;
+    const first = await render(<Skeleton />);
+    await expect.poll(() => phase(first)).toBeGreaterThan(1300);
+    // A synchronous hold stands in for a loaded host that delays a paint before this mount,
+    // the same gap the bound above is sized for.
+    const holdUntil = performance.now() + 200;
+    while (performance.now() < holdUntil) { /* holds the main thread, no yield */ }
+    const late = await render(<Skeleton />);
+    expect(Math.abs(phase(first) - phase(late))).toBeLessThan(phaseGapMs);
   });
 
   it("places a placeholder in the wave: a new wave after a quiet gap of more than a second, else the running one", () => {
