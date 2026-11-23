@@ -9,3 +9,14 @@ export {
   scaleServingsText,
   type FormatAmountOptions,
 } from "./model/quantity";
+export {
+  formatAmountIn,
+  parseUnitSystem,
+  resolveUnit,
+  UNIT_SYSTEM_COOKIE,
+  UNIT_SYSTEMS,
+  unitSystemCookie,
+  unitSystemFromCookie,
+  type KnownUnit,
+  type UnitSystem,
+} from "./model/units";
