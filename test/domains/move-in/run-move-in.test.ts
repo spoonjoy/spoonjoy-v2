@@ -168,6 +168,31 @@ describe("runNextChunk", () => {
     expect(h.photos).toHaveLength(1);
   });
 
+  it("counts a recipe the backup changed as updated, and brings a photo it lacks", async () => {
+    const h = harness({ write: async ({ draft }) => ({ outcome: "updated", recipeId: `x-${draft.sourceKey}` }) });
+    await h.runAll();
+    expect(h.counts.get("recipes")).toMatchObject({ found: 3, created: 0, updated: 3 });
+    expect(h.counts.get("photos")).toMatchObject({ created: 1 });
+    expect(h.photos).toHaveLength(1);
+  });
+
+  it("counts a recipe whose cook's version stays as already here, with the reason", async () => {
+    const h = harness({ write: async ({ draft }) => ({ outcome: "kept", recipeId: `x-${draft.sourceKey}`, reason: `${draft.title} stays yours.` }) });
+    await h.runAll();
+    expect(h.counts.get("recipes")).toMatchObject({ unchanged: 3, updated: 0 });
+    expect(h.events.filter((event) => event.kind === "item-kept")).toHaveLength(3);
+    expect(h.events.find((event) => event.kind === "item-kept")).toMatchObject({ level: "info", entity: "recipes", message: expect.stringMatching(/ stays yours\.$/) });
+  });
+
+  it("reports a recipe that got a number on its own, apart from other notes", async () => {
+    const h = harness({ write: async ({ draft }) => ({ outcome: "created", recipeId: `x-${draft.sourceKey}`, title: `${draft.title} (2)`, renamedFrom: draft.title, warnings: [] }) });
+    await h.runAll();
+    const renamed = h.events.filter((event) => event.kind === "item-renamed");
+    expect(renamed).toHaveLength(3);
+    expect(renamed[0]).toMatchObject({ level: "info", entity: "recipes", targetId: expect.stringMatching(/^x-/) });
+    expect(renamed[0].message).toMatch(/^You already had a recipe called ".+", so this one is ".+ \(2\)"\.$/);
+  });
+
   it("counts a recipe it leaves alone as skipped, with the reason", async () => {
     const h = harness({ write: async ({ draft }) => ({ outcome: "skipped", recipeId: `x-${draft.sourceKey}`, reason: "You deleted this recipe in Spoonjoy after it moved in." }) });
     await h.runAll();

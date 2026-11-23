@@ -156,7 +156,31 @@ describe("the Move in page", () => {
     waiting = [];
     const again = ((await post({ app: "mealie", backup: backup() })) as Response).headers.get("Location") as string;
     await Promise.all(waiting);
-    expect((await load(again)).move).toMatchObject({ recipes: { found: 3, created: 0, unchanged: 3 }, photos: { found: 1, in: 1 } });
+    expect((await load(again)).move).toMatchObject({ recipes: { found: 3, created: 0, already: 3, updated: 0, unchanged: 3 }, photos: { found: 1, in: 1 } });
+  });
+
+  it("lists recipes that got a number apart from the notes", async () => {
+    await db.recipe.create({ data: { title: "Soup", chefId: ownerId } });
+    const location = ((await post({ app: "mealie", backup: backup() })) as Response).headers.get("Location") as string;
+    await Promise.all(waiting);
+    const { move } = await load(location);
+    expect(move?.renamed).toEqual([{ seq: expect.any(Number), message: 'You already had a recipe called "Soup", so this one is "Soup (2)".' }]);
+    expect(move?.notes.map((note) => note.message)).not.toContain('You already had a recipe called "Soup", so this one is "Soup (2)".');
+  });
+
+  it("notes a recipe whose cook's version stays", async () => {
+    await post({ app: "mealie", backup: backup() });
+    await Promise.all(waiting);
+    waiting = [];
+    const soup = await db.recipe.findFirstOrThrow({ where: { chefId: ownerId, title: "Soup" } });
+    await db.recipe.update({ where: { id: soup.id }, data: { description: "My own soup." } });
+    // The backup's soup changed as well.
+    await d1.binding.prepare(`UPDATE "SourceRecord" SET "contentHash" = 'before' WHERE "targetId" = ?`).bind(soup.id).run();
+    const again = ((await post({ app: "mealie", backup: backup() })) as Response).headers.get("Location") as string;
+    await Promise.all(waiting);
+    const { move } = await load(again);
+    expect(move?.recipes).toMatchObject({ already: 3, updated: 0 });
+    expect(move?.notes).toContainEqual({ seq: expect.any(Number), level: "info", message: "Soup changed in the backup, but you've changed it in Spoonjoy too, so your version stays." });
   });
 
   it("keeps a move-in going each time the page asks", async () => {
