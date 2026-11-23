@@ -1683,6 +1683,94 @@
       "output": {}
     },
     {
+      "id": "plan_meal",
+      "consent": "write",
+      "label": "Plan a meal",
+      "description": "Put a recipe or a note on your meal plan.",
+      "agent": "Plan one meal on the person's meal plan: a recipe (give recipeId, from search_recipes or get_recipe, of any recipe they can see) or a note (give title, such as Eating out). It goes after the meals already planned for that day and meal type.",
+      "input": {
+        "ownerEmail": {
+          "label": "Owner",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "date": {
+          "label": "Day",
+          "description": "The day, as YYYY-MM-DD.",
+          "format": "date",
+          "kind": "string"
+        },
+        "mealType": {
+          "label": "Meal",
+          "description": "The meal type: breakfast, lunch, dinner, side, snack, drink or dessert.",
+          "kind": "string"
+        },
+        "recipeId": {
+          "label": "Recipe",
+          "description": "Optional. The recipe to plan; leave it out to plan a note.",
+          "optional": true,
+          "kind": "string"
+        },
+        "title": {
+          "label": "Title",
+          "description": "Optional. A note's title, up to 200 characters; required for a note.",
+          "optional": true,
+          "maxLength": 200,
+          "kind": "string"
+        },
+        "note": {
+          "label": "Note",
+          "description": "Optional. More about the meal, up to 2000 characters.",
+          "optional": true,
+          "maxLength": 2000,
+          "multiline": true,
+          "kind": "string"
+        },
+        "scaleFactor": {
+          "label": "Servings scale",
+          "description": "Optional. Multiplies the recipe's servings for this meal only, above 0 and up to 50. Defaults to 1.",
+          "optional": true,
+          "min": 0,
+          "max": 50,
+          "kind": "number"
+        },
+        "idempotencyKey": {
+          "label": "Idempotency key",
+          "description": "Optional. Send the same key again when retrying this exact call, such as after a timeout, and the meal is planned once.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        }
+      },
+      "output": {}
+    },
+    {
+      "id": "remove_meal_plan_entry",
+      "consent": "write",
+      "label": "Remove planned meal",
+      "description": "Take a meal off your meal plan.",
+      "agent": "Remove one planned meal from the person's meal plan by its id, from get_meal_plan. Removing it again answers removed: false.",
+      "input": {
+        "ownerEmail": {
+          "label": "Owner",
+          "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves.",
+          "optional": true,
+          "protocolOnly": true,
+          "kind": "string"
+        },
+        "entryId": {
+          "label": "Meal",
+          "description": "The planned meal's id, from get_meal_plan.",
+          "kind": "string"
+        }
+      },
+      "output": {},
+      "destructive": true,
+      "idempotent": true
+    },
+    {
       "id": "approve_agent_connection",
       "consent": "person-only",
       "label": "Approve access",

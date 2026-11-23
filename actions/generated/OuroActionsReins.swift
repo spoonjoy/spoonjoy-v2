@@ -176,6 +176,14 @@ extension GetMealPlanInput: ReinsInput {
     public static var reinsSchema: ReinsSchema { .object(properties: ["week": .string], required: []) }
 }
 
+extension PlanMealInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["date": .string, "mealType": .string, "recipeId": .string, "title": .string, "note": .string, "scaleFactor": .number], required: ["date", "mealType"]) }
+}
+
+extension RemoveMealPlanEntryInput: ReinsInput {
+    public static var reinsSchema: ReinsSchema { .object(properties: ["entryId": .string], required: ["entryId"]) }
+}
+
 extension ApproveAgentConnectionInput: ReinsInput {
     public static var reinsSchema: ReinsSchema { .object(properties: ["requestId": .string], required: ["requestId"]) }
 }
@@ -394,6 +402,16 @@ extension ReinsAction {
     /// Get meal plan: See a week of your meal plan.
     public static func getMealPlan() -> ReinsAction {
         ReinsAction("getMealPlan", "Get meal plan", input: GetMealPlanInput.self) { input in _ = try await GetMealPlanAction.run(input) }
+    }
+
+    /// Plan a meal: Put a recipe or a note on your meal plan.
+    public static func planMeal() -> ReinsAction {
+        ReinsAction("planMeal", "Plan a meal", input: PlanMealInput.self) { input in _ = try await PlanMealAction.run(input) }
+    }
+
+    /// Remove planned meal: Take a meal off your meal plan.
+    public static func removeMealPlanEntry() -> ReinsAction {
+        ReinsAction("removeMealPlanEntry", "Remove planned meal", input: RemoveMealPlanEntryInput.self) { input in _ = try await RemoveMealPlanEntryAction.run(input) }
     }
 
     /// Approve access: Let this agent, app or device use your Spoonjoy account.

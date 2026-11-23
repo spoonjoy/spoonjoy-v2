@@ -1588,6 +1588,86 @@
         "readOnlyHint": true,
         "consequentialHint": false
       }
+    },
+    {
+      "name": "plan_meal",
+      "description": "Plan one meal on the person's meal plan: a recipe (give recipeId, from search_recipes or get_recipe, of any recipe they can see) or a note (give title, such as Eating out). It goes after the meals already planned for that day and meal type.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ownerEmail": {
+            "type": "string",
+            "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+          },
+          "date": {
+            "type": "string",
+            "description": "The day, as YYYY-MM-DD.",
+            "format": "date"
+          },
+          "mealType": {
+            "type": "string",
+            "description": "The meal type: breakfast, lunch, dinner, side, snack, drink or dessert."
+          },
+          "recipeId": {
+            "type": "string",
+            "description": "Optional. The recipe to plan; leave it out to plan a note."
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional. A note's title, up to 200 characters; required for a note.",
+            "maxLength": 200
+          },
+          "note": {
+            "type": "string",
+            "description": "Optional. More about the meal, up to 2000 characters. It may run over several lines.",
+            "maxLength": 2000
+          },
+          "scaleFactor": {
+            "type": "number",
+            "description": "Optional. Multiplies the recipe's servings for this meal only, above 0 and up to 50. Defaults to 1.",
+            "minimum": 0,
+            "maximum": 50
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "Optional. Send the same key again when retrying this exact call, such as after a timeout, and the meal is planned once."
+          }
+        },
+        "required": [
+          "date",
+          "mealType"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "consequentialHint": false
+      }
+    },
+    {
+      "name": "remove_meal_plan_entry",
+      "description": "Remove one planned meal from the person's meal plan by its id, from get_meal_plan. Removing it again answers removed: false.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ownerEmail": {
+            "type": "string",
+            "description": "Optional. Whose kitchen, for a local server with no signed-in person; a signed-in caller always acts as themselves."
+          },
+          "entryId": {
+            "type": "string",
+            "description": "The planned meal's id, from get_meal_plan."
+          }
+        },
+        "required": [
+          "entryId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "consequentialHint": false
+      }
     }
   ],
   "refusals": {

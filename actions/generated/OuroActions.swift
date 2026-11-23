@@ -74,6 +74,8 @@ public enum OuroActions {
         "set_recipe_no_cover": .write,
         "archive_recipe_cover": .write,
         "get_meal_plan": .read,
+        "plan_meal": .write,
+        "remove_meal_plan_entry": .write,
         "approve_agent_connection": .personOnly,
     ]
 
@@ -4139,6 +4141,203 @@ public struct GetMealPlanButton<Label: View>: View {
 extension GetMealPlanButton where Label == Text {
     public init(_ input: GetMealPlanInput) {
         self.init(input) { Text(verbatim: "Get meal plan") }
+    }
+}
+
+// MARK: plan_meal (write)
+
+public struct PlanMealInput: Codable, Sendable, Hashable {
+    public var ownerEmail: String?
+    public var date: String
+    public var mealType: String
+    public var recipeId: String?
+    public var title: String?
+    public var note: String?
+    public var scaleFactor: Double?
+    public var idempotencyKey: String?
+    public init(ownerEmail: String? = nil, date: String, mealType: String, recipeId: String? = nil, title: String? = nil, note: String? = nil, scaleFactor: Double? = nil, idempotencyKey: String? = nil) {
+        self.ownerEmail = ownerEmail
+        self.date = date
+        self.mealType = mealType
+        self.recipeId = recipeId
+        self.title = title
+        self.note = note
+        self.scaleFactor = scaleFactor
+        self.idempotencyKey = idempotencyKey
+    }
+}
+
+public struct PlanMealOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Plan a meal: Put a recipe or a note on your meal plan.
+@MainActor
+public enum PlanMealAction {
+    public static let id = "plan_meal"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (PlanMealInput) async throws -> PlanMealOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (PlanMealInput, Result<PlanMealOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: PlanMealInput) async throws -> PlanMealOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct PlanMealIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Plan a meal"
+    public static let description = IntentDescription("Plan one meal on the person's meal plan: a recipe (give recipeId, from search_recipes or get_recipe, of any recipe they can see) or a note (give title, such as Eating out). It goes after the meals already planned for that day and meal type.")
+
+    @Parameter(title: "Day", description: "The day, as YYYY-MM-DD.")
+    public var date: String
+    @Parameter(title: "Meal", description: "The meal type: breakfast, lunch, dinner, side, snack, drink or dessert.")
+    public var mealType: String
+    @Parameter(title: "Recipe", description: "Optional. The recipe to plan; leave it out to plan a note.")
+    public var recipeId: String?
+    @Parameter(title: "Title", description: "Optional. A note's title, up to 200 characters; required for a note.")
+    public var title: String?
+    @Parameter(title: "Note", description: "Optional. More about the meal, up to 2000 characters. It may run over several lines.", inputOptions: String.IntentInputOptions(multiline: true))
+    public var note: String?
+    @Parameter(title: "Servings scale", description: "Optional. Multiplies the recipe's servings for this meal only, above 0 and up to 50. Defaults to 1.")
+    public var scaleFactor: Double?
+
+    public init() {}
+
+    public init(_ input: PlanMealInput) {
+        self.init()
+        self.date = input.date
+        self.mealType = input.mealType
+        self.recipeId = input.recipeId
+        self.title = input.title
+        self.note = input.note
+        self.scaleFactor = input.scaleFactor
+    }
+
+    public var input: PlanMealInput {
+        PlanMealInput(date: date, mealType: mealType, recipeId: recipeId, title: title, note: note, scaleFactor: scaleFactor)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<PlanMealOutput, any Error>
+        do { result = .success(try await PlanMealAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = PlanMealAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for plan_meal: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct PlanMealButton<Label: View>: View {
+    public let input: PlanMealInput
+    let label: Label
+
+    public init(_ input: PlanMealInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: PlanMealIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Put a recipe or a note on your meal plan."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension PlanMealButton where Label == Text {
+    public init(_ input: PlanMealInput) {
+        self.init(input) { Text(verbatim: "Plan a meal") }
+    }
+}
+
+// MARK: remove_meal_plan_entry (write)
+
+public struct RemoveMealPlanEntryInput: Codable, Sendable, Hashable {
+    public var ownerEmail: String?
+    public var entryId: String
+    public init(ownerEmail: String? = nil, entryId: String) {
+        self.ownerEmail = ownerEmail
+        self.entryId = entryId
+    }
+}
+
+public struct RemoveMealPlanEntryOutput: Codable, Sendable, Hashable {
+    public init() {
+    }
+}
+
+/// Remove planned meal: Take a meal off your meal plan.
+@MainActor
+public enum RemoveMealPlanEntryAction {
+    public static let id = "remove_meal_plan_entry"
+    /// The app's handler; every door calls it.
+    public static var perform: (@MainActor @Sendable (RemoveMealPlanEntryInput) async throws -> RemoveMealPlanEntryOutput)?
+    /// What Siri and Shortcuts say when the App Intent finishes or fails: the result in words, or an error turned into
+    /// words (rethrow to let the system show it). Unset, the intent says "Done." and a failure throws.
+    public static var dialog: (@MainActor @Sendable (RemoveMealPlanEntryInput, Result<RemoveMealPlanEntryOutput, any Error>) async throws -> IntentDialog)?
+
+    public static func run(_ input: RemoveMealPlanEntryInput) async throws -> RemoveMealPlanEntryOutput {
+        guard let perform else { throw OuroActionNotBound(action: id) }
+        return try await perform(input)
+    }
+}
+
+public struct RemoveMealPlanEntryIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Remove planned meal"
+    public static let description = IntentDescription("Remove one planned meal from the person's meal plan by its id, from get_meal_plan. Removing it again answers removed: false.")
+
+    @Parameter(title: "Meal", description: "The planned meal's id, from get_meal_plan.")
+    public var entryId: String
+
+    public init() {}
+
+    public init(_ input: RemoveMealPlanEntryInput) {
+        self.init()
+        self.entryId = input.entryId
+    }
+
+    public var input: RemoveMealPlanEntryInput {
+        RemoveMealPlanEntryInput(entryId: entryId)
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let input = self.input
+        let result: Result<RemoveMealPlanEntryOutput, any Error>
+        do { result = .success(try await RemoveMealPlanEntryAction.run(input)) } catch { result = .failure(error) }
+        if let dialog = RemoveMealPlanEntryAction.dialog { return .result(dialog: try await dialog(input, result)) }
+        _ = try result.get()
+        return .result(dialog: "Done.")
+    }
+}
+
+/// The control for remove_meal_plan_entry: Button(_:intent:), the same intent Siri and Shortcuts run.
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+public struct RemoveMealPlanEntryButton<Label: View>: View {
+    public let input: RemoveMealPlanEntryInput
+    let label: Label
+
+    public init(_ input: RemoveMealPlanEntryInput, @ViewBuilder label: () -> Label) {
+        self.input = input
+        self.label = label()
+    }
+
+    public var body: some View {
+        Button(intent: RemoveMealPlanEntryIntent(input)) { label }
+            .accessibilityHint(Text(verbatim: "Take a meal off your meal plan."))
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, watchOS 10.0, tvOS 17.0, *)
+extension RemoveMealPlanEntryButton where Label == Text {
+    public init(_ input: RemoveMealPlanEntryInput) {
+        self.init(input) { Text(verbatim: "Remove planned meal") }
     }
 }
 

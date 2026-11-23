@@ -285,6 +285,10 @@ async function dispatchMutation(method: string, path: string, segments: string[]
   if (method === "DELETE" && segments[0] === "shopping-list" && segments[1] === "items" && segments.length === 3) {
     return { operation: "remove_shopping_list_item", args: { ...args, itemId: segments[2] } };
   }
+  if (method === "POST" && path === "meal-plan/meals") return { operation: "plan_meal", args };
+  if (method === "DELETE" && segments[0] === "meal-plan" && segments[1] === "meals" && segments.length === 3) {
+    return { operation: "remove_meal_plan_entry", args: { ...args, entryId: segments[2] } };
+  }
   if (method === "POST" && path === "tokens") return { operation: "create_api_token", args };
   if (method === "DELETE" && segments[0] === "tokens" && segments.length === 2) {
     return { operation: "revoke_api_token", args: { ...args, credentialId: segments[1] } };
