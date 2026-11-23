@@ -41,13 +41,15 @@ async function showShell(page: Page): Promise<void> {
   }, HIDDEN_MARK);
 }
 
-/** Shows the shared shell again and hides the page's main content, so the entry counts only the shell. */
+/** Shows the shared shell again and empties main down to its heading, so the entry counts only the shell. */
 export async function showOnlyShell(page: Page): Promise<void> {
   await showShell(page);
-  // Main itself and its level-one heading stay visible, so the accessibility audit still finds the
-  // page's main landmark and heading; everything else in main is hidden, so no page control counts.
+  // Main keeps only a plain copy of its level-one heading, in the page's own colours, so the
+  // accessibility audit still finds a main landmark and a heading it can read, and no page control
+  // counts. Hiding main's content instead left the heading over a hidden background (1:1 contrast).
   await page.getByRole("main").evaluate((main) => {
-    for (const child of Array.from(main.children)) (child as HTMLElement).style.visibility = "hidden";
-    for (const heading of Array.from(main.querySelectorAll("h1"))) (heading as HTMLElement).style.visibility = "visible";
+    const heading = document.createElement("h1");
+    heading.textContent = main.querySelector("h1")?.textContent?.trim() || document.title;
+    main.replaceChildren(heading);
   });
 }
