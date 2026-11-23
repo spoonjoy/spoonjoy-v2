@@ -14,8 +14,8 @@ import { Toaster } from "~/components/ouro/toast/toaster";
  */
 
 const signedInTabs: TabBarItem[] = [
-  // Kitchen also owns the pages reached from it: account settings, chefs and profiles.
-  { label: "Kitchen", href: "/", icon: <Home />, paths: ["/account", "/chefs", "/users"] },
+  // Kitchen also owns the pages reached from it: account settings, chefs, households and profiles.
+  { label: "Kitchen", href: "/", icon: <Home />, paths: ["/account", "/chefs", "/households", "/users"] },
   { label: "Recipes", href: "/my-recipes", icon: <BookOpen />, paths: ["/recipes", "/saved-recipes"] },
   { label: "Cookbooks", href: "/cookbooks", icon: <Library /> },
   { label: "Shopping", href: "/shopping-list", icon: <ShoppingCart /> },

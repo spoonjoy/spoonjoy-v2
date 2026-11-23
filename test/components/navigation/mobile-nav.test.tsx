@@ -59,6 +59,8 @@ describe("MobileNav signed in", () => {
     ["/", "Kitchen"],
     ["/account/settings", "Kitchen"],
     ["/chefs", "Kitchen"],
+    ["/households", "Kitchen"],
+    ["/households/h-1/lists", "Kitchen"],
     ["/users/someone", "Kitchen"],
     ["/my-recipes", "Recipes"],
     ["/saved-recipes", "Recipes"],
