@@ -85,6 +85,22 @@ describe("startMoveIn", () => {
       .rejects.toThrow("D1 is down");
   });
 
+  it("still answers a bad backup when deleting it fails, and leaves it to the sweep", async () => {
+    const bucket = { ...memoryBucket(), delete: async () => Promise.reject(new Error("R2 is down")) };
+    expect(await start(new TextEncoder().encode("not a zip"), bucket)).toEqual({ ok: false, code: "broken-zip" });
+  });
+
+  it("still passes on a failed save when deleting the backup fails", async () => {
+    const bucket = { ...memoryBucket(), delete: async () => Promise.reject(new Error("R2 is down")) };
+    const failing = {
+      prepare: database.binding.prepare,
+      batch: (statements: Array<{ sql: string }>) =>
+        statements.some((statement) => statement.sql.includes(`INSERT INTO "ImportJob"`)) ? Promise.reject(new Error("D1 is down")) : database.binding.batch(statements as never),
+    };
+    await expect(startMoveIn({ env: { DB: failing, PHOTOS: bucket } as never, ownerId: "chef-1", app: "mealie", file: { name: "x.zip", size: 1, data: zip() }, now }))
+      .rejects.toThrow("D1 is down");
+  });
+
   it("deletes the backup again when the job can't be saved", async () => {
     const bucket = memoryBucket();
     const failing = {
