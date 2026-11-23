@@ -98,6 +98,13 @@ describe("Self-host Image workflow", () => {
     );
   });
 
+  it("keeps the fresh server's screenshots when the OpenID Connect check runs Playwright again", () => {
+    // Playwright empties its output folder when it starts, so the second run writes elsewhere.
+    expect(stepNamed(image, /OpenID Connect/).run).toContain("--output test-results-self-host-oidc");
+    expect(stepNamed(image, /Strip network logs/).run).toContain("test-results-self-host-oidc");
+    expect(stepNamed(image, /Upload the report/).with?.path).toContain("test-results-self-host-oidc/");
+  });
+
   it("runs the fresh server's sign-up and invite checks when the code that decides who may sign up changes", () => {
     expect(stepNamed(image, /fresh server/).name).toMatch(/sign-ups and invites/);
     expect(workflow.on.pull_request.paths).toEqual(
