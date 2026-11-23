@@ -213,6 +213,19 @@ describe("the Move in page", () => {
     expect(screen.getByText("2 already here, 0 changed.")).toBeTruthy();
     expect(screen.queryByRole("heading", { level: 3, name: "What to look over" })).toBeNull();
     expect(screen.queryByText("Left out")).toBeNull();
+    // Nothing moved, so no counts that read as if recipes or photos did.
+    expect(screen.queryByText("Recipes moved in")).toBeNull();
+    expect(screen.queryByText("Photos")).toBeNull();
+    expect(document.querySelector("dl")).toBeNull();
+    expect(screen.getByRole("link", { name: "See your recipes" })).toBeTruthy();
+  });
+
+  it("keeps the counts when a recipe already here changed", async () => {
+    page(view({ status: "done", finished: true, recipes: { found: 2, done: 2, created: 0, already: 2, updated: 1, unchanged: 1, skipped: 0, failed: 0 }, photos: { found: 2, in: 2 } }));
+    expect(await screen.findByRole("heading", { level: 2, name: "Everything was already here" })).toBeTruthy();
+    expect(screen.getByText("2 already here, 1 changed.")).toBeTruthy();
+    expect(screen.getByText("Recipes moved in").nextElementSibling?.textContent).toBe("0");
+    expect(screen.getByText("Photos").nextElementSibling?.textContent).toBe("2 of 2");
   });
 
   it("says when nothing new came in", async () => {
