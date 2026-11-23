@@ -7,7 +7,7 @@ import { test } from "./support/journey";
 import { inTheKitchen, moveIn } from "./support/move-in";
 import { scratchStorageStatePath } from "./support/personas";
 
-test.describe("Move in, a v1.12.0 kitchen", () => {
+test.describe("Move in, a v1.12.0 kitchen", { tag: "@move-in" }, () => {
   test.use({ storageState: scratchStorageStatePath(11) });
 
   test("moves in with every recipe and photo @mutates", async ({ page, expectAccessible, verifyAfterReload }) => {
@@ -16,7 +16,7 @@ test.describe("Move in, a v1.12.0 kitchen", () => {
   });
 });
 
-test.describe("Move in, a v2.8.0 kitchen", () => {
+test.describe("Move in, a v2.8.0 kitchen", { tag: "@move-in" }, () => {
   test.use({ storageState: scratchStorageStatePath(12) });
 
   test("moves in with every recipe and photo @mutates", async ({ page, expectAccessible, verifyAfterReload }) => {
@@ -25,7 +25,7 @@ test.describe("Move in, a v2.8.0 kitchen", () => {
   });
 });
 
-test.describe("Move in, a v3.31.0 kitchen", () => {
+test.describe("Move in, a v3.31.0 kitchen", { tag: "@move-in" }, () => {
   test.use({ storageState: scratchStorageStatePath(13) });
 
   test("moves in with every recipe and photo @mutates", async ({ page, expectAccessible, verifyAfterReload }) => {
