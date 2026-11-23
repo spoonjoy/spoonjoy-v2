@@ -56,13 +56,13 @@ jobs:
       - name: 🔧 Generate Prisma client
         run: pnpm prisma:generate
       
-      - name: 📚 Build Storybook
-        run: pnpm build-storybook
-
       # On a pull request or a merge-queue group, the Ouro UI tests and specs below run only when a
-      # change can reach them; otherwise their result is the base commit's, which passed them. It
-      # runs the base commit's copy of scripts/storybook-scope.mjs, so a change cannot set its own
-      # scope, and runs them all when the base has no copy.
+      # change can reach them; otherwise their result is the base commit's, which passed them. On a
+      # pull request, the Storybook build and story check also run only when a story, Storybook's
+      # preview or a file Storybook reads changed, or the Ouro UI tests run; otherwise the job ends
+      # here and build-storybook passes on the base commit's result (the merge queue builds it
+      # whole). It runs the base commit's copy of scripts/storybook-scope.mjs, so a change cannot
+      # set its own scope, and runs everything when the base has no copy or doesn't say.
       - name: 🧭 Ouro UI test scope
         id: scope
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
@@ -81,6 +81,10 @@ jobs:
             echo "ouro=true" >> "$GITHUB_OUTPUT"
             echo "The base has no scripts/storybook-scope.mjs, so the Ouro UI tests run."
           fi
+
+      - name: 📚 Build Storybook
+        if: steps.scope.outputs.storybook != 'false'
+        run: pnpm build-storybook
 
       # Ouro UI (app/components/ouro, installed from its shadcn registry) ships its own tests. They
       # run here, beside the Storybook they use, on every push to main and on each pull request and
@@ -102,7 +106,7 @@ jobs:
       # (e2e/storybook/accessibility.spec.ts): any axe finding fails, including a check axe could
       # not decide that a pixel measurement does not settle. It runs even when the specs above fail.
       - name: ♿ Story accessibility in both themes
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.scope.outputs.storybook != 'false' }}
         run: |
           python3 -m http.server 6007 --bind 127.0.0.1 --directory storybook-static > "$RUNNER_TEMP/storybook-a11y-server.log" 2>&1 &
           for _ in $(seq 50); do curl -sf http://127.0.0.1:6007/iframe.html > /dev/null && break; sleep 0.2; done
