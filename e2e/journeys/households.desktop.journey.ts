@@ -43,6 +43,9 @@ async function openFromKitchen(
   await expect(household).toBeVisible();
   await expect(cookTogether.getByRole("link", { name: "Start a household", exact: true })).toHaveCount(0);
   await attachLocatorScreenshot(testInfo, cookTogether, shot);
+  // The whole first screen, so the shot shows where the section sits under the Kitchen's action row.
+  await expect(cookTogether).toBeInViewport();
+  await testInfo.attach(`${shot}-page`, { body: await page.screenshot({ animations: "disabled" }), contentType: "image/png" });
   await household.click();
   await expect(page).toHaveURL(pathUrl(householdPath));
   await page.reload({ waitUntil: "load" });

@@ -776,6 +776,10 @@ describe("Kitchen Index Route", () => {
         [expect.stringContaining("The Lee kitchen"), "/households/h1"],
         [expect.stringContaining("Cabin weekends"), "/households/h2"],
       ]);
+      // The house sits in Item's small muted icon tile, as on /households, so the name leads the row.
+      for (const row of within(list).getAllByRole("listitem")) {
+        expect(row.querySelector("svg")?.parentElement).toHaveAttribute("aria-hidden", "true");
+      }
       expect(within(section).queryByRole("link", { name: "Start a household" })).not.toBeInTheDocument();
       // Below the action row: the section follows the kitchen's header.
       const header = screen.getByRole("link", { name: "Kitchen settings" }).closest("header")!;
