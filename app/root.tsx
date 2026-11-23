@@ -42,6 +42,7 @@ import { Link } from "~/components/ouro/link/link";
 import { Navbar } from "~/components/ouro/navbar/navbar";
 import { Popover } from "~/components/ouro/popover/popover";
 import { Text } from "~/components/ouro/text/text";
+import { Tooltip } from "~/components/ouro/tooltip/tooltip";
 import { MobileNav, MobileNavInstallPrompt, MobileNavToaster, DockContextProvider } from "~/components/navigation";
 import { Button } from "~/components/ouro/button/button";
 import { OAuthButtonGroup } from "~/components/oauth";
@@ -196,9 +197,11 @@ export function AppNavbar({
           {/* Behind the households flag. An icon action, as on the phone's Kitchen row, since a ninth page
               link overflows the bar at 1280px and folds every link behind Menu. */}
           {households ? (
-            <Button href="/households" variant="outline" tone="secondary" aria-label="Households" aria-current={currentNav === "households" ? "page" : undefined}>
-              <House />
-            </Button>
+            <Tooltip content="Households" side="bottom">
+              <Button href="/households" variant="outline" tone="secondary" aria-label="Households" aria-current={currentNav === "households" ? "page" : undefined}>
+                <House />
+              </Button>
+            </Tooltip>
           ) : null}
           <Button href="/account/settings" variant="outline" tone="secondary" aria-current={currentNav === "account" ? "page" : undefined}>Account</Button>
           <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
