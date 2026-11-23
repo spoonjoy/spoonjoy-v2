@@ -325,6 +325,8 @@ export const census: Journey[] = [
     ],
   },
   { id: "shopping-list-newbie", enrolled: true, persona: "newbie", path: "/shopping-list", states: [DEFAULT] },
+  // A fixed week, so the run's date never changes the page; the chef plans nothing, so the week is empty.
+  { id: "meal-plan", enrolled: true, persona: "chef", path: "/plan?week=2027-03-01", states: [DEFAULT] },
 
   // Households (the households flag is on in QA). The chef belongs to none, so the list is empty
   // and the same each run; an invite token that doesn't exist shows the refusal.
