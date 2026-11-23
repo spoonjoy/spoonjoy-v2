@@ -206,6 +206,22 @@ describe("API v1 native account settings", () => {
     ]));
   });
 
+  it("reports a self-hosted server's OpenID Connect sign-in as the oidc provider without its issuer", async () => {
+    await db.oAuth.create({
+      data: {
+        provider: "oidc:https://auth.example.test/application/o/spoonjoy/",
+        providerUserId: `oidc-${faker.string.alphanumeric(8)}`,
+        providerUsername: "chef",
+        userId,
+      },
+    });
+    const cookie = await sessionCookie(userId);
+
+    const payload = await readJson(await apiGet("me", { Cookie: cookie }, "req_me_oidc"));
+
+    expect(payload.data.oauthAccounts).toEqual([{ provider: "oidc", providerUsername: "chef" }]);
+  });
+
   it("updates the username with account-write bearer auth, refuses email changes, and rejects collisions", async () => {
     const bearer = await createApiCredential(db, userId, "Native settings writer", { scopes: ["account:write"] });
     const other = await createUser(
