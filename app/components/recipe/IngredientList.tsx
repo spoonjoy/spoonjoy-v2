@@ -1,8 +1,9 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { Checklist, type ChecklistItemData } from '~/components/ouro/checklist/checklist'
 import type { IngredientIconKey } from '~/lib/ingredient-affordances'
-import { formatAmountIn, scaleQuantity, type UnitSystem } from "~/domains/food-knowledge"
+import { formatAmountIn, scaleQuantity, swapsFor, type UnitSystem } from "~/domains/food-knowledge"
 import { useUnitSystem } from "./use-unit-system"
+import { useIngredientSwaps } from "./use-ingredient-swaps"
 
 export interface Ingredient {
   /** Unique identifier */
@@ -38,6 +39,8 @@ export interface IngredientListProps {
   checkedIds: ReadonlySet<string>
   /** Called with an ingredient's id when it is ticked or unticked */
   onToggle: (id: string) => void
+  /** Show each ingredient's swaps after its aisle, where swaps are on (cook mode's step list) */
+  showSwaps?: boolean
   /** Earlier steps' outputs this step uses, listed before the ingredients */
   stepOutputUses: StepReference[]
   /** Step output ids the cook has ticked off */
@@ -110,8 +113,10 @@ export function IngredientList({
   checkedStepOutputIds,
   onStepOutputToggle,
   hideLabel = false,
+  showSwaps = false,
 }: IngredientListProps) {
   const { system } = useUnitSystem()
+  const swapsOn = useIngredientSwaps() && showSwaps
   const outputIds = useMemo(() => new Set(stepOutputUses.map((reference) => reference.id)), [stepOutputUses])
   const items: ChecklistItemData[] = uncheckedFirst([
     ...stepOutputUses.map((reference) => ({
@@ -123,7 +128,7 @@ export function IngredientList({
     ...ingredients.map((ingredient) => ({
       id: ingredient.id,
       label: ingredient.name,
-      description: ingredient.categoryLabel,
+      description: swapsOn ? withSwaps(ingredient) : ingredient.categoryLabel,
       value: formatScaledAmount(ingredient, scaleFactor, system) || undefined,
       checked: checkedIds.has(ingredient.id),
     })),
@@ -143,6 +148,13 @@ export function IngredientList({
       onCheckedChange={(id) => (outputIds.has(id) ? onStepOutputToggle(id) : onToggle(id))}
     />
   )
+}
+
+/** An ingredient's aisle, then what to use instead of it: "Dairy · Swap: plain Greek yogurt". */
+function withSwaps(ingredient: Ingredient) {
+  const swaps = swapsFor(ingredient.name)
+  const swapText = swaps.length > 0 ? `Swap: ${swaps.join('; ')}` : undefined
+  return [ingredient.categoryLabel, swapText].filter(Boolean).join(' · ') || undefined
 }
 
 /** An ingredient's amount at the recipe's scale, in the cook's units: "1 ½ cups", or "" with neither a quantity nor a unit. */
