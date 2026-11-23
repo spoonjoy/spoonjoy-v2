@@ -8,7 +8,7 @@ import { runWithD1WriteRetryReporter } from "../app/lib/d1-write-retry.server";
 import { qaErrorLogsEnabled } from "../app/lib/qa-error-logs.server";
 import { isolateColoReport, isolateRequestReport } from "../app/lib/slow-call.server";
 import { getDb } from "../app/lib/db.server";
-import { consumeJobBatch, d1JobKeys, jobRegistry, type JobKeysDatabase, type JobMessage } from "../app/domains/platform";
+import { consumeJobBatch, d1JobKeys, jobRegistry, type JobKeysDatabase } from "../app/domains/platform";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
 import { defaultPhotoCache, deliverPhoto, photoKeyFromPath } from "../app/lib/photo-delivery.server";
@@ -381,7 +381,7 @@ export default {
 
   // Platform jobs on the JOBS queue (app/domains/platform/ports/jobs.ts); a job that runs out of
   // attempts is reported, and its key freed to be enqueued again.
-  async queue(batch: MessageBatch<JobMessage>, rawEnv: CloudflareEnvironment) {
+  async queue(batch: MessageBatch<unknown>, rawEnv: CloudflareEnvironment) {
     const env = withTransientD1Retry(rawEnv);
     if (!env.DB) throw new Error("Platform jobs need the DB binding for their keys.");
     await consumeJobBatch(batch, jobHandlers, d1JobKeys(env.DB as JobKeysDatabase), {
