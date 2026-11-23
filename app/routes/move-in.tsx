@@ -24,7 +24,7 @@ import {
   type MoveInEnv,
   type MoveInProgress,
 } from "~/domains/move-in";
-import { isFlagOn } from "~/domains/platform/flags";
+import { isFlagOn } from "~/domains/platform";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { CookbookPage } from "~/components/cookbook/page";
