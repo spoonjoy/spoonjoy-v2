@@ -1,6 +1,7 @@
 // The jobs port for tests: jobs wait in memory until drain() runs them, one at a time, retrying a failed
 // run straight away and ignoring delaySeconds (the outcome still says how long the queue would have
 // waited), with keys held in memory. A job that fails its last attempt shows as "failed" in drain()'s list.
+// A key is waiting at most once, and drain() runs one job at a time, so no delivery finds its key running or done.
 import { runJob, type JobKeys, type JobMessage, type JobOutcome, type JobRegistry, type Jobs } from "../ports/jobs";
 
 export interface MemoryJobs extends Jobs {
@@ -18,9 +19,6 @@ export function memoryJobs(registry: JobRegistry): MemoryJobs {
       return true;
     },
     async start(key) {
-      const now = status.get(key);
-      if (now === "done") return { state: "done" };
-      if (now === "running") return { state: "busy", retryInSeconds: 0 };
       status.set(key, "running");
       const run = (runs.get(key) ?? 0) + 1;
       runs.set(key, run);
