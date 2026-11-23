@@ -1,6 +1,6 @@
 // Meal planner on both devices, as scratch user 9 (AGENTS.md's scratch index table): open the week, plan another
-// chef's seeded recipe at twice its size from the page a recipe links to, add a note, and remove the note; each change
-// survives a reload. The week is a fixed one far from today, so the run's date never moves the days.
+// chef's seeded recipe at twice its size from the page a recipe links to, add a note, put the week on the shopping list
+// (the salmon's ingredients at twice their amounts), and remove the note; each change survives a reload. The week is a fixed one far from today, so the run's date never moves the days.
 //
 // A cook has one plan, and the two device projects run at the same time, so each device signs in as its own account:
 // scratch 9's base account on iPhone, its desktop twin on desktop Chrome (support/personas.ts's
@@ -66,6 +66,23 @@ test.describe("Meal planner", () => {
     });
     await expectAccessible();
     await testInfo.attach("meal-planner-week", { body: await page.screenshot({ fullPage: true, animations: "disabled" }), contentType: "image/png" });
+
+    // Put the week on the shopping list: the salmon's ingredients, doubled, survive a reload of the list.
+    await page.getByRole("button", { name: "Add this week to my list", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Added 1 recipe to your shopping list." })).toBeVisible();
+    await page.getByRole("link", { name: "Open the list", exact: true }).click();
+    await expect(page).toHaveURL(pathUrl("/shopping-list"));
+    await waitForHydration(page);
+    const listed = { salmon: /(^| )4\b/, "white miso": /(^| )4\b/, mirin: /(^| )2\b/ };
+    await verifyAfterReload(async () => {
+      for (const [name, amount] of Object.entries(listed)) {
+        await expect(page.getByRole("checkbox", { name, exact: true })).toHaveAccessibleDescription(amount);
+      }
+    });
+    await expectAccessible();
+    await testInfo.attach("meal-planner-shopping-list", { body: await page.screenshot({ fullPage: true, animations: "disabled" }), contentType: "image/png" });
+    await page.goto(`/plan?week=${WEEK}`);
+    await waitForHydration(page);
 
     // Remove the note; the recipe stays.
     await thursday.getByRole("button", { name: "Remove Eat out from Thursday", exact: true }).click();
