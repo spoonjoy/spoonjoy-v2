@@ -44,9 +44,8 @@ async function showShell(page: Page): Promise<void> {
 /** Shows the shared shell again and hides the page's main content, so the entry counts only the shell. */
 export async function showOnlyShell(page: Page): Promise<void> {
   await showShell(page);
+  // With main hidden the skip link counts as visible, so the shell's entries list it too.
   await page.getByRole("main").evaluate((main) => {
     (main as HTMLElement).style.visibility = "hidden";
-    // Nothing on the page keeps focus, so no focus-only control (the skip link) shows.
-    (document.activeElement as HTMLElement | null)?.blur();
   });
 }

@@ -3421,6 +3421,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
           "identity": "link \"Spoonjoy for iPhone and iPad\" [link/root] in contentinfo",
           "count": 1
         },
@@ -3466,6 +3470,10 @@
         },
         {
           "identity": "link \"Sign up\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
           "count": 1
         },
         {
@@ -4423,7 +4431,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"27 components\" [inspector/list] in region \"X-ray\"",
+          "identity": "button \"16 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {
@@ -4504,7 +4512,7 @@
         },
         {
           "identity": "link \"\" [inspector/tag] in -",
-          "count": 13
+          "count": 9
         },
         {
           "identity": "link \"Make it yours: sign up\" [button/root] in main",
@@ -7855,6 +7863,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
           "identity": "link \"Spoonjoy for iPhone and iPad\" [link/root] in contentinfo",
           "count": 1
         }
@@ -7892,6 +7904,10 @@
         },
         {
           "identity": "link \"Sign up\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
           "count": 1
         },
         {
@@ -8837,7 +8853,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"23 components\" [inspector/list] in region \"X-ray\"",
+          "identity": "button \"17 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {
