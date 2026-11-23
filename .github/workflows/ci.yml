@@ -427,6 +427,11 @@ jobs:
       - name: 🔧 Generate Prisma client
         run: node scripts/warning-gate.ts -- pnpm prisma:generate
 
+      # The install skipped postinstall, so write the provenance manifest the app imports; Git
+      # ignores it (scripts/generate-ouro-provenance.mjs).
+      - name: 🔧 Generate the provenance manifest
+        run: node scripts/warning-gate.ts -- pnpm provenance:generate
+
       - name: 🔒 Verify blake3 override resolution
         run: |
           node scripts/warning-gate.ts -- pnpm why blake3-wasm

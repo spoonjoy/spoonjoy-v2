@@ -602,6 +602,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     ),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile --ignore-scripts`),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm prisma:generate`),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm provenance:generate`),
     commandStepSignature(
       `${WARNING_GATE_COMMAND_PREFIX}pnpm why blake3-wasm`,
       `${WARNING_GATE_COMMAND_PREFIX}pnpm why @c4312/blake3-internal`,
