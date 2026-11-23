@@ -1,7 +1,7 @@
 // A household shared by two people, as scratch index 10 (AGENTS.md's scratch index table): its base
 // account makes a household and an invite link, and its desktop twin opens the link in a second
-// browser and joins. Both see each other in People after a reload, and the twin then leaves and no
-// longer finds it. Desktop only: the two accounts are the two people, so an iPhone run at the same
+// browser and joins. Both see each other in People after a reload. The owner then makes the twin
+// view-only and removes them, and each change shows on the twin's next load. Desktop only: the two accounts are the two people, so an iPhone run at the same
 // time would share them. The household's name carries a timestamp, so each run's household is its
 // own. The households flag is on in QA.
 import type { Page, TestInfo } from "@playwright/test";
@@ -83,10 +83,26 @@ test.describe("Households", () => {
       });
       await attachScreenshot(testInfo, page, "owner-household");
 
-      // The joiner leaves, and the household is gone from their list.
-      await joinerPage.getByRole("button", { name: "Leave household", exact: true }).click();
-      await expect(joinerPage).toHaveURL(pathUrl("/households"));
+      // The owner makes the joiner view-only, and the joiner sees it on their next load.
+      await page.getByRole("button", { name: `Actions for ${joiner.username}`, exact: true }).click();
+      await page.getByRole("menuitemradio", { name: "View-only", exact: true }).click();
+      await verifyAfterReload(async () => {
+        await expect(people(page).getByText("View-only", { exact: true })).toBeVisible();
+      });
       await joinerPage.reload({ waitUntil: "load" });
+      await expect(people(joinerPage).getByText("View-only", { exact: true })).toBeVisible();
+
+      // The owner removes the joiner, after confirming, and the household is gone from the joiner's list.
+      await page.getByRole("button", { name: `Actions for ${joiner.username}`, exact: true }).click();
+      await page.getByRole("menuitem", { name: "Remove from household", exact: true }).click();
+      const confirm = page.getByRole("alertdialog", { name: `Remove ${joiner.username}?` });
+      await expectAccessible();
+      await attachScreenshot(testInfo, page, "owner-remove-dialog");
+      await confirm.getByRole("button", { name: "Remove", exact: true }).click();
+      await verifyAfterReload(async () => {
+        await expect(people(page).getByText(joiner.username, { exact: true })).toHaveCount(0);
+      });
+      await joinerPage.goto("/households");
       await expect(joinerPage.getByRole("link", { name })).toHaveCount(0);
     } catch (error) {
       throw appendConsoleIssues(error, joinerConsole.issues);

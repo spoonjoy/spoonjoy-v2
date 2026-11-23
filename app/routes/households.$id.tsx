@@ -1,14 +1,18 @@
 import type { Route } from "./+types/households.$id";
-import { Form as RouterForm, data, redirect, useActionData, useLoaderData } from "react-router";
+import { useState } from "react";
+import { Ellipsis } from "lucide-react";
+import { Form as RouterForm, data, redirect, useActionData, useLoaderData, useSubmit } from "react-router";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Button } from "~/components/ouro/button/button";
 import { CopyButton } from "~/components/ouro/copy-button/copy-button";
+import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { Form } from "~/components/ouro/form/form";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Link } from "~/components/ouro/link/link";
+import { Menu, MenuItem, MenuRadioGroup, MenuRadioItem } from "~/components/ouro/menu/menu";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { SectionHeader } from "~/components/ouro/section-header/section-header";
 import { NativeSelect } from "~/components/ouro/select/native-select";
@@ -19,12 +23,15 @@ import { CookbookPage } from "~/components/cookbook/page";
 // bundle must not reach, so the page reads labels from the loader.
 import {
   DEFAULT_INVITE_DAYS,
+  HOUSEHOLD_ROLES,
   HOUSEHOLD_ROLE_LABELS,
   can,
+  changeMemberRole,
   createInvite,
   getHousehold,
   householdsRequest,
   leave,
+  removeFromHousehold,
 } from "~/domains/households-and-identity";
 
 export function meta({ data: loaded }: Route.MetaArgs) {
@@ -41,6 +48,8 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       name: household.name,
       myRole: household.me.role,
       canInvite: can(household.me, "invite"),
+      canManage: can(household.me, "manage-members"),
+      roleChoices: HOUSEHOLD_ROLES.map((role) => ({ value: role, label: HOUSEHOLD_ROLE_LABELS[role] })),
       members: household.members.map((member) => ({
         userId: member.userId,
         username: member.username,
@@ -67,6 +76,21 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       inviteDays: DEFAULT_INVITE_DAYS,
     };
   }
+  if (intent === "role") {
+    const changed = await changeMemberRole(store, {
+      householdId: params.id,
+      userId,
+      targetId: String(form.get("targetId") ?? ""),
+      role: form.get("role"),
+    });
+    if (!changed.ok) return data({ error: changed.error }, { status: 400 });
+    return { done: "role" as const };
+  }
+  if (intent === "remove") {
+    const removed = await removeFromHousehold(store, { householdId: params.id, userId, targetId: String(form.get("targetId") ?? "") });
+    if (!removed.ok) return data({ error: removed.error }, { status: 400 });
+    return { done: "removed" as const };
+  }
   if (intent === "leave") {
     const left = await leave(store, { householdId: params.id, userId });
     if (!left.ok) return data({ error: left.error }, { status: 400 });
@@ -79,7 +103,13 @@ export default function HouseholdPage() {
   const { household } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const error = actionData && "error" in actionData ? actionData.error : null;
-  const invite = actionData && "inviteUrl" in actionData ? actionData : null;
+  const invite = actionData && "inviteUrl" in actionData && actionData.inviteUrl
+    ? { inviteUrl: actionData.inviteUrl, invitedAs: actionData.invitedAs, inviteDays: actionData.inviteDays }
+    : null;
+  const submit = useSubmit();
+  const [removing, setRemoving] = useState<{ userId: string; username: string } | null>(null);
+  // Choosing a role keeps a menu open by default; this one closes once the role is sent.
+  const [menuFor, setMenuFor] = useState<string | null>(null);
 
   return (
     <CookbookPage>
@@ -105,14 +135,60 @@ export default function HouseholdPage() {
                 title={member.me ? `${member.username} (you)` : member.username}
                 media={<Avatar name={member.username} src={member.photoUrl ?? undefined} alt="" />}
                 actions={
-                  <Badge tone={member.role === "owner" ? "primary" : "secondary"} variant="soft">
-                    {member.roleLabel}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge tone={member.role === "owner" ? "primary" : "secondary"} variant="soft">
+                      {member.roleLabel}
+                    </Badge>
+                    {household.canManage && !member.me ? (
+                      <Menu
+                        open={menuFor === member.userId}
+                        onOpenChange={(open) => setMenuFor(open ? member.userId : null)}
+                        trigger={
+                          <Button variant="outline" tone="secondary" aria-label={`Actions for ${member.username}`}>
+                            <Ellipsis />
+                          </Button>
+                        }
+                      >
+                        <MenuRadioGroup
+                          label="Role"
+                          value={member.role}
+                          onValueChange={(role) => {
+                            setMenuFor(null);
+                            submit({ intent: "role", targetId: member.userId, role }, { method: "post" });
+                          }}
+                        >
+                          {household.roleChoices.map((choice) => (
+                            <MenuRadioItem key={choice.value} value={choice.value}>
+                              {choice.label}
+                            </MenuRadioItem>
+                          ))}
+                        </MenuRadioGroup>
+                        <MenuItem
+                          tone="destructive"
+                          onClick={() => setRemoving({ userId: member.userId, username: member.username })}
+                        >
+                          Remove from household
+                        </MenuItem>
+                      </Menu>
+                    ) : null}
+                  </div>
                 }
               />
             ))}
           </ItemGroup>
         </section>
+
+        {removing ? (
+          <ConfirmDialog
+            open
+            onOpenChange={() => setRemoving(null)}
+            onConfirm={() => submit({ intent: "remove", targetId: removing.userId }, { method: "post" })}
+            title={`Remove ${removing.username}?`}
+            description="They lose what the household shares. You can invite them again later."
+            confirmLabel="Remove"
+            tone="destructive"
+          />
+        ) : null}
 
         {household.canInvite ? (
           <section className="mt-10" aria-labelledby="household-invite">
