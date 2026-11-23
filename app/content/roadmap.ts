@@ -176,14 +176,14 @@ export const ROADMAP: readonly RoadmapItem[] = [
     id: "organizers",
     title: "Tags, categories and tools",
     benefit: "Sort recipes your way, and filter out what you can't eat or don't own the gear for.",
-    status: "next",
+    status: "building",
     area: "Recipes",
   },
   {
     id: "smart-cookbooks",
     title: "Smart cookbooks",
     benefit: "Cookbooks that fill themselves from a rule, like every vegetarian dinner under 30 minutes.",
-    status: "next",
+    status: "building",
     area: "Recipes",
   },
   {
