@@ -3,3 +3,5 @@
 export * from "./model/local-date";
 export * from "./model/meal-type";
 export * from "./model/plan-entry";
+export * from "./application/plan";
+export * from "./adapters/prisma-plan-store";

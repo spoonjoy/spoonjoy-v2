@@ -52,6 +52,8 @@ model User {
   spoons                   RecipeSpoon[]
   imageGenLedger           ImageGenLedger[]
   cookingNow               CookingNow[]
+  mealPlan                 MealPlan?
+  plannedEntries           PlanEntry[]
   contentReports           ContentReport[]
   blocksMade               ChefBlock[]               @relation("ChefBlocker")
   blocksReceived           ChefBlock[]               @relation("ChefBlocked")
@@ -475,6 +477,7 @@ model Recipe {
   spoons             RecipeSpoon[]
   covers             RecipeCover[]      @relation("RecipeCoverHistory")
   cookingNow         CookingNow[]
+  planEntries        PlanEntry[]
   activeCoverId      String?
   activeCover        RecipeCover?       @relation("RecipeActiveCover", fields: [activeCoverId], references: [id], onDelete: SetNull)
   activeCoverVariant String?
@@ -669,6 +672,52 @@ model CookingNow {
 
   @@id([userId, recipeId])
   @@index([userId, touchedAt])
+}
+
+// A cook's meal plan (migration 0040, app/domains/planning): one per cook until households set
+// householdId. An entry is a recipe at a servings scale or a note, on a local "YYYY-MM-DD" day.
+model MealPlan {
+  id             String      @id @default(cuid())
+  ownerId        String      @unique
+  owner          User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  householdId    String?
+  firstDayOfWeek Int         @default(1)
+  timeZone       String      @default("UTC")
+  entries        PlanEntry[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @default(now()) @updatedAt
+
+  @@index([householdId])
+}
+
+model PlanEntry {
+  id           String    @id @default(cuid())
+  mealPlanId   String
+  mealPlan     MealPlan  @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  date         String
+  span         String    @default("day")
+  mealType     String
+  position     Int       @default(0)
+  kind         String
+  recipeId     String?
+  recipe       Recipe?   @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+  recipeTitle  String?
+  title        String    @default("")
+  note         String    @default("")
+  scaleFactor  Float     @default(1)
+  addedById    String?
+  addedBy      User?     @relation(fields: [addedById], references: [id], onDelete: SetNull)
+  cookedAt     DateTime?
+  spoonId      String?
+  sourceSystem String?
+  sourceId     String?
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  @@unique([mealPlanId, sourceSystem, sourceId])
+  @@index([mealPlanId, date, mealType, position])
+  @@index([recipeId])
 }
 
 // A signed-in chef's report about a recipe, chef, cook log (spoon) or cookbook (App Store
