@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { readdirSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -5054,6 +5055,8 @@ describe("pending D1 migration discovery", () => {
   });
 });
 
+const MIGRATIONS = path.resolve(__dirname, "../../migrations");
+
 describe("additive migration safety", () => {
   it.each([
     "DROP INDEX Recipe_idx;",
@@ -5113,6 +5116,52 @@ describe("additive migration safety", () => {
       "0024_bad.sql",
       'CREATE TABLE "Fresh" (id TEXT); CREATE UNIQUE INDEX "Recipe_title_key" ON "Recipe"(title);',
     )).toThrow("not additive");
+  });
+
+  it("allows a trigger only on a table the same migration creates, writing only to tables it creates", () => {
+    const fresh = 'CREATE TABLE "Team" (id TEXT); CREATE TABLE "Member" ("teamId" TEXT, role TEXT);';
+    expect(() => assertAdditiveMigrationSql(
+      "0024_good.sql",
+      `${fresh}
+CREATE TRIGGER "Member_keep_owner" AFTER DELETE ON "Member"
+WHEN OLD."role" = 'owner' AND NOT EXISTS (SELECT 1 FROM "Member" WHERE "teamId" = OLD."teamId")
+BEGIN
+    UPDATE "Member" SET "role" = CASE WHEN "role" = 'viewer' THEN 'member' ELSE 'owner' END WHERE "teamId" = OLD."teamId";
+    DELETE FROM "Team" WHERE "id" = OLD."teamId";
+    SELECT 1;
+END;
+CREATE INDEX "Member_teamId_idx" ON "Member"("teamId");`,
+    )).not.toThrow();
+    // On a table that already exists.
+    expect(() => assertAdditiveMigrationSql(
+      "0024_bad.sql",
+      `${fresh} CREATE TRIGGER "Recipe_gone" AFTER DELETE ON "Recipe" BEGIN DELETE FROM "Team"; END;`,
+    )).toThrow("not additive");
+    // On a new table, but writing to a table that already exists.
+    expect(() => assertAdditiveMigrationSql(
+      "0024_bad.sql",
+      `${fresh} CREATE TRIGGER "Member_gone" AFTER DELETE ON "Member" BEGIN DELETE FROM "Recipe"; END;`,
+    )).toThrow("not additive");
+    expect(() => assertAdditiveMigrationSql(
+      "0024_bad.sql",
+      `${fresh} CREATE TRIGGER "Member_gone" AFTER DELETE ON "Member" BEGIN PRAGMA foreign_keys = OFF; END;`,
+    )).toThrow("not additive");
+    expect(() => assertAdditiveMigrationSql(
+      "0024_bad.sql",
+      `${fresh} CREATE TEMP TRIGGER "Member_gone" AFTER DELETE ON "Member" BEGIN DELETE FROM "Team"; END;`,
+    )).toThrow("not additive");
+    // A trigger body that never ends, or a standalone transaction, is still refused.
+    expect(() => assertAdditiveMigrationSql(
+      "0024_bad.sql",
+      `${fresh} CREATE TRIGGER "Member_gone" AFTER DELETE ON "Member" BEGIN DELETE FROM "Team";`,
+    )).toThrow("not additive");
+    expect(() => assertAdditiveMigrationSql("0024_bad.sql", `BEGIN; ${fresh} END;`)).toThrow("not additive");
+  });
+
+  // The migrations production had not applied when the trigger rule came in (0045 once it lands).
+  it.each(readdirSync(MIGRATIONS).filter((name) => /^004[2-5]_.*\.sql$/.test(name)))("finds the pending migration %s additive", (name) => {
+    const sql = readFileSync(path.join(MIGRATIONS, name), "utf8");
+    expect(() => assertAdditiveMigrationSql(name, sql)).not.toThrow();
   });
 
   it("accepts a line comment that ends at EOF", () => {
