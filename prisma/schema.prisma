@@ -617,7 +617,7 @@ model RecipeInCookbook {
   @@index([addedById, recipeId])
 }
 
-// The tags, categories and tools a cook sorts recipes by (migration 0043, app/domains/kitchen). The
+// The tags, categories and tools a cook sorts recipes by (migration 0044, app/domains/kitchen). The
 // slug is unique per owner and kind; householdId is set once households share organizers.
 model Organizer {
   id          String            @id @default(cuid())
