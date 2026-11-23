@@ -130,8 +130,10 @@ const API_CONNECTION_FAILURE_PATTERN = /(?:\[ERROR\]|TypeError:) fetch failed\b|
 const API_SERVER_ERROR_PAGE_PATTERN = /Received a malformed response from the API[\s\S]*-> (50[0234])\b/;
 // A deploy that ended in 10007, or lost its connection, has usually made the script and applied
 // its Durable Object migrations; while Cloudflare's reads lag, the next deploy sends them again
-// and is refused.
+// and is refused, or wrangler itself fails reading the half-made script's migration tag (PR
+// Journeys run 45181160164, after a 10007).
 const MIGRATION_TAG_LAG_PATTERN = /Actor migration tag precondition failed, got tag '' when expected tag is '[^']+'.*\[code: 10079\]/s;
+const MIGRATION_TAG_READ_FAILURE_PATTERN = /\[ERROR\] Cannot read properties of null \(reading 'tag'\)/;
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const MIGRATION_FILE_PATTERN = /^\d{4}_[A-Za-z0-9_.-]+\.sql$/;
@@ -557,6 +559,8 @@ export async function deploy({ env, exec, fs, sleep, log }) {
             ? `Cloudflare answered an unknown error (code 10013) while enabling ${state.workerName}'s workers.dev subdomain`
           : scriptMayExist && MIGRATION_TAG_LAG_PATTERN.test(output)
             ? `Cloudflare had not yet caught up with ${state.workerName}'s Durable Object migrations (code 10079)`
+          : scriptMayExist && MIGRATION_TAG_READ_FAILURE_PATTERN.test(output)
+            ? `Wrangler could not read ${state.workerName}'s Durable Object migration tag while Cloudflare catches up`
             : serverErrorPage
               ? `Cloudflare's API answered ${serverErrorPage[1]} while deploying ${state.workerName}`
               : API_CONNECTION_FAILURE_PATTERN.test(output)
