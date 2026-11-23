@@ -10,7 +10,7 @@ import { Text } from "~/components/ouro/text/text";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { CookbookPage } from "~/components/cookbook/page";
 import { ORGANIZER_KIND_COPY, ORGANIZER_KIND_ORDER, organizerHref, organizerMeta } from "~/components/organizers/organizer-kinds";
-import { recipeOrganizeAction, recipeOrganizeLoader } from "~/domains/kitchen";
+import { recipeOrganizeAction, recipeOrganizeLoader } from "~/domains/kitchen/index.server";
 
 export function meta({ data }: Route.MetaArgs) {
   return organizerMeta(data ? `Organize ${data.recipe.title}` : "Organize");

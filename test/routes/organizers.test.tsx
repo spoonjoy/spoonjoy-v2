@@ -3,7 +3,7 @@ import { Request as UndiciRequest } from "undici";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { db } from "~/lib/db.server";
 import { OBJECTIONABLE_CONTENT_MESSAGE, OBJECTIONABLE_TERMS } from "~/lib/objectionable-terms";
-import { organizerNamesFromInput } from "~/domains/kitchen";
+import { organizerNamesFromInput } from "~/domains/kitchen/index.server";
 import TagsIndex, { loader as tagsLoader, meta as tagsMeta } from "~/routes/tags._index";
 import TagPage, { loader as tagLoader, meta as tagMeta } from "~/routes/tags.$slug";
 import CategoriesIndex, { loader as categoriesLoader, meta as categoriesMeta } from "~/routes/categories._index";
