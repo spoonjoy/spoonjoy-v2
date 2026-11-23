@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { BookOpen, Download, Ellipsis, Play, Plus, Search as SearchIcon, Settings, Users, Utensils } from "lucide-react";
+import { BookOpen, Download, Ellipsis, House, Play, Plus, Search as SearchIcon, Settings, Users, Utensils } from "lucide-react";
 import { chefDisplayName } from "~/lib/username";
 import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
@@ -18,6 +18,7 @@ import { cn } from "~/lib/ouro/cn";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { formatServingsLabel } from "~/domains/food-knowledge";
 import { share } from "~/lib/ouro/share";
+import { useFlag } from "~/domains/platform";
 
 export function absoluteKitchenUrl(path: string) {
   if (typeof window === "undefined") {
@@ -41,6 +42,7 @@ export function KitchenHome({
   /** The owner's recipes in progress, above everything else in their kitchen. */
   cookingNow?: ReactNode;
 }) {
+  const households = useFlag("households");
   const heading = isOwner ? "My Kitchen" : `${chefDisplayName(kitchenUser.username)}'s Kitchen`;
   const recipeCount = `${recipes.length} ${recipes.length === 1 ? "recipe" : "recipes"}`;
   const cookbookCount = `${cookbooks.length} ${cookbooks.length === 1 ? "cookbook" : "cookbooks"}`;
@@ -92,6 +94,10 @@ export function KitchenHome({
               <>
                 <Button href="/recipes/new" startIcon={Plus}>Add a recipe</Button>
                 <Button href="/chefs" variant="outline" tone="secondary" startIcon={Users}>Chefs</Button>
+                {/* Behind the households flag: the phone's way to its households, since the top bar is desktop only. */}
+                {households ? (
+                  <Button href="/households" variant="outline" tone="secondary" aria-label="Households"><House /></Button>
+                ) : null}
                 <Button href="/account/settings" variant="outline" tone="secondary" aria-label="Kitchen settings"><Settings /></Button>
               </>
             ) : (

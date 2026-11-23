@@ -23,6 +23,7 @@ const TAB_PAGES: ReadonlyArray<readonly [path: string, currentTab: string]> = [
   ["/", "Kitchen"],
   ["/account/settings", "Kitchen"],
   ["/chefs", "Kitchen"],
+  ["/households", "Kitchen"],
   ["/users/qa_kitchen_friend", "Kitchen"],
   ["/my-recipes", "Recipes"],
   ["/saved-recipes", "Recipes"],
@@ -153,17 +154,33 @@ test.describe("Tab bar on iPhone", () => {
     await expect(tabBar.getByRole("link", { name: "Recipes", exact: true })).toHaveAttribute("aria-current", "page");
   });
 
-  test("the Kitchen page reaches Chefs and Account settings", async ({ page }) => {
+  test("the Kitchen page reaches Chefs, Households and Account settings", async ({ page }, testInfo) => {
     const main = page.getByRole("main");
 
+    // The narrowest phone the row is laid out for.
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
     await waitForHydration(page);
     // The kitchen's actions sit in one row on the phone, as the Apple app's kitchen toolbar does:
-    // Add a recipe, Chefs, then Settings as a circle with its gear.
-    const actions = ["Add a recipe", "Chefs", "Kitchen settings"].map((name) => main.getByRole("link", { name, exact: true }));
+    // Add a recipe, Chefs, then Households (QA has the households flag on) with its house and
+    // Settings with its gear, each a circle.
+    const actions = ["Add a recipe", "Chefs", "Households", "Kitchen settings"].map((name) => main.getByRole("link", { name, exact: true }));
     const boxes = await Promise.all(actions.map(async (action) => (await action.boundingBox())!));
-    expect(boxes.map((box) => Math.round(box.y)), "the kitchen's actions share one row").toEqual(Array(3).fill(Math.round(boxes[0]!.y)));
-    expect(Math.round(boxes[2]!.width), "Settings is a circle").toBe(Math.round(boxes[2]!.height));
+    expect(boxes.map((box) => Math.round(box.y)), "the kitchen's actions share one row").toEqual(Array(4).fill(Math.round(boxes[0]!.y)));
+    expect(Math.round(boxes[2]!.width), "Households is a circle").toBe(Math.round(boxes[2]!.height));
+    expect(Math.round(boxes[3]!.width), "Settings is a circle").toBe(Math.round(boxes[3]!.height));
+    const row = actions[0]!.locator("xpath=..");
+    await testInfo.attach("kitchen-actions-with-households-390", { body: await row.screenshot({ animations: "disabled" }), contentType: "image/png" });
+
+    // Households opens the cook's households, under the Kitchen tab.
+    await main.getByRole("link", { name: "Households", exact: true }).click();
+    await expect(page).toHaveURL(pathUrl("/households"));
+    await expect(page.getByRole("heading", { level: 1, name: "Cook together", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Spoonjoy navigation" }).getByRole("link", { name: "Kitchen", exact: true })).toHaveAttribute("aria-current", "page");
+    await testInfo.attach("households-from-kitchen-390", { body: await page.screenshot({ animations: "disabled" }), contentType: "image/png" });
+
+    await page.goto("/");
+    await waitForHydration(page);
     await main.getByRole("link", { name: "Chefs", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/chefs"));
     await expect(page.getByRole("heading", { level: 1, name: "Chefs", exact: true })).toBeVisible();
