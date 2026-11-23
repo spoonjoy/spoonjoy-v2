@@ -6,5 +6,6 @@ export * from "./model/plan-entry";
 export * from "./model/calendar-feed";
 export * from "./application/plan";
 export * from "./application/feed-link";
+export * from "./application/plan-to-list";
 export * from "./adapters/prisma-plan-store";
 export * from "./adapters/prisma-feed-link-store";

@@ -67,3 +67,21 @@ export function planWeek(entries: readonly PlanEntry[], start: LocalDate): PlanD
     entries: entries.filter((planned) => planned.date === date).sort(compareEntries),
   }));
 }
+
+export type RecipeToShop = { recipeId: string; scaleFactor: number; entryIds: string[] };
+
+/** The recipes planned among these entries, in the order first planned, each with the servings of every meal it is planned for added up. */
+export function recipesToShop(entries: readonly PlanEntry[]): RecipeToShop[] {
+  const byRecipe = new Map<string, RecipeToShop>();
+  for (const planned of entries) {
+    if (planned.kind !== "recipe" || !planned.recipeId) continue;
+    const found = byRecipe.get(planned.recipeId);
+    if (found) {
+      found.scaleFactor += planned.scaleFactor;
+      found.entryIds.push(planned.id);
+    } else {
+      byRecipe.set(planned.recipeId, { recipeId: planned.recipeId, scaleFactor: planned.scaleFactor, entryIds: [planned.id] });
+    }
+  }
+  return [...byRecipe.values()];
+}
