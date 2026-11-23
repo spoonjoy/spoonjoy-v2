@@ -1,0 +1,30 @@
+{
+  "desktop-chrome": {
+    "default": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "from-photo": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "paste-text": [
+      "banner",
+      "nav",
+      "footer"
+    ]
+  },
+  "iphone-webkit": {
+    "default": [
+      "footer"
+    ],
+    "from-photo": [
+      "footer"
+    ],
+    "paste-text": [
+      "footer"
+    ]
+  }
+}

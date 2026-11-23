@@ -1,0 +1,30 @@
+{
+  "desktop-chrome": {
+    "cook-mode": [],
+    "default": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "xray": [
+      "banner",
+      "nav",
+      "footer"
+    ]
+  },
+  "iphone-webkit": {
+    "cook-mode": [
+      "tabBar"
+    ],
+    "default": [
+      "banner",
+      "tabBar",
+      "footer"
+    ],
+    "xray": [
+      "banner",
+      "tabBar",
+      "footer"
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "desktop-chrome": {
+    "crop-photo-dialog": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "default": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "delete-account-open": [
+      "banner",
+      "nav",
+      "footer"
+    ]
+  },
+  "iphone-webkit": {
+    "crop-photo-dialog": [
+      "tabBar",
+      "footer"
+    ],
+    "default": [
+      "tabBar",
+      "footer"
+    ],
+    "delete-account-open": [
+      "tabBar",
+      "footer"
+    ]
+  }
+}

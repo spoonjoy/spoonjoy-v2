@@ -1,0 +1,22 @@
+{
+  "desktop-chrome": {
+    "default": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "uses-output-open": [
+      "banner",
+      "nav",
+      "footer"
+    ]
+  },
+  "iphone-webkit": {
+    "default": [
+      "footer"
+    ],
+    "uses-output-open": [
+      "footer"
+    ]
+  }
+}

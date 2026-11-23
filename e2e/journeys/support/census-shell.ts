@@ -8,13 +8,13 @@
 //
 // Which parts of the shell a page shows is still checked, page by page: after each state's action,
 // `expectShellLandmarks` shows the shell for a moment, reads which of its landmarks have a visible
-// control, and holds that to e2e/journeys/census-shell.baseline.json. It records the landmarks, not
-// their controls, so a new nav link changes no page's record, while a tab bar that comes back on an
-// editing page, or a footer that goes missing, fails.
-import { readFileSync } from "node:fs";
+// control, and holds that to the journey's record in e2e/journeys/census-shell/. It records the
+// landmarks, not their controls, so a new nav link changes no page's record, while a tab bar that
+// comes back on an editing page, or a footer that goes missing, fails.
+import { existsSync, readFileSync } from "node:fs";
 import { test, type Locator, type Page } from "@playwright/test";
 import { collectCensus } from "../../ouro-census/census-page.mjs";
-import { SHELL_BASELINE_PATH, shellMismatch, visibleShellLandmarks, type ShellBaseline } from "./census-shell-record";
+import { checkShell, shellRecordPath, visibleShellLandmarks, type ShellRecord } from "./census-shell-record";
 
 function shellLandmarks(page: Page): Locator[] {
   return [
@@ -63,12 +63,17 @@ export async function showOnlyShell(page: Page): Promise<void> {
   });
 }
 
-/** Fails unless the state shows the shell landmarks its baseline record names; leaves the shell hidden. */
+/**
+ * Fails when the state shows other shell landmarks than its journey's record names; a state with no
+ * record yet passes with a note in the report. Leaves the shell hidden.
+ */
 export async function expectShellLandmarks(page: Page, journeyId: string, stateId: string): Promise<void> {
   await showShell(page);
   const actual = visibleShellLandmarks(await collectCensus(page));
   await hideShell(page);
-  const baseline = JSON.parse(readFileSync(SHELL_BASELINE_PATH, "utf8")) as ShellBaseline;
-  const mismatch = shellMismatch(baseline, { project: test.info().project.name, journeyId, stateId }, actual);
-  if (mismatch) throw new Error(mismatch);
+  const path = shellRecordPath(journeyId);
+  const record = existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as ShellRecord) : undefined;
+  const result = checkShell(record, { project: test.info().project.name, journeyId, stateId }, actual);
+  if (result?.kind === "changed") throw new Error(result.message);
+  if (result) test.info().annotations.push({ type: "census-shell", description: result.message });
 }

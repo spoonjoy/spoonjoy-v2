@@ -1,0 +1,42 @@
+{
+  "desktop-chrome": {
+    "clear-all-dialog": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "default": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "item-actions-menu": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "remove-item-dialog": [
+      "banner",
+      "nav",
+      "footer"
+    ]
+  },
+  "iphone-webkit": {
+    "clear-all-dialog": [
+      "tabBar",
+      "footer"
+    ],
+    "default": [
+      "tabBar",
+      "footer"
+    ],
+    "item-actions-menu": [
+      "tabBar",
+      "footer"
+    ],
+    "remove-item-dialog": [
+      "tabBar",
+      "footer"
+    ]
+  }
+}

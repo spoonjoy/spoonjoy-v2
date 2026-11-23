@@ -1,0 +1,24 @@
+{
+  "desktop-chrome": {
+    "default": [
+      "banner",
+      "nav",
+      "footer"
+    ],
+    "fork-dialog": [
+      "banner",
+      "nav",
+      "footer"
+    ]
+  },
+  "iphone-webkit": {
+    "default": [
+      "tabBar",
+      "footer"
+    ],
+    "fork-dialog": [
+      "tabBar",
+      "footer"
+    ]
+  }
+}
