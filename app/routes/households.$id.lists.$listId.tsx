@@ -1,5 +1,5 @@
 import type { Route } from "./+types/households.$id.lists.$listId";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Form as RouterForm, data, redirect, useActionData, useFetcher, useFetchers, useLoaderData, useSubmit } from "react-router";
 import { Alert } from "~/components/ouro/alert/alert";
@@ -83,10 +83,14 @@ export default function HouseholdListPage() {
     submit(fields, { method: "post", navigate: false, fetcherKey: itemFetcherKey(fields.itemId) });
   const fetchers = useFetchers();
   // A tick shows at once, and the next load puts back what the server kept if it refused, with the reason.
-  const ticking = new Map(
-    fetchers
-      .filter((fetcher) => fetcher.formData?.get("intent") === "check")
-      .map((fetcher) => [String(fetcher.formData?.get("itemId")), fetcher.formData?.get("checked") === "true"]),
+  const ticking = useMemo(
+    () =>
+      new Map(
+        fetchers
+          .filter((fetcher) => fetcher.formData?.get("intent") === "check")
+          .map((fetcher) => [String(fetcher.formData?.get("itemId")), fetcher.formData?.get("checked") === "true"]),
+      ),
+    [fetchers],
   );
 
   return (
