@@ -16,11 +16,6 @@
       "nav",
       "footer"
     ],
-    "manage-open": [
-      "banner",
-      "nav",
-      "footer"
-    ],
     "save-dialog": [
       "banner",
       "nav",
@@ -43,9 +38,6 @@
     ],
     "log-cook-dialog": [
       "tabBar",
-      "footer"
-    ],
-    "manage-open": [
       "footer"
     ],
     "save-dialog": [
