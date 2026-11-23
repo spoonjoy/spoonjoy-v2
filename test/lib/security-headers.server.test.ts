@@ -201,16 +201,13 @@ describe("buildContentSecurityPolicy", () => {
 
   it("keeps 'unsafe-inline' on style-src (React style attributes cannot be nonced)", () => {
     const csp = buildContentSecurityPolicy("abc");
-    expect(directiveSources(csp, "style-src")).toEqual([
-      "'self'",
-      "'unsafe-inline'",
-      "https://fonts.googleapis.com",
-    ]);
+    expect(directiveSources(csp, "style-src")).toEqual(["'self'", "'unsafe-inline'"]);
   });
 
   it("allows the real runtime dependencies (fonts, broad images, PostHog ingest)", () => {
     const csp = buildContentSecurityPolicy();
-    expect(directiveSources(csp, "font-src")).toEqual(["'self'", "https://fonts.gstatic.com"]);
+    // The web fonts are the app's own assets, so no font or stylesheet comes from Google.
+    expect(directiveSources(csp, "font-src")).toEqual(["'self'"]);
     expect(directiveSources(csp, "img-src")).toEqual(["'self'", "data:", "blob:", "https:"]);
     expect(directiveSources(csp, "connect-src")).toEqual([
       "'self'",

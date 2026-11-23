@@ -32,8 +32,8 @@
  * CSP directives, keyed in serialization order. `script-src` varies with the
  * per-request `nonce`; every other directive is static except PostHog origins.
  * Each non-`self` origin is justified against a real dependency: PostHog
- * (configured ingestion + asset origins), Google Fonts (`fonts.googleapis.com`
- * stylesheet, `fonts.gstatic.com` files). `img-src` stays broad (`https:`)
+ * (configured ingestion + asset origins). The web fonts are the app's own
+ * assets (app/styles/fonts.css), so styles and fonts need only `self`. `img-src` stays broad (`https:`)
  * because legacy/imported recipe and profile images can still be external.
  */
 const DEFAULT_POSTHOG_INGEST_ORIGIN = "https://us.i.posthog.com";
@@ -157,8 +157,8 @@ function cspDirectives(
     "script-src": nonce
       ? uniqueSources(["'self'", `'nonce-${nonce}'`, postHog.assetsOrigin])
       : uniqueSources(["'self'", postHog.assetsOrigin]),
-    "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-    "font-src": ["'self'", "https://fonts.gstatic.com"],
+    "style-src": ["'self'", "'unsafe-inline'"],
+    "font-src": ["'self'"],
     "img-src": ["'self'", "data:", "blob:", "https:"],
     "connect-src": uniqueSources(["'self'", postHog.ingestOrigin, postHog.assetsOrigin]),
     "report-uri": ["/csp-report"],

@@ -76,9 +76,10 @@ describe("root.tsx links()", () => {
   });
 
   it("loads every Fraunces weight the type roles set, down to sj-type-instruction's 400", () => {
-    const fonts = links().find((link) => link.rel === "stylesheet" && link.href.includes("family=Fraunces"));
-    // Fraunces's axes are opsz, wght, SOFT, WONK; the second range is the weight range.
-    const range = /family=Fraunces:opsz,wght,SOFT,WONK@[^,]+,(\d+)\.\.(\d+),/.exec(fonts?.href ?? "");
+    // Fraunces is one variable face per unicode range, each covering the same weight range.
+    const range = /font-family: 'Fraunces';\s*font-style: normal;\s*font-weight: (\d+) (\d+);/.exec(
+      readFileSync("app/styles/fonts.css", "utf8"),
+    );
     expect(range).not.toBeNull();
     const [min, max] = [Number(range![1]), Number(range![2])];
     const css = readFileSync("app/styles/tailwind.css", "utf8");

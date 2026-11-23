@@ -134,7 +134,7 @@ describe("cook-mode timers", () => {
     // The ▶ is drawn by CSS with empty alternative text, so a screen reader hears only "Start".
     expect(css).toMatch(/\.sj-cook-timer\[data-status="idle"\] \[data-ouro-part="primary"\]::after \{\s*content: "\\25B6\\FE0E" \/ "";\s*order: -1;/);
     // Plex is loaded at 300, or the light figures would fall back to 400.
-    expect(readFileSync("app/root.tsx", "utf8")).toContain("IBM+Plex+Sans+Condensed:wght@300;");
+    expect(readFileSync("app/styles/fonts.css", "utf8")).toMatch(/font-family: 'IBM Plex Sans Condensed';\s*font-style: normal;\s*font-weight: 300;/);
   });
 
   it("runs a step's timer with Spoonjoy's words, and the tray follows it on another step", () => {
