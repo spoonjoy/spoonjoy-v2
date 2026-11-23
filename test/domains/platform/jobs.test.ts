@@ -167,14 +167,15 @@ describe("the Cloudflare Queues adapter", () => {
       retry: vi.fn(),
     });
     const malformed = { body: { nope: true }, attempts: 1, ack: vi.fn(), retry: vi.fn() };
+    const empty = { body: null, attempts: 1, ack: vi.fn(), retry: vi.fn() };
     keys.runs.set("d", 2);
-    const messages = [delivery("a", "ok", 1), delivery("b", "ok", 1), delivery("c", "fails", 4), delivery("d", "fails", 1), malformed];
+    const messages = [delivery("a", "ok", 1), delivery("b", "ok", 1), delivery("c", "fails", 4), delivery("d", "fails", 1), malformed, empty];
     const failed = vi.fn(() => {
       throw new Error("PostHog is down");
     });
     await consumeJobBatch({ messages } as never, registry, keys, { onFailed: failed });
     expect(messages.map((m) => [m.ack.mock.calls.length, m.retry.mock.calls]))
-      .toEqual([[1, []], [1, []], [0, [[{ delaySeconds: 10 }]]], [1, []], [1, []]]);
+      .toEqual([[1, []], [1, []], [0, [[{ delaySeconds: 10 }]]], [1, []], [1, []], [1, []]]);
     expect(failed).toHaveBeenCalledWith(messages[3].body, expect.objectContaining({ message: "not yet" }));
   });
 
@@ -234,6 +235,33 @@ describe("the D1 job keys", () => {
     expect(await keys.claim("lost", "move-in.run")).toBe(true);
   });
 
+  it("answers busy when a key changes between its two reads, or a driver leaves out what it changed", async () => {
+    clock = new Date("2026-11-23T12:00:00.000Z");
+    // A database whose answers to one statement are replaced, as another run or another D1 driver would leave them.
+    const answering = (match: string, answer: { results?: unknown[]; meta?: object }) => ({
+      prepare: (query: string) => {
+        const statement = database.binding.prepare(query);
+        if (!query.includes(match)) return statement;
+        return { bind: () => ({ run: async () => answer, all: async () => answer }) };
+      },
+    });
+    const gone = d1JobKeys(answering(`SELECT "status", "leaseUntil"`, { results: [] }) as never, () => clock);
+    const real = d1JobKeys(database.binding, () => clock);
+    await real.claim("k", "move-in.run");
+    await real.markDone("k");
+    expect(await gone.start("k", "move-in.run", 600)).toEqual({ state: "busy", retryInSeconds: 5 });
+    const unleased = d1JobKeys(answering(`SELECT "status", "leaseUntil"`, { results: [{ status: "running", leaseUntil: null }] }) as never, () => clock);
+    expect(await unleased.start("k", "move-in.run", 600)).toEqual({ state: "busy", retryInSeconds: 5 });
+    const quiet = d1JobKeys(answering(`INSERT INTO "PlatformJobKey" ("key", "type", "status", "createdAt"`, { meta: {} }) as never, () => clock);
+    expect(await quiet.claim("other", "move-in.run")).toBe(false);
+  });
+
+  it("keeps time by the real clock unless told otherwise", async () => {
+    const keys = d1JobKeys(database.binding);
+    expect(await keys.claim("k", "move-in.run")).toBe(true);
+    expect(await keys.start("k", "move-in.run", 600)).toEqual({ state: "started", run: 1 });
+  });
+
   it("lets a key whose run died, its lease run out and its message gone, be claimed again", async () => {
     clock = new Date("2026-11-23T12:00:00.000Z");
     const keys = d1JobKeys(database.binding, () => clock);
@@ -263,5 +291,20 @@ describe("the test adapter", () => {
     ]);
     expect(seen).toEqual([["job-1", 1], ["job-1", 2]]);
     expect(await jobs.enqueue(moveIn, { jobId: "job-1" }, { key: "move-in:job-1" })).toEqual({ enqueued: false });
+  });
+
+  it("frees the key of a job that fails every run, so it can be enqueued again", async () => {
+    const jobs = memoryJobs(jobRegistry().on(moveIn, async () => {
+      throw new Error("never works");
+    }));
+    await jobs.enqueue(moveIn, { jobId: "job-1" }, { key: "move-in:job-1" });
+    expect((await jobs.drain()).map((ran) => ran.outcome.status)).toEqual(["retry", "retry", "failed"]);
+    expect(await jobs.enqueue(moveIn, { jobId: "job-1" }, { key: "move-in:job-1" })).toEqual({ enqueued: true });
+  });
+
+  it("reports a job no handler knows once, and drops it", async () => {
+    const jobs = memoryJobs(jobRegistry());
+    await jobs.enqueue(welcome, { userId: "u" }, { key: "welcome:u" });
+    expect((await jobs.drain()).map((ran) => ran.outcome.status)).toEqual(["unhandled"]);
   });
 });
