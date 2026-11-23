@@ -124,13 +124,16 @@ describe("the Move in page", () => {
       latest: [{ id: "r12", title: "Lemon pie", photoUrl: "/photos/covers/import/movein-r12.webp" }, { id: "r11", title: "Stew", photoUrl: null }],
     }));
     const list = await screen.findByRole("list", { name: "Just moved in" });
-    const tile = within(list).getByRole("link", { name: "Stew" }).closest("li")?.querySelector("svg")?.parentElement;
+    const fill = within(list).getByRole("link", { name: "Stew" }).closest("li")?.querySelector("svg")?.parentElement;
+    const tile = fill?.parentElement;
     const photo = within(list).getByRole("link", { name: "Lemon pie" }).closest("li")?.querySelector("img")?.parentElement;
-    // The same 40px as a photo, in the muted surface, and hidden from screen readers, which hear the title.
-    expect(tile?.className).toContain("size-ouro-10");
+    // The photo's own slot, so the same 40px and the same corner radius as a photo, filled muted and hidden from
+    // screen readers, which hear the title. (Journeys reads the computed radii in a real browser.)
+    expect(tile?.className).toBe(photo?.className);
     expect(photo?.className).toContain("size-ouro-10");
-    expect(tile?.className).toContain("bg-muted");
-    expect(tile?.getAttribute("aria-hidden")).toBe("true");
+    expect(photo?.className).toContain("rounded-ouro-md");
+    expect(fill?.className).toContain("bg-muted");
+    expect(fill?.getAttribute("aria-hidden")).toBe("true");
   });
 
   it("leaves the list out until a recipe is in", async () => {

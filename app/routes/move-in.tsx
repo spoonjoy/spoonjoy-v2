@@ -262,9 +262,17 @@ function Progress({ move }: { move: MoveInView }) {
               key={recipe.id}
               href={`/recipes/${recipe.id}`}
               title={recipe.title}
-              // A recipe whose photo isn't in yet keeps its place in a tile the photo's size; the next poll brings the photo.
-              media={recipe.photoUrl ? <img src={recipe.photoUrl} alt="" /> : <Utensils aria-hidden="true" />}
-              mediaSize={recipe.photoUrl ? "sm" : "icon"}
+              // A recipe whose photo isn't in yet keeps its place in the photo's own slot (its size and corners), filled
+              // muted with a utensils mark; the next poll brings the photo.
+              media={
+                recipe.photoUrl ? (
+                  <img src={recipe.photoUrl} alt="" />
+                ) : (
+                  <span aria-hidden="true" className="flex items-center justify-center bg-muted text-muted-foreground">
+                    <Utensils className="size-ouro-5" />
+                  </span>
+                )
+              }
             />
           ))}
         </ItemGroup>
