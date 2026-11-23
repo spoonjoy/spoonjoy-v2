@@ -7,6 +7,7 @@ import {
   SELECTABLE_RECIPE_VISIBILITIES,
   selectableRecipeVisibilities,
   canRead,
+  forkedRecipeVisibility,
   newRecipeVisibility,
   parseRecipeVisibility,
   readableRecipeSql,
@@ -66,6 +67,25 @@ describe("choosing household", () => {
     expect(newRecipeVisibility("household", "private", withHousehold)).toBe("household");
     expect(newRecipeVisibility(undefined, "household", withHousehold)).toBe("household");
     expect(newRecipeVisibility("household", "private", selectableRecipeVisibilities(false))).toBe("private");
+  });
+});
+
+describe("a fork's visibility", () => {
+  it("keeps the level of a cook's own recipe", () => {
+    for (const level of RECIPE_VISIBILITIES) expect(forkedRecipeVisibility({ chefId: "me", visibility: level }, "me", "public")).toBe(level);
+  });
+
+  it("starts a fork of another cook's public recipe at the forking cook's default", () => {
+    expect(forkedRecipeVisibility({ chefId: "them", visibility: "public" }, "me", "household")).toBe("household");
+    expect(forkedRecipeVisibility({ chefId: "them", visibility: "public" }, "me", "public")).toBe("public");
+  });
+
+  it("keeps a fork of another cook's household or unknown-level recipe to its forking cook, whatever their default", () => {
+    for (const level of ["household", "private", "bogus"]) {
+      for (const cookDefault of ["public", "household", "private"] as const) {
+        expect(forkedRecipeVisibility({ chefId: "them", visibility: level }, "me", cookDefault)).toBe("private");
+      }
+    }
   });
 });
 

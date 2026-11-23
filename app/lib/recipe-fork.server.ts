@@ -26,7 +26,7 @@ import {
   type RecipeCoverStatus,
   type RecipeCoverVariant,
 } from "~/lib/recipe-cover.server";
-import { DEFAULT_RECIPE_VISIBILITY, canRead, newRecipeVisibility, type RecipeViewer, type RecipeVisibility } from "~/domains/kitchen";
+import { DEFAULT_RECIPE_VISIBILITY, canRead, forkedRecipeVisibility, newRecipeVisibility, type RecipeViewer, type RecipeVisibility } from "~/domains/kitchen";
 import { recipeViewerD1Query, recipeViewerFor, recipeViewerFromD1Rows } from "~/lib/recipe-viewer.server";
 
 export class ForkSourceNotFoundError extends Error {
@@ -332,10 +332,9 @@ async function writeForkWithPrisma(
   return created.id;
 }
 
-// A cook's fork of their own recipe keeps its level, so forking never publishes a private recipe. A fork of another
-// cook's recipe is a new recipe of theirs: their default while they can choose it (forkCookDefault), else public.
+// Kitchen's forkedRecipeVisibility decides; the cook's default counts while they can choose it (forkCookDefault).
 function forkVisibility(source: { chefId: string; visibility: string }, viewerId: string, cookDefault: RecipeVisibility): string {
-  return source.chefId === viewerId ? source.visibility : cookDefault;
+  return forkedRecipeVisibility(source, viewerId, cookDefault);
 }
 
 function forkCookDefault(input: Pick<ForkRecipeInput, "visibilityChoices">, stored: unknown): RecipeVisibility {

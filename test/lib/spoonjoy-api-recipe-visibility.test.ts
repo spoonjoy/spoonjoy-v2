@@ -151,6 +151,17 @@ describe("household recipes over MCP", () => {
     await cleanupDatabase();
   });
 
+  it("fork_recipe keeps a housemate's fork of it to the housemate, so forking never opens it to anyone else", async () => {
+    await db.user.update({ where: { id: housemate.user.id }, data: { defaultRecipeVisibility: "public" } });
+    for (const flags of ["recipe_visibility,households", "recipe_visibility", ""]) {
+      const context = { ...housemate.context, env: { SPOONJOY_FLAGS: flags } };
+      const forked = await callSpoonjoyApiOperation("fork_recipe", { sourceRecipeId: keptId, title: `Pear Tart ${flags || "none"}` }, context) as { recipe: { id: string } };
+      const { visibility } = await db.recipe.findUniqueOrThrow({ where: { id: forked.recipe.id }, select: { visibility: true } });
+      expect(visibility, flags || "no flags").toBe("private");
+      expect(await callSpoonjoyApiOperation("get_recipe", { id: forked.recipe.id }, stranger.context)).toEqual({ recipe: null });
+    }
+  });
+
   it("get_recipe, search_recipes, list_spoons_for_recipe and get_cookbook read it for its cook's household and no one else", async () => {
     const book = await db.cookbook.create({ data: { title: "Shared Tarts", authorId: housemate.user.id } });
     await db.recipeInCookbook.create({ data: { recipeId: keptId, cookbookId: book.id, addedById: housemate.user.id } });

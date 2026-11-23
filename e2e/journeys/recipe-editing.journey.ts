@@ -10,7 +10,7 @@ import { test as journeyTest, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { chooseMenuItem } from "./support/menu";
-import { personaStorageStatePath, scratchDesktopStorageStatePath, scratchStorageStatePath } from "./support/personas";
+import { personaStorageStatePath, scratchDesktop, scratchDesktopStorageStatePath, scratchStorageStatePath } from "./support/personas";
 import { requiredLabel } from "./support/forms";
 import { recordCookSyncRequests } from "./support/cook-sync-evidence";
 
@@ -401,19 +401,22 @@ test.describe("Recipe create and edit", () => {
     await page.getByRole("button", { name: "Create household", exact: true }).click();
     await expect(page).toHaveURL(/\/households\/[0-9a-f-]{36}$/);
     const householdPath = new URL(page.url()).pathname;
-    await page.getByRole("button", { name: "Make invite link", exact: true }).click();
-    const linkField = page.getByLabel("Invite link");
-    await expect(linkField).toHaveValue(/\/join\/[A-Za-z0-9_-]{43}$/);
-    const invitePath = new URL(await linkField.inputValue()).pathname;
-
     let recipePath = "";
     const member = await browser.newContext({ storageState: scratchDesktopStorageStatePath(1) });
     try {
+      await page.getByRole("button", { name: "Make invite link", exact: true }).click();
+      const linkField = page.getByLabel("Invite link");
+      await expect(linkField).toHaveValue(/\/join\/[A-Za-z0-9_-]{43}$/);
+      const invitePath = new URL(await linkField.inputValue()).pathname;
+
       const memberPage = await member.newPage();
       await memberPage.goto(invitePath);
       await waitForHydration(memberPage);
       await memberPage.getByRole("button", { name: "Join household", exact: true }).click();
       await expect(memberPage).toHaveURL(pathUrl(householdPath));
+      // This run's own join, not the other device project's: the cook sees the member in this household's People.
+      await page.reload({ waitUntil: "load" });
+      await expect(page.getByRole("list", { name: "People" }).getByText(scratchDesktop(1).username, { exact: true })).toBeVisible();
 
       // --- The cook saves a recipe as Household.
       await page.goto("/recipes/new");
@@ -446,27 +449,32 @@ test.describe("Recipe create and edit", () => {
       } finally {
         await stranger.close();
       }
-
-      // --- Tidy up: the member leaves.
-      await memberPage.goto(householdPath);
-      await waitForHydration(memberPage);
-      await memberPage.getByRole("button", { name: "Leave household", exact: true }).click();
-      await expect(memberPage).toHaveURL(pathUrl("/households"));
     } finally {
+      // --- Tidy up, even after a failure: the member leaves, the recipe goes, and the cook leaves, which ends it.
+      const memberPage = member.pages()[0];
+      if (memberPage) {
+        await memberPage.goto(householdPath);
+        await waitForHydration(memberPage);
+        const leave = memberPage.getByRole("button", { name: "Leave household", exact: true });
+        if (await leave.isVisible()) {
+          await leave.click();
+          await memberPage.waitForURL(pathUrl("/households"));
+        }
+      }
       await member.close();
+      if (recipePath) {
+        await page.goto(recipePath);
+        await waitForHydration(page);
+        await expectCookProgressSynced(page);
+        await chooseRecipeAction(page, "Delete");
+        await page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ }).getByRole("button", { name: "Delete", exact: true }).click();
+        await page.waitForURL(pathUrl("/recipes"));
+      }
+      await page.goto(householdPath);
+      await waitForHydration(page);
+      await page.getByRole("button", { name: "Leave household", exact: true }).click();
+      await expect(page).toHaveURL(pathUrl("/households"));
     }
-
-    // --- Tidy up: delete the recipe, and the cook leaves the household, which ends it.
-    await page.goto(recipePath);
-    await waitForHydration(page);
-    await expectCookProgressSynced(page);
-    await chooseRecipeAction(page, "Delete");
-    await page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ }).getByRole("button", { name: "Delete", exact: true }).click();
-    await expect(page).toHaveURL(pathUrl("/recipes"));
-    await page.goto(householdPath);
-    await waitForHydration(page);
-    await page.getByRole("button", { name: "Leave household", exact: true }).click();
-    await expect(page).toHaveURL(pathUrl("/households"));
   });
 
   // QA has no OpenAI key (see AGENTS.md), so import answers that it isn't switched on rather than

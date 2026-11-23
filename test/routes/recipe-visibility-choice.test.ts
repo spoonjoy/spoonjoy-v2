@@ -145,6 +145,21 @@ describe("choosing who can see a recipe", () => {
     expect((await created("Edit Household")).visibility).toBe("household");
   });
 
+  it("shows a Household recipe as Household in the editor while households is off, and makes it Only me when that is picked", async () => {
+    type EditLoaderArgs = Parameters<typeof editLoader>[0];
+    type EditActionArgs = Parameters<typeof editAction>[0];
+    const recipe = await db.recipe.create({ data: { title: "Still Shared", chefId: cookId, visibility: "household" } });
+    const url = `http://localhost/recipes/${recipe.id}/edit`;
+    const params = { id: recipe.id };
+    expect(await editLoader(args<EditLoaderArgs>(await get(url), FLAG_ON, params)))
+      .toMatchObject({ visibility: "household", visibilityChoices: ["public", "household", "private"] });
+    await editAction(args<EditActionArgs>(await post(url, { title: "Still Shared", visibility: "private" }), FLAG_ON, params));
+    expect((await created("Still Shared")).visibility).toBe("private");
+    // Once it is no longer Household, households being off takes Household away again.
+    expect(await editLoader(args<EditLoaderArgs>(await get(url), FLAG_ON, params)))
+      .toMatchObject({ visibility: "private", visibilityChoices: ["public", "private"] });
+  });
+
   it("offers Household as the default for new recipes only while households is on", async () => {
     type SettingsActionArgs = Parameters<typeof settingsAction>[0];
     type SettingsLoaderArgs = Parameters<typeof settingsLoader>[0];
