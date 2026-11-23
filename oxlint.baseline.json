@@ -136,7 +136,7 @@
     "eslint(no-control-regex)": 1
   },
   "app/lib/spoonjoy-api.server.ts": {
-    "eslint(no-unused-vars)": 5
+    "eslint(no-unused-vars)": 4
   },
   "app/routes/$.tsx": {
     "eslint(no-empty-pattern)": 1

@@ -28,6 +28,7 @@ import {
   type AgentConnectionRequester,
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import { canRead, readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
 import { d1Binding, d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { deleteNativeRecipe } from "~/lib/api-v1-recipe-writes.server";
@@ -285,6 +286,11 @@ const cookbookSummaryRecipeInclude = {
     },
   },
 } satisfies Prisma.RecipeInCookbookInclude;
+
+// Who is reading, for canRead: the signed-in principal, or signed out.
+function apiViewer(context: SpoonjoyApiContext): RecipeViewer {
+  return context.principal ? { id: context.principal.id } : null;
+}
 
 function json(value: unknown): unknown {
   return value;
@@ -1023,8 +1029,9 @@ function formatApiCredential(credential: ApiCredentialRecord) {
   };
 }
 
+// These tools read only the caller's own cookbooks, so the cookbook's author is the reader.
 function activeCookbookRecipes(cookbook: CookbookWithRecipes) {
-  return cookbook.recipes.filter((item) => !item.recipe.deletedAt);
+  return cookbook.recipes.filter((item) => !item.recipe.deletedAt && canRead({ id: cookbook.authorId }, item.recipe));
 }
 
 function formatCookbookSummary(cookbook: CookbookWithRecipes) {
@@ -1135,14 +1142,15 @@ function parseSteps(value: unknown) {
   return value.map((step, index) => parseStep(step, index));
 }
 
-async function findRecipeByIdOrTitle(db: PrismaClientType, args: Record<string, unknown>) {
+async function findRecipeByIdOrTitle(db: PrismaClientType, args: Record<string, unknown>, viewer: RecipeViewer) {
   const id = optionalString(args.id);
   const title = optionalString(args.title);
 
   if (!id && !title) throw new Error("id or title is required");
 
+  const readable = readableRecipeWhere(viewer);
   return db.recipe.findFirst({
-    where: id ? { id, deletedAt: null } : { title, deletedAt: null },
+    where: id ? { id, deletedAt: null, ...readable } : { title, deletedAt: null, ...readable },
     include: {
       chef: { select: { id: true, username: true } },
       covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
@@ -1575,10 +1583,12 @@ const searchRecipesTool: SpoonjoyApiOperation = {
       return json({ recipes: [] });
     }
 
+    const viewer = apiViewer(context);
     const results = await searchSpoonjoy(context.db, {
       query,
       scope: "recipes",
       ownerId: chef?.id,
+      viewerId: viewer?.id ?? null,
       limit,
     });
     const resultOrder = new Map(results.map((result, index) => [result.id, index]));
@@ -1588,6 +1598,7 @@ const searchRecipesTool: SpoonjoyApiOperation = {
           where: {
             id: { in: results.map((result) => result.id) },
             deletedAt: null,
+            ...readableRecipeWhere(viewer),
           },
           include: {
             chef: { select: { id: true, username: true } },
@@ -1615,7 +1626,7 @@ const searchSpoonjoyTool: SpoonjoyApiOperation = {
     const results = await searchSpoonjoy(context.db, {
       query,
       scope,
-      viewerId: owner?.id,
+      viewerId: owner?.id ?? apiViewer(context)?.id ?? null,
       limit: normalizeLimit(args.limit),
     });
 
@@ -1653,7 +1664,7 @@ const getRecipeTool: SpoonjoyApiOperation = {
   ...declaredOperation("get_recipe"),
   requiredScopes: ["recipes:read"],
   async handle(args, context) {
-    const recipe = await findRecipeByIdOrTitle(context.db, args);
+    const recipe = await findRecipeByIdOrTitle(context.db, args, apiViewer(context));
     return json({ recipe: recipe ? formatRecipe(recipe) : null });
   },
 };
@@ -1667,7 +1678,7 @@ const listRecipeCoversTool: SpoonjoyApiOperation = {
     const limit = normalizeBrowseLimit(args.limit);
     const offset = normalizeOffset(args.offset);
     const recipe = await context.db.recipe.findFirst({
-      where: { id: recipeId, deletedAt: null },
+      where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: principal.id }) },
       select: {
         id: true,
         title: true,
@@ -2709,7 +2720,7 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
     const owner = await getOrCreateOwner(context, email);
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
     const recipe = await context.db.recipe.findFirst({
-      where: { id: recipeId, deletedAt: null },
+      where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: owner.id }) },
       select: { id: true },
     });
     if (!recipe) throw new Error("Recipe not found");
@@ -2879,7 +2890,7 @@ const listCookbooksTool: SpoonjoyApiOperation = {
       ? await context.db.recipeInCookbook.findMany({
           where: {
             cookbookId: { in: cookbookIds },
-            recipe: { deletedAt: null },
+            recipe: { deletedAt: null, ...readableRecipeWhere({ id: owner.id }) },
           },
           orderBy: { createdAt: "desc" },
           include: cookbookSummaryRecipeInclude,
@@ -2979,7 +2990,7 @@ const addRecipeToCookbookTool: SpoonjoyApiOperation = {
     if (!cookbook) throw new Error("Cookbook not found");
 
     const recipe = await context.db.recipe.findFirst({
-      where: { id: recipeId, deletedAt: null },
+      where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: owner.id }) },
       select: { id: true },
     });
     if (!recipe) throw new Error("Recipe not found");
@@ -3455,10 +3466,13 @@ const listSpoonsForRecipeTool: SpoonjoyApiOperation = {
   requiredScopes: ["recipes:read"],
   async handle(args, context) {
     rejectOwnerEmail(args);
-    requireApiPrincipal(context.principal);
+    const principal = requireApiPrincipal(context.principal);
     const recipeId = requiredString(args, "recipeId");
     const limit = typeof args.limit === "number" ? args.limit : undefined;
     const offset = typeof args.offset === "number" ? args.offset : undefined;
+    // A recipe the caller may not read answers as one that does not exist.
+    const access = await context.db.recipe.findUnique({ where: { id: recipeId }, select: { chefId: true, visibility: true } });
+    if (access && !canRead({ id: principal.id }, access)) throw new SpoonNotFoundError(`Recipe ${recipeId} not found`);
     const spoons = await listSpoonsForRecipe(context.db, recipeId, {
       limit,
       offset,
@@ -3489,13 +3503,14 @@ const listSpoonsByChefTool: SpoonjoyApiOperation = {
   requiredScopes: ["recipes:read"],
   async handle(args, context) {
     rejectOwnerEmail(args);
-    requireApiPrincipal(context.principal);
+    const principal = requireApiPrincipal(context.principal);
     const chefIdOrUsername = requiredString(args, "chefIdOrUsername");
     const limit = typeof args.limit === "number" ? args.limit : undefined;
     const offset = typeof args.offset === "number" ? args.offset : undefined;
     const spoons = await listSpoonsByChef(context.db, chefIdOrUsername, {
       limit,
       offset,
+      viewer: { id: principal.id },
     });
     return json({
       spoons: spoons.map((spoon) => {

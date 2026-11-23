@@ -4,6 +4,7 @@ import { FOOD_IMAGE_SIZE_MESSAGE, FOOD_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-i
 import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 import { newReservationId as cuidShapedId } from "~/lib/api-idempotency.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
+import { readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
 
 export class SpoonValidationError extends Error {
   status = 400;
@@ -61,6 +62,8 @@ export interface ListSpoonsOptions {
   limit?: number;
   offset?: number;
   includeDeleted?: boolean;
+  /** listSpoonsByChef: list only cooks of recipes this reader may read. Signed out when absent. */
+  viewer?: RecipeViewer;
 }
 
 const DEFAULT_LIMIT = 10;
@@ -320,7 +323,7 @@ export async function listSpoonsByChef(
   }
   const take = normalizeLimit(opts.limit);
   const skip = normalizeOffset(opts.offset);
-  const where: Prisma.RecipeSpoonWhereInput = { chefId: user.id };
+  const where: Prisma.RecipeSpoonWhereInput = { chefId: user.id, recipe: readableRecipeWhere(opts.viewer) };
   if (!opts.includeDeleted) where.deletedAt = null;
   return db.recipeSpoon.findMany({
     where,

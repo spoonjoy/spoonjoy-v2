@@ -341,8 +341,14 @@ function parseRow(row: SearchRow): SearchResult {
     href: row.href,
     imageUrl: row.imageUrl,
     score: row.rank,
-    metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+    metadata: publicMetadata(row.metadata),
   };
+}
+
+// The stored visibility serves the readable filter only; results carry the metadata they did before.
+function publicMetadata(stored: string): Record<string, unknown> {
+  const { visibility: _visibility, ...metadata } = JSON.parse(stored) as Record<string, unknown>;
+  return metadata;
 }
 
 // The rows search documents are built from. Both readers (Prisma and D1) fill the same

@@ -75,6 +75,7 @@ describe("API v1 recipe list query", () => {
             id: true,
             title: true,
             deletedAt: true,
+            visibility: true,
             chef: { select: { id: true, username: true } },
           },
         },
