@@ -733,10 +733,34 @@ function sanitizeMigrationSql(sql: string): SanitizedSql {
   return { sql: output, identifiers };
 }
 
+/**
+ * Splits sanitized migration SQL into statements on ";", keeping a CREATE TRIGGER's BEGIN ... END body whole (CASE ...
+ * END inside it nests). A trigger whose body never ends stays one unfinished statement, which no rule accepts.
+ */
+function splitMigrationStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const token of sql.split(/(;|\b(?:BEGIN|CASE|END)\b)/i)) {
+    const word = token.toUpperCase();
+    const inTrigger = /^\s*CREATE\s+(?:TEMP\s+|TEMPORARY\s+)?TRIGGER\b/i.test(current);
+    if (token === ";" && depth === 0) {
+      statements.push(current);
+      current = "";
+      continue;
+    }
+    if (inTrigger && (word === "BEGIN" || (word === "CASE" && depth > 0))) depth += 1;
+    else if (inTrigger && word === "END" && depth > 0) depth -= 1;
+    current += token;
+  }
+  statements.push(current);
+  return statements.map((statement) => statement.trim()).filter(Boolean);
+}
+
 export function assertAdditiveMigrationSql(filename: string, sql: string): void {
   const sanitized = sanitizeMigrationSql(sql);
   const executableSql = sanitized.sql;
-  const statements = executableSql.split(";").map((statement) => statement.trim()).filter(Boolean);
+  const statements = splitMigrationStatements(executableSql);
   if (statements.length === 0) {
     throw new Error(`Pending migration ${filename} is not additive and cannot be released automatically.`);
   }
@@ -760,7 +784,30 @@ export function assertAdditiveMigrationSql(filename: string, sql: string): void 
       `(?:\\s+(?:NOT\\s+NULL\\s+)?DEFAULT\\s+(?:__literal__|NULL|TRUE|FALSE|CURRENT_TIMESTAMP|CURRENT_DATE|CURRENT_TIME|[-+]?\\d+(?:\\.\\d+)?))?$`,
     "i",
   );
+  // A trigger on a table this migration creates: the previous Worker never writes that table, so it never fires.
+  const createTrigger = new RegExp(
+    `^CREATE\\s+TRIGGER\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${identifier}\\s+(?:BEFORE\\s+|AFTER\\s+|INSTEAD\\s+OF\\s+)?` +
+      `(?:DELETE|INSERT|UPDATE(?:\\s+OF\\s+${identifier}(?:\\s*,\\s*${identifier})*)?)\\s+ON\\s+(${identifier})` +
+      `(?:\\s+FOR\\s+EACH\\s+ROW)?(?:\\s+WHEN\\s+[\\s\\S]+?)?\\s+BEGIN\\s+([\\s\\S]+;)\\s*END$`,
+    "i",
+  );
+  // What a trigger body may do: read, or write a table this migration creates.
+  const triggerStep = new RegExp(
+    `^(?:SELECT\\b[\\s\\S]*|UPDATE\\s+(${identifier})\\s+SET\\b[\\s\\S]*|DELETE\\s+FROM\\s+(${identifier})(?:\\s+WHERE\\b[\\s\\S]*)?` +
+      `|INSERT\\s+INTO\\s+(${identifier})\\b[\\s\\S]*)$`,
+    "i",
+  );
   const canonicalIdentifier = (value: string): string => sanitized.identifiers.get(value) ?? value.toLowerCase();
+  const additiveTrigger = (statement: string): boolean => {
+    const match = statement.match(createTrigger);
+    if (!match || !createdTables.has(canonicalIdentifier(match[1]))) return false;
+    return match[2].split(";").map((step) => step.trim()).filter(Boolean).every((step) => {
+      const write = step.match(triggerStep);
+      if (!write) return false;
+      const target = write[1] ?? write[2] ?? write[3];
+      return target === undefined || createdTables.has(canonicalIdentifier(target));
+    });
+  };
   const createdTables = new Set<string>();
 
   for (const statement of statements) {
@@ -770,6 +817,7 @@ export function assertAdditiveMigrationSql(filename: string, sql: string): void 
 
   for (const statement of statements) {
     if (createTable.test(statement) || createVirtualTable.test(statement) || alterAddColumn.test(statement)) continue;
+    if (additiveTrigger(statement)) continue;
     const indexMatch = statement.match(createIndex);
     if (indexMatch) {
       const unique = Boolean(indexMatch[1]);
