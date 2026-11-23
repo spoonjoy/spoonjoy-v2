@@ -22,3 +22,12 @@ export {
   type KnownUnit,
   type UnitSystem,
 } from "./model/units";
+export {
+  foodNutritionFor,
+  gramsOf,
+  NUTRITION_SOURCE,
+  recipeNutrition,
+  type FoodNutrition,
+  type NutritionFacts,
+  type RecipeNutrition,
+} from "./model/nutrition";
