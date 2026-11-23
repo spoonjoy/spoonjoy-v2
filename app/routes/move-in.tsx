@@ -11,6 +11,8 @@ import { ChoiceCard } from "~/components/ouro/choice-card/choice-card";
 import { Collapsible } from "~/components/ouro/collapsible/collapsible";
 import { DescriptionList } from "~/components/ouro/description-list/description-list";
 import { FileField } from "~/components/ouro/file-field/file-field";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Form } from "~/components/ouro/form/form";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Spinner } from "~/components/ouro/spinner/spinner";
@@ -38,6 +40,9 @@ import { CookbookPage } from "~/components/cookbook/page";
 const RUN_BUDGET_MS = 20_000;
 /** How often the page asks for more while a move-in runs. */
 const POLL_MS = 3_000;
+// A server-side move-in needs no page to keep it going, so while it shows no change the page asks
+// half as often each time, down to this.
+const POLL_MAX_MS = 30_000;
 
 export function meta() {
   return [{ title: "Move in - Spoonjoy" }, { name: "robots", content: "noindex" }];
@@ -83,6 +88,8 @@ export interface MoveInView {
   notes: Array<{ seq: number; level: "info" | "warn" | "error"; message: string }>;
   /** Recipes that got a number because the cook already had one by that name. */
   renamed: Array<{ seq: number; message: string }>;
+  /** The newest recipes in, newest first, with their photos. */
+  latest: MoveInProgress["latest"];
   /** It runs on the server, so the page can be closed. */
   runsOnServer: boolean;
 }
@@ -111,6 +118,7 @@ function view(progress: MoveInProgress, runsOnServer: boolean): MoveInView {
     failure,
     notes: progress.events.flatMap((event) =>
       (event.level === "info" && event.kind !== "item-kept") || event.kind === "job-failed" ? [] : [{ seq: event.seq, level: event.level, message: event.message }]),
+    latest: progress.latest,
     renamed: progress.events.flatMap((event) => (event.kind === "item-renamed" ? [{ seq: event.seq, message: event.message }] : [])),
     runsOnServer,
   };
@@ -199,13 +207,23 @@ function Progress({ move }: { move: MoveInView }) {
   useEffect(() => {
     latest.current = fetcher;
   });
+  const { jobId, runsOnServer } = move;
+  const done = move.recipes.done;
+  // Asks how the move-in is going, from 3 s after the last change. A move-in this page keeps going
+  // is asked at that pace; a server-side one less often each time it shows no change, and never
+  // while the page is out of sight. A change in the count starts the pace over.
   useEffect(() => {
-    const timer = setInterval(() => {
+    let wait = POLL_MS;
+    let timer: ReturnType<typeof setTimeout>;
+    const ask = () => {
       const current = latest.current;
-      if (current.state === "idle") current.submit({ intent: "continue", jobId: move.jobId }, { method: "post", encType: "multipart/form-data" });
-    }, POLL_MS);
-    return () => clearInterval(timer);
-  }, [move.jobId]);
+      if (current.state === "idle" && document.visibilityState !== "hidden") current.submit({ intent: "continue", jobId }, { method: "post", encType: "multipart/form-data" });
+      if (runsOnServer) wait = Math.min(wait * 2, POLL_MAX_MS);
+      timer = setTimeout(ask, wait);
+    };
+    timer = setTimeout(ask, wait);
+    return () => clearTimeout(timer);
+  }, [jobId, runsOnServer, done]);
   const counted = move.recipes.found > 0;
   return (
     <section aria-labelledby="move-in-progress" className="flex flex-col gap-4">
@@ -216,6 +234,18 @@ function Progress({ move }: { move: MoveInView }) {
           {counted ? `${move.recipes.done} of ${plural(move.recipes.found, "recipe")} in so far.` : "Reading the backup…"}
         </Text>
       </div>
+      {move.latest.length ? (
+        <ItemGroup aria-label="Just moved in" variant="divided">
+          {move.latest.map((recipe) => (
+            <Item
+              key={recipe.id}
+              href={`/recipes/${recipe.id}`}
+              title={recipe.title}
+              media={recipe.photoUrl ? <img src={recipe.photoUrl} alt="" /> : undefined}
+            />
+          ))}
+        </ItemGroup>
+      ) : null}
       <Text tone="muted">
         {move.runsOnServer ? "You can close this page; your recipes keep moving in without it." : "You can leave this page; the move carries on when you come back."}
       </Text>
