@@ -1310,6 +1310,14 @@ describe("spoonjoy MCP tools", () => {
     await expect(context.db.user.count()).resolves.toBe(1);
   });
 
+  it("hands back the gate's claim when the owner account can't be written", async () => {
+    const selfHosted = { ...context, env: { SPOONJOY_SELF_HOSTED: "true" } } as SpoonjoyMcpContext;
+    const create = vi.spyOn(context.db.user, "create").mockRejectedValueOnce(new Error("disk full"));
+    await expect(callSpoonjoyMcpTool("create_api_token", { name: "Owner token" }, selfHosted)).rejects.toThrow("disk full");
+    create.mockRestore();
+    await expect(context.db.user.count()).resolves.toBe(0);
+  });
+
   it("uses the account an owner email already has in another case instead of creating a second one", async () => {
     const email = context.defaultOwnerEmail!;
     const mixedCase = await context.db.user.create({

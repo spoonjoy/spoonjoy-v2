@@ -15,6 +15,7 @@ import {
   serverAdminId,
   serverInviteStatus,
   setSignupMode,
+  signupDoor,
   signupMode,
 } from "~/lib/server-access.server";
 
@@ -192,5 +193,30 @@ describe("server access", () => {
     it("answer unknown for a token that matches no invite", async () => {
       expect(await serverInviteStatus(db, "not-a-token")).toBe("unknown");
     });
+  });
+  describe("before anyone has signed up", () => {
+    it("has no admin yet", async () => {
+      expect(await serverAdminId(db, selfHosted)).toBeNull();
+      expect(await isServerAdmin(db, selfHosted, "nobody")).toBe(false);
+    });
+
+    it("keeps the sign-up page open for the first account, even without an invite", async () => {
+      expect(await signupDoor(db, selfHosted, null)).toEqual({ door: "open" });
+    });
+
+    it("lets a first sign-up that fails be abandoned, with nothing to put back", async () => {
+      const gate = await gateAccountCreation(db, selfHosted);
+      expect(gate.allowed).toBe(true);
+      if (gate.allowed) await gate.abandoned();
+      expect(await serverAdminId(db, selfHosted)).toBeNull();
+    });
+  });
+
+  it("keeps spoonjoy.app's sign-up page open", async () => {
+    expect(await signupDoor(db, {}, null)).toEqual({ door: "open" });
+  });
+
+  it("switches sign-ups only on a self-hosted server", async () => {
+    await expect(setSignupMode(db, {}, "open")).rejects.toThrow("Sign-ups can only be switched on a self-hosted server.");
   });
 });

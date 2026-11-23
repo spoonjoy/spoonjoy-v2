@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { db } from "~/lib/db.server";
 import { createUserSessionCookie } from "~/lib/session.server";
 import { gateAccountCreation, serverInviteStatus, signupMode } from "~/lib/server-access.server";
@@ -129,5 +130,80 @@ describe("/account/server", () => {
     expect(screen.getByText("Invite only")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open sign-ups" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Make an invite link" })).toBeInTheDocument();
+  });
+  it("refuses an action it doesn't know, and builds the link from the request when no base address is set", async () => {
+    const env = { SPOONJOY_SELF_HOSTED: "true" };
+    const admin = await chef(env);
+    expect(answer(await post(admin.cookie, {}, env))).toEqual({ status: 400, body: { intent: "", success: false, error: "Unknown action." } });
+    expect(answer(await post(admin.cookie, { intent: "invite" }, env)).body.link).toMatch(/^http:\/\/localhost:3000\/signup\?invite=/);
+    expect(answer(await post(admin.cookie, { intent: "revoke" }, env)).body).toEqual({ intent: "revoke", success: true });
+  });
+
+  function renderPage(
+    loaderData: Awaited<ReturnType<typeof loader>>,
+    reply: (form: FormData) => Record<string, unknown>,
+    submitted: FormData[] = [],
+  ) {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/account/server",
+        Component: ServerSettings,
+        loader: () => loaderData,
+        action: async ({ request }) => {
+          const form = await request.formData();
+          submitted.push(form);
+          return reply(form);
+        },
+      },
+    ]);
+    render(<Stub initialEntries={["/account/server"]} />);
+    return submitted;
+  }
+
+  it("turns sign-ups off from the page, and shows why it couldn't", async () => {
+    const submitted = renderPage(
+      { signups: { mode: "open", setBy: "admin" }, invites: [] },
+      () => ({ intent: "signups", success: false, error: "Something went wrong." }),
+    );
+    expect(await screen.findByText("Open")).toBeInTheDocument();
+    expect(screen.getByText("Anyone who can reach this server can make an account.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Make invite-only" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Something went wrong.");
+    expect(Object.fromEntries(submitted[0]!)).toEqual({ intent: "signups", mode: "invite" });
+  });
+
+  it("opens sign-ups from the page", async () => {
+    const submitted = renderPage({ signups: { mode: "invite", setBy: "default" }, invites: [] }, () => ({ intent: "signups", success: true }));
+    await userEvent.click(await screen.findByRole("button", { name: "Open sign-ups" }));
+    await expect.poll(() => submitted.map((form) => Object.fromEntries(form))).toEqual([{ intent: "signups", mode: "open" }]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Open sign-ups" })).toBeEnabled());
+  });
+
+  it("hides the switch when SPOONJOY_SIGNUPS decides", async () => {
+    renderPage({ signups: { mode: "invite", setBy: "env" }, invites: [] }, () => ({}));
+    expect(await screen.findByText(/SPOONJOY_SIGNUPS sets this where the server is started\./)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open sign-ups" })).not.toBeInTheDocument();
+  });
+
+  it("makes a link to copy, and revokes a listed one", async () => {
+    const submitted = renderPage(
+      {
+        signups: { mode: "invite", setBy: "default" },
+        invites: [{ id: "invite-1", createdAt: "2026-11-20T10:00:00.000Z", expiresAt: "2026-11-27T10:00:00.000Z" }],
+      },
+      (form) => form.get("intent") === "invite"
+        ? { intent: "invite", success: true, link: "https://kitchen.example.com/signup?invite=abc" }
+        : { intent: "revoke", success: true },
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Make an invite link" }));
+    expect(await screen.findByTestId("server-invite-link")).toHaveTextContent("https://kitchen.example.com/signup?invite=abc");
+    expect(screen.getByRole("button", { name: "Copy link" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Invite links that still work" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    await screen.findByRole("button", { name: "Revoke" });
+    await expect.poll(() => submitted.map((form) => Object.fromEntries(form))).toEqual([
+      { intent: "invite" },
+      { intent: "revoke", inviteId: "invite-1" },
+    ]);
   });
 });
