@@ -35,6 +35,30 @@ test.describe("Public recipes", () => {
     await expectAccessible();
   });
 
+  // The organizers flag is on in QA, so the view switch shows; the pick is a cookie in this browser (`sj_recipe_view`).
+  test("List shows a compact line per recipe and keeps the pick across a reload", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
+    const main = page.getByRole("main");
+    const views = main.getByRole("radiogroup", { name: "Recipe view", exact: true });
+    const firstRow = main.getByRole("listitem").first();
+
+    await page.goto("/recipes");
+    await waitForHydration(page);
+    await expect(views.getByRole("radio", { name: "Pictures", exact: true })).toBeChecked();
+    const picturesHeight = (await firstRow.boundingBox())!.height;
+
+    await views.getByRole("radio", { name: "List", exact: true }).click();
+    await expect(views.getByRole("radio", { name: "List", exact: true })).toBeChecked();
+    // A line is shorter than a row with its picture and description.
+    await expect.poll(async () => (await firstRow.boundingBox())!.height).toBeLessThan(picturesHeight);
+    await expectAccessible();
+
+    await verifyAfterReload(async () => {
+      await expect(views.getByRole("radio", { name: "List", exact: true })).toBeChecked();
+    });
+    await expectNoHydrationErrors(page);
+    await testInfo.attach("recipes-list-view", { body: await main.screenshot(), contentType: "image/png" });
+  });
+
   test("following the next-page links reaches the oldest seeded recipe", async ({ page }) => {
     test.setTimeout(180_000);
     const main = page.getByRole("main");
