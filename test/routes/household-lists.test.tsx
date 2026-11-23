@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { createUserSessionCookie } from "~/lib/session.server";
@@ -196,7 +196,7 @@ describe("household list pages", () => {
     await user.click(box());
     await vi.waitFor(() => expect(box().getAttribute("aria-checked")).toBe("true"));
     // Refused: the next load still has it unticked, and the tick goes.
-    release();
+    await act(async () => release());
     await vi.waitFor(() => expect(box().getAttribute("aria-checked")).toBe("false"));
   });
 
