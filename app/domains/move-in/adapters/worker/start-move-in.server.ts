@@ -42,10 +42,16 @@ export async function startMoveIn({ env, ownerId, app, file, now }: {
     if (error instanceof MoveInError) return { ok: false, code: error.code };
     throw error;
   }
+  const drop = () => env.PHOTOS.delete(archiveKey).catch(() => undefined);
   if (refused) {
-    await env.PHOTOS.delete(archiveKey);
+    await drop();
     return { ok: false, code: refused };
   }
-  const jobId = await createMoveInJob(env.DB, { ownerId, kind: chosen.kind, archiveKey, archiveName: file.name, now });
-  return { ok: true, jobId };
+  try {
+    const jobId = await createMoveInJob(env.DB, { ownerId, kind: chosen.kind, archiveKey, archiveName: file.name, now });
+    return { ok: true, jobId };
+  } catch (error) {
+    await drop();
+    throw error;
+  }
 }

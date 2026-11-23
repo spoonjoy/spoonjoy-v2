@@ -112,6 +112,15 @@ describe("the move-in job store", () => {
     expect(await store.loadJob(id)).toMatchObject({ attempt: 2 });
   });
 
+  it("changes a job only once it has gone quiet, when asked to, and says whether it did", async () => {
+    const store = moveInJobStore(database.binding, () => clock);
+    const id = await create();
+    await store.claim(id, later(60));
+    expect(await store.updateJob(id, { status: "failed" }, undefined, { quietSince: new Date(clock.getTime() - 1).toISOString() })).toBe(0);
+    expect(await store.loadJob(id)).toMatchObject({ status: "queued" });
+    expect(await store.updateJob(id, { status: "failed" }, undefined, { quietSince: later(60).toISOString() })).toBe(1);
+  });
+
   it("never changes a finished job", async () => {
     const store = moveInJobStore(database.binding, () => clock);
     const id = await create();

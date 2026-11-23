@@ -51,8 +51,10 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
       if (patch.status && FINISHED.includes(patch.status)) stamped(`"finishedAt" = ?`);
       // Every statement holds only while the job is unfinished and, under a claim, still this run's. The batch is one
       // transaction and the job's own row changes last, so a run that lost its claim writes nothing at all.
-      const fenceSql = `EXISTS (SELECT 1 FROM "ImportJob" WHERE "id" = ? AND "status" NOT IN (${FINISHED.map(() => "?").join(", ")})${token === undefined ? "" : ` AND "claimToken" = ?`})`;
-      const fence = [id, ...FINISHED, ...(token === undefined ? [] : [token])];
+      const claimed = token === undefined ? "" : ` AND "claimToken" = ?`;
+      const quiet = report.quietSince === undefined ? "" : ` AND ("heartbeatAt" IS NULL OR "heartbeatAt" <= ?) AND "updatedAt" <= ?`;
+      const fenceSql = `EXISTS (SELECT 1 FROM "ImportJob" WHERE "id" = ? AND "status" NOT IN (${FINISHED.map(() => "?").join(", ")})${claimed}${quiet})`;
+      const fence = [id, ...FINISHED, ...(token === undefined ? [] : [token]), ...(report.quietSince === undefined ? [] : [report.quietSince, report.quietSince])];
       const statements: Array<[string, ...unknown[]]> = [];
       if (report.restart) {
         statements.push([`DELETE FROM "ImportEntityCount" WHERE "jobId" = ? AND ${fenceSql}`, id, ...fence]);
@@ -76,7 +78,9 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
       }
       statements.push([`UPDATE "ImportJob" SET ${sets.join(", ")} WHERE "id" = ? AND ${fenceSql}`, ...values, id, ...fence]);
       const results = await d1WriteBatch(db, statements);
-      if (token !== undefined && results[results.length - 1].changes === 0) throw new LostClaimError();
+      const changed = results[results.length - 1].changes;
+      if (token !== undefined && changed === 0) throw new LostClaimError();
+      return changed;
     },
 
     async sourceInstanceKey(sourceId) {

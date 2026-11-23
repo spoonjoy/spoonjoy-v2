@@ -14,7 +14,7 @@ export type MoveInPhase = "inspect" | "recipes" | "done";
 export const FINISHED: readonly MoveInStatus[] = ["done", "done-with-issues", "failed"];
 /** How many runs in a row may take the job without moving it forward before it fails with the "stuck" message. */
 export const MAX_ATTEMPTS = 5;
-/** How many runs in a row may fail to write one recipe before it is reported and passed over. */
+/** How many runs in a row one recipe may stop, however it stops them, before it is reported and passed over. */
 export const RECIPE_TRIES = 3;
 
 export interface MoveInJob {
@@ -63,6 +63,8 @@ export interface MoveInReport {
   events?: MoveInEvent[];
   /** Clears the counts and report lines first, for an inspect that runs again. */
   restart?: boolean;
+  /** Changes the job only if it has neither moved nor been taken by a run after this time (ISO). */
+  quietSince?: string;
 }
 
 /** The job's claim passed to another run: this run must stop writing. */
@@ -78,9 +80,9 @@ export interface MoveInPorts {
     loadJob(id: string): Promise<MoveInJob | null>;
     /**
      * Saves the job and its report in one write, only while the job is unfinished and, with a token, only while that
-     * claim holds: LostClaimError otherwise, with nothing written.
+     * claim holds: LostClaimError otherwise, with nothing written. Resolves to how many jobs it changed (0 or 1).
      */
-    updateJob(id: string, patch: Partial<MoveInJob>, token?: string, report?: MoveInReport): Promise<void>;
+    updateJob(id: string, patch: Partial<MoveInJob>, token?: string, report?: MoveInReport): Promise<number>;
     ensureSource(source: { ownerId: string; kind: string; instanceKey: string; label: string; sourceVersion: string }): Promise<string>;
     /** The kitchen's key in the backup, as inspect chose it. */
     sourceInstanceKey(sourceId: string): Promise<string | null>;
@@ -178,7 +180,9 @@ async function inspect(run: Run, { backup, groupKey, drafts }: Opened) {
 }
 
 /** Brings the recipe's photo, adding what happened to the report. */
-async function bringPhoto({ job, ports }: Run, backup: MealieBackup, draft: RecipeDraft, recipeId: string, report: Required<MoveInReport>) {
+type Report = Required<Pick<MoveInReport, "counts" | "events">>;
+
+async function bringPhoto({ job, ports }: Run, backup: MealieBackup, draft: RecipeDraft, recipeId: string, report: Report) {
   // A damaged photo loses only the photo, never the job.
   const bytes = await backup.readFile(draft.photoPath).catch(() => null);
   try {
@@ -192,21 +196,13 @@ async function bringPhoto({ job, ports }: Run, backup: MealieBackup, draft: Reci
 }
 
 /** Brings one recipe and its photo, and returns what to report; writes nothing to the job itself. */
-async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft): Promise<Required<MoveInReport>> {
+async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft): Promise<Report> {
   const { job, ports } = run;
-  const report: Required<MoveInReport> = { counts: [], events: [], restart: false };
+  const report: Report = { counts: [], events: [] };
   const at = { entity: "recipes", sourceKey: draft.sourceKey };
   const hasPhoto = backup.hasFile(draft.photoPath);
-  let result: RecipeWriteResult;
-  try {
-    result = await ports.writeRecipe({ sourceId: job.sourceId as string, jobId: job.id, chefId: job.ownerId, draft });
-  } catch (error) {
-    // Most likely an outage: the next run tries the recipe again, and only after RECIPE_TRIES runs is it passed over.
-    if (error instanceof LostClaimError || job.attempt < RECIPE_TRIES) throw error;
-    report.counts.push(["recipes", { failed: 1 }]);
-    report.events.push(event("item-failed", `${draft.title} didn't move in this time. Moving the same backup in again tries it once more.`, { ...at, detail: (error as Error).message }));
-    return report;
-  }
+  // An error here is passed on: the next run tries the recipe again, and recipes() passes it over after RECIPE_TRIES.
+  const result: RecipeWriteResult = await ports.writeRecipe({ sourceId: job.sourceId as string, jobId: job.id, chefId: job.ownerId, draft });
   const target = { ...at, targetId: result.recipeId };
   if (result.outcome === "skipped") {
     report.counts.push(["recipes", { skipped: 1 }]);
@@ -232,7 +228,21 @@ async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft): 
 async function recipes(run: Run, { backup, drafts }: Opened, chunkSize: number) {
   const { job, ports } = run;
   const { store } = ports;
-  const start = Number(job.cursor);
+  let start = Number(job.cursor);
+  // The recipe at the cursor has stopped every run since the job last moved, whether it threw or took the Worker down:
+  // report it and move past it, so it never holds the rest back.
+  if (job.attempt >= RECIPE_TRIES && start < drafts.length) {
+    const draft = drafts[start];
+    await store.updateJob(job.id, { cursor: String(++start), attempt: 0 }, run.token, {
+      counts: [["recipes", { failed: 1 }]],
+      events: [event("item-failed", `${draft.title} didn't move in this time. Moving the same backup in again tries it once more.`, {
+        entity: "recipes",
+        sourceKey: draft.sourceKey,
+        detail: `It stopped the move-in ${RECIPE_TRIES} times in a row.`,
+      })],
+    });
+    job.attempt = 0;
+  }
   const end = Math.min(start + chunkSize, drafts.length);
   for (let i = start; i < end; i++) {
     const report = await bringRecipe(run, backup, drafts[i]);
@@ -299,12 +309,14 @@ export async function runForAWhile(jobId: string, ports: MoveInPorts, { budgetMs
   try {
     for (;;) {
       const job = await runNextChunk(jobId, ports, { chunkSize, token, cache });
-      if (!job || FINISHED.includes(job.status) || ports.now().getTime() - started.getTime() >= budgetMs) return job;
+      if (!job || FINISHED.includes(job.status) || ports.now().getTime() - started.getTime() >= budgetMs) {
+        await ports.store.release(jobId, token);
+        return job;
+      }
     }
   } catch (error) {
     if (error instanceof LostClaimError) return ports.store.loadJob(jobId);
+    // An outage keeps hold of the job, so the next try waits out the claim instead of spending an attempt at every poll.
     throw error;
-  } finally {
-    await ports.store.release(jobId, token);
   }
 }
