@@ -39,6 +39,7 @@ import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, Recipe
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { loadApiRecipeFromD1, loadApiRecipeWithPrisma } from "~/lib/api-recipe-reads.server";
 import { canRead, readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
+import { likeContainsSearch } from "~/domains/platform";
 import { d1WriteBatch } from "~/lib/d1-write.server";
 import { d1WriteOnceKey } from "~/lib/d1-write-once.server";
 import { putShoppingListItemOnceOnD1, type D1ShoppingItemPut } from "~/lib/shopping-list-d1-actions.server";
@@ -1816,15 +1817,17 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
   const limit = parseListLimit(url);
   const cursor = parseListCursor(url);
   const cursorWhere = listCursorWhere(cursor);
+  // D1 refuses a LIKE over 50 bytes, so a long query searches by its start and is checked in full below.
+  const search = likeContainsSearch(query);
   const queryWhere = query
     ? {
         OR: [
-          { title: { contains: query } },
-          { description: { contains: query } },
+          { title: { contains: search.pattern } },
+          { description: { contains: search.pattern } },
         ],
       }
     : {};
-  const recipes = await db.recipe.findMany({
+  const found = await db.recipe.findMany({
     where: {
       deletedAt: null,
       AND: [cursorWhere, queryWhere, readableRecipeWhere(apiReader(principal))],
@@ -1853,8 +1856,11 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
       activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    take: limit + 1,
+    take: search.narrowed ? undefined : limit + 1,
   });
+  const recipes = search.narrowed
+    ? found.filter((recipe) => search.matches(recipe.title, recipe.description)).slice(0, limit + 1)
+    : found;
   const page = recipes.slice(0, limit);
   const hasMore = recipes.length > limit;
   const nextCursor = hasMore && page.length > 0 ? listCursorFor(page[page.length - 1]!) : null;
@@ -3350,15 +3356,17 @@ async function handleCookbookList(args: ApiV1RouteArgs, requestId: string, princ
   const limit = parseListLimit(url);
   const cursor = parseListCursor(url);
   const cursorWhere = listCursorWhere(cursor);
+  // D1 refuses a LIKE over 50 bytes, so a long query searches by its start and is checked in full below.
+  const search = likeContainsSearch(query);
   const queryWhere = query
     ? {
         OR: [
-          { title: { contains: query } },
-          { author: { username: { contains: query } } },
+          { title: { contains: search.pattern } },
+          { author: { username: { contains: search.pattern } } },
         ],
       }
     : {};
-  const cookbooks = await db.cookbook.findMany({
+  const found = await db.cookbook.findMany({
     where: { AND: [cursorWhere, queryWhere] },
     select: {
       id: true,
@@ -3402,8 +3410,11 @@ async function handleCookbookList(args: ApiV1RouteArgs, requestId: string, princ
       },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    take: limit + 1,
+    take: search.narrowed ? undefined : limit + 1,
   });
+  const cookbooks = search.narrowed
+    ? found.filter((cookbook) => search.matches(cookbook.title, cookbook.author.username)).slice(0, limit + 1)
+    : found;
   const page = cookbooks.slice(0, limit);
   const hasMore = cookbooks.length > limit;
   const nextCursor = hasMore && page.length > 0 ? listCursorFor(page[page.length - 1]!) : null;

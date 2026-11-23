@@ -29,6 +29,7 @@ import {
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { canRead, readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
+import { likeContainsSearch } from "~/domains/platform";
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
 import { d1Binding, d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { deleteNativeRecipe } from "~/lib/api-v1-recipe-writes.server";
@@ -2870,16 +2871,20 @@ const listCookbooksTool: SpoonjoyApiOperation = {
     const email = requireOwnerEmail(args, context);
     const owner = await getOrCreateOwner(context, email);
     const query = optionalString(args.query);
+    // D1 refuses a LIKE over 50 bytes, so a long query searches by its start and is checked in full here.
+    const search = query ? likeContainsSearch(query) : null;
+    const limit = normalizeLimit(args.limit);
 
-    const cookbooks = await context.db.cookbook.findMany({
+    const found = await context.db.cookbook.findMany({
       where: {
         authorId: owner.id,
-        ...(query ? { title: { contains: query } } : {}),
+        ...(search ? { title: { contains: search.pattern } } : {}),
       },
       orderBy: { updatedAt: "desc" },
-      take: normalizeLimit(args.limit),
+      take: search?.narrowed ? undefined : limit,
       include: cookbookSummaryInclude,
     });
+    const cookbooks = search?.narrowed ? found.filter((cookbook) => search.matches(cookbook.title)).slice(0, limit) : found;
 
     // Single batched fetch of every cookbook's recipes instead of one
     // findMany per cookbook (was up to 1 + N round-trips at the audited

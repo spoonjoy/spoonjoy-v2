@@ -43,6 +43,7 @@ const extensions = [".ts", ".tsx", ".js", ".jsx", ".json"];
 import "@testing-library/jest-dom";
 import "./warning-policy";
 import { vi, beforeAll, expect } from "vitest";
+import { refuseLongLikePatterns } from "./helpers/d1-like";
 import React from "react";
 
 // happy-dom does not compile the app's Tailwind stylesheet. Supply its installed base
@@ -180,8 +181,13 @@ function takingDatabaseTurns(factory: TestAdapterFactory): TestAdapterFactory {
       },
     });
   };
+  // Each connection's LIKE refuses a pattern over D1's 50 bytes, as D1 does (test/helpers/d1-like.ts).
+  const withD1Like = (adapter: TestAdapter): TestAdapter => {
+    refuseLongLikePatterns((adapter as unknown as { client: import('better-sqlite3').Database }).client);
+    return adapter;
+  };
   return Object.assign(Object.create(factory) as TestAdapterFactory, {
-    connect: async () => turns(await factory.connect()),
+    connect: async () => turns(withD1Like(await factory.connect())),
     connectToShadowDb: async () => turns(await factory.connectToShadowDb()),
   });
 }
