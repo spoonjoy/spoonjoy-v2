@@ -35,6 +35,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -112,7 +116,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -233,6 +237,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -379,6 +387,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -483,6 +495,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -555,6 +571,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -616,6 +636,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -727,6 +751,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Roasted Tomato Soup\" [item/link] in region \"Recipes\"",
           "count": 1
         },
@@ -808,6 +836,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -903,6 +935,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saffron Risotto\" [item/link] in region \"Contents\"",
           "count": 1
         },
@@ -982,7 +1018,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -1079,6 +1115,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saffron Risotto\" [item/link] in region \"Contents\"",
           "count": 1
         },
@@ -1158,7 +1198,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -1226,6 +1266,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -1310,6 +1354,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -1402,6 +1450,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -1705,6 +1757,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"SDK spec\" [button/root] in main",
           "count": 1
         },
@@ -1906,6 +1962,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -2345,6 +2405,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -2406,6 +2470,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -2525,6 +2593,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Roasted Tomato Soup\" [item/link] in region \"Your recipes\"",
           "count": 1
         },
@@ -2633,6 +2705,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -2685,11 +2761,19 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search Recipes\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"See the roadmap\" [link/root] in region \"What's next\"",
           "count": 1
         },
         {
@@ -2738,6 +2822,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -2817,6 +2905,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -2890,6 +2982,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -2977,6 +3073,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Roasted Tomato Soup\" [item/link] in main",
           "count": 1
         },
@@ -3034,6 +3134,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -3105,6 +3209,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -3161,6 +3269,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -3214,6 +3326,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -3321,6 +3437,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -3404,7 +3524,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -3543,6 +3663,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -3622,7 +3746,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -3702,6 +3826,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -3827,6 +3955,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -3938,6 +4070,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -4183,6 +4319,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -4282,7 +4422,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -4380,7 +4520,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -4562,6 +4702,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -4676,7 +4820,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -4774,7 +4918,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -5005,6 +5149,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -5213,6 +5361,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Roasted Tomato Soup\" [item/link] in main",
           "count": 1
         },
@@ -5317,6 +5469,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -5342,6 +5498,106 @@
         },
         {
           "identity": "link \"Terms\" [link/root] in main",
+          "count": 1
+        }
+      ]
+    },
+    "roadmap": {
+      "default": [
+        {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"Log in\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Browse recipes\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Building now · 3\" [link/root] in navigation \"Roadmap groups\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Connect an assistant\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Get it on the App Store\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"How to export\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Later · 5\" [link/root] in navigation \"Roadmap groups\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Next · 13\" [link/root] in navigation \"Roadmap groups\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search recipes\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Shipped · 11\" [link/root] in navigation \"Roadmap groups\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Sign up\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy for iPhone and iPad\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy kitchen\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Start your kitchen\" [button/root] in complementary \"Something missing?\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Try it in the Test Kitchen\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"ari@spoonjoy.app\" [link/root] in complementary \"Something missing?\"",
           "count": 1
         }
       ]
@@ -5398,6 +5654,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -5498,6 +5758,10 @@
         },
         {
           "identity": "link \"Recipes\" [tabs/link] in navigation \"Search scope\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -5605,6 +5869,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -5694,7 +5962,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -5824,6 +6092,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -5973,6 +6245,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -6072,7 +6348,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -6156,6 +6432,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -6243,6 +6523,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -6320,6 +6604,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -6435,6 +6723,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -6541,6 +6833,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -6612,7 +6908,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -6696,6 +6992,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -6794,6 +7094,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -6905,6 +7209,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -7011,6 +7319,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saved\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -7099,6 +7411,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -7168,6 +7484,10 @@
         },
         {
           "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -7373,6 +7693,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -7407,7 +7731,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"26 components\" [inspector/list] in region \"X-ray\"",
+          "identity": "button \"27 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {
@@ -7519,6 +7843,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -7585,6 +7913,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -7642,7 +7974,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -7724,6 +8056,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -7817,6 +8153,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -7873,6 +8213,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -7914,6 +8258,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -7970,6 +8318,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -8057,6 +8409,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Roasted Tomato Soup\" [item/link] in region \"Recipes\"",
           "count": 1
         },
@@ -8110,6 +8466,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -8177,6 +8537,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saffron Risotto\" [item/link] in region \"Contents\"",
           "count": 1
         },
@@ -8236,7 +8600,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -8313,6 +8677,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Saffron Risotto\" [item/link] in region \"Contents\"",
           "count": 1
         },
@@ -8372,7 +8740,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -8408,6 +8776,10 @@
         },
         {
           "identity": "link \"Cancel\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -8456,6 +8828,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -8520,6 +8896,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -8815,6 +9195,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"SDK spec\" [button/root] in main",
           "count": 1
         },
@@ -9012,6 +9396,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -9447,6 +9835,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -9504,6 +9896,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -9599,6 +9995,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Roasted Tomato Soup\" [item/link] in region \"Your recipes\"",
           "count": 1
         },
@@ -9679,6 +10079,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -9723,11 +10127,19 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search Recipes\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"See the roadmap\" [link/root] in region \"What's next\"",
           "count": 1
         },
         {
@@ -9775,6 +10187,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -9812,6 +10228,10 @@
         },
         {
           "identity": "link \"Privacy\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -9876,6 +10296,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -9947,6 +10371,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Roasted Tomato Soup\" [item/link] in main",
           "count": 1
         },
@@ -10003,6 +10431,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -10032,6 +10464,10 @@
         },
         {
           "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -10072,6 +10508,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -10124,6 +10564,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -10195,6 +10639,10 @@
           "count": 3
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
           "count": 1
         },
@@ -10250,7 +10698,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -10361,6 +10809,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -10420,7 +10872,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -10468,6 +10920,10 @@
         },
         {
           "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -10545,6 +11001,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
           "count": 1
         },
@@ -10608,6 +11068,10 @@
         },
         {
           "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -10805,6 +11269,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -10884,7 +11352,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -10966,7 +11434,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -11119,6 +11587,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
           "count": 1
         },
@@ -11202,7 +11674,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -11288,7 +11760,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -11484,6 +11956,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11691,6 +12167,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Roasted Tomato Soup\" [item/link] in main",
           "count": 1
         },
@@ -11791,6 +12271,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -11816,6 +12300,102 @@
         },
         {
           "identity": "link \"Terms\" [link/root] in main",
+          "count": 1
+        }
+      ]
+    },
+    "roadmap": {
+      "default": [
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Browse recipes\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Building now · 3\" [link/root] in navigation \"Roadmap groups\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Connect an assistant\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Get it on the App Store\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"How to export\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Later · 5\" [link/root] in navigation \"Roadmap groups\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Next · 13\" [link/root] in navigation \"Roadmap groups\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search recipes\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Shipped · 11\" [link/root] in navigation \"Roadmap groups\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Sign up\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy for iPhone and iPad\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Start your kitchen\" [button/root] in complementary \"Something missing?\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Try it in the Test Kitchen\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"ari@spoonjoy.app\" [link/root] in complementary \"Something missing?\"",
           "count": 1
         }
       ]
@@ -11856,6 +12436,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11935,6 +12519,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -12011,6 +12599,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -12080,7 +12672,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -12190,6 +12782,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -12311,6 +12907,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -12394,7 +12994,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -12461,6 +13061,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -12521,6 +13125,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Sign up\" [button/root] in banner",
           "count": 1
         },
@@ -12578,6 +13186,10 @@
         },
         {
           "identity": "link \"Privacy\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -12653,6 +13265,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
           "count": 1
         },
@@ -12711,6 +13327,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
           "count": 1
         },
@@ -12754,7 +13374,7 @@
         },
         {
           "identity": "link \"\" [link/root] in contentinfo",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -12798,6 +13418,10 @@
         },
         {
           "identity": "link \"Cancel\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -12848,6 +13472,10 @@
         },
         {
           "identity": "link \"Cancel\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -12911,6 +13539,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
           "count": 1
         },
@@ -12966,6 +13598,10 @@
         },
         {
           "identity": "link \"Cancel\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -13041,6 +13677,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -13106,6 +13746,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -13311,6 +13955,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -13345,7 +13993,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"22 components\" [inspector/list] in region \"X-ray\"",
+          "identity": "button \"23 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {
@@ -13450,6 +14098,10 @@
         },
         {
           "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Roadmap\" [link/root] in contentinfo",
           "count": 1
         },
         {
