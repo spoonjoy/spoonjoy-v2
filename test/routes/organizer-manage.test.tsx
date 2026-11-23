@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { redirect } from "react-router";
 import { db } from "~/lib/db.server";
 import { OBJECTIONABLE_CONTENT_MESSAGE, OBJECTIONABLE_TERMS } from "~/lib/objectionable-terms";
 import TagPage, { action as tagAction, loader as tagLoader } from "~/routes/tags.$slug";
@@ -176,6 +177,27 @@ describe("managing an organizer from its page", () => {
     fireEvent.click(within(rename).getByRole("button", { name: "Rename" }));
     expect(await screen.findByText("You already have a tag called that. Merge them instead.")).toBeInTheDocument();
     expect(sent).toHaveBeenLastCalledWith("rename");
+  });
+
+  it("show the kept tag's own name in the Name box after a merge moves to its page without a reload", async () => {
+    const names: Record<string, string> = { quick: "Quick", fast: "Fast" };
+    const Stub = createTestRoutesStub([{
+      path: "/tags/:slug",
+      Component: TagPage,
+      loader: ({ params }: { params: { slug?: string } }) => ({
+        organizer: { name: names[params.slug!]!, slug: params.slug! },
+        recipes: [],
+        others: Object.keys(names).filter((slug) => slug !== params.slug).map((slug) => ({ name: names[slug]!, slug })),
+      }),
+      action: () => redirect("/tags/fast"),
+    }]);
+
+    render(<Stub initialEntries={["/tags/quick"]} />);
+    const merge = await screen.findByRole("form", { name: "Merge this tag" });
+    fireEvent.click(within(merge).getByRole("button", { name: "Merge" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Fast" })).toBeInTheDocument();
+    expect(within(screen.getByRole("form", { name: "Rename this tag" })).getByRole("textbox", { name: "Name" })).toHaveValue("Fast");
   });
 
   it("leave Merge out when there's nothing of the same kind to merge into", async () => {
