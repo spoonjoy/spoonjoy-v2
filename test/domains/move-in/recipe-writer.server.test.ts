@@ -193,6 +193,34 @@ describe("writeMovedInRecipe", () => {
       expect(result).toMatchObject({ outcome: "kept", recipeId: first.recipeId });
       expect(all(`SELECT "description" FROM "Recipe"`)).toEqual([{ description: "Theirs." }]);
     });
+
+    it("keeps an edit the cook saves while the backup's change is on its way", async () => {
+      const first = await write(draft());
+      const db = {
+        prepare: database.binding.prepare,
+        batch: async (statements: Array<{ sql: string }>) => {
+          if (statements.some((statement) => statement.sql.includes(`UPDATE "SourceRecord" SET "contentHash"`))) {
+            // The cook saves between the move-in's read and its write; their save bumps updatedAt.
+            database.sqlite.prepare(`UPDATE "Recipe" SET "description" = 'Mine now.', "updatedAt" = '2026-11-23T12:00:05.000Z'`).run();
+          }
+          return database.binding.batch(statements as never);
+        },
+      };
+      const result = await writeMovedInRecipe({ db: db as never, sourceId: "source-1", jobId: "job-2", chefId: "chef-1", draft: changed(), now });
+      expect(result).toMatchObject({ outcome: "kept", recipeId: first.recipeId });
+      expect(all(`SELECT "title", "description" FROM "Recipe"`)).toEqual([{ title: "Pancakes", description: "Mine now." }]);
+    });
+
+    it("counts a step's time or a step that uses another's output as the cook's change", async () => {
+      const first = await write(draft());
+      database.sqlite.prepare(`UPDATE "RecipeStep" SET "duration" = 10 WHERE "stepNum" = 1`).run();
+      expect(await write(changed(), "job-2")).toMatchObject({ outcome: "kept" });
+      database.sqlite.prepare(`UPDATE "RecipeStep" SET "duration" = NULL`).run();
+      database.sqlite.prepare(`INSERT INTO "StepOutputUse" ("id", "recipeId", "outputStepNum", "inputStepNum") VALUES ('use-1', ?, 1, 2)`).run(first.recipeId);
+      expect(await write(changed(), "job-2")).toMatchObject({ outcome: "kept" });
+      expect(all(`SELECT "duration" FROM "RecipeStep" ORDER BY "stepNum"`)).toEqual([{ duration: null }, { duration: null }]);
+      expect(all(`SELECT "id" FROM "StepOutputUse"`)).toEqual([{ id: "use-1" }]);
+    });
   });
 
   describe("when another copy of the same kitchen moved in before", () => {
@@ -235,6 +263,48 @@ describe("writeMovedInRecipe", () => {
     it("never takes a recipe the cook wrote for one that moved in", async () => {
       database.sqlite.prepare(`INSERT INTO "Recipe" ("id", "title", "description", "chefId") VALUES ('mine', 'Pancakes', 'Fluffy ones.', 'chef-1')`).run();
       expect(await writeFromCopy(draft({ sourceKey: "copy-1", steps: [], ingredients: [], notes: [] }))).toMatchObject({ outcome: "created", title: "Pancakes (2)" });
+    });
+
+    it("finds a recipe whose own name ends in a number", async () => {
+      const first = await write(draft({ title: "Soup (2)" }));
+      expect(await writeFromCopy(draft({ sourceKey: "copy-1", title: "Soup (2)" }))).toEqual({ outcome: "unchanged", recipeId: first.recipeId, jobId: "job-1" });
+      expect(all(`SELECT "title" FROM "Recipe"`)).toEqual([{ title: "Soup (2)" }]);
+    });
+
+    it("lets only one of two identical rows claim the earlier recipe when they arrive together", async () => {
+      const first = await write(draft());
+      // Another row of the copy claims the recipe between this row's read and its write.
+      const db = {
+        prepare: database.binding.prepare,
+        batch: async (statements: Array<{ sql: string }>) => {
+          if (statements.some((statement) => statement.sql.includes(`"targetType" = 'Recipe' AND "targetId" = ?)`)) && !all(`SELECT 1 FROM "SourceRecord" WHERE "sourceKey" = 'copy-2'`).length) {
+            await writeFromCopy(draft({ sourceKey: "copy-2" }));
+          }
+          return database.binding.batch(statements as never);
+        },
+      };
+      const result = await writeMovedInRecipe({ db: db as never, sourceId: "source-2", jobId: "job-2", chefId: "chef-1", draft: draft({ sourceKey: "copy-1" }), now });
+      expect(result).toMatchObject({ outcome: "created", title: "Pancakes (2)" });
+      expect(all(`SELECT "sourceKey", "targetId" FROM "SourceRecord" WHERE "sourceId" = 'source-2' ORDER BY "sourceKey"`)).toEqual([
+        { sourceKey: "copy-1", targetId: (result as { recipeId: string }).recipeId },
+        { sourceKey: "copy-2", targetId: first.recipeId },
+      ]);
+    });
+
+    it("leaves a recipe the cook edits while a copy is matched to it", async () => {
+      const first = await write(draft());
+      const db = {
+        prepare: database.binding.prepare,
+        batch: async (statements: Array<{ sql: string }>) => {
+          if (statements.some((statement) => statement.sql.includes(`"targetType" = 'Recipe' AND "targetId" = ?)`)) && !all(`SELECT 1 FROM "Recipe" WHERE "description" = 'Mine now.'`).length) {
+            database.sqlite.prepare(`UPDATE "Recipe" SET "description" = 'Mine now.', "updatedAt" = '2026-11-23T12:00:05.000Z'`).run();
+          }
+          return database.binding.batch(statements as never);
+        },
+      };
+      const result = await writeMovedInRecipe({ db: db as never, sourceId: "source-2", jobId: "job-2", chefId: "chef-1", draft: draft({ sourceKey: "copy-1" }), now });
+      expect(result).toMatchObject({ outcome: "created", title: "Pancakes (2)" });
+      expect(all(`SELECT "description" FROM "Recipe" WHERE "id" = ?`, first.recipeId)).toEqual([{ description: "Mine now." }]);
     });
 
     it("leaves recipes from the same kitchen to their own ids", async () => {

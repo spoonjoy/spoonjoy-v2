@@ -83,8 +83,12 @@ interface WrittenForm {
   description: string | null;
   servings: string | null;
   sourceUrl: string | null;
-  steps: Array<{ title: string | null; text: string }>;
+  steps: Array<{ title: string | null; text: string; duration: number | null }>;
   ingredients: Array<SpoonjoyIngredient & { stepNum: number }>;
+  /** Steps that use another step's output, as [output step, step using it]. Only a cook adds these. */
+  links: Array<[number, number]>;
+  /** When the recipe was last written, for a recipe read from Spoonjoy; a write checks it is still the same. */
+  updatedAt?: string;
 }
 
 /** The title without the number a move-in adds when the name is taken: "Pancakes (2)" is "Pancakes". */
@@ -95,8 +99,11 @@ function baseTitle(title: string): string {
 async function contentHash(form: WrittenForm): Promise<string> {
   const ingredients = form.ingredients
     .map((line) => [line.stepNum, line.ingredientName, line.unitName, line.quantity] as const)
-    .sort((a, b) => a.join("\u0000").localeCompare(b.join("\u0000")));
-  const text = JSON.stringify([baseTitle(form.title), form.description, form.servings, form.sourceUrl, form.steps.map((step) => [step.title, step.text]), ingredients]);
+    .map((line) => JSON.stringify(line))
+    // The default sort is by code unit, not the locale's order, so a hash never changes with the runtime.
+    .sort();
+  const steps = form.steps.map((step) => [step.title, step.text, step.duration]);
+  const text = JSON.stringify([baseTitle(form.title), form.description, form.servings, form.sourceUrl, steps, ingredients, form.links]);
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -106,8 +113,8 @@ function writtenForm(draft: RecipeDraft): { form: WrittenForm; warnings: string[
   const warnings = [...draft.warnings];
   const stepTexts = draft.steps.map((step) => step.text);
   const steps = draft.steps.length || !draft.ingredients.length
-    ? draft.steps.map((step) => ({ title: step.title, text: step.text }))
-    : [{ title: null, text: GATHER_STEP }];
+    ? draft.steps.map((step) => ({ title: step.title, text: step.text, duration: null }))
+    : [{ title: null, text: GATHER_STEP, duration: null }];
   const ingredients = draft.ingredients.flatMap((line) => {
     const written = spoonjoyIngredient(line);
     if (!written) {
@@ -118,7 +125,7 @@ function writtenForm(draft: RecipeDraft): { form: WrittenForm; warnings: string[
     const stepNum = linked >= 0 ? linked + 1 : stepForIngredient(written.ingredientName, stepTexts);
     return [{ ...written, stepNum }];
   });
-  const form = { title: draft.title, description: description(draft), servings: draft.servings, sourceUrl: draft.sourceUrl, steps, ingredients };
+  const form = { title: draft.title, description: description(draft), servings: draft.servings, sourceUrl: draft.sourceUrl, steps, ingredients, links: [] };
   return { form, warnings };
 }
 
@@ -126,9 +133,10 @@ function writtenForm(draft: RecipeDraft): { form: WrittenForm; warnings: string[
 async function readForms(db: D1ReadDatabase, recipeIds: string[]): Promise<Map<string, WrittenForm>> {
   const forms = new Map<string, WrittenForm>();
   for (const recipeId of recipeIds) {
-    const [[recipe], steps, ingredients] = await d1ReadBatch(db, [
-      [`SELECT "title", "description", "servings", "sourceUrl" FROM "Recipe" WHERE "id" = ?`, recipeId],
-      [`SELECT "stepTitle", "description" FROM "RecipeStep" WHERE "recipeId" = ? ORDER BY "stepNum"`, recipeId],
+    const [[recipe], steps, links, ingredients] = await d1ReadBatch(db, [
+      [`SELECT "title", "description", "servings", "sourceUrl", "updatedAt" FROM "Recipe" WHERE "id" = ?`, recipeId],
+      [`SELECT "stepTitle", "description", "duration" FROM "RecipeStep" WHERE "recipeId" = ? ORDER BY "stepNum"`, recipeId],
+      [`SELECT "outputStepNum", "inputStepNum" FROM "StepOutputUse" WHERE "recipeId" = ? ORDER BY "outputStepNum", "inputStepNum"`, recipeId],
       [
         `SELECT "Ingredient"."stepNum", "Ingredient"."quantity", "Unit"."name" AS "unitName", "IngredientRef"."name" AS "ingredientName" FROM "Ingredient"
          JOIN "Unit" ON "Unit"."id" = "Ingredient"."unitId" JOIN "IngredientRef" ON "IngredientRef"."id" = "Ingredient"."ingredientRefId"
@@ -141,7 +149,9 @@ async function readForms(db: D1ReadDatabase, recipeIds: string[]): Promise<Map<s
       description: recipe.description as string | null,
       servings: recipe.servings as string | null,
       sourceUrl: recipe.sourceUrl as string | null,
-      steps: steps.map((step) => ({ title: step.stepTitle as string | null, text: String(step.description) })),
+      steps: steps.map((step) => ({ title: step.stepTitle as string | null, text: String(step.description), duration: step.duration as number | null })),
+      links: links.map((link) => [Number(link.outputStepNum), Number(link.inputStepNum)]),
+      updatedAt: String(recipe.updatedAt),
       ingredients: ingredients.map((line) => ({
         stepNum: Number(line.stepNum),
         quantity: Number(line.quantity),
@@ -205,7 +215,7 @@ async function recorded(db: D1ReadDatabase, sourceId: string, sourceKey: string)
 async function sameRecipeFromACopy(
   db: D1ReadDatabase,
   { sourceId, chefId, title, hash }: { sourceId: string; chefId: string; title: string; hash: string },
-): Promise<{ recipeId: string; jobId: string } | null> {
+): Promise<{ recipeId: string; jobId: string; updatedAt: string } | null> {
   const [candidates] = await d1ReadBatch(db, [[
     `SELECT "Recipe"."id" AS "recipeId", MIN("SourceRecord"."lastJobId") AS "jobId" FROM "Recipe"
      JOIN "SourceRecord" ON "SourceRecord"."targetType" = 'Recipe' AND "SourceRecord"."targetId" = "Recipe"."id" AND "SourceRecord"."sourceId" != ?
@@ -221,8 +231,9 @@ async function sameRecipeFromACopy(
   const forms = await readForms(db, candidates.map((row) => String(row.recipeId)));
   for (const candidate of candidates) {
     const form = forms.get(String(candidate.recipeId)) as WrittenForm;
-    if (baseTitle(form.title) === title && (await contentHash(form)) === hash) {
-      return { recipeId: String(candidate.recipeId), jobId: String(candidate.jobId) };
+    // Compared by base name both ways, so a backup's own "Soup (2)" still finds the "Soup (2)" it brought before.
+    if (baseTitle(form.title) === baseTitle(title) && (await contentHash(form)) === hash) {
+      return { recipeId: String(candidate.recipeId), jobId: String(candidate.jobId), updatedAt: form.updatedAt as string };
     }
   }
   return null;
@@ -252,6 +263,10 @@ function sourceRecordFreeGuard({ sourceId, draft }: WriteMovedInRecipeInput): D1
   );
 }
 
+function recipeUnchangedGuard(recipeId: string, updatedAt: string): D1Query {
+  return d1Guard(`EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "updatedAt" = ?)`, recipeId, updatedAt);
+}
+
 /** Changes a recipe that moved in before to the backup's version. */
 async function update(input: WriteMovedInRecipeInput, found: Found, current: WrittenForm, form: WrittenForm, hash: string) {
   const { db, chefId, draft, now } = input;
@@ -259,6 +274,8 @@ async function update(input: WriteMovedInRecipeInput, found: Found, current: Wri
   const title = baseTitle(current.title) === form.title ? current.title : await freeTitle(db, chefId, form.title, found.recipeId);
   await d1WriteBatch(db, [
     recipeActiveGuard(found.recipeId),
+    // Unchanged since it was read: neither the cook nor another move-in has written it in between.
+    recipeUnchangedGuard(found.recipeId, current.updatedAt as string),
     d1Guard(`EXISTS (SELECT 1 FROM "SourceRecord" WHERE "id" = ? AND "contentHash" = ?)`, found.recordId, found.contentHash),
     activeRecipeTitleFreeGuard(chefId, title, found.recipeId),
     recipeUpdateStatement(found.recipeId, { title, description: form.description, servings: form.servings, sourceUrl: form.sourceUrl }, now),
@@ -305,8 +322,15 @@ export async function writeMovedInRecipe(input: WriteMovedInRecipeInput): Promis
 
       const copy = await sameRecipeFromACopy(db, { sourceId, chefId, title: draft.title, hash });
       if (copy) {
-        // The job that first brought it in stays its job, so a later count calls it "already here".
-        await d1WriteBatch(db, [sourceRecordFreeGuard(input), recipeActiveGuard(copy.recipeId), sourceRecordInsert(input, copy.recipeId, hash, copy.jobId)]);
+        // A job that brought it in before stays its job, so this move-in counts it as "already here".
+        await d1WriteBatch(db, [
+          sourceRecordFreeGuard(input),
+          recipeActiveGuard(copy.recipeId),
+          recipeUnchangedGuard(copy.recipeId, copy.updatedAt),
+          // No other row of this kitchen has claimed it since it was read, so two rows never share one recipe.
+          d1Guard(`NOT EXISTS (SELECT 1 FROM "SourceRecord" WHERE "sourceId" = ? AND "targetType" = 'Recipe' AND "targetId" = ?)`, sourceId, copy.recipeId),
+          sourceRecordInsert(input, copy.recipeId, hash, copy.jobId),
+        ]);
         return { outcome: "unchanged", recipeId: copy.recipeId, jobId: copy.jobId };
       }
 
