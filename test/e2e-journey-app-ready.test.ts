@@ -14,6 +14,11 @@ import {
   TRANSPORT_RETRY_DELAY_MS,
   answerDataRequest,
   answerStaticAsset,
+  PLACEHOLDER_RETRY_DELAY_MS,
+  isWorkersDevPlaceholder,
+  loadAgainAfterPlaceholder,
+  placeholderLoadCount,
+  placeholderRetryNote,
   apiGetRetryNote,
   getAgainAfterReset,
   dataRequestPattern,
@@ -162,6 +167,67 @@ describe("waitForHydrationOnLoad", () => {
       if (base === undefined) delete process.env.SPOONJOY_JOURNEYS_BASE_URL;
       else process.env.SPOONJOY_JOURNEYS_BASE_URL = base;
     }
+  });
+});
+
+describe("loadAgainAfterPlaceholder", () => {
+  const LOGIN = "https://spoonjoy-v2-qa-run-45436206706-1-p2.mendelow-studio.workers.dev/login";
+  // Cloudflare's page, as the trace of Journeys run 45436206706 recorded it.
+  const PLACEHOLDER = '<html class="no-js" lang="en-US"><title>Page not found</title><h1>There is nothing here yet</h1></html>';
+  const APP = "<script>window.__reactRouterContext = {};</script>";
+  const answer = (status: number, body: string | Error) => ({
+    status: () => status,
+    text: async () => {
+      if (body instanceof Error) throw body;
+      return body;
+    },
+    url: () => LOGIN,
+  });
+
+  it("loads once more, after a wait, when Cloudflare answered with its placeholder, and says so", async () => {
+    const page = {};
+    const load = vi.fn().mockResolvedValueOnce(answer(404, PLACEHOLDER)).mockResolvedValueOnce(answer(200, APP));
+    const wait = vi.fn(async () => undefined);
+    const onRetry = vi.fn();
+
+    const response = await loadAgainAfterPlaceholder(page, load, wait, onRetry);
+    expect(response!.status()).toBe(200);
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledExactlyOnceWith(PLACEHOLDER_RETRY_DELAY_MS);
+    expect(onRetry).toHaveBeenCalledExactlyOnceWith(LOGIN);
+    expect(placeholderLoadCount(page, LOGIN)).toBe(1);
+    expect(placeholderLoadCount({}, LOGIN)).toBe(0);
+  });
+
+  it("returns the second answer, whatever it is, without loading a third time", async () => {
+    const page = {};
+    const load = vi.fn().mockResolvedValue(answer(404, PLACEHOLDER));
+    expect((await loadAgainAfterPlaceholder(page, load, async () => undefined, () => undefined))!.status()).toBe(404);
+    expect(load).toHaveBeenCalledTimes(2);
+    await loadAgainAfterPlaceholder(page, load, async () => undefined, () => undefined);
+    expect(placeholderLoadCount(page, LOGIN)).toBe(2);
+  });
+
+  it.each([
+    ["the app's own 404", answer(404, `${APP}<h1>There is nothing here yet</h1>`)],
+    ["the app's 404 page", answer(404, `${APP}<h1>Page not found</h1>`)],
+    ["a page the app answered", answer(200, PLACEHOLDER)],
+    ["a 404 whose body cannot be read", answer(404, new Error("Response body is unavailable for redirect responses"))],
+    ["no response", null],
+  ])("never loads again after %s", async (_name, first) => {
+    const load = vi.fn().mockResolvedValue(first);
+    const wait = vi.fn(async () => undefined);
+    expect(await loadAgainAfterPlaceholder({}, load, wait)).toBe(first);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
+    expect(await isWorkersDevPlaceholder(first)).toBe(false);
+  });
+
+  it("names the page's path in the note it prints by default", async () => {
+    expectConsoleWarning("Journeys: loading the page again after Cloudflare answered with its workers.dev placeholder (404 /login)");
+    const load = vi.fn().mockResolvedValueOnce(answer(404, PLACEHOLDER)).mockResolvedValueOnce(answer(200, APP));
+    await loadAgainAfterPlaceholder({}, load, async () => undefined);
+    expect(placeholderRetryNote(`${LOGIN}?next=%2F`)).toBe("Journeys: loading the page again after Cloudflare answered with its workers.dev placeholder (404 /login)");
   });
 });
 

@@ -14,6 +14,10 @@ import {
   MAX_RETRY_AFTER_MS,
   MAX_RUN_WORKERS,
   READY_TIMEOUT_MS,
+  APP_ANSWERS_IN_A_ROW,
+  APP_ANSWER_GAP_MS,
+  WORKERS_DEV_PLACEHOLDER,
+  waitForAppAnswers,
   READY_POLL_MS,
   ASSETS_READY_TIMEOUT_MS,
   ASSET_FETCH_CONCURRENCY,
@@ -862,15 +866,85 @@ function site(routes: Record<string, Route | Error>, baseUrl = IDENTITY.baseUrl)
 }
 
 const JS = "application/javascript; charset=utf-8";
+const APP_PAGE = "<script>window.__reactRouterContext = {};</script>";
 const LIVE: Record<string, Route> = {
   "/health": { status: 200 },
   "/": { status: 200, body: '<link rel="modulepreload" href="/assets/entry.client-AbC_1.js">' },
   "/assets/entry.client-AbC_1.js": { status: 200, type: JS },
   "/assets/createLucideIcon-Xy9.js": { status: 200, type: JS },
   "/assets/root-Q1.css": { status: 200, type: "text/css; charset=utf-8" },
+  "/login": { status: 200, body: APP_PAGE },
 };
 const ASSET_URLS = ["/assets/createLucideIcon-Xy9.js", "/assets/entry.client-AbC_1.js", "/assets/root-Q1.css"]
   .map((path) => `${IDENTITY.baseUrl}${path}`);
+
+// The waits verify makes other than the gaps between its /login checks.
+function pollSleeps(sleep: { mock: { calls: unknown[][] } }): unknown[] {
+  return sleep.mock.calls.map(([ms]) => ms).filter((ms) => ms !== APP_ANSWER_GAP_MS);
+}
+
+describe("waitForAppAnswers", () => {
+  const login = `${IDENTITY.baseUrl}/login`;
+  const app = { status: 200, body: APP_PAGE };
+  const placeholder = { status: 404, body: `<title>Page not found</title><h1>${WORKERS_DEV_PLACEHOLDER}</h1>` };
+
+  function answers(...replies: Array<Route | Error | string>) {
+    return vi.fn(async (url: string) => {
+      expect(url).toBe(login);
+      const reply = replies.length > 1 ? replies.shift()! : replies[0]!;
+      if (reply instanceof Error || typeof reply === "string") throw reply;
+      return { status: reply.status, headers: new Headers(), text: async () => reply.body ?? "" };
+    });
+  }
+
+  it("passes once the app answers five times in a row, about ten seconds apart in all", async () => {
+    const sleep = vi.fn(async () => {});
+    const fetchImpl = answers(app);
+    await waitForAppAnswers({ fetchImpl, now: () => 0, sleep, baseUrl: IDENTITY.baseUrl });
+    expect(fetchImpl).toHaveBeenCalledTimes(APP_ANSWERS_IN_A_ROW);
+    expect(sleep.mock.calls).toEqual(Array(APP_ANSWERS_IN_A_ROW - 1).fill([APP_ANSWER_GAP_MS]));
+    expect((APP_ANSWERS_IN_A_ROW - 1) * APP_ANSWER_GAP_MS).toBe(10_000);
+  });
+
+  it("starts the count again after the placeholder, an error or a page without the app", async () => {
+    const sleep = vi.fn(async () => {});
+    const fetchImpl = answers(app, app, placeholder, app, new Error("socket hang up"), app, { status: 200, body: "<html></html>" }, app);
+    await waitForAppAnswers({ fetchImpl, now: () => 0, sleep, baseUrl: IDENTITY.baseUrl });
+    expect(fetchImpl).toHaveBeenCalledTimes(7 + APP_ANSWERS_IN_A_ROW);
+  });
+
+  it.each([
+    ["the placeholder", placeholder, "/login returned 404, Cloudflare's workers.dev placeholder"],
+    ["an app error", { status: 500, body: APP_PAGE }, "/login returned 500"],
+    ["a page without the app", { status: 200, body: "<html></html>" }, "/login answered without the app"],
+    ["a dropped connection", new Error("socket hang up"), "/login failed: socket hang up"],
+    ["a thrown string", "reset", "/login failed: reset"],
+  ])("fails as a setup error when it keeps getting %s", async (_name, reply, reason) => {
+    let clock = 0;
+    const sleep = vi.fn(async (ms: number) => {
+      clock += ms;
+    });
+    await expect(waitForAppAnswers({ fetchImpl: answers(reply), now: () => clock, sleep, baseUrl: IDENTITY.baseUrl, timeoutMs: 20_000 }))
+      .rejects.toThrow(`Setup error, not a test failure: ${login} did not answer with the app ${APP_ANSWERS_IN_A_ROW} times in a row within 20 s: ${reason}.`);
+  });
+
+  it("opens a new connection for each request", async () => {
+    const http = await import("node:http");
+    const ports: number[] = [];
+    const server = http.createServer((request, response) => {
+      ports.push(request.socket.remotePort!);
+      response.end(APP_PAGE);
+    });
+    await new Promise<void>((listening) => server.listen(0, "127.0.0.1", listening));
+    try {
+      const { port } = server.address() as { port: number };
+      await waitForAppAnswers({ fetchImpl: fetch, now: () => 0, sleep: async () => {}, baseUrl: `http://127.0.0.1:${port}` });
+      expect(new Set(ports).size).toBe(APP_ANSWERS_IN_A_ROW);
+    } finally {
+      server.close();
+    }
+  });
+});
 
 describe("verify", () => {
   it("passes once the run's Worker has its secrets, no pending migration, and serves /health and a hashed asset", async () => {
@@ -885,7 +959,9 @@ describe("verify", () => {
       `${IDENTITY.baseUrl}/`,
       `${IDENTITY.baseUrl}/assets/entry.client-AbC_1.js`,
       ...ASSET_URLS,
+      ...Array(APP_ANSWERS_IN_A_ROW).fill(`${IDENTITY.baseUrl}/login`),
     ]);
+    expect(fetchImpl.mock.calls.at(-1)![1]).toEqual({ redirect: "manual", headers: { connection: "close" } });
   });
 
   it("waits until every built asset is live, re-fetching only the ones still missing", async () => {
@@ -902,8 +978,8 @@ describe("verify", () => {
     const log = vi.fn();
     await verify({ env: RUN_ENV, exec: verifyExec().exec, fs: scopedFiles().fs, fetchImpl, now: Date.now, sleep, log });
 
-    expect(sleep).toHaveBeenCalledTimes(2);
-    const assetFetches = fetchImpl.mock.calls.map(([url]) => url).slice(3);
+    expect(pollSleeps(sleep)).toHaveLength(2);
+    const assetFetches = fetchImpl.mock.calls.map(([url]) => url).slice(3).filter((url) => !url.endsWith("/login"));
     expect(assetFetches).toEqual([...ASSET_URLS, ASSET_URLS[0], ASSET_URLS[0]]);
     expect(log).toHaveBeenCalledWith(expect.stringContaining("all 3 hashed assets live"));
   });
@@ -955,7 +1031,7 @@ describe("verify", () => {
     });
     const sleep = vi.fn(async () => {});
     await verify({ env: RUN_ENV, exec: verifyExec().exec, fs: scopedFiles().fs, fetchImpl, now: Date.now, sleep, log: vi.fn() });
-    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(pollSleeps(sleep)).toHaveLength(2);
   });
 
   it.each([
@@ -983,8 +1059,7 @@ describe("verify", () => {
       .mockRejectedValueOnce("This Worker does not exist on your account. [code: 10007]");
     const sleep = vi.fn(async () => {});
     await verify({ env: RUN_ENV, exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, sleep, log: vi.fn() });
-    expect(sleep).toHaveBeenCalledTimes(2);
-    expect(sleep).toHaveBeenCalledWith(READY_POLL_MS);
+    expect(pollSleeps(sleep)).toEqual([READY_POLL_MS, READY_POLL_MS]);
     expect(exec.mock.calls.map(([, args]) => args.slice(2, 4).join(" "))).toEqual([
       "secret list", "secret list", "secret list", "d1 migrations",
     ]);
@@ -1028,7 +1103,7 @@ describe("verify", () => {
     const sleep = vi.fn(async () => {});
     await verify({ env: RUN_ENV, exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, sleep, log: vi.fn() });
     expect(lists).toEqual([]);
-    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(pollSleeps(sleep)).toHaveLength(2);
   });
 
   it("fails on a missing secret or a pending migration", async () => {
@@ -1745,7 +1820,7 @@ describe("main and the CLI guard", () => {
 
     expect(await main(["deploy"], { env: RUN_ENV, exec: vi.fn(async () => ({ stdout: "", stderr: "" })), fs: files.fs, log })).toBe(1);
     files.store.set(`${CLIENT_ASSETS_DIR}/entry.client-AbC_1.js`, "");
-    await main(["verify"], { env: RUN_ENV, exec: verifyExec().exec, fs: files.fs, fetchImpl: site(LIVE), log });
+    await main(["verify"], { env: RUN_ENV, exec: verifyExec().exec, fs: files.fs, fetchImpl: site(LIVE), log, sleep: vi.fn(async () => {}) });
     expect(await main(["teardown"], { env: RUN_ENV, fs: files.fs, api, log })).toBe(true);
     expect(await main(["sweep"], { env: RUN_ENV, api, log })).toEqual({ swept: 0, remainingRunWorkers: 0 });
     expect(await main(["shared-queue"], { env: RUN_ENV, api, log })).toBe(true);
