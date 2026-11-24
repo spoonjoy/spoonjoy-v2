@@ -18,8 +18,11 @@ export type HouseholdMember = { householdId: string; userId: string; role: House
 
 export type HouseholdAction = "read" | "edit-shared" | "invite" | "manage-members" | "edit-settings";
 
-/** A refusal with `forbidden` is about who is asking or who they're acting on (403), not about what they sent (400). */
-export type Validated<T> = { ok: true; value: T } | { ok: false; error: string; forbidden?: true };
+/**
+ * A refusal with `forbidden` is about who is asking or who they're acting on (403), and one with `unavailable` about
+ * something this server couldn't do just then, such as send mail (503); any other is about what they sent (400).
+ */
+export type Validated<T> = { ok: true; value: T } | { ok: false; error: string; forbidden?: true; unavailable?: true };
 
 export const MAX_HOUSEHOLD_NAME_LENGTH = 80;
 

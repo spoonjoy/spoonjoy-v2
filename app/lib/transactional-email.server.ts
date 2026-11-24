@@ -1,7 +1,7 @@
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { captureEvent, resolvePostHogServerConfig, type PostHogServerEnv } from "~/lib/analytics-server";
 
-// Account mail (verification links, email-change confirmations and notices, password resets).
+// Account mail (verification links, email-change confirmations and notices, password resets) and household invites.
 //
 // Delivery modes, chosen per environment:
 // - "send": Cloudflare Email Service through the Worker's `send_email` binding named EMAIL, from
@@ -16,7 +16,8 @@ export type EmailPurpose =
   | "change_email_notice"
   | "email_changed_notice"
   | "reset_password"
-  | "content_report";
+  | "content_report"
+  | "household_invite";
 
 /** The Cloudflare Email Service binding's send call (the subset Spoonjoy uses). */
 export interface SendEmailBinding {

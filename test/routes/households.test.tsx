@@ -192,6 +192,47 @@ describe("/households/:id", () => {
     expect(seen.household.members.map((m: { username: string }) => m.username)).toEqual(["ann_cooks", "ben_cooks"]);
   });
 
+  it("emails an invite that only the address it went to can use, and lists it until it is used", async () => {
+    const sent: Array<{ to: string; from: string; subject: string; text: string }> = [];
+    const mail = { ...flagsOn, SPOONJOY_EMAIL_FROM: "Spoonjoy <hello@spoonjoy.app>", EMAIL: { send: async (message: (typeof sent)[number]) => { sent.push(message); } } };
+    const id = await makeHousehold();
+    expect(payload(await call(householdLoader, `/households/${id}`, "ann", undefined, mail)).household).toMatchObject({ canEmailInvites: true, emailInvites: [] });
+    expect(payload(await call(householdLoader, `/households/${id}`, "ann")).household.canEmailInvites).toBe(false);
+
+    const answer = await call(householdAction, `/households/${id}`, "ann", { intent: "email-invite", email: "Cal@Example.com", role: "viewer" }, mail);
+    expect(payload(answer)).toEqual({ invitedEmail: "cal@example.com" });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to: "cal@example.com", subject: "ann_cooks invited you to The Lee kitchen on Spoonjoy" });
+    const token = /http:\/\/localhost:3000\/join\/([A-Za-z0-9_-]+)/.exec(sent[0]!.text)![1]!;
+    expect(payload(await call(householdLoader, `/households/${id}`, "ann", undefined, mail)).household.emailInvites).toEqual([
+      { id: expect.any(String), email: "cal@example.com", roleLabel: "View-only" },
+    ]);
+
+    expect(statusOf(await call(joinAction, `/join/${token}`, "ben", {}))).toBe(400);
+    expect(((await call(joinAction, `/join/${token}`, "cal", {})) as Response).headers.get("Location")).toBe(`/households/${id}`);
+    expect(payload(await call(householdLoader, `/households/${id}`, "ann", undefined, mail)).household.emailInvites).toEqual([]);
+  });
+
+  it("refuses an email invite from a non-owner (403), without an address (400), and where mail can't go (503)", async () => {
+    const refusing = { ...flagsOn, SPOONJOY_EMAIL_FROM: "hello@spoonjoy.app", EMAIL: { send: async () => { throw new Error("refused"); } } };
+    const id = await makeHousehold();
+    await call(joinAction, `/join/${await makeInvite(id)}`, "ben", {});
+    const send = (user: string, fields: Record<string, string>, env: Record<string, unknown>) =>
+      call(householdAction, `/households/${id}`, user, { intent: "email-invite", ...fields }, env);
+
+    const notOwner = await send("ben", { email: "cal@example.com" }, refusing);
+    expect(statusOf(notOwner)).toBe(403);
+    expect(payload(notOwner)).toEqual({ error: "Only an owner can invite people." });
+    expect(statusOf(await send("ann", {}, refusing))).toBe(400);
+    const noMail = await send("ann", { email: "cal@example.com" }, flagsOn);
+    expect(statusOf(noMail)).toBe(503);
+    expect(payload(noMail)).toEqual({ error: "This server can't send email. Make an invite link instead." });
+    const bounced = await send("ann", { email: "cal@example.com" }, refusing);
+    expect(statusOf(bounced)).toBe(503);
+    expect(payload(bounced)).toEqual({ error: "The invite email couldn't be sent. Make an invite link instead." });
+    expect(payload(await call(householdLoader, `/households/${id}`, "ann", undefined, refusing)).household.emailInvites).toEqual([]);
+  });
+
   it("refuses an invite from a non-owner, and lets a member leave", async () => {
     const id = await makeHousehold();
     await call(joinAction, `/join/${await makeInvite(id)}`, "ben", {});
@@ -281,6 +322,7 @@ describe("/households/:id", () => {
               name: "Home",
               myRole: canRename ? "owner" : "member",
               canInvite: canRename,
+              emailInvites: [],
               canManage: canRename,
               canRename,
               maxNameLength: 80,
@@ -326,6 +368,7 @@ describe("/households/:id", () => {
             name: "Home",
             myRole: "owner",
             canInvite: true,
+            emailInvites: [],
             canManage: true,
             roleChoices: [
               { value: "owner", label: "Owner" },
@@ -375,6 +418,7 @@ describe("/households/:id", () => {
             name: "Home",
             myRole: "owner",
             canInvite: false,
+            emailInvites: [],
             canManage: true,
             roleChoices: [
               { value: "owner", label: "Owner" },
@@ -433,6 +477,7 @@ describe("/households/:id", () => {
             name: "Home",
             myRole: "member",
             canInvite: false,
+            emailInvites: [],
             canManage: false,
             members: [
               { userId: "ann", username: "ann_cooks", photoUrl: null, role: "owner", roleLabel: "Owner", me: false },
@@ -453,6 +498,7 @@ describe("/households/:id", () => {
       name: "Home",
       myRole: "owner",
       canInvite: true,
+      emailInvites: [],
       members: [
         { userId: "ann", username: "ann_cooks", photoUrl: null, role: "owner", roleLabel: "Owner", me: true },
         { userId: "ben", username: "ben_cooks", photoUrl: "/photos/ben.jpg", role: "viewer", roleLabel: "View-only", me: false },
@@ -478,6 +524,50 @@ describe("/households/:id", () => {
     expect(screen.getByText("Anyone with this link joins as a member. It works once, for 14 days.")).toBeTruthy();
   });
 
+  it("offers an owner an email invite where mail works, says it went, and lists who hasn't joined yet", async () => {
+    const submitted: Array<Record<string, string>> = [];
+    const pageFor = (canEmailInvites: boolean) =>
+      createTestRoutesStub([
+        {
+          path: "/households/:id",
+          Component: HouseholdPage,
+          loader: () => ({
+            household: {
+              id: "h1",
+              name: "Home",
+              myRole: "owner",
+              canInvite: true,
+              canEmailInvites,
+              emailInvites: canEmailInvites ? [{ id: "i1", email: "dee@example.com", roleLabel: "Member" }] : [],
+              members: [{ userId: "ann", username: "ann_cooks", photoUrl: null, role: "owner", roleLabel: "Owner", me: true }],
+            },
+          }),
+          action: async ({ request }: { request: Request }) => {
+            submitted.push(Object.fromEntries((await request.formData()) as unknown as Iterable<[string, string]>));
+            return { invitedEmail: "cal@example.com" };
+          },
+        },
+      ]);
+
+    const NoMail = pageFor(false);
+    render(<NoMail initialEntries={["/households/h1"]} />);
+    await screen.findByRole("heading", { level: 1, name: "Home" });
+    expect(screen.queryByLabelText(/Email address/)).toBeNull();
+    expect(screen.queryByRole("list", { name: "Waiting to join" })).toBeNull();
+    cleanup();
+
+    const WithMail = pageFor(true);
+    render(<WithMail initialEntries={["/households/h1"]} />);
+    await screen.findByRole("heading", { level: 1, name: "Home" });
+    expect(within(screen.getByRole("list", { name: "Waiting to join" })).getByText("dee@example.com")).toBeTruthy();
+    const form = screen.getByRole("form", { name: "Invite by email" });
+    await userEvent.type(within(form).getByLabelText(/Email address/), "cal@example.com");
+    await userEvent.selectOptions(within(form).getByLabelText("They join as"), "viewer");
+    await userEvent.click(within(form).getByRole("button", { name: "Send invite" }));
+    expect(await screen.findByText("Invite sent to cal@example.com.")).toBeTruthy();
+    expect(submitted).toEqual([{ intent: "email-invite", email: "cal@example.com", role: "viewer" }]);
+  });
+
   it("hides the invite form from someone who can't invite, and shows an action's error", async () => {
     const Stub = createTestRoutesStub([
       {
@@ -489,6 +579,7 @@ describe("/households/:id", () => {
             name: "Home",
             myRole: "member",
             canInvite: false,
+            emailInvites: [],
             members: [{ userId: "ben", username: "ben_cooks", photoUrl: null, role: "member", roleLabel: "Member", me: true }],
           },
         }),

@@ -265,4 +265,38 @@ test.describe("Households", () => {
     await openFromKitchen(page, testInfo, { name, householdPath, width: 390, height: 844, shot: "kitchen-cook-together-390" });
     await attachScreenshot(testInfo, page, "household-from-kitchen-390");
   });
+
+  test("an owner emails an invite, which waits under their household after a reload @mutates", async ({
+    page,
+    verifyAfterReload,
+    expectAccessible,
+  }, testInfo) => {
+    const tag = Date.now().toString(36);
+    const name = `The Park kitchen ${tag}`;
+    const address = `cook-${tag}@example.com`;
+
+    await page.goto("/households");
+    await waitForHydration(page);
+    await page.getByLabel("Household name").fill(name);
+    await page.getByRole("button", { name: "Create household", exact: true }).click();
+    await expect(page).toHaveURL(HOUSEHOLD_URL);
+    const householdPath = new URL(page.url()).pathname;
+    await waitForHydration(page);
+
+    // The Journeys stack captures mail rather than sending it, so the form is offered as it is in production.
+    const form = page.getByRole("form", { name: "Invite by email" });
+    await form.getByLabel("Email address").fill(address);
+    await form.getByLabel("They join as").selectOption("viewer");
+    await Promise.all([saved(page, householdPath), form.getByRole("button", { name: "Send invite", exact: true }).click()]);
+    await expect(page.getByRole("status").filter({ hasText: `Invite sent to ${address}.` })).toBeVisible();
+    await expectAccessible();
+    await attachScreenshot(testInfo, page, "owner-email-invite-sent");
+
+    const waiting = page.getByRole("list", { name: "Waiting to join" });
+    await verifyAfterReload(async () => {
+      await expect(waiting.getByText(address, { exact: true })).toBeVisible();
+      await expect(waiting.getByText("View-only", { exact: true })).toBeVisible();
+    });
+    await attachLocatorScreenshot(testInfo, page.getByRole("region", { name: "Invite someone" }), "owner-email-invite-waiting-after-reload");
+  });
 });
