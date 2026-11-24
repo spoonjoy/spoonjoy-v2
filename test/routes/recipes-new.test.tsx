@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { expectConsoleError } from "../warning-policy";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { cleanup, act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { redirect } from "react-router";
 import { createTestRoutesStub, chooseImage } from "../utils";
@@ -1643,6 +1643,30 @@ describe("Recipes New Route", () => {
       });
       expect(actionFormData.description).toBe("A test description");
       expect(actionFormData.servings).toBe("4");
+    });
+
+    it("sends the level the cook picks, starting at their default, while the visibility choice shows", async () => {
+      const user = userEvent.setup();
+      let sent: string | null = null;
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/new",
+          Component: NewRecipe,
+          loader: () => ({ visibilityDefault: "private" }),
+          action: async ({ request }: { request: Request }) => {
+            sent = (await request.formData()).get("visibility")?.toString() ?? null;
+            return redirect("/recipes/test-id");
+          },
+        },
+        { path: "/recipes/:id", Component: () => <div>Recipe Detail</div> },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/new"]} />);
+      const group = await screen.findByRole("radiogroup", { name: "Who can see this recipe" });
+      expect(within(group).getByRole("radio", { name: /^Only me/ })).toBeChecked();
+      await user.type(screen.getByLabelText(/Title/), "Secret Soup");
+      await user.click(screen.getByRole("button", { name: "Create recipe" }));
+      await waitFor(() => expect(sent).toBe("private"));
     });
 
     it("should handle image upload in handleSave", async () => {

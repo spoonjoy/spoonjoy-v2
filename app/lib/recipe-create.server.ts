@@ -349,10 +349,9 @@ export async function cookRecipeVisibilityDefault(db: PrismaClientType, chefId: 
  */
 export async function createRecipeDraft(
   db: PrismaClientType,
-  draft: CreateRecipeDraftInput,
+  input: CreateRecipeDraftInput,
   d1: D1ReadDatabase | null = null,
 ): Promise<{ id: string }> {
-  const input = draft;
   if (d1) return createRecipeDraftOnD1(d1, input);
 
   // Prisma (no D1 binding): the writes run in sequence against the top-level client.

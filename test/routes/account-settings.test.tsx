@@ -464,6 +464,23 @@ describe("Account Settings Route", () => {
     });
   });
 
+  it("shows the default for new recipes while the visibility choice is on, and leaves it out while it is off", async () => {
+    const mockData = (recipeVisibilityDefault: "private" | null) => ({
+      user: { id: testUserId, email: testUserEmail.toLowerCase(), username: testUsername, hasPassword: true, oauthAccounts: [], passkeys: [] },
+      notifications: { pushSubscribed: false },
+      recipeVisibilityDefault,
+    });
+    const Stub = createTestRoutesStub([{ path: "/account/settings", Component: AccountSettings, loader: () => mockData("private") }]);
+    render(<Stub initialEntries={["/account/settings"]} />);
+    const section = await screen.findByTestId("recipe-visibility-section");
+    expect(within(section).getByRole("radio", { name: /^Only me/ })).toBeChecked();
+    cleanup();
+    const Plain = createTestRoutesStub([{ path: "/account/settings", Component: AccountSettings, loader: () => mockData(null) }]);
+    render(<Plain initialEntries={["/account/settings"]} />);
+    await screen.findByRole("heading", { name: /account settings/i });
+    expect(screen.queryByTestId("recipe-visibility-section")).not.toBeInTheDocument();
+  });
+
   describe("component", () => {
     it("should render account settings page with heading", async () => {
       const mockData = {

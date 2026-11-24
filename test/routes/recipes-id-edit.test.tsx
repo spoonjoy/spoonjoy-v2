@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { expectConsoleError } from "../warning-policy";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { data } from "react-router";
-import { cleanup, act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub, requiredLabel, chooseImage } from "../utils";
 import { db } from "~/lib/db.server";
@@ -2595,6 +2595,34 @@ describe("Recipes $id Edit Route", () => {
       expect(submittedData.description).toBe("Updated description");
       expect(submittedData.servings).toBe("8");
       expect(submittedData.steps).toBeDefined();
+    });
+
+    it("sends the level the cook picks with a save while the visibility choice shows", async () => {
+      const user = userEvent.setup();
+      const sent: Array<string | null> = [];
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id/edit",
+          Component: EditRecipe,
+          loader: () => ({
+            recipe: { id: "recipe-1", title: "Open Soup", description: null, servings: null, steps: [] },
+            coverImageUrl: "",
+            formattedSteps: [],
+            visibility: "public",
+          }),
+          action: async ({ request }: { request: Request }) => {
+            sent.push((await request.formData()).get("visibility")?.toString() ?? null);
+            return { success: true };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
+      const group = await screen.findByRole("radiogroup", { name: "Who can see this recipe" });
+      await user.click(within(group).getByRole("radio", { name: /^Only me/ }));
+      await user.click(screen.getByRole("button", { name: "Save recipe" }));
+      await waitFor(() => expect(sent).toEqual(["private"]));
+      await waitForSaveToSettle();
     });
 
     it("sends the loaded updatedAt with a save, shows an edit conflict, and saves again against the current updatedAt", async () => {

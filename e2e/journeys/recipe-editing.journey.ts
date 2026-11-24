@@ -329,6 +329,17 @@ test.describe("Recipe create and edit", () => {
     });
     await testInfo.attach("private-recipe-owner-view", { body: await page.screenshot(), contentType: "image/png" });
 
+    // The editor shows the choice the cook made, after a reload.
+    await page.goto(`${recipePath}/edit`);
+    await waitForHydration(page);
+    const saved = page.getByRole("radiogroup", { name: "Who can see this recipe" });
+    await verifyAfterReload(async () => {
+      await expect(saved.getByRole("radio", { name: /^Only me/ })).toBeChecked();
+      await expect(saved.getByRole("radio", { name: /^Public/ })).not.toBeChecked();
+    });
+    await testInfo.attach("private-recipe-choice-after-reload", { body: await saved.screenshot({ animations: "disabled" }), contentType: "image/png" });
+    await page.goto(recipePath);
+
     // The cook reads it over the API and finds it in their own search, so its absence below means something.
     expect((await page.request.get(`/api/v1/recipes/${recipeId}`)).status(), "its cook: API").toBe(200);
     await page.goto(`/search?q=${encodeURIComponent(title)}`);
