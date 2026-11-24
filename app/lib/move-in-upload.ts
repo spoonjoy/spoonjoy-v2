@@ -15,7 +15,10 @@ export const UPLOAD_ATTEMPTS = 5;
 export const UPLOAD_REQUEST_MS = 120_000;
 const STORAGE_PREFIX = "spoonjoy:move-in-upload:";
 
-export type UploadOutcome = { ok: true; jobId: string } | { ok: false; error: string };
+/** `stopped` when the cook stopped the upload: it was aborted on the server, and the page goes back to the empty form. */
+export type UploadOutcome = { ok: true; jobId: string } | { ok: false; error: string; stopped?: true };
+
+export const UPLOAD_STOPPED_MESSAGE = "The upload was stopped, and nothing of it was kept. Choose a backup to start again.";
 
 type Fetch = (url: string, init: RequestInit) => Promise<Response>;
 type KeyValueStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -34,6 +37,8 @@ export interface UploadOptions {
   attempts?: number;
   /** How long one request may take; UPLOAD_REQUEST_MS unless a test shortens it. */
   requestMs?: number;
+  /** Stops the upload: parts in flight are cut off, and the upload is aborted on the server and forgotten here. */
+  signal?: AbortSignal;
 }
 
 /** A size as the page shows it: "84 MB", or "1.2 GB" from a thousand megabytes on, rounded down so it never overstates. */
@@ -94,6 +99,8 @@ class Gone extends Error {
 }
 /** The server turned a step away, with its message for the cook. */
 class Refused extends Error {}
+/** The cook stopped the upload. */
+class Stopped extends Error {}
 
 const retriable = (status: number) => status === 408 || status === 429 || status >= 500;
 
@@ -118,11 +125,33 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
   const arrived = new Map<number, number>();
   const sent = () => [...arrived.values()].reduce((total, size) => total + size, 0);
   let finishing = false;
+  /** The upload the server began, so a stop can abort it. */
+  let begunId: string | null = null;
+  const stop = options.signal;
+  const halt = () => {
+    if (stop?.aborted) throw new Stopped();
+  };
+  /** Waits, unless the cook stops the upload first. */
+  const wait = (ms: number) =>
+    new Promise<void>((resolve) => {
+      void sleep(ms).then(resolve);
+      stop?.addEventListener("abort", () => resolve(), { once: true });
+    });
+  /**
+   * A part is cut off by a stop as well as by its time running out. Begin and finish are left to answer, so a stop
+   * never loses the id of an upload the server began. Where the browser can't join signals, a part in flight runs
+   * out and the stop takes effect after it.
+   */
+  const partSignal = (timeout: AbortSignal) => (stop && typeof AbortSignal.any === "function" ? AbortSignal.any([timeout, stop]) : timeout);
 
   /** Sends a request, trying again after a dropped connection or a server error, and reads its JSON answer. */
   async function send(url: string, init: RequestInit): Promise<{ status: number; body: Record<string, unknown> }> {
     for (let attempt = 1; ; attempt++) {
-      const response = await fetcher(url, { credentials: "same-origin", signal: AbortSignal.timeout(requestMs), ...init }).catch(() => null);
+      halt();
+      const timeout = AbortSignal.timeout(requestMs);
+      const signal = init.method === "PUT" ? partSignal(timeout) : timeout;
+      const response = await fetcher(url, { credentials: "same-origin", signal, ...init }).catch(() => null);
+      if (init.method === "PUT") halt();
       if (response && !retriable(response.status)) {
         const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
         if (response.status === 404 && body.code === "upload-gone") throw new Gone(finishing);
@@ -130,7 +159,7 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
         return { status: response.status, body };
       }
       if (attempt >= attempts) throw new Dropped();
-      await sleep(1000 * 2 ** (attempt - 1));
+      await wait(1000 * 2 ** (attempt - 1));
     }
   }
 
@@ -160,11 +189,14 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
   async function once(resume: string | null): Promise<string> {
     const begun = await send("/move-in/uploads", json({ app: options.app, name: file.name, size: file.size, head, resume }));
     const plan = begun.body as unknown as Plan;
+    begunId = plan.uploadId;
     kept.keep(plan.uploadId);
+    halt();
     arrived.clear();
     for (const n of plan.done) arrived.set(n, Math.min(plan.partSize, file.size - (n - 1) * plan.partSize));
     options.onProgress?.(sent(), file.size);
     await sendParts(plan, Array.from({ length: plan.partCount }, (_, i) => i + 1).filter((n) => !arrived.has(n)));
+    halt();
     options.onChecking?.();
     finishing = true;
     for (;;) {
@@ -193,6 +225,12 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
     kept.forget();
     return { ok: true, jobId };
   } catch (error) {
+    if (error instanceof Stopped || stop?.aborted) {
+      // Abort it on the server too, so choosing the same file again starts afresh rather than carrying on.
+      if (begunId) await fetcher(`/move-in/uploads/${encodeURIComponent(begunId)}`, { method: "DELETE", credentials: "same-origin" }).catch(() => null);
+      kept.forget();
+      return { ok: false, error: UPLOAD_STOPPED_MESSAGE, stopped: true };
+    }
     if (error instanceof Dropped && finishing) {
       return { ok: false, error: "Every part arrived, but checking the backup didn't finish. Press Move in again with the same file to check it again." };
     }
