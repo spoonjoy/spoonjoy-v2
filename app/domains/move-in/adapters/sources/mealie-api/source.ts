@@ -1,7 +1,7 @@
 // The other app's own server as a move-in source, read with an API token the cook made there. It asks for the token's
 // kitchen and its recipe list once when a kitchen opens, then for each recipe and photo only when the move-in reaches
 // it, so a large kitchen never has to fit in one request or one run.
-import { SourceUnavailableError, type KitchenEntry, type MoveInKitchen, type MoveInSource } from "../../../application/source";
+import { SourceBusyError, SourceUnavailableError, type KitchenEntry, type MoveInKitchen, type MoveInSource } from "../../../application/source";
 import { MoveInError } from "../../../model/move-in-error";
 import { UNTITLED_RECIPE, type RecipeDraft } from "../../../model/recipe-draft";
 import { normalizeGuid } from "../../../model/source-key";
@@ -67,8 +67,20 @@ class AnswerError extends Error {
   }
 }
 
-/** The server, or a proxy in front of it, asked the move-in to slow down: an outage however well the server answers. */
-class RateLimitedError extends SourceUnavailableError {}
+// How long the move-in waits when the server asks it to slow down: what its Retry-After says, kept between these, or
+// BUSY_DEFAULT_MS when it doesn't say.
+export const BUSY_MIN_MS = 1_000;
+export const BUSY_MAX_MS = 5 * 60_000;
+export const BUSY_DEFAULT_MS = 30_000;
+
+/** A Retry-After header, in seconds or as a date, as milliseconds from `now`, kept between BUSY_MIN_MS and BUSY_MAX_MS. */
+export function retryAfterMs(header: string | null, now: number): number {
+  const value = header?.trim() ?? "";
+  let ms = BUSY_DEFAULT_MS;
+  if (/^\d+$/.test(value)) ms = Number(value) * 1000;
+  else if (value && !Number.isNaN(Date.parse(value))) ms = Date.parse(value) - now;
+  return Math.min(BUSY_MAX_MS, Math.max(BUSY_MIN_MS, ms));
+}
 
 /** The body, up to `maxBytes`; a body cut off partway is an outage, like a server that can't be reached. */
 async function readBody(response: Response, path: string, maxBytes: number): Promise<Uint8Array> {
@@ -119,7 +131,11 @@ function client({ address, token, fetch }: MealieApiConnection) {
       clearTimeout(headers);
     }
     if (response.status === 401 || response.status === 403) throw new MoveInError("server-token", `${path} answered ${response.status}`);
-    if (response.status === 429) throw new RateLimitedError(`the recipe server asked the move-in to slow down at ${path}`);
+    // The server, or a proxy in front of it, asked the move-in to slow down: a 429, or a 503 that says when to come back.
+    if (response.status === 429 || (response.status === 503 && response.headers.has("retry-after"))) {
+      const wait = retryAfterMs(response.headers.get("retry-after"), Date.now());
+      throw new SourceBusyError(`the recipe server asked the move-in to wait ${Math.round(wait / 1000)} s at ${path}`, wait);
+    }
     if (response.status >= 500) throw new SourceUnavailableError(`the recipe server answered ${response.status} for ${path}`);
     if (response.status !== 200) throw new AnswerError(response.status, `the recipe server answered ${response.status} for ${path}`);
     const body = setTimeout(() => timer.abort(new Error("the answer took too long to arrive")), BODY_MS);
@@ -141,7 +157,7 @@ function client({ address, token, fetch }: MealieApiConnection) {
      * page answers even while its database is down.
      */
     async itemOutage(error: unknown): Promise<never> {
-      if (!(error instanceof SourceUnavailableError) || error instanceof RateLimitedError) throw error;
+      if (!(error instanceof SourceUnavailableError) || error instanceof SourceBusyError) throw error;
       const answers = await request("/api/users/self", JSON_MAX_BYTES).then(
         () => true,
         (probe: unknown) => {

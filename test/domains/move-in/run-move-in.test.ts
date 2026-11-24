@@ -3,10 +3,12 @@ import { bytesSource } from "~/domains/move-in/adapters/archive/zip";
 import {
   LostClaimError,
   MAX_ATTEMPTS,
+  MOVE_IN_BUSY_MAX_MS,
   RECIPE_TRIES,
   runForAWhile,
   runMoveInSegment,
   runNextChunk,
+  WAITING_ON_SOURCE,
   type MoveInCounts,
   type MoveInEvent,
   type MoveInJob,
@@ -18,8 +20,8 @@ import {
 import { openMealieBackup } from "~/domains/move-in/adapters/sources/mealie-backup/backup";
 import { mealieBackupSource } from "~/domains/move-in/adapters/sources/mealie-backup/source";
 import { mealieApiSource } from "~/domains/move-in/adapters/sources/mealie-api/source";
-import { SourceUnavailableError, type MoveInKitchen } from "~/domains/move-in/application/source";
-import { MoveInError } from "~/domains/move-in/model/move-in-error";
+import { SourceBusyError, SourceUnavailableError, type MoveInKitchen } from "~/domains/move-in/application/source";
+import { MOVE_IN_ERROR_MESSAGES, MoveInError } from "~/domains/move-in/model/move-in-error";
 import type { RecipeDraft } from "~/domains/move-in/model/recipe-draft";
 import { makeZip } from "./support/make-zip";
 import { guid, mealieDatabase } from "./support/mealie-database";
@@ -757,6 +759,74 @@ describe("a source other than a backup", () => {
     down = false;
     expect(await runClaimed()).toMatchObject({ status: "done-with-issues" });
     expect(h.counts.get("recipes")).toMatchObject({ failed: 0, created: 3 });
+  });
+
+  it("says it is waiting while the source asks it to slow down, counts no attempt, and stops waiting once it answers", async () => {
+    const h = harness();
+    let busy = true;
+    changedSource(h, (kitchen) => ({ draft: async (index) => (busy && index === 1 ? Promise.reject(new SourceBusyError("slow down", 5_000)) : kitchen.draft(index)) }));
+    const token = (await h.ports.store.claim("job-1", new Date())) as string;
+    await runNextChunk("job-1", h.ports, { chunkSize: 1, token });
+    await runNextChunk("job-1", h.ports, { chunkSize: 1, token });
+    await expect(runNextChunk("job-1", h.ports, { chunkSize: 1, token })).rejects.toBeInstanceOf(SourceBusyError);
+    expect(h.job()).toMatchObject({ status: "running", cursor: "1", lastError: WAITING_ON_SOURCE, attempt: 0 });
+    busy = false;
+    await runNextChunk("job-1", h.ports, { chunkSize: 1, token });
+    expect(h.job()).toMatchObject({ status: "running", cursor: "2", lastError: null });
+  });
+
+  it("passes the wait on for a move-in deleted while the source kept it waiting", async () => {
+    const h = harness();
+    changedSource(h, (kitchen) => ({
+      draft: async (index) => {
+        if (index < 1) return kitchen.draft(index);
+        h.jobs.delete("job-1");
+        throw new SourceBusyError("slow down", 5_000);
+      },
+    }));
+    await runNextChunk("job-1", h.ports, { chunkSize: 1 });
+    await runNextChunk("job-1", h.ports, { chunkSize: 1 });
+    await expect(runNextChunk("job-1", h.ports, { chunkSize: 1 })).rejects.toBeInstanceOf(SourceBusyError);
+    expect(h.jobs.has("job-1")).toBe(false);
+  });
+
+  it("fails with the server-busy message once the source has kept it waiting the most it may, counting from the last move forward", async () => {
+    const h = harness();
+    let clock = Date.parse("2026-11-23T12:00:00.000Z");
+    h.ports.now = () => new Date(clock);
+    // The store keeps when the job was last written, as D1 does.
+    const updateJob = h.ports.store.updateJob;
+    h.ports.store.updateJob = async (id, patch, token, report) => {
+      const changed = await updateJob(id, patch, token, report);
+      h.jobs.set(id, { ...h.job(), updatedAt: new Date(clock).toISOString() });
+      return changed;
+    };
+    let busyFrom = 1;
+    changedSource(h, (kitchen) => ({ draft: async (index) => (index >= busyFrom ? Promise.reject(new SourceBusyError("slow down", 5_000)) : kitchen.draft(index)) }));
+    const token = (await h.ports.store.claim("job-1", new Date())) as string;
+    const run = () => runNextChunk("job-1", h.ports, { chunkSize: 1, token }).catch((error: unknown) => {
+      if (!(error instanceof SourceBusyError)) throw error;
+    });
+    await run();
+    await run();
+    await run();
+    expect(h.job()).toMatchObject({ cursor: "1", lastError: WAITING_ON_SOURCE });
+    // Waiting most of the time, then moving forward, starts the wait again.
+    clock += MOVE_IN_BUSY_MAX_MS - 1;
+    await run();
+    expect(h.job().status).toBe("running");
+    busyFrom = 2;
+    await run();
+    await run();
+    expect(h.job()).toMatchObject({ status: "running", cursor: "2", lastError: WAITING_ON_SOURCE });
+    clock += MOVE_IN_BUSY_MAX_MS - 1;
+    await run();
+    expect(h.job().status).toBe("running");
+    clock += 1;
+    await run();
+    expect(h.job()).toMatchObject({ status: "failed", lastError: "server-busy" });
+    expect(h.events.at(-1)?.message).toBe(MOVE_IN_ERROR_MESSAGES["server-busy"]);
+    expect(h.discarded).toEqual(["uploads/job-1.zip"]);
   });
 
   it("passes an outage on while reading a photo, rather than moving the recipe in without it", async () => {

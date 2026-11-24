@@ -4,9 +4,11 @@
 // for, and a segment that runs twice repeats nothing: the runner resumes from its own cursor.
 // A watch runs beside the segments every few minutes, queues the move-in again if its segments
 // stopped coming, and ends when the move-in does. A delivery that finds another run holding the
-// move-in leaves it to that run.
+// move-in leaves it to that run. When the source server asks the move-in to slow down, the next segment waits as long
+// as it asked.
 import { defineJob, type JobHandler, type Jobs } from "~/domains/platform";
-import { FINISHED, runMoveInSegment, type MoveInJob, type MoveInStatus } from "../../application/run-move-in";
+import { FINISHED, MOVE_IN_BUSY_MAX_MS, runMoveInSegment, WAITING_ON_SOURCE, type MoveInJob, type MoveInStatus } from "../../application/run-move-in";
+import { SourceBusyError } from "../../application/source";
 import { readMoveInPosition, readMoveInRecipesFound } from "../storage/job-store.server";
 import { moveInPorts, type MoveInEnv } from "./move-in-ports.server";
 import { meterD1, moveInSegmentLine, timeMoveInPorts } from "./move-in-timing.server";
@@ -68,11 +70,17 @@ async function watchMoveIn(jobs: Jobs, jobId: string, look: number): Promise<voi
  * (a segment out of attempts, or a Worker that died holding it). `updatedAt` is the job's last write, as D1 keeps it
  * (ISO). The key names that quiet stretch and the minute, rather than the segment, whose own key may be spent already:
  * one nudge a minute goes out however many ask, and a nudge that found a run still holding the move-in, which then died,
- * doesn't stop the next.
+ * doesn't stop the next. A move-in waiting on a busy server is quiet by design, and its own delayed segment asks again,
+ * so it is nudged only once it has waited MOVE_IN_BUSY_MAX_MS, when the next run either carries on or ends it.
  */
-export async function nudgeMoveIn(jobs: Jobs, job: Pick<MoveInJob, "id"> & { status: MoveInStatus; updatedAt: string }, now: Date): Promise<boolean> {
+export async function nudgeMoveIn(
+  jobs: Jobs,
+  job: Pick<MoveInJob, "id"> & { status: MoveInStatus; updatedAt: string; lastError?: string | null },
+  now: Date,
+): Promise<boolean> {
   if (FINISHED.includes(job.status)) return false;
-  if (now.getTime() - Date.parse(job.updatedAt) < MOVE_IN_QUIET_MS) return false;
+  const quiet = job.lastError === WAITING_ON_SOURCE ? MOVE_IN_BUSY_MAX_MS : MOVE_IN_QUIET_MS;
+  if (now.getTime() - Date.parse(job.updatedAt) < quiet) return false;
   const minute = Math.floor(now.getTime() / MOVE_IN_QUIET_MS);
   return (await jobs.enqueue(MOVE_IN_JOB, { jobId: job.id, queuedAt: now.getTime() }, { key: `move-in:${job.id}:nudge:${job.updatedAt}:${minute}` })).enqueued;
 }
@@ -118,12 +126,17 @@ export function moveInJobHandler(
     };
     let segment: Awaited<ReturnType<typeof runMoveInSegment>>;
     // An error lets the move-in go and is passed on, so the port's backoff paces the next try, which resumes from the
-    // runner's cursor.
+    // runner's cursor. A server that asked for a wait gets it instead: the next segment is queued to start after it.
     try {
       segment = await runMoveInSegment(before.id, timed, { budgetMs, chunkSize, releaseOnError: true });
     } catch (error) {
       await logSegment(null);
-      throw error;
+      if (!(error instanceof SourceBusyError)) throw error;
+      await jobs.enqueue(MOVE_IN_JOB, { jobId: before.id }, {
+        key: `move-in:${before.id}:wait:${now().getTime()}`,
+        delaySeconds: Math.ceil(error.retryAfterMs / 1000),
+      });
+      return;
     }
     await logSegment(segment.claimed);
     const { job: after, claimed } = segment;

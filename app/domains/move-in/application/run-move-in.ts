@@ -13,7 +13,7 @@ import { openMealieBackup } from "../adapters/sources/mealie-backup/backup";
 import { mealieBackupSource } from "../adapters/sources/mealie-backup/source";
 import { MOVE_IN_ERROR_MESSAGES, MoveInError } from "../model/move-in-error";
 import type { RecipeDraft } from "../model/recipe-draft";
-import { SourceUnavailableError, type MoveInKitchen, type MoveInSource, type SourceWords } from "./source";
+import { SourceBusyError, SourceUnavailableError, type MoveInKitchen, type MoveInSource, type SourceWords } from "./source";
 
 export type MoveInStatus = "queued" | "running" | "done" | "done-with-issues" | "failed";
 export type MoveInPhase = "inspect" | "recipes" | "done";
@@ -22,6 +22,13 @@ export const FINISHED: readonly MoveInStatus[] = ["done", "done-with-issues", "f
 export const MAX_ATTEMPTS = 5;
 /** How many runs in a row one recipe may stop, however it stops them, before it is reported and passed over. */
 export const RECIPE_TRIES = 3;
+/**
+ * How long a move-in waits on a source that keeps asking it to slow down, without moving forward, before it fails with
+ * the "server-busy" message, so a move-in never waits on a server silently for ever.
+ */
+export const MOVE_IN_BUSY_MAX_MS = 30 * 60_000;
+/** The job's lastError while it waits on a source that asked it to slow down; the page says it is waiting. */
+export const WAITING_ON_SOURCE = "server-busy";
 
 export interface MoveInJob {
   id: string;
@@ -35,6 +42,8 @@ export interface MoveInJob {
   lastError: string | null;
   /** Runs that have taken the job since it last moved forward. */
   attempt: number;
+  /** The job's last write (ISO). While it waits on a busy source, that is when the wait began. */
+  updatedAt?: string;
 }
 
 export interface MoveInCounts {
@@ -586,6 +595,25 @@ async function discard(job: MoveInJob, ports: MoveInPorts) {
   await ports.discardArchive(job).catch(() => undefined);
 }
 
+/**
+ * The source asked the move-in to slow down. The first time at this place in the kitchen, the job says it is waiting,
+ * and that write marks when the wait began; once the source has kept it waiting MOVE_IN_BUSY_MAX_MS, the job fails.
+ * Says whether the job has failed.
+ */
+async function waitOnSource(run: Run): Promise<boolean> {
+  const { job, ports } = run;
+  const current = await ports.store.loadJob(job.id);
+  if (!current) return false;
+  const moved = current.phase !== job.phase || current.cursor !== job.cursor;
+  if (current.lastError !== WAITING_ON_SOURCE || moved) {
+    await ports.store.updateJob(job.id, { lastError: WAITING_ON_SOURCE }, run.token);
+    return false;
+  }
+  if (ports.now().getTime() - Date.parse(String(current.updatedAt)) < MOVE_IN_BUSY_MAX_MS) return false;
+  await fail(run, "server-busy");
+  return true;
+}
+
 async function fail(run: Run, code: keyof typeof MOVE_IN_ERROR_MESSAGES) {
   const { job, ports } = run;
   await ports.store.updateJob(job.id, { status: "failed", lastError: code }, run.token, { events: [event("job-failed", MOVE_IN_ERROR_MESSAGES[code])] });
@@ -616,10 +644,15 @@ export async function runNextChunk(
     if (job.phase === "inspect") await inspect(run, opened);
     else await recipes(run, opened, chunkSize, cache);
   } catch (error) {
+    if (error instanceof SourceBusyError && (await waitOnSource(run))) return store.loadJob(jobId);
     if (error instanceof SourceUnavailableError && token) await store.forgiveAttempt(job.id, token);
     if (!(error instanceof MoveInError)) throw error;
     await fail(run, error.code);
   }
+  const after = await store.loadJob(jobId);
+  // The source answered again, so the move-in is no longer waiting on it.
+  if (after?.lastError !== WAITING_ON_SOURCE || FINISHED.includes(after.status)) return after;
+  await store.updateJob(job.id, { lastError: null }, token);
   return store.loadJob(jobId);
 }
 

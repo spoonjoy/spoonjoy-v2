@@ -30,7 +30,7 @@ describe("the move-in job store", () => {
   it("creates a queued job that starts by inspecting its archive", async () => {
     const id = await create();
     expect(await moveInJobStore(database.binding, () => clock).loadJob(id)).toEqual({
-      id, ownerId: "chef-1", kind: "mealie-backup", sourceId: null, status: "queued", phase: "inspect", cursor: null, archiveKey: "move-in/chef-1/a.zip", lastError: null, attempt: 0,
+      id, ownerId: "chef-1", kind: "mealie-backup", sourceId: null, status: "queued", phase: "inspect", cursor: null, archiveKey: "move-in/chef-1/a.zip", lastError: null, attempt: 0, updatedAt: "2026-11-23T12:00:00.000Z",
     });
     expect(await moveInJobStore(database.binding, () => clock).loadJob("nope")).toBeNull();
   });
