@@ -9,7 +9,7 @@ const migration = (path: string) => readFileSync(resolve(__dirname, "../..", pat
 describe("migration 0047 (platform job keys)", () => {
   it("mirrors the D1 migration in Prisma's folder", () => {
     const withoutComments = migration("migrations/0047_platform_job_keys.sql").split("\n").filter((line) => !line.startsWith("--")).join("\n");
-    expect(migration("prisma/migrations/20261123180000_platform_job_keys/migration.sql")).toBe(withoutComments);
+    expect(migration("prisma/migrations/20261123210000_platform_job_keys/migration.sql")).toBe(withoutComments);
   });
 
   it("holds one row per job key, pending until it is done", () => {
