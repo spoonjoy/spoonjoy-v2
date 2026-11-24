@@ -113,7 +113,7 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
       if (response && !retriable(response.status)) {
         const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
         if (response.status === 404 && body.code === "upload-gone") throw new Gone(finishing);
-        if (!response.ok && response.status !== 409) throw new Refused(typeof body.error === "string" ? body.error : "Move-in couldn't take that backup. Reload the page and try again.");
+        if (!response.ok && response.status !== 409) throw new Refused(typeof body.error === "string" ? body.error : `Spoonjoy's server answered ${response.status} without saying why, so the backup wasn't sent. Reload the page and press Move in again.`);
         return { status: response.status, body };
       }
       if (attempt >= attempts) throw new Dropped();
