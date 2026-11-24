@@ -14,6 +14,7 @@ export {
   formatAmountIn,
   parseUnitSystem,
   resolveUnit,
+  UNIT_NAMES,
   UNIT_SYSTEM_COOKIE,
   UNIT_SYSTEMS,
   unitSystemCookie,
