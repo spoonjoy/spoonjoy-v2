@@ -352,6 +352,35 @@ test.describe("Cooking Lemon Herb Rice", () => {
       });
       await expectAccessible();
     });
+
+    // A phone on kitchen wifi: the save reaches the server, then the connection drops before the
+    // answer comes back. The page sends the same save again; the server answers it with the saved
+    // progress instead of a conflict, and the check is still there after a reload.
+    test("a check survives a connection that drops after the save landed @mutates", async ({ page, verifyAfterReload, expectConsoleError }) => {
+      const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
+      const cookSession = new RegExp(`/api/cook-sessions/${LEMON_RICE_ID}$`);
+      // The browser may log the dropped request; the console gate allows only that one.
+      expectConsoleError(/Failed to load resource/, { url: cookSession, optional: true });
+
+      await openLemonRiceDirectly(page);
+      let dropped = false;
+      await page.route(cookSession, async (route) => {
+        if (route.request().method() !== "PATCH" || dropped) return route.fallback();
+        dropped = true;
+        await route.fetch();
+        await route.abort("connectionreset");
+      });
+      const saved = cookProgressSaved(page, LEMON_RICE_ID, (progress) => progress.checkedIngredientIds.length === 1);
+      await jasmineRice.click();
+      await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
+      await saved;
+      expect(dropped).toBe(true);
+      await page.unroute(cookSession);
+
+      await verifyAfterReload(async () => {
+        await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
+      });
+    });
   });
 
   // Cooking now: each tab keeps its own recipe, mode and step, and the Kitchen lists every recipe
