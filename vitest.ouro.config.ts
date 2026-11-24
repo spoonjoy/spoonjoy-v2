@@ -4,6 +4,7 @@ import { defineConfig } from "vitest/config";
 import { ouroTestProjects } from "./app/lib/ouro/testing/vitest.ts";
 import { nativeShoppingInput, shoppingInputBounds, task21PrintMedia } from "./test/ouro/native-shopping-input";
 import { parkPointer } from "./test/ouro/park-pointer";
+import { ouroTimingTestNamePattern } from "./test/ouro/timing-quarantine";
 
 // Native touchCancel is a CDP input capability, not a product/library API gap.
 // Register app-owned native input/print commands; preserve published coverage inputs.
@@ -63,6 +64,9 @@ export default defineConfig({
   test: {
     // Keep consumer integration measurements (test annotations) visible in CI's retained log.
     reporters: ["verbose"],
+    // The tests test/ouro/timing-quarantine.ts lists run only with OURO_TIMING=only, in Storybook's
+    // non-blocking step, never in the required run.
+    testNamePattern: ouroTimingTestNamePattern(process.env.OURO_TIMING),
     projects,
     coverage: {
       provider: "istanbul",
