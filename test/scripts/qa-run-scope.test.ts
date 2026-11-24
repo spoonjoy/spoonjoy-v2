@@ -1721,8 +1721,9 @@ describe("Journeys workflow", () => {
       const bin = mkdtempSync(join(tmpdir(), "journeys-part-"));
       const log = join(bin, "calls.log");
       writeFileSync(join(bin, "node"), `#!/bin/bash\necho "node $*" >> "${log}"\ncase "$*" in *"--project personas"*) exit ${codes.personas ?? 0};; *--shard*) sleep 0.2; exit ${codes.shard ?? 0};; esac\n`, { mode: 0o755 });
-      writeFileSync(join(bin, "pnpm"), `#!/bin/bash\necho "pnpm $*" >> "${log}"\nexit ${codes.moveIn ?? 0}\n`, { mode: 0o755 });
-      const result = spawnSync("bash", ["-e", "-c", step("Run test suite").run as string], {
+      // The Move in journeys outlive the shard, so the step must wait for them.
+      writeFileSync(join(bin, "pnpm"), `#!/bin/bash\nsleep 0.5\necho "pnpm $*" >> "${log}"\necho "moved in"\nexit ${codes.moveIn ?? 0}\n`, { mode: 0o755 });
+      const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", step("Run test suite").run as string], {
         env: { PATH: `${bin}:${process.env.PATH}`, MODE: "full", SUITE: "", PART: part, PARTS: "2", GITHUB_OUTPUT: join(bin, "output") },
         encoding: "utf8",
       });
@@ -1739,7 +1740,13 @@ describe("Journeys workflow", () => {
         'node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts --no-deps --project iphone-webkit --project desktop-chrome --grep-invert @ouro-census|@move-in --shard=2/2',
         "pnpm run test:journeys:move-in",
       ]);
-      expect(stdout).toBe("");
+      expect(stdout).toBe("[move-in] moved in\n");
+    });
+
+    it("gives the Move in journeys one worker, no setup and their own report and results folders", () => {
+      const script: string = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8")).scripts["test:journeys:move-in"];
+      expect(script).toMatch(/^SPOONJOY_JOURNEYS_REPORT_DIR=move-in-report SPOONJOY_JOURNEYS_RESULTS_DIR=move-in-test-results /);
+      for (const flag of ["--no-deps", "--workers 1", "--grep @move-in", "--project iphone-webkit", "--project desktop-chrome"]) expect(script).toContain(flag);
     });
 
     it("fails when its shard or the Move in journeys fail, after both finish, and stops when the sign-ins fail", () => {
