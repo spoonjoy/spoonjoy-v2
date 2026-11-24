@@ -532,14 +532,17 @@ jobs:
           fi
           jq '{ complete, tailAliveAtStop, tailReconnects, tailCoverage, tailReads, tailSamplingNotices, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), serverErrors: (.serverErrorInvocations | length), hungInvocations, stalledInvocations, d1TransientErrors, moveInSegments, slowestPaths: (.byPath | .[0:5]) }' \
             test-results/worker-tail-summary.json || true
-          # Where the move-ins' segments spent their time, by stage, beside the timed move-in's line
-          # in the run's summary, so a slow move-in shows which stage to speed up.
-          jq -r 'select((.moveInSegments.segments // 0) > 0) | .moveInSegments as $m
+          # Where the move-ins' segments spent their time, by stage and by kitchen size, beside the
+          # timed move-in's line in the run's summary, so a slow move-in shows which stage to speed up.
+          jq -r 'select((.moveInSegments.kitchens // []) | length > 0) | .moveInSegments as $m
             | def s: (. / 100 | round) / 10 | tostring + " s";
-              { job: "saving progress", backupReads: "reading the backup", recipeWrites: "writing recipes", photoWrites: "storing photos", photoChecks: "checking for photos", organizers: "tags, categories and tools" } as $names
-            | "### Move in, by stage\n\nMove-ins ran \($m.segments) segment(s), \($m.wallMs | s) in all: "
-              + ([$m.stages | to_entries[] | select(.value.calls > 0) | "\($names[.key]) \(.value.ms | s) over \(.value.calls) call(s)"]
-                + ["everything else, mostly parsing, \($m.otherMs | s)"] | join("; ")) + "."' \
+              { job: "saving progress", backup: "the backup in storage", recipeWrites: "writing recipes", photoWrites: "storing photos", photoChecks: "checking for photos", organizers: "tags, categories and tools" } as $names
+            | "### Move in, by stage\(if .complete == true then "" else " (partial: the Worker log missed some of the run)" end)\n\n"
+              + ([$m.kitchens[]
+                  | "\(if .recipesFound == null then "A kitchen not yet counted" else "A \(.recipesFound)-recipe kitchen" end) ran \(.segments) segment(s), \(.wallMs | s) working and \(.waitMs | s) waiting in the queue: "
+                    + ([.stages | to_entries[] | select(.value.calls > 0) | "\($names[.key]) \(.value.ms | s) over \(.value.calls) call(s)"]
+                      + ["everything else, such as parsing, \(.otherMs | s)"] | join("; ")) + "."] | join("\n\n"))
+              + (if $m.unclaimed > 0 then "\n\n\($m.unclaimed) segment(s) found another run doing the work." else "" end)' \
             test-results/worker-tail-summary.json >> "${GITHUB_STEP_SUMMARY:-/dev/null}" || true
           # A request the Workers runtime canceled as hung is a 500 (Error 1101) the browser sees as
           # a server failure, so name it in the log. Non-fatal for now.

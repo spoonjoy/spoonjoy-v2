@@ -84,7 +84,7 @@ async function setUp({ jobs: wrap = (jobs: Jobs) => jobs }: { jobs?: (jobs: Jobs
   const registry = jobRegistry();
   const jobs = memoryJobs(registry);
   // A budget of 0 stops each segment after one chunk of one recipe, so the move-in takes several.
-  registry.on(MOVE_IN_JOB, moveInJobHandler(env, wrap(jobs), { budgetMs: 0, chunkSize: 1, now: () => now }));
+  registry.on(MOVE_IN_JOB, moveInJobHandler(env, wrap(jobs), { budgetMs: 0, chunkSize: 1, now: () => now, log: () => undefined }));
   const store = moveInJobStore(database.binding, () => now);
   return { bucket, env, jobId, jobs, store };
 }
@@ -135,29 +135,67 @@ describe("the move-in job", () => {
     expect(job(jobId)).toMatchObject({ status: "done-with-issues" });
   });
 
-  it("logs where each segment's time went, as counts and milliseconds only", async () => {
-    const { env, jobId } = await setUp();
-    const registry = jobRegistry();
-    const jobs = memoryJobs(registry);
-    const lines: string[] = [];
-    // Each look at the clock is a millisecond later, so every timed call takes 1 ms.
-    let tick = 0;
-    registry.on(MOVE_IN_JOB, moveInJobHandler(env, jobs, { budgetMs: 0, chunkSize: 3, now: () => now, clock: () => tick++, log: (line) => lines.push(line) }));
-    await queueMoveIn(jobs, { id: jobId, phase: "inspect", cursor: null });
-    await jobs.drain();
+  describe("each segment's timing line", () => {
+    /** A handler on a clock that moves 1 ms each time it is read, so every timed call takes 1 ms; and the lines it logs. */
+    async function timed(jobId: string, env: never) {
+      const registry = jobRegistry();
+      const jobs = memoryJobs(registry);
+      const lines: string[] = [];
+      let tick = 1000;
+      registry.on(MOVE_IN_JOB, moveInJobHandler(env, jobs, { budgetMs: 0, chunkSize: 3, now: () => now, clock: () => tick++, log: (line) => lines.push(line) }));
+      return { jobs, lines, parsed: () => lines.map((line) => JSON.parse(line)) };
+    }
 
-    expect(lines).toHaveLength(2);
-    const [inspect, recipes] = lines.map((line) => JSON.parse(line));
-    expect(inspect).toMatchObject({ event: "move_in_segment", stages: { recipeWrites: { calls: 0, ms: 0 } } });
-    expect(recipes).toMatchObject({
-      event: "move_in_segment",
-      stages: { recipeWrites: { calls: 3, ms: 3 }, photoWrites: { calls: 1, ms: 1 }, organizers: { calls: 0, ms: 0 } },
+    it("says where the time went, how long the segment waited in the queue and how big the kitchen is, as numbers only", async () => {
+      const { env, jobId } = await setUp();
+      const { jobs, lines, parsed } = await timed(jobId, env);
+      await queueMoveIn(jobs, { id: jobId, phase: "inspect", cursor: null }, 400);
+      await jobs.drain();
+
+      const [inspect, recipes] = parsed();
+      expect(parsed()).toHaveLength(2);
+      expect(inspect).toMatchObject({ event: "move_in_segment", waitMs: 600, claimed: true, recipesFound: 3, stages: { recipeWrites: { calls: 0, ms: 0 } } });
+      expect(recipes).toMatchObject({
+        event: "move_in_segment",
+        claimed: true,
+        recipesFound: 3,
+        stages: { recipeWrites: { calls: 3, ms: 3 }, photoWrites: { calls: 1, ms: 1 }, organizers: { calls: 0, ms: 0 } },
+      });
+      // The next segment was stamped when the last one queued it.
+      expect(recipes.waitMs).toBeGreaterThan(0);
+      expect(recipes.stages.job.calls).toBeGreaterThan(3);
+      expect(recipes.stages.backup.calls).toBeGreaterThan(0);
+      expect(recipes.wallMs).toBeGreaterThan(recipes.stages.job.ms);
+      // Nothing that names the job, the cook or a recipe.
+      for (const line of lines) expect(line).not.toMatch(new RegExp(`${jobId}|chef|Pancakes|cook@`, "i"));
     });
-    expect(recipes.stages.job.calls).toBeGreaterThan(3);
-    expect(recipes.stages.backupReads.calls).toBeGreaterThan(0);
-    expect(recipes.wallMs).toBeGreaterThan(recipes.stages.job.ms);
-    // Nothing that names the job, the cook or a recipe.
-    for (const line of lines) expect(line).not.toMatch(new RegExp(`${jobId}|chef|Pancakes|cook@`, "i"));
+
+    it("marks a segment that found another run doing the work, and one that stopped on an error, and a message with no time", async () => {
+      const { env, jobId, store } = await setUp();
+      const { lines, parsed } = await timed(jobId, env);
+      const handler = moveInJobHandler(env, memoryJobs(jobRegistry()), { clock: () => 5, log: (line) => lines.push(line) });
+
+      segment.instead = async (id) => ({ job: await store.loadJob(id), claimed: false });
+      await handler({ jobId }, {} as never);
+      segment.instead = async () => {
+        throw new Error("the database is down");
+      };
+      await expect(handler({ jobId, queuedAt: 2 }, {} as never)).rejects.toThrow("the database is down");
+      // A kitchen that can't be counted logs no size rather than failing the segment's line.
+      const counting = /"ImportEntityCount" WHERE "jobId" = \? AND "entity" = 'recipes'/;
+      const binding = database.binding as unknown as { prepare(sql: string): unknown };
+      const failing = { ...(env as object), DB: new Proxy(binding, {
+        get: (target, key) => key === "prepare"
+          ? (sql: string) => { if (counting.test(sql)) throw new Error("D1 is down"); return binding.prepare(sql); }
+          : Reflect.get(target, key, target),
+      }) };
+      segment.instead = async (id) => ({ job: await store.loadJob(id), claimed: true });
+      await moveInJobHandler(failing as never, memoryJobs(jobRegistry()), { log: (line) => lines.push(line) })({ jobId }, {} as never).catch(() => undefined);
+
+      expect(parsed()[0]).toMatchObject({ claimed: false, recipesFound: null, waitMs: null });
+      expect(parsed()[1]).toMatchObject({ claimed: null, recipesFound: null, waitMs: 3 });
+      expect(parsed()[2]).toMatchObject({ claimed: true, recipesFound: null });
+    });
   });
 
   it("leaves alone a job that is finished, gone or not a move-in", async () => {
@@ -255,7 +293,7 @@ describe("startMoveInJob", () => {
     await startMoveInJob(jobs, "movein_1");
     expect(queued).toEqual([
       { type: "move-in.watch", payload: { jobId: "movein_1", look: 1 }, options: { key: "move-in:movein_1:watch:1", delaySeconds: 300 } },
-      { type: "move-in.run", payload: { jobId: "movein_1" }, options: { key: "move-in:movein_1:inspect:-" } },
+      { type: "move-in.run", payload: { jobId: "movein_1", queuedAt: expect.any(Number) }, options: { key: "move-in:movein_1:inspect:-" } },
     ]);
     expect(MOVE_IN_WATCH_SECONDS).toBe(300);
     expect(MOVE_IN_WATCH.type).toBe("move-in.watch");
@@ -301,7 +339,7 @@ describe("the move-in watch", () => {
 
     expect(queued).toEqual([
       { type: "move-in.watch", payload: { jobId, look: 4 }, options: { key: `move-in:${jobId}:watch:4`, delaySeconds: 300 } },
-      { type: "move-in.run", payload: { jobId }, options: { key: `move-in:${jobId}:nudge:${quiet}:${Math.floor(now.getTime() / 60_000)}` } },
+      { type: "move-in.run", payload: { jobId, queuedAt: now.getTime() }, options: { key: `move-in:${jobId}:nudge:${quiet}:${Math.floor(now.getTime() / 60_000)}` } },
     ]);
   });
 

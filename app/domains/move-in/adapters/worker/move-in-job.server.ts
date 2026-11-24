@@ -7,7 +7,7 @@
 // move-in leaves it to that run.
 import { defineJob, type JobHandler, type Jobs } from "~/domains/platform";
 import { FINISHED, runMoveInSegment, type MoveInJob, type MoveInStatus } from "../../application/run-move-in";
-import { readMoveInPosition } from "../storage/job-store.server";
+import { readMoveInPosition, readMoveInRecipesFound } from "../storage/job-store.server";
 import { moveInPorts, type MoveInEnv } from "./move-in-ports.server";
 import { moveInSegmentLine, timeMoveInPorts } from "./move-in-timing.server";
 
@@ -20,6 +20,8 @@ export const MOVE_IN_WATCH_SECONDS = 5 * 60;
 
 export interface MoveInJobPayload {
   jobId: string;
+  /** When the message was queued (epoch ms), so a segment can log how long it waited. */
+  queuedAt?: number;
 }
 
 export interface MoveInWatchPayload {
@@ -41,8 +43,8 @@ export function moveInJobKey(job: Position): string {
 }
 
 /** Queues the segment that starts where the job stands: false when that segment is already queued, running or done. */
-export async function queueMoveIn(jobs: Jobs, job: Position): Promise<boolean> {
-  return (await jobs.enqueue(MOVE_IN_JOB, { jobId: job.id }, { key: moveInJobKey(job) })).enqueued;
+export async function queueMoveIn(jobs: Jobs, job: Position, queuedAt = Date.now()): Promise<boolean> {
+  return (await jobs.enqueue(MOVE_IN_JOB, { jobId: job.id, queuedAt }, { key: moveInJobKey(job) })).enqueued;
 }
 
 /**
@@ -72,7 +74,7 @@ export async function nudgeMoveIn(jobs: Jobs, job: Pick<MoveInJob, "id"> & { sta
   if (FINISHED.includes(job.status)) return false;
   if (now.getTime() - Date.parse(job.updatedAt) < MOVE_IN_QUIET_MS) return false;
   const minute = Math.floor(now.getTime() / MOVE_IN_QUIET_MS);
-  return (await jobs.enqueue(MOVE_IN_JOB, { jobId: job.id }, { key: `move-in:${job.id}:nudge:${job.updatedAt}:${minute}` })).enqueued;
+  return (await jobs.enqueue(MOVE_IN_JOB, { jobId: job.id, queuedAt: now.getTime() }, { key: `move-in:${job.id}:nudge:${job.updatedAt}:${minute}` })).enqueued;
 }
 
 /** A segment held the move-in and moved nothing, so the port runs it again. */
@@ -103,20 +105,33 @@ export function moveInJobHandler(
     const ports = moveInPorts(env, now);
     const before = await ports.store.loadJob(payload.jobId);
     if (!before || FINISHED.includes(before.status)) return;
-    // An error lets the move-in go and is passed on, so the port's backoff paces the next try, which resumes from the
-    // runner's cursor.
     // Each segment logs where its time went, whether it ran to its budget, finished the move-in or stopped on an error.
     const { ports: timed, times } = timeMoveInPorts(ports, clock);
     const started = clock();
-    const { job: after, claimed } = await runMoveInSegment(before.id, timed, { budgetMs, chunkSize, releaseOnError: true }).finally(() =>
-      log(moveInSegmentLine(clock() - started, times)),
-    );
+    const waitMs = typeof payload.queuedAt === "number" ? Math.max(0, started - payload.queuedAt) : null;
+    const logSegment = async (claimed: boolean | null) => {
+      const wallMs = clock() - started;
+      // Counting the kitchen is one more read, made only for a segment that did the work; a failed count logs null.
+      const recipesFound = claimed === false ? null : await readMoveInRecipesFound(env.DB, before.id).catch(() => null);
+      log(moveInSegmentLine({ wallMs, waitMs, claimed, recipesFound, stages: times }));
+    };
+    let segment: Awaited<ReturnType<typeof runMoveInSegment>>;
+    // An error lets the move-in go and is passed on, so the port's backoff paces the next try, which resumes from the
+    // runner's cursor.
+    try {
+      segment = await runMoveInSegment(before.id, timed, { budgetMs, chunkSize, releaseOnError: true });
+    } catch (error) {
+      await logSegment(null);
+      throw error;
+    }
+    await logSegment(segment.claimed);
+    const { job: after, claimed } = segment;
     if (!after || FINISHED.includes(after.status)) return;
     // Another run holds it, and queues what comes after its own segment. If that run's Worker died instead, the move-in
     // goes quiet, and the watch or the page queues it again.
     if (!claimed) return;
     if (moveInJobKey(after) === moveInJobKey(before)) throw new MoveInStalledError(before.id);
-    await queueMoveIn(jobs, after);
+    await queueMoveIn(jobs, after, clock());
   };
 }
 

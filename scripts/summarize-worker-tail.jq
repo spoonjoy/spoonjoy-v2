@@ -156,16 +156,27 @@ def isolate_colos:
   | map({ key: .isolate, value: .runsIn }) | from_entries;
 
 # The stages a move-in segment's time is split into, as move-in-timing.server.ts names them.
-def move_in_stages: ["job", "backupReads", "recipeWrites", "photoWrites", "photoChecks", "organizers"];
-def move_in_segments:
-  [.[] | log_objects("move_in_segment")[] | select((.wallMs | count_or_null) != null)] as $lines
-  | { segments: ($lines | length),
-      wallMs: ([$lines[] | .wallMs | count_or_null] | add // 0),
+def move_in_stages: ["job", "backup", "recipeWrites", "photoWrites", "photoChecks", "organizers"];
+# A group of move_in_segment lines added up: how many, their time working and waiting, and each stage's.
+def move_in_totals:
+  . as $lines
+  | { segments: length,
+      wallMs: ([$lines[] | .wallMs | count_or_null // 0] | add // 0),
+      waitMs: ([$lines[] | .waitMs | count_or_null // 0] | add // 0),
       stages: (reduce move_in_stages[] as $stage ({};
         .[$stage] = ([$lines[] | (.stages | objects | .[$stage] | objects) // {}] as $times
           | { calls: ([$times[] | .calls | count_or_null // 0] | add // 0),
               ms: ([$times[] | .ms | count_or_null // 0] | add // 0) }))) }
   | . + { otherMs: ([.wallMs - ([.stages[].ms] | add // 0), 0] | max) };
+# The segments that did a move-in's work, grouped by the size of its kitchen (recipesFound), biggest
+# first, and how many found another run holding the move-in and did nothing.
+def move_in_segments:
+  [.[] | log_objects("move_in_segment")[] | select((.wallMs | count_or_null) != null)] as $lines
+  | { unclaimed: ([$lines[] | select(.claimed == false)] | length),
+      kitchens: ([$lines[] | select(.claimed != false) | . + { recipesFound: (.recipesFound | count_or_null) }]
+        | group_by(.recipesFound)
+        | map({ recipesFound: .[0].recipesFound } + move_in_totals)
+        | sort_by(-(.recipesFound // -1))) };
 
 # The URL's path: scheme, authority (including any user:pass@), query and fragment removed.
 def request_path:

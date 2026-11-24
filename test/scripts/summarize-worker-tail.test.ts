@@ -343,31 +343,29 @@ describe("summarize-worker-tail.jq", () => {
     expect(summarize([]).summary.platformRetries).toEqual({ total: 0, byCall: {}, unmarked: 0 });
   });
 
-  it("adds up where the move-ins' segments spent their time, reading only the wall time and each stage's counts", () => {
-    const segment = (wallMs: unknown, stages: unknown) => JSON.stringify({ event: "move_in_segment", wallMs, stages, jobId: CANARIES.query });
+  it("adds up where the move-ins' segments spent their time by kitchen size, reading only numbers under fixed keys", () => {
+    const segment = (fields: Record<string, unknown>) => JSON.stringify({ event: "move_in_segment", jobId: CANARIES.query, ...fields });
+    const zero = { calls: 0, ms: 0 };
     const { summary, raw } = summarize([
-      { outcome: "ok", logs: [{ level: "log", message: [segment(20_000, { job: { calls: 30, ms: 6000 }, recipeWrites: { calls: 10, ms: 9000 }, [CANARIES.body]: { calls: 1, ms: 1 } })] }] },
-      { outcome: "ok", logs: [{ level: "log", message: [{ event: "move_in_segment", wallMs: 4000, stages: { job: { calls: 2, ms: -5 }, photoWrites: { calls: 1, ms: 3000 } } }] }] },
-      // Lines whose wall time isn't a count, and lines of another kind, are left out.
-      { outcome: "ok", logs: [{ level: "log", message: [segment("slow", {}), segment(100, "none"), "not json"] }] },
+      { outcome: "ok", logs: [{ level: "log", message: [segment({ wallMs: 20_000, waitMs: 1000, claimed: true, recipesFound: 500, stages: { job: { calls: 30, ms: 6000 }, recipeWrites: { calls: 10, ms: 9000 }, [CANARIES.body]: { calls: 1, ms: 1 } } })] }] },
+      { outcome: "ok", logs: [{ level: "log", message: [{ event: "move_in_segment", wallMs: 4000, waitMs: 9000, claimed: null, recipesFound: 500, stages: { job: { calls: 2, ms: -5 }, photoWrites: { calls: 1, ms: 3000 } } }] }] },
+      { outcome: "ok", logs: [{ level: "log", message: [segment({ wallMs: 300, waitMs: "soon", claimed: true, recipesFound: 3, stages: { backup: { calls: 2, ms: 100 } } })] }] },
+      // A segment that found another run doing the work is counted apart; one whose wall time isn't a count is left out.
+      { outcome: "ok", logs: [{ level: "log", message: [segment({ wallMs: 50, claimed: false }), segment({ wallMs: "slow" }), segment({ wallMs: 100, recipesFound: CANARIES.body, stages: "none" }), "not json"] }] },
     ]);
 
+    const stages = (more: object) => ({ job: zero, backup: zero, recipeWrites: zero, photoWrites: zero, photoChecks: zero, organizers: zero, ...more });
     expect(summary.moveInSegments).toEqual({
-      segments: 3,
-      wallMs: 24_100,
-      stages: {
-        job: { calls: 32, ms: 6000 },
-        backupReads: { calls: 0, ms: 0 },
-        recipeWrites: { calls: 10, ms: 9000 },
-        photoWrites: { calls: 1, ms: 3000 },
-        photoChecks: { calls: 0, ms: 0 },
-        organizers: { calls: 0, ms: 0 },
-      },
-      otherMs: 6100,
+      unclaimed: 1,
+      kitchens: [
+        { recipesFound: 500, segments: 2, wallMs: 24_000, waitMs: 10_000, stages: stages({ job: { calls: 32, ms: 6000 }, recipeWrites: { calls: 10, ms: 9000 }, photoWrites: { calls: 1, ms: 3000 } }), otherMs: 6000 },
+        { recipesFound: 3, segments: 1, wallMs: 300, waitMs: 0, stages: stages({ backup: { calls: 2, ms: 100 } }), otherMs: 200 },
+        { recipesFound: null, segments: 1, wallMs: 100, waitMs: 0, stages: stages({}), otherMs: 100 },
+      ],
     });
     expect(raw).not.toContain(CANARIES.query);
     expect(raw).not.toContain(CANARIES.body);
-    expect(summarize([]).summary.moveInSegments).toMatchObject({ segments: 0, wallMs: 0, otherMs: 0 });
+    expect(summarize([]).summary.moveInSegments).toEqual({ unclaimed: 0, kitchens: [] });
   });
 
   it("counts the writes an operation retried safely, found applied or gave up on, and leaves out of notRetriedWrites the ones it handled", () => {
@@ -970,17 +968,26 @@ describe("Journeys workflow tail wiring", () => {
       .toContain("Slow requests: 24 or more took over 5 s");
   });
 
-  it("puts the move-ins' time by stage in the run's summary, and nothing when no move-in ran", () => {
+  it("puts the move-ins' time by stage and kitchen size in the run's summary, and nothing when no move-in ran", () => {
     const run = step("Stop QA Worker tail and summarise it").run ?? "";
     const filter = /jq -r '(select\(\(\.moveInSegments[\s\S]*?)' \\\n/.exec(run)?.[1];
     expect(filter).toBeDefined();
     expect(run).toContain('test-results/worker-tail-summary.json >> "${GITHUB_STEP_SUMMARY:-/dev/null}" || true');
     const print = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
-    const stages = { job: { calls: 32, ms: 6000 }, backupReads: { calls: 0, ms: 0 }, recipeWrites: { calls: 10, ms: 9040 }, photoWrites: { calls: 1, ms: 3000 } };
-    expect(print({ moveInSegments: { segments: 2, wallMs: 24_100, stages, otherMs: 6060 } }).trimEnd()).toBe(
-      "### Move in, by stage\n\nMove-ins ran 2 segment(s), 24.1 s in all: saving progress 6 s over 32 call(s); writing recipes 9 s over 10 call(s); storing photos 3 s over 1 call(s); everything else, mostly parsing, 6.1 s.",
+    const big = { recipesFound: 500, segments: 2, wallMs: 24_100, waitMs: 61_000, stages: { job: { calls: 32, ms: 6000 }, backup: { calls: 0, ms: 0 }, recipeWrites: { calls: 10, ms: 9040 } }, otherMs: 9060 };
+    const uncounted = { recipesFound: null, segments: 1, wallMs: 300, waitMs: 0, stages: {}, otherMs: 300 };
+    expect(print({ complete: true, moveInSegments: { unclaimed: 0, kitchens: [big, uncounted] } }).trimEnd()).toBe(
+      "### Move in, by stage\n\n" +
+        "A 500-recipe kitchen ran 2 segment(s), 24.1 s working and 61 s waiting in the queue: saving progress 6 s over 32 call(s); writing recipes 9 s over 10 call(s); everything else, such as parsing, 9.1 s.\n\n" +
+        "A kitchen not yet counted ran 1 segment(s), 0.3 s working and 0 s waiting in the queue: everything else, such as parsing, 0.3 s.",
     );
-    expect(print({ moveInSegments: { segments: 0, wallMs: 0, stages: {}, otherMs: 0 } })).toBe("");
+    // An incomplete log says so, so a low total isn't taken for a fast move-in.
+    expect(print({ complete: false, moveInSegments: { unclaimed: 2, kitchens: [uncounted] } }).trimEnd()).toBe(
+      "### Move in, by stage (partial: the Worker log missed some of the run)\n\n" +
+        "A kitchen not yet counted ran 1 segment(s), 0.3 s working and 0 s waiting in the queue: everything else, such as parsing, 0.3 s.\n\n" +
+        "2 segment(s) found another run doing the work.",
+    );
+    expect(print({ moveInSegments: { unclaimed: 0, kitchens: [] } })).toBe("");
     expect(print({})).toBe("");
   });
 

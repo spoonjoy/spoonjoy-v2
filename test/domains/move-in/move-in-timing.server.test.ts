@@ -33,7 +33,7 @@ describe("timeMoveInPorts", () => {
     await expect(ports.writeRecipe({} as never)).rejects.toThrow("the database is down");
 
     expect(times).toMatchObject({
-      backupReads: { calls: 2, ms: 10 },
+      backup: { calls: 2, ms: 10 },
       job: { calls: 1, ms: 5 },
       recipeWrites: { calls: 1, ms: 5 },
       photoWrites: { calls: 0, ms: 0 },
@@ -54,8 +54,17 @@ describe("timeMoveInPorts", () => {
 });
 
 describe("moveInSegmentLine", () => {
-  it("is a move_in_segment line of the wall time and each stage", () => {
+  it("is a move_in_segment line of numbers under fixed keys", () => {
     const { times } = timeMoveInPorts(fakePorts());
-    expect(JSON.parse(moveInSegmentLine(42, times))).toEqual({ event: "move_in_segment", wallMs: 42, stages: times });
+    const timing = { wallMs: 42, waitMs: 7, claimed: true, recipesFound: 500, stages: times };
+    expect(JSON.parse(moveInSegmentLine({ ...timing, extra: "movein_1" } as never))).toEqual({ event: "move_in_segment", ...timing });
   });
+});
+
+it("times looking up the cook's email and deleting the backup", async () => {
+  const { ports, times } = timeMoveInPorts(fakePorts(), () => 0);
+  await ports.ownerEmail("chef-1");
+  await ports.discardArchive(job);
+  expect(times.job.calls).toBe(1);
+  expect(times.backup.calls).toBe(1);
 });

@@ -155,6 +155,12 @@ export async function readMoveInPosition(
   return (row as unknown as Awaited<ReturnType<typeof readMoveInPosition>>) ?? null;
 }
 
+/** How many recipes the job's kitchen has, as inspect counted them, or null before it has. */
+export async function readMoveInRecipesFound(db: D1ReadDatabase, jobId: string): Promise<number | null> {
+  const [[row]] = await d1ReadBatch(db, [[`SELECT "found" FROM "ImportEntityCount" WHERE "jobId" = ? AND "entity" = 'recipes'`, jobId]]);
+  return row ? Number(row.found) : null;
+}
+
 /** A job's state, counts and report, or null when the job isn't this owner's. */
 export async function readMoveInProgress(db: D1ReadDatabase, { ownerId, jobId }: { ownerId: string; jobId: string }): Promise<MoveInProgress | null> {
   const [[job], counts, events, latest] = await d1ReadBatch(db, [
