@@ -135,6 +135,31 @@ describe("the move-in job", () => {
     expect(job(jobId)).toMatchObject({ status: "done-with-issues" });
   });
 
+  it("logs where each segment's time went, as counts and milliseconds only", async () => {
+    const { env, jobId } = await setUp();
+    const registry = jobRegistry();
+    const jobs = memoryJobs(registry);
+    const lines: string[] = [];
+    // Each look at the clock is a millisecond later, so every timed call takes 1 ms.
+    let tick = 0;
+    registry.on(MOVE_IN_JOB, moveInJobHandler(env, jobs, { budgetMs: 0, chunkSize: 3, now: () => now, clock: () => tick++, log: (line) => lines.push(line) }));
+    await queueMoveIn(jobs, { id: jobId, phase: "inspect", cursor: null });
+    await jobs.drain();
+
+    expect(lines).toHaveLength(2);
+    const [inspect, recipes] = lines.map((line) => JSON.parse(line));
+    expect(inspect).toMatchObject({ event: "move_in_segment", stages: { recipeWrites: { calls: 0, ms: 0 } } });
+    expect(recipes).toMatchObject({
+      event: "move_in_segment",
+      stages: { recipeWrites: { calls: 3, ms: 3 }, photoWrites: { calls: 1, ms: 1 }, organizers: { calls: 0, ms: 0 } },
+    });
+    expect(recipes.stages.job.calls).toBeGreaterThan(3);
+    expect(recipes.stages.backupReads.calls).toBeGreaterThan(0);
+    expect(recipes.wallMs).toBeGreaterThan(recipes.stages.job.ms);
+    // Nothing that names the job, the cook or a recipe.
+    for (const line of lines) expect(line).not.toMatch(new RegExp(`${jobId}|chef|Pancakes|cook@`, "i"));
+  });
+
   it("leaves alone a job that is finished, gone or not a move-in", async () => {
     const { jobId, jobs } = await setUp();
     database.sqlite.prepare(`UPDATE "ImportJob" SET "status" = 'done', "phase" = 'done'`).run();

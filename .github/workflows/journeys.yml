@@ -516,8 +516,17 @@ jobs:
                 else "::warning::The QA Worker log is incomplete (a tail reconnected without a second one covering it, no tail was running when the suite finished, or it recorded no events). Treat worker-tail-summary.json as partial evidence, not as a run without Worker-side failures." end' \
               test-results/worker-tail-summary.json || true
           fi
-          jq '{ complete, tailAliveAtStop, tailReconnects, tailCoverage, tailReads, tailSamplingNotices, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), serverErrors: (.serverErrorInvocations | length), hungInvocations, stalledInvocations, d1TransientErrors, slowestPaths: (.byPath | .[0:5]) }' \
+          jq '{ complete, tailAliveAtStop, tailReconnects, tailCoverage, tailReads, tailSamplingNotices, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), serverErrors: (.serverErrorInvocations | length), hungInvocations, stalledInvocations, d1TransientErrors, moveInSegments, slowestPaths: (.byPath | .[0:5]) }' \
             test-results/worker-tail-summary.json || true
+          # Where the move-ins' segments spent their time, by stage, beside the timed move-in's line
+          # in the run's summary, so a slow move-in shows which stage to speed up.
+          jq -r 'select((.moveInSegments.segments // 0) > 0) | .moveInSegments as $m
+            | def s: (. / 100 | round) / 10 | tostring + " s";
+              { job: "saving progress", backupReads: "reading the backup", recipeWrites: "writing recipes", photoWrites: "storing photos", photoChecks: "checking for photos", organizers: "tags, categories and tools" } as $names
+            | "### Move in, by stage\n\nMove-ins ran \($m.segments) segment(s), \($m.wallMs | s) in all: "
+              + ([$m.stages | to_entries[] | select(.value.calls > 0) | "\($names[.key]) \(.value.ms | s) over \(.value.calls) call(s)"]
+                + ["everything else, mostly parsing, \($m.otherMs | s)"] | join("; ")) + "."' \
+            test-results/worker-tail-summary.json >> "${GITHUB_STEP_SUMMARY:-/dev/null}" || true
           # A request the Workers runtime canceled as hung is a 500 (Error 1101) the browser sees as
           # a server failure, so name it in the log. Non-fatal for now.
           jq -r 'select(.hungInvocations > 0) | "::warning::Worker hangs: \(.hungInvocations) request(s) failed with Error 1101 because the Workers runtime detected hung code. See hungInvocations and nonOkInvocations in worker-tail-summary.json."' \

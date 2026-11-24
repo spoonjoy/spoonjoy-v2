@@ -97,6 +97,7 @@ describe("summarize-worker-tail.jq", () => {
       "hungInvocations",
       "isolates",
       "lastEventTimestamp",
+      "moveInSegments",
       "nonOkInvocations",
       "outcomes",
       "platformRetries",
@@ -340,6 +341,33 @@ describe("summarize-worker-tail.jq", () => {
     expect(raw).not.toContain(CANARIES.query);
     expect(raw).not.toContain(CANARIES.body);
     expect(summarize([]).summary.platformRetries).toEqual({ total: 0, byCall: {}, unmarked: 0 });
+  });
+
+  it("adds up where the move-ins' segments spent their time, reading only the wall time and each stage's counts", () => {
+    const segment = (wallMs: unknown, stages: unknown) => JSON.stringify({ event: "move_in_segment", wallMs, stages, jobId: CANARIES.query });
+    const { summary, raw } = summarize([
+      { outcome: "ok", logs: [{ level: "log", message: [segment(20_000, { job: { calls: 30, ms: 6000 }, recipeWrites: { calls: 10, ms: 9000 }, [CANARIES.body]: { calls: 1, ms: 1 } })] }] },
+      { outcome: "ok", logs: [{ level: "log", message: [{ event: "move_in_segment", wallMs: 4000, stages: { job: { calls: 2, ms: -5 }, photoWrites: { calls: 1, ms: 3000 } } }] }] },
+      // Lines whose wall time isn't a count, and lines of another kind, are left out.
+      { outcome: "ok", logs: [{ level: "log", message: [segment("slow", {}), segment(100, "none"), "not json"] }] },
+    ]);
+
+    expect(summary.moveInSegments).toEqual({
+      segments: 3,
+      wallMs: 24_100,
+      stages: {
+        job: { calls: 32, ms: 6000 },
+        backupReads: { calls: 0, ms: 0 },
+        recipeWrites: { calls: 10, ms: 9000 },
+        photoWrites: { calls: 1, ms: 3000 },
+        photoChecks: { calls: 0, ms: 0 },
+        organizers: { calls: 0, ms: 0 },
+      },
+      otherMs: 6100,
+    });
+    expect(raw).not.toContain(CANARIES.query);
+    expect(raw).not.toContain(CANARIES.body);
+    expect(summarize([]).summary.moveInSegments).toMatchObject({ segments: 0, wallMs: 0, otherMs: 0 });
   });
 
   it("counts the writes an operation retried safely, found applied or gave up on, and leaves out of notRetriedWrites the ones it handled", () => {
@@ -940,6 +968,20 @@ describe("Journeys workflow tail wiring", () => {
     // The list holds the 25 slowest invocations, so a full list over 5 s may hide more requests.
     expect(warn({ slowest: [background, ...Array.from({ length: 24 }, () => ({ method: "GET", wallTime: 6000 }))] }).trimEnd())
       .toContain("Slow requests: 24 or more took over 5 s");
+  });
+
+  it("puts the move-ins' time by stage in the run's summary, and nothing when no move-in ran", () => {
+    const run = step("Stop QA Worker tail and summarise it").run ?? "";
+    const filter = /jq -r '(select\(\(\.moveInSegments[\s\S]*?)' \\\n/.exec(run)?.[1];
+    expect(filter).toBeDefined();
+    expect(run).toContain('test-results/worker-tail-summary.json >> "${GITHUB_STEP_SUMMARY:-/dev/null}" || true');
+    const print = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    const stages = { job: { calls: 32, ms: 6000 }, backupReads: { calls: 0, ms: 0 }, recipeWrites: { calls: 10, ms: 9040 }, photoWrites: { calls: 1, ms: 3000 } };
+    expect(print({ moveInSegments: { segments: 2, wallMs: 24_100, stages, otherMs: 6060 } }).trimEnd()).toBe(
+      "### Move in, by stage\n\nMove-ins ran 2 segment(s), 24.1 s in all: saving progress 6 s over 32 call(s); writing recipes 9 s over 10 call(s); storing photos 3 s over 1 call(s); everything else, mostly parsing, 6.1 s.",
+    );
+    expect(print({ moveInSegments: { segments: 0, wallMs: 0, stages: {}, otherMs: 0 } })).toBe("");
+    expect(print({})).toBe("");
   });
 
   it("warns, without failing, on the platform faults our code tried again, by call", () => {
