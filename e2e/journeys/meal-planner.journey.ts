@@ -113,6 +113,25 @@ test.describe("Meal planner", () => {
     });
   });
 
+  test("Plan opens from the bar, between Cookbooks and Shopping, and stays the current page after a reload", async ({ page, isMobile }, testInfo) => {
+    // The phone's tab bar, or the desktop's top bar.
+    const bar = isMobile ? page.getByRole("navigation", { name: "Spoonjoy navigation" }) : page.locator('header[data-ouro="navbar"]');
+    const shot = isMobile ? "plan-tab-bar-iphone" : "plan-top-bar-desktop";
+    await page.goto("/");
+    await waitForHydration(page);
+    const links = await bar.getByRole("link").allTextContents();
+    const cookbooks = links.indexOf("Cookbooks");
+    expect(links[cookbooks + 1], "the link after Cookbooks").toBe("Plan");
+    expect(links[cookbooks + 2], "the link after Plan").toMatch(/^Shopping/);
+    await bar.getByRole("link", { name: "Plan", exact: true }).click();
+    await expect(page).toHaveURL(pathUrl("/plan"));
+    await page.reload({ waitUntil: "load" });
+    await waitForHydration(page);
+    await expect(page.getByRole("heading", { level: 1, name: /^Week of / })).toBeVisible();
+    await expect(bar.getByRole("link", { name: "Plan", exact: true })).toHaveAttribute("aria-current", "page");
+    await testInfo.attach(shot, { body: await bar.screenshot({ animations: "disabled" }), contentType: "image/png" });
+  });
+
   test.describe("as the seeded chef", () => {
     test.use({ storageState: personaStorageStatePath("chef") });
 

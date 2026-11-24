@@ -30,26 +30,27 @@ function currentTab() {
 }
 
 describe("MobileNav signed in", () => {
-  it("is a phone-only bar of four labeled tabs plus Search in its own circle", () => {
+  it("is a phone-only bar of five labeled tabs plus Search in its own circle", () => {
     renderAt("/");
 
     expect(tabBar().closest('[data-ouro="tab-bar"]')).toHaveClass("lg:hidden", "sj-tab-bar");
-    expect(tabNames()).toEqual(["Kitchen", "Recipes", "Cookbooks", "Shopping", "Search"]);
+    expect(tabNames()).toEqual(["Kitchen", "Recipes", "Cookbooks", "Plan", "Shopping", "Search"]);
     expect(screen.getByRole("link", { name: "Kitchen" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/my-recipes");
     expect(screen.getByRole("link", { name: "Cookbooks" })).toHaveAttribute("href", "/cookbooks");
+    expect(screen.getByRole("link", { name: "Plan" })).toHaveAttribute("href", "/plan");
     expect(screen.getByRole("link", { name: "Shopping" })).toHaveAttribute("href", "/shopping-list");
     expect(screen.getByRole("link", { name: "Search" })).toHaveAttribute("href", "/search");
-    // The four tabs share one list, each growing to an equal share of it.
+    // The five tabs share one list, each growing to an equal share of it.
     const items = within(tabBar()).getAllByRole("listitem");
-    expect(items).toHaveLength(4);
+    expect(items).toHaveLength(5);
     for (const item of items) expect(item).toHaveClass("flex-1");
   });
 
   it("is the same on every page: no page actions, no buttons, no drawer", () => {
     for (const path of ["/", "/my-recipes", "/recipes/r-1", "/cookbooks/c-1", "/shopping-list", "/search", "/account/settings", "/users/someone"]) {
       const { unmount } = renderAt(path);
-      expect(tabNames(), path).toEqual(["Kitchen", "Recipes", "Cookbooks", "Shopping", "Search"]);
+      expect(tabNames(), path).toEqual(["Kitchen", "Recipes", "Cookbooks", "Plan", "Shopping", "Search"]);
       expect(within(tabBar()).queryAllByRole("button"), path).toEqual([]);
       unmount();
     }
@@ -68,6 +69,7 @@ describe("MobileNav signed in", () => {
     ["/recipes/r-1", "Recipes"],
     ["/cookbooks", "Cookbooks"],
     ["/cookbooks/c-1", "Cookbooks"],
+    ["/plan", "Plan"],
     ["/shopping-list", "Shopping"],
     ["/search", "Search"],
   ])("marks the tab that owns %s as current (%s)", (path, tab) => {

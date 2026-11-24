@@ -133,6 +133,15 @@ export const ROADMAP: readonly RoadmapItem[] = [
     area: "Moving in",
     link: { href: "/support", label: "How to export" },
   },
+  {
+    id: "meal-planner",
+    title: "Meal planner",
+    benefit: "Plan the week with recipes or quick notes, set servings per meal and send it all to your list.",
+    status: "shipped",
+    area: "Planning",
+    shipped: "2026-11-24",
+    link: { href: "/plan", label: "Plan your week" },
+  },
 
   // Building now.
   {
@@ -158,13 +167,6 @@ export const ROADMAP: readonly RoadmapItem[] = [
   },
 
   // Next.
-  {
-    id: "meal-planner",
-    title: "Meal planner",
-    benefit: "Plan the week with recipes or quick notes, set servings per meal and send it all to your list.",
-    status: "next",
-    area: "Planning",
-  },
   {
     id: "households",
     title: "Households",

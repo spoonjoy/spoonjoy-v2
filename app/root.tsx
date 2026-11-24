@@ -115,6 +115,7 @@ function getActiveNav(pathname: string): string | null {
   if (pathname.startsWith("/my-recipes")) return "my-recipes";
   if (pathname.startsWith("/saved-recipes")) return "saved-recipes";
   if (pathname.startsWith("/cookbooks")) return "cookbooks";
+  if (pathname.startsWith("/plan")) return "plan";
   if (pathname.startsWith("/shopping-list")) return "shopping";
   if (pathname.startsWith("/households")) return "households";
   if (pathname.startsWith("/chefs")) return "chefs";
@@ -129,6 +130,7 @@ const signedInLinks = [
   { label: "My Recipes", href: "/my-recipes", nav: "my-recipes" },
   { label: "Saved", href: "/saved-recipes", nav: "saved-recipes" },
   { label: "Cookbooks", href: "/cookbooks", nav: "cookbooks" },
+  { label: "Plan", href: "/plan", nav: "plan" },
   { label: "Shopping List", href: "/shopping-list", nav: "shopping" },
   { label: "Chefs", href: "/chefs", nav: "chefs" },
   { label: "Kitchen Search", href: "/search", nav: "search" },
