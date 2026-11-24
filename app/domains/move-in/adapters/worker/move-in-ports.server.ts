@@ -15,7 +15,7 @@ import { mealieBackupSource } from "../sources/mealie-backup/source";
 import { moveInJobStore } from "../storage/job-store.server";
 import { attachMovedInOrganizers } from "../storage/organizer-writer.server";
 import { attachMovedInPhoto, hasMovedInPhoto } from "../storage/photo-writer.server";
-import { writeMovedInRecipe } from "../storage/recipe-writer.server";
+import { writeMovedInRecipe, writeMovedInRecipes } from "../storage/recipe-writer.server";
 import { readsAServer } from "./apps";
 import { openServerConnection, serverConnectionSecret } from "./server-connection.server";
 
@@ -97,6 +97,7 @@ export function moveInPorts(env: MoveInEnv, now: () => Date): MoveInPorts {
     openSource: (job) => openMoveInSource(env.PHOTOS, job, (input, init) => fetch(input, init), () => serverConnectionSecret(env)),
     ownerEmail: (ownerId) => ownerEmail(db, ownerId),
     writeRecipe: (input) => writeMovedInRecipe({ db, ...input, now: now() }),
+    writeRecipes: (inputs) => writeMovedInRecipes(inputs.map((input) => ({ db, ...input, now: now() }))),
     attachPhoto: (input) => attachMovedInPhoto({ db, bucket: env.PHOTOS, ...input, now: now() }),
     hasMovedInPhoto: (recipeId) => hasMovedInPhoto(db, recipeId),
     organizers: {

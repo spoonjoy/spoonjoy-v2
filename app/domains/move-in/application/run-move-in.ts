@@ -1,6 +1,11 @@
-// Runs a move-in a piece at a time. Each recipe's counts and report lines are saved with the cursor
-// in one write, so a Worker that stops mid-way repeats at most the recipe it stopped on, and the
-// SourceRecord rows make that repeat a no-op that still counts as this job's. Only the run that
+// Runs a move-in a piece at a time. A chunk's recipes are written together, and their counts and
+// report lines saved with the cursor in one write, so a Worker that stops mid-way repeats at most
+// that chunk, and the SourceRecord rows make the repeat a no-op that still counts as this job's.
+// A chunk a run stopped in goes again one recipe at a time, saving after each, so a recipe that
+// takes the Worker down is found and passed over on its own. To tell a stop from a run that ended
+// well, a save under a claim leaves the job's attempt at 1 rather than 0, and a run that ends well
+// clears it as it lets the job go: the next claim reads 1 after a run that ended well, 2 or more
+// after one that stopped. Only the run that
 // holds the job's claim may write it, and every claim counts as an attempt until the job moves
 // forward, so a job whose runs keep dying ends. The ports keep this free of D1, R2 and the request.
 import type { RangeSource } from "../adapters/archive/zip";
@@ -64,6 +69,13 @@ export type RecipeWriteResult =
   | { outcome: "kept"; recipeId: string; reason: string }
   | { outcome: "skipped"; recipeId: string; reason: string };
 
+export interface RecipeWriteInput {
+  sourceId: string;
+  jobId: string;
+  chefId: string;
+  draft: RecipeDraft;
+}
+
 /** Counts to add and report lines to log, saved with the job in one write. */
 export interface MoveInReport {
   counts?: Array<[entity: string, delta: Partial<MoveInCounts>]>;
@@ -107,14 +119,22 @@ export interface MoveInPorts {
      * it never brings a recipe nearer to being passed over; a job whose source stays away a day is stopped as expired.
      */
     forgiveAttempt(jobId: string, token: string): Promise<void>;
-    /** Lets the job go, if this run still holds it, so the next run can take it at once. */
-    release(jobId: string, token: string): Promise<void>;
+    /**
+     * Lets the job go, if this run still holds it, so the next run can take it at once. With `endedWell`, it also sets
+     * the job's attempt back to 0, clearing the 1 this run's saves left.
+     */
+    release(jobId: string, token: string, endedWell?: boolean): Promise<void>;
   };
   openArchive(job: MoveInJob): RangeSource | Promise<RangeSource>;
   /** Where the job's recipes come from, when it isn't the uploaded backup that openArchive reads. */
   openSource?(job: MoveInJob): Promise<MoveInSource>;
   ownerEmail(ownerId: string): Promise<string | null>;
-  writeRecipe(input: { sourceId: string; jobId: string; chefId: string; draft: RecipeDraft }): Promise<RecipeWriteResult>;
+  writeRecipe(input: RecipeWriteInput): Promise<RecipeWriteResult>;
+  /**
+   * Writes several new recipes in one go, for a chunk: each result in the inputs' order, or null for a recipe to write
+   * alone with writeRecipe (one that moved in before, say). A Worker without it writes every recipe alone.
+   */
+  writeRecipes?(inputs: RecipeWriteInput[]): Promise<Array<RecipeWriteResult | null>>;
   attachPhoto(input: { ownerId: string; recipeId: string; bytes: Uint8Array }): Promise<void>;
   /** Whether the recipe already has a cover that moved in. */
   hasMovedInPhoto(recipeId: string): Promise<boolean>;
@@ -145,6 +165,23 @@ function event(kind: MoveInEvent["kind"], message: string, more: Partial<MoveInE
 interface Opened {
   source: MoveInSource;
   kitchen: MoveInKitchen;
+}
+
+/**
+ * The attempt a save leaves: 1 under a claim, so a run that stops after it shows as one more to the next claim than a
+ * run that ended well (whose release clears it); 0 without a claim, which has no release.
+ */
+function moved(token: string | undefined): number {
+  return token === undefined ? 0 : 1;
+}
+
+/**
+ * How many runs in a row have stopped since the job last moved. Under a claim that is the claims before this one: the
+ * attempt less this claim's own count, since a run that ended well left 0 and one that stopped after a save left 1.
+ * Without a claim it is the attempt, as the caller counts it.
+ */
+function stops(job: MoveInJob, token: string | undefined): number {
+  return job.phase === "recipes" ? job.attempt - moved(token) : job.attempt;
 }
 
 /** One chunk's context: the job, the ports, the claim it writes under. */
@@ -208,7 +245,7 @@ async function inspect(run: Run, { source, kitchen }: Opened) {
       ...(left.length && !organizing ? [event("item-skipped", `Spoonjoy doesn't have tags, categories or tools yet, so ${left.join(", ")} stayed ${source.words.there}.`, { entity: "tags" })] : []),
     ],
   };
-  await store.updateJob(job.id, { status: "running", phase: "recipes", cursor: "0", sourceId, attempt: 0 }, run.token, report);
+  await store.updateJob(job.id, { status: "running", phase: "recipes", cursor: "0", sourceId, attempt: moved(run.token) }, run.token, report);
 }
 
 /** Brings the recipe's photo, adding what happened to the report. */
@@ -240,13 +277,19 @@ async function bringOrganizers({ job, organizers }: Run, words: SourceWords, dra
 }
 
 /** Brings one recipe, its photo and its organizers, and returns what to report; writes nothing to the job itself. */
-async function bringRecipe(run: Run, { source, kitchen }: Opened, draft: RecipeDraft): Promise<Report> {
+async function bringRecipe(run: Run, opened: Opened, draft: RecipeDraft): Promise<Report> {
+  const { job, ports } = run;
+  // An error here is passed on, for bringOrPassOver to try the recipe again or pass it over.
+  const result = await ports.writeRecipe({ sourceId: job.sourceId as string, jobId: job.id, chefId: job.ownerId, draft });
+  return afterWrite(run, opened, draft, result);
+}
+
+/** Brings a written recipe's photo and organizers, and returns what to report. */
+async function afterWrite(run: Run, { source, kitchen }: Opened, draft: RecipeDraft, result: RecipeWriteResult): Promise<Report> {
   const { job, ports } = run;
   const report: Report = { counts: [], events: [] };
   const at = { entity: "recipes", sourceKey: draft.sourceKey };
   const hasPhoto = kitchen.hasPhoto(draft);
-  // An error here is passed on, for bringOrPassOver to try the recipe again or pass it over.
-  const result: RecipeWriteResult = await ports.writeRecipe({ sourceId: job.sourceId as string, jobId: job.id, chefId: job.ownerId, draft });
   const target = { ...at, targetId: result.recipeId };
   if (result.outcome === "skipped") {
     report.counts.push(["recipes", { skipped: 1 }]);
@@ -278,6 +321,42 @@ async function bringRecipe(run: Run, { source, kitchen }: Opened, draft: RecipeD
   await bringOrganizers(run, source.words, draft, result.recipeId, report);
   if (hasPhoto) await bringPhoto(run, kitchen, draft, result.recipeId, report);
   return report;
+}
+
+/**
+ * Brings the recipes from `start` up to `end` and returns what to report for all of them: the new ones written in one
+ * go, and any the chunk's write left out, or that failed with it, one at a time as bringOrPassOver brings them.
+ */
+async function bringChunk(run: Run, opened: Opened, start: number, end: number, writeRecipes: NonNullable<MoveInPorts["writeRecipes"]>): Promise<Report> {
+  const { job } = run;
+  const drafts: Array<RecipeDraft | null> = [];
+  for (let i = start; i < end; i++) {
+    try {
+      drafts.push(await opened.kitchen.draft(i));
+    } catch (error) {
+      if (stopsTheRun(error)) throw error;
+      // A recipe the source can't give is tried, and reported, on its own.
+      drafts.push(null);
+    }
+  }
+  const ready = drafts.flatMap((draft) => (draft ? [{ sourceId: job.sourceId as string, jobId: job.id, chefId: job.ownerId, draft }] : []));
+  let written: Array<RecipeWriteResult | null> = [];
+  try {
+    written = await writeRecipes(ready);
+  } catch (error) {
+    if (stopsTheRun(error)) throw error;
+    // Each goes on its own instead, so one recipe's error is that recipe's alone.
+  }
+  const chunk: Report = { counts: [], events: [] };
+  let next = 0;
+  for (let i = start; i < end; i++) {
+    const draft = drafts[i - start];
+    const result = draft ? (written[next++] ?? null) : null;
+    const report = draft && result ? await afterWrite(run, opened, draft, result) : await bringOrPassOver(run, opened, i);
+    chunk.counts.push(...report.counts);
+    chunk.events.push(...report.events);
+  }
+  return chunk;
 }
 
 /**
@@ -333,9 +412,9 @@ async function recipes(run: Run, opened: Opened, chunkSize: number, cache: RunCa
   let start = Number(job.cursor);
   // The recipe at the cursor has stopped every run since the job last moved, whether it threw or took the Worker down:
   // report it and move past it, so it never holds the rest back.
-  if (job.attempt >= RECIPE_TRIES && start < kitchen.size) {
+  if (stops(job, run.token) >= RECIPE_TRIES && start < kitchen.size) {
     const entry = kitchen.entry(start);
-    await store.updateJob(job.id, { cursor: String(++start), attempt: 0 }, run.token, {
+    await store.updateJob(job.id, { cursor: String(++start), attempt: moved(run.token) }, run.token, {
       counts: [["recipes", { failed: 1 }]],
       events: [event("item-failed", `${entry.title} didn't move in this time. ${source.words.again} tries it once more.`, {
         entity: "recipes",
@@ -343,13 +422,21 @@ async function recipes(run: Run, opened: Opened, chunkSize: number, cache: RunCa
         detail: `It stopped the move-in ${RECIPE_TRIES} times in a row.`,
       })],
     });
-    job.attempt = 0;
+    job.attempt = moved(run.token);
   }
   const end = Math.min(start + chunkSize, kitchen.size);
-  for (let i = start; i < end; i++) {
-    const report = await bringOrPassOver(run, opened, i);
-    await store.updateJob(job.id, { cursor: String(i + 1), attempt: 0 }, run.token, report);
-    job.attempt = 0;
+  // Together only while no run has stopped since the job last moved, so a recipe that stops runs is found on its own.
+  // Without a claim, the caller has counted this run in the attempt already.
+  if (ports.writeRecipes && stops(job, run.token) <= 1 - moved(run.token) && end - start > 1) {
+    const report = await bringChunk(run, opened, start, end, ports.writeRecipes);
+    await store.updateJob(job.id, { cursor: String(end), attempt: moved(run.token) }, run.token, report);
+    job.attempt = moved(run.token);
+  } else {
+    for (let i = start; i < end; i++) {
+      const report = await bringOrPassOver(run, opened, i);
+      await store.updateJob(job.id, { cursor: String(i + 1), attempt: moved(run.token) }, run.token, report);
+      job.attempt = moved(run.token);
+    }
   }
   if (end < kitchen.size) return;
   const status = (await store.hasIssues(job.id)) ? "done-with-issues" : "done";
@@ -382,7 +469,7 @@ export async function runNextChunk(
   const job = await store.loadJob(jobId);
   if (!job || FINISHED.includes(job.status)) return job;
   const run: Run = { job, ports, token };
-  if (job.attempt > MAX_ATTEMPTS) {
+  if (stops(job, token) > MAX_ATTEMPTS) {
     await fail(run, "stuck");
     return store.loadJob(jobId);
   }
@@ -426,7 +513,7 @@ export async function runMoveInSegment(
     for (;;) {
       const job = await runNextChunk(jobId, ports, { chunkSize, token, cache });
       if (!job || FINISHED.includes(job.status) || ports.now().getTime() - started.getTime() >= budgetMs) {
-        await ports.store.release(jobId, token);
+        await ports.store.release(jobId, token, true);
         return { job, claimed: true };
       }
     }

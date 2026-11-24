@@ -40,6 +40,13 @@ describe("timeMoveInPorts", () => {
     });
   });
 
+  it("times a chunk's recipe writes as recipe writes, and leaves a Worker without a chunk writer without one", async () => {
+    const { ports, times } = timeMoveInPorts(fakePorts({ writeRecipes: async () => [null] }));
+    expect(await ports.writeRecipes?.([])).toEqual([null]);
+    expect(times.recipeWrites.calls).toBe(1);
+    expect(timeMoveInPorts(fakePorts()).ports.writeRecipes).toBeUndefined();
+  });
+
   it("leaves a Worker without organizers without them", () => {
     expect(timeMoveInPorts(fakePorts()).ports.organizers).toBeUndefined();
   });
