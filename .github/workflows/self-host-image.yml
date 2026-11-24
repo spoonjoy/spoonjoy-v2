@@ -363,9 +363,11 @@ jobs:
 
       # A move-in the server restarts in the middle of: a cook starts moving the large proof kitchen
       # in and leaves, and the server is killed the moment the move-in is accepted (losing whatever its
-      # in-process queue held), as a crash or power cut would. Its backup shows the move-in unfinished
-      # then, so the check can't pass on a move-in that beat the kill. Then it starts again, and the
-      # move-in must finish with no page open to nudge it. On 8084, on the host network.
+      # in-process queue held), as a crash or power cut would. At full speed the move-in finishes within
+      # a second, so the server's CPU is capped just before the cook clicks Move in, and the cap lifted
+      # before it starts again. Its backup shows the move-in unfinished at the kill, so the check can't
+      # pass on a move-in that beat it. Then the move-in must finish with no page open to nudge it.
+      # On 8084, on the host network.
       - name: Finish a move-in the server restarts in the middle of
         if: success()
         run: |
@@ -388,12 +390,16 @@ jobs:
           docker volume create sj-restart
           docker run -d --name sj-restart --network host -v sj-restart:/data -e PORT=8084 -e SPOONJOY_FLAGS=move_in "$LOCAL_IMAGE"
           ready
-          rm -f .self-host/move-in-restart.json
+          rm -f .self-host/move-in-restart.json .self-host/move-in-restart.json.slow-asked .self-host/move-in-restart.json.slowed
           restart_half before &
           before=$!
+          until [ -e .self-host/move-in-restart.json.slow-asked ] || ! kill -0 "$before" 2>/dev/null; do sleep 0.05; done
+          docker update --cpus 0.05 sj-restart
+          touch .self-host/move-in-restart.json.slowed
           until [ -s .self-host/move-in-restart.json ] || ! kill -0 "$before" 2>/dev/null; do sleep 0.05; done
           docker kill sj-restart
           wait "$before"
+          docker update --cpus "$(nproc)" sj-restart
           mkdir -p .self-host/backups && chmod 777 .self-host/backups
           docker run --rm --network none -v sj-restart:/data -v "$PWD/.self-host/backups:/backups" "$LOCAL_IMAGE" \
             node /app/self-host/server.mjs backup /backups/restart.tar.gz

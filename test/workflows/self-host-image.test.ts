@@ -263,9 +263,13 @@ describe("Self-host Image workflow", () => {
     const order = [
       "docker run -d --name sj-restart --network host -v sj-restart:/data -e PORT=8084 -e SPOONJOY_FLAGS=move_in",
       "restart_half before &",
+      "until [ -e .self-host/move-in-restart.json.slow-asked ]",
+      "docker update --cpus 0.05 sj-restart",
+      "touch .self-host/move-in-restart.json.slowed",
       "until [ -s .self-host/move-in-restart.json ]",
       "docker kill sj-restart",
       'wait "$before"',
+      'docker update --cpus "$(nproc)" sj-restart',
       "server.mjs backup /backups/restart.tar.gz",
       "if (row.finishedAt) throw",
       'echo "$stopped" | tee "$OUT/move-in-restart.json"',
