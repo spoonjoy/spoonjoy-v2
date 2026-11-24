@@ -264,6 +264,35 @@ describe("the other app's server as a move-in source", () => {
     await expect(kitchen.readPhoto(photo)).rejects.toBeInstanceOf(SourceUnavailableError);
   });
 
+  it("calls a failing recipe an outage while the server's database is down, though its about page answers", async () => {
+    const { routes } = kitchenRoutes();
+    const slug = (routes["/api/recipes"] as { items: Json[] }).items[0].slug;
+    const status: Record<string, number> = { [`/api/recipes/${slug}`]: 500 };
+    const { fetch } = server(routes, { status });
+    const kitchen = await (await mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).openKitchen(KITCHEN);
+    if (!kitchen) throw new Error("expected the kitchen");
+    status["/api/users/self"] = 500;
+    const index = (routes["/api/recipes"] as { items: Json[] }).items.findIndex((item) => item.slug === slug);
+    await expect(kitchen.draft(index)).rejects.toBeInstanceOf(SourceUnavailableError);
+    // A token the server stopped taking stops the move-in, rather than waiting for it.
+    status["/api/users/self"] = 401;
+    await expect(kitchen.draft(index)).rejects.toMatchObject({ code: "server-token" });
+  });
+
+  it("slows down when asked to, without asking whether the server is up", async () => {
+    const { routes } = kitchenRoutes();
+    const slug = (routes["/api/recipes"] as { items: Json[] }).items[0].slug;
+    const index = (routes["/api/recipes"] as { items: Json[] }).items.findIndex((item) => item.slug === slug);
+    const status: Record<string, number> = {};
+    const { fetch, asked } = server(routes, { status });
+    const kitchen = await (await mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).openKitchen(KITCHEN);
+    status[`/api/recipes/${slug}`] = 429;
+    const before = asked.length;
+    await expect(kitchen?.draft(index)).rejects.toThrow("slow down");
+    await expect(kitchen?.draft(index)).rejects.toBeInstanceOf(SourceUnavailableError);
+    expect(asked.slice(before).map((request) => request.url)).toEqual([`/api/recipes/${slug}`, `/api/recipes/${slug}`]);
+  });
+
   it("waits so long for an answer to start, and so long more for its body", async () => {
     vi.useFakeTimers();
     try {
