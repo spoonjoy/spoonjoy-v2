@@ -143,7 +143,7 @@ describe("the Move in page", () => {
     sent.run = (options) => {
       signal = options.signal;
       return new Promise((resolve) =>
-        signal.addEventListener("abort", () => resolve({ ok: false, stopped: true, error: "The upload was stopped, and nothing of it was kept. Choose a backup to start again." })),
+        signal.addEventListener("abort", () => resolve({ ok: false, stopped: true, error: "Nothing sent so far will be used. Choose a backup to start again." })),
       );
     };
     page(null);
@@ -153,11 +153,28 @@ describe("the Move in page", () => {
     await act(async () => fireEvent.click(stop));
     expect(signal.aborted).toBe(true);
     expect(await screen.findByText("Upload stopped")).toBeTruthy();
-    expect(screen.getByText("The upload was stopped, and nothing of it was kept. Choose a backup to start again.")).toBeTruthy();
+    expect(screen.getByText("Nothing sent so far will be used. Choose a backup to start again.")).toBeTruthy();
+    // Focus goes to the alert, since the button that had it is gone.
+    expect(document.activeElement?.textContent).toContain("Upload stopped");
     expect(screen.queryByRole("button", { name: "Stop upload" })).toBeNull();
     expect(screen.queryByText(/ sent$/)).toBeNull();
     expect(screen.queryByText("That backup didn't move in")).toBeNull();
     expect((screen.getByRole("button", { name: "Move in" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("says the upload is stopping while the abort is on its way, and takes no second press", async () => {
+    let signal!: AbortSignal;
+    sent.run = (options) => {
+      signal = options.signal;
+      return new Promise(() => undefined);
+    };
+    page(null);
+    await chooseAndSend(new File([new Uint8Array(8)], "mealie.zip"));
+    await act(async () => fireEvent.click(await screen.findByRole("button", { name: "Stop upload" })));
+    expect(signal.aborted).toBe(true);
+    const stopping = screen.getByRole("button", { name: "Stopping…" }) as HTMLButtonElement;
+    expect(stopping.disabled).toBe(true);
+    expect(screen.getByText("Stopping the upload…")).toBeTruthy();
   });
 
   it("hides Stop upload once every part has arrived and the backup is being checked", async () => {

@@ -13,12 +13,17 @@ export const UPLOAD_ATTEMPTS = 5;
  * stops. Two minutes lets a 10 MiB part through at about 85 KB/s, and the finish read the backup's index.
  */
 export const UPLOAD_REQUEST_MS = 120_000;
+/** Tries at aborting a stopped upload, each given ABORT_REQUEST_MS: a stop shouldn't keep the page waiting long. */
+export const ABORT_ATTEMPTS = 3;
+export const ABORT_REQUEST_MS = 15_000;
 const STORAGE_PREFIX = "spoonjoy:move-in-upload:";
+/** Kept for a file in place of an upload id when its stopped upload may still be on the server: its next upload starts fresh. */
+const STOPPED_MARK = "stopped";
 
-/** `stopped` when the cook stopped the upload: it was aborted on the server, and the page goes back to the empty form. */
+/** `stopped` when the cook stopped the upload: the page goes back to the empty form, and the same file starts over. */
 export type UploadOutcome = { ok: true; jobId: string } | { ok: false; error: string; stopped?: true };
 
-export const UPLOAD_STOPPED_MESSAGE = "The upload was stopped, and nothing of it was kept. Choose a backup to start again.";
+export const UPLOAD_STOPPED_MESSAGE = "Nothing sent so far will be used. Choose a backup to start again.";
 
 type Fetch = (url: string, init: RequestInit) => Promise<Response>;
 type KeyValueStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -37,7 +42,11 @@ export interface UploadOptions {
   attempts?: number;
   /** How long one request may take; UPLOAD_REQUEST_MS unless a test shortens it. */
   requestMs?: number;
-  /** Stops the upload: parts in flight are cut off, and the upload is aborted on the server and forgotten here. */
+  /**
+   * Stops the upload: parts in flight are cut off and the upload is aborted on the server. Where the abort doesn't
+   * arrive, the same file's next upload asks the server to discard it. Once every part has arrived and the backup is
+   * being checked, a stop no longer applies.
+   */
   signal?: AbortSignal;
 }
 
@@ -128,16 +137,23 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
   /** The upload the server began, so a stop can abort it. */
   let begunId: string | null = null;
   const stop = options.signal;
+  const stopping = () => Boolean(stop?.aborted) && !finishing;
   const halt = () => {
-    if (stop?.aborted) throw new Stopped();
+    if (stopping()) throw new Stopped();
   };
   /** Waits, unless the cook stops the upload first. */
   const wait = (ms: number) =>
     new Promise<void>((resolve) => {
-      stop?.addEventListener("abort", () => resolve(), { once: true });
-      void sleep(ms).then(resolve);
+      const early = () => {
+        if (!finishing) resolve();
+      };
+      stop?.addEventListener("abort", early, { once: true });
+      void sleep(ms).then(() => {
+        stop?.removeEventListener("abort", early);
+        resolve();
+      });
       // A stop that came while the pause was being set up.
-      if (stop?.aborted) resolve();
+      if (stop?.aborted) early();
     });
   /**
    * A part is cut off by a stop as well as by its time running out. Begin and finish are left to answer, so a stop
@@ -188,8 +204,27 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
     if (failure) throw failure;
   }
 
-  async function once(resume: string | null): Promise<string> {
-    const begun = await send("/move-in/uploads", json({ app: options.app, name: file.name, size: file.size, head, resume }));
+  /** Aborts the stopped upload on the server, a few times if need be; true once it is gone there. */
+  async function abort(uploadId: string) {
+    for (let attempt = 1; attempt <= ABORT_ATTEMPTS; attempt++) {
+      const response = await fetcher(`/move-in/uploads/${encodeURIComponent(uploadId)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+        signal: AbortSignal.timeout(ABORT_REQUEST_MS),
+      }).catch(() => null);
+      if (response && (response.ok || response.status === 404)) return true;
+      if (response && !retriable(response.status)) return false;
+      if (attempt < ABORT_ATTEMPTS) await sleep(1000 * 2 ** (attempt - 1));
+    }
+    return false;
+  }
+
+  let begins = 0;
+  async function once(resume: string | null, fresh = false): Promise<string> {
+    halt();
+    begins++;
+    begunId = null;
+    const begun = await send("/move-in/uploads", json({ app: options.app, name: file.name, size: file.size, head, resume, ...(fresh ? { fresh } : {}) }));
     const plan = begun.body as unknown as Plan;
     begunId = plan.uploadId;
     kept.keep(plan.uploadId);
@@ -216,7 +251,8 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
   try {
     let jobId: string;
     try {
-      jobId = await once(kept.read());
+      const keptId = kept.read();
+      jobId = keptId === STOPPED_MARK ? await once(null, true) : await once(keptId);
     } catch (error) {
       // Gone before every part arrived: the upload was swept or stopped, so send it afresh. Gone at the finish may be a
       // backup the server turned away whose answer was lost, so that one isn't sent again unasked.
@@ -227,10 +263,13 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
     kept.forget();
     return { ok: true, jobId };
   } catch (error) {
-    if (error instanceof Stopped || stop?.aborted) {
-      // Abort it on the server too, so choosing the same file again starts afresh rather than carrying on.
-      if (begunId) await fetcher(`/move-in/uploads/${encodeURIComponent(begunId)}`, { method: "DELETE", credentials: "same-origin" }).catch(() => null);
-      kept.forget();
+    if (stopping()) {
+      // Abort it on the server too, so choosing the same file again starts afresh rather than carrying on. Where that
+      // isn't certain (the abort didn't arrive, or a begin was sent whose answer never came), the file is marked so
+      // its next upload asks the server to discard what it has. Stopped before any begin was sent, there is nothing new
+      // to abort, and what the file had kept stays.
+      if (begunId && (await abort(begunId))) kept.forget();
+      else if (begins > 0) kept.keep(STOPPED_MARK);
       return { ok: false, error: UPLOAD_STOPPED_MESSAGE, stopped: true };
     }
     if (error instanceof Dropped && finishing) {

@@ -367,11 +367,15 @@ export async function moveInAfterADrop(version: string, { page, expectConsoleErr
 }
 
 /**
- * Starts sending a backup of over 200 MB, presses Stop upload once a few parts are in, and checks the upload was
- * aborted on the server and the page went back to the empty form. Choosing the same file after a reload then starts
- * over from part 1 rather than carrying on, and that upload is stopped too, so nothing is left behind.
+ * Starts sending a backup of over 200 MB, presses Stop upload once two parts are in, and checks the upload was aborted
+ * on the server and the page went back to the empty form. Choosing the same file after a reload then starts over from
+ * part 1 rather than carrying on, and that upload is stopped too, so nothing is left behind. Parts past the ones let
+ * through are held until the stop, so the upload can't finish before Stop is pressed.
  */
-export async function stopAndStartAgain(version: string, { page, expectConsoleError }: Pick<JourneyArgs, "page"> & { expectConsoleError: ExpectConsoleError }) {
+export async function stopAndStartAgain(
+  version: string,
+  { page, expectAccessible, expectConsoleError }: Pick<JourneyArgs, "page" | "expectAccessible"> & { expectConsoleError: ExpectConsoleError },
+) {
   test.setTimeout(Math.max(test.info().timeout, 2 * MOVE_IN_MS));
   const path = await bigBackup(version);
   const main = page.getByRole("main");
@@ -379,10 +383,20 @@ export async function stopAndStartAgain(version: string, { page, expectConsoleEr
   expectConsoleError(/^Failed to load resource: net::/, { url: PART_URL, optional: true });
   const isBegin = (request: Request) => request.method() === "POST" && new URL(request.url()).pathname === "/move-in/uploads";
   const isStop = (request: Request) => request.method() === "DELETE" && /^\/move-in\/uploads\/[^/]+$/.test(new URL(request.url()).pathname);
-  const arrived: number[] = [];
-  page.on("requestfinished", async (request) => {
-    if (isPart(request) && (await request.response())?.ok()) arrived.push(Number(request.url().split("/").at(-1)));
-  });
+  /** Lets `through` parts reach the server and holds the rest, which the page then cuts off itself. */
+  const holdParts = async (through: number) => {
+    let passed = 0;
+    let held = 0;
+    await page.route(PART_URL, async (route) => {
+      if (route.request().method() === "PUT" && passed < through) {
+        passed++;
+        return route.continue();
+      }
+      // Never answered: the stop cuts the request off in the page.
+      held++;
+    });
+    return { held: () => held };
+  };
 
   const stopNow = async () => {
     const stopped = page.waitForResponse((response) => isStop(response.request()));
@@ -391,17 +405,21 @@ export async function stopAndStartAgain(version: string, { page, expectConsoleEr
     await expect(main.getByText("Upload stopped", { exact: true })).toBeVisible();
     await expect(main.getByRole("button", { name: "Stop upload", exact: true })).toHaveCount(0);
     await expect(main.getByRole("button", { name: "Move in", exact: true })).toBeEnabled();
+    await page.unroute(PART_URL);
   };
 
   await page.goto("/move-in");
   await waitForHydration(page);
   const field = page.getByLabel(requiredLabel("Backup zip"), { exact: true });
   await field.setInputFiles(path);
+  const first = await holdParts(2);
   const begun = page.waitForResponse((response) => isBegin(response.request()));
   await page.getByRole("button", { name: "Move in", exact: true }).click();
   const uploadId = ((await (await begun).json()) as { uploadId: string }).uploadId;
-  await expect.poll(() => arrived.length, { timeout: MOVE_IN_MS }).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => first.held(), { timeout: MOVE_IN_MS }).toBeGreaterThanOrEqual(1);
+  await expect(main.getByText(/^20 MB of 2\d\d MB sent$/)).toBeVisible({ timeout: MOVE_IN_MS });
   await stopNow();
+  await expectAccessible();
   await snapshot(page, version, "8-stopped");
 
   await page.reload();
@@ -409,6 +427,7 @@ export async function stopAndStartAgain(version: string, { page, expectConsoleEr
   await field.setInputFiles(path);
   const again = page.waitForResponse((response) => isBegin(response.request()));
   const firstPart = page.waitForRequest(isPart);
+  await holdParts(0);
   await page.getByRole("button", { name: "Move in", exact: true }).click();
   const answer = await again;
   // Nothing to carry on from: the page forgot the upload, and the server aborted it.
@@ -418,4 +437,10 @@ export async function stopAndStartAgain(version: string, { page, expectConsoleEr
   expect(plan.done).toEqual([]);
   expect(new URL((await firstPart).url()).pathname).toMatch(/\/parts\/1$/);
   await stopNow();
+  // After a reload the page holds no upload: the empty form, ready for a backup.
+  return async () => {
+    await expect(main.getByRole("button", { name: "Move in", exact: true })).toBeEnabled();
+    await expect(main.getByRole("button", { name: "Stop upload", exact: true })).toHaveCount(0);
+    await expect(main.getByText(/ sent$/)).toHaveCount(0);
+  };
 }

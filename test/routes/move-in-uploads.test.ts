@@ -161,6 +161,16 @@ describe("the upload endpoints", () => {
     expect(captured).toEqual([{ error: new Error("the queue is down"), distinctId: ownerId, route: "/move-in", extras: { phase: "queue" } }]);
   });
 
+  it("start over when asked, discarding the unfinished upload of the same file", async () => {
+    const bytes = backup();
+    const begun = await beginUpload(file(bytes));
+    await sendPart(begun.body.uploadId, "2", bytes.slice(PART, 2 * PART));
+    const fresh = await beginUpload({ ...file(bytes), resume: begun.body.uploadId, fresh: true });
+    expect(fresh).toMatchObject({ status: 200, body: { done: [] } });
+    expect(fresh.body.uploadId).not.toBe(begun.body.uploadId);
+    expect(await sendPart(begun.body.uploadId, "1", bytes.slice(0, PART))).toMatchObject({ status: 404, body: { code: "upload-gone" } });
+  });
+
   it("resume the unfinished upload of the same file with the parts that arrived", async () => {
     const bytes = backup();
     const begun = await beginUpload(file(bytes));
@@ -192,6 +202,7 @@ describe("the upload endpoints", () => {
     ["a head that isn't a SHA-256 in hex", { app: "mealie", name: "a.zip", size: 1, head: "A".repeat(64) }, {}],
     ["a head too short to be one", { app: "mealie", name: "a.zip", size: 1, head: "a".repeat(63) }, {}],
     ["a resume that isn't an id", { app: "mealie", name: "a.zip", size: 1, head: H, resume: 1 }, {}],
+    ["a fresh that isn't true or false", { app: "mealie", name: "a.zip", size: 1, head: H, fresh: "yes" }, {}],
   ])("refuse a begin with %s", async (_name, json, headers) => {
     const call: Call = typeof json === "string" ? { body: json, headers } : json === undefined ? { body: "hi", headers } : { json, headers };
     expect(await beginUpload(undefined, call)).toEqual({ status: 400, body: { error: "Send the backup's app, name, size and head as JSON." } });
