@@ -10,7 +10,7 @@
 // message: open it, use it, and it is dead.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { Page, TestInfo } from "@playwright/test";
+import { expect, type Page, type TestInfo } from "@playwright/test";
 
 const execFileAsync = promisify(execFile);
 
@@ -99,6 +99,20 @@ export async function attachCapturedMail(testInfo: TestInfo, page: Page, mail: C
     for (const colorScheme of ["light", "dark"] as const) {
       await mailPage.emulateMedia({ colorScheme });
       await mailPage.setContent(mail.html, { waitUntil: "load" });
+      // The button's corners: a squircle where the browser draws one (Chromium), else square, never round.
+      const corners = await mailPage.locator(".sj-button").evaluate((cell) => {
+        const style = getComputedStyle(cell);
+        return { squircle: CSS.supports("corner-shape", "squircle"), shape: style.getPropertyValue("corner-shape"), radius: style.borderTopLeftRadius };
+      });
+      // Chromium draws corner-shape, so on the desktop-chrome project the squircle must be there.
+      if (testInfo.project.name === "desktop-chrome") expect(corners.squircle).toBe(true);
+      if (corners.squircle) {
+        // The squircle keyword computes to superellipse(2).
+        expect(corners.shape).toMatch(/^(squircle|superellipse\(2\))$/);
+        expect(corners.radius).toBe("14px");
+      } else {
+        expect(corners.radius).toBe("0px");
+      }
       await testInfo.attach(`${name}-mail-${colorScheme}`, { body: await mailPage.screenshot({ fullPage: true }), contentType: "image/png" });
     }
   } finally {

@@ -5,7 +5,9 @@
 // A mail is a heading, a few short paragraphs, at most one button and some small print. It renders
 // twice: a plain-text part, which keeps the whole link for clients that show no HTML, and an HTML
 // part in Spoonjoy's look (the brass mark and wordmark, Fraunces/Source Serif with Georgia behind
-// them, bone paper and charcoal ink, sj-tokens.css's colours).
+// them, bone paper and charcoal ink, sj-tokens.css's colours). The two serifs load from the sending
+// site's own /fonts/email/ (copies of app/fonts/'s latin files, at URLs that never change), so a
+// client that loads web fonts, such as Apple Mail, shows the app's type with no third party.
 //
 // Corners: the button is square unless the client can draw a squircle (`corner-shape`), so no client
 // ever shows a plain round corner. Dark mode: clients that honour prefers-color-scheme get Spoonjoy's
@@ -47,12 +49,23 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
-/** The link as a person reads it: host and path, with a long query (a token) cut short. */
+/**
+ * The link as a person reads it: the host and the first path segment, with an ellipsis for anything
+ * after it (a token), so it stays short and never wraps inside a word. The button and this link
+ * still go to the whole URL.
+ */
 export function shortLink(url: string): string {
   const parsed = new URL(url);
-  const query = parsed.search ? `${parsed.search.slice(0, parsed.search.indexOf("=") + 1 || 1)}…` : "";
-  return `${parsed.host}${parsed.pathname}${query}`;
+  const [first = "", ...rest] = parsed.pathname.split("/").filter(Boolean);
+  const more = rest.length > 0 || parsed.search !== "" || parsed.hash !== "";
+  return `${parsed.host}${first ? `/${first}` : ""}${more ? "…" : ""}`;
 }
+
+/** Where the mail's web fonts are served from, on the site that sends it. */
+export const ACCOUNT_EMAIL_FONT_PATHS = {
+  display: "/fonts/email/fraunces-400-900-latin.woff2",
+  body: "/fonts/email/source-serif-4-400-800-latin.woff2",
+} as const;
 
 function siteOrigin(baseUrl: string): string {
   return new URL(baseUrl).origin;
@@ -65,7 +78,9 @@ export function renderAccountEmailText(content: AccountEmailContent): string {
   return parts.join("\n\n");
 }
 
-const STYLE = `
+const style = (origin: string) => `
+@font-face { font-family: 'Fraunces'; font-style: normal; font-weight: 400 900; font-display: swap; src: url("${origin}${ACCOUNT_EMAIL_FONT_PATHS.display}") format('woff2'); }
+@font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 400 800; font-display: swap; src: url("${origin}${ACCOUNT_EMAIL_FONT_PATHS.body}") format('woff2'); }
 :root { color-scheme: light dark; supported-color-schemes: light dark; }
 body { margin: 0; padding: 0; }
 a { color: ${LIGHT.ink}; }
@@ -91,10 +106,10 @@ export function renderAccountEmailHtml(content: AccountEmailContent, baseUrl: st
   const action = content.action
     ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 14px;">
 <tr><td class="sj-button" bgcolor="${LIGHT.action}" style="background-color:${LIGHT.action};">
-<a href="${escapeHtml(content.action.url)}" style="display:inline-block;padding:14px 26px;font-family:${UI};font-size:16px;font-weight:600;line-height:1;color:${LIGHT.onAction};text-decoration:none;">${escapeHtml(content.action.label)}</a>
+<a href="${escapeHtml(content.action.url)}" style="display:inline-block;padding:14px 26px;font-family:${BODY};font-size:17px;font-weight:600;line-height:1;color:${LIGHT.onAction};text-decoration:none;">${escapeHtml(content.action.label)}</a>
 </td></tr>
 </table>
-<p class="sj-soft" style="margin:0 0 24px;font-family:${UI};font-size:13px;line-height:1.5;color:${LIGHT.soft};">Or open <a href="${escapeHtml(content.action.url)}" style="color:${LIGHT.soft};word-break:break-all;">${escapeHtml(shortLink(content.action.url))}</a></p>`
+<p class="sj-soft" style="margin:0 0 24px;font-family:${UI};font-size:13px;line-height:1.5;color:${LIGHT.soft};">Or open <a href="${escapeHtml(content.action.url)}" style="color:${LIGHT.soft};">${escapeHtml(shortLink(content.action.url))}</a></p>`
     : "";
   const footer = (content.footer ?? []).map(smallPrint).join("\n");
 
@@ -106,7 +121,7 @@ export function renderAccountEmailHtml(content: AccountEmailContent, baseUrl: st
 <meta name="color-scheme" content="light dark">
 <meta name="supported-color-schemes" content="light dark">
 <title>${escapeHtml(content.heading)}</title>
-<style>${STYLE}
+<style>${style(origin)}
 </style>
 </head>
 <body class="sj-page" style="margin:0;padding:0;background-color:${LIGHT.page};">

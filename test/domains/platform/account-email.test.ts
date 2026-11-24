@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { renderAccountEmail, shortLink, type AccountEmailContent } from "~/domains/platform";
 import { passwordResetEmail } from "~/lib/password-reset.server";
@@ -40,13 +42,27 @@ describe("account email", () => {
     const { html, text } = renderAccountEmail(passwordResetEmail(link), BASE);
     expect(text).toContain(`Choose a new password: ${link}`);
     expect(html.match(new RegExp(`href="${link.replace(/[?.]/g, "\\$&")}"`, "g"))).toHaveLength(2);
-    expect(html).toContain(">spoonjoy.app/reset-password?token=…</a>");
+    expect(html).toContain(">spoonjoy.app/reset-password…</a>");
   });
 
-  it("shortens a link to its host and path, cutting a query's value", () => {
-    expect(shortLink("https://spoonjoy.app/reset-password?token=abc")).toBe("spoonjoy.app/reset-password?token=…");
-    expect(shortLink("https://spoonjoy.app/join/inv_1")).toBe("spoonjoy.app/join/inv_1");
-    expect(shortLink("https://spoonjoy.app/x?abc")).toBe("spoonjoy.app/x?…");
+  it("shortens a link to its host and first path segment, so no token shows and nothing wraps mid-word", () => {
+    expect(shortLink("https://spoonjoy.app/reset-password?token=abc")).toBe("spoonjoy.app/reset-password…");
+    expect(shortLink("https://spoonjoy.app/join/uufKrnDJgarBH9ybTNXv4mF3CLjxw9EIxV674QyE3LE")).toBe("spoonjoy.app/join…");
+    expect(shortLink("https://spoonjoy.app/moderation")).toBe("spoonjoy.app/moderation");
+    expect(shortLink("https://spoonjoy.app/")).toBe("spoonjoy.app");
+  });
+
+  it("loads Fraunces and Source Serif from the sending site, keeping Georgia behind them, and sets the button in the serif", () => {
+    const { html } = renderAccountEmail(EMAILS["reset-password"].content, "https://kitchen.example.com/x");
+    expect(html).toContain(`src: url("https://kitchen.example.com/fonts/email/fraunces-400-900-latin.woff2")`);
+    expect(html).toContain(`src: url("https://kitchen.example.com/fonts/email/source-serif-4-400-800-latin.woff2")`);
+    expect(html).toMatch(/<a href="[^"]+" style="display:inline-block;padding:14px 26px;font-family:'Source Serif 4', Georgia, 'Times New Roman', serif;/);
+  });
+
+  it("serves the mail's fonts from public/, byte for byte the app's own", () => {
+    for (const [file, source] of [["fraunces-400-900-latin.woff2", "fraunces-400-900-latin.woff2"], ["source-serif-4-400-800-latin.woff2", "source-serif-4-400-800-latin.woff2"]]) {
+      expect(readFileSync(resolve("public/fonts/email", file)).equals(readFileSync(resolve("app/fonts", source)))).toBe(true);
+    }
   });
 
   it("draws the button square unless the client can draw a squircle, and never round", () => {
