@@ -108,6 +108,14 @@ export interface MoveInPorts {
   attachPhoto(input: { ownerId: string; recipeId: string; bytes: Uint8Array }): Promise<void>;
   /** Whether the recipe already has a cover that moved in. */
   hasMovedInPhoto(recipeId: string): Promise<boolean>;
+  /**
+   * Puts a recipe's tags, categories and tools on it, adding to any it has, for a cook who has organizers. A Worker
+   * without it leaves them in the backup.
+   */
+  organizers?: {
+    on(ownerId: string): boolean;
+    attach(input: { ownerId: string; recipeId: string; tags: string[]; categories: string[]; tools: string[] }): Promise<void>;
+  };
   /** Deletes the uploaded backup; it holds the other app's accounts, so it is kept no longer than the job needs it. */
   discardArchive(job: MoveInJob): Promise<void>;
   now(): Date;
@@ -166,7 +174,9 @@ async function inspect(run: Run, { backup, groupKey, drafts }: Opened) {
   });
   const counted = inspectGroup(backup.database, groupKey);
   const photos = drafts.filter((draft) => backup.hasFile(draft.photoPath)).length;
-  // Spoonjoy has no tags, categories or tools yet; they are counted, and left for a later move-in.
+  // A cook with organizers gets the tags, categories and tools on each recipe as it moves in; for anyone else they are
+  // counted, and left for a later move-in.
+  const organizing = run.ports.organizers?.on(job.ownerId) ?? false;
   const waiting = [["tags", counted.tags, "tag"], ["categories", counted.categories, "category"], ["tools", counted.tools, "tool"]] as const;
   const left = waiting.filter(([, found]) => found).map(([, found, one]) => plural(found, one, one === "category" ? "categories" : `${one}s`));
   const report: MoveInReport = {
@@ -175,11 +185,11 @@ async function inspect(run: Run, { backup, groupKey, drafts }: Opened) {
     counts: [
       ["recipes", { found: drafts.length }],
       ["photos", { found: photos }],
-      ...waiting.filter(([, found]) => found).map(([entity, found]) => [entity, { found, skipped: found }] as [string, Partial<MoveInCounts>]),
+      ...waiting.filter(([, found]) => found).map(([entity, found]) => [entity, organizing ? { found } : { found, skipped: found }] as [string, Partial<MoveInCounts>]),
     ],
     events: [
       event("phase-done", `Found ${plural(drafts.length, "recipe")}, ${photos} with a photo, in ${group.name}.`),
-      ...(left.length ? [event("item-skipped", `Spoonjoy doesn't have tags, categories or tools yet, so ${left.join(", ")} stayed in the backup.`, { entity: "tags" })] : []),
+      ...(left.length && !organizing ? [event("item-skipped", `Spoonjoy doesn't have tags, categories or tools yet, so ${left.join(", ")} stayed in the backup.`, { entity: "tags" })] : []),
     ],
   };
   await store.updateJob(job.id, { status: "running", phase: "recipes", cursor: "0", sourceId, attempt: 0 }, run.token, report);
@@ -201,7 +211,18 @@ async function bringPhoto({ job, ports }: Run, backup: MealieBackup, draft: Reci
   }
 }
 
-/** Brings one recipe and its photo, and returns what to report; writes nothing to the job itself. */
+/** Puts the recipe's tags, categories and tools on it, for a cook who has organizers; if that fails, the recipe stays and says so. */
+async function bringOrganizers({ job, ports }: Run, draft: RecipeDraft, recipeId: string, report: Report) {
+  const { tags, categories, tools } = draft;
+  if (!ports.organizers?.on(job.ownerId) || !(tags.length || categories.length || tools.length)) return;
+  try {
+    await ports.organizers.attach({ ownerId: job.ownerId, recipeId, tags, categories, tools });
+  } catch (error) {
+    report.events.push(event("item-degraded", `${draft.title} moved in without its tags, categories and tools: ${(error as Error).message}.`, { entity: "recipes", sourceKey: draft.sourceKey, targetId: recipeId }));
+  }
+}
+
+/** Brings one recipe, its photo and its organizers, and returns what to report; writes nothing to the job itself. */
 async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft): Promise<Report> {
   const { job, ports } = run;
   const report: Report = { counts: [], events: [] };
@@ -224,6 +245,8 @@ async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft): 
     // This job wrote it before a stop that came before the save: it is still this job's new recipe.
     const ours = result.outcome === "unchanged" && result.jobId === job.id;
     report.counts.push(["recipes", ours ? { created: 1 } : result.outcome === "updated" ? { updated: 1 } : { unchanged: 1 }]);
+    // Adding only, so a recipe already here gets any it lacks and keeps the ones the cook gave it.
+    await bringOrganizers(run, draft, result.recipeId, report);
     if (!hasPhoto) return report;
     // A run that stopped between the recipe and its photo left the photo out; bring it now.
     if (await ports.hasMovedInPhoto(result.recipeId)) report.counts.push(["photos", ours ? { created: 1 } : { unchanged: 1 }]);
@@ -235,6 +258,7 @@ async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft): 
     report.events.push(event("item-renamed", `You already had a recipe called "${result.renamedFrom}", so this one is "${result.title}".`, target));
   }
   for (const warning of result.warnings) report.events.push(event("item-degraded", warning, target));
+  await bringOrganizers(run, draft, result.recipeId, report);
   if (hasPhoto) await bringPhoto(run, backup, draft, result.recipeId, report);
   return report;
 }
