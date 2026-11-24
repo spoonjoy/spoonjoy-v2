@@ -6,7 +6,8 @@ vi.mock("~/lib/analytics-server", async (importOriginal) => ({
 }));
 
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub, createTestRecipe, createTestUser } from "../utils";
 import { db } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -306,7 +307,7 @@ describe("meal plan route", () => {
       expect(within(tuesday).getByText("Lunch · Tacos")).toBeTruthy();
       expect(within(tuesday).getByRole("button", { name: "Remove Eat out from Tuesday" })).toBeTruthy();
       expect(within(screen.getByRole("region", { name: "Wednesday, Nov 25" })).getByText("Snack")).toBeTruthy();
-      expect(within(screen.getByRole("region", { name: "Monday, Nov 23" })).getByText("Nothing planned yet.")).toBeTruthy();
+      expect(within(tuesday).queryByRole("button", { name: "Plan a meal for Tuesday" })).toBeNull();
       expect(screen.getByRole("link", { name: "Previous week" }).getAttribute("href")).toBe("/plan?week=2026-11-16");
       expect(screen.getByRole("link", { name: "Next week" }).getAttribute("href")).toBe("/plan?week=2026-11-30");
       expect(screen.getByRole("link", { name: "This week" }).getAttribute("href")).toBe("/plan");
@@ -348,26 +349,100 @@ describe("meal plan route", () => {
       expect(within(tuesday).getByText("Dinner")).toBeTruthy();
     });
 
-    it("offers the cook's recipes to plan, or a way to write one when there are none", async () => {
-      await renderPage();
-      expect(screen.getByRole("link", { name: "Write a recipe" }).getAttribute("href")).toBe("/recipes/new");
-      expect(screen.queryByRole("combobox", { name: "Recipe" })).toBeNull();
-      cleanup();
+    /** The page on a stub whose loader and action are the route's own, so an add lands and the week reloads. */
+    function renderLive(path = "/plan?week=2026-11-25") {
+      const Stub = createTestRoutesStub([{
+        path: "/plan",
+        Component: PlanPage,
+        loader: () => load(path),
+        action: async ({ request }: { request: Request }) => {
+          const fields = Object.fromEntries(await request.formData()) as Record<string, string>;
+          const result = await act(fields);
+          // The route redirects to the week it added to; the stub stays on this week.
+          return result instanceof Response ? null : result;
+        },
+      }]);
+      render(<Stub initialEntries={["/plan"]} />);
+      // A sheet open from the start hides the page from the accessibility tree.
+      return screen.findByRole("heading", { level: 1, hidden: true });
+    }
 
+    it("gives each day an Add that opens the recipe-or-note sheet with that day chosen", async () => {
+      const user = userEvent.setup();
       await db.recipe.create({ data: { ...createTestRecipe(chefId), title: "Lemon Herb Rice" } });
-      await renderPage();
-      expect(within(screen.getByRole("combobox", { name: "Recipe" })).getByRole("option", { name: "Lemon Herb Rice" })).toBeTruthy();
-      expect(screen.getAllByRole("combobox", { name: "Day" })[0]).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Add to plan" })).toBeTruthy();
-      cleanup();
+      await renderLive();
 
+      const tuesday = screen.getByRole("region", { name: "Tuesday, Nov 24" });
+      await user.click(within(tuesday).getByRole("button", { name: "Add to Tuesday" }));
+      const sheet = await screen.findByRole("dialog", { name: "Add to Tuesday, Nov 24" });
+      expect((within(sheet).getByRole("combobox", { name: "Recipe" }) as HTMLSelectElement).value).toBeTruthy();
+      expect(within(sheet).queryByRole("combobox", { name: "Day" })).toBeNull();
+      expect(within(sheet).queryByRole("textbox", { name: "Title" })).toBeNull();
+
+      await user.click(within(sheet).getByRole("radio", { name: "Note" }));
+      await user.type(within(sheet).getByRole("textbox", { name: "Title" }), "Eat out");
+      await user.click(within(sheet).getByRole("button", { name: "Add note" }));
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(within(screen.getByRole("region", { name: "Tuesday, Nov 24" })).getByText("Eat out")).toBeTruthy();
+      expect(await db.planEntry.findMany({ select: { date: true, mealType: true, title: true } })).toEqual([{ date: "2026-11-24", mealType: "dinner", title: "Eat out" }]);
+    });
+
+    it("plans a recipe from a day's sheet on that day, at the scale chosen", async () => {
+      const user = userEvent.setup();
+      const recipe = await db.recipe.create({ data: { ...createTestRecipe(chefId), title: "Lemon Herb Rice" } });
+      await renderLive();
+
+      await user.click(within(screen.getByRole("region", { name: "Thursday, Nov 26" })).getByRole("button", { name: "Plan a meal for Thursday" }));
+      const sheet = await screen.findByRole("dialog", { name: "Add to Thursday, Nov 26" });
+      await user.selectOptions(within(sheet).getByRole("combobox", { name: "Meal" }), "lunch");
+      const scale = within(sheet).getByRole("textbox", { name: "Scale" });
+      await user.clear(scale);
+      await user.type(scale, "2");
+      await user.click(within(sheet).getByRole("button", { name: "Add to plan" }));
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(within(screen.getByRole("region", { name: "Thursday, Nov 26" })).getByRole("link", { name: /Lemon Herb Rice/ })).toBeTruthy();
+      expect(await db.planEntry.findMany({ select: { date: true, mealType: true, recipeId: true, scaleFactor: true } })).toEqual([
+        { date: "2026-11-26", mealType: "lunch", recipeId: recipe.id, scaleFactor: 2 },
+      ]);
+    });
+
+    it("makes an empty day the add target, in place of saying nothing is planned", async () => {
+      const user = userEvent.setup();
+      await renderLive();
+
+      expect(screen.queryByText("Nothing planned yet.")).toBeNull();
+      const monday = screen.getByRole("region", { name: "Monday, Nov 23" });
+      await user.click(within(monday).getByRole("button", { name: "Plan a meal for Monday" }));
+      const sheet = await screen.findByRole("dialog", { name: "Add to Monday, Nov 23" });
+      await user.click(within(sheet).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    });
+
+    it("keeps the sheet open with the error on the form that sent it", async () => {
+      const user = userEvent.setup();
+      await renderLive();
+
+      await user.click(within(screen.getByRole("region", { name: "Monday, Nov 23" })).getByRole("button", { name: "Add to Monday" }));
+      const sheet = await screen.findByRole("dialog", { name: "Add to Monday, Nov 23" });
+      // No recipes yet: the sheet opens on the note, and the recipe side offers to write one.
+      await user.click(within(sheet).getByRole("radio", { name: "Recipe" }));
+      expect(within(sheet).getByRole("link", { name: "Write a recipe" }).getAttribute("href")).toBe("/recipes/new");
+      await user.click(within(sheet).getByRole("radio", { name: "Note" }));
+      await user.type(within(sheet).getByRole("textbox", { name: "Title" }), "   ");
+      await user.click(within(sheet).getByRole("button", { name: "Add note" }));
+
+      expect(await within(screen.getByRole("dialog", { name: "Add to Monday, Nov 23" })).findByText("Give the note a title.")).toBeTruthy();
+      expect(await db.planEntry.count()).toBe(0);
+    });
+
+    it("opens the sheet on the recipe a recipe's page sent the cook to plan", async () => {
       const other = await db.user.create({ data: createTestUser() });
       const salmon = await db.recipe.create({ data: { ...createTestRecipe(other.id), title: "Miso Glazed Salmon" } });
-      const chosen = await load(`/plan?week=2026-11-25&recipe=${salmon.id}`);
-      const Stub = createTestRoutesStub([{ path: "/plan", Component: PlanPage, loader: () => chosen }]);
-      render(<Stub initialEntries={["/plan"]} />);
-      expect(((await screen.findByRole("combobox", { name: "Recipe" })) as HTMLSelectElement).value).toBe(salmon.id);
-      expect(screen.getByRole("button", { name: "Add note" })).toBeTruthy();
+      await renderLive(`/plan?week=2026-11-25&recipe=${salmon.id}`);
+      const sheet = await screen.findByRole("dialog", { name: "Add to Monday, Nov 23" });
+      expect((within(sheet).getByRole("combobox", { name: "Recipe" }) as HTMLSelectElement).value).toBe(salmon.id);
     });
 
     it("shows a moved-in recipe meal that came without its title by its own title", async () => {
