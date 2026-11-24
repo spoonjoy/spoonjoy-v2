@@ -404,7 +404,7 @@ test.describe("Recipe create and edit", () => {
     let recipePath = "";
     const member = await browser.newContext({ storageState: scratchDesktopStorageStatePath(1) });
     try {
-      await page.getByRole("button", { name: "Make invite link", exact: true }).click();
+      await page.getByRole("button", { name: "Copy invite link", exact: true }).click();
       const linkField = page.getByLabel("Invite link");
       await expect(linkField).toHaveValue(/\/join\/[A-Za-z0-9_-]{43}$/);
       const invitePath = new URL(await linkField.inputValue()).pathname;
