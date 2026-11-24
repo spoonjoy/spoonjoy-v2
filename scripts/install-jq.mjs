@@ -17,34 +17,32 @@ export const JQ_DOWNLOAD_TIMEOUT_MS = 60_000;
 const backoffMs = (attempt) => 1000 * 2 ** (attempt - 1);
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function installJq({
-  env = process.env,
-  fetchImpl = fetch,
-  attempts = 3,
-  expectedSha256 = JQ_LINUX_AMD64_SHA256,
-  sleep = defaultSleep,
-} = {}) {
+/**
+ * Installs one pinned release binary for a job in Playwright's image: downloads it, checks its SHA-256, writes it
+ * executable to $RUNNER_TEMP/<name>/<name>, and puts that directory on the job's PATH.
+ */
+export async function installPinnedBinary({ name, url, sha256: expectedSha256, env = process.env, fetchImpl = fetch, attempts = 3, sleep = defaultSleep }) {
   const runnerTemp = env.RUNNER_TEMP;
   const githubPath = env.GITHUB_PATH;
-  if (!runnerTemp || !githubPath) throw new Error("install-jq needs RUNNER_TEMP and GITHUB_PATH (run it in a GitHub Actions job)");
+  if (!runnerTemp || !githubPath) throw new Error(`install-${name} needs RUNNER_TEMP and GITHUB_PATH (run it in a GitHub Actions job)`);
 
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const response = await fetchImpl(JQ_URL, { signal: AbortSignal.timeout(JQ_DOWNLOAD_TIMEOUT_MS) });
-      if (!response.ok) throw new Error(`${JQ_URL} answered ${response.status}`);
+      const response = await fetchImpl(url, { signal: AbortSignal.timeout(JQ_DOWNLOAD_TIMEOUT_MS) });
+      if (!response.ok) throw new Error(`${url} answered ${response.status}`);
       const binary = Buffer.from(await response.arrayBuffer());
       const sha256 = createHash("sha256").update(binary).digest("hex");
       // A wrong checksum is not a transient failure: stop at once.
       if (sha256 !== expectedSha256) {
-        throw Object.assign(new Error(`jq's SHA-256 is ${sha256}, expected ${expectedSha256}`), { fatal: true });
+        throw Object.assign(new Error(`${name}'s SHA-256 is ${sha256}, expected ${expectedSha256}`), { fatal: true });
       }
-      const dir = join(runnerTemp, "jq");
+      const dir = join(runnerTemp, name);
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, "jq"), binary);
-      chmodSync(join(dir, "jq"), 0o755);
+      writeFileSync(join(dir, name), binary);
+      chmodSync(join(dir, name), 0o755);
       appendFileSync(githubPath, `${dir}\n`);
-      return join(dir, "jq");
+      return join(dir, name);
     } catch (error) {
       if (error?.fatal) throw error;
       lastError = error;
@@ -52,6 +50,10 @@ export async function installJq({
     }
   }
   throw lastError;
+}
+
+export function installJq({ expectedSha256 = JQ_LINUX_AMD64_SHA256, ...options } = {}) {
+  return installPinnedBinary({ name: "jq", url: JQ_URL, sha256: expectedSha256, ...options });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

@@ -1,13 +1,14 @@
 // Move in on desktop, as the desktop twins of scratch indices 11 to 13 (e2e/journeys/scratch/), each
-// a fresh account of its own. The v1.12.0 and v2.8.0 kitchens move in once each. The v3.31.0 kitchen
-// moves in twice into the same account: the second time adds nothing, says everything was already
-// here, and still says so after a reload, and the kitchen holds one copy of its recipe, not two.
+// a fresh account of its own. The v1.12.0 and v2.8.0 kitchens move in once each from their backups.
+// The v3.31.0 kitchen moves in twice into the same account: first from a stand-in of its own server,
+// with an address and token, then from its backup. The second time adds nothing, says everything was
+// already here, and still says so after a reload, and the kitchen holds one copy of its recipe, not two.
 // A backup of over 200 MB whose connection drops partway carries on after a reload, in the index 11
 // account after its kitchen moved in, and one stopped with Stop upload starts over from its first
 // part. The base accounts of the same indices run move-in.mobile.journey.ts. Helpers:
 // support/move-in.ts.
-import { test } from "./support/journey";
-import { inTheKitchen, moveIn, moveInAfterADrop, moveInAgain, stopAndStartAgain } from "./support/move-in";
+import { expect, test } from "./support/journey";
+import { inTheKitchen, moveIn, moveInAfterADrop, moveInAgain, serverTest, stopAndStartAgain } from "./support/move-in";
 import { timeLargeMoveIn } from "./support/move-in-timing";
 import { scratchDesktopStorageStatePath } from "./support/personas";
 
@@ -36,12 +37,15 @@ test.describe("Move in, a v2.8.0 kitchen", { tag: "@move-in" }, () => {
   });
 });
 
-test.describe("Move in, the same v3.31.0 kitchen twice", { tag: "@move-in" }, () => {
+test.describe("Move in, the same v3.31.0 kitchen from its server and then its backup", { tag: "@move-in" }, () => {
   test.use({ storageState: scratchDesktopStorageStatePath(13) });
 
-  test("the second move-in adds nothing, even after a reload @mutates", async ({ page, expectAccessible, verifyAfterReload }) => {
+  serverTest("the backup adds nothing the server brought, even after a reload @mutates", async ({ page, expectAccessible, verifyAfterReload, recipeServer }) => {
     test.setTimeout(5 * 150_000);
-    await verifyAfterReload(await moveIn("v3.31.0", { page, expectAccessible }));
+    const server = await recipeServer("v3.31.0");
+    await verifyAfterReload(await moveIn("v3.31.0", { page, expectAccessible }, { from: server }));
+    // The recipes came from the server, asked for one at a time.
+    expect([...server.asked.keys()].filter((path) => path.startsWith("/api/recipes/")).length).toBeGreaterThan(0);
     await verifyAfterReload(await moveInAgain("v3.31.0", { page }));
     await inTheKitchen("v3.31.0", { page, verifyAfterReload });
   });

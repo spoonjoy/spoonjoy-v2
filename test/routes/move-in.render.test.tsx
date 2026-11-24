@@ -37,6 +37,7 @@ function view(fields: Partial<MoveInView> = {}): MoveInView {
     status: "running",
     finished: false,
     archiveName: "mealie.zip",
+    fromServer: false,
     recipes: { found: 0, done: 0, created: 0, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 },
     photos: { found: 0, in: 0 },
     organizers: { tags: 0, categories: 0, tools: 0 },
@@ -70,24 +71,45 @@ describe("the Move in page", () => {
     expect(meta()).toEqual([{ title: "Move in - Spoonjoy" }, { name: "robots", content: "noindex" }]);
   });
 
-  it("asks for a backup", async () => {
+  it("asks for the server's address and a token first, and for a backup instead when the cook picks one", async () => {
     page(null);
     expect(await screen.findByRole("heading", { level: 1, name: "Bring your kitchen with you." })).toBeTruthy();
     expect(screen.getByRole("radio", { name: /^Mealie/ })).toBeTruthy();
+    expect((screen.getByRole("radio", { name: /^From your server/ }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("textbox", { name: /^Server address/ })).toBeTruthy();
+    const token = screen.getByLabelText(/^API token/);
+    expect(token.getAttribute("type")).toBe("password");
+    // Kept out of password managers, which would otherwise offer the token at sign-in.
+    expect([token.getAttribute("autocomplete"), token.getAttribute("data-1p-ignore"), token.getAttribute("data-lpignore"), token.getAttribute("data-bwignore")]).toEqual(["new-password", "", "true", ""]);
+    expect(screen.queryByLabelText(/^Backup zip/)).toBeNull();
+    await act(async () => screen.getByRole("radio", { name: /^From a backup/ }).click());
+    expect(screen.getByLabelText(/^Backup zip/)).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: /^Server address/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Move in" })).toBeTruthy();
-    expect(screen.queryByText("That backup didn't move in")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("says it is checking a server on its way, and why the kitchen didn't move in", async () => {
+    routerState.navigation = "submitting";
+    routerState.actionData = { error: "Your recipe server didn't answer." };
+    page(null);
+    expect(await screen.findByRole("button", { name: "Checking your server…" })).toBeTruthy();
+    expect(screen.getByText("Your kitchen didn't move in")).toBeTruthy();
+    expect(screen.getByText("Your recipe server didn't answer.")).toBeTruthy();
   });
 
   it("says it is checking a backup on its way, and why one didn't move in", async () => {
     routerState.navigation = "submitting";
     routerState.actionData = { error: "That zip isn't a backup." };
-    page(null);
+    page(view({ status: "failed", finished: true, failure: "The backup is damaged." }));
     expect(await screen.findByRole("button", { name: "Checking the backup…" })).toBeTruthy();
+    expect(screen.getByText("That backup didn't move in")).toBeTruthy();
     expect(screen.getByText("That zip isn't a backup.")).toBeTruthy();
   });
 
   /** Puts `file` in the backup field, as the picker would, and presses Move in. */
   async function chooseAndSend(file: File | null) {
+    await act(async () => screen.getByRole("radio", { name: /^From a backup/ }).click());
     const input = (await screen.findByLabelText(/^Backup zip/)) as HTMLInputElement;
     Object.defineProperty(input, "files", { configurable: true, value: file ? [file] : [] });
     input.required = false;
@@ -207,6 +229,14 @@ describe("the Move in page", () => {
     await vi.waitFor(() => expect(action).toHaveBeenCalled());
     expect(sent.calls).toEqual([]);
     vi.unstubAllGlobals();
+  });
+
+  it("words a move-in from a server for the server", async () => {
+    page(view({ fromServer: true }));
+    expect(await screen.findByText("Reading your kitchen…")).toBeTruthy();
+    cleanup();
+    page(view({ fromServer: true, status: "done", finished: true, recipes: { found: 1, done: 1, created: 1, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 } }));
+    expect((await screen.findByRole("link", { name: "Move in again" })).getAttribute("href")).toBe("/move-in");
   });
 
   it("offers the form again, with what went wrong, when a move-in failed", async () => {

@@ -1,5 +1,6 @@
 // Moving a kitchen in, for the Move in journeys (move-in.mobile.journey.ts, move-in.desktop.journey.ts):
-// drop a source version's small kitchen backup on /move-in, watch it move in, and check the finish
+// drop a source version's small kitchen backup on /move-in, or give a stand-in of its server's address and a token
+// (support/recipe-server.ts), watch it move in, and check the finish
 // screen against the move-in proof's manifest, with the kitchen's tags, categories and tools counted;
 // move the same backup in again and see nothing added; find one of its recipes, photo, steps, tags
 // and all, in the kitchen. The backups and the manifest are
@@ -20,6 +21,7 @@ import { chooseMenuItem } from "./menu";
 import { pathUrl, waitForHydration } from "./navigation";
 import { proofFixtures } from "./move-in-fixtures";
 import { UPLOAD_ATTEMPTS, UPLOAD_CONCURRENCY } from "../../../app/lib/move-in-upload";
+import { startRecipeServer, type RecipeServer } from "./recipe-server";
 
 // A move-in of a small kitchen polls every few seconds; give it room on a slow QA run.
 const MOVE_IN_MS = 150_000;
@@ -30,6 +32,7 @@ interface Manifest {
 }
 
 let manifest: Manifest | undefined;
+let fixtureBundle: Awaited<ReturnType<typeof proofFixtures>>["bundle"] | undefined;
 const backups = new Map<string, Buffer>();
 /** One recipe with a photo and tags from each version's kitchen, to find after it moves in, with its organizers' names. */
 const samples = new Map<string, { title: string; tags: string[]; categories: string[]; tools: string[] }>();
@@ -47,6 +50,7 @@ async function fixtures(): Promise<Manifest> {
   const fixtures = await proofFixtures();
   const read = fixtures.manifest as unknown as Manifest;
   const bundle = fixtures.bundle;
+  fixtureBundle = bundle;
   for (const source of read.sources) {
     const entry = bundle.get(source.fixtures.small.backup);
     if (!entry) throw new Error(`The proof fixtures have no ${source.fixtures.small.backup}`);
@@ -83,6 +87,7 @@ const PART_URL = /\/move-in\/uploads\/[^/]+\/parts\/\d+$/;
 const isPart = (request: Request) => request.method() === "PUT" && PART_URL.test(new URL(request.url()).pathname);
 
 async function dropBackup(page: Page, version: string) {
+  await page.getByRole("main").getByRole("radio", { name: /^From a backup/ }).check();
   await page.getByLabel(requiredLabel("Backup zip"), { exact: true }).setInputFiles({
     name: `kitchen-${version}.zip`,
     mimeType: "application/zip",
@@ -94,6 +99,34 @@ async function dropBackup(page: Page, version: string) {
   // The page moves on once the Worker has read the whole upload, which Journeys gives as long as an upload takes.
   await expect(page).toHaveURL(/\/move-in\?job=movein_/, { timeout: UPLOAD_FETCH_TIMEOUT_MS });
 }
+
+/** Gives the stand-in server's address and token, the way a cook pastes them from their recipe app. */
+async function giveServer(page: Page, server: RecipeServer) {
+  const main = page.getByRole("main");
+  await expect(main.getByRole("radio", { name: /^From your server/ })).toBeChecked();
+  await main.getByLabel(requiredLabel("Server address"), { exact: true }).fill(server.address);
+  await main.getByLabel(requiredLabel("API token"), { exact: true }).fill(server.token);
+  await main.getByRole("button", { name: "Move in", exact: true }).click();
+  await expect(page).toHaveURL(/\/move-in\?job=movein_/, { timeout: 60_000 });
+}
+
+/**
+ * The journey test with `recipeServer`, which starts a stand-in for a version's kitchen on its own server, reached over
+ * a quick tunnel. Each one closes in the test's teardown, which runs even when the test times out.
+ */
+export const serverTest = test.extend<{ recipeServer: (version: string) => Promise<RecipeServer> }>({
+  // eslint-disable-next-line no-empty-pattern -- Playwright requires an object pattern for a fixture's fixtures.
+  recipeServer: async ({}, use) => {
+    const opened: RecipeServer[] = [];
+    await use(async (version) => {
+      await fixtures();
+      const server = await startRecipeServer(fixtureBundle as NonNullable<typeof fixtureBundle>, version);
+      opened.push(server);
+      return server;
+    });
+    await Promise.all(opened.map((server) => server.close()));
+  },
+});
 
 export type JourneyArgs = Pick<Parameters<Parameters<typeof test>[2]>[0], "page" | "expectAccessible" | "verifyAfterReload">;
 
@@ -124,7 +157,11 @@ async function reachable(control: Locator) {
  * Moves the version's small kitchen in and checks the finish screen against the manifest. Returns
  * that check, for the test to run again after a reload.
  */
-export async function moveIn(version: string, { page, expectAccessible }: Pick<JourneyArgs, "page" | "expectAccessible">): Promise<() => Promise<void>> {
+export async function moveIn(
+  version: string,
+  { page, expectAccessible }: Pick<JourneyArgs, "page" | "expectAccessible">,
+  { from }: { from?: RecipeServer } = {},
+): Promise<() => Promise<void>> {
   test.setTimeout(Math.max(test.info().timeout, 3 * MOVE_IN_MS));
   const { kitchens, sources } = await fixtures();
   expect(sources.map((source) => source.version)).toContain(version);
@@ -137,7 +174,8 @@ export async function moveIn(version: string, { page, expectAccessible }: Pick<J
   await expectAccessible();
   await snapshot(page, version, "1-before-a-file");
 
-  await dropBackup(page, version);
+  if (from) await giveServer(page, from);
+  else await dropBackup(page, version);
   // A small kitchen can finish before the first poll, so progress is captured only when it shows.
   const moving = main.getByRole("heading", { level: 2, name: "Moving in", exact: true });
   if (await moving.isVisible()) await snapshot(page, version, "2-progress");
@@ -151,7 +189,7 @@ export async function moveIn(version: string, { page, expectAccessible }: Pick<J
       if (count) await expect(detail(page, term)).toHaveText(String(count));
       else await expect(main.locator("dt", { hasText: term })).toHaveCount(0);
     }
-    await expect(main.getByText(/stayed in the backup/)).toHaveCount(0);
+    await expect(main.getByText(/stayed (in the backup|on your recipe server)/)).toHaveCount(0);
   };
   await finished();
   await expectAccessible();
@@ -168,7 +206,8 @@ export async function moveIn(version: string, { page, expectAccessible }: Pick<J
 export async function moveInAgain(version: string, { page }: Pick<JourneyArgs, "page">): Promise<() => Promise<void>> {
   const { recipes } = (await fixtures()).kitchens.small.counts;
   const main = page.getByRole("main");
-  await main.getByRole("link", { name: "Move in another backup", exact: true }).click();
+  // "Move in again" after a move-in from a server; "Move in another backup" after a backup.
+  await main.getByRole("link", { name: /^Move in (again|another backup)$/ }).click();
   await dropBackup(page, version);
   const nothingAdded = async () => {
     await expect(main.getByRole("heading", { level: 2, name: "Everything was already here", exact: true })).toBeVisible({ timeout: MOVE_IN_MS });
@@ -334,7 +373,9 @@ export async function moveInAfterADrop(version: string, { page, expectConsoleErr
   });
   await page.goto("/move-in");
   await waitForHydration(page);
+  const fromBackup = main.getByRole("radio", { name: /^From a backup/ });
   const field = page.getByLabel(requiredLabel("Backup zip"), { exact: true });
+  await fromBackup.check();
   await field.setInputFiles(path);
   await page.getByRole("button", { name: "Move in", exact: true }).click();
   await expect(main.getByText(/ of 2\d\d MB sent$/)).toBeVisible();
@@ -348,6 +389,7 @@ export async function moveInAfterADrop(version: string, { page, expectConsoleErr
   await page.unroute(PART_URL);
   await page.reload();
   await waitForHydration(page);
+  await fromBackup.check();
   await field.setInputFiles(path);
   await page.getByRole("button", { name: "Move in", exact: true }).click();
   await expect(page).toHaveURL(/\/move-in\?job=movein_/, { timeout: MOVE_IN_MS });

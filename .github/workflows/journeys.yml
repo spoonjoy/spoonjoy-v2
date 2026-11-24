@@ -361,6 +361,13 @@ jobs:
             echo "::add-mask::$password"
           done < <(jq -r '(.scratch[]?, .scratchDesktop[]?) | .password' "$SPOONJOY_QA_CREDENTIALS")
 
+      # Part 2's Move in journeys move one kitchen in from a stand-in of the other app's server
+      # (e2e/journeys/support/recipe-server.ts), which the QA Worker reaches over a Cloudflare quick
+      # tunnel; cloudflared opens it, pinned and checked as install-jq.mjs does jq.
+      - name: Install cloudflared for the Move in journeys
+        if: matrix.part == 2
+        run: node scripts/install-cloudflared.mjs
+
       # The HX census (e2e/journeys/hx-census.journey.ts) reads the seeded kitchen before any other
       # journey changes QA data, so it runs alone first; the other journeys run whether or not it
       # passed, and the step fails if either did. The census writes its report and results to
