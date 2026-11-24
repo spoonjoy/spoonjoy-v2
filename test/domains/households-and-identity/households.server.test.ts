@@ -5,6 +5,7 @@ import {
   changeMemberRole,
   createHousehold,
   createInvite,
+  emailInvite,
   getHousehold,
   householdChefIdsFor,
   leave,
@@ -16,6 +17,7 @@ import {
 } from "~/domains/households-and-identity/application/households.server";
 import { d1HouseholdStore } from "~/domains/households-and-identity/adapters/d1-household-store.server";
 import { migratedSqliteD1, type MigratedSqlite } from "../../helpers/migrated-sqlite";
+import type { TransactionalEmail } from "~/lib/transactional-email.server";
 
 let database: MigratedSqlite;
 let store: ReturnType<typeof d1HouseholdStore>;
@@ -156,6 +158,67 @@ describe("invites", () => {
       ok: false,
       error: "An invite works 1 to 50 times.",
     });
+  });
+});
+
+describe("invites by email", () => {
+  const joinUrl = (token: string) => `https://spoonjoy.app/join/${token}`;
+  function mailbox(fails = false) {
+    const sent: TransactionalEmail[] = [];
+    return {
+      sent,
+      email: {
+        async send(message: TransactionalEmail) {
+          if (fails) throw new Error("provider refused");
+          sent.push(message);
+        },
+      },
+    };
+  }
+
+  it("mails a link that joins only the address it was sent to, naming the household and who invited them", async () => {
+    const id = await homeOf("ann");
+    const box = mailbox();
+    const made = await emailInvite(store, box.email, { householdId: id, userId: "ann", input: { email: " Cal@Example.com ", role: "viewer" }, now, joinUrl });
+    expect(made).toEqual({ ok: true, value: { to: "cal@example.com" } });
+    expect(box.sent).toHaveLength(1);
+    const [message] = box.sent;
+    expect(message).toMatchObject({ to: "cal@example.com", purpose: "household_invite", subject: "ann_cooks invited you to The Lee kitchen on Spoonjoy" });
+    expect(message!.text).toContain("to see what The Lee kitchen shares");
+    expect(message!.text).toContain("It works once, for 14 days");
+    const token = /https:\/\/spoonjoy\.app\/join\/([A-Za-z0-9_-]+)/.exec(message!.text)![1]!;
+
+    expect(await acceptInvite(store, { token, userId: "ben", userEmail: "ben@example.com", now })).toMatchObject({ ok: false });
+    expect(await acceptInvite(store, { token, userId: "cal", userEmail: "cal@example.com", now })).toEqual({ ok: true, value: { householdId: id, joined: true } });
+    expect((await getHousehold(store, id, "ann"))!.members.find((member) => member.userId === "cal")?.role).toBe("viewer");
+  });
+
+  it("needs an address, and an owner to send it", async () => {
+    const id = await homeOf("ann");
+    const box = mailbox();
+    expect(await emailInvite(store, box.email, { householdId: id, userId: "ann", input: { email: " " }, now, joinUrl })).toEqual({
+      ok: false,
+      error: "Enter the email address to send the invite to.",
+    });
+    expect(await emailInvite(store, box.email, { householdId: id, userId: "ann", input: { email: "not-an-address" }, now, joinUrl })).toEqual({
+      ok: false,
+      error: "That email address doesn't look right.",
+    });
+    expect(await emailInvite(store, box.email, { householdId: id, userId: "ben", input: { email: "cal@example.com" }, now, joinUrl })).toEqual({
+      ok: false,
+      error: "Only an owner can invite people.",
+      forbidden: true,
+    });
+    expect(box.sent).toEqual([]);
+    expect((await getHousehold(store, id, "ann"))!.invites).toEqual([]);
+  });
+
+  it("turns the invite off again when the mail can't be sent, and says so", async () => {
+    const id = await homeOf("ann");
+    const made = await emailInvite(store, mailbox(true).email, { householdId: id, userId: "ann", input: { email: "cal@example.com" }, now, joinUrl });
+    expect(made).toEqual({ ok: false, error: "The invite email couldn't be sent. Make an invite link instead.", unavailable: true });
+    const [invite] = (await getHousehold(store, id, "ann"))!.invites;
+    expect(invite?.revokedAt).toEqual(now);
   });
 });
 

@@ -15,6 +15,7 @@ import {
 } from "../model/household";
 import { inviteStatus, validateInviteInput, type HouseholdInvite, type InviteStatus } from "../model/invite";
 import type { HouseholdMemberView, HouseholdStore, HouseholdSummary, StoredInvite } from "./household-store";
+import type { Email } from "~/domains/platform";
 
 export type HouseholdView = {
   id: string;
@@ -26,6 +27,7 @@ export type HouseholdView = {
 };
 
 const done: Validated<null> = { ok: true, value: null };
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function fail<T>(error: string): Validated<T> {
   return { ok: false, error };
@@ -96,6 +98,49 @@ export async function createInvite(
   const invite: HouseholdInvite = { id: crypto.randomUUID(), householdId, revokedAt: null, ...checked.value };
   await store.insertInvite(invite, { createdById: userId, tokenHash: await hashInviteToken(token), now });
   return { ok: true, value: { invite, token } };
+}
+
+/**
+ * Sends an invite to one address: an invite only that address's account can use, mailed with its link, which
+ * `joinUrl` makes from the token. When the mail can't be sent the invite is turned off again, so no one holds a link
+ * that was never delivered.
+ */
+export async function emailInvite(
+  store: HouseholdStore,
+  email: Email,
+  { householdId, userId, input, now, joinUrl }: {
+    householdId: string;
+    userId: string;
+    input: Record<string, unknown>;
+    now: Date;
+    joinUrl: (token: string) => string;
+  },
+): Promise<Validated<{ to: string }>> {
+  if (typeof input.email !== "string" || !input.email.trim()) return fail("Enter the email address to send the invite to.");
+  const made = await createInvite(store, { householdId, userId, input, now });
+  if (!made.ok) return made;
+  const { invite, token } = made.value;
+  const to = invite.email!;
+  const [household, members] = await Promise.all([store.household(householdId), store.members(householdId)]);
+  const name = household!.name;
+  const inviter = members.find((member) => member.userId === userId)!.username;
+  const what = invite.role === "viewer" ? `to see what ${name} shares` : `to share lists and meal plans in ${name}`;
+  try {
+    await email.send({
+      to,
+      purpose: "household_invite",
+      subject: `${inviter} invited you to ${name} on Spoonjoy`,
+      text: [
+        `${inviter} invited you ${what}, on Spoonjoy.`,
+        `Join here: ${joinUrl(token)}`,
+        `It works once, for ${Math.round((invite.expiresAt.getTime() - now.getTime()) / DAY_MS)} days, and only for the Spoonjoy account with this email address. If you weren't expecting it, you can ignore this email.`,
+      ].join("\n\n"),
+    });
+  } catch {
+    await store.revokeInvite(householdId, invite.id, now);
+    return { ok: false, error: "The invite email couldn't be sent. Make an invite link instead.", unavailable: true };
+  }
+  return { ok: true, value: { to } };
 }
 
 /** What an invite link joins, for the page that offers to join; null when the token matches no invite. */

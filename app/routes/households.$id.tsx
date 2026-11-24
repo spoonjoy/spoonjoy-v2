@@ -26,10 +26,12 @@ import {
   DEFAULT_INVITE_DAYS,
   HOUSEHOLD_ROLES,
   HOUSEHOLD_ROLE_LABELS,
+  inviteStatus,
   MAX_HOUSEHOLD_NAME_LENGTH,
   can,
   changeMemberRole,
   createInvite,
+  emailInvite,
   getHousehold,
   householdsRequest,
   leave,
@@ -37,6 +39,13 @@ import {
   renameHousehold,
 } from "~/domains/households-and-identity";
 import { OBJECTIONABLE_CONTENT_MESSAGE, containsObjectionableContent } from "~/lib/objectionable-terms";
+import { cloudflarePlatform, type CloudflarePlatformEnv } from "~/domains/platform/index.server";
+import { canSendAccountEmail } from "~/lib/transactional-email.server";
+
+const INVITE_ROLE_OPTIONS = [
+  { value: "member", label: "Member: adds to the shared lists and plan" },
+  { value: "viewer", label: "View-only: sees what the household shares" },
+];
 
 export function meta({ data: loaded }: Route.MetaArgs) {
   return [{ title: `${loaded?.household.name ?? "Household"} - Spoonjoy` }];
@@ -46,6 +55,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   const { userId, store } = await householdsRequest(request, context);
   const household = await getHousehold(store, params.id, userId);
   if (!household) throw new Response("Household not found", { status: 404 });
+  const now = new Date();
   return {
     household: {
       id: household.id,
@@ -55,6 +65,12 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       canManage: can(household.me, "manage-members"),
       canRename: can(household.me, "edit-settings"),
       maxNameLength: MAX_HOUSEHOLD_NAME_LENGTH,
+      // Inviting by email shows only where this server can send mail.
+      canEmailInvites: can(household.me, "invite") && canSendAccountEmail(context.cloudflare?.env),
+      // Email invites still waiting to be used; owners only, as getHousehold gives invites to owners alone.
+      emailInvites: household.invites
+        .filter((invite) => invite.email && inviteStatus(invite, now) === "usable")
+        .map((invite) => ({ id: invite.id, email: invite.email!, roleLabel: HOUSEHOLD_ROLE_LABELS[invite.role] })),
       roleChoices: HOUSEHOLD_ROLES.map((role) => ({ value: role, label: HOUSEHOLD_ROLE_LABELS[role] })),
       members: household.members.map((member) => ({
         userId: member.userId,
@@ -81,6 +97,21 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       invitedAs: made.value.invite.role === "viewer" ? "view-only" : "as a member",
       inviteDays: DEFAULT_INVITE_DAYS,
     };
+  }
+  if (intent === "email-invite") {
+    const env = context.cloudflare?.env as CloudflarePlatformEnv | undefined;
+    if (!env || !canSendAccountEmail(env)) {
+      return data({ error: "This server can't send email. Make an invite link instead." }, { status: 503 });
+    }
+    const sent = await emailInvite(store, cloudflarePlatform(env).email, {
+      householdId: params.id,
+      userId,
+      input: { email: form.get("email"), role: form.get("role") },
+      now: new Date(),
+      joinUrl: (token) => new URL(`/join/${token}`, request.url).href,
+    });
+    if (!sent.ok) return data({ error: sent.error }, { status: sent.forbidden ? 403 : sent.unavailable ? 503 : 400 });
+    return { invitedEmail: sent.value.to };
   }
   if (intent === "rename") {
     const name = String(form.get("name") ?? "");
@@ -120,6 +151,7 @@ export default function HouseholdPage() {
   const invite = actionData && "inviteUrl" in actionData && actionData.inviteUrl
     ? { inviteUrl: actionData.inviteUrl, invitedAs: actionData.invitedAs, inviteDays: actionData.inviteDays }
     : null;
+  const invitedEmail = actionData && "invitedEmail" in actionData ? actionData.invitedEmail : null;
   const submit = useSubmit();
   // The person whose role change or removal the server is still deciding. Their row keeps the role it has, with a
   // spinner, until the answer comes back: the new role, or the reason in the alert above and the old role kept.
@@ -232,10 +264,7 @@ export default function HouseholdPage() {
                 label="They join as"
                 name="role"
                 defaultValue="member"
-                options={[
-                  { value: "member", label: "Member: adds to the shared lists and plan" },
-                  { value: "viewer", label: "View-only: sees what the household shares" },
-                ]}
+                options={INVITE_ROLE_OPTIONS}
               />
               <div className="flex sm:justify-end">
                 <Button type="submit">Make invite link</Button>
@@ -251,6 +280,34 @@ export default function HouseholdPage() {
                   {`Anyone with this link joins ${invite.invitedAs}. It works once, for ${invite.inviteDays} days.`}
                 </Text>
               </div>
+            ) : null}
+            {household.canEmailInvites ? (
+              <Form method="post" render={<RouterForm />} className="mt-8 gap-4" aria-label="Invite by email">
+                <input type="hidden" name="intent" value="email-invite" />
+                <TextField
+                  label="Email address"
+                  name="email"
+                  type="email"
+                  required
+                  description="We email them a link that works only for their account."
+                />
+                <NativeSelect label="They join as" name="role" defaultValue="member" options={INVITE_ROLE_OPTIONS} />
+                <div className="flex sm:justify-end">
+                  <Button type="submit" variant="outline" tone="secondary">
+                    Send invite
+                  </Button>
+                </div>
+              </Form>
+            ) : null}
+            {invitedEmail ? (
+              <Text role="status" className="mt-4">{`Invite sent to ${invitedEmail}.`}</Text>
+            ) : null}
+            {household.emailInvites.length > 0 ? (
+              <ItemGroup aria-label="Waiting to join" variant="divided" className="mt-6">
+                {household.emailInvites.map((pending) => (
+                  <Item key={pending.id} title={pending.email} actions={<Badge tone="secondary" variant="soft">{pending.roleLabel}</Badge>} />
+                ))}
+              </ItemGroup>
             ) : null}
           </section>
         ) : null}
