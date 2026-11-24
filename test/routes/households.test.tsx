@@ -592,8 +592,11 @@ describe("/households/:id", () => {
             },
           }),
           action: async ({ request }: { request: Request }) => {
-            submitted.push(Object.fromEntries((await request.formData()) as unknown as Iterable<[string, string]>));
-            return { invitedEmail: "cal@example.com" };
+            const fields = Object.fromEntries((await request.formData()) as unknown as Iterable<[string, string]>);
+            submitted.push(fields);
+            return fields.intent === "invite"
+              ? { inviteUrl: "https://spoonjoy.app/join/tok", invitedAs: "as a member", inviteDays: 14 }
+              : { invitedEmail: "cal@example.com" };
           },
         },
       ]);
@@ -621,6 +624,12 @@ describe("/households/:id", () => {
     expect(await screen.findByText("Invite sent to cal@example.com.")).toBeTruthy();
     expect(submitted).toEqual([{ role: "viewer", email: "cal@example.com", intent: "email-invite" }]);
     expect((within(form).getByLabelText(/Email address/) as HTMLInputElement).value).toBe("");
+
+    // Copying a link afterwards leaves a newly typed address where it is.
+    await userEvent.type(within(form).getByLabelText(/Email address/), "dee@example.com");
+    await userEvent.click(within(form).getByRole("button", { name: "Copy invite link" }));
+    expect(await screen.findByDisplayValue("https://spoonjoy.app/join/tok")).toBeTruthy();
+    expect((within(form).getByLabelText(/Email address/) as HTMLInputElement).value).toBe("dee@example.com");
   });
 
   it("lists invites waiting to join under their heading, each with a way to cancel it", async () => {
