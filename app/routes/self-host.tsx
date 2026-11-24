@@ -61,6 +61,19 @@ function Section({ id, title, children }: { id: string; title: string; children:
   );
 }
 
+/** Says the image isn't out yet, until it is public. */
+export function ImageNotice({ imagePublic }: { imagePublic: boolean }) {
+  if (imagePublic) return null;
+  return (
+    <Alert
+      className="mt-8"
+      tone="primary"
+      title="Image coming soon"
+      description="The image is built and checked on every change, and opens to everyone soon. Until then these steps are here to read ahead."
+    />
+  );
+}
+
 export default function SelfHost() {
   return (
     <CookbookPage>
@@ -73,14 +86,7 @@ export default function SelfHost() {
       />
 
       <div className="max-w-3xl">
-        {IMAGE_PUBLIC ? null : (
-          <Alert
-            className="mt-8"
-            tone="primary"
-            title="Image coming soon"
-            description="The image is built and checked on every change, and opens to everyone soon. Until then these steps are here to read ahead."
-          />
-        )}
+        <ImageNotice imagePublic={IMAGE_PUBLIC} />
 
         <Section id="self-host-start" title="Start it">
           <Text>Save this as <code>compose.yaml</code>:</Text>
