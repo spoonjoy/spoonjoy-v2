@@ -27,6 +27,12 @@ function itemsOf(page: unknown): Json[] {
   return Array.isArray(items) ? items.filter((item): item is Json => Boolean(item) && typeof item === "object") : [];
 }
 
+// The cook's token goes only to the address they gave, over https, and the move-in waits only so long for each answer
+// and reads only so much of it, so a slow or strange server can't hold a run past its time or its memory.
+const REQUEST_MS = 10_000;
+const JSON_MAX_BYTES = 16 * 1024 * 1024;
+const PHOTO_MAX_BYTES = 20 * 1024 * 1024;
+
 function baseOf(address: string): URL {
   let url: URL;
   try {
@@ -34,7 +40,8 @@ function baseOf(address: string): URL {
   } catch {
     throw new MoveInError("server-address", "not a web address");
   }
-  if (url.protocol !== "https:" && url.protocol !== "http:") throw new MoveInError("server-address", `${url.protocol} isn't a web address`);
+  // Plain http would carry the token across the internet in the clear.
+  if (url.protocol !== "https:") throw new MoveInError("server-address", `${url.protocol} isn't https`);
   url.pathname = url.pathname.replace(/\/+$/, "");
   url.search = "";
   url.hash = "";
@@ -45,31 +52,77 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** The server answered, but not with what was asked for: a status it shouldn't give, or more than the move-in reads. */
+class AnswerError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = "AnswerError";
+  }
+}
+
+/** The body, up to `maxBytes`; a body cut off partway is an outage, like a server that can't be reached. */
+async function readBody(response: Response, path: string, maxBytes: number): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.length;
+      if (size > maxBytes) {
+        await reader.cancel();
+        throw new AnswerError(response.status, `the recipe server's answer for ${path} is larger than ${maxBytes / 1024 / 1024} MB`);
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof AnswerError) throw error;
+    throw new SourceUnavailableError(`the recipe server stopped answering partway: ${messageOf(error)}`);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return body;
+}
+
 function client({ address, token, fetch }: MealieApiConnection) {
-  const base = baseOf(address);
-  const request = async (path: string): Promise<Response> => {
+  const base = baseOf(address).href.replace(/\/$/, "");
+  const request = async (path: string, maxBytes: number): Promise<Uint8Array> => {
     let response: Response;
     try {
-      response = await fetch(`${base.href.replace(/\/$/, "")}${path}`, { headers: { authorization: `Bearer ${token}`, accept: "application/json" } });
+      response = await fetch(`${base}${path}`, {
+        headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+        // A redirect could carry the token to another server, so the move-in never follows one.
+        redirect: "manual",
+        signal: AbortSignal.timeout(REQUEST_MS),
+      });
     } catch (error) {
       throw new SourceUnavailableError(`the recipe server can't be reached: ${messageOf(error)}`);
     }
     if (response.status === 401 || response.status === 403) throw new MoveInError("server-token", `${path} answered ${response.status}`);
     if (response.status === 429 || response.status >= 500) throw new SourceUnavailableError(`the recipe server answered ${response.status} for ${path}`);
-    if (!response.ok) throw new Error(`the recipe server answered ${response.status} for ${path}`);
-    return response;
+    if (response.status !== 200) throw new AnswerError(response.status, `the recipe server answered ${response.status} for ${path}`);
+    return readBody(response, path, maxBytes);
   };
   return {
-    request,
-    json: async (path: string): Promise<unknown> => (await request(path)).json(),
-    bytes: async (path: string): Promise<Uint8Array> => new Uint8Array(await (await request(path)).arrayBuffer()),
+    /** The address with no trailing slash, as the move-in keeps it. */
+    base,
+    json: async (path: string): Promise<unknown> => JSON.parse(new TextDecoder().decode(await request(path, JSON_MAX_BYTES))),
+    bytes: (path: string): Promise<Uint8Array> => request(path, PHOTO_MAX_BYTES),
   };
 }
 
-/** Asks which version of the app answers at the address; anything else at that address isn't the recipe app. */
+/**
+ * Asks which version of the app answers at the address. Anything else there isn't the recipe app; that includes a
+ * sign-in page in front of it, since the app answers this without one.
+ */
 async function versionAt(api: ReturnType<typeof client>): Promise<string> {
   const about = await api.json("/api/app/about").catch((error: unknown) => {
-    if (error instanceof SourceUnavailableError || error instanceof MoveInError) throw error;
+    if (error instanceof SourceUnavailableError) throw error;
     throw new MoveInError("server-address", messageOf(error));
   });
   const version = text((about as Json | null)?.version);
@@ -82,11 +135,12 @@ export async function mealieApiSource(connection: MealieApiConnection): Promise<
   const version = await versionAt(api);
   const self = (await api.json("/api/users/self")) as Json;
   const kitchenKey = normalizeGuid(self.groupId);
+  if (!kitchenKey) throw new MoveInError("server-token", "the server has no kitchen for this token");
   // The server names the kitchen by its group's name.
   const name = text(self.group) ?? "Kitchen";
 
   async function openKitchen(key: string): Promise<MoveInKitchen | null> {
-    if (!kitchenKey || key !== kitchenKey) return null;
+    if (key !== kitchenKey) return null;
     // Oldest first, then by key, so every run counts through the same order and a recipe added meanwhile goes last.
     const listed: Listed[] = itemsOf(await api.json("/api/recipes?page=1&perPage=-1"))
       .map((item) => ({
@@ -111,8 +165,8 @@ export async function mealieApiSource(connection: MealieApiConnection): Promise<
       hasPhoto: (draft: RecipeDraft) => draft.photoPath !== "",
       async readPhoto(draft) {
         return api.bytes(draft.photoPath).catch((error: unknown) => {
-          if (error instanceof SourceUnavailableError || error instanceof MoveInError) throw error;
-          throw new Error("the server has no photo for this recipe");
+          if (error instanceof AnswerError && error.status === 404) throw new Error("the server has no photo for this recipe");
+          throw error;
         });
       },
     };

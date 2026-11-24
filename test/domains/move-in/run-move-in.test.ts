@@ -76,6 +76,7 @@ function harness({ zip = backup(), email = "cook@example.com", write, organizers
         jobs.set(id, { ...job, ...patch });
         return 1;
       },
+      forgiveAttempt: async (id) => void jobs.set(id, { ...(jobs.get(id) as MoveInJob), attempt: Math.max((jobs.get(id) as MoveInJob).attempt - 1, 0) }),
       sourceInstanceKey: async () => (sources.at(-1)?.instanceKey as string | undefined) ?? null,
       ensureSource: async (source) => (sources.push(source), "source-1"),
       hasIssues: async () => events.some((event) => event.level !== "info"),
@@ -448,6 +449,17 @@ describe("a source other than a backup", () => {
     // The first recipe moved in and was kept; the second is next again.
     expect(h.job()).toMatchObject({ status: "running", cursor: "1" });
     expect(h.counts.get("recipes")).toMatchObject({ failed: 0 });
+  });
+
+  it("waits out a long outage without passing any recipe over or calling the move-in stuck", async () => {
+    const h = harness();
+    let down = true;
+    changedSource(h, (kitchen) => ({ draft: async (index) => (down && index === 1 ? Promise.reject(new SourceUnavailableError("server down")) : kitchen.draft(index)) }));
+    expect(await h.runAll(1)).toMatchObject({ status: "running", cursor: "1", attempt: 0 });
+    expect(h.counts.get("recipes")).toMatchObject({ failed: 0 });
+    down = false;
+    expect(await h.runAll(1)).toMatchObject({ status: "done-with-issues" });
+    expect(h.counts.get("recipes")).toMatchObject({ failed: 0, created: 3 });
   });
 
   it("passes an outage on while reading a photo, rather than moving the recipe in without it", async () => {

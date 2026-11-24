@@ -109,6 +109,11 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
       return changes === 1 ? token : null;
     },
 
+    async forgiveAttempt(jobId) {
+      // Leaves "updatedAt" alone: an outage isn't progress, so a day of them still expires the job.
+      await d1WriteBatch(db, [[`UPDATE "ImportJob" SET "attempt" = MAX("attempt" - 1, 0) WHERE "id" = ?`, jobId]]);
+    },
+
     async release(jobId, token) {
       await d1WriteBatch(db, [[`UPDATE "ImportJob" SET "heartbeatAt" = NULL, "claimToken" = NULL WHERE "id" = ? AND "claimToken" = ?`, jobId, token]]);
     },
