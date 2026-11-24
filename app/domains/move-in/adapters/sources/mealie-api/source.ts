@@ -46,6 +46,8 @@ function baseOf(address: string): URL {
   }
   // Plain http would carry the token across the internet in the clear.
   if (url.protocol !== "https:") throw new MoveInError("server-address", `${url.protocol} isn't https`);
+  // A name and password in the address would be kept with it and sent beside the token: the token is all it needs.
+  if (url.username || url.password) throw new MoveInError("server-address", "the address has a name or password in it");
   url.pathname = url.pathname.replace(/\/+$/, "");
   url.search = "";
   url.hash = "";
