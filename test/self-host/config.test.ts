@@ -73,6 +73,19 @@ describe("selfHostVars", () => {
     expect(vars.SPOONJOY_CSP_MODE).toBe("enforce");
   });
 
+  it("sends web push with the server's own keys, unless the owner set theirs", () => {
+    const pushKeys = { publicKey: "server-public", privateKey: "server-private" };
+    expect(selfHostVars({ ...base, pushKeys })).toMatchObject({
+      VAPID_PUBLIC_KEY: "server-public",
+      VAPID_PRIVATE_KEY: "server-private",
+      VAPID_SUBJECT: "mailto:owner@localhost",
+    });
+    const owner = { VAPID_PUBLIC_KEY: "owner-public", VAPID_PRIVATE_KEY: "owner-private", VAPID_SUBJECT: "mailto:me@example.com" };
+    expect(selfHostVars({ ...base, pushKeys, env: owner })).toMatchObject(owner);
+    expect(selfHostVars({ ...base, pushKeys, env: { SPOONJOY_BASE_URL: "https://kitchen.example.com" } }).VAPID_SUBJECT).toBe("https://kitchen.example.com");
+    expect(selfHostVars(base).VAPID_PUBLIC_KEY).toBeUndefined();
+  });
+
   it("takes the public address from SPOONJOY_BASE_URL, for a server behind an HTTPS proxy", () => {
     expect(selfHostVars({ ...base, env: { SPOONJOY_BASE_URL: "https://kitchen.example.com" } }).SPOONJOY_BASE_URL).toBe(
       "https://kitchen.example.com",

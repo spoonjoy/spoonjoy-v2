@@ -1,6 +1,7 @@
 // What the self-hosted server hands Miniflare: the production build's own settings
 // (build/server/wrangler.json), with the changes a server in someone's home needs. Pure: no I/O.
 import path from "node:path";
+import { pushSubject } from "./push-keys.mjs";
 
 // The app's own settings a container may set (app/cloudflare-env.d.ts). Anything else in the
 // container's environment (PATH, HOSTNAME, NODE_OPTIONS) stays out of the Worker.
@@ -53,7 +54,7 @@ export function backupSettings(env, dataDir, checkCron) {
   return { schedule, keep, dir: env.SPOONJOY_BACKUP_DIR || path.join(dataDir, "backups") };
 }
 
-export function selfHostVars({ built, env, port, sessionSecret }) {
+export function selfHostVars({ built, env, port, sessionSecret, pushKeys }) {
   const vars = {
     ...built.vars,
     SPOONJOY_BASE_URL: `http://localhost:${port}`,
@@ -82,6 +83,12 @@ export function selfHostVars({ built, env, port, sessionSecret }) {
   if (!base || (base.protocol !== "http:" && base.protocol !== "https:")) {
     throw new Error(`SPOONJOY_BASE_URL must be an http:// or https:// address; got "${vars.SPOONJOY_BASE_URL}".`);
   }
+  // Web push with the server's own keys (self-host/push-keys.mjs), unless the owner set theirs.
+  if (pushKeys && !vars.VAPID_PUBLIC_KEY && !vars.VAPID_PRIVATE_KEY) {
+    vars.VAPID_PUBLIC_KEY = pushKeys.publicKey;
+    vars.VAPID_PRIVATE_KEY = pushKeys.privateKey;
+  }
+  vars.VAPID_SUBJECT ||= pushSubject(vars.SPOONJOY_BASE_URL);
   // Analytics are off unless the owner brings their own PostHog project.
   if (!vars.POSTHOG_KEY) vars.POSTHOG_DISABLED = "true";
   return vars;
@@ -122,10 +129,10 @@ function outboundInit(request) {
   return { method: request.method, headers, body: request.body, duplex: "half", redirect: request.redirect };
 }
 
-export function miniflareOptions({ built, env, settings, sessionSecret, version, serverAssetFiles, outboundFetch }) {
+export function miniflareOptions({ built, env, settings, sessionSecret, pushKeys, version, serverAssetFiles, outboundFetch }) {
   const { appDir, dataDir, port } = settings;
   const serverDir = path.join(appDir, "build/server");
-  const vars = selfHostVars({ built, env, port, sessionSecret });
+  const vars = selfHostVars({ built, env, port, sessionSecret, pushKeys });
   return {
     host: "0.0.0.0",
     port,
