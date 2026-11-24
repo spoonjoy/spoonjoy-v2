@@ -8,7 +8,7 @@
 // key), except for one deliberate parse on the Add Step page, which must not take the page down.
 import { test as journeyTest, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
-import { openDisclosure, pathUrl, waitForHydration } from "./support/navigation";
+import { pathUrl, waitForHydration } from "./support/navigation";
 import { chooseMenuItem } from "./support/menu";
 import { personaStorageStatePath, scratchStorageStatePath } from "./support/personas";
 import { requiredLabel } from "./support/forms";
@@ -363,7 +363,7 @@ test.describe("Recipe create and edit", () => {
     await page.goto(recipePath);
     await waitForHydration(page);
     await expectCookProgressSynced(page);
-    await (await openMaintenance(page)).getByRole("button", { name: "Delete", exact: true }).click();
+    await chooseRecipeAction(page, "Delete");
     const deleteRecipeDialog = page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ });
     await deleteRecipeDialog.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/recipes"));
