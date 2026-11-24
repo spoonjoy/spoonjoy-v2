@@ -7,7 +7,7 @@
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { APIResponse, Page, Route } from "@playwright/test";
+import type { APIRequestContext, APIResponse, Page, Route } from "@playwright/test";
 
 /** Waits until React has finished hydrating the page's current document. */
 export async function waitForHydration(page: Page): Promise<void> {
@@ -54,11 +54,12 @@ export async function loadAgainAfterTransportFailure<T>(
   load: () => Promise<T>,
   wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   onRetry: (error: Error) => void = () => undefined,
+  isReset: (error: unknown) => boolean = isTransportFailure,
 ): Promise<T> {
   const first = await load().then(
     (answer) => ({ answer }),
     (error: unknown) => {
-      if (!isTransportFailure(error)) throw error;
+      if (!isReset(error)) throw error;
       return { reset: error as Error };
     },
   );
@@ -286,6 +287,33 @@ function reportDataRequestAgain(method: string, path: string, error: Error): voi
 }
 
 /** The app's data requests on `origin`: every path ending in `.data`, with any query. */
+const requestsSentAgain = new WeakSet<APIRequestContext>();
+
+/**
+ * Makes every GET a journey sends through this API request context (page.request, or its browser
+ * context's request) send once more, after a second, when its connection dropped before any answer,
+ * like a page load (Journeys run 45383802562: "apiRequestContext.get: read ECONNRESET" on
+ * /sitemap.xml). A GET changes nothing, so sending it again repeats nothing. Other methods are left
+ * alone. A context's pages share one request context, so it is wrapped once.
+ */
+export function getAgainAfterReset(request: APIRequestContext): void {
+  if (requestsSentAgain.has(request)) return;
+  requestsSentAgain.add(request);
+  const get = request.get.bind(request);
+  request.get = (url, options) =>
+    loadAgainAfterTransportFailure(
+      () => get(url, options),
+      undefined,
+      (error) => console.warn(apiGetRetryNote(url, error)),
+      isFetchTransportFailure,
+    );
+}
+
+// scripts/warning-gate.ts lets these notes through (JOURNEYS_RETRY_NOTE_PATTERN).
+export function apiGetRetryNote(url: string, error: Error): string {
+  return `Journeys: sending GET ${new URL(url, "https://journeys.invalid").pathname} again after its connection was reset (${error.message.split("\n")[0]})`;
+}
+
 export function dataRequestPattern(origin: string): RegExp {
   return new RegExp(`^${origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/[^?#]*\\.data(?:[?#]|$)`);
 }
@@ -295,7 +323,8 @@ export function dataRequestPattern(origin: string): RegExp {
  * journey's first tap reaches the app, and load once more after a reset connection
  * (loadAgainAfterTransportFailure), and routes the app's static files through answerStaticAsset and
  * its data requests through answerDataRequest, which turns off the browser's HTTP cache for this
- * page. A load with waitUntil "commit" is not
+ * page, and sends its request context's GETs again after a dropped connection (getAgainAfterReset).
+ * A load with waitUntil "commit" is not
  * waited on: it is how a journey types into the server's markup before hydration on purpose.
  * support/journey.ts applies this to the fixture's page; a journey that opens its own page applies
  * it there.
@@ -303,6 +332,7 @@ export function dataRequestPattern(origin: string): RegExp {
 export function waitForHydrationOnLoad(page: Page): void {
   const goto = page.goto.bind(page);
   const reload = page.reload.bind(page);
+  getAgainAfterReset(page.request);
   // A glob, not a function: Playwright pauses every request a function matcher might match.
   const base = process.env.SPOONJOY_JOURNEYS_BASE_URL;
   const assetsRouted = base
