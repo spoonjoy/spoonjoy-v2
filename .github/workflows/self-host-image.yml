@@ -245,9 +245,13 @@ jobs:
             node node_modules/@playwright/test/cli.js test -c playwright.self-host.config.ts \
               e2e/journeys/personas.setup.ts e2e/journeys/sign-in.journey.ts e2e/journeys/round-trips.journey.ts
 
+      # The server's own web push key (self-host/push-keys.mjs) must survive the restart too, or
+      # every browser that subscribed would stop getting notifications.
       - name: Check the kitchen survives a restart
         if: success()
         run: |
+          push_key=$(curl -sf http://localhost:8080/api/push/public-key | jq -r .key)
+          [ "${#push_key}" = 87 ]
           start=$(date +%s%3N)
           docker restart sj
           for _ in $(seq 1 600); do
@@ -258,6 +262,7 @@ jobs:
           curl -sf http://localhost:8080/recipes/qa-kitchen-recipe-risotto -o .self-host/risotto.html
           grep -q "Saffron Risotto" .self-host/risotto.html
           rm .self-host/risotto.html
+          [ "$(curl -sf http://localhost:8080/api/push/public-key | jq -r .key)" = "$push_key" ]
           echo "{\"restartToFirstPageMs\": $(( end - start ))}" > "$OUT/restart.json"
           cat "$OUT/restart.json"
 

@@ -156,6 +156,12 @@ describe("Self-host Image workflow", () => {
     expect(run).toContain("-e SPOONJOY_SELF_HOST_RESTORED=1");
   });
 
+  it("checks the server's own web push key is there and survives a restart", () => {
+    const restart = stepNamed(image, /Check the kitchen survives a restart/);
+    expect(restart.run).toContain("/api/push/public-key");
+    expect(restart.run).toContain('= "$push_key" ]');
+  });
+
   it("shows a scheduled backup running on the restored server", () => {
     const run = stepNamed(image, /Back up the kitchen and restore it/).run ?? "";
     expect(run).toContain('-e "SPOONJOY_BACKUP_SCHEDULE=* * * * *" -e SPOONJOY_BACKUPS_KEPT=1');

@@ -30,6 +30,7 @@ The image runs as the unprivileged `node` user (uid 1000). A named volume needs 
 | `PORT` | The port the server listens on inside the container. | `8080` |
 | `SESSION_SECRET` | Signs sign-in cookies. Leave it unset and the server makes one and keeps it in `/data`. | generated |
 | `OPENAI_API_KEY`, `GEMINI_API_KEY` | AI features (ingredient parsing, covers). Without one, ingredient parsing uses the built-in parser. | none |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Web push notifications in the browser. Leave the keys unset and the server makes its own pair and keeps it in `/data/push-keys.json`. The subject is your `https://` address, or `mailto:owner@<host>` on plain `http://`. A server restored into a new `/data` makes new keys, so browsers turn notifications on again there. | generated |
 | `SPOONJOY_SIGNUPS` | `open` lets anyone who reaches the server sign up; `invite` lets only people with an invite link. Set, it overrides the switch in Server settings. | the switch, invite-only at first |
 | `SPOONJOY_MODERATOR_USERNAMES` | Comma-separated usernames who may review reports at `/moderation`, besides the server's admin. | none |
 | `SPOONJOY_RATE_LIMIT_<NAME>` | Raises one of the per-minute limits (`AUTH_IP_RATE_LIMITER`, `API_IP_RATE_LIMITER`, `API_TOKEN_RATE_LIMITER`, `INGREDIENT_PARSE_RATE_LIMITER`), for a household that all reaches the server from one address. | spoonjoy.app's |
