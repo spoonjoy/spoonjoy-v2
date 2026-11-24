@@ -261,6 +261,8 @@ describe("/households/:id", () => {
     const blank = await call(householdAction, `/households/${id}`, "ann", { intent: "rename", name: " " });
     expect(statusOf(blank)).toBe(400);
     expect(payload(blank)).toEqual({ error: "Give the household a name." });
+    const missing = await call(householdAction, `/households/${id}`, "ann", { intent: "rename" });
+    expect(statusOf(missing)).toBe(400);
     const blocked = await call(householdAction, `/households/${id}`, "ann", { intent: "rename", name: "kkk kitchen" });
     expect(statusOf(blocked)).toBe(400);
     expect(payload(await call(householdLoader, `/households/${id}`, "ann")).household.name).toBe("The Lee and Okafor kitchen");
