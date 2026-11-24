@@ -256,6 +256,24 @@ describe("Self-host Image workflow", () => {
     expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["app/routes/move-in.tsx", "app/domains/move-in/adapters/worker/**"]));
   });
 
+  it("restarts a server in the middle of a move-in, then waits for the move-in to finish with no page open", () => {
+    const step = stepNamed(image, /Finish a move-in the server restarts in the middle of/);
+    const run = step.run ?? "";
+    expect(step.if).toBe("success()");
+    const order = [
+      "docker run -d --name sj-restart --network host -v sj-restart:/data -e PORT=8084 -e SPOONJOY_FLAGS=move_in",
+      "restart_half before",
+      "docker restart sj-restart",
+      "restart_half after",
+      "docker rm -f sj-restart",
+    ].map((text) => run.lastIndexOf(text));
+    expect(order.every((index) => index > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(run).toContain('e2e/self-host/move-in-restart.spec.ts --output "test-results-self-host-move-in-restart-$1"');
+    expect(stepNamed(image, /Stop the server/).run).toContain("docker rm -f sj-restart || true");
+    expect(runs(image)).toMatch(/sanitize-journey-traces\.mjs [^\n]*test-results-self-host-move-in-restart-after/);
+  });
+
   it("starts the guide's Compose file with this image and waits for its health check, then takes it down", () => {
     const up = stepNamed(image, /Start it with Docker Compose/);
     expect(up.run).toContain('SPOONJOY_IMAGE="$LOCAL_IMAGE"');
