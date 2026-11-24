@@ -615,6 +615,7 @@ describe("/households/:id", () => {
     await screen.findByRole("heading", { level: 1, name: "Home" });
     const form = screen.getByRole("form", { name: "Invite someone" });
     expect(within(form).getAllByLabelText("They join as")).toHaveLength(1);
+    expect(within(form).getByRole("option", { name: "Member: adds to the shared lists" })).toBeTruthy();
     const send = within(form).getByRole("button", { name: "Send invite" });
     expect(send.getAttribute("aria-disabled")).toBe("true");
     await userEvent.type(within(form).getByLabelText(/Email address/), "cal@example.com");
@@ -740,7 +741,7 @@ describe("/join/:token", () => {
     ]);
     render(<Stub initialEntries={["/join/t"]} />);
     expect(await screen.findByRole("heading", { level: 1, name: "Join Home" })).toBeTruthy();
-    expect(screen.getByText("You'll join as a member: you can add to the shared lists and plan.")).toBeTruthy();
+    expect(screen.getByText("You'll join as a member: you can add to the shared lists.")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Join household" }));
     expect(await screen.findByText("This invite has already been used.")).toBeTruthy();
     cleanup();

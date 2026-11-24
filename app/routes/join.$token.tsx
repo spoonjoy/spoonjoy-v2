@@ -73,7 +73,7 @@ export default function JoinPage() {
           description={
             invite.role === "viewer"
               ? "You'll join view-only: you can see what it shares."
-              : "You'll join as a member: you can add to the shared lists and plan."
+              : "You'll join as a member: you can add to the shared lists."
           }
         />
         <Form method="post" render={<RouterForm />} className="mt-6 gap-4">
