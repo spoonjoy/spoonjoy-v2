@@ -109,7 +109,8 @@ describe("the Move in page", () => {
 
   /** Puts `file` in the backup field, as the picker would, and presses Move in. */
   async function chooseAndSend(file: File | null) {
-    await act(async () => screen.getByRole("radio", { name: /^From a backup/ }).click());
+    const backup = await screen.findByRole("radio", { name: /^From a backup/ });
+    await act(async () => backup.click());
     const input = (await screen.findByLabelText(/^Backup zip/)) as HTMLInputElement;
     Object.defineProperty(input, "files", { configurable: true, value: file ? [file] : [] });
     input.required = false;
