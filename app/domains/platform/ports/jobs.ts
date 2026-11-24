@@ -86,13 +86,13 @@ export function jobRegistry(): JobRegistry {
   return registry;
 }
 
-/** Where job keys are claimed and leased, so a key runs once at a time and finishes once: D1 on spoonjoy.app. */
 /** A job's message as its key keeps it, so it can be sent again if the queue loses it. */
 export interface KeptMessage {
   payload: unknown;
   deliverAt: Date;
 }
 
+/** Where job keys are claimed and leased, so a key runs once at a time and finishes once: D1 on spoonjoy.app. */
 export interface JobKeys {
   /**
    * True when the key was free (or left waiting for over a day, its message lost) and is now this job's;
