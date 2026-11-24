@@ -225,6 +225,7 @@ describe("/households/:id", () => {
     const refused = await call(householdAction, `/households/${id}`, "ben", { intent: "revoke-invite", inviteId: pending.id });
     expect(statusOf(refused)).toBe(403);
     expect(statusOf(await call(householdAction, `/households/${id}`, "ann", { intent: "revoke-invite", inviteId: "nope" }))).toBe(400);
+    expect(statusOf(await call(householdAction, `/households/${id}`, "ann", { intent: "revoke-invite" }))).toBe(400);
 
     expect(payload(await call(householdAction, `/households/${id}`, "ann", { intent: "revoke-invite", inviteId: pending.id }))).toEqual({ done: "revoked" });
     expect(payload(await call(householdLoader, `/households/${id}`, "ann", undefined, mail)).household.emailInvites).toEqual([]);
@@ -544,6 +545,34 @@ describe("/households/:id", () => {
     expect(await navigator.clipboard.readText()).toBe("https://spoonjoy.app/join/tok");
   });
 
+  it("still shows a new invite link to copy by hand when the browser refuses the clipboard", async () => {
+    const household = {
+      id: "h1",
+      name: "Home",
+      myRole: "owner",
+      canInvite: true,
+      emailInvites: [],
+      members: [{ userId: "ann", username: "ann_cooks", photoUrl: null, role: "owner", roleLabel: "Owner", me: true }],
+    };
+    const Stub = createTestRoutesStub([
+      {
+        path: "/households/:id",
+        Component: HouseholdPage,
+        loader: () => ({ household }),
+        action: () => ({ inviteUrl: "https://spoonjoy.app/join/tok", invitedAs: "as a member", inviteDays: 14 }),
+      },
+    ]);
+    render(<Stub initialEntries={["/households/h1"]} />);
+    const user = userEvent.setup();
+    const refused = vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
+    await user.click(await screen.findByRole("button", { name: "Copy invite link" }));
+    expect(await screen.findByDisplayValue("https://spoonjoy.app/join/tok")).toBeTruthy();
+    expect(await screen.findByText("Anyone with this link joins as a member. It works once, for 14 days.")).toBeTruthy();
+    expect(screen.queryByText(/^Link copied/)).toBeNull();
+    expect(refused).toHaveBeenCalledWith("https://spoonjoy.app/join/tok");
+    refused.mockRestore();
+  });
+
   it("invites from one form: copy a link, or send it to an address where mail works", async () => {
     const submitted: Array<Record<string, string>> = [];
     const pageFor = (canEmailInvites: boolean) =>
@@ -622,11 +651,35 @@ describe("/households/:id", () => {
     ]);
     render(<Stub initialEntries={["/households/h1"]} />);
     expect(await screen.findByRole("heading", { level: 3, name: "Waiting to join" })).toBeTruthy();
+    expect(screen.getByText("2 invites")).toBeTruthy();
     const waiting = screen.getByRole("list", { name: "Waiting to join" });
     expect(within(waiting).getByText("dee@example.com")).toBeTruthy();
     expect(within(waiting).getByText("View-only")).toBeTruthy();
     await userEvent.click(within(waiting).getByRole("button", { name: "Cancel invite to eve@example.com" }));
     await vi.waitFor(() => expect(submitted).toEqual([{ intent: "revoke-invite", inviteId: "i2" }]));
+  });
+
+  it("counts a single invite waiting to join as 1 invite", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/households/:id",
+        Component: HouseholdPage,
+        loader: () => ({
+          household: {
+            id: "h1",
+            name: "Home",
+            myRole: "owner",
+            canInvite: true,
+            canEmailInvites: true,
+            emailInvites: [{ id: "i1", email: "dee@example.com", roleLabel: "Member" }],
+            members: [{ userId: "ann", username: "ann_cooks", photoUrl: null, role: "owner", roleLabel: "Owner", me: true }],
+          },
+        }),
+      },
+    ]);
+    render(<Stub initialEntries={["/households/h1"]} />);
+    expect(await screen.findByRole("heading", { level: 3, name: "Waiting to join" })).toBeTruthy();
+    expect(screen.getByText("1 invite")).toBeTruthy();
   });
 
   it("hides the invite form from someone who can't invite, and shows an action's error", async () => {
