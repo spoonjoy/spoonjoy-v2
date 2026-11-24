@@ -431,6 +431,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     reason:
       "Generic Gemini text adapter (no PostHog config). Every catch throws a typed GeminiTextError preserving status/code/cause for timeout/network/non-2xx/non-JSON/empty-content; the sole caller (ingredient-parse.server.ts parseWithGemini -> parseIngredients) captures the surfaced failure via captureLlmCallFailure with provider='gemini'. Not silent — surfaced to an instrumented caller.",
   },
+  {
+    file: "app/routes/move-in.tsx",
+    category: "delegated",
+    reason:
+      "The loader's one catch, a failed nudge of a queued move-in, is captured by reportMoveIn in app/lib/move-in-route.server.ts, which every move-in endpoint shares.",
+  },
 ];
 
 /** Allowlist as a `file -> reason` map for the ratchet check. */
