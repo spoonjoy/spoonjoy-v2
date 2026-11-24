@@ -2,6 +2,7 @@
 // (self-host/config.mjs): the backups the admin sees on Server settings. Only the Worker can call
 // it; nothing outside the container reaches it.
 //
+//   POST /mail                    send one account email through the owner's SMTP server (self-host/mail.mjs)
 //   GET  /backups                 the schedule, the number kept and the backups, newest first
 //   POST /backups                 back up now
 //   GET  /backups/<name>          the backup file, to download
@@ -36,10 +37,11 @@ export function oneAtATime() {
 
 /**
  * The binding's handler. `settings` are backupSettings'; `backUp(kind)` and `restore(file)` do the
- * work and resolve to what they did, one at a time through `exclusive` (`oneAtATime`). `Response`
- * is Miniflare's, which the binding must answer with.
+ * work and resolve to what they did, one at a time through `exclusive` (`oneAtATime`). `sendMail`
+ * is smtpMailer's, or null when the server has no SMTP settings. `Response` is Miniflare's, which
+ * the binding must answer with.
  */
-export function hostApi({ settings, backUp, restore, exclusive, Response }) {
+export function hostApi({ settings, backUp, restore, exclusive, sendMail = null, Response }) {
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
   const run = async (work) => {
     try {
@@ -52,6 +54,16 @@ export function hostApi({ settings, backUp, restore, exclusive, Response }) {
 
   return async (request) => {
     const { pathname } = new URL(request.url);
+    if (pathname === "/mail" && request.method === "POST") {
+      if (!sendMail) return json({ error: "This server has no SMTP settings." }, 404);
+      try {
+        await sendMail(await request.json());
+        return json({ sent: true });
+      } catch (error) {
+        // Only the SMTP error's code goes back: the server's words can quote the address.
+        return json({ error: error?.code ?? error?.name ?? "Error" }, 502);
+      }
+    }
     if (pathname === "/backups") {
       if (request.method === "GET") return json({ schedule: settings.schedule, keep: settings.keep, backups: listBackups(settings.dir) });
       if (request.method === "POST") return run(() => backUp("manual"));

@@ -137,6 +137,63 @@ describe("transactional-email.server", () => {
     }
   });
 
+  describe("on a self-hosted server with SMTP settings", () => {
+    const smtpEnv = (host: unknown) => ({
+      SPOONJOY_SELF_HOSTED: "true",
+      SPOONJOY_SELF_HOST_MAIL: "smtp",
+      SELF_HOST: host,
+      SPOONJOY_EMAIL_FROM: " Our kitchen <kitchen@example.com> ",
+    });
+
+    it("sends only when the server around the Worker has SMTP settings and the binding to reach it", () => {
+      const host = { fetch: vi.fn() };
+      expect(resolveEmailDeliveryMode(smtpEnv(host))).toBe("send");
+      expect(resolveEmailDeliveryMode({ ...smtpEnv(host), SPOONJOY_EMAIL_FROM: undefined })).toBe("disabled");
+      expect(resolveEmailDeliveryMode({ ...smtpEnv(host), SPOONJOY_SELF_HOST_MAIL: undefined })).toBe("disabled");
+      expect(resolveEmailDeliveryMode({ ...smtpEnv(host), SPOONJOY_SELF_HOSTED: undefined })).toBe("disabled");
+      expect(resolveEmailDeliveryMode(smtpEnv(undefined))).toBe("disabled");
+      expect(resolveEmailDeliveryMode(smtpEnv({}))).toBe("disabled");
+      expect(host.fetch).not.toHaveBeenCalled();
+    });
+
+    it("hands each message to the server, which sends it through the SMTP server", async () => {
+      const fetch = vi.fn().mockResolvedValue(Response.json({ sent: true }));
+
+      await sendTransactionalEmail(db, smtpEnv({ fetch }), message);
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const [url, init] = fetch.mock.calls[0]!;
+      expect(url).toBe("http://self-host/mail");
+      expect(init).toMatchObject({ method: "POST", headers: { "Content-Type": "application/json" } });
+      expect(JSON.parse(init.body)).toEqual({
+        to: message.to,
+        from: "Our kitchen <kitchen@example.com>",
+        subject: message.subject,
+        text: message.text,
+        html: textToHtml(message.text),
+      });
+    });
+
+    it("reports the SMTP server's refusal by its code, as a provider refusal", async () => {
+      const fetch = vi.fn().mockResolvedValue(Response.json({ error: "EAUTH" }, { status: 502 }));
+
+      const error = await sendTransactionalEmail(db, smtpEnv({ fetch }), message).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(EmailDeliveryError);
+      expect((error as Error).message).toBe("Email provider refused the verify_email message (EAUTH)");
+    });
+
+    it("prefers a Cloudflare binding when there is one", async () => {
+      const send = vi.fn().mockResolvedValue({});
+      const fetch = vi.fn();
+
+      await sendTransactionalEmail(db, { ...smtpEnv({ fetch }), EMAIL: { send } }, message);
+
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(fetch).not.toHaveBeenCalled();
+    });
+  });
+
   it("renders paragraphs, line breaks and links, escaping markup", () => {
     expect(textToHtml('Hi <chef> & "friends"\nline two\n\nhttps://spoonjoy.app/a?b=1&c=2')).toBe(
       '<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;font-size:16px;line-height:1.5;color:#1f1b16">' +

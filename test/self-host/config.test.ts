@@ -131,6 +131,21 @@ describe("selfHostVars", () => {
     expect(selfHostVars({ ...base, env: { SPOONJOY_SELF_HOSTED: "false" } }).SPOONJOY_SELF_HOSTED).toBe("true");
   });
 
+  it("keeps the SMTP settings, password included, out of the Worker, and only tells it that mail goes through the server", () => {
+    const smtp = {
+      SPOONJOY_SMTP_HOST: "smtp.example.com",
+      SPOONJOY_SMTP_PORT: "587",
+      SPOONJOY_SMTP_USERNAME: "chef",
+      SPOONJOY_SMTP_PASSWORD: "app-password",
+      SPOONJOY_EMAIL_FROM: "kitchen@example.com",
+    };
+    const vars = selfHostVars({ ...base, env: smtp });
+    expect(Object.keys(vars).filter((key) => key.startsWith("SPOONJOY_SMTP_"))).toEqual([]);
+    expect(JSON.stringify(vars)).not.toContain("app-password");
+    expect(vars).toMatchObject({ SPOONJOY_SELF_HOST_MAIL: "smtp", SPOONJOY_EMAIL_FROM: "kitchen@example.com" });
+    expect(selfHostVars({ ...base, env: { SPOONJOY_SELF_HOST_MAIL: "smtp", SPOONJOY_SMTP_HOST: " " } }).SPOONJOY_SELF_HOST_MAIL).toBeUndefined();
+  });
+
   it("passes SPOONJOY_SIGNUPS through, and refuses a value that isn't open or invite", () => {
     expect(selfHostVars(base)).not.toHaveProperty("SPOONJOY_SIGNUPS");
     expect(selfHostVars({ ...base, env: { SPOONJOY_SIGNUPS: "open" } }).SPOONJOY_SIGNUPS).toBe("open");

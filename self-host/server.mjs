@@ -20,11 +20,13 @@ import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Miniflare, Response as MiniflareResponse, fetch as nodeFetch } from "miniflare";
+import { createTransport } from "nodemailer";
 import { createBackup, backupFileName, pruneBackups, restoreBackup } from "./backup.mjs";
 import { serverPushKeys } from "./push-keys.mjs";
 import { backupSettings, miniflareOptions, photoUploads, settingsFromEnv } from "./config.mjs";
 import { nextCronTime, startCronTimers } from "./cron.mjs";
 import { BusyError, hostApi, oneAtATime } from "./host-api.mjs";
+import { mailSettings, smtpMailer } from "./mail.mjs";
 import { applyMigrations, migrationFiles, splitSql } from "./migrations.mjs";
 
 const startedAt = Date.now();
@@ -32,6 +34,7 @@ const [command = "serve", ...args] = process.argv.slice(2);
 const settings = settingsFromEnv(process.env);
 const { appDir, dataDir } = settings;
 const backups = backupSettings(process.env, dataDir, (cron) => nextCronTime(cron, Date.now()));
+const mail = mailSettings(process.env);
 // One backup or restore at a time, whether the schedule or the admin asks for it.
 const exclusive = oneAtATime();
 let api;
@@ -57,7 +60,7 @@ const options = miniflareOptions({
   serverAssetFiles: readdirSync(path.join(appDir, "build/server/assets")),
   outboundFetch: nodeFetch,
   // Built on its first request, which comes only once the database below is ready.
-  hostService: command === "serve" ? (request) => (api ??= hostApi({ settings: backups, backUp, restore: restoreFrom, exclusive, Response: MiniflareResponse }))(request) : undefined,
+  hostService: command === "serve" ? (request) => (api ??= hostApi({ settings: backups, backUp, restore: restoreFrom, exclusive, sendMail, Response: MiniflareResponse }))(request) : undefined,
 });
 if (command !== "serve") options.host = "127.0.0.1";
 
@@ -68,6 +71,20 @@ const db = await mf.getD1Database("DB");
 const knownMigrations = migrationFiles(path.join(appDir, "migrations"));
 const migrations = await applyMigrations(db, knownMigrations);
 const version = options.bindings.CF_VERSION_METADATA.id;
+
+// Account mail through the owner's SMTP server. The log says only whether it went, never to whom.
+const smtp = mail ? smtpMailer(mail, createTransport) : null;
+const sendMail = smtp
+  ? async (message) => {
+      try {
+        await smtp(message);
+        log("mail-sent");
+      } catch (error) {
+        log("mail-failed", { code: error?.code ?? error?.name ?? "Error" });
+        throw error;
+      }
+    }
+  : null;
 
 async function backUp(kind, file = path.join(backups.dir, backupFileName(kind))) {
   mkdirSync(path.dirname(file), { recursive: true });
@@ -159,6 +176,7 @@ log("ready", {
   version,
   port: settings.port,
   backups: backups.schedule ? { schedule: backups.schedule, keep: backups.keep, dir: backups.dir } : "off",
+  mail: mail ? { host: mail.host, port: mail.port, security: mail.security } : "off",
   migrationsRun: migrations.ran,
   migrations: migrations.total,
   bootMs: Date.now() - startedAt,

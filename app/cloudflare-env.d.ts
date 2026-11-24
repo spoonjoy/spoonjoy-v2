@@ -147,8 +147,10 @@ declare global {
     SPOONJOY_MODERATOR_USERNAMES?: string;
     /** "true" only on a self-hosted server (self-host/config.mjs): its first account is its admin (app/lib/server-access.server.ts). */
     SPOONJOY_SELF_HOSTED?: string;
-    /** Only on a self-hosted server: the server's backups, answered by self-host/host-api.mjs. */
+    /** Only on a self-hosted server: the server's backups and account mail, answered by self-host/host-api.mjs. */
     SELF_HOST?: Fetcher;
+    /** "smtp" only on a self-hosted server whose owner set SPOONJOY_SMTP_HOST: account mail goes out through SELF_HOST. */
+    SPOONJOY_SELF_HOST_MAIL?: string;
     /** A self-hosted server's sign-ups, "open" or "invite", over its admin's switch. */
     SPOONJOY_SIGNUPS?: string;
     /** "1" only on a per-run QA Worker: handleError writes one scrubbed console.error line per error. */
