@@ -185,7 +185,8 @@ describe("invites by email", () => {
     const [message] = box.sent;
     expect(message).toMatchObject({ to: "cal@example.com", purpose: "household_invite", subject: "ann_cooks invited you to The Lee kitchen on Spoonjoy" });
     expect(message!.text).toContain("to see what The Lee kitchen shares");
-    expect(message!.text).toContain("It works once, for 14 days");
+    expect(message!.text).toContain("The invite works once, for 14 days");
+    expect(message!.html).toContain(">Join The Lee kitchen</a>");
     const token = /https:\/\/spoonjoy\.app\/join\/([A-Za-z0-9_-]+)/.exec(message!.text)![1]!;
 
     expect(await acceptInvite(store, { token, userId: "ben", userEmail: "ben@example.com", now })).toMatchObject({ ok: false });

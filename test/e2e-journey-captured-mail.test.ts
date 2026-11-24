@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   capturedMailQuery,
   resetLinkPath,
-  textBodyFromD1Output,
+  mailFromD1Output,
   waitForCapturedMail,
 } from "../e2e/journeys/support/captured-mail";
 
@@ -13,23 +13,25 @@ const RESET_MAIL = [
   "The link works once, for the next 30 minutes.",
 ].join("\n\n");
 
-function d1Output(rows: Array<{ textBody: string }>): string {
+function d1Output(rows: Array<{ textBody: string; htmlBody?: string | null }>): string {
   return `${JSON.stringify([{ results: rows, success: true, meta: {} }])}\n`;
 }
 
 describe("captured mail", () => {
-  it("reads only a run's throwaway address", () => {
+  it("reads only an example.com address", () => {
     expect(capturedMailQuery(ADDRESS, "reset_password")).toBe(
-      `SELECT "textBody" FROM "EmailOutbox" WHERE "toAddress" = '${ADDRESS}' AND "purpose" = 'reset_password' ORDER BY "createdAt" DESC LIMIT 1`,
+      `SELECT "textBody", "htmlBody" FROM "EmailOutbox" WHERE "toAddress" = '${ADDRESS}' AND "purpose" = 'reset_password' ORDER BY "createdAt" DESC LIMIT 1`,
     );
-    expect(() => capturedMailQuery("qa-kitchen-chef@example.com", "reset_password")).toThrow(/throwaway/);
-    expect(() => capturedMailQuery("codex-e2e-x'; DROP TABLE User;--@example.com", "reset_password")).toThrow(/throwaway/);
+    expect(capturedMailQuery("cook-abc123@example.com", "household_invite")).toContain(`"toAddress" = 'cook-abc123@example.com' AND "purpose" = 'household_invite'`);
+    expect(() => capturedMailQuery("someone@gmail.com", "reset_password")).toThrow(/example\.com/);
+    expect(() => capturedMailQuery("codex-e2e-x'; DROP TABLE User;--@example.com", "reset_password")).toThrow(/example\.com/);
   });
 
-  it("answers the text body from wrangler's JSON, after any lines before it, or null for no row", () => {
-    expect(textBodyFromD1Output(`warning line\n${d1Output([{ textBody: RESET_MAIL }])}`)).toBe(RESET_MAIL);
-    expect(textBodyFromD1Output(d1Output([]))).toBeNull();
-    expect(() => textBodyFromD1Output("no json here")).toThrow(/no JSON/);
+  it("answers the mail from wrangler's JSON, after any lines before it, or null for no row", () => {
+    expect(mailFromD1Output(`warning line\n${d1Output([{ textBody: RESET_MAIL, htmlBody: "<p>hi</p>" }])}`)).toEqual({ text: RESET_MAIL, html: "<p>hi</p>" });
+    expect(mailFromD1Output(d1Output([{ textBody: RESET_MAIL, htmlBody: null }]))).toEqual({ text: RESET_MAIL, html: null });
+    expect(mailFromD1Output(d1Output([]))).toBeNull();
+    expect(() => mailFromD1Output("no json here")).toThrow(/no JSON/);
   });
 
   it("takes the reset link's path and query from the mail", () => {
@@ -40,14 +42,14 @@ describe("captured mail", () => {
   it("reads again until the mail is captured, and gives up after the last read", async () => {
     const outputs = [d1Output([]), d1Output([]), d1Output([{ textBody: RESET_MAIL }])];
     const sql: string[] = [];
-    const body = await waitForCapturedMail(ADDRESS, "reset_password", {
+    const mail = await waitForCapturedMail(ADDRESS, "reset_password", {
       delayMs: 0,
       query: async (statement) => {
         sql.push(statement);
         return outputs.shift()!;
       },
     });
-    expect(body).toBe(RESET_MAIL);
+    expect(mail).toEqual({ text: RESET_MAIL, html: null });
     expect(sql).toHaveLength(3);
 
     await expect(

@@ -102,6 +102,7 @@ model EmailOutbox {
   purpose   String
   subject   String
   textBody  String
+  htmlBody  String?
   createdAt DateTime @default(now())
 
   @@index([toAddress, createdAt])

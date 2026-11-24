@@ -56,6 +56,8 @@ export interface TransactionalEmail {
   purpose: EmailPurpose;
   subject: string;
   text: string;
+  /** The HTML part, from renderAccountEmail (app/domains/platform/model/account-email.ts). Without it, the text is sent as simple HTML. */
+  html?: string;
 }
 
 export class EmailDeliveryError extends Error {
@@ -118,7 +120,7 @@ export async function sendTransactionalEmail(
   if (mode === "capture") {
     await db.emailOutbox.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - CAPTURED_EMAIL_RETENTION_MS) } } });
     await db.emailOutbox.create({
-      data: { toAddress: email.to, purpose: email.purpose, subject: email.subject, textBody: email.text },
+      data: { toAddress: email.to, purpose: email.purpose, subject: email.subject, textBody: email.text, htmlBody: email.html ?? textToHtml(email.text) },
     });
     return;
   }
@@ -129,7 +131,7 @@ export async function sendTransactionalEmail(
       from: env!.SPOONJOY_EMAIL_FROM!.trim(),
       subject: email.subject,
       text: email.text,
-      html: textToHtml(email.text),
+      html: email.html ?? textToHtml(email.text),
     });
   } catch (error) {
     // The provider's message can include the address; keep it out of logs, telemetry and responses.

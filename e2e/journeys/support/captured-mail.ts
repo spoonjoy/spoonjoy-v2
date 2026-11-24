@@ -10,30 +10,38 @@
 // message: open it, use it, and it is dead.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import type { Page, TestInfo } from "@playwright/test";
 
 const execFileAsync = promisify(execFile);
 
-export type CapturedMailPurpose = "reset_password";
+export type CapturedMailPurpose = "reset_password" | "household_invite";
 
-// Only the run's own throwaway addresses (scripts/seed-qa-kitchen.mjs's scratch accounts and
-// createDisposableJourneyUser's) are read, and the address goes into SQL, so anything else is refused.
-const THROWAWAY_ADDRESS = /^codex-e2e-[a-z0-9-]+@example\.com$/;
-
-/** The SQL for the newest captured message of this purpose to this throwaway address. */
-export function capturedMailQuery(to: string, purpose: CapturedMailPurpose): string {
-  if (!THROWAWAY_ADDRESS.test(to)) {
-    throw new Error("Captured mail is read only for a run's codex-e2e-*@example.com throwaway address.");
-  }
-  return `SELECT "textBody" FROM "EmailOutbox" WHERE "toAddress" = '${to}' AND "purpose" = '${purpose}' ORDER BY "createdAt" DESC LIMIT 1`;
+export interface CapturedMail {
+  text: string;
+  /** The HTML part; null for mail captured before QA kept it (migration 0055). */
+  html: string | null;
 }
 
-/** The text body from `wrangler d1 execute --json` output, or null when the query matched no row. */
-export function textBodyFromD1Output(stdout: string): string | null {
+// Only addresses at example.com, which no one receives mail for, are read: the run's throwaway
+// accounts and the addresses journeys invite. The address goes into SQL, so anything else is refused.
+const THROWAWAY_ADDRESS = /^[a-z0-9._+-]+@example\.com$/;
+
+/** The SQL for the newest captured message of this purpose to this example.com address. */
+export function capturedMailQuery(to: string, purpose: CapturedMailPurpose): string {
+  if (!THROWAWAY_ADDRESS.test(to)) {
+    throw new Error("Captured mail is read only for an @example.com address.");
+  }
+  return `SELECT "textBody", "htmlBody" FROM "EmailOutbox" WHERE "toAddress" = '${to}' AND "purpose" = '${purpose}' ORDER BY "createdAt" DESC LIMIT 1`;
+}
+
+/** The mail from `wrangler d1 execute --json` output, or null when the query matched no row. */
+export function mailFromD1Output(stdout: string): CapturedMail | null {
   const start = stdout.indexOf("[");
   if (start < 0) throw new Error("wrangler d1 execute printed no JSON.");
-  const statements = JSON.parse(stdout.slice(start)) as Array<{ results?: Array<{ textBody?: unknown }> }>;
-  const body = statements[0]?.results?.[0]?.textBody;
-  return typeof body === "string" ? body : null;
+  const statements = JSON.parse(stdout.slice(start)) as Array<{ results?: Array<{ textBody?: unknown; htmlBody?: unknown }> }>;
+  const row = statements[0]?.results?.[0];
+  if (typeof row?.textBody !== "string") return null;
+  return { text: row.textBody, html: typeof row.htmlBody === "string" ? row.htmlBody : null };
 }
 
 /** The path and query of the reset link in a reset mail, so the journey opens it on its own origin. */
@@ -63,18 +71,37 @@ async function queryRunDatabase(sql: string): Promise<string> {
 
 /**
  * Waits for the run's Worker to capture a message of this purpose to this address and answers its
- * text. The Worker writes it after answering the form (waitUntil), so the first read can be early.
+ * text and HTML. The Worker writes it after answering the form (waitUntil), so the first read can be early.
  */
 export async function waitForCapturedMail(
   to: string,
   purpose: CapturedMailPurpose,
   { attempts = 8, delayMs = 2_000, query = queryRunDatabase }: WaitOptions = {},
-): Promise<string> {
+): Promise<CapturedMail> {
   const sql = capturedMailQuery(to, purpose);
   for (let attempt = 1; attempt <= attempts; attempt++) {
-    const body = textBodyFromD1Output(await query(sql));
-    if (body !== null) return body;
+    const mail = mailFromD1Output(await query(sql));
+    if (mail !== null) return mail;
     if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
   throw new Error(`No ${purpose} mail was captured for the address after ${attempts} reads.`);
+}
+
+/**
+ * Attaches the mail's HTML part as a person sees it, in light and in dark mode, opened in a page of
+ * its own beside the journey's. A mail with no HTML part fails the journey.
+ */
+export async function attachCapturedMail(testInfo: TestInfo, page: Page, mail: CapturedMail, name: string): Promise<void> {
+  if (mail.html === null) throw new Error(`The captured ${name} mail has no HTML part.`);
+  const mailPage = await page.context().newPage();
+  try {
+    await mailPage.setViewportSize({ width: 600, height: 720 });
+    for (const colorScheme of ["light", "dark"] as const) {
+      await mailPage.emulateMedia({ colorScheme });
+      await mailPage.setContent(mail.html, { waitUntil: "load" });
+      await testInfo.attach(`${name}-mail-${colorScheme}`, { body: await mailPage.screenshot({ fullPage: true }), contentType: "image/png" });
+    }
+  } finally {
+    await mailPage.close();
+  }
 }

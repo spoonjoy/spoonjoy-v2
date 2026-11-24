@@ -15,7 +15,7 @@ import {
 } from "../model/household";
 import { inviteStatus, validateInviteInput, type HouseholdInvite, type InviteStatus } from "../model/invite";
 import type { HouseholdMemberView, HouseholdStore, HouseholdSummary, StoredInvite } from "./household-store";
-import type { Email } from "~/domains/platform";
+import { renderAccountEmail, type AccountEmailContent, type Email } from "~/domains/platform";
 
 export type HouseholdView = {
   id: string;
@@ -100,6 +100,27 @@ export async function createInvite(
   return { ok: true, value: { invite, token } };
 }
 
+/** The invite mail's words around its join link. */
+export function householdInviteEmail({ inviter, household, viewer, link, days }: {
+  inviter: string;
+  household: string;
+  viewer: boolean;
+  link: string;
+  days: number;
+}): AccountEmailContent {
+  const what = viewer ? `to see what ${household} shares` : `to share lists and meal plans in ${household}`;
+  return {
+    preview: `${inviter} invited you ${what}.`,
+    heading: `Join ${household}`,
+    body: [`${inviter} invited you ${what}, on Spoonjoy.`],
+    action: { label: `Join ${household}`, url: link },
+    footer: [
+      `The invite works once, for ${days} days, and only for the Spoonjoy account with this email address.`,
+      "Weren't expecting it? You can ignore this email.",
+    ],
+  };
+}
+
 /**
  * Sends an invite to one address: an invite only that address's account can use, mailed with its link, which
  * `joinUrl` makes from the token. When the mail can't be sent the invite is turned off again, so no one holds a link
@@ -124,17 +145,14 @@ export async function emailInvite(
   const [household, members] = await Promise.all([store.household(householdId), store.members(householdId)]);
   const name = household!.name;
   const inviter = members.find((member) => member.userId === userId)!.username;
-  const what = invite.role === "viewer" ? `to see what ${name} shares` : `to share lists and meal plans in ${name}`;
+  const link = joinUrl(token);
+  const days = Math.round((invite.expiresAt.getTime() - now.getTime()) / DAY_MS);
   try {
     await email.send({
       to,
       purpose: "household_invite",
       subject: `${inviter} invited you to ${name} on Spoonjoy`,
-      text: [
-        `${inviter} invited you ${what}, on Spoonjoy.`,
-        `Join here: ${joinUrl(token)}`,
-        `It works once, for ${Math.round((invite.expiresAt.getTime() - now.getTime()) / DAY_MS)} days, and only for the Spoonjoy account with this email address. If you weren't expecting it, you can ignore this email.`,
-      ].join("\n\n"),
+      ...renderAccountEmail(householdInviteEmail({ inviter, household: name, viewer: invite.role === "viewer", link, days }), link),
     });
   } catch {
     await store.revokeInvite(householdId, invite.id, now);

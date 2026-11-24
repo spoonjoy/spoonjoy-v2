@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { test, expect } from "./support/journey";
 import { persona } from "./support/personas";
 import { requiredLabel } from "./support/forms";
-import { resetLinkPath, waitForCapturedMail } from "./support/captured-mail";
+import { attachCapturedMail, resetLinkPath, waitForCapturedMail } from "./support/captured-mail";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchForProject } from "./support/personas";
 import { Secret, fillSecret } from "./support/secret";
@@ -71,8 +71,9 @@ test.describe("Password reset", () => {
     // The mail QA captured holds the link. It works once, and it is used below, so the copy of it in
     // the report's step titles is dead by the time anyone can read the report.
     const mail = await waitForCapturedMail(account.email, "reset_password");
-    expect(mail).toContain("Someone asked to reset the password for your Spoonjoy account.");
-    const link = resetLinkPath(mail);
+    expect(mail.text).toContain("Someone asked to reset the password for your Spoonjoy account.");
+    await attachCapturedMail(testInfo, page, mail, "password-reset");
+    const link = resetLinkPath(mail.text);
 
     // Choose a new password from the link.
     await page.goto(link);

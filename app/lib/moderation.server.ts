@@ -8,6 +8,7 @@ import { deleteNativeRecipe } from "~/lib/api-v1-recipe-writes.server";
 import { asCompatibleCookbookD1Database, deleteCookbookWithTombstone } from "~/lib/cookbook-membership-compat.server";
 import { deleteSpoon } from "~/lib/recipe-spoon.server";
 import { sendTransactionalEmail, type TransactionalEmailEnv } from "~/lib/transactional-email.server";
+import { renderAccountEmail, type AccountEmailContent } from "~/domains/platform";
 
 // Moderation for App Store guideline 1.2: chefs report content and block other chefs, and the
 // blocker never sees a blocked chef's recipes, cookbooks, cook logs or profile again. Reporting
@@ -236,6 +237,23 @@ export function isModerator(env: ModerationEnv | null | undefined, username: str
   return Boolean(username) && moderatorUsernames(env).has(username!.toLowerCase());
 }
 
+/** The moderators' mail about a new report. */
+export function contentReportEmail({ reporter, target, reason, details, baseUrl }: {
+  reporter: string;
+  target: string;
+  reason: string;
+  details: string | null | undefined;
+  baseUrl: string;
+}): AccountEmailContent {
+  return {
+    preview: `@${reporter} reported ${target}.`,
+    heading: "A new report to review",
+    body: [`@${reporter} reported ${target} (${reason}).`, details ? `They wrote: ${details}` : "They added no details."],
+    action: { label: "Open the moderation queue", url: `${baseUrl}/moderation` },
+    footer: ["Please review it within 24 hours."],
+  };
+}
+
 /**
  * Tells the moderators about a new report: a PostHog event always, and an email when this
  * environment can send mail. Never throws, so a report is filed even when both fail.
@@ -260,11 +278,10 @@ export async function notifyModerators(
       to: moderationEmail(env),
       purpose: "content_report",
       subject: `Spoonjoy report: ${REPORT_REASON_LABELS[report.reason]}`,
-      text: [
-        `@${reporterUsername} reported ${report.targetLabel} (${REPORT_REASON_LABELS[report.reason]}).`,
-        report.details ? `They wrote: ${report.details}` : "They added no details.",
-        `Review it within 24 hours: ${baseUrl}/moderation`,
-      ].join("\n\n"),
+      ...renderAccountEmail(
+        contentReportEmail({ reporter: reporterUsername, target: report.targetLabel, reason: REPORT_REASON_LABELS[report.reason], details: report.details, baseUrl }),
+        baseUrl,
+      ),
     });
   } catch {
     // Mail is off or refused here; the PostHog event and the /moderation queue still carry it.
