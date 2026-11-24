@@ -30,6 +30,8 @@ on:
       - app/components/oauth.tsx
       - app/routes/signup.tsx
       - app/routes/account.server-settings.tsx
+      - app/routes/account.server-backups.$name.tsx
+      - app/lib/self-host-backups.server.ts
       - playwright.journeys.config.ts
       - e2e/journeys/**
       - migrations/**

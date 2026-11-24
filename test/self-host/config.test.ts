@@ -256,6 +256,13 @@ describe("miniflareOptions", () => {
     expect(options.outboundService).toBeUndefined();
   });
 
+  it("binds the server's backups as SELF_HOST only when given a handler for them", () => {
+    const base = { built, env: {}, settings: { port: 8080, dataDir: "/data", appDir: "/app" }, sessionSecret: "s", version: "v", serverAssetFiles: [] };
+    const hostService = vi.fn();
+    expect(miniflareOptions({ ...base, hostService }).serviceBindings).toEqual({ SELF_HOST: hostService });
+    expect(miniflareOptions(base).serviceBindings).toBeUndefined();
+  });
+
   it("passes a request's body on", async () => {
     const outboundFetch = vi.fn(async () => new Response("ok"));
     const routed = miniflareOptions({

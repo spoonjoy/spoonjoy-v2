@@ -12,4 +12,5 @@ export default [
   webRoute("routes/auth.oidc.callback.tsx", "/auth/oidc/callback", "secure-web-handoff"),
   // A self-hosted server's settings, for its admin; spoonjoy.app has no such page.
   webRoute("routes/account.server-settings.tsx", "/account/server", "intentional-exclude"),
+  webRoute("routes/account.server-backups.$name.tsx", "/account/server/backups/:name", "intentional-exclude"),
 ] as const satisfies readonly WebRouteClassification[];

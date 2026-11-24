@@ -342,6 +342,11 @@ export function backupFileName(kind, now = new Date()) {
   return `spoonjoy-${kind}-${now.toISOString().replace(/\.\d{3}Z$/, "Z").replaceAll(":", "-")}.tar.gz`;
 }
 
+/** Whether `name` is a backup's file name, so it names nothing outside the backups folder. */
+export function isBackupName(name) {
+  return BACKUP_FILE.test(name);
+}
+
 /** The backups in a folder, newest first, as `{ name, kind, size, createdAt }`. */
 export function listBackups(dir) {
   let names;

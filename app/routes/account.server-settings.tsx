@@ -2,6 +2,7 @@ import { data, useFetcher, useLoaderData } from "react-router";
 import type { Route } from "./+types/account.server-settings";
 import { Button } from "~/components/ouro/button/button";
 import { CopyButton } from "~/components/ouro/copy-button/copy-button";
+import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { LocalDate } from "~/components/ouro/local-date/local-date";
 import { Text } from "~/components/ouro/text/text";
 import { CookbookPage } from "~/components/cookbook/page";
@@ -17,10 +18,11 @@ import {
   setSignupMode,
   signupMode,
 } from "~/lib/server-access.server";
+import { ServerBackupError, serverBackups, type BackupMade, type BackupRestored, type ServerBackup, type ServerBackups } from "~/lib/self-host-backups.server";
 
 // A self-hosted server's own settings, for its admin (its first account) only: whether strangers
-// may sign up, and invite links that let one person sign up while they may not. To anyone else,
-// and on spoonjoy.app, the page does not exist.
+// may sign up, invite links that let one person sign up while they may not, and the server's
+// backups. To anyone else, and on spoonjoy.app, the page does not exist.
 
 export function meta(_args: Route.MetaArgs) {
   return [{ title: "Server settings - Spoonjoy" }, { name: "robots", content: "noindex" }];
@@ -34,17 +36,32 @@ async function requireAdmin(request: Request, context: Route.LoaderArgs["context
   return { env, userId, db };
 }
 
+const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+// The backups section's data: null where the server has no backups to show (spoonjoy.app), or why
+// the server couldn't list them.
+async function loadBackups(env: Parameters<typeof serverBackups>[0]): Promise<ServerBackups | { error: string } | null> {
+  const host = serverBackups(env);
+  if (!host) return null;
+  try {
+    return await host.list();
+  } catch (error) {
+    return { error: reason(error) };
+  }
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, db } = await requireAdmin(request, context);
   const invites = await listServerInvites(db);
   return {
     signups: await signupMode(db, env),
     invites: invites.map((invite) => ({ id: invite.id, createdAt: invite.createdAt.toISOString(), expiresAt: invite.expiresAt.toISOString() })),
+    backups: await loadBackups(env),
   };
 }
 
 export type ServerSettingsActionData =
-  | { intent: string; success: true; link?: string }
+  | { intent: string; success: true; link?: string; made?: BackupMade; restored?: BackupRestored }
   | { intent: string; success: false; error: string };
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -67,6 +84,17 @@ export async function action({ request, context }: Route.ActionArgs) {
       const { token } = await createServerInvite(db, userId);
       const origin = env?.SPOONJOY_BASE_URL && URL.canParse(env.SPOONJOY_BASE_URL) ? new URL(env.SPOONJOY_BASE_URL).origin : new URL(request.url).origin;
       return data<ServerSettingsActionData>({ intent, success: true, link: `${origin}/signup?invite=${token}` });
+    }
+    case "backup":
+    case "restore": {
+      const host = serverBackups(env);
+      if (!host) return fail("This server has no backups.", 404);
+      try {
+        if (intent === "backup") return data<ServerSettingsActionData>({ intent, success: true, made: await host.backUpNow() });
+        return data<ServerSettingsActionData>({ intent, success: true, restored: await host.restore(String(form.get("name") ?? "")) });
+      } catch (error) {
+        return fail(reason(error), error instanceof ServerBackupError ? error.status : 500);
+      }
     }
     case "revoke": {
       await revokeServerInvite(db, String(form.get("inviteId") ?? ""));
@@ -161,8 +189,90 @@ function Invites({ invites }: { invites: Awaited<ReturnType<typeof loader>>["inv
   );
 }
 
+const BACKUP_KINDS: Record<ServerBackup["kind"], string> = {
+  auto: "Scheduled",
+  manual: "Made here",
+  "before-restore": "Saved before a restore",
+};
+
+function size(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function scheduleText({ schedule, keep }: ServerBackups) {
+  if (!schedule) return "Scheduled backups are off: SPOONJOY_BACKUP_SCHEDULE is set to off where the server is started.";
+  const when = schedule === "17 3 * * *" ? "every day at 03:17 UTC" : `on the schedule ${schedule} (UTC)`;
+  return `The server backs itself up ${when} and keeps the last ${keep} scheduled backups. Backups made here, and those saved before a restore, stay until you remove them from the backups folder.`;
+}
+
+function BackupRow({ backup }: { backup: ServerBackup }) {
+  const fetcher = useFetcher<ServerSettingsActionData>();
+  const failure = fetcher.data && !fetcher.data.success ? fetcher.data.error : null;
+  const restored = fetcher.data?.success ? fetcher.data.restored : undefined;
+  return (
+    <li className="py-3" data-testid="server-backup">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Text size="sm">
+          {BACKUP_KINDS[backup.kind]}, <LocalDate value={backup.createdAt} />, {size(backup.size)}
+        </Text>
+        <div className="flex flex-wrap gap-2">
+          <Button href={`/account/server/backups/${encodeURIComponent(backup.name)}`} variant="outline" size="sm" download={backup.name}>
+            Download
+          </Button>
+          <ConfirmDialog
+            trigger={<Button type="button" variant="outline" tone="destructive" size="sm" disabled={fetcher.state !== "idle"}>Restore</Button>}
+            title="Restore this backup?"
+            description="Everything on this server, its accounts, recipes, cookbooks and photos, goes back to how it was when this backup was made. The server backs up what's here first, so you can undo it."
+            confirmLabel="Restore"
+            tone="destructive"
+            onConfirm={() => fetcher.submit({ intent: "restore", name: backup.name }, { method: "post" })}
+          />
+        </div>
+      </div>
+      {failure ? <Text role="alert" tone="destructive" size="sm" className="mt-2">{failure}</Text> : null}
+      {restored ? (
+        <Text role="status" size="sm" className="mt-2" data-testid="server-backup-restored">
+          Restored this backup.{restored.savedFirst ? " What was here before is saved as the newest backup above." : null}
+        </Text>
+      ) : null}
+    </li>
+  );
+}
+
+function Backups({ backups }: { backups: Awaited<ReturnType<typeof loader>>["backups"] }) {
+  const fetcher = useFetcher<ServerSettingsActionData>();
+  if (!backups) return null;
+  const made = fetcher.data?.success ? fetcher.data.made : undefined;
+  const failure = fetcher.data && !fetcher.data.success ? fetcher.data.error : null;
+  return (
+    <section className="mt-10" aria-labelledby="server-backups" data-testid="server-backups">
+      <SectionHeader id="server-backups" title="Backups" level={2} />
+      {"error" in backups ? (
+        <Text role="alert" tone="destructive" size="sm" className="mt-2">The server couldn't list its backups: {backups.error}</Text>
+      ) : (
+        <>
+          <Text tone="muted" size="sm" className="mt-2">{scheduleText(backups)}</Text>
+          <Button type="button" className="mt-3" disabled={fetcher.state !== "idle"} onClick={() => fetcher.submit({ intent: "backup" }, { method: "post" })}>
+            {fetcher.state === "idle" ? "Back up now" : "Backing up..."}
+          </Button>
+          {made ? <Text role="status" size="sm" className="mt-2">Backed up {made.rows} rows and {made.photos} photos.</Text> : null}
+          {failure ? <Text role="alert" tone="destructive" size="sm" className="mt-2">{failure}</Text> : null}
+          {backups.backups.length > 0 ? (
+            <ul className="mt-6 divide-y divide-[var(--sj-border)]" aria-label="Backups">
+              {backups.backups.map((backup) => <BackupRow key={backup.name} backup={backup} />)}
+            </ul>
+          ) : (
+            <Text size="sm" className="mt-4">No backups yet.</Text>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function ServerSettings() {
-  const { signups, invites } = useLoaderData<typeof loader>();
+  const { signups, invites, backups } = useLoaderData<typeof loader>();
   return (
     <CookbookPage>
       <PageHeader
@@ -170,10 +280,11 @@ export default function ServerSettings() {
         title="This server"
         size="lg"
         divider
-        description="You made this server's first account, so you decide who else can join it. You can also review reports at /moderation."
+        description="You made this server's first account, so you decide who else can join it and look after its backups. You can also review reports at /moderation."
       />
       <SignupsSwitch signups={signups} />
       <Invites invites={invites} />
+      <Backups backups={backups} />
     </CookbookPage>
   );
 }

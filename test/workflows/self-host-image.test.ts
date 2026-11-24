@@ -162,6 +162,12 @@ describe("Self-host Image workflow", () => {
     expect(restart.run).toContain('= "$push_key" ]');
   });
 
+  it("runs when the admin's backups screen or its download changes", () => {
+    expect(workflow.on.pull_request.paths).toEqual(
+      expect.arrayContaining(["app/routes/account.server-settings.tsx", "app/routes/account.server-backups.$name.tsx", "app/lib/self-host-backups.server.ts"]),
+    );
+  });
+
   it("shows a scheduled backup running on the restored server", () => {
     const run = stepNamed(image, /Back up the kitchen and restore it/).run ?? "";
     expect(run).toContain('-e "SPOONJOY_BACKUP_SCHEDULE=* * * * *" -e SPOONJOY_BACKUPS_KEPT=1');

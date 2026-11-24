@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Page } from "@playwright/test";
 import { test, expect } from "../fixtures";
@@ -129,6 +129,40 @@ test.describe("A fresh self-hosted server", () => {
     expect(link).toContain("/signup?invite=");
     mkdirSync(dirname(out!), { recursive: true });
     writeFileSync(out!, link);
+  });
+
+  // Backups on Server settings (self-host/backup.mjs, answered through self-host/host-api.mjs). The
+  // backup is made after the invite above, so restoring it keeps that invite for the OpenID Connect
+  // check; opening sign-ups in between shows the restore putting the server back.
+  test("the admin backs the server up, downloads the backup and restores it", async ({ page }, testInfo) => {
+    await signInAsOwner(page);
+    await page.goto("/account/server");
+    const backups = page.getByTestId("server-backups");
+    await expect(backups.getByText(/backs itself up every day at 03:17 UTC/)).toBeVisible();
+    await backups.getByRole("button", { name: "Back up now" }).click();
+    await expect(backups.getByRole("status")).toContainText("Backed up");
+    const made = backups.getByTestId("server-backup").filter({ hasText: "Made here" });
+    await expect(made).toHaveCount(1);
+    await page.screenshot({ path: testInfo.outputPath("backups-made.png"), fullPage: true });
+
+    const [download] = await Promise.all([page.waitForEvent("download"), made.getByRole("link", { name: "Download" }).click()]);
+    expect(download.suggestedFilename()).toMatch(/^spoonjoy-manual-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z\.tar\.gz$/);
+    expect(statSync((await download.path())!).size).toBeGreaterThan(1000);
+
+    await page.getByRole("button", { name: "Open sign-ups" }).click();
+    await expect(page.getByTestId("server-signups-mode")).toHaveText("Open");
+
+    await made.getByRole("button", { name: "Restore" }).click();
+    const confirm = page.getByRole("alertdialog", { name: "Restore this backup?" });
+    await expect(confirm).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("backups-restore-confirm.png"), fullPage: true });
+    await confirm.getByRole("button", { name: "Restore" }).click();
+    await expect(backups.getByTestId("server-backup-restored")).toContainText("Restored this backup. What was here before is saved");
+
+    await page.reload();
+    await expect(page.getByTestId("server-signups-mode")).toHaveText("Invite only");
+    await expect(page.getByTestId("server-backup").filter({ hasText: "Saved before a restore" })).toHaveCount(1);
+    await page.screenshot({ path: testInfo.outputPath("backups-restored.png"), fullPage: true });
   });
 
   test("the Spoonjoy apps' Sign in with Apple is set up, and a token Apple didn't sign is refused", async ({ request }) => {
