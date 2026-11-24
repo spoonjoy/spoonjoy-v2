@@ -5,7 +5,9 @@ import { migratedSqliteD1, type MigratedSqlite } from "../../helpers/migrated-sq
 import { makeZip } from "./support/make-zip";
 import { mealieDatabase } from "./support/mealie-database";
 import { recipeServer, SERVER_TOKEN } from "./support/recipe-server";
+import { openServerConnection } from "~/domains/move-in/adapters/worker/server-connection.server";
 
+const SECRET = "the deployment's session secret";
 let database: MigratedSqlite;
 const now = new Date("2026-11-23T12:00:00.000Z");
 
@@ -139,7 +141,7 @@ describe("admitStoredBackup", () => {
 describe("startServerMoveIn", () => {
   const startFrom = (options: { address?: string; token?: string; app?: string; fetch?: typeof globalThis.fetch; bucket?: ReturnType<typeof memoryBucket>; db?: unknown } = {}) =>
     startServerMoveIn({
-      env: { DB: options.db ?? database.binding, PHOTOS: options.bucket ?? memoryBucket() } as never,
+      env: { DB: options.db ?? database.binding, PHOTOS: options.bucket ?? memoryBucket(), SESSION_SECRET: SECRET } as never,
       ownerId: "chef-1",
       app: options.app ?? "mealie",
       address: options.address ?? "https://recipes.example.com/",
@@ -148,12 +150,17 @@ describe("startServerMoveIn", () => {
       now,
     });
 
-  it("checks the server and token at once, keeps them where they are never served, and queues the move-in", async () => {
+  it("checks the server and token at once, keeps them sealed where they are never served, and queues the move-in", async () => {
     const bucket = memoryBucket();
     expect(await startFrom({ bucket })).toEqual({ ok: true, jobId: expect.stringMatching(/^movein_/) });
     const [key] = Object.keys(bucket.objects);
     expect(key).toMatch(/^pending-uploads\/move-in\/chef-1\/[0-9a-f-]{36}\.json$/);
-    expect(JSON.parse(new TextDecoder().decode(bucket.objects[key]))).toEqual({ address: "https://recipes.example.com", token: SERVER_TOKEN });
+    // Storage holds neither the token nor the address in the clear; only the Worker's secret opens them.
+    const kept = new TextDecoder().decode(bucket.objects[key]);
+    expect(kept).not.toContain(SERVER_TOKEN);
+    expect(kept).not.toContain("recipes.example.com");
+    expect(await openServerConnection(SECRET, key, bucket.objects[key])).toEqual({ address: "https://recipes.example.com", token: SERVER_TOKEN });
+    expect(await openServerConnection("another secret", key, bucket.objects[key])).toBeNull();
     const job = database.sqlite.prepare(`SELECT "kind", "status", "archiveKey", "archiveName" FROM "ImportJob"`).get();
     expect(job).toEqual({ kind: "mealie-api", status: "queued", archiveKey: key, archiveName: "recipes.example.com" });
   });
