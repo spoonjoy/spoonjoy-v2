@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "~/lib/db.server";
 import { applyServerAi, serverAi, setServerAi, withServerAi } from "~/lib/server-ai.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { sqliteD1 } from "../helpers/sqlite-d1";
 
 const selfHosted = { SPOONJOY_SELF_HOSTED: "true" };
 const started = { ...selfHosted, OPENAI_API_KEY: "sk-started", OPENAI_BASE_URL: "http://models.local/v1", GEMINI_API_KEY: "g-started", GOOGLE_API_KEY: "g-started", POSTHOG_KEY: "ph" };
@@ -56,6 +57,24 @@ describe("setServerAi", () => {
     await setServerAi(db, selfHosted, { provider: "off", key: "ignored" });
     expect(await db.serverSetting.findMany({ orderBy: { key: "asc" } })).toEqual([{ key: "ai", value: "off" }]);
     expect(await setServerAi(db, selfHosted, { provider: "openai", key: "" })).toBe("Paste the server's OpenAI API key.");
+  });
+
+  it("writes the pick and its key as one D1 batch when the request has a binding", async () => {
+    const d1 = sqliteD1();
+    try {
+      await expect(setServerAi(db, selfHosted, { provider: "gemini", key: " g-typed " }, d1.binding)).resolves.toBeNull();
+      expect(d1.roundTrips()).toBe(1);
+      expect(await serverAi(db, selfHosted)).toEqual({ provider: "gemini", setBy: "admin" });
+      await expect(setServerAi(db, selfHosted, { provider: "gemini", key: "" }, d1.binding)).resolves.toBeNull();
+      expect(await db.serverSetting.findMany({ orderBy: { key: "asc" } })).toEqual([
+        { key: "ai", value: "gemini" },
+        { key: "ai-key", value: "g-typed" },
+      ]);
+      await expect(setServerAi(db, selfHosted, { provider: "off", key: "" }, d1.binding)).resolves.toBeNull();
+      expect(await db.serverSetting.findMany()).toEqual([{ key: "ai", value: "off" }]);
+    } finally {
+      d1.close();
+    }
   });
 
   it("refuses anywhere but a self-hosted server", async () => {

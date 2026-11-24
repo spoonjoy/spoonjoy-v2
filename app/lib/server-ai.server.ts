@@ -1,4 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1WriteBatch } from "~/lib/d1-write.server";
 import { isSelfHosted, type ServerAccessEnv } from "~/lib/server-access.server";
 
 // Which AI a self-hosted server uses: OpenAI, Gemini or none, picked by its admin on Server
@@ -82,12 +84,15 @@ export async function serverAi(db: PrismaClient, env: ServerAiEnv | null | undef
 
 /**
  * Saves the admin's pick, or says why it can't. A provider needs a key, except when it is already
- * the saved one, whose key a blank keeps. Off forgets the saved key.
+ * the saved one, whose key a blank keeps. Off forgets the saved key. With the request's D1
+ * binding the pick and its key are written as one batch, since Prisma's D1 adapter doesn't
+ * make `$transaction` atomic.
  */
 export async function setServerAi(
   db: PrismaClient,
   env: ServerAiEnv | null | undefined,
   { provider, key }: { provider: AiProvider; key: string },
+  d1?: D1ReadDatabase | null,
 ): Promise<string | null> {
   if (!isSelfHosted(env)) return "AI can only be chosen on a self-hosted server.";
   const typed = key.trim();
@@ -96,6 +101,14 @@ export async function setServerAi(
     if (saved?.provider !== provider || !saved.key) {
       return `Paste the server's ${provider === "openai" ? "OpenAI" : "Gemini"} API key.`;
     }
+  }
+  if (d1) {
+    const upsert = `INSERT INTO "ServerSetting" ("key", "value") VALUES (?, ?) ON CONFLICT ("key") DO UPDATE SET "value" = excluded."value"`;
+    await d1WriteBatch(d1, [
+      [upsert, AI_KEY, provider],
+      ...(provider === "off" ? [[`DELETE FROM "ServerSetting" WHERE "key" = ?`, AI_SECRET_KEY] as const] : typed ? [[upsert, AI_SECRET_KEY, typed] as const] : []),
+    ]);
+    return null;
   }
   const writes: Prisma.PrismaPromise<unknown>[] = [
     db.serverSetting.upsert({ where: { key: AI_KEY }, create: { key: AI_KEY, value: provider }, update: { value: provider } }),
