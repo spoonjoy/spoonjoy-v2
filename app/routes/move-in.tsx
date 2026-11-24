@@ -32,7 +32,8 @@ import {
   type MoveInEnv,
   type MoveInProgress,
 } from "~/domains/move-in";
-import { d1JobKeys, isFlagOn, queueJobs, type JobKeysDatabase, type JobMessage } from "~/domains/platform";
+import { isFlagOn, type JobMessage } from "~/domains/platform";
+import { d1JobKeys, queueJobs, type JobKeysDatabase } from "~/domains/platform/index.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";

@@ -13,7 +13,8 @@ import {
   queueMoveIn,
   startMoveInJob,
 } from "~/domains/move-in/adapters/worker/move-in-job.server";
-import { jobRegistry, memoryJobs, type EnqueueOptions, type Jobs } from "~/domains/platform";
+import { jobRegistry, type EnqueueOptions, type Jobs } from "~/domains/platform";
+import { memoryJobs } from "~/domains/platform/index.server";
 
 // A segment can stand in for the runner, to show what the handler does with a run that moved nothing.
 const segment = vi.hoisted(() => ({ instead: null as null | ((jobId: string) => Promise<unknown>) }));
