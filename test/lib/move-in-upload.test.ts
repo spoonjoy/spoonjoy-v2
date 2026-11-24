@@ -250,6 +250,108 @@ describe("uploadBackup", () => {
     expect(api.calls).toEqual([]);
   });
 
+  describe("stopped by the cook", () => {
+    const STOPPED = { ok: false, error: "The upload was stopped, and nothing of it was kept. Choose a backup to start again.", stopped: true };
+
+    it("cuts off the parts in flight, aborts the upload on the server, and forgets it", async () => {
+      const file = backupFile();
+      const api = server(file.size);
+      const store = memoryStore();
+      const stop = new AbortController();
+      const signals: AbortSignal[] = [];
+      const fetcher = (url: string, init: RequestInit) => {
+        if (init.method !== "PUT") return api.fetch(url, init);
+        api.calls.push(`PUT ${url}`);
+        signals.push(init.signal as AbortSignal);
+        // A part on its way when the cook presses Stop: it never answers.
+        stop.abort();
+        // As fetch does, a signal already aborted rejects at once.
+        return Promise.reject(init.signal!.reason);
+      };
+      expect(await uploadBackup(file, { app: "mealie", fetch: fetcher, storage: store, sleep: noWait, concurrency: 1, signal: stop.signal })).toEqual(STOPPED);
+      expect(signals[0].aborted).toBe(true);
+      expect(api.calls).toEqual(["POST /move-in/uploads", "PUT /move-in/uploads/upload_1/parts/1", "DELETE /move-in/uploads/upload_1"]);
+      expect(store.values.size).toBe(0);
+    });
+
+    it("stops while waiting to try a part again, without waiting out the pause", async () => {
+      const file = backupFile();
+      const api = server(file.size);
+      api.next.set("PUT /move-in/uploads/upload_1/parts/1", [503]);
+      const stop = new AbortController();
+      const never = () => {
+        stop.abort();
+        return new Promise<void>(() => undefined);
+      };
+      expect(await uploadBackup(file, { app: "mealie", fetch: api.fetch, storage: null, sleep: never, concurrency: 1, signal: stop.signal })).toEqual(STOPPED);
+      expect(api.calls.at(-1)).toBe("DELETE /move-in/uploads/upload_1");
+    });
+
+    it("lets begin answer when stopped while it is on its way, then aborts the upload it began", async () => {
+      const file = backupFile();
+      const api = server(file.size);
+      const stop = new AbortController();
+      const fetcher = (url: string, init: RequestInit) => {
+        if (url === "/move-in/uploads") stop.abort();
+        return api.fetch(url, init);
+      };
+      expect(await uploadBackup(file, { app: "mealie", fetch: fetcher, storage: null, sleep: noWait, signal: stop.signal })).toEqual(STOPPED);
+      expect(api.calls).toEqual(["POST /move-in/uploads", "DELETE /move-in/uploads/upload_1"]);
+    });
+
+    it("stops before the finish once the last part has arrived", async () => {
+      const file = backupFile(5);
+      const api = server(file.size);
+      const stop = new AbortController();
+      const fetcher = async (url: string, init: RequestInit) => {
+        const response = await api.fetch(url, init);
+        if (init.method === "PUT") stop.abort();
+        return response;
+      };
+      expect(await uploadBackup(file, { app: "mealie", fetch: fetcher, storage: null, sleep: noWait, signal: stop.signal })).toEqual(STOPPED);
+      expect(api.calls).toEqual(["POST /move-in/uploads", "PUT /move-in/uploads/upload_1/parts/1", "DELETE /move-in/uploads/upload_1"]);
+    });
+
+    it("forgets the upload even when the abort doesn't arrive, and sends none when begin never answered", async () => {
+      const file = backupFile();
+      const store = memoryStore();
+      const stop = new AbortController();
+      const calls: string[] = [];
+      const fetcher = async (url: string, init: RequestInit) => {
+        calls.push(`${init.method} ${url}`);
+        if (init.method === "DELETE") throw new TypeError("Failed to fetch");
+        if (url === "/move-in/uploads") return Response.json({ uploadId: "upload_1", partSize: PART, partCount: 4, done: [] });
+        stop.abort();
+        throw new TypeError("Failed to fetch");
+      };
+      expect(await uploadBackup(file, { app: "mealie", fetch: fetcher, storage: store, sleep: noWait, concurrency: 1, signal: stop.signal })).toEqual(STOPPED);
+      expect(calls.at(-1)).toBe("DELETE /move-in/uploads/upload_1");
+      expect(store.values.size).toBe(0);
+
+      const dropped = vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      });
+      const early = new AbortController();
+      early.abort();
+      expect(await uploadBackup(file, { app: "mealie", fetch: dropped, storage: null, sleep: noWait, signal: early.signal })).toEqual(STOPPED);
+      expect(dropped).not.toHaveBeenCalled();
+    });
+
+    it("lets a part in flight run out in a browser that can't join signals, then stops", async () => {
+      const file = backupFile();
+      const api = server(file.size);
+      const stop = new AbortController();
+      vi.stubGlobal("AbortSignal", Object.assign(Object.create(AbortSignal), { timeout: AbortSignal.timeout.bind(AbortSignal), any: undefined }));
+      const fetcher = async (url: string, init: RequestInit) => {
+        if (init.method === "PUT") stop.abort();
+        return api.fetch(url, init);
+      };
+      expect(await uploadBackup(file, { app: "mealie", fetch: fetcher, storage: null, sleep: noWait, concurrency: 1, signal: stop.signal })).toEqual(STOPPED);
+      // The part already on its way arrived; no other part was sent.
+      expect(api.parts).toEqual(new Set([1]));
+    });
+  });
+
   it("uploads in a browser that refuses storage", async () => {
     const file = backupFile();
     const api = server(file.size);
