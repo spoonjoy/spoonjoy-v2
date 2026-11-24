@@ -49,6 +49,8 @@ test.describe("Meal planner", () => {
     // An empty day is the way to plan it: no "nothing planned" line, just its button.
     const planTuesday = tuesday.getByRole("button", { name: "Plan a meal for Tuesday", exact: true });
     await expect(page.getByText("Nothing planned yet.", { exact: true })).toHaveCount(0);
+    // One control for one action: an empty day has no Add in its header beside its button.
+    await expect(tuesday.getByRole("button", { name: "Add to Tuesday", exact: true })).toHaveCount(0);
     await attachElement(testInfo, "meal-planner-empty-day", tuesday);
     await planTuesday.click();
     const tuesdaySheet = addSheet(page, "Tuesday, Mar 2");
@@ -64,9 +66,11 @@ test.describe("Meal planner", () => {
     await expect(salmon).toHaveAttribute("href", `/recipes/${SALMON.id}?scale=2`);
     await expect(tuesday.getByText("Dinner · 2× the recipe", { exact: true })).toBeVisible();
     await expect(planTuesday).toHaveCount(0);
+    // A day with meals adds more from its header's Add.
+    await expect(tuesday.getByRole("button", { name: "Add to Tuesday", exact: true })).toBeVisible();
 
-    // A note for Thursday's lunch, from the day's own Add.
-    await thursday.getByRole("button", { name: "Add to Thursday", exact: true }).click();
+    // A note for Thursday's lunch, from the empty day's own button.
+    await thursday.getByRole("button", { name: "Plan a meal for Thursday", exact: true }).click();
     const thursdaySheet = addSheet(page, "Thursday, Mar 4");
     await thursdaySheet.getByRole("radio", { name: "Note", exact: true }).click();
     await thursdaySheet.getByRole("combobox", { name: "Meal", exact: true }).selectOption({ label: "Lunch" });
@@ -119,7 +123,7 @@ test.describe("Meal planner", () => {
     test("the recipe picker offers the chef's own recipes and the ones saved in their cookbooks", async ({ page, expectAccessible }) => {
       await page.goto(`/plan?week=${WEEK}`);
       await waitForHydration(page);
-      await day(page, "Monday, Mar 1").getByRole("button", { name: "Add to Monday", exact: true }).click();
+      await day(page, "Monday, Mar 1").getByRole("button", { name: "Plan a meal for Monday", exact: true }).click();
       const picker = addSheet(page, "Monday, Mar 1").getByRole("combobox", { name: "Recipe", exact: true });
       // Lemon Herb Rice is the chef's own; Saffron Risotto is the friend's, saved in the chef's Weeknight Dinners.
       await expect(picker.getByRole("option", { name: "Lemon Herb Rice", exact: true })).toBeAttached();

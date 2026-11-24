@@ -13,7 +13,8 @@ import { db } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { D1WriteUnavailableError, D1_WRITE_UNAVAILABLE_MESSAGE } from "~/lib/d1-write-retry.server";
 import { OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
-import PlanPage, { WeekListAnswer, action, loader, meta } from "~/routes/plan";
+import PlanPage, { action, loader, meta } from "~/routes/plan";
+import { WeekListAnswer } from "~/components/plan/week-plan";
 import { errorsFor } from "~/domains/planning";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { captureException } from "~/lib/analytics-server";
@@ -367,11 +368,16 @@ describe("meal plan route", () => {
       return screen.findByRole("heading", { level: 1, hidden: true });
     }
 
-    it("gives each day an Add that opens the recipe-or-note sheet with that day chosen", async () => {
+    it("gives a day with meals an Add that opens the recipe-or-note sheet with that day chosen, and an empty day only its own button", async () => {
       const user = userEvent.setup();
       await db.recipe.create({ data: { ...createTestRecipe(chefId), title: "Lemon Herb Rice" } });
+      await act({ intent: "add-note", entryToken: "token-note-add-1", date: "2026-11-24", mealType: "dinner", title: "Leftovers" });
       await renderLive();
 
+      // One control for one action: an empty day is planned from its own button, with no Add in its header.
+      const monday = screen.getByRole("region", { name: "Monday, Nov 23" });
+      expect(within(monday).queryByRole("button", { name: "Add to Monday" })).toBeNull();
+      expect(within(monday).getByRole("button", { name: "Plan a meal for Monday" })).toBeTruthy();
       const tuesday = screen.getByRole("region", { name: "Tuesday, Nov 24" });
       await user.click(within(tuesday).getByRole("button", { name: "Add to Tuesday" }));
       const sheet = await screen.findByRole("dialog", { name: "Add to Tuesday, Nov 24" });
@@ -385,7 +391,7 @@ describe("meal plan route", () => {
 
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
       expect(within(screen.getByRole("region", { name: "Tuesday, Nov 24" })).getByText("Eat out")).toBeTruthy();
-      expect(await db.planEntry.findMany({ select: { date: true, mealType: true, title: true } })).toEqual([{ date: "2026-11-24", mealType: "dinner", title: "Eat out" }]);
+      expect(await db.planEntry.findMany({ where: { title: "Eat out" }, select: { date: true, mealType: true, title: true } })).toEqual([{ date: "2026-11-24", mealType: "dinner", title: "Eat out" }]);
     });
 
     it("plans a recipe from a day's sheet on that day, at the scale chosen", async () => {
@@ -424,7 +430,7 @@ describe("meal plan route", () => {
       const user = userEvent.setup();
       await renderLive();
 
-      await user.click(within(screen.getByRole("region", { name: "Monday, Nov 23" })).getByRole("button", { name: "Add to Monday" }));
+      await user.click(within(screen.getByRole("region", { name: "Monday, Nov 23" })).getByRole("button", { name: "Plan a meal for Monday" }));
       const sheet = await screen.findByRole("dialog", { name: "Add to Monday, Nov 23" });
       // No recipes yet: the sheet opens on the note, and the recipe side offers to write one.
       await user.click(within(sheet).getByRole("radio", { name: "Recipe" }));
