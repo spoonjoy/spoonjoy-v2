@@ -44,7 +44,7 @@ import { cloudflarePlatform, type CloudflarePlatformEnv } from "~/domains/platfo
 import { canSendAccountEmail } from "~/lib/transactional-email.server";
 
 const INVITE_ROLE_OPTIONS = [
-  { value: "member", label: "Member: adds to the shared lists and plan" },
+  { value: "member", label: "Member: adds to the shared lists" },
   { value: "viewer", label: "View-only: sees what the household shares" },
 ];
 
