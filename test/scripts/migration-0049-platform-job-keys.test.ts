@@ -6,9 +6,9 @@ import { migratedSqliteD1 } from "../helpers/migrated-sqlite";
 
 const migration = (path: string) => readFileSync(resolve(__dirname, "../..", path), "utf8");
 
-describe("migration 0047 (platform job keys)", () => {
+describe("migration 0049 (platform job keys)", () => {
   it("mirrors the D1 migration in Prisma's folder", () => {
-    const withoutComments = migration("migrations/0047_platform_job_keys.sql").split("\n").filter((line) => !line.startsWith("--")).join("\n");
+    const withoutComments = migration("migrations/0049_platform_job_keys.sql").split("\n").filter((line) => !line.startsWith("--")).join("\n");
     expect(migration("prisma/migrations/20261123210000_platform_job_keys/migration.sql")).toBe(withoutComments);
   });
 
