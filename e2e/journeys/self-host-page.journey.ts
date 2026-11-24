@@ -1,5 +1,6 @@
-// The public page on running Spoonjoy yourself (signed out, read-only), on a phone and a desktop: its
-// Compose file reads without scrolling sideways, its sections use the page's full width, and its
+// The public page on running Spoonjoy yourself (signed out, read-only), on a phone and a desktop: the
+// page never scrolls sideways, each code line stays whole (a long one scrolls inside its block on a
+// phone rather than wrapping), its sections use the page's full width, and its
 // notice and code blocks have Ouro's squircle corners. The page is static, so a reload shows the same.
 import type { Page, TestInfo } from "@playwright/test";
 import { test, expect } from "./support/journey";
@@ -14,16 +15,29 @@ async function expectSelfHostPage(page: Page): Promise<void> {
   await expect(page.getByRole("region", { name: "Start it", exact: true })).toContainText("image: ${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}");
 }
 
-/** Neither the page nor any code block is wider than the space it has. */
-async function expectNoSidewaysScroll(page: Page): Promise<void> {
-  const overflow = await page.evaluate(() => {
-    const wider = (el: Element) => el.scrollWidth > el.clientWidth + 1;
-    return {
-      page: wider(document.documentElement),
-      code: [...document.querySelectorAll("main [data-ouro-part=code]")].filter(wider).length,
-    };
-  });
-  expect(overflow).toEqual({ page: false, code: 0 });
+/**
+ * The page is no wider than the window. Code never wraps: each block keeps white-space: pre and shows
+ * one row per line of its code, so a long line scrolls inside its block instead of breaking in two.
+ */
+async function expectWholeCodeLines(page: Page): Promise<void> {
+  const layout = await page.evaluate(() => ({
+    pageOverflows: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    blocks: [...document.querySelectorAll("main [data-ouro-part=code]")].map((pre) => {
+      const code = pre.querySelector("code")!;
+      const lineHeight = parseFloat(getComputedStyle(pre).lineHeight);
+      return {
+        whiteSpace: getComputedStyle(pre).whiteSpace,
+        lines: (code.textContent ?? "").replace(/\n$/, "").split("\n").length,
+        rows: Math.round(code.getBoundingClientRect().height / lineHeight),
+      };
+    }),
+  }));
+  expect(layout.pageOverflows).toBe(false);
+  expect(layout.blocks).toHaveLength(3);
+  for (const block of layout.blocks) {
+    expect(block.whiteSpace).toBe("pre");
+    expect(block.rows).toBe(block.lines);
+  }
 }
 
 /**
@@ -62,7 +76,7 @@ test.describe("Self-host page, signed out", () => {
     await waitForHydration(page);
     await expectNoHydrationErrors(page);
     await expectSelfHostPage(page);
-    await expectNoSidewaysScroll(page);
+    await expectWholeCodeLines(page);
     await expectFullWidth(page);
     await expectSquircles(page);
     await expectAccessible();
