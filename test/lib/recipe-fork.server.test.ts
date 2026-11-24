@@ -406,7 +406,7 @@ describe.each<ForkPath>(["prisma", "d1"])("recipe-fork.server (%s)", (path) => {
     await db.user.update({ where: { id: chefB.id }, data: { defaultRecipeVisibility: "private" } });
     const open = await seedSourceRecipe(chefA.id, { title: "Open Soup" });
 
-    const forked = await fork({ sourceRecipeId: open.id, viewerId: chefB.id, useCookDefault: true });
+    const forked = await fork({ sourceRecipeId: open.id, viewerId: chefB.id, visibilityChoices: ["public", "private"] });
     expect(await db.recipe.findUnique({ where: { id: forked.recipe.id }, select: { visibility: true } })).toEqual({ visibility: "private" });
   });
 
@@ -804,7 +804,7 @@ describe("forkRecipeOnD1", () => {
     await db.user.update({ where: { id: chefB.id }, data: { defaultRecipeVisibility: "private" } });
     const source = await richSource(chefA.id, "Ribs");
 
-    const { recipeId } = await forkRecipeOnD1(binding.binding, { sourceRecipeId: source.id, viewerId: chefB.id, useCookDefault: true });
+    const { recipeId } = await forkRecipeOnD1(binding.binding, { sourceRecipeId: source.id, viewerId: chefB.id, visibilityChoices: ["public", "private"] });
     expect(await db.recipe.findUnique({ where: { id: recipeId }, select: { visibility: true } })).toEqual({ visibility: "private" });
   });
 
