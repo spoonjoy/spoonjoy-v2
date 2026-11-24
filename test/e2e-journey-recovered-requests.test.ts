@@ -3,6 +3,7 @@
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import { RequestLedger, isTransportFailureLog } from "../e2e/journeys/support/recovered-requests";
+import { loadAgainAfterPlaceholder } from "../e2e/journeys/support/app-ready";
 
 const fixtureState = vi.hoisted(() => ({ extension: undefined as unknown }));
 vi.mock("@playwright/test", () => ({
@@ -30,8 +31,7 @@ type Event =
   | { answered: Sent }
   | { log: string; url?: string };
 
-async function gate(events: Event[]) {
-  const page = new EventEmitter();
+async function gate(events: Event[], page = new EventEmitter()) {
   await fixtures.consoleGate[0]({ page, consoleExpectations: [] }, async () => {
     for (const event of events) {
       if ("failed" in event) page.emit("requestfailed", request(...event.failed));
@@ -136,5 +136,35 @@ describe("the console gate and lost requests", () => {
     ]],
   ] as Array<[string, Event[]]>)("still fails a lost request %s", async (_case, events) => {
     await expect(gate(events)).rejects.toThrow("Console errors during test:");
+  });
+});
+
+describe("the console gate and Cloudflare's workers.dev placeholder", () => {
+  // Journeys run 45436206706: a persona's /login got the placeholder from one Cloudflare machine.
+  const LOGIN = "https://spoonjoy-v2-qa-run-45436206706-1-p2.mendelow-studio.workers.dev/login";
+  const NOT_FOUND = "Failed to load resource: the server responded with a status of 404 ()";
+  const answer = (status: number, body: string) => ({ status: () => status, text: async () => body, url: () => LOGIN });
+
+  async function loadedAgainAfterPlaceholder(page: EventEmitter) {
+    const load = vi.fn()
+      .mockResolvedValueOnce(answer(404, "<h1>There is nothing here yet</h1>"))
+      .mockResolvedValueOnce(answer(200, "<script>window.__reactRouterContext = {};</script>"));
+    await loadAgainAfterPlaceholder(page, load, async () => undefined, () => undefined);
+  }
+
+  it("passes when the page got the placeholder and was loaded again", async () => {
+    const page = new EventEmitter();
+    await loadedAgainAfterPlaceholder(page);
+    await expect(gate([{ log: NOT_FOUND, url: LOGIN }], page)).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ["a 404 when no load got the placeholder", [{ log: NOT_FOUND, url: LOGIN }], false],
+    ["a second 404 after one placeholder load", [{ log: NOT_FOUND, url: LOGIN }, { log: NOT_FOUND, url: LOGIN }], true],
+    ["a 404 at another page", [{ log: NOT_FOUND, url: `${LOGIN}/elsewhere` }], true],
+  ])("still fails %s", async (_name, events, placeholderLoaded) => {
+    const page = new EventEmitter();
+    if (placeholderLoaded) await loadedAgainAfterPlaceholder(page);
+    await expect(gate(events as Event[], page)).rejects.toThrow(NOT_FOUND);
   });
 });

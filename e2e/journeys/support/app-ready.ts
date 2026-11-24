@@ -86,6 +86,58 @@ function reportLoadAgain(error: Error): void {
   console.warn(loadRetryNote(error));
 }
 
+// Right after a run's Worker is deployed, one Cloudflare machine can serve it while another still
+// answers the hostname with Cloudflare's workers.dev placeholder: a 404 page that says "There is
+// nothing here yet" and holds none of the app (Journeys run 45436206706, a persona's /login). That
+// Worker is not ready there yet, so the page is loaded once more after a wait. The app's own 404 is
+// never loaded again: it is a page React Router rendered, and it carries the app.
+export const WORKERS_DEV_PLACEHOLDER = "There is nothing here yet";
+export const PLACEHOLDER_RETRY_DELAY_MS = 5_000;
+const APP_PAGE_MARKER = "__reactRouterContext";
+
+interface DocumentAnswer {
+  status(): number;
+  text(): Promise<string>;
+  url(): string;
+}
+
+/** True for Cloudflare's workers.dev placeholder page, and false for anything the app answered. */
+export async function isWorkersDevPlaceholder(response: DocumentAnswer | null): Promise<boolean> {
+  if (!response || response.status() !== 404) return false;
+  const body = await response.text().catch(() => "");
+  return body.includes(WORKERS_DEV_PLACEHOLDER) && !body.includes(APP_PAGE_MARKER);
+}
+
+const placeholderLoads = new WeakMap<object, Map<string, number>>();
+
+/** How many loads of `url` on `page` got the placeholder and were loaded again; the console gate excuses their 404 logs. */
+export function placeholderLoadCount(page: object, url: string): number {
+  return placeholderLoads.get(page)?.get(url) ?? 0;
+}
+
+/** Loads once more, after a wait, when the first load got Cloudflare's workers.dev placeholder. */
+export async function loadAgainAfterPlaceholder<T extends DocumentAnswer | null>(
+  page: object,
+  load: () => Promise<T>,
+  wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  onRetry: (url: string) => void = (url) => console.warn(placeholderRetryNote(url)),
+): Promise<T> {
+  const first = await load();
+  if (!(await isWorkersDevPlaceholder(first))) return first;
+  const url = first!.url();
+  const loads = placeholderLoads.get(page) ?? new Map<string, number>();
+  loads.set(url, (loads.get(url) ?? 0) + 1);
+  placeholderLoads.set(page, loads);
+  onRetry(url);
+  await wait(PLACEHOLDER_RETRY_DELAY_MS);
+  return load();
+}
+
+// scripts/warning-gate.ts lets these notes through (JOURNEYS_RETRY_NOTE_PATTERN).
+export function placeholderRetryNote(url: string): string {
+  return `Journeys: loading the page again after Cloudflare answered with its workers.dev placeholder (404 ${new URL(url).pathname})`;
+}
+
 // Cloudflare's own static file serving, in front of the Worker, sometimes answers a built file
 // under /assets/ with 502, 503 or 504 while the Worker's complete log shows no server error
 // (Journeys runs 39850143035, 40362557353 and 40379638056). The file then never loads, so the page
@@ -328,7 +380,8 @@ export function dataRequestPattern(origin: string): RegExp {
  * journey's first tap reaches the app, and load once more after a reset connection
  * (loadAgainAfterTransportFailure), and routes the app's static files through answerStaticAsset and
  * its data requests through answerDataRequest, which turns off the browser's HTTP cache for this
- * page, and sends its request context's GETs again after a dropped connection (getAgainAfterReset).
+ * page, and sends its request context's GETs again after a dropped connection (getAgainAfterReset),
+ * and loads once more after Cloudflare's workers.dev placeholder (loadAgainAfterPlaceholder).
  * A load with waitUntil "commit" is not
  * waited on: it is how a journey types into the server's markup before hydration on purpose.
  * support/journey.ts applies this to the fixture's page; a journey that opens its own page applies
@@ -351,13 +404,13 @@ export function waitForHydrationOnLoad(page: Page): void {
   assetsRouted.catch(() => undefined);
   page.goto = async (url, options) => {
     await assetsRouted;
-    const response = await loadAgainAfterTransportFailure(() => goto(url, options), undefined, reportLoadAgain);
+    const response = await loadAgainAfterPlaceholder(page, () => loadAgainAfterTransportFailure(() => goto(url, options), undefined, reportLoadAgain));
     if (options?.waitUntil !== "commit") await waitForHydrationIfApp(page);
     return response;
   };
   page.reload = async (options) => {
     await assetsRouted;
-    const response = await loadAgainAfterTransportFailure(() => reload(options), undefined, reportLoadAgain);
+    const response = await loadAgainAfterPlaceholder(page, () => loadAgainAfterTransportFailure(() => reload(options), undefined, reportLoadAgain));
     if (options?.waitUntil !== "commit") await waitForHydrationIfApp(page);
     return response;
   };

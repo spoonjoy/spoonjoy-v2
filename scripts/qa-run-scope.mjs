@@ -43,7 +43,8 @@
 //   deploy    deploy this build to the run's Worker with the run's secrets, retrying code 10007
 //             or the specific internal authentication server error (code 10500).
 //   verify    after deploy: the run's Worker has its secrets, its D1 has no pending migration,
-//             and the URL serves /health and every built asset. While Cloudflare keeps answering a
+//             and the URL serves /health and every built asset, and the app answers /login
+//             several times in a row on new connections. While Cloudflare keeps answering a
 //             server error for a built file, it deploys the build again under a fresh Worker name
 //             (`-r<n>`) and points the rest of the run at it.
 //   teardown  delete this run's jobs queue, Worker and D1 (always; a failure only warns, and a
@@ -116,6 +117,17 @@ export const READY_POLL_MS = 5_000;
 // not the PR's.
 export const CLIENT_ASSETS_DIR = join("build", "client", "assets");
 export const ASSETS_READY_TIMEOUT_MS = 2 * 60_000;
+
+// One edge can serve a new workers.dev Worker while another still answers Cloudflare's placeholder
+// page, a 404 that says "There is nothing here yet" (Journeys run 45436206706: /login got it after
+// this check passed). So verify asks for /login until the app answers it this many times in a row,
+// this far apart (about 10 s), each on a new connection ("connection: close"), so the requests can
+// reach different machines.
+export const APP_ANSWERS_IN_A_ROW = 5;
+export const APP_ANSWER_GAP_MS = 2_500;
+export const WORKERS_DEV_PLACEHOLDER = "There is nothing here yet";
+// React Router writes this into every page it renders; the placeholder has none.
+const APP_PAGE_MARKER = "__reactRouterContext";
 export const ASSET_FETCH_CONCURRENCY = 8;
 // Cloudflare's own static file serving has answered 500 for a few built files of a freshly
 // deployed run Worker, a different few each run, for the whole two-minute window, while it served
@@ -830,6 +842,37 @@ export async function waitForBuiltAssets({ fs, fetchImpl, now, sleep, baseUrl, l
   }
 }
 
+async function appProblem(fetchImpl, url) {
+  try {
+    const response = await fetchImpl(url, { redirect: "manual", headers: { connection: "close" } });
+    const body = await response.text();
+    if (response.status !== 200) {
+      return `/login returned ${response.status}${body.includes(WORKERS_DEV_PLACEHOLDER) ? ", Cloudflare's workers.dev placeholder" : ""}`;
+    }
+    return body.includes(APP_PAGE_MARKER) ? null : "/login answered without the app";
+  } catch (error) {
+    return `/login failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+// Asks for /login until the app answers APP_ANSWERS_IN_A_ROW times in a row; any other answer
+// starts the count again. Fails as a setup error after the bound.
+export async function waitForAppAnswers({ fetchImpl, now, sleep, baseUrl, timeoutMs = READY_TIMEOUT_MS }) {
+  const started = now();
+  let inARow = 0;
+  for (;;) {
+    const problem = await appProblem(fetchImpl, `${baseUrl}/login`);
+    inARow = problem ? 0 : inARow + 1;
+    if (inARow === APP_ANSWERS_IN_A_ROW) return;
+    if (problem && now() - started >= timeoutMs) {
+      throw new Error(
+        `Setup error, not a test failure: ${baseUrl}/login did not answer with the app ${APP_ANSWERS_IN_A_ROW} times in a row within ${Math.round(timeoutMs / 1000)} s: ${problem}.`,
+      );
+    }
+    await sleep(APP_ANSWER_GAP_MS);
+  }
+}
+
 // Right after deploy, Cloudflare's API can still say a brand-new script does not exist (seen 1.6 s
 // after "Deployed ... triggers" on #403). Every Cloudflare call verify makes retries a not-found
 // within the readiness window, then fails as a setup error rather than as a suite failure.
@@ -968,7 +1011,10 @@ export async function verify({ env, exec, fs, fetchImpl, now, sleep, log, api })
       state = await deployFresh({ env, exec, fs, sleep, log, api, state, ordinal });
       continue;
     }
-    log(`${state.baseUrl} serves this build: secrets set, no pending migrations, /health and all ${served} hashed assets live.`);
+    await waitForAppAnswers({ fetchImpl, now, sleep, baseUrl: state.baseUrl });
+    log(
+      `${state.baseUrl} serves this build: secrets set, no pending migrations, /health and all ${served} hashed assets live, and /login answered by the app ${APP_ANSWERS_IN_A_ROW} times in a row.`,
+    );
     return state;
   }
 }

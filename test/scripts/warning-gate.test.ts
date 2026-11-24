@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiGetRetryNote, assetRecoveredNote, assetRetryNote, dataRequestRetryNote, loadRetryNote } from "../../e2e/journeys/support/app-ready";
+import { apiGetRetryNote, assetRecoveredNote, assetRetryNote, dataRequestRetryNote, loadRetryNote, placeholderRetryNote } from "../../e2e/journeys/support/app-ready";
 import {
   EXPECTED_PRISMA_D1_TRANSACTION_WARNING,
   JOURNEYS_RETRY_NOTE_PATTERN,
@@ -385,6 +385,8 @@ describe("warning gate", () => {
       // The API GET Journeys run 45383802562 lost (#1008).
       apiGetRetryNote("/sitemap.xml", new Error("apiRequestContext.get: read ECONNRESET")),
       apiGetRetryNote("/api/v1/recipes/r1", new Error("apiRequestContext.get: socket hang up")),
+      // A page Cloudflare answered with its workers.dev placeholder (Journeys run 45436206706).
+      placeholderRetryNote("https://spoonjoy-v2-qa-run-45436206706-1-p2.mendelow-studio.workers.dev/login"),
       // A built file Cloudflare answered 404 for (#668).
       assetRetryNote("/assets/button-CXqvcQew.js", 404, 2, "none", 6),
       assetRetryNote("/assets/button-CXqvcQew.js", 404, 6, "8f1e2d3c4b5a6978-IAD", 6),
@@ -419,6 +421,8 @@ describe("warning gate", () => {
       ["a data request that failed another way", dataRequestRetryNote("POST", "/login.data", new Error("getaddrinfo ENOTFOUND example.test"))],
       ["a request that is not a data request", dataRequestRetryNote("POST", "/login", new Error("read ECONNRESET"))],
       ["a submission resent after no answer", dataRequestRetryNote("POST", "/login.data", Object.assign(new Error("route.fetch: Timeout 6000ms exceeded."), { name: "TimeoutError" }))],
+      ["a placeholder note with more after it", `${placeholderRetryNote("https://example.test/login")} and a page error`],
+      ["a placeholder note for another status", "Journeys: loading the page again after Cloudflare answered with its workers.dev placeholder (500 /login)"],
       ["an API GET that failed another way", apiGetRetryNote("/sitemap.xml", new Error("apiRequestContext.get: getaddrinfo ENOTFOUND example.test"))],
       ["an API POST sent again", "Journeys: sending POST /api/v1/recipes again after its connection was reset (apiRequestContext.post: read ECONNRESET)"],
       ["a data request whose retry note has more after it", `${dataRequestRetryNote("POST", "/login.data", new Error("read ECONNRESET"))} and then a page error`],

@@ -22,7 +22,7 @@
 import { test as base, expect } from "@playwright/test";
 import type { ConsoleMessage, Page, Request } from "@playwright/test";
 import { auditAccessibility, describeAuditFailures } from "./accessibility";
-import { waitForHydrationOnLoad } from "./app-ready";
+import { placeholderLoadCount, waitForHydrationOnLoad } from "./app-ready";
 import { redactUrl, redactUrlsInText } from "./redact";
 import { isWebKitCancelledSameOriginFetch } from "./webkit-noise";
 import { RequestLedger, isTransportFailureLog } from "./recovered-requests";
@@ -167,6 +167,8 @@ export interface ConsoleWatcher {
  * full URL in its text (for example a fetch/CSP failure), which can carry a query string or
  * other data that shouldn't end up verbatim in a test failure message or CI log.
  */
+const PLACEHOLDER_LOG = "Failed to load resource: the server responded with a status of 404 ()";
+
 export function watchConsole(page: Page): ConsoleWatcher {
   const collected: Array<{ issue: ConsoleIssue; url?: string }> = [];
   const requests = new RequestLedger();
@@ -198,8 +200,16 @@ export function watchConsole(page: Page): ConsoleWatcher {
     // support/recovered-requests.ts). Read at the end, once the second request has finished.
     get issues() {
       const excused = new Map<string, number>();
+      const excusedPlaceholders = new Map<string, number>();
       return collected
         .filter(({ issue, url }) => {
+          // A load that got Cloudflare's workers.dev placeholder and was loaded again (support/app-ready.ts).
+          if (url && issue.text === PLACEHOLDER_LOG) {
+            const used = excusedPlaceholders.get(url) ?? 0;
+            if (used >= placeholderLoadCount(page, url)) return true;
+            excusedPlaceholders.set(url, used + 1);
+            return false;
+          }
           if (!url || !isTransportFailureLog(issue.text)) return true;
           const used = excused.get(url) ?? 0;
           if (used >= requests.recoveredCount(url)) return true;
