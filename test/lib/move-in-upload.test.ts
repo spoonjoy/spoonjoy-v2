@@ -152,7 +152,7 @@ describe("uploadBackup", () => {
   });
 
   it.each([
-    ["an answer that isn't JSON", () => new Response("<html>", { status: 403 }), "Move-in couldn't take that backup. Reload the page and try again."],
+    ["an answer that isn't JSON", () => new Response("<html>", { status: 403 }), "Spoonjoy's server answered 403 without saying why, so the backup wasn't sent. Reload the page and press Move in again."],
     ["a conflict it doesn't know", () => Response.json({ code: "finished", error: "That backup has already arrived and is moving in." }, { status: 409 }), "That backup has already arrived and is moving in."],
   ])("says so for %s", async (_name, finish, error) => {
     const file = backupFile();
