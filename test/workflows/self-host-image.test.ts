@@ -190,7 +190,28 @@ describe("Self-host Image workflow", () => {
     expect(stop.if).toBe("always()");
     expect(stop.run).toContain("docker stop sj-restored || true");
     expect(stop.run).toContain('docker logs sj-restored > "$OUT/restored.log"');
-    expect(runs(image)).toContain('for (const file of ["image", "boot", "restart", "restore", "compose"])');
+    expect(runs(image)).toContain('for (const file of ["image", "boot", "restart", "restore", "jobs", "compose"])');
+  });
+
+  it("moves a kitchen in on a server with move-in on, and checks its backup for move-in jobs done", () => {
+    const step = stepNamed(image, /Move a kitchen in through the server's jobs queue/);
+    const run = step.run ?? "";
+    expect(step.if).toBe("success()");
+    const order = [
+      "docker run -d --name sj-jobs --network host -v sj-jobs:/data -e PORT=8082 -e SPOONJOY_FLAGS=move_in",
+      "-e SPOONJOY_SELF_HOST_MOVE_IN=1",
+      "e2e/self-host/move-in.spec.ts --output test-results-self-host-move-in",
+      "docker stop sj-jobs",
+      "server.mjs backup /backups/jobs.tar.gz",
+      'row[type] === "move-in.run" && row[status] === "done"',
+      'tee "$OUT/jobs.json"',
+    ].map((text) => run.indexOf(text));
+    expect(order.every((index) => index > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(run).toContain("docker run --rm --network none -v sj-jobs:/data");
+    expect(stepNamed(image, /Stop the server/).run).toContain("docker stop sj-jobs || true");
+    expect(runs(image)).toMatch(/sanitize-journey-traces\.mjs [^\n]*test-results-self-host-move-in/);
+    expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["app/routes/move-in.tsx", "app/domains/move-in/adapters/worker/**"]));
   });
 
   it("starts the guide's Compose file with this image and waits for its health check, then takes it down", () => {

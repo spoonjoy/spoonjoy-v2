@@ -18,6 +18,9 @@ on:
       - playwright.self-host.config.ts
       - playwright.self-host-fresh.config.ts
       - e2e/self-host/**
+      - app/routes/move-in.tsx
+      - app/domains/move-in/adapters/worker/**
+      - app/domains/platform/ports/jobs.ts
       - e2e/fixtures.ts
       - app/lib/session.server.ts
       - app/lib/apple-native-auth.server.ts
@@ -318,6 +321,41 @@ jobs:
           docker logs sj-restored 2>/dev/null | grep '"event":"backup","kind":"auto"'
           docker exec sj-restored ls /data/backups
 
+      # Platform jobs end to end: a fresh server with move-in on (on 8082, on the host network beside
+      # the restored server) moves a small proof kitchen in, which runs as jobs on the server's
+      # in-process JOBS queue. Its backup's PlatformJobKey rows then show the move-in jobs done.
+      - name: Move a kitchen in through the server's jobs queue
+        if: success()
+        run: |
+          docker volume create sj-jobs
+          docker run -d --name sj-jobs --network host -v sj-jobs:/data -e PORT=8082 -e SPOONJOY_FLAGS=move_in "$LOCAL_IMAGE"
+          for _ in $(seq 1 600); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8082/health/ready || true)" = "200" ] && break
+            sleep 0.1
+          done
+          curl -sf http://localhost:8082/health/ready
+          docker run --rm --network host --user "$(id -u):$(id -g)" --ipc host \
+            -v "$PWD:/work" -w /work -e HOME=/tmp -e CI=true \
+            -e SPOONJOY_JOURNEYS_BASE_URL=http://localhost:8082 \
+            -e SPOONJOY_SELF_HOST_MOVE_IN=1 \
+            mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f \
+            node node_modules/@playwright/test/cli.js test -c playwright.self-host-fresh.config.ts e2e/self-host/move-in.spec.ts --output test-results-self-host-move-in
+          docker stop sj-jobs
+          mkdir -p .self-host/backups && chmod 777 .self-host/backups
+          docker run --rm --network none -v sj-jobs:/data -v "$PWD/.self-host/backups:/backups" "$LOCAL_IMAGE" \
+            node /app/self-host/server.mjs backup /backups/jobs.tar.gz
+          node --input-type=module -e '
+            import { readTarGz } from "./self-host/backup.mjs";
+            for await (const { name, data } of readTarGz(".self-host/backups/jobs.tar.gz")) {
+              if (name !== "database.json") continue;
+              const keys = JSON.parse(Buffer.from(data).toString("utf8")).tables.find((table) => table.name === "PlatformJobKey");
+              const [type, status] = ["type", "status"].map((column) => keys.columns.indexOf(column));
+              const done = keys.rows.filter((row) => row[type] === "move-in.run" && row[status] === "done").length;
+              console.log(JSON.stringify({ moveInJobsDone: done, jobKeys: keys.rows.length }));
+              if (!done) throw new Error("No move-in job ran to done on the server's JOBS queue.");
+            }
+          ' | tee "$OUT/jobs.json"
+
       # The Compose file in the guide (self-host/compose.yaml) starts this image and waits for its
       # health check; on 8081, beside the restored server.
       - name: Start it with Docker Compose
@@ -340,6 +378,8 @@ jobs:
           docker logs sj > "$OUT/container.log" 2>&1 || true
           docker stop sj || true
           docker logs sj-restored > "$OUT/restored.log" 2>&1 || true
+          docker logs sj-jobs > "$OUT/jobs.log" 2>&1 || true
+          docker stop sj-jobs || true
           docker stop sj-restored || true
           docker logs dex > "$OUT/dex.log" 2>&1 || true
           docker stop dex || true
@@ -351,7 +391,7 @@ jobs:
 
       - name: Strip network logs from traces
         if: always()
-        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report test-results-self-host-fresh test-results-self-host-oidc test-results-self-host-restored
+        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report test-results-self-host-fresh test-results-self-host-oidc test-results-self-host-restored test-results-self-host-move-in
 
       - name: Summary
         if: always()
@@ -360,7 +400,7 @@ jobs:
             const fs = require("fs");
             const out = process.env.OUT;
             const metrics = { arch: process.env.ARCH, version: process.env.VERSION };
-            for (const file of ["image", "boot", "restart", "restore", "compose"]) {
+            for (const file of ["image", "boot", "restart", "restore", "jobs", "compose"]) {
               try { Object.assign(metrics, JSON.parse(fs.readFileSync(`${out}/${file}.json`, "utf8"))); } catch {}
             }
             try { metrics.memoryIdle = JSON.parse(fs.readFileSync(`${out}/memory-idle.json`, "utf8")).MemUsage; } catch {}
@@ -382,6 +422,7 @@ jobs:
             test-results-self-host-fresh/
             test-results-self-host-oidc/
             test-results-self-host-restored/
+            test-results-self-host-move-in/
           retention-days: 30
           include-hidden-files: false
 
