@@ -12,7 +12,7 @@ test.describe("Move in, a v1.12.0 kitchen", { tag: "@move-in" }, () => {
 
   test("moves in with every recipe and photo @mutates", async ({ page, expectAccessible, verifyAfterReload }) => {
     await verifyAfterReload(await moveIn("v1.12.0", { page, expectAccessible }));
-    await inTheKitchen("v1.12.0", { page });
+    await inTheKitchen("v1.12.0", { page, verifyAfterReload });
   });
 });
 
@@ -21,7 +21,7 @@ test.describe("Move in, a v2.8.0 kitchen", { tag: "@move-in" }, () => {
 
   test("moves in with every recipe and photo @mutates", async ({ page, expectAccessible, verifyAfterReload }) => {
     await verifyAfterReload(await moveIn("v2.8.0", { page, expectAccessible }));
-    await inTheKitchen("v2.8.0", { page });
+    await inTheKitchen("v2.8.0", { page, verifyAfterReload });
   });
 });
 
@@ -30,6 +30,6 @@ test.describe("Move in, a v3.31.0 kitchen", { tag: "@move-in" }, () => {
 
   test("moves in with every recipe and photo @mutates", async ({ page, expectAccessible, verifyAfterReload }) => {
     await verifyAfterReload(await moveIn("v3.31.0", { page, expectAccessible }));
-    await inTheKitchen("v3.31.0", { page });
+    await inTheKitchen("v3.31.0", { page, verifyAfterReload });
   });
 });
