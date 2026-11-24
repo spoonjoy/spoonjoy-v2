@@ -19,11 +19,12 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { Miniflare, fetch as nodeFetch } from "miniflare";
+import { Miniflare, Response as MiniflareResponse, fetch as nodeFetch } from "miniflare";
 import { createBackup, backupFileName, pruneBackups, restoreBackup } from "./backup.mjs";
 import { serverPushKeys } from "./push-keys.mjs";
 import { backupSettings, miniflareOptions, photoUploads, settingsFromEnv } from "./config.mjs";
 import { nextCronTime, startCronTimers } from "./cron.mjs";
+import { BusyError, hostApi, oneAtATime } from "./host-api.mjs";
 import { applyMigrations, migrationFiles, splitSql } from "./migrations.mjs";
 
 const startedAt = Date.now();
@@ -31,6 +32,9 @@ const [command = "serve", ...args] = process.argv.slice(2);
 const settings = settingsFromEnv(process.env);
 const { appDir, dataDir } = settings;
 const backups = backupSettings(process.env, dataDir, (cron) => nextCronTime(cron, Date.now()));
+// One backup or restore at a time, whether the schedule or the admin asks for it.
+const exclusive = oneAtATime();
+let api;
 const log = (event, fields = {}) => console.log(JSON.stringify({ event, ...fields }));
 
 mkdirSync(dataDir, { recursive: true });
@@ -52,6 +56,8 @@ const options = miniflareOptions({
   version: process.env.SPOONJOY_VERSION ?? "dev",
   serverAssetFiles: readdirSync(path.join(appDir, "build/server/assets")),
   outboundFetch: nodeFetch,
+  // Built on its first request, which comes only once the database below is ready.
+  hostService: command === "serve" ? (request) => (api ??= hostApi({ settings: backups, backUp, restore: restoreFrom, exclusive, Response: MiniflareResponse }))(request) : undefined,
 });
 if (command !== "serve") options.host = "127.0.0.1";
 
@@ -68,7 +74,19 @@ async function backUp(kind, file = path.join(backups.dir, backupFileName(kind)))
   const photos = await mf.getR2Bucket("PHOTOS");
   const made = await createBackup({ db, photos, file, version });
   log("backup", { kind, file, rows: made.rows, photos: made.photos, photoBytes: made.photoBytes, bytes: statSync(file).size });
-  return made;
+  return { ...made, name: path.basename(file) };
+}
+
+// Replaces the kitchen with a backup's, saving what's there first if it has any accounts, and
+// brings it up to date with this image.
+async function restoreFrom(file) {
+  const users = (await db.prepare('SELECT COUNT(*) AS count FROM "User"').first()).count;
+  const saved = users > 0 ? await backUp("before-restore") : null;
+  const photos = await mf.getR2Bucket("PHOTOS");
+  const restored = await restoreBackup({ db, photos, file, knownMigrations: knownMigrations.map((migration) => migration.name) });
+  const after = await applyMigrations(db, knownMigrations);
+  log("restore", { ...restored, migrationsRun: after.ran, savedFirst: saved?.name ?? null });
+  return { ...restored, savedFirst: saved?.name ?? null };
 }
 
 if (command === "sql") {
@@ -109,12 +127,7 @@ if (command === "sql") {
     await mf.dispose();
     process.exit(2);
   }
-  const users = (await db.prepare('SELECT COUNT(*) AS count FROM "User"').first()).count;
-  if (users > 0) await backUp("before-restore");
-  const photos = await mf.getR2Bucket("PHOTOS");
-  const restored = await restoreBackup({ db, photos, file, knownMigrations: knownMigrations.map((migration) => migration.name) });
-  const after = await applyMigrations(db, knownMigrations);
-  log("restore", { ...restored, migrationsRun: after.ran });
+  await restoreFrom(file);
   await mf.dispose();
   process.exit(0);
 } else if (command !== "serve") {
@@ -131,10 +144,10 @@ const stopCron = startCronTimers(built.triggers?.crons ?? [], async (cron) => {
 });
 const stopBackups = backups.schedule
   ? startCronTimers([backups.schedule], async () => {
-      await backUp("auto");
+      await exclusive(() => backUp("auto"));
       const removed = pruneBackups(backups.dir, backups.keep);
       if (removed.length > 0) log("backups-pruned", { removed });
-    }, (error) => log("backup-failed", { error: String(error?.message ?? error) }))
+    }, (error) => log(error instanceof BusyError ? "backup-skipped" : "backup-failed", { error: String(error?.message ?? error) }))
   : () => {};
 
 log("ready", {

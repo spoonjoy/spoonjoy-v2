@@ -129,7 +129,7 @@ function outboundInit(request) {
   return { method: request.method, headers, body: request.body, duplex: "half", redirect: request.redirect };
 }
 
-export function miniflareOptions({ built, env, settings, sessionSecret, pushKeys, version, serverAssetFiles, outboundFetch }) {
+export function miniflareOptions({ built, env, settings, sessionSecret, pushKeys, version, serverAssetFiles, outboundFetch, hostService }) {
   const { appDir, dataDir, port } = settings;
   const serverDir = path.join(appDir, "build/server");
   const vars = selfHostVars({ built, env, port, sessionSecret, pushKeys });
@@ -154,6 +154,8 @@ export function miniflareOptions({ built, env, settings, sessionSecret, pushKeys
     r2Persist: path.join(dataDir, "r2"),
     durableObjectsPersist: path.join(dataDir, "do"),
     cachePersist: path.join(dataDir, "cache"),
+    // The server's backups, for the admin's Server settings (self-host/host-api.mjs).
+    ...(hostService ? { serviceBindings: { SELF_HOST: hostService } } : {}),
     // The Worker's own fetches (Apple's sign-in keys, AI providers, OAuth) go out through Node,
     // without the CF-Worker header workerd adds to each one: Apple's key server answers a request
     // carrying it from outside Cloudflare with a 403.

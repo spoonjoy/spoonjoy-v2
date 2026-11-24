@@ -11,6 +11,7 @@ export default [
   // Sign-in with a self-hosted server's own OpenID Connect provider.
   route("auth/oidc", "routes/auth.oidc.tsx"),
   route("auth/oidc/callback", "routes/auth.oidc.callback.tsx"),
-  // A self-hosted server's admin settings: who may sign up, and invite links.
+  // A self-hosted server's admin settings: who may sign up, invite links, and backups to download.
   route("account/server", "routes/account.server-settings.tsx"),
+  route("account/server/backups/:name", "routes/account.server-backups.$name.tsx"),
 ] satisfies RouteConfig;

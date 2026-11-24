@@ -52,6 +52,7 @@ const coverageInclude = [
   "self-host/migrations.mjs",
   "self-host/backup.mjs",
   "self-host/push-keys.mjs",
+  "self-host/host-api.mjs",
   "scripts/check-domain-boundaries.mjs",
   "test/warning-policy.ts",
   "e2e/warning-policy.ts",

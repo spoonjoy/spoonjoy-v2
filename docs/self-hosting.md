@@ -113,7 +113,9 @@ The server makes one on its schedule while it runs (`SPOONJOY_BACKUP_SCHEDULE`),
 docker run -d --name spoonjoy -p 8080:8080 -v spoonjoy-data:/data -v /mnt/nas/spoonjoy:/backups -e SPOONJOY_BACKUP_DIR=/backups ghcr.io/spoonjoy/spoonjoy:latest
 ```
 
-To make one now, stop the server and run `server.mjs backup`, which writes `spoonjoy-manual-<time>.tar.gz` in the backups folder, or to the file you name:
+The admin sees the backups under **Server settings**, at `/account/server`: they can back up now, download any backup, and restore one. A restore asks first, saves what's there as a backup, then puts the server back as it was when that backup was made, while it keeps running.
+
+To make one from the command line, stop the server and run `server.mjs backup`, which writes `spoonjoy-manual-<time>.tar.gz` in the backups folder, or to the file you name:
 
 ```sh
 docker stop spoonjoy
@@ -132,7 +134,7 @@ The container runs as uid 1000, so a host folder it writes a backup into needs t
 
 ## How it's checked
 
-The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, signs up, adds a passkey and signs back in on the empty server, checks the first account is the admin, that a stranger is refused once sign-ups are off and that an invite link signs up one person and then stops working, checks Sign in with Apple is set up, signs in through a Dex OpenID Connect provider, seeds the QA kitchen through `server.mjs sql` and its sample cover photos through `server.mjs photos`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, checks the kitchen is still there after `docker restart`, and backs it up with `server.mjs backup`, restores the backup into a second, empty volume and checks the restored server shows a recipe and its photo, byte for byte, and makes its own scheduled backup. Then it starts the image with `self-host/compose.yaml` and waits for Compose to report it healthy. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
+The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, signs up, adds a passkey and signs back in on the empty server, checks the first account is the admin, that a stranger is refused once sign-ups are off and that an invite link signs up one person and then stops working, checks Sign in with Apple is set up, signs in through a Dex OpenID Connect provider, seeds the QA kitchen through `server.mjs sql` and its sample cover photos through `server.mjs photos`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, checks the kitchen is still there after `docker restart`, and backs it up with `server.mjs backup`, restores the backup into a second, empty volume and checks the restored server shows a recipe and its photo, byte for byte, and makes its own scheduled backup. On the fresh server, the admin backs up from Server settings, downloads the backup, and restores it. Then it starts the image with `self-host/compose.yaml` and waits for Compose to report it healthy. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
 
 After each green run on main, the `Self-host Pull` workflow (`.github/workflows/self-host-pull.yml`) pulls `ghcr.io/spoonjoy/spoonjoy:latest` with no login on amd64 and arm64, boots it on an empty volume and waits for its health check, the way a self-hoster would.
 
