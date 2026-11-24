@@ -104,6 +104,13 @@ describe("timeMoveInPorts", () => {
     await ports.organizers?.attach({} as never);
     expect(times.organizers.calls).toBe(1);
   });
+
+  it("times a chunk's organizers with the rest, when the Worker has a chunk organizer writer", async () => {
+    const { ports, times } = timeMoveInPorts(fakePorts({ organizers: { on: () => true, attach: async () => undefined, attachMany: async () => [null] } }));
+    expect(await ports.organizers?.attachMany?.([])).toEqual([null]);
+    expect(times.organizers.calls).toBe(1);
+    expect(timeMoveInPorts(fakePorts({ organizers: { on: () => true, attach: async () => undefined } })).ports.organizers?.attachMany).toBeUndefined();
+  });
 });
 
 describe("moveInSegmentLine", () => {

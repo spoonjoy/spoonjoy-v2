@@ -4,8 +4,9 @@ import type { PrismaClient } from "@prisma/client";
 import { getLocalDb } from "~/lib/db.server";
 import { organizersOnRecipe, prismaOrganizerStore, setRecipeOrganizers, type OrganizerKind, type OrganizerStore } from "~/domains/kitchen";
 import { readMoveInOrganizerCounts } from "~/domains/move-in/adapters/storage/organizer-writer.server";
-import { attachMovedInOrganizers } from "~/domains/move-in/adapters/storage/organizer-writer.server";
+import { attachMovedInOrganizers, attachMovedInOrganizersTogether } from "~/domains/move-in/adapters/storage/organizer-writer.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
+import { sqliteD1, type SqliteD1 } from "../../helpers/sqlite-d1";
 import { createTestRecipe, createTestUser } from "../../utils";
 
 let db: PrismaClient;
@@ -105,5 +106,83 @@ describe("attachMovedInOrganizers", () => {
     await db.recipeOrganizer.deleteMany({ where: { organizer: { ownerId: at.ownerId, slug: "dinner" } } });
     await db.recipe.update({ where: { id: second.id }, data: { deletedAt: new Date() } });
     expect(await readMoveInOrganizerCounts(db, at)).toEqual({ tags: 1, categories: 0, tools: 0 });
+  });
+});
+
+describe("attachMovedInOrganizersTogether", () => {
+  let d1: SqliteD1;
+  const now = new Date("2026-11-24T12:00:00.000Z");
+
+  beforeEach(() => {
+    d1 = sqliteD1();
+  });
+
+  afterEach(() => d1.close());
+
+  it("puts a chunk's tags, categories and tools on its recipes in two round trips, making each organizer once as the first recipe spells it, and again changes nothing", async () => {
+    const at = await kitchen();
+    const { ownerId, recipeId } = at;
+    const second = await db.recipe.create({ data: createTestRecipe(ownerId) });
+    const other = await db.recipe.create({ data: createTestRecipe(ownerId) });
+    await setRecipeOrganizers(store, ownerId, recipeId, "tag", ["Cozy"]);
+    await setRecipeOrganizers(store, ownerId, other.id, "tool", ["SKILLET"]);
+    const chunk = [
+      { ...at, tags: ["Quick", "quick"], categories: ["Dinner"], tools: [] },
+      { ...at, recipeId: second.id, tags: ["quick"], categories: [], tools: ["skillet", "x".repeat(61)] },
+      { ...at, recipeId: other.id, ...none },
+    ];
+
+    expect(await attachMovedInOrganizersTogether(d1.binding, chunk, now)).toEqual([null, null, null]);
+    expect(d1.roundTrips()).toBe(2);
+    expect(await attachMovedInOrganizersTogether(d1.binding, chunk, now)).toEqual([null, null, null]);
+
+    expect(await on(recipeId, "tag")).toEqual(["Cozy", "Quick"]);
+    expect(await on(recipeId, "category")).toEqual(["Dinner"]);
+    expect(await on(second.id, "tag")).toEqual(["Quick"]);
+    expect(await on(second.id, "tool")).toEqual(["SKILLET"]);
+    expect(await on(other.id, "tag")).toEqual([]);
+    expect(await db.organizer.count({ where: { ownerId } })).toBe(4);
+    expect(await readMoveInOrganizerCounts(db, at)).toEqual({ tags: 1, categories: 1, tools: 1 });
+  });
+
+  it("answers an error for a recipe that isn't the cook's or was deleted, and still brings the rest", async () => {
+    const at = await kitchen();
+    const theirs = await kitchen();
+    const deleted = await db.recipe.create({ data: { ...createTestRecipe(at.ownerId), deletedAt: new Date() } });
+    const answers = await attachMovedInOrganizersTogether(d1.binding, [
+      { ...theirs, recipeId: at.recipeId, ...none, tags: ["Theirs"] },
+      { ...at, recipeId: deleted.id, ...none, tags: ["Gone"] },
+      { ...at, ...none, tags: ["Quick"] },
+    ], now);
+
+    expect(answers.map((answer) => answer?.message ?? null)).toEqual(["the recipe is no longer in your kitchen", "the recipe is no longer in your kitchen", null]);
+    expect(await on(at.recipeId, "tag")).toEqual(["Quick"]);
+    expect(await db.organizer.count()).toBe(1);
+  });
+
+  it("writes nothing for a chunk with none to put on, and reads nothing for an empty one", async () => {
+    const at = await kitchen();
+    expect(await attachMovedInOrganizersTogether(d1.binding, [], now)).toEqual([]);
+    expect(d1.roundTrips()).toBe(0);
+    expect(await attachMovedInOrganizersTogether(d1.binding, [{ ...at, ...none }], now)).toEqual([null]);
+    expect(d1.roundTrips()).toBe(1);
+  });
+
+  it("reads a chunk of many recipes in pieces D1 accepts", async () => {
+    const at = await kitchen();
+    const many = [];
+    for (let n = 0; n < 95; n++) many.push({ ...at, recipeId: (await db.recipe.create({ data: createTestRecipe(at.ownerId) })).id, ...none, tags: ["Quick"] });
+
+    expect(await attachMovedInOrganizersTogether(d1.binding, many, now)).toEqual(many.map(() => null));
+    expect(d1.statements.filter((statement) => statement.sql.startsWith(`SELECT "id", "chefId"`)).map((statement) => statement.params.length)).toEqual([90, 5]);
+    expect(await db.recipeOrganizer.count()).toBe(95);
+  });
+
+  it("throws when its write fails, so each recipe can go alone", async () => {
+    const at = await kitchen();
+    let trips = 0;
+    const failing = { prepare: d1.binding.prepare, batch: async (statements: Parameters<typeof d1.binding.batch>[0]) => (++trips === 1 ? d1.binding.batch(statements) : Promise.reject(new Error("D1 is down"))) };
+    await expect(attachMovedInOrganizersTogether(failing, [{ ...at, ...none, tags: ["Quick"] }], now)).rejects.toThrow("D1 is down");
+    expect(await db.organizer.count()).toBe(0);
   });
 });

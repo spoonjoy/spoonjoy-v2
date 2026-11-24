@@ -210,6 +210,18 @@ describe("moveInPorts' organizers", () => {
     expect(getDb).toHaveBeenCalledTimes(2);
     expect(getDb).toHaveBeenCalledWith({ DB: database.binding });
   });
+  it("put a chunk's on through the Worker's database, without Prisma", async () => {
+    const sql = database.sqlite;
+    sql.prepare(`INSERT INTO "Recipe" ("id", "title", "chefId") VALUES ('recipe-1', 'Pancakes', 'chef-1')`).run();
+    sql.prepare(`INSERT INTO "ImportSource" ("id", "ownerId", "kind", "instanceKey", "label") VALUES ('source-1', 'chef-1', 'mealie-backup', 'k', 'Home')`).run();
+    vi.mocked(getDb).mockClear();
+    const ports = moveInPorts({ DB: database.binding, PHOTOS: memoryBucket(), SPOONJOY_FLAGS: "organizers" } as never, () => now);
+
+    expect(await ports.organizers?.attachMany?.([{ ownerId: "chef-1", sourceId: "source-1", jobId: "job-1", recipeId: "recipe-1", tags: ["Quick"], categories: [], tools: [] }])).toEqual([null]);
+
+    expect(sql.prepare(`SELECT o."name" FROM "RecipeOrganizer" ro JOIN "Organizer" o ON o."id" = ro."organizerId" WHERE ro."recipeId" = 'recipe-1'`).all()).toEqual([{ name: "Quick" }]);
+    expect(getDb).not.toHaveBeenCalled();
+  });
 });
 
 describe("moveInEnv", () => {
