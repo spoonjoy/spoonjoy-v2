@@ -175,6 +175,38 @@ describe("planning a week, stored", () => {
   });
 
   describe("the recipes a cook can plan", () => {
+    it("lists a household's recipes on its plan too: its cooks' recipes the acting cook can read, and lets them be planned", async () => {
+      const chef = await cook();
+      const partner = await cook();
+      const stranger = await cook();
+      const household = await db.household.create({ data: { name: "Our kitchen" } });
+      const recipe = (chefId: string, title: string, visibility: string) => db.recipe.create({ data: { ...createTestRecipe(chefId), title, visibility } });
+      const mine = await recipe(chef.id, "Bean Stew", "private");
+      const ours = await recipe(partner.id, "Family Lasagna", "household");
+      const open = await recipe(partner.id, "Open Soup", "public");
+      const secret = await recipe(partner.id, "Partner's Secret", "private");
+      const notOurs = await recipe(stranger.id, "Their Household Pie", "household");
+      await recipe(stranger.id, "Stranger's Public Tart", "public");
+      const scope: PlanScope = { household: household.id, actingCook: chef.id, householdChefIds: new Set([partner.id]) };
+
+      expect(await plannableRecipes(store, scope, null)).toEqual({
+        recipes: [
+          { id: mine.id, title: "Bean Stew" },
+          { id: ours.id, title: "Family Lasagna" },
+          { id: open.id, title: "Open Soup" },
+        ],
+        chosenRecipeId: null,
+      });
+      expect((await plannableRecipes(store, scope, ours.id)).chosenRecipeId).toBe(ours.id);
+      expect((await plannableRecipes(store, scope, secret.id)).chosenRecipeId).toBeNull();
+      const plan = (id: string, recipeId: string) => addEntry(store, scope, id, { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId });
+      expect(await plan("e1", ours.id)).toMatchObject({ ok: true, value: { recipeTitle: "Family Lasagna" } });
+      expect(await plan("e2", secret.id)).toEqual({ ok: false, error: "That recipe isn't available to plan." });
+      expect(await plan("e3", notOurs.id)).toEqual({ ok: false, error: "That recipe isn't available to plan." });
+      // A cook's own plan still reads only their own and public recipes.
+      expect(await addEntry(store, { cook: chef.id }, "e4", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: ours.id })).toEqual({ ok: false, error: "That recipe isn't available to plan." });
+    });
+
     it("lists their own recipes and the readable ones saved in their cookbooks, by title, once each", async () => {
       const chef = await cook();
       const friend = await cook();

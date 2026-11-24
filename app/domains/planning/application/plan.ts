@@ -6,9 +6,11 @@ import { planWeek, validateEntryInput, type PlanDay, type PlanEntry, type PlanEn
 
 /**
  * Whose plan a use case works on: a cook's own, or a household's, changed by one of its cooks. The acting cook is who
- * adds entries, whose cooks count as last made and whose read rights decide which recipes may be planned.
+ * adds entries, whose cooks count as last made and whose read rights decide which recipes may be planned. On a
+ * household's plan, `householdChefIds` are the cooks who share a household with the acting cook (Households works them
+ * out; Planning never asks it): their recipes are offered too, and their household recipes become readable.
  */
-export type PlanScope = { cook: string } | { household: string; actingCook: string };
+export type PlanScope = { cook: string } | { household: string; actingCook: string; householdChefIds?: ReadonlySet<string> };
 
 export function actingCookOf(scope: PlanScope): string {
   return "cook" in scope ? scope.cook : scope.actingCook;
@@ -24,10 +26,13 @@ export interface PlanStore {
   planFor(scope: PlanScope): Promise<PlanSettings>;
   /** The plan's live entries from `from` to `to`, both days included. */
   entriesBetween(plan: PlanSettings, from: LocalDate, to: LocalDate): Promise<PlanEntry[]>;
-  /** The title of a recipe the cook may plan (one they can read that isn't deleted), or null when there is none. */
-  plannableRecipeTitle(cookId: string, recipeId: string): Promise<string | null>;
-  /** The recipes the cook may plan that are theirs or saved in their cookbooks, by title, at most `limit`. */
-  ownAndSavedRecipes(cookId: string, limit: number): Promise<PlannableRecipe[]>;
+  /** The title of a recipe the scope's acting cook may plan (one they can read that isn't deleted), or null. */
+  plannableRecipeTitle(scope: PlanScope, recipeId: string): Promise<string | null>;
+  /**
+   * The recipes the acting cook may plan that are theirs, saved in their cookbooks or, on a household's plan, by the
+   * household's cooks, by title, at most `limit`.
+   */
+  listPlannableRecipes(scope: PlanScope, limit: number): Promise<PlannableRecipe[]>;
   /** The entry with this id in this plan, removed ones included. */
   findEntry(plan: PlanSettings, entryId: string): Promise<StoredEntry | null>;
   insertEntry(plan: PlanSettings, addedById: string, entry: PlanEntry): Promise<void>;
@@ -82,7 +87,7 @@ export async function addEntry(store: PlanStore, scope: PlanScope, entryId: stri
   }
   const input = validateEntryInput(raw);
   if (!input.ok) return input;
-  const recipeTitle = input.value.recipeId ? await store.plannableRecipeTitle(cook, input.value.recipeId) : null;
+  const recipeTitle = input.value.recipeId ? await store.plannableRecipeTitle(scope, input.value.recipeId) : null;
   if (input.value.recipeId && recipeTitle === null) return { ok: false, error: "That recipe isn't available to plan." };
   const sameDay = await store.entriesBetween(plan, input.value.date, input.value.date);
   const entry: PlanEntry = { id: entryId, ...input.value, position: nextPosition(sameDay, input.value), recipeTitle };
@@ -127,18 +132,18 @@ export async function moveEntry(
 export const PLANNABLE_RECIPE_LIMIT = 500;
 
 /**
- * The recipes the plan page offers: the acting cook's own and those saved in their cookbooks, by title. A recipe asked
- * for by link (`?recipe=`) goes first when the cook may plan it, and is ignored when they may not.
+ * The recipes the plan page offers: the acting cook's own, those saved in their cookbooks and, on a household's plan,
+ * the household's cooks' recipes they can read, by title. A recipe asked for by link (`?recipe=`) goes first when the
+ * cook may plan it, and is ignored when they may not.
  */
 export async function plannableRecipes(
   store: PlanStore,
   scope: PlanScope,
   chosenId: string | null,
 ): Promise<{ recipes: PlannableRecipe[]; chosenRecipeId: string | null }> {
-  const cook = actingCookOf(scope);
   const [listed, chosenTitle] = await Promise.all([
-    store.ownAndSavedRecipes(cook, PLANNABLE_RECIPE_LIMIT),
-    chosenId ? store.plannableRecipeTitle(cook, chosenId) : null,
+    store.listPlannableRecipes(scope, PLANNABLE_RECIPE_LIMIT),
+    chosenId ? store.plannableRecipeTitle(scope, chosenId) : null,
   ]);
   if (!chosenId || chosenTitle === null) return { recipes: listed, chosenRecipeId: null };
   return { recipes: [{ id: chosenId, title: chosenTitle }, ...listed.filter((recipe) => recipe.id !== chosenId)], chosenRecipeId: chosenId };
