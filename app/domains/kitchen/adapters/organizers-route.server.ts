@@ -6,6 +6,7 @@ import { isFlagOn } from "~/domains/platform";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import type { OrganizerStore } from "../application/organizers";
+import { ORGANIZE_MARKER } from "../model/organizer";
 import { prismaOrganizerStore } from "./prisma-organizer-store";
 
 export async function organizersRequest(
@@ -19,7 +20,11 @@ export async function organizersRequest(
   return { userId, store: prismaOrganizerStore(db), db };
 }
 
-/** Splits a comma-separated list of tags, categories or tools as typed into one name per entry. */
-export function organizerNamesFromInput(value: FormDataEntryValue | null): string[] {
-  return typeof value === "string" ? value.split(",") : [];
+/**
+ * The names a form gives for one kind: one per chip, with any typed list split at commas, or null when the form
+ * neither sends the field nor marks it as shown (a kind left out stays as it is).
+ */
+export function organizerNamesFromForm(form: FormData, field: string): string[] | null {
+  if (!form.has(field) && !form.getAll(ORGANIZE_MARKER).includes(field)) return null;
+  return form.getAll(field).flatMap((value) => (typeof value === "string" ? value.split(",") : []));
 }

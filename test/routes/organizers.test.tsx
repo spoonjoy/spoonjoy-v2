@@ -3,7 +3,8 @@ import { Request as UndiciRequest } from "undici";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { db } from "~/lib/db.server";
 import { OBJECTIONABLE_CONTENT_MESSAGE, OBJECTIONABLE_TERMS } from "~/lib/objectionable-terms";
-import { organizerNamesFromInput } from "~/domains/kitchen/index.server";
+import { organizerNamesFromForm } from "~/domains/kitchen/index.server";
+import { organizerAddLabel } from "~/components/organizers/organizer-kinds";
 import TagsIndex, { loader as tagsLoader, meta as tagsMeta } from "~/routes/tags._index";
 import TagPage, { loader as tagLoader, meta as tagMeta } from "~/routes/tags.$slug";
 import CategoriesIndex, { loader as categoriesLoader, meta as categoriesMeta } from "~/routes/categories._index";
@@ -29,8 +30,14 @@ async function signedIn(path: string, userId: string, init: RequestInit = {}) {
   return new UndiciRequest(`http://localhost:3000${path}`, { ...init, headers }) as unknown as Request;
 }
 
-function organizeForm(fields: { tags?: string; categories?: string; tools?: string }) {
+function organizeForm(fields: { tags?: string; categories?: string; tools?: string } | [string, string][]) {
   return { method: "POST", body: new URLSearchParams(fields) } as RequestInit;
+}
+
+function formOf(entries: [string, string][]): FormData {
+  const form = new FormData();
+  for (const [name, value] of entries) form.append(name, value);
+  return form;
 }
 
 async function status(promise: Promise<unknown>): Promise<number> {
@@ -58,9 +65,18 @@ describe("organizers on recipes", () => {
     await cleanupDatabase();
   });
 
-  it("read typed names split at commas, and none from a missing field", () => {
-    expect(organizerNamesFromInput("a, b,,c")).toEqual(["a", " b", "", "c"]);
-    expect(organizerNamesFromInput(null)).toEqual([]);
+  it("read one name per chip, split any typed list at commas, and tell a field with no chips left from one the form leaves out", () => {
+    expect(organizerNamesFromForm(formOf([["tags", "a, b,,c"]]), "tags")).toEqual(["a", " b", "", "c"]);
+    expect(organizerNamesFromForm(formOf([["tags", "Quick"], ["tags", "Cozy"], ["organize", "tags"]]), "tags")).toEqual(["Quick", "Cozy"]);
+    expect(organizerNamesFromForm(formOf([["organize", "tags"]]), "tags")).toEqual([]);
+    expect(organizerNamesFromForm(formOf([["organize", "tools"]]), "tags")).toBeNull();
+    const withFile = formOf([["tags", "Quick"]]);
+    withFile.append("tags", new Blob(["Cozy"]), "cozy.txt");
+    expect(organizerNamesFromForm(withFile, "tags")).toEqual(["Quick"]);
+  });
+
+  it("label the phone sheet's row that adds a typed name", () => {
+    expect(organizerAddLabel("Date night")).toBe("Add “Date night”");
   });
 
   it("name their pages", () => {
@@ -102,10 +118,27 @@ describe("organizers on recipes", () => {
       tags: [{ name: "Quick", slug: "quick" }, { name: "Soup", slug: "soup" }],
       categories: [{ name: "Dinner", slug: "dinner" }],
       tools: [{ name: "Dutch oven", slug: "dutch-oven" }],
+      choices: { tags: ["Quick", "Soup"], categories: ["Dinner"], tools: ["Dutch oven"] },
     });
     expect(await organize(recipe.id, chef.id, { categories: "" })).toEqual({ saved: true });
     const kept = await organizeLoader({ request: await signedIn(path, chef.id), context: ON, params: { id: recipe.id } } as never);
     expect([kept.tags.length, kept.categories.length, kept.tools.length]).toEqual([2, 0, 1]);
+  });
+
+  it("save one chip per entry, clear a kind whose chips are all removed, and keep suggesting a tag taken off the recipe", async () => {
+    const chef = await createDrawerUser("organizers-chips");
+    const recipe = await createDrawerRecipe({ chefId: chef.id, title: "Chip soup" });
+    const path = `/recipes/${recipe.id}/organize`;
+    const all: [string, string][] = [["organize", "tags"], ["organize", "categories"], ["organize", "tools"]];
+    expect(await organize(recipe.id, chef.id, [...all, ["tags", "Weeknight"], ["tags", "Spare"], ["tools", "Wok"]])).toEqual({ saved: true });
+    expect(await organize(recipe.id, chef.id, [...all, ["tags", "weeknight"], ["tools", "Wok"]])).toEqual({ saved: true });
+    const loaded = await organizeLoader({ request: await signedIn(path, chef.id), context: ON, params: { id: recipe.id } } as never);
+    expect(loaded.tags).toEqual([{ name: "Weeknight", slug: "weeknight" }]);
+    expect(loaded.choices.tags).toEqual(["Spare", "Weeknight"]);
+    expect(await organize(recipe.id, chef.id, [...all, ["tags", "Weeknight"]])).toEqual({ saved: true });
+    const cleared = await organizeLoader({ request: await signedIn(path, chef.id), context: ON, params: { id: recipe.id } } as never);
+    expect(cleared.tools).toEqual([]);
+    expect(cleared.choices.tools).toEqual(["Wok"]);
   });
 
   it("refuse another cook's recipe, a missing one and unkind words", async () => {
@@ -171,13 +204,19 @@ describe("organizers on recipes", () => {
       {
         path: "/recipes/:id/organize",
         Component: RecipeOrganize,
-        loader: () => ({ recipe: { id: "r1", title: "Lentil soup" }, tags: [{ name: "Cozy", slug: "cozy" }], categories: [{ name: "Soup", slug: "soup" }], tools: [] }),
+        loader: () => ({
+          recipe: { id: "r1", title: "Lentil soup" },
+          tags: [{ name: "Cozy", slug: "cozy" }],
+          categories: [{ name: "Soup", slug: "soup" }],
+          tools: [],
+          choices: { tags: ["Cozy", "Quick"], categories: ["Soup"], tools: ["Wok"] },
+        }),
         action: () => ({ saved: true }),
       },
       {
         path: "/recipes-rude/:id/organize",
         Component: RecipeOrganize,
-        loader: () => ({ recipe: { id: "r3", title: "Rude stew" }, tags: [], categories: [], tools: [] }),
+        loader: () => ({ recipe: { id: "r3", title: "Rude stew" }, tags: [], categories: [], tools: [], choices: { tags: [], categories: [], tools: [] } }),
         action: () => ({ error: "Please keep it kind." }),
       },
     ]);
@@ -209,9 +248,14 @@ describe("organizers on recipes", () => {
 
     render(<Stub initialEntries={["/recipes/r1/organize"]} />);
     expect(await screen.findByRole("heading", { level: 1, name: "Organize" })).toBeTruthy();
-    expect((screen.getByLabelText("Tags") as HTMLInputElement).value).toBe("Cozy");
-    expect((screen.getByLabelText("Categories") as HTMLInputElement).value).toBe("Soup");
-    expect((screen.getByLabelText("Tools") as HTMLInputElement).value).toBe("");
+    expect(screen.getByRole("combobox", { name: "Tags" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove Cozy" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove Soup" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Tools" })).toBeTruthy();
+    const form = screen.getByRole("button", { name: "Save" }).closest("form")!;
+    expect(new FormData(form).getAll("organize")).toEqual(["tags", "categories", "tools"]);
+    expect(new FormData(form).getAll("tags")).toEqual(["Cozy"]);
+    expect(new FormData(form).getAll("tools")).toEqual([]);
     expect(screen.getByRole("region", { name: "Tags on this recipe" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Cozy" }).getAttribute("href")).toBe("/tags/cozy");
     expect(screen.getByRole("link", { name: "Soup" }).getAttribute("href")).toBe("/categories/soup");

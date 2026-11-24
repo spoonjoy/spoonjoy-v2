@@ -1,10 +1,11 @@
 // Organizers on recipes (organizers flag, on in QA), as per-run scratch user 1, whose area is recipe editing: a cook
-// makes a recipe, gives it tags, a category and a tool from Organize in the recipe menu, and finds them on the recipe's
+// makes a recipe, gives it tags, a category and a tool from Organize in the recipe menu as chips (on a phone, in the
+// field's sheet), removes one tag, adds it back from the suggestions with different case and adds a new one, and finds them on the recipe's
 // Organize page, on a tag's own page, in the list of their tags and in the list of their categories, each after a
 // reload; then filters My recipes to the recipe by one of its tags and leaves it out by its tool; and last renames a
 // tag, merges the other into it and deletes it from the tag's page. Both device projects run at the same time as the same scratch user, so the recipe and every organizer carry
 // the project name and a timestamp.
-import type { Page, TestInfo } from "@playwright/test";
+import type { Locator, Page, TestInfo } from "@playwright/test";
 import { test, expect } from "./support/journey";
 import { chooseMenuItem } from "./support/menu";
 import { pathUrl, waitForHydration } from "./support/navigation";
@@ -19,6 +20,66 @@ async function attachScreenshot(page: Page, testInfo: TestInfo, name: string): P
     body: await page.screenshot({ fullPage: true, animations: "disabled" }),
     contentType: "image/png",
   });
+}
+
+// One part of the page, scrolled to the top of the viewport first so the floating tab bar doesn't cover it.
+async function attachElementShot(element: Locator, testInfo: TestInfo, name: string): Promise<void> {
+  await element.evaluate((node) => node.scrollIntoView({ block: "start" }));
+  await testInfo.attach(`${name}-${testInfo.project.name}`, {
+    body: await element.screenshot({ animations: "disabled" }),
+    contentType: "image/png",
+  });
+}
+
+// A token field's input: in the form, or on a phone (iphone-webkit) in the sheet its button opens. `done` closes it.
+async function openTokens(page: Page, label: string, phone: boolean): Promise<{ input: Locator; scope: Page | Locator; done: () => Promise<void> }> {
+  const field = page.getByRole("combobox", { name: label, exact: true });
+  if (!phone) {
+    await field.click();
+    return { input: field, scope: page, done: () => field.press("Escape") };
+  }
+  await field.click();
+  const sheet = page.getByRole("dialog", { name: label, exact: true });
+  await expect(sheet).toBeVisible();
+  const input = sheet.getByRole("combobox", { name: label, exact: true });
+  await input.click();
+  return {
+    input,
+    scope: sheet,
+    done: async () => {
+      await sheet.getByRole("button", { name: "Done", exact: true }).click();
+      await expect(sheet).toHaveCount(0);
+    },
+  };
+}
+
+// Types a name the cook doesn't have yet and makes it a chip: Enter in the form, the sheet's Add row on a phone.
+async function addNewToken(page: Page, label: string, name: string, phone: boolean): Promise<void> {
+  const { input, scope, done } = await openTokens(page, label, phone);
+  await input.pressSequentially(name);
+  if (phone) await scope.getByRole("option", { name: `Add “${name}”`, exact: true }).click();
+  else await input.press("Enter");
+  await done();
+}
+
+// Types `typed` and picks the cook's existing `name` from the suggestions.
+async function addSuggestedToken(page: Page, label: string, typed: string, name: string, phone: boolean): Promise<void> {
+  const { input, scope, done } = await openTokens(page, label, phone);
+  await input.pressSequentially(typed);
+  await expect(scope.getByRole("option", { name: `Add “${typed}”`, exact: true })).toHaveCount(0);
+  await scope.getByRole("option", { name, exact: true }).click();
+  await done();
+}
+
+// Removes a chip: its Remove button in the form, or picking its row again in the phone's sheet.
+async function removeToken(page: Page, label: string, name: string, phone: boolean): Promise<void> {
+  if (!phone) {
+    await page.getByRole("button", { name: `Remove ${name}`, exact: true }).click();
+    return;
+  }
+  const { scope, done } = await openTokens(page, label, phone);
+  await scope.getByRole("option", { name, exact: true }).click();
+  await done();
 }
 
 test.describe("Organizers", () => {
@@ -48,20 +109,44 @@ test.describe("Organizers", () => {
     await expect(page).toHaveURL(pathUrl(`${recipePath}/organize`));
     await expect(page.getByRole("heading", { level: 1, name: "Organize", exact: true })).toBeVisible();
     await waitForHydration(page);
-    await page.getByLabel("Tags", { exact: true }).fill(`${quick}, ${cozy}, ${quick.toLowerCase()}`);
-    await page.getByLabel("Categories", { exact: true }).fill(supper);
-    await page.getByLabel("Tools", { exact: true }).fill(pot);
+    const phone = testInfo.project.name === "iphone-webkit";
+    const spare = `Spare ${suffix}`;
+    await addNewToken(page, "Tags", cozy, phone);
+    await addNewToken(page, "Tags", spare, phone);
+    await addNewToken(page, "Categories", supper, phone);
+    await addNewToken(page, "Tools", pot, phone);
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
 
     const onRecipe = page.getByRole("region", { name: "Tags on this recipe", exact: true });
     await verifyAfterReload(async () => {
-      await expect(page.getByLabel("Tags", { exact: true })).toHaveValue(`${cozy}, ${quick}`);
-      await expect(page.getByLabel("Categories", { exact: true })).toHaveValue(supper);
-      await expect(page.getByLabel("Tools", { exact: true })).toHaveValue(pot);
+      await expect(onRecipe.getByRole("link", { name: cozy, exact: true })).toBeVisible();
+      await expect(onRecipe.getByRole("link", { name: spare, exact: true })).toBeVisible();
+      await expect(page.getByRole("region", { name: "Categories on this recipe", exact: true }).getByRole("link", { name: supper, exact: true })).toBeVisible();
+      await expect(page.getByRole("region", { name: "Tools on this recipe", exact: true }).getByRole("link", { name: pot, exact: true })).toBeVisible();
+    });
+
+    // Remove one tag; it stays the cook's, off this recipe.
+    await waitForHydration(page);
+    await removeToken(page, "Tags", spare, phone);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
+    await verifyAfterReload(async () => {
+      await expect(onRecipe.getByRole("link", { name: cozy, exact: true })).toBeVisible();
+      await expect(onRecipe.getByRole("link", { name: spare, exact: true })).toHaveCount(0);
+    });
+
+    // Typing it in lower case suggests the cook's own tag, so it comes back as it was instead of forking; and a new one.
+    await waitForHydration(page);
+    await addSuggestedToken(page, "Tags", spare.toLowerCase(), spare, phone);
+    await addNewToken(page, "Tags", quick, phone);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
+    await verifyAfterReload(async () => {
       await expect(onRecipe.getByRole("link", { name: cozy, exact: true })).toBeVisible();
       await expect(onRecipe.getByRole("link", { name: quick, exact: true })).toBeVisible();
-      await expect(page.getByRole("region", { name: "Tools on this recipe", exact: true }).getByRole("link", { name: pot, exact: true })).toBeVisible();
+      await expect(onRecipe.getByRole("link", { name: spare, exact: true })).toBeVisible();
+      await expect(onRecipe.getByRole("link")).toHaveCount(3);
     });
     await expectAccessible();
     await attachScreenshot(page, testInfo, "recipe-organize-after-reload");
@@ -133,6 +218,7 @@ test.describe("Organizers", () => {
     await yourTags.getByRole("link", { name: cozy, exact: true }).click();
     await expect(page.getByRole("heading", { level: 1, name: cozy, exact: true })).toBeVisible();
     await waitForHydration(page);
+    await attachElementShot(page.getByRole("region", { name: "Change this tag", exact: true }), testInfo, "tag-change-section");
     const rename = page.getByRole("form", { name: "Rename this tag", exact: true });
     await rename.getByLabel("Name", { exact: true }).fill(snug);
     await rename.getByRole("button", { name: "Rename", exact: true }).click();
@@ -151,12 +237,13 @@ test.describe("Organizers", () => {
     await waitForHydration(page);
     const merge = page.getByRole("form", { name: "Merge this tag", exact: true });
     await merge.getByLabel("Merge into", { exact: true }).selectOption({ label: snug });
+    await attachElementShot(page.getByRole("region", { name: "Change this tag", exact: true }), testInfo, "tag-merge-chosen");
     await merge.getByRole("button", { name: "Merge", exact: true }).click();
     await expect(page.getByRole("heading", { level: 1, name: snug, exact: true })).toBeVisible();
     await verifyAfterReload(async () => {
       await expect(page.getByRole("list", { name: `Recipes tagged ${snug}`, exact: true }).getByRole("link", { name: title })).toBeVisible();
     });
-    await attachScreenshot(page, testInfo, "tag-merged-after-reload");
+    await attachElementShot(page.getByRole("list", { name: `Recipes tagged ${snug}`, exact: true }), testInfo, "tag-merged-recipes-after-reload");
 
     // Delete it, after saying yes: the list no longer has either.
     await waitForHydration(page);
