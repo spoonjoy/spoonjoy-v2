@@ -686,9 +686,8 @@ describe("Kitchen Index Route", () => {
         }));
       });
 
-      // HX components set their own inline styles (Text's line clamp, a squircle surface's layer,
-      // a Card backdrop's inset); the app sets none.
-      const styles = container.querySelectorAll("[style]:not([data-ouro]):not([data-ouro-surface]):not([data-card-backdrop])");
+      // HX components set their own inline styles (Text's line clamp, a Card backdrop's inset); the app sets none.
+      const styles = container.querySelectorAll("[style]:not([data-ouro]):not([data-card-backdrop])");
       expect(styles.length).toBe(0);
     });
 

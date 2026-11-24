@@ -27,7 +27,9 @@ describe("the cover tokens", () => {
   it("give the counter card four control radii as its squircle radius, never a round corner shape", () => {
     const card = rule(".sj-counter-card");
     expect(card).toContain("--ouro-sq-r: calc(var(--radius) * var(--ouro-radius-scale, 1) * 4);");
-    expect(card).toContain("border-radius: calc(var(--ouro-sq-r) * var(--ouro-corner-fallback, 1));");
+    // The build's squircleCorners() draws this radius as a squircle in every engine; no Safari factor scales it.
+    expect(card).toContain("border-radius: var(--ouro-sq-r);");
+    expect(card).not.toContain("--ouro-corner-fallback");
     expect(card).not.toMatch(/corner-shape:\s*round/);
   });
 

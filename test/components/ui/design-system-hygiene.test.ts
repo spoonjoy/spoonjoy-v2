@@ -172,8 +172,38 @@ describe("Spoonjoy UI design-system hygiene", () => {
     const css = APP_CSS;
 
     expect(css).toContain("--radius: var(--sj-radius-control);");
-    expect(css).toContain("--radius-xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 1.4);");
-    expect(css).toMatch(/@supports not \(corner-shape: squircle\) \{\s*:root \{\s*--ouro-corner-fallback: 0\.7;/);
+    expect(css).toContain("--radius-xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 1.4);");
+    // Ouro UI v1.3.506 retired the Safari factor: a corner is its full radius in every engine, and
+    // squircleCorners() draws the squircle where the engine has no corner-shape.
+    expect(css).not.toContain("--ouro-corner-fallback");
+  });
+
+  it("draws every squircle in the build, with Ouro UI's squircleCorners() after Tailwind in the PostCSS plugins", async () => {
+    // Without it, an engine with no corner-shape (WebKit, Safari) gets plain round corners
+    // (Ouro UI UPGRADING, "After v1.3.506 (squircles)"). postcss.config.js is the one PostCSS config
+    // every Vite build here reads: the app, Storybook and the Storybook tests.
+    const { default: config } = (await import("../../../postcss.config.js")) as {
+      default: { plugins: { postcssPlugin?: string }[] };
+    };
+    const names = config.plugins.map((plugin) => plugin.postcssPlugin);
+    // shapeVarFallback() rewrites squircleCorners()' clip path for Chromium before 158, so it runs after it.
+    expect(names).toEqual(["@tailwindcss/postcss", "autoprefixer", "ouro-squircle-corners", "spoonjoy-shape-var-fallback"]);
+    expect(readSourceFile("vite.config.ts")).not.toMatch(/\bpostcss\s*:/);
+    expect(readSourceFile(".storybook/vite.config.ts")).not.toMatch(/\bpostcss\s*:/);
+  });
+
+  it("gives the counter card corner-shape: squircle, and a squircle clip-path where the engine has none", async () => {
+    const { default: postcss } = await import("postcss");
+    const { squircleCorners } = await import("~/lib/ouro/squircle-corners");
+    const card = /\.sj-counter-card \{[^}]*\}/.exec(readSourceFile("app/styles/tailwind.css"))?.[0];
+    expect(card).toBeDefined();
+    const out = postcss([squircleCorners()]).process(card!, { from: undefined }).css;
+
+    expect(out).toMatch(/@supports \(corner-shape: squircle\) \{\s*\.sj-counter-card \{\s*corner-shape: squircle/);
+    expect(out).toMatch(
+      /@supports \(not \(corner-shape: squircle\)\) and \(clip-path: shape\(from 0 0, close\)\) \{\s*\.sj-counter-card \{\s*--sq-tl: var\(--ouro-sq-r\);/,
+    );
+    expect(out).toMatch(/\.sj-counter-card \{\s*clip-path: shape\(nonzero from -9999px -9999px[^;]*curve by/);
   });
 
   it("keeps page mastheads from stacking a top rule under the desktop nav", () => {
