@@ -1817,8 +1817,24 @@
     "my-recipes": {
       "default": [
         {
+          "identity": "button \"\" [button/root] in form \"Filter my recipes\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Filter\" [collapsible/trigger] in form \"Filter my recipes\"",
+          "count": 1
+        },
+        {
           "identity": "button \"Search\" [button/root] in search",
           "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/box] in form \"Filter my recipes\"",
+          "count": 6
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in form \"Filter my recipes\"",
+          "count": 6
         },
         {
           "identity": "link \"Create recipe\" [button/root] in main",
@@ -1830,6 +1846,74 @@
         },
         {
           "identity": "link \"Roasted Tomato Soup\" [item/link] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "searchbox \"Search my recipes\" [text-field/input] in search",
+          "count": 1
+        }
+      ]
+    },
+    "my-recipes-filtered": {
+      "default": [
+        {
+          "identity": "button \"Apply filters\" [button/root] in form \"Filter my recipes\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Filter (1)\" [collapsible/trigger] in form \"Filter my recipes\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Search\" [button/root] in search",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in group \"Has\"",
+          "count": 3
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in group \"Leave out\"",
+          "count": 3
+        },
+        {
+          "identity": "checkbox \"Saucepan\" [checkbox/box] in group \"Has\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"Saucepan\" [checkbox/box] in group \"Leave out\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"Sides\" [checkbox/box] in group \"Has\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"Sides\" [checkbox/box] in group \"Leave out\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"Weeknight\" [checkbox/box] in group \"Has\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"Weeknight\" [checkbox/box] in group \"Leave out\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Clear filters\" [link/root] in form \"Filter my recipes\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Create recipe\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Lemon Herb Rice\" [item/link] in main",
           "count": 1
         },
         {
@@ -6553,8 +6637,24 @@
     "my-recipes": {
       "default": [
         {
+          "identity": "button \"\" [button/root] in form \"Filter my recipes\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Filter\" [collapsible/trigger] in form \"Filter my recipes\"",
+          "count": 1
+        },
+        {
           "identity": "button \"Search\" [button/root] in search",
           "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/box] in form \"Filter my recipes\"",
+          "count": 6
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in form \"Filter my recipes\"",
+          "count": 6
         },
         {
           "identity": "link \"Create recipe\" [button/root] in main",
@@ -6574,6 +6674,86 @@
         },
         {
           "identity": "link \"Roasted Tomato Soup\" [item/link] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Saved\" [tabs/link] in navigation \"Recipe lists\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "searchbox \"Search my recipes\" [text-field/input] in search",
+          "count": 1
+        }
+      ]
+    },
+    "my-recipes-filtered": {
+      "default": [
+        {
+          "identity": "button \"Apply filters\" [button/root] in form \"Filter my recipes\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Filter (1)\" [collapsible/trigger] in form \"Filter my recipes\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Search\" [button/root] in search",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in group \"Has\"",
+          "count": 3
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in group \"Leave out\"",
+          "count": 3
+        },
+        {
+          "identity": "checkbox \"Saucepan\" [checkbox/box] in group \"Has\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"Saucepan\" [checkbox/box] in group \"Leave out\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"Sides\" [checkbox/box] in group \"Has\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"Sides\" [checkbox/box] in group \"Leave out\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"Weeknight\" [checkbox/box] in group \"Has\"",
+          "count": 1
+        },
+        {
+          "identity": "checkbox \"Weeknight\" [checkbox/box] in group \"Leave out\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Clear filters\" [link/root] in form \"Filter my recipes\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Create recipe\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Everyone\" [tabs/link] in navigation \"Recipe lists\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Lemon Herb Rice\" [item/link] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Mine\" [tabs/link] in navigation \"Recipe lists\"",
           "count": 1
         },
         {
