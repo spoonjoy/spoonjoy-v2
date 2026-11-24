@@ -256,29 +256,26 @@ describe("Self-host Image workflow", () => {
     expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["app/routes/move-in.tsx", "app/domains/move-in/adapters/worker/**"]));
   });
 
-  it("kills a server in the middle of a move-in, checks the move-in was unfinished, starts it again and waits for the move-in to finish with no page open", () => {
+  it("pauses a server's jobs, starts a move-in, checks its job is waiting when the server stops, and has a server without the pause finish it with no page open", () => {
     const step = stepNamed(image, /Finish a move-in the server restarts in the middle of/);
     const run = step.run ?? "";
     expect(step.if).toBe("success()");
     const order = [
-      "docker run -d --name sj-restart --network host -v sj-restart:/data -e PORT=8084 -e SPOONJOY_FLAGS=move_in",
-      "restart_half before &",
-      "until [ -e .self-host/move-in-restart.json.slow-asked ]",
-      "docker update --cpus 0.05 sj-restart",
-      "touch .self-host/move-in-restart.json.slowed",
-      "until [ -s .self-host/move-in-restart.json ]",
-      "docker kill sj-restart",
-      'wait "$before"',
-      'docker update --cpus "$(nproc)" sj-restart',
+      "-e SPOONJOY_JOBS_PAUSED=1",
+      "restart_half before",
+      "docker stop sj-restart",
+      "docker rm sj-restart",
       "server.mjs backup /backups/restart.tar.gz",
-      "if (row.finishedAt) throw",
+      'key.type === "move-in.run" && key.status === "pending"',
       'echo "$stopped" | tee "$OUT/move-in-restart.json"',
-      "docker start sj-restart",
+      'docker run -d --name sj-restart --network host -v sj-restart:/data -e PORT=8084 -e SPOONJOY_FLAGS=move_in "$LOCAL_IMAGE"',
       "restart_half after",
       "docker rm -f sj-restart",
-    ].map((text) => run.lastIndexOf(text));
+    ].map((text) => run.indexOf(text));
     expect(order.every((index) => index > -1)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
+    // Only the first server pauses its jobs.
+    expect(run.match(/SPOONJOY_JOBS_PAUSED/g)).toHaveLength(1);
     expect(run).toContain('e2e/self-host/move-in-restart.spec.ts --output "test-results-self-host-move-in-restart-$1"');
     // The check is a single-quoted node -e script, so a quote inside it would end the script early.
     const script = run.slice(run.indexOf("node --input-type=module -e '") + "node --input-type=module -e '".length, run.indexOf("')\n"));

@@ -154,7 +154,9 @@ export function miniflareOptions({ built, env, settings, sessionSecret, pushKeys
     // lives in memory: a job waiting when the server stops is dropped, and its key in D1 can be
     // claimed again a day later.
     queueProducers: { JOBS: { queueName: JOBS_QUEUE } },
-    queueConsumers: { [JOBS_QUEUE]: { maxBatchSize: 1, maxRetries: 100 } },
+    // SPOONJOY_JOBS_PAUSED=1 is for tests only, and stays out of the guide: the queue takes jobs but runs none, so the
+    // Self-host Image workflow can stop a server with a job surely still waiting (e2e/self-host/move-in-restart.spec.ts).
+    ...(env.SPOONJOY_JOBS_PAUSED === "1" ? {} : { queueConsumers: { [JOBS_QUEUE]: { maxBatchSize: 1, maxRetries: 100 } } }),
     ratelimits: selfHostRateLimits(built, env),
     assets: { directory: path.join(appDir, "build/client"), routerConfig: { has_user_worker: true } },
     defaultPersistRoot: dataDir,

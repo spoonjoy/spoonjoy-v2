@@ -228,6 +228,14 @@ describe("miniflareOptions", () => {
     expect(options.queueConsumers).toEqual({ "spoonjoy-jobs": { maxBatchSize: 1, maxRetries: 100 } });
   });
 
+  it("takes jobs but runs none while the test-only SPOONJOY_JOBS_PAUSED is 1", () => {
+    const paused = (value: string) =>
+      miniflareOptions({ built, env: { SPOONJOY_JOBS_PAUSED: value }, settings: { port: 8080, dataDir: "/data", appDir: "/app" }, sessionSecret: "s", version: "1", serverAssetFiles: [] });
+    expect(paused("1").queueProducers).toEqual({ JOBS: { queueName: "spoonjoy-jobs" } });
+    expect(paused("1").queueConsumers).toBeUndefined();
+    expect(paused("0").queueConsumers).toEqual({ "spoonjoy-jobs": { maxBatchSize: 1, maxRetries: 100 } });
+  });
+
   it("runs the build at its own compatibility date and flags, and serves its client assets", () => {
     expect(options.compatibilityDate).toBe("2024-12-01");
     expect(options.compatibilityFlags).toEqual(["nodejs_compat"]);
