@@ -129,6 +129,10 @@ export function d1HouseholdStore(db: D1ReadDatabase): HouseholdStore {
       }
     },
 
+    async renameHousehold(id, name, now) {
+      await write(`UPDATE "Household" SET "name" = ?, "updatedAt" = ? WHERE "id" = ?`, name, d1Timestamp(now), id);
+    },
+
     async setRole(householdId, userId, role) {
       await write(`UPDATE "HouseholdMember" SET "role" = ? WHERE "householdId" = ? AND "userId" = ?`, role, householdId, userId);
     },

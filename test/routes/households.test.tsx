@@ -172,7 +172,7 @@ describe("/households/:id", () => {
   it("shows a household to its members only", async () => {
     const id = await makeHousehold();
     const seen = payload(await call(householdLoader, `/households/${id}`, "ann"));
-    expect(seen.household).toMatchObject({ id, name: "The Lee kitchen", myRole: "owner", canInvite: true, canManage: true });
+    expect(seen.household).toMatchObject({ id, name: "The Lee kitchen", myRole: "owner", canInvite: true, canManage: true, canRename: true, maxNameLength: 80 });
     expect(seen.household.members).toEqual([
       { userId: "ann", username: "ann_cooks", photoUrl: null, role: "owner", roleLabel: "Owner", me: true },
     ]);
@@ -244,6 +244,72 @@ describe("/households/:id", () => {
     });
     expect(payload(await call(householdAction, `/households/${id}`, "ann", { intent: "remove", targetId: "ben" }))).toEqual({ done: "removed" });
     expect(statusOf(await call(householdLoader, `/households/${id}`, "ben"))).toBe(404);
+  });
+
+  it("lets an owner rename the household; someone else is refused with 403, and a name it can't use with 400", async () => {
+    const id = await makeHousehold();
+    await call(joinAction, `/join/${await makeInvite(id)}`, "ben", {});
+    expect(payload(await call(householdLoader, `/households/${id}`, "ben")).household.canRename).toBe(false);
+
+    const renamed = await call(householdAction, `/households/${id}`, "ann", { intent: "rename", name: "The Lee and Okafor kitchen" });
+    expect(payload(renamed)).toEqual({ done: "renamed" });
+    expect(payload(await call(householdLoader, `/households/${id}`, "ben")).household.name).toBe("The Lee and Okafor kitchen");
+
+    const refused = await call(householdAction, `/households/${id}`, "ben", { intent: "rename", name: "Ben's" });
+    expect(statusOf(refused)).toBe(403);
+    expect(payload(refused)).toEqual({ error: "Only an owner can rename the household." });
+    const blank = await call(householdAction, `/households/${id}`, "ann", { intent: "rename", name: " " });
+    expect(statusOf(blank)).toBe(400);
+    expect(payload(blank)).toEqual({ error: "Give the household a name." });
+    const blocked = await call(householdAction, `/households/${id}`, "ann", { intent: "rename", name: "kkk kitchen" });
+    expect(statusOf(blocked)).toBe(400);
+    expect(payload(await call(householdLoader, `/households/${id}`, "ann")).household.name).toBe("The Lee and Okafor kitchen");
+  });
+
+  it("shows owners the household's name to change, and no one else", async () => {
+    const submitted: Array<Record<string, string>> = [];
+    const pageFor = (canRename: boolean) =>
+      createTestRoutesStub([
+        {
+          path: "/households/:id",
+          Component: HouseholdPage,
+          loader: () => ({
+            household: {
+              id: "h1",
+              name: "Home",
+              myRole: canRename ? "owner" : "member",
+              canInvite: canRename,
+              canManage: canRename,
+              canRename,
+              maxNameLength: 80,
+              roleChoices: [],
+              members: [{ userId: "ann", username: "ann_cooks", photoUrl: null, role: "owner", roleLabel: "Owner", me: true }],
+            },
+          }),
+          action: async ({ request }: { request: Request }) => {
+            submitted.push(Object.fromEntries((await request.formData()) as unknown as Iterable<[string, string]>));
+            return { done: "renamed" };
+          },
+        },
+      ]);
+
+    const Member = pageFor(false);
+    render(<Member initialEntries={["/households/h1"]} />);
+    await screen.findByRole("heading", { level: 1, name: "Home" });
+    expect(screen.queryByLabelText("Household name")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save name" })).toBeNull();
+    cleanup();
+
+    const Owner = pageFor(true);
+    const user = userEvent.setup();
+    render(<Owner initialEntries={["/households/h1"]} />);
+    const field = await screen.findByLabelText("Household name");
+    expect(field).toHaveValue("Home");
+    expect(field).toHaveAttribute("maxlength", "80");
+    await user.clear(field);
+    await user.type(field, "The Lee kitchen");
+    await user.click(screen.getByRole("button", { name: "Save name" }));
+    await vi.waitFor(() => expect(submitted).toEqual([{ intent: "rename", name: "The Lee kitchen" }]));
   });
 
   it("gives owners a menu on everyone else's row to change their role or remove them", async () => {

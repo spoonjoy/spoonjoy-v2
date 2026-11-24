@@ -11,6 +11,7 @@ import {
   listHouseholds,
   previewInvite,
   removeFromHousehold,
+  renameHousehold,
   revokeInvite,
 } from "~/domains/households-and-identity/application/households.server";
 import { d1HouseholdStore } from "~/domains/households-and-identity/adapters/d1-household-store.server";
@@ -171,6 +172,25 @@ describe("membership", () => {
     expect(await getHousehold(store, id, "dee")).toBeNull();
     expect(await getHousehold(store, "missing", "ann")).toBeNull();
     expect((await getHousehold(store, id, "cal"))?.me.role).toBe("member");
+  });
+
+  it("lets only an owner rename the household, and everyone in it sees the new name", async () => {
+    const id = await kitchen();
+    expect(await renameHousehold(store, { householdId: id, userId: "ann", name: "  The Lee and Okafor kitchen ", now })).toEqual({
+      ok: true,
+      value: { id, name: "The Lee and Okafor kitchen" },
+    });
+    expect((await getHousehold(store, id, "cal"))?.name).toBe("The Lee and Okafor kitchen");
+    expect((await listHouseholds(store, "ben"))[0]?.name).toBe("The Lee and Okafor kitchen");
+
+    const refused = { ok: false, error: "Only an owner can rename the household.", forbidden: true };
+    expect(await renameHousehold(store, { householdId: id, userId: "cal", name: "Cal's", now })).toEqual(refused);
+    expect(await renameHousehold(store, { householdId: id, userId: "dee", name: "Dee's", now })).toEqual(refused);
+    expect(await renameHousehold(store, { householdId: id, userId: "ann", name: " ", now })).toEqual({
+      ok: false,
+      error: "Give the household a name.",
+    });
+    expect((await getHousehold(store, id, "ann"))?.name).toBe("The Lee and Okafor kitchen");
   });
 
   it("lets an owner change a role and remove someone, with the model's refusals", async () => {

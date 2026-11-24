@@ -1,4 +1,4 @@
-// Households use cases: create, list and open a household, invite by link or email, join, leave, remove someone and
+// Households use cases: create, list, open and rename a household, invite by link or email, join, leave, remove someone and
 // change a role. Each checks the model's rules, then writes through the HouseholdStore port.
 //
 // Invite tokens are 32 random bytes in base64url, shown once in the link; only their SHA-256 is stored.
@@ -69,6 +69,19 @@ export async function getHousehold(store: HouseholdStore, householdId: string, u
   if (!household || !me) return null;
   const invites = can(me, "invite") ? await store.invites(householdId) : [];
   return { id: household.id, name: household.name, me, members, invites };
+}
+
+/** Renames the household; only an owner may (can(me, "edit-settings")). */
+export async function renameHousehold(
+  store: HouseholdStore,
+  { householdId, userId, name, now }: { householdId: string; userId: string; name: unknown; now: Date },
+): Promise<Validated<{ id: string; name: string }>> {
+  const me = (await store.members(householdId)).find((member) => member.userId === userId);
+  if (!can(me, "edit-settings")) return forbid("Only an owner can rename the household.");
+  const checked = validateHouseholdName(name);
+  if (!checked.ok) return checked;
+  await store.renameHousehold(householdId, checked.value, now);
+  return { ok: true, value: { id: householdId, name: checked.value } };
 }
 
 export async function createInvite(

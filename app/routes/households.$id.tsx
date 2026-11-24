@@ -26,6 +26,7 @@ import {
   DEFAULT_INVITE_DAYS,
   HOUSEHOLD_ROLES,
   HOUSEHOLD_ROLE_LABELS,
+  MAX_HOUSEHOLD_NAME_LENGTH,
   can,
   changeMemberRole,
   createInvite,
@@ -33,7 +34,9 @@ import {
   householdsRequest,
   leave,
   removeFromHousehold,
+  renameHousehold,
 } from "~/domains/households-and-identity";
+import { OBJECTIONABLE_CONTENT_MESSAGE, containsObjectionableContent } from "~/lib/objectionable-terms";
 
 export function meta({ data: loaded }: Route.MetaArgs) {
   return [{ title: `${loaded?.household.name ?? "Household"} - Spoonjoy` }];
@@ -50,6 +53,8 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       myRole: household.me.role,
       canInvite: can(household.me, "invite"),
       canManage: can(household.me, "manage-members"),
+      canRename: can(household.me, "edit-settings"),
+      maxNameLength: MAX_HOUSEHOLD_NAME_LENGTH,
       roleChoices: HOUSEHOLD_ROLES.map((role) => ({ value: role, label: HOUSEHOLD_ROLE_LABELS[role] })),
       members: household.members.map((member) => ({
         userId: member.userId,
@@ -76,6 +81,13 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       invitedAs: made.value.invite.role === "viewer" ? "view-only" : "as a member",
       inviteDays: DEFAULT_INVITE_DAYS,
     };
+  }
+  if (intent === "rename") {
+    const name = String(form.get("name") ?? "");
+    if (containsObjectionableContent(name)) return data({ error: OBJECTIONABLE_CONTENT_MESSAGE }, { status: 400 });
+    const renamed = await renameHousehold(store, { householdId: params.id, userId, name, now: new Date() });
+    if (!renamed.ok) return data({ error: renamed.error }, { status: renamed.forbidden ? 403 : 400 });
+    return { done: "renamed" as const };
   }
   if (intent === "role") {
     const changed = await changeMemberRole(store, {
@@ -240,6 +252,28 @@ export default function HouseholdPage() {
                 </Text>
               </div>
             ) : null}
+          </section>
+        ) : null}
+
+        {household.canRename ? (
+          <section className="mt-10" aria-labelledby="household-name">
+            <SectionHeader id="household-name" title="Name" />
+            {/* Keyed by the name, so the field shows the saved name once the page reloads its data. */}
+            <Form key={household.name} method="post" render={<RouterForm />} className="mt-4 gap-4">
+              <input type="hidden" name="intent" value="rename" />
+              <TextField
+                label="Household name"
+                name="name"
+                required
+                maxLength={household.maxNameLength}
+                defaultValue={household.name}
+              />
+              <div className="flex sm:justify-end">
+                <Button type="submit" variant="outline" tone="secondary">
+                  Save name
+                </Button>
+              </div>
+            </Form>
           </section>
         ) : null}
 

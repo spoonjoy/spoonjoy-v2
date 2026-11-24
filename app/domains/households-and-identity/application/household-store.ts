@@ -13,6 +13,7 @@ export interface HouseholdStore {
   insertHousehold(row: { id: string; name: string; ownerId: string; now: Date }): Promise<void>;
   householdsFor(userId: string): Promise<HouseholdSummary[]>;
   household(id: string): Promise<{ id: string; name: string } | null>;
+  renameHousehold(id: string, name: string, now: Date): Promise<void>;
   /** Members in the order they joined. */
   members(householdId: string): Promise<HouseholdMemberView[]>;
   /** Newest first. */

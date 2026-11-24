@@ -1,9 +1,10 @@
 // A household shared by two people, as scratch index 10 (AGENTS.md's scratch index table): its base
 // account makes a household and an invite link, and its desktop twin opens the link in a second
-// browser and joins. Both see each other in People after a reload, and share a shopping list: the twin adds to
+// browser and joins. Both see each other in People after a reload; the owner renames the household and the
+// twin sees the new name. They share a shopping list: the twin adds to
 // it and the owner checks it off. The owner then makes the twin view-only and removes them, and each change
 // shows on the twin's next load: view-only, they still read the list but can't change it. Desktop only: the two accounts are the two people, so an iPhone run at the same
-// time would share them. The household's name carries a timestamp, so each run's household is its
+// time would share them. The household's name carries a run tag, so each run's household is its
 // own. The households flag is on in QA.
 import type { Locator, Page, TestInfo } from "@playwright/test";
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
@@ -69,7 +70,9 @@ test.describe("Households", () => {
   }, testInfo) => {
     const owner = scratch(SCRATCH_INDEX);
     const joiner = scratchDesktop(SCRATCH_INDEX);
-    const name = `Household ${Date.now().toString(36)}`;
+    // A name like one a person would give, with the run's tag so each run finds its own household.
+    const tag = Date.now().toString(36);
+    let name = `The Lee kitchen ${tag}`;
 
     // The owner makes a household and lands on it.
     await page.goto("/households");
@@ -128,6 +131,25 @@ test.describe("Households", () => {
         await expect(people(page).getByText("Member", { exact: true })).toBeVisible();
       });
       await attachScreenshot(testInfo, page, "owner-household");
+
+      // The owner renames the household; the joiner sees the new name on their next load, and has no name to change.
+      const renamed = `The Lee and Okafor kitchen ${tag}`;
+      const nameField = page.getByLabel("Household name");
+      await expect(nameField).toHaveValue(name);
+      await nameField.fill(renamed);
+      await Promise.all([saved(page, householdPath), page.getByRole("button", { name: "Save name", exact: true }).click()]);
+      await expect(page.getByRole("heading", { level: 1, name: renamed, exact: true })).toBeVisible();
+      name = renamed;
+      await verifyAfterReload(async () => {
+        await expect(page.getByRole("heading", { level: 1, name, exact: true })).toBeVisible();
+        await expect(page.getByLabel("Household name")).toHaveValue(name);
+      });
+      await expectAccessible();
+      await attachScreenshot(testInfo, page, "owner-renamed-household");
+      await joinerPage.reload({ waitUntil: "load" });
+      await expect(joinerPage.getByRole("heading", { level: 1, name, exact: true })).toBeVisible();
+      await expect(joinerPage.getByLabel("Household name")).toHaveCount(0);
+      await attachScreenshot(testInfo, joinerPage, "joiner-sees-new-name");
 
       // The owner makes a shared list; the joiner adds to it, and the owner checks it off. Each sees the other's
       // change on their next load.
