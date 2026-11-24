@@ -31,11 +31,12 @@ describe("/self-host", () => {
     expect(UPDATE).toBe("docker compose pull && docker compose up -d");
   });
 
-  it("keeps the Compose file's notes in short lines and wraps its longer settings, so nothing runs off a phone", async () => {
+  it("keeps the Compose file's notes in short lines and wraps every code block, so nothing runs off a phone", async () => {
     await renderPage();
     for (const line of COMPOSE.split("\n").filter((l) => l.startsWith("#"))) expect(line.length).toBeLessThanOrEqual(48);
-    const code = screen.getByRole("region", { name: "Start it" }).querySelector("[data-ouro-part=code]");
-    expect(code?.className).toContain("whitespace-pre-wrap");
+    const blocks = document.querySelectorAll("[data-ouro-part=code]");
+    expect(blocks).toHaveLength(3);
+    for (const code of blocks) expect(code.className).toContain("whitespace-pre-wrap");
   });
 
   it("says what the first account gets: who joins, which AI, and backups", async () => {
