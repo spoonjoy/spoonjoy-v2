@@ -1521,6 +1521,33 @@ describe("deploy", () => {
     expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(DEPLOY_RETRY_DELAYS_MS.slice(0, 2));
   });
 
+  // Seen on #1037's Journeys run 45487087615: the script was uploaded, then looking up the
+  // account's queues (to find the run's queue by name) failed with Cloudflare's "unknown error".
+  const queueLookupUnknownError = failedDeploy(
+    "✘ [ERROR] A request to the Cloudflare API (/accounts/x/queues) failed.\n\n  An unknown error has occurred. If this error persists, please file a report in workers-sdk (https://github.com/cloudflare/workers-sdk/issues) or reach out to your account team. [code: 10013]\n",
+  );
+
+  it("deploys again after Cloudflare's unknown error while looking up the queues (code 10013), and then accepts the migrations the first try applied", async () => {
+    const exec = vi.fn()
+      .mockRejectedValueOnce(queueLookupUnknownError)
+      .mockRejectedValueOnce(migrationTagLag)
+      .mockResolvedValueOnce({ stdout: "Deployed\n", stderr: "" });
+    const sleep = vi.fn(async () => {});
+    const log = vi.fn();
+
+    expect(await deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log })).toBe(3);
+    expect(log).toHaveBeenCalledWith(`::warning::Cloudflare answered an unknown error (code 10013) while looking up ${IDENTITY.workerName}'s queue; deploying again in 5 s.`);
+    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(DEPLOY_RETRY_DELAYS_MS.slice(0, 2));
+  });
+
+  it("stops deploying again after a bounded number of queue lookup unknown errors", async () => {
+    const exec = vi.fn().mockRejectedValue(queueLookupUnknownError);
+    const sleep = vi.fn(async () => {});
+
+    await expect(deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log: vi.fn() })).rejects.toBe(queueLookupUnknownError);
+    expect(exec).toHaveBeenCalledTimes(DEPLOY_RETRY_DELAYS_MS.length + 1);
+  });
+
   it("stops deploying again after a bounded number of subdomain unknown errors", async () => {
     const exec = vi.fn().mockRejectedValue(subdomainUnknownError);
     const sleep = vi.fn(async () => {});
@@ -1535,6 +1562,8 @@ describe("deploy", () => {
     ["an API error with a JSON answer", "A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2) failed.\n  Script startup exceeded CPU time limit. [code: 10021]\n"],
     ["an unknown error (code 10013) on a request other than the subdomain", "A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2) failed.\n  An unknown error has occurred. [code: 10013]\n"],
     ["another error on the queue consumer", "A request to the Cloudflare API (/accounts/x/queues/q/consumers) failed.\n  Queue not found [code: 11000]\n"],
+    ["another error while looking up the queues", "A request to the Cloudflare API (/accounts/x/queues) failed.\n  Authentication error [code: 10000]\n"],
+    ["an unknown error (code 10013) on one queue's own request", "A request to the Cloudflare API (/accounts/x/queues/q) failed.\n  An unknown error has occurred. [code: 10013]\n"],
     ["another error on the subdomain", "A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2/subdomain) failed.\n  Forbidden [code: 10001]\n"],
     ["an API client error page", "✘ [ERROR] Received a malformed response from the API\n  PUT /accounts/x/workers/scripts/y -> 413 Payload Too Large\n"],
     ["an API 501", "✘ [ERROR] Received a malformed response from the API\n  PUT /accounts/x/workers/scripts/y -> 501 Not Implemented\n"],
