@@ -286,6 +286,14 @@ describe("runNextChunk", () => {
     expect(await h.runAll()).toMatchObject({ status: "failed", lastError: "pick-a-group" });
   });
 
+  it("stops rather than guess when the kitchen it chose before isn't in the backup", async () => {
+    const h = harness();
+    h.jobs.set("job-1", { ...h.job(), sourceId: "source-1", phase: "recipes", cursor: "0" });
+    h.ports.store.sourceInstanceKey = async () => "not-a-kitchen";
+    expect(await h.runAll()).toMatchObject({ status: "failed", lastError: "pick-a-group" });
+    expect(h.written.size).toBe(0);
+  });
+
   it("does nothing for a job that is finished or missing", async () => {
     const h = harness();
     await h.runAll();
