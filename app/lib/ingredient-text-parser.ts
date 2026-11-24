@@ -1,3 +1,4 @@
+import { UNIT_NAMES } from '~/domains/food-knowledge/model/units'
 import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
 
 // A deterministic, offline ingredient parser: the web editor's fallback when AI parsing is
@@ -8,7 +9,9 @@ import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
 // - fractions, mixed numbers and unicode fractions become decimals, a range keeps its lower
 //   number, and approximate words ("about", "~") and list bullets are dropped;
 // - units become singular standard abbreviations, size words ("large") are units, and a line
-//   with no unit word gets "whole"; "of" after a unit is dropped;
+//   with no unit word gets "whole"; "of" after a unit is dropped. Measured units are every name in
+//   the unit table that converts amounts (app/domains/food-knowledge/model/units.ts), so a unit
+//   Spoonjoy can convert is one the parser reads, quarts and fluid ounces included;
 // - a line with no quantity is quantity 1 ("pinch of salt", "salt");
 // - a line with no ingredient name ("2 cups") is skipped.
 
@@ -32,16 +35,33 @@ const UNICODE_FRACTIONS: Record<string, number> = {
   '⅞': 0.875,
 }
 
-const UNIT_GROUPS: Record<string, string[]> = {
-  cup: ['cup', 'cups'],
-  tbsp: ['tbsp', 'tbsps', 'tbs', 'tbl', 'tablespoon', 'tablespoons'],
-  tsp: ['tsp', 'tsps', 'teaspoon', 'teaspoons'],
-  oz: ['oz', 'ounce', 'ounces'],
-  lb: ['lb', 'lbs', 'pound', 'pounds'],
-  g: ['g', 'gram', 'grams'],
-  kg: ['kg', 'kilogram', 'kilograms'],
-  ml: ['ml', 'milliliter', 'milliliters', 'millilitre', 'millilitres'],
-  l: ['l', 'liter', 'liters', 'litre', 'litres'],
+/**
+ * How each measured unit in the unit table is written once parsed: the singular standard
+ * abbreviation the AI parser's prompt asks for, which the unit table reads back as the same unit.
+ */
+export const MEASURED_UNIT_WRITTEN: Record<string, string> = {
+  teaspoon: 'tsp',
+  tablespoon: 'tbsp',
+  'us-fluid-ounce': 'fl oz',
+  cup: 'cup',
+  'us-pint': 'pt',
+  'us-quart': 'qt',
+  'us-gallon': 'gal',
+  'imperial-fluid-ounce': 'imperial fl oz',
+  'imperial-pint': 'imperial pint',
+  milliliter: 'ml',
+  centiliter: 'cl',
+  deciliter: 'dl',
+  liter: 'l',
+  milligram: 'mg',
+  gram: 'g',
+  kilogram: 'kg',
+  ounce: 'oz',
+  pound: 'lb',
+}
+
+/** Counted and loose units, which the unit table leaves alone because they don't convert. */
+const COUNTED_UNIT_GROUPS: Record<string, string[]> = {
   clove: ['clove', 'cloves'],
   pinch: ['pinch', 'pinches'],
   dash: ['dash', 'dashes'],
@@ -59,9 +79,13 @@ const UNIT_GROUPS: Record<string, string[]> = {
   large: ['large'],
 }
 
-const UNIT_ALIASES = new Map(
-  Object.entries(UNIT_GROUPS).flatMap(([canonical, names]) => names.map((name) => [name, canonical] as const))
-)
+const UNIT_ALIASES = new Map<string, string>([
+  ...[...UNIT_NAMES].map(([name, slug]) => [name, MEASURED_UNIT_WRITTEN[slug] ?? slug] as const),
+  ...Object.entries(COUNTED_UNIT_GROUPS).flatMap(([canonical, names]) => names.map((name) => [name, canonical] as const)),
+])
+
+/** The most words a unit name in the table has ("imperial fl oz"). */
+const LONGEST_UNIT_WORDS = Math.max(...[...UNIT_ALIASES.keys()].map((name) => name.split(' ').length))
 
 const APPROXIMATE_PREFIXES = ['approximately ', 'approx. ', 'approx ', 'about ', 'around ', '~']
 const BULLETS = '-*•–—'
@@ -152,8 +176,16 @@ function leadingQuantity(text: string): Read | null {
   return first
 }
 
-function canonicalUnit(token: string): string | undefined {
-  return UNIT_ALIASES.get(token.toLowerCase().replace(/^[.,]+|[.,]+$/g, ''))
+/** The unit the line's first words name, longest name first, and how many words it took. */
+function leadingUnit(tokens: string[]): [unit: string, words: number] | undefined {
+  // A capital T is the tablespoon of handwritten cards; a lower-case t could be either spoon.
+  if (tokens[0] === 'T') return ['tbsp', 1]
+  for (let words = Math.min(LONGEST_UNIT_WORDS, tokens.length); words > 0; words -= 1) {
+    const name = tokens.slice(0, words).join(' ').toLowerCase().replace(/\./g, '').replace(/^,+|,+$/g, '')
+    const unit = UNIT_ALIASES.get(name)
+    if (unit) return [unit, words]
+  }
+  return undefined
 }
 
 /** Parses one line, or returns null when it has no ingredient name. */
@@ -169,10 +201,10 @@ export function parseIngredientLine(line: string): ParsedIngredient | null {
 
   let unit = WHOLE_UNIT
   const tokens = rest.split(/\s+/).filter(Boolean)
-  const canonical = tokens[0] === undefined ? undefined : canonicalUnit(tokens[0])
-  if (canonical) {
-    unit = canonical
-    tokens.shift()
+  const found = leadingUnit(tokens)
+  if (found) {
+    unit = found[0]
+    tokens.splice(0, found[1])
     if (tokens[0]?.toLowerCase() === 'of') tokens.shift()
   }
 

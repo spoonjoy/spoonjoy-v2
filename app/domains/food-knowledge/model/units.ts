@@ -87,6 +87,9 @@ const UNITS: readonly (KnownUnit & { names: readonly string[] })[] = [
 
 const UNITS_BY_NAME = new Map(UNITS.flatMap((unit) => unit.names.map((name) => [name, unit] as const)));
 
+/** Every name a recipe writes a convertible unit with (lower-case, without dots), and its unit's slug. */
+export const UNIT_NAMES: ReadonlyMap<string, string> = new Map(UNITS.flatMap((unit) => unit.names.map((name) => [name, unit.slug] as const)));
+
 /** The convertible unit a recipe's unit text names, or null for a unit that is counted, loose or unknown. */
 export function resolveUnit(text: string | null | undefined): KnownUnit | null {
   const trimmed = text?.trim() ?? "";
