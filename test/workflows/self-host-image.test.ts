@@ -256,14 +256,16 @@ describe("Self-host Image workflow", () => {
     expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["app/routes/move-in.tsx", "app/domains/move-in/adapters/worker/**"]));
   });
 
-  it("stops a server in the middle of a move-in, checks the move-in was unfinished, starts it again and waits for the move-in to finish with no page open", () => {
+  it("kills a server in the middle of a move-in, checks the move-in was unfinished, starts it again and waits for the move-in to finish with no page open", () => {
     const step = stepNamed(image, /Finish a move-in the server restarts in the middle of/);
     const run = step.run ?? "";
     expect(step.if).toBe("success()");
     const order = [
       "docker run -d --name sj-restart --network host -v sj-restart:/data -e PORT=8084 -e SPOONJOY_FLAGS=move_in",
-      "restart_half before",
-      "docker stop sj-restart",
+      "restart_half before &",
+      "until [ -s .self-host/move-in-restart.json ]",
+      "docker kill sj-restart",
+      'wait "$before"',
       "server.mjs backup /backups/restart.tar.gz",
       "if (row.finishedAt) throw",
       'echo "$stopped" | tee "$OUT/move-in-restart.json"',

@@ -362,10 +362,10 @@ jobs:
           echo "$jobs" | tee "$OUT/jobs.json"
 
       # A move-in the server restarts in the middle of: a cook starts moving the large proof kitchen
-      # in and leaves, and the server stops at once (losing whatever its in-process queue held). Its
-      # backup shows the move-in unfinished at the stop, so the check can't pass on a move-in that beat
-      # the restart. Then it starts again, and the move-in must finish with no page open to nudge it.
-      # On 8084, on the host network.
+      # in and leaves, and the server is killed the moment the move-in is accepted (losing whatever its
+      # in-process queue held), as a crash or power cut would. Its backup shows the move-in unfinished
+      # then, so the check can't pass on a move-in that beat the kill. Then it starts again, and the
+      # move-in must finish with no page open to nudge it. On 8084, on the host network.
       - name: Finish a move-in the server restarts in the middle of
         if: success()
         run: |
@@ -388,8 +388,12 @@ jobs:
           docker volume create sj-restart
           docker run -d --name sj-restart --network host -v sj-restart:/data -e PORT=8084 -e SPOONJOY_FLAGS=move_in "$LOCAL_IMAGE"
           ready
-          restart_half before
-          docker stop sj-restart
+          rm -f .self-host/move-in-restart.json
+          restart_half before &
+          before=$!
+          until [ -s .self-host/move-in-restart.json ] || ! kill -0 "$before" 2>/dev/null; do sleep 0.05; done
+          docker kill sj-restart
+          wait "$before"
           mkdir -p .self-host/backups && chmod 777 .self-host/backups
           docker run --rm --network none -v sj-restart:/data -v "$PWD/.self-host/backups:/backups" "$LOCAL_IMAGE" \
             node /app/self-host/server.mjs backup /backups/restart.tar.gz
