@@ -131,11 +131,13 @@ export const MAX_RUN_WORKERS = 100;
 // to the exact internal authentication server error seen during run 39088149235, not other
 // authentication or permission failures, to a lost API connection or an API server error, and to
 // the "unknown error" (code 10013) Cloudflare answered while enabling the new script's workers.dev
-// subdomain on merge-queue runs 45145294626, 45163811444 and 45176389392; only that request's
-// 10013 is retried, since the script is uploaded by then.
+// subdomain on merge-queue runs 45145294626, 45163811444 and 45176389392, and while attaching it
+// to its queue as a consumer on #971's run 45350953066; only those two requests' 10013 is
+// retried, since the script is uploaded by then.
 export const DEPLOY_RETRY_DELAYS_MS = [5_000, 15_000, 30_000];
 const SCRIPT_NOT_FOUND_PATTERN = /\[code: 10007\]/;
 const SUBDOMAIN_UNKNOWN_ERROR_PATTERN = /\/workers\/scripts\/[^/\s)]+\/subdomain\) failed\.\s+An unknown error has occurred\.[^\n]*\[code: 10013\]/;
+const QUEUE_CONSUMER_UNKNOWN_ERROR_PATTERN = /\/queues\/[^/\s)]+\/consumers\) failed\.\s+An unknown error has occurred\.[^\n]*\[code: 10013\]/;
 const INTERNAL_AUTH_SERVER_ERROR_PATTERN = /Internal authentication error: internal server error\s+\[code: 10500\]/;
 // The connection to Cloudflare's API failed before any answer (undici's "fetch failed" and the
 // socket errors under it), or the API answered a server error with a page instead of JSON, which
@@ -666,6 +668,8 @@ export async function deploy({ env, exec, fs, sleep, log }) {
           ? `Cloudflare reported an internal authentication server error (code 10500) while deploying ${state.workerName}`
           : SUBDOMAIN_UNKNOWN_ERROR_PATTERN.test(output)
             ? `Cloudflare answered an unknown error (code 10013) while enabling ${state.workerName}'s workers.dev subdomain`
+          : QUEUE_CONSUMER_UNKNOWN_ERROR_PATTERN.test(output)
+            ? `Cloudflare answered an unknown error (code 10013) while attaching ${state.workerName} to its queue`
           : scriptMayExist && MIGRATION_TAG_LAG_PATTERN.test(output)
             ? `Cloudflare had not yet caught up with ${state.workerName}'s Durable Object migrations (code 10079)`
           : scriptMayExist && MIGRATION_TAG_READ_FAILURE_PATTERN.test(output)
@@ -675,7 +679,7 @@ export async function deploy({ env, exec, fs, sleep, log }) {
               : API_CONNECTION_FAILURE_PATTERN.test(output)
                 ? `The connection to Cloudflare's API failed while deploying ${state.workerName}`
                 : undefined;
-      if (SCRIPT_NOT_FOUND_PATTERN.test(output) || SUBDOMAIN_UNKNOWN_ERROR_PATTERN.test(output) || serverErrorPage || API_CONNECTION_FAILURE_PATTERN.test(output)) scriptMayExist = true;
+      if (SCRIPT_NOT_FOUND_PATTERN.test(output) || SUBDOMAIN_UNKNOWN_ERROR_PATTERN.test(output) || QUEUE_CONSUMER_UNKNOWN_ERROR_PATTERN.test(output) || serverErrorPage || API_CONNECTION_FAILURE_PATTERN.test(output)) scriptMayExist = true;
       if (!reason || attempt >= DEPLOY_RETRY_DELAYS_MS.length) throw error;
       const delay = DEPLOY_RETRY_DELAYS_MS[attempt];
       log(`::warning::${reason}; deploying again in ${delay / 1000} s.`);

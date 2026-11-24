@@ -2036,6 +2036,91 @@ describe("cleanup-local-qa-data", () => {
     });
   });
 
+  describe("transient Cloudflare D1 API errors", () => {
+    // Journeys run 45348033648 lost part 2 to this answer on its final scratch-table drop, after
+    // every journey had passed.
+    const internalError = () => ({
+      stderr: [
+        "✘ [ERROR] A request to the Cloudflare API (/accounts/x/d1/database/526dc279/query) failed.",
+        "",
+        "  internal error; reference = e_fPYqxG_abeefd612d4f474bafdcf610e84d81a7 [code: 7429]",
+      ].join("\n"),
+    });
+    const scratchDrop = (phases: Array<() => unknown>) => {
+      let calls = 0;
+      return vi.fn(async (_cmd: string, args: string[]) => {
+        if (args.join(" ").includes("DROP TABLE IF EXISTS main.__e2e_exact_mutation_tombstones")) {
+          const phase = phases[calls] ?? (() => ({ stdout: wranglerJson(), stderr: "" }));
+          calls += 1;
+          return phase();
+        }
+        return { stdout: wranglerJson(), stderr: "" };
+      });
+    };
+
+    it.each([
+      ["the 7429 answer run 45348033648 got", internalError(), true],
+      ["an internal authentication error", { stderr: "A request to the Cloudflare API (/accounts/x/workers/scripts/s/deployments) failed.\n  Internal authentication error: internal server error [code: 10500]" }, true],
+      ["a 503", { stderr: "A request to the Cloudflare API (/accounts/x/d1/database/d/query) failed.\n  Service Unavailable [code: 503]" }, true],
+      ["an SQL error", { stderr: "A request to the Cloudflare API (/accounts/x/d1/database/d/query) failed.\n  no such table: User: SQLITE_ERROR [code: 7500]" }, false],
+      ["a plain string", "A request to the Cloudflare API (/accounts/x/d1/database/d/query) failed.\n  internal error [code: 7429]", true],
+      ["a 429 on stdout", { stdout: "A request to the Cloudflare API (/accounts/x/d1/database/d/query) failed.\n  Too Many Requests [code: 429]" }, true],
+      ["the setup seed's answer in run 45350929268", { stderr: "✘ [ERROR] internal error; reference = e_fPYqxG_6426c8fd1ef74c4ead37ff6d25179260" }, true],
+      ["an internal error from somewhere else", new Error("internal error"), false],
+      ["nothing", undefined, false],
+    ])("classifies %s", (_label, error, transient) => {
+      expect(cleanup.isTransientCloudflareApiError(error)).toBe(transient);
+    });
+
+    it("retries a D1 command with backoff when Cloudflare answers an internal error", async () => {
+      const stdout = writableBuffer();
+      const stderr = writableBuffer();
+      const sleep = vi.fn(async () => {});
+      const runCommand = scratchDrop([() => { throw internalError(); }, () => { throw internalError(); }]);
+
+      await cleanup.runCleanupCli({ argv: ["--target-env", "qa", "--apply"], runCommand, stdout: stdout.stream, stderr: stderr.stream, sleep });
+
+      expect(sleep.mock.calls.map((call) => call[0])).toEqual([5_000, 15_000]);
+      expect(stdout.text()).toContain("Cloudflare's D1 API answered an internal error; trying the D1 command again in 5 s (retry 1 of 3).");
+      expect(stdout.text()).toContain("trying the D1 command again in 15 s (retry 2 of 3).");
+      expect(stdout.text()).not.toMatch(/warn/i);
+      expect(stderr.text()).toBe("");
+    });
+
+    it("gives up after three retries with an error that says the failure was Cloudflare's", async () => {
+      const sleep = vi.fn(async () => {});
+      const runCommand = scratchDrop(Array.from({ length: 8 }, () => () => { throw internalError(); }));
+
+      const failure = cleanup.runCleanupCli({ argv: ["--target-env", "qa", "--apply"], runCommand, stdout: writableBuffer().stream, stderr: writableBuffer().stream, sleep });
+
+      await expect(failure).rejects.toBeInstanceOf(cleanup.TransientCloudflareApiError);
+      await expect(failure).rejects.toThrow("Cloudflare's D1 API still answered an internal error after 3 retries");
+      expect(sleep.mock.calls.map((call) => call[0])).toEqual([5_000, 15_000, 30_000]);
+    });
+
+    it("never retries a D1 error that is not Cloudflare's", async () => {
+      const sleep = vi.fn(async () => {});
+      const runCommand = scratchDrop([() => { throw new Error("no such table: User: SQLITE_ERROR"); }]);
+
+      await expect(cleanup.runCleanupCli({ argv: ["--target-env", "qa", "--apply"], runCommand, stdout: writableBuffer().stream, stderr: writableBuffer().stream, sleep }))
+        .rejects.toThrow("no such table: User");
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
+    it("exits 75 with the reason on stdout when Cloudflare's failure outlasted the retries", () => {
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        cleanup.defaultCliErrorHandler(new cleanup.TransientCloudflareApiError("Cloudflare's D1 API still answered an internal error after 3 retries"));
+        expect(log).toHaveBeenCalledWith("Cloudflare's D1 API still answered an internal error after 3 retries");
+        expect(process.exitCode).toBe(cleanup.TRANSIENT_CLOUDFLARE_EXIT_CODE);
+        expect(cleanup.TRANSIENT_CLOUDFLARE_EXIT_CODE).toBe(75);
+      } finally {
+        log.mockRestore();
+        process.exitCode = originalExitCode;
+      }
+    });
+  });
+
   it("fails QA apply when R2 verification still fetches a deleted key", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();

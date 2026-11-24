@@ -58,8 +58,9 @@ describe("Journeys workflow: seed step masks every seeded password", () => {
     try {
       const credentialsPath = join(directory, "credentials.json");
       writeFileSync(credentialsPath, credentials);
-      // The seed has already "run": pnpm is a no-op, so only the step's masking lines act.
-      const output = execFileSync("bash", ["-euo", "pipefail", "-c", `pnpm() { :; }\n${script}`], {
+      // The seed has already "run": pnpm and node (the retry wrapper around it) are no-ops, so only
+      // the step's masking lines act.
+      const output = execFileSync("bash", ["-euo", "pipefail", "-c", `pnpm() { :; }\nnode() { :; }\n${script}`], {
         cwd: directory,
         env: { ...process.env, SPOONJOY_QA_CREDENTIALS: credentialsPath },
         encoding: "utf8",
