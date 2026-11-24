@@ -24,7 +24,7 @@
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 9
+          "count": 10
         },
         {
           "identity": "button \"\" [image-field/choose] in main",
@@ -57,6 +57,14 @@
         {
           "identity": "link \"\" [skip-link/root] in -",
           "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/circle] in main",
+          "count": 2
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in main",
+          "count": 2
         },
         {
           "identity": "slider \"Zoom\" [slider/thumb] in group \"Zoom\"",
@@ -105,6 +113,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Sign out everywhere\" [button/root] in main",
           "count": 1
         },
@@ -126,6 +138,18 @@
         },
         {
           "identity": "link \"What gets deleted\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in main",
+          "count": 2
+        },
+        {
+          "identity": "radio \"Only me\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Public\" [radio-group/circle] in main",
           "count": 1
         },
         {
@@ -187,6 +211,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Show password\" [text-field/show-password] in main",
           "count": 1
         },
@@ -212,6 +240,18 @@
         },
         {
           "identity": "link \"What gets deleted\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in main",
+          "count": 2
+        },
+        {
+          "identity": "radio \"Only me\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Public\" [radio-group/circle] in main",
           "count": 1
         },
         {
@@ -1801,6 +1841,18 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 2
+        },
+        {
+          "identity": "radio \"Only me\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Public\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "textbox \"Description\" [text-area/input] in group \"Recipe details\"",
           "count": 1
         },
@@ -1849,6 +1901,14 @@
         {
           "identity": "link \"\" [skip-link/root] in -",
           "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 2
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 2
         },
         {
           "identity": "textbox \"\" [text-area/input] in group \"Recipe details\"",
@@ -2013,6 +2073,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 2
+        },
+        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
@@ -2021,7 +2085,15 @@
           "count": 1
         },
         {
+          "identity": "radio \"Only me\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Paste text\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Public\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
         {
@@ -2075,6 +2147,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 2
+        },
+        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
@@ -2083,7 +2159,15 @@
           "count": 1
         },
         {
+          "identity": "radio \"Only me\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Paste text\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Public\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
         {
@@ -2129,6 +2213,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 2
+        },
+        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
@@ -2137,7 +2225,15 @@
           "count": 1
         },
         {
+          "identity": "radio \"Only me\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Paste text\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Public\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
         {
@@ -4512,7 +4608,7 @@
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 8
+          "count": 9
         },
         {
           "identity": "button \"\" [image-field/choose] in main",
@@ -4541,6 +4637,14 @@
         {
           "identity": "link \"\" [skip-link/root] in -",
           "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/circle] in main",
+          "count": 2
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in main",
+          "count": 2
         },
         {
           "identity": "slider \"Zoom\" [slider/thumb] in group \"Zoom\"",
@@ -4577,6 +4681,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Sign out everywhere\" [button/root] in main",
           "count": 1
         },
@@ -4598,6 +4706,18 @@
         },
         {
           "identity": "link \"What gets deleted\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in main",
+          "count": 2
+        },
+        {
+          "identity": "radio \"Only me\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Public\" [radio-group/circle] in main",
           "count": 1
         }
       ],
@@ -4635,6 +4755,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Show password\" [text-field/show-password] in main",
           "count": 1
         },
@@ -4660,6 +4784,18 @@
         },
         {
           "identity": "link \"What gets deleted\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in main",
+          "count": 2
+        },
+        {
+          "identity": "radio \"Only me\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Public\" [radio-group/circle] in main",
           "count": 1
         },
         {
@@ -6245,6 +6381,18 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 2
+        },
+        {
+          "identity": "radio \"Only me\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Public\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "textbox \"Description\" [text-area/input] in group \"Recipe details\"",
           "count": 1
         },
@@ -6293,6 +6441,14 @@
         {
           "identity": "link \"\" [skip-link/root] in -",
           "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 2
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 2
         },
         {
           "identity": "textbox \"\" [text-area/input] in group \"Recipe details\"",
@@ -6457,6 +6613,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 2
+        },
+        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
@@ -6465,7 +6625,15 @@
           "count": 1
         },
         {
+          "identity": "radio \"Only me\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Paste text\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Public\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
         {
@@ -6519,6 +6687,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 2
+        },
+        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
@@ -6527,7 +6699,15 @@
           "count": 1
         },
         {
+          "identity": "radio \"Only me\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Paste text\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Public\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
         {
@@ -6573,6 +6753,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 2
+        },
+        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
@@ -6581,7 +6765,15 @@
           "count": 1
         },
         {
+          "identity": "radio \"Only me\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Paste text\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Public\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
         {
