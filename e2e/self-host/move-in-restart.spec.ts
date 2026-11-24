@@ -8,7 +8,7 @@ import { proofFixtures } from "../journeys/support/move-in-fixtures";
 
 // A move-in that the server restarts in the middle of carries on by itself, with nobody on the page.
 // The Self-host Image workflow runs this in two halves around a `docker restart`:
-// - before: a cook starts moving the large proof kitchen in and leaves once it is under way;
+// - before: a cook starts moving the large proof kitchen in and leaves as soon as it is accepted;
 // - after: the move-in finishes with no page open to nudge it. Progress is read with JavaScript off,
 //   because the open page asks the server to pick up a stalled move-in, which would hide the bug.
 // SPOONJOY_SELF_HOST_MOVE_IN_RESTART picks the half; without it, this is skipped.
@@ -53,10 +53,10 @@ test.describe("A move-in on a self-hosted server that restarts", () => {
     await page.goto("/move-in");
     await page.getByLabel(requiredLabel("Backup zip"), { exact: true }).setInputFiles({ name: `kitchen-${source.version}.zip`, mimeType: "application/zip", buffer: backup });
     await page.getByRole("button", { name: "Move in", exact: true }).click();
+    // The move-in is accepted. The cook leaves at once and the workflow stops the server, since 500 recipes can come in
+    // within two minutes; the workflow then checks the move-in was unfinished when the server stopped.
     await expect(page).toHaveURL(/\/move-in\?job=movein_/);
-    // Under way: recipes are coming in, and the kitchen isn't all here yet.
     const recipes = read.kitchens.large.counts.recipes;
-    await expect(page.getByRole("status").getByText(new RegExp(`^[1-9]\\d* of ${recipes} recipes in so far\\.$`))).toBeVisible({ timeout: 2 * 60_000 });
 
     mkdirSync(dirname(statePath), { recursive: true });
     const state: State = { email, password: plainPassword, url: page.url(), recipes };

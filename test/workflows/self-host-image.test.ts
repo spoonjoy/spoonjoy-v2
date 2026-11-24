@@ -256,20 +256,28 @@ describe("Self-host Image workflow", () => {
     expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["app/routes/move-in.tsx", "app/domains/move-in/adapters/worker/**"]));
   });
 
-  it("restarts a server in the middle of a move-in, then waits for the move-in to finish with no page open", () => {
+  it("stops a server in the middle of a move-in, checks the move-in was unfinished, starts it again and waits for the move-in to finish with no page open", () => {
     const step = stepNamed(image, /Finish a move-in the server restarts in the middle of/);
     const run = step.run ?? "";
     expect(step.if).toBe("success()");
     const order = [
       "docker run -d --name sj-restart --network host -v sj-restart:/data -e PORT=8084 -e SPOONJOY_FLAGS=move_in",
       "restart_half before",
-      "docker restart sj-restart",
+      "docker stop sj-restart",
+      "server.mjs backup /backups/restart.tar.gz",
+      "if (row.finishedAt) throw",
+      'echo "$stopped" | tee "$OUT/move-in-restart.json"',
+      "docker start sj-restart",
       "restart_half after",
       "docker rm -f sj-restart",
     ].map((text) => run.lastIndexOf(text));
     expect(order.every((index) => index > -1)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(run).toContain('e2e/self-host/move-in-restart.spec.ts --output "test-results-self-host-move-in-restart-$1"');
+    // The check is a single-quoted node -e script, so a quote inside it would end the script early.
+    const script = run.slice(run.indexOf("node --input-type=module -e '") + "node --input-type=module -e '".length, run.indexOf("')\n"));
+    expect(script).toContain('readTarGz("/backups/restart.tar.gz")');
+    expect(script).not.toContain("'");
     expect(stepNamed(image, /Stop the server/).run).toContain("docker rm -f sj-restart || true");
     expect(runs(image)).toMatch(/sanitize-journey-traces\.mjs [^\n]*test-results-self-host-move-in-restart-after/);
   });
