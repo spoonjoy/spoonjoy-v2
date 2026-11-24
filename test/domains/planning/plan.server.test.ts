@@ -111,27 +111,51 @@ describe("planning a week, stored", () => {
     expect(await db.planEntry.count()).toBe(0);
   });
 
-  it("doesn't store a household's plan yet", async () => {
+  it("keeps a household's plan apart from its cooks' own: one plan per household, and its entries only there", async () => {
     const chef = await cook();
-    await expect(store.planFor({ household: "household-1", actingCook: chef.id })).rejects.toThrow("Household plans aren't stored yet.");
-    expect(await db.mealPlan.count()).toBe(0);
+    const partner = await cook();
+    const household = await db.household.create({ data: { name: "Our kitchen" } });
+    const ours: PlanScope = { household: household.id, actingCook: chef.id };
+    const theirs: PlanScope = { household: household.id, actingCook: partner.id };
+    await addEntry(store, ours, "shared-dinner", { kind: "note", date: "2026-11-24", mealType: "dinner", title: "Tacos" });
+    await addEntry(store, theirs, "shared-soup", { kind: "note", date: "2026-11-24", mealType: "dinner", title: "Soup" });
+    await addEntry(store, { cook: chef.id }, "own-dinner", { kind: "note", date: "2026-11-24", mealType: "dinner", title: "Just me" });
+
+    const titles = async (scope: PlanScope) => (await getWeek(store, scope, "2026-11-24")).days[1].entries.map((entry) => entry.title);
+    expect(await titles(theirs)).toEqual(["Tacos", "Soup"]);
+    expect(await titles({ cook: chef.id })).toEqual(["Just me"]);
+    expect(await db.householdPlan.count()).toBe(1);
+    expect(await db.householdPlanEntry.findMany({ select: { id: true, addedById: true }, orderBy: { id: "asc" } })).toEqual([
+      { id: "shared-dinner", addedById: chef.id },
+      { id: "shared-soup", addedById: partner.id },
+    ]);
+
+    expect(await moveEntry(store, theirs, "shared-soup", { date: "2026-11-24", mealType: "dinner", index: 0 })).toMatchObject({ ok: true });
+    expect(await titles(ours)).toEqual(["Soup", "Tacos"]);
+    expect(await moveEntry(store, ours, "own-dinner", { date: "2026-11-24", mealType: "dinner", index: 0 })).toEqual({ ok: false, error: "That meal isn't on your plan." });
+    expect(await removeEntry(store, ours, "own-dinner")).toBe(false);
+    expect(await removeEntry(store, ours, "shared-dinner")).toBe(true);
+    expect(await addEntry(store, ours, "shared-dinner", { kind: "note", date: "2026-11-24", mealType: "dinner", title: "Again" })).toEqual({ ok: false, error: "That meal was removed from the plan." });
+    expect(await titles(ours)).toEqual(["Soup"]);
+
+    await db.household.delete({ where: { id: household.id } });
+    expect(await db.householdPlanEntry.count()).toBe(0);
+    expect(await titles({ cook: chef.id })).toEqual(["Just me"]);
   });
 
   it("acts as the acting cook on a household plan: they add the entries, their cooks count and their read rights apply", async () => {
     const host = await cook();
     const chef = await cook();
-    const scope: PlanScope = { household: "household-1", actingCook: chef.id };
-    // A store that keeps the household's plan in the host's, to drive the use cases until household plans are stored.
-    const shared: PlanStore = { ...store, planFor: async (asked) => ({ ...(await store.planFor({ cook: host.id })), scope: asked }) };
+    const household = await db.household.create({ data: { name: "Our kitchen" } });
+    const scope: PlanScope = { household: household.id, actingCook: chef.id };
     const hostsSecret = await db.recipe.create({ data: { ...createTestRecipe(host.id), visibility: "private" } });
     const chefs = await db.recipe.create({ data: { ...createTestRecipe(chef.id), title: "Chef's Curry", visibility: "private" } });
     await db.recipeSpoon.create({ data: { chefId: chef.id, recipeId: chefs.id, cookedAt: new Date("2026-11-20T18:00:00Z") } });
 
-    expect(await addEntry(shared, scope, "e1", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: hostsSecret.id })).toEqual({ ok: false, error: "That recipe isn't available to plan." });
-    expect(await addEntry(shared, scope, "e2", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: chefs.id })).toMatchObject({ ok: true });
-    expect(await db.planEntry.findUniqueOrThrow({ where: { id: "e2" }, select: { addedById: true } })).toEqual({ addedById: chef.id });
-    expect((await getWeek(shared, scope, "2026-11-24")).lastMade).toEqual({ [chefs.id]: "2026-11-20" });
-    expect((await plannableRecipes(shared, scope, null)).recipes).toEqual([{ id: chefs.id, title: "Chef's Curry" }]);
+    expect(await addEntry(store, scope, "e1", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: hostsSecret.id })).toEqual({ ok: false, error: "That recipe isn't available to plan." });
+    expect(await addEntry(store, scope, "e2", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: chefs.id })).toMatchObject({ ok: true });
+    expect((await getWeek(store, scope, "2026-11-24")).lastMade).toEqual({ [chefs.id]: "2026-11-20" });
+    expect((await plannableRecipes(store, scope, null)).recipes).toEqual([{ id: chefs.id, title: "Chef's Curry" }]);
     expect(actingCookOf(scope)).toBe(chef.id);
     expect(actingCookOf({ cook: host.id })).toBe(host.id);
   });

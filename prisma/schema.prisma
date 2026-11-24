@@ -54,6 +54,7 @@ model User {
   cookingNow               CookingNow[]
   mealPlan                 MealPlan?
   plannedEntries           PlanEntry[]
+  householdPlannedEntries  HouseholdPlanEntry[]
   organizers               Organizer[]
   contentReports           ContentReport[]
   blocksMade               ChefBlock[]               @relation("ChefBlocker")
@@ -475,26 +476,27 @@ model OAuthRefreshLineage {
 }
 
 model Recipe {
-  id                 String             @id @default(cuid())
-  title              String
-  description        String?
-  servings           String?
-  chefId             String
-  chef               User               @relation(fields: [chefId], references: [id], onDelete: Cascade)
-  deletedAt          DateTime?
-  steps              RecipeStep[]
-  cookbooks          RecipeInCookbook[]
-  spoons             RecipeSpoon[]
-  covers             RecipeCover[]      @relation("RecipeCoverHistory")
-  cookingNow         CookingNow[]
-  planEntries        PlanEntry[]
-  organizers         RecipeOrganizer[]
-  activeCoverId      String?
-  activeCover        RecipeCover?       @relation("RecipeActiveCover", fields: [activeCoverId], references: [id], onDelete: SetNull)
-  activeCoverVariant String?
-  coverMode          String             @default("auto")
+  id                   String               @id @default(cuid())
+  title                String
+  description          String?
+  servings             String?
+  chefId               String
+  chef                 User                 @relation(fields: [chefId], references: [id], onDelete: Cascade)
+  deletedAt            DateTime?
+  steps                RecipeStep[]
+  cookbooks            RecipeInCookbook[]
+  spoons               RecipeSpoon[]
+  covers               RecipeCover[]        @relation("RecipeCoverHistory")
+  cookingNow           CookingNow[]
+  planEntries          PlanEntry[]
+  householdPlanEntries HouseholdPlanEntry[]
+  organizers           RecipeOrganizer[]
+  activeCoverId        String?
+  activeCover          RecipeCover?         @relation("RecipeActiveCover", fields: [activeCoverId], references: [id], onDelete: SetNull)
+  activeCoverVariant   String?
+  coverMode            String               @default("auto")
   // Who may read it: private, household or public (app/domains/kitchen/model/recipe-visibility.ts).
-  visibility         String             @default("public")
+  visibility           String               @default("public")
 
   sourceRecipeId String?
   sourceRecipe   Recipe? @relation("SourceRecipe", fields: [sourceRecipeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -782,6 +784,50 @@ model PlanEntry {
 
   @@unique([mealPlanId, sourceSystem, sourceId])
   @@index([mealPlanId, date, mealType, position])
+  @@index([recipeId])
+}
+
+// A household's meal plan, one per household. Planning keeps one plan model: its Prisma adapter reads this table and
+// HouseholdPlanEntry for a household scope and MealPlan and PlanEntry for a cook's (migration 0052 says why).
+model HouseholdPlan {
+  id             String               @id @default(cuid())
+  householdId    String               @unique
+  household      Household            @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  firstDayOfWeek Int                  @default(1)
+  timeZone       String               @default("UTC")
+  entries        HouseholdPlanEntry[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @default(now()) @updatedAt
+}
+
+// An entry on a household's plan, with the same columns as PlanEntry.
+model HouseholdPlanEntry {
+  id              String        @id @default(cuid())
+  householdPlanId String
+  householdPlan   HouseholdPlan @relation(fields: [householdPlanId], references: [id], onDelete: Cascade)
+  date            String
+  span            String        @default("day")
+  mealType        String
+  position        Int           @default(0)
+  kind            String
+  recipeId        String?
+  recipe          Recipe?       @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+  recipeTitle     String?
+  title           String        @default("")
+  note            String        @default("")
+  scaleFactor     Float         @default(1)
+  addedById       String?
+  addedBy         User?         @relation(fields: [addedById], references: [id], onDelete: SetNull)
+  cookedAt        DateTime?
+  spoonId         String?
+  sourceSystem    String?
+  sourceId        String?
+  deletedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @default(now()) @updatedAt
+
+  @@unique([householdPlanId, sourceSystem, sourceId])
+  @@index([householdPlanId, date, mealType, position])
   @@index([recipeId])
 }
 
@@ -1136,6 +1182,7 @@ model Household {
   members     HouseholdMember[]
   invites     HouseholdInvite[]
   lists       HouseholdList[]
+  plan        HouseholdPlan?
 }
 
 model HouseholdMember {
