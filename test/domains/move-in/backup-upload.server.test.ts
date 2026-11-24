@@ -120,6 +120,18 @@ describe("beginning an upload", () => {
     expect(await begin(bytes, { resume: first.uploadId })).toMatchObject({ ok: true, uploadId: expect.not.stringMatching(first.uploadId) });
   });
 
+  it("starts over when asked, discarding every unfinished upload of the same file and no other", async () => {
+    const bytes = backup();
+    const first = await begin(bytes);
+    const other = await begin(bytes, { fingerprint: "fp-2" });
+    if (!first.ok || !other.ok) throw new Error("not begun");
+    await part(bytes, first.uploadId, 1);
+    const fresh = await begin(bytes, { fresh: true, resume: first.uploadId });
+    expect(fresh).toMatchObject({ ok: true, done: [], uploadId: expect.not.stringMatching(first.uploadId) });
+    expect(rows(`SELECT "id" FROM "ImportUpload" ORDER BY "id"`).map((row) => row.id).sort()).toEqual([other.uploadId, (fresh as { uploadId: string }).uploadId].sort());
+    expect([...bucket.uploads.values()].map((upload) => upload.state)).toEqual(["aborted", "open", "open"]);
+  });
+
   it("aborts the upload in parts when it can't record it", async () => {
     database.sqlite.prepare(`DELETE FROM "User" WHERE "id" = 'chef-1'`).run();
     await expect(begin(backup())).rejects.toThrow(/FOREIGN KEY/);

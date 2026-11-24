@@ -49,12 +49,19 @@ async function plan(env: MoveInEnv, upload: BackupUpload): Promise<UploadPlan> {
   return { uploadId: upload.id, partSize: upload.partSize, partCount: partCount(upload.size, upload.partSize), done };
 }
 
+/** Aborts an unfinished upload in storage and forgets it. */
+async function discard(env: MoveInEnv, upload: BackupUpload) {
+  await env.PHOTOS.resumeMultipartUpload(upload.archiveKey, upload.uploadId).abort().catch(() => undefined);
+  await deleteUpload(env.DB, upload.id);
+}
+
 /**
  * Begins sending a backup of `size` bytes, or resumes this owner's unfinished upload of the same file: the one
  * `resume` names when it still fits, otherwise the newest of the same file: same name, size and `head`, the
- * SHA-256 of its first MiB.
+ * SHA-256 of its first MiB. `fresh` starts over instead, discarding every unfinished upload of the same file: the
+ * page asks for it after the cook stopped one whose abort may not have arrived.
  */
-export async function beginBackupUpload({ env, ownerId, app, name, size, head, resume, now }: {
+export async function beginBackupUpload({ env, ownerId, app, name, size, head, resume, fresh = false, now }: {
   env: MoveInEnv;
   ownerId: string;
   app: string;
@@ -62,22 +69,26 @@ export async function beginBackupUpload({ env, ownerId, app, name, size, head, r
   size: number;
   head: string;
   resume?: string | null;
+  fresh?: boolean;
   now: Date;
 }): Promise<UploadResult<UploadPlan>> {
   if (!moveInKind(app)) return { ok: false, code: "unknown-app" };
   if (!Number.isSafeInteger(size) || size <= 0) return { ok: false, code: "no-file" };
   if (size > MOVE_IN_BACKUP_MAX_BYTES) return { ok: false, code: "backup-too-large" };
   const fingerprint = uploadFingerprint(name, size, head);
-  const since = new Date(now.getTime() - MOVE_IN_UPLOAD_KEPT_MS + RESUME_MARGIN_MS);
-  const named = resume ? await loadUpload(env.DB, ownerId, resume) : null;
-  const fits = named && named.fingerprint === fingerprint && named.size === size && !named.jobId && named.startedAt >= since.toISOString();
-  const existing = fits ? named : await findUnfinishedUpload(env.DB, { ownerId, fingerprint, size, since });
-  if (existing) return { ok: true, ...(await plan(env, existing)) };
-
-  for (const stale of (await unfinishedUploads(env.DB, ownerId)).slice(MOVE_IN_OPEN_UPLOADS - 1)) {
-    await env.PHOTOS.resumeMultipartUpload(stale.archiveKey, stale.uploadId).abort().catch(() => undefined);
-    await deleteUpload(env.DB, stale.id);
+  if (fresh) {
+    for (const same of await unfinishedUploads(env.DB, ownerId)) {
+      if (same.fingerprint === fingerprint && same.size === size) await discard(env, same);
+    }
+  } else {
+    const since = new Date(now.getTime() - MOVE_IN_UPLOAD_KEPT_MS + RESUME_MARGIN_MS);
+    const named = resume ? await loadUpload(env.DB, ownerId, resume) : null;
+    const fits = named && named.fingerprint === fingerprint && named.size === size && !named.jobId && named.startedAt >= since.toISOString();
+    const existing = fits ? named : await findUnfinishedUpload(env.DB, { ownerId, fingerprint, size, since });
+    if (existing) return { ok: true, ...(await plan(env, existing)) };
   }
+
+  for (const stale of (await unfinishedUploads(env.DB, ownerId)).slice(MOVE_IN_OPEN_UPLOADS - 1)) await discard(env, stale);
 
   const archiveKey = `${MOVE_IN_ARCHIVE_PREFIX}${ownerId}/${crypto.randomUUID()}.zip`;
   const multipart = await env.PHOTOS.createMultipartUpload(archiveKey, { httpMetadata: { contentType: "application/zip" } });

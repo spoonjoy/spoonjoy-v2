@@ -180,7 +180,13 @@ function UploadForm({ error, uploadMaxBytes }: { error: string | null; uploadMax
   const [sending, setSending] = useState<Sending | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [stopped, setStopped] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const stopper = useRef<AbortController | null>(null);
+  const stoppedAlert = useRef<HTMLDivElement>(null);
+  // The Stop button goes once the upload stops, so focus goes to the alert that says so, which also has it read out.
+  useEffect(() => {
+    if (stopped) stoppedAlert.current?.focus();
+  }, [stopped]);
   // With JavaScript, the backup goes straight to storage in parts and the page shows how much has been sent;
   // without it, the plain form posts the file, up to the form's own limit.
   const send = async (event: FormEvent<HTMLFormElement>) => {
@@ -206,6 +212,7 @@ function UploadForm({ error, uploadMaxBytes }: { error: string | null; uploadMax
       return;
     }
     setSending(null);
+    setStopping(false);
     if (outcome.stopped) {
       // Back to the empty form, saying what happened.
       element.reset();
@@ -219,7 +226,7 @@ function UploadForm({ error, uploadMaxBytes }: { error: string | null; uploadMax
   return (
     <Form method="post" render={<RouterForm encType="multipart/form-data" />} className="gap-6" onSubmit={send}>
       {shown ? <Alert tone="destructive" title="That backup didn't move in" description={shown} /> : null}
-      {stopped ? <Alert title="Upload stopped" description={UPLOAD_STOPPED_MESSAGE} /> : null}
+      {stopped ? <Alert ref={stoppedAlert} tabIndex={-1} title="Upload stopped" description={UPLOAD_STOPPED_MESSAGE} /> : null}
       <ChoiceCard
         legend="Where are you coming from?"
         name="app"
@@ -239,16 +246,28 @@ function UploadForm({ error, uploadMaxBytes }: { error: string | null; uploadMax
       />
       {sending ? (
         <div role="status" className="flex items-center gap-3">
-          <Spinner label={sending.checking ? "Checking the backup" : "Sending the backup"} />
+          <Spinner label={sending.checking ? "Checking the backup" : stopping ? "Stopping the upload" : "Sending the backup"} />
           <Text>
-            {sending.checking ? "All of it arrived. Checking the backup…" : `${formatBytes(sending.sent)} of ${formatBytes(sending.total)} sent`}
+            {sending.checking
+              ? "All of it arrived. Checking the backup…"
+              : stopping
+                ? "Stopping the upload…"
+                : `${formatBytes(sending.sent)} of ${formatBytes(sending.total)} sent`}
           </Text>
         </div>
       ) : null}
       <div className="flex justify-end gap-3">
         {sending && !sending.checking ? (
-          <Button type="button" variant="outline" onClick={() => stopper.current?.abort()}>
-            Stop upload
+          <Button
+            type="button"
+            variant="outline"
+            disabled={stopping}
+            onClick={() => {
+              setStopping(true);
+              stopper.current?.abort();
+            }}
+          >
+            {stopping ? "Stopping…" : "Stop upload"}
           </Button>
         ) : null}
         <Button type="submit" disabled={busy}>

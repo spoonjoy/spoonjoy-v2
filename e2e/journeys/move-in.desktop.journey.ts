@@ -46,7 +46,7 @@ test.describe("Move in, a big v1.12.0 backup over a connection that drops", { ta
     await verifyAfterReload(await moveInAfterADrop("v1.12.0", { page, expectConsoleError }));
   });
 
-  test("stops on the cook's word, and the same file then starts over from its first part", async ({ page, expectConsoleError }) => {
-    await stopAndStartAgain("v1.12.0", { page, expectConsoleError });
+  test("stops on the cook's word, and the same file then starts over from its first part @mutates", async ({ page, expectAccessible, expectConsoleError, verifyAfterReload }) => {
+    await verifyAfterReload(await stopAndStartAgain("v1.12.0", { page, expectAccessible, expectConsoleError }));
   });
 });
