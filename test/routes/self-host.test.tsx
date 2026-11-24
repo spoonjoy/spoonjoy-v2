@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
-import SelfHost, { COMPOSE, IMAGE_PUBLIC, START, UPDATE, meta } from "~/routes/self-host";
+import SelfHost, { COMPOSE, IMAGE_PUBLIC, ImageNotice, START, UPDATE, meta } from "~/routes/self-host";
 
 async function renderPage() {
   const Stub = createTestRoutesStub([{ path: "/self-host", Component: SelfHost }]);
@@ -44,6 +44,11 @@ describe("/self-host", () => {
     expect(IMAGE_PUBLIC).toBe(false);
     await renderPage();
     expect(screen.getByRole("status")).toHaveTextContent("Image coming soon");
+  });
+
+  it("drops the notice once the image is public", () => {
+    const { container } = render(<ImageNotice imagePublic />);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("links to the full self-hosting guide", async () => {
