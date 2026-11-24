@@ -86,14 +86,22 @@ export function parseArgs(argv) {
   return { bucket: rest[0], check };
 }
 
+/** The line of wrangler's error output that says what went wrong, such as "Authentication error [code: 10000]". */
+export function errorSummary(text) {
+  const lines = text.split("\n").map((line) => stripVTControlCharacters(line).trim()).filter(Boolean);
+  return lines.find((line) => /\[code: \d+\]/.test(line)) ?? lines.find((line) => /\[ERROR\]/.test(line)) ?? lines[0] ?? "";
+}
+
 async function wrangler(exec, args, stderr) {
   try {
     return (await exec("pnpm", args, { maxBuffer: 1024 * 1024 })).stdout;
   } catch (error) {
-    // Pass wrangler's own words on, for the log and for retry-cloudflare.mjs to classify.
-    if (typeof error?.stderr === "string" && error.stderr) stderr.write(error.stderr);
-    if (typeof error?.stdout === "string" && error.stdout) stderr.write(error.stdout);
-    throw error;
+    // Pass wrangler's error output on, for the log and for retry-cloudflare.mjs to classify. Its stdout is left out:
+    // after an authentication error wrangler prints the token's account names and permissions there.
+    const said = typeof error?.stderr === "string" ? error.stderr : "";
+    if (said) stderr.write(said);
+    const summary = errorSummary(said);
+    throw new Error(`wrangler ${args.slice(2, 6).join(" ")} failed${summary ? `: ${summary}` : ""}`);
   }
 }
 

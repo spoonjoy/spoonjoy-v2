@@ -70,6 +70,10 @@ describe("retry-cloudflare", () => {
     ["the cleanup's 7429", { stderr: "A request to the Cloudflare API (/accounts/x/d1/database/d/query) failed.\n  internal error [code: 7429]" }, true],
     ["a 503 on stdout", { stdout: "A request to the Cloudflare API (/accounts/x/d1/database/d/query) failed.\n  Service Unavailable [code: 503]" }, true],
     ["an Error", new Error("internal error; reference = abc"), true],
+    ["R2's passing 10042", "A request to the Cloudflare API (/accounts/x/r2/buckets/b/lifecycle) failed.\n  Please enable R2 through the Cloudflare Dashboard. [code: 10042]", true],
+    ["a 502 page", "Received a malformed response from the API\n<html>…</html>\nGET /accounts/x/r2/buckets/b/lifecycle -> 502 Bad Gateway", true],
+    ["a malformed answer that is no 5xx", "Received a malformed response from the API\nGET /accounts/x/r2/buckets/b/lifecycle -> 403 Forbidden", false],
+    ["a token without R2 rights", "A request to the Cloudflare API (/accounts/x/r2/buckets/b/lifecycle) failed.\n  Authentication error [code: 10000]", false],
     ["an SQL error", "A request to the Cloudflare API (/accounts/x/d1/database/d/query) failed.\n  no such table [code: 7500]", false],
     ["nothing", undefined, false],
   ])("classifies %s", (_label, error, transient) => {

@@ -358,7 +358,7 @@ The GitHub workflow requires repository secrets:
 
 - `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account that owns D1 `spoonjoy`, R2 `spoonjoy-photos`, and Worker `spoonjoy-v2`.
 - `CLOUDFLARE_D1_API_TOKEN`: a dashboard-created account token with only D1 write access. The orchestrator exposes it only to D1 migration, remote-preflight, and production smoke commands that create and remove disposable D1 state.
-- `CLOUDFLARE_WORKERS_API_TOKEN`: a dashboard-created account token with only Workers Scripts write and Workers R2 Storage write access. The orchestrator exposes it only to Worker version commands.
+- `CLOUDFLARE_WORKERS_API_TOKEN`: a dashboard-created account token with only Workers Scripts write and Workers R2 Storage write access. The orchestrator exposes it only to Worker version commands; after a successful release, the deploy job's last step also uses it to keep the rule that aborts unfinished move-in uploads in `spoonjoy-photos` after a day (`scripts/ensure-r2-upload-lifecycle.mjs`).
 
 Build, Playwright, and Git commands receive none of the Cloudflare credentials. Production smoke receives only the D1 token it needs for disposable smoke data; it never receives the Workers token. Do not use a local Wrangler OAuth token for either secret because it is interactive user-session auth, not durable CI auth.
 

@@ -796,9 +796,11 @@ jobs:
         run: node scripts/qa-run-scope.mjs shared-queue && pnpm run deploy:qa
 
       # Unfinished move-in uploads in QA's photo bucket are aborted after a day instead of R2's
-      # default 7 (scripts/ensure-r2-upload-lifecycle.mjs).
+      # default 7 (scripts/ensure-r2-upload-lifecycle.mjs). As in Production Deploy, a failure here
+      # shows as an error on the run but doesn't mark main's deploy to shared QA failed.
       - name: Abort unfinished move-in uploads in QA after a day
         if: steps.tip.outputs.current == 'true'
+        continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
