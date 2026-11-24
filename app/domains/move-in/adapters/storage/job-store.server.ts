@@ -117,6 +117,14 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
       const [rows] = await d1ReadBatch(db, [[`SELECT 1 FROM "ImportEvent" WHERE "jobId" = ? AND "level" != 'info' LIMIT 1`, jobId]]);
       return rows.length > 0;
     },
+
+    async organizing(jobId) {
+      const [rows] = await d1ReadBatch(db, [[
+        `SELECT 1 FROM "ImportEntityCount" WHERE "jobId" = ? AND "entity" IN ('tags', 'categories', 'tools') AND "found" > 0 AND "skipped" = 0 LIMIT 1`,
+        jobId,
+      ]]);
+      return rows.length > 0;
+    },
   };
 }
 

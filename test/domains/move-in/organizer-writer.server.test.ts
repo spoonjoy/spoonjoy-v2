@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { getLocalDb } from "~/lib/db.server";
 import { organizersOnRecipe, prismaOrganizerStore, setRecipeOrganizers, type OrganizerKind, type OrganizerStore } from "~/domains/kitchen";
+import { readMoveInOrganizerCounts } from "~/domains/move-in/adapters/storage/organizer-writer.server";
 import { attachMovedInOrganizers } from "~/domains/move-in/adapters/storage/organizer-writer.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../../utils";
@@ -23,19 +24,23 @@ afterEach(async () => {
 async function kitchen() {
   const cook = await db.user.create({ data: createTestUser() });
   const recipe = await db.recipe.create({ data: createTestRecipe(cook.id) });
-  return { ownerId: cook.id, recipeId: recipe.id };
+  const source = await db.importSource.create({ data: { id: crypto.randomUUID(), ownerId: cook.id, kind: "mealie-backup", instanceKey: "k", label: "Home" } });
+  return { ownerId: cook.id, recipeId: recipe.id, sourceId: source.id, jobId: "job-1" };
 }
+
+const none = { tags: [], categories: [], tools: [] };
 
 const on = async (recipeId: string, kind: OrganizerKind) => (await organizersOnRecipe(store, recipeId, kind)).map((organizer) => organizer.name);
 
 describe("attachMovedInOrganizers", () => {
   it("puts the tags, categories and tools on the recipe beside the ones it has, once each, and again changes nothing", async () => {
-    const { ownerId, recipeId } = await kitchen();
+    const at = await kitchen();
+    const { ownerId, recipeId } = at;
     await setRecipeOrganizers(store, ownerId, recipeId, "tag", ["Cozy"]);
-    const moved = { ownerId, recipeId, tags: ["Quick", "quick"], categories: ["Dinner"], tools: [] };
+    const moved = { ...at, tags: ["Quick", "quick"], categories: ["Dinner"], tools: [] };
 
-    await attachMovedInOrganizers(store, moved);
-    await attachMovedInOrganizers(store, moved);
+    await attachMovedInOrganizers(db, moved);
+    await attachMovedInOrganizers(db, moved);
 
     expect(await on(recipeId, "tag")).toEqual(["Cozy", "Quick"]);
     expect(await on(recipeId, "category")).toEqual(["Dinner"]);
@@ -44,11 +49,12 @@ describe("attachMovedInOrganizers", () => {
   });
 
   it("uses the tag the cook already has under another spelling", async () => {
-    const { ownerId, recipeId } = await kitchen();
+    const at = await kitchen();
+    const { ownerId, recipeId } = at;
     const other = await db.recipe.create({ data: createTestRecipe(ownerId) });
     await setRecipeOrganizers(store, ownerId, other.id, "tag", ["QUICK"]);
 
-    await attachMovedInOrganizers(store, { ownerId, recipeId, tags: ["quick"], categories: [], tools: [] });
+    await attachMovedInOrganizers(db, { ...at, ...none, tags: ["quick"] });
 
     expect(await on(recipeId, "tag")).toEqual(["QUICK"]);
     expect(await db.organizer.count({ where: { ownerId } })).toBe(1);
@@ -56,10 +62,41 @@ describe("attachMovedInOrganizers", () => {
 
   it("refuses a recipe that isn't the cook's", async () => {
     const { recipeId } = await kitchen();
-    const { ownerId } = await kitchen();
-    await expect(attachMovedInOrganizers(store, { ownerId, recipeId, tags: ["Quick"], categories: [], tools: [] })).rejects.toThrow(
-      "the recipe is no longer in your kitchen",
-    );
+    const theirs = await kitchen();
+    await expect(attachMovedInOrganizers(db, { ...theirs, recipeId, ...none, tags: ["Quick"] })).rejects.toThrow("the recipe is no longer in your kitchen");
     expect(await on(recipeId, "tag")).toEqual([]);
+    expect(await readMoveInOrganizerCounts(db, theirs)).toEqual({ tags: 0, categories: 0, tools: 0 });
+  });
+
+  it("never takes off a tag the cook puts on while it runs", async () => {
+    const at = await kitchen();
+    const racing: OrganizerStore = {
+      ...store,
+      async organizersOf(ownerId, kind) {
+        const existing = await store.organizersOf(ownerId, kind);
+        await setRecipeOrganizers(store, ownerId, at.recipeId, "tag", ["Cozy"]);
+        return existing;
+      },
+    };
+
+    await attachMovedInOrganizers(db, { ...at, ...none, tags: ["Quick"] }, racing);
+
+    expect(await on(at.recipeId, "tag")).toEqual(["Cozy", "Quick"]);
+  });
+
+  it("counts each organizer a move-in put on its recipes once, by kind, while it is still in the kitchen", async () => {
+    const at = await kitchen();
+    const second = await db.recipe.create({ data: createTestRecipe(at.ownerId) });
+    await attachMovedInOrganizers(db, { ...at, tags: ["Quick", "Cozy"], categories: ["Dinner"], tools: [] });
+    await attachMovedInOrganizers(db, { ...at, recipeId: second.id, tags: ["quick"], categories: [], tools: ["Wok", "x".repeat(61)] });
+
+    expect(await readMoveInOrganizerCounts(db, at)).toEqual({ tags: 2, categories: 1, tools: 1 });
+    expect(await readMoveInOrganizerCounts(db, { ...at, jobId: "job-2" })).toEqual({ tags: 0, categories: 0, tools: 0 });
+
+    await db.organizer.deleteMany({ where: { ownerId: at.ownerId, slug: "cozy" } });
+    expect(await readMoveInOrganizerCounts(db, at)).toEqual({ tags: 1, categories: 1, tools: 1 });
+
+    await attachMovedInOrganizers(db, { ...at, jobId: "job-2", ...none, tags: ["Quick"] });
+    expect(await readMoveInOrganizerCounts(db, { ...at, jobId: "job-2" })).toEqual({ tags: 1, categories: 0, tools: 0 });
   });
 });

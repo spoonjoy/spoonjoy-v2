@@ -10,7 +10,8 @@ import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "./journey";
 import { bytesSource } from "../../../app/domains/move-in/adapters/archive/zip";
 import { openMealieBackup } from "../../../app/domains/move-in/adapters/sources/mealie-backup/backup";
-import { chooseGroup, inspectGroup, recipeDrafts } from "../../../app/domains/move-in/adapters/sources/mealie-backup/database";
+import { chooseGroup, recipeDrafts } from "../../../app/domains/move-in/adapters/sources/mealie-backup/database";
+import { planOrganizerAssignment } from "../../../app/domains/kitchen/model/organizer";
 import { requiredLabel } from "./forms";
 import { chooseMenuItem } from "./menu";
 import { pathUrl, waitForHydration } from "./navigation";
@@ -26,9 +27,9 @@ interface Manifest {
 
 let manifest: Manifest | undefined;
 const backups = new Map<string, Buffer>();
-/** One recipe with a photo and tags from each version's kitchen, to find after it moves in. */
+/** One recipe with a photo and tags from each version's kitchen, to find after it moves in, with its organizers' slugs. */
 const samples = new Map<string, { title: string; tags: string[]; categories: string[]; tools: string[] }>();
-/** Each version's kitchen's tags, categories and tools, as the finish screen counts them. */
+/** Each version's tags, categories and tools on its recipes, each counted once by Kitchen's slug, as the finish screen counts them. */
 const organizerCounts = new Map<string, { tags: number; categories: number; tools: number }>();
 
 /** The manifest and each version's small kitchen backup, read once per worker. */
@@ -49,9 +50,12 @@ async function fixtures(): Promise<Manifest> {
     const drafts = recipeDrafts(backup.database, group);
     const sample = drafts.find((draft) => backup.hasFile(draft.photoPath) && draft.tags.length);
     if (!sample) throw new Error(`The ${source.version} kitchen has no recipe with a photo and tags`);
-    samples.set(source.version, { title: sample.title, tags: sample.tags, categories: sample.categories, tools: sample.tools });
-    const { tags, categories, tools } = inspectGroup(backup.database, group);
-    organizerCounts.set(source.version, { tags, categories, tools });
+    samples.set(source.version, { title: sample.title, tags: slugs(sample.tags), categories: slugs(sample.categories), tools: slugs(sample.tools) });
+    organizerCounts.set(source.version, {
+      tags: slugs(drafts.flatMap((draft) => draft.tags)).length,
+      categories: slugs(drafts.flatMap((draft) => draft.categories)).length,
+      tools: slugs(drafts.flatMap((draft) => draft.tools)).length,
+    });
   }
   if (groups.size !== read.sources.length) throw new Error("Two proof kitchens share a kitchen id, so they would move in as one");
   manifest = read;
@@ -161,8 +165,10 @@ export async function moveInAgain(version: string, { page }: Pick<JourneyArgs, "
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** A link named exactly this, whatever its case: Kitchen names an organizer after the first spelling it meets. */
-const named = (name: string) => new RegExp(`^${escaped(name.trim().replace(/\s+/g, " "))}$`, "i");
+/** The organizers these names make in an empty kitchen, by slug, once each: Kitchen's own matching. */
+function slugs(names: string[]): string[] {
+  return planOrganizerAssignment([], names).create.map((organizer) => organizer.slug);
+}
 
 /**
  * Finds the version's sample recipe in the person's kitchen, once and under its own name, and opens
@@ -197,9 +203,9 @@ export async function inTheKitchen(version: string, { page, verifyAfterReload }:
   await chooseMenuItem(page, main.getByRole("button", { name: "Recipe actions", exact: true }), "Organize");
   await expect(page).toHaveURL(pathUrl(`${recipePath}/organize`));
   await verifyAfterReload(async () => {
-    for (const [label, names] of [["Tags", tags], ["Categories", categories], ["Tools", tools]] as const) {
+    for (const [label, segment, kindSlugs] of [["Tags", "tags", tags], ["Categories", "categories", categories], ["Tools", "tools", tools]] as const) {
       const region = main.getByRole("region", { name: `${label} on this recipe`, exact: true });
-      for (const name of names) await expect(region.getByRole("link", { name: named(name) })).toBeVisible();
+      for (const slug of kindSlugs) await expect(region.locator(`a[href="/${segment}/${encodeURIComponent(slug)}"]`)).toBeVisible();
     }
   });
   await snapshot(page, version, "4-recipe-tags");

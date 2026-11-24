@@ -75,6 +75,20 @@ describe("the move-in job store", () => {
     expect(progress?.job).not.toHaveProperty("archiveKey");
   });
 
+  it("says whether inspect chose to bring the tags, categories and tools", async () => {
+    const store = moveInJobStore(database.binding, () => clock);
+    const left = await create();
+    expect(await store.organizing(left)).toBe(false);
+    await store.updateJob(left, {}, undefined, { counts: [["tags", { found: 2, skipped: 2 }], ["tools", { found: 1, skipped: 1 }]] });
+    expect(await store.organizing(left)).toBe(false);
+    const brought = await create();
+    await store.updateJob(brought, {}, undefined, { counts: [["tags", { found: 0 }], ["categories", { found: 2 }]] });
+    expect(await store.organizing(brought)).toBe(true);
+    const none = await create();
+    await store.updateJob(none, {}, undefined, { counts: [["tags", { found: 0 }], ["recipes", { found: 3 }]] });
+    expect(await store.organizing(none)).toBe(false);
+  });
+
   it("lets one run work on a job at a time, and another take over a run that went quiet", async () => {
     const store = moveInJobStore(database.binding, () => clock);
     const id = await create();
