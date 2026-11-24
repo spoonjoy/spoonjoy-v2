@@ -264,11 +264,12 @@ async function handleCookSessionBootstrapRequest(
 const SELF_HOST_BOOT_EVENT = "self-host:boot";
 
 function finalizeResponse(
+  request: Request,
   response: Response,
   env: CloudflareEnvironment,
   nonce?: string,
 ): Response {
-  const finalized = withSecurityHeaders(response, nonce, env);
+  const finalized = withSecurityHeaders(response, nonce, env, request.url);
   const workerVersionId = env.CF_VERSION_METADATA?.id;
   if (workerVersionId) {
     finalized.headers.set("X-Spoonjoy-Worker-Version", workerVersionId);
@@ -279,7 +280,7 @@ function finalizeResponse(
 async function handleFetch(request: Request, env: CloudflareEnvironment, ctx: ExecutionContext): Promise<Response> {
   const oauthPreflight = oauthCorsPreflightResponse(request);
   if (oauthPreflight) {
-    return finalizeResponse(oauthPreflight, env);
+    return finalizeResponse(request, oauthPreflight, env);
   }
 
   const canonicalUrl =
@@ -287,23 +288,23 @@ async function handleFetch(request: Request, env: CloudflareEnvironment, ctx: Ex
     canonicalizeRequestUrlForHost(request.url, request.headers.get("Host"));
 
   if (canonicalUrl) {
-    return finalizeResponse(Response.redirect(canonicalUrl.toString(), 308), env);
+    return finalizeResponse(request, Response.redirect(canonicalUrl.toString(), 308), env);
   }
 
   try {
     const url = new URL(request.url);
     if (url.pathname.startsWith(COOK_SESSION_BOOTSTRAP_PATH)) {
-      return finalizeResponse(await handleCookSessionBootstrapRequest(request, env), env);
+      return finalizeResponse(request, await handleCookSessionBootstrapRequest(request, env), env);
     }
     if (url.pathname.startsWith(COOK_SESSION_PREFIX)) {
-      return finalizeResponse(await handleCookSessionRequest(request, env), env);
+      return finalizeResponse(request, await handleCookSessionRequest(request, env), env);
     }
     // Photos skip React Router: a list screen asks for dozens at once, and each one only needs R2
     // or the edge cache.
     const photoKey = request.method === "GET" || request.method === "HEAD" ? photoKeyFromPath(url.pathname) : null;
     // Quarantined photos (moved there by the photo sweep) are never served.
     if (photoKey && !isServablePhotoKey(photoKey)) {
-      return finalizeResponse(new Response("Not Found", { status: 404 }), env);
+      return finalizeResponse(request, new Response("Not Found", { status: 404 }), env);
     }
     if (photoKey && env.PHOTOS) {
       const response = await deliverPhoto({
@@ -313,21 +314,21 @@ async function handleFetch(request: Request, env: CloudflareEnvironment, ctx: Ex
         cache: defaultPhotoCache(),
         waitUntil: (promise) => ctx.waitUntil(promise),
       });
-      return finalizeResponse(response, env);
+      return finalizeResponse(request, response, env);
     }
 
     if (request.method === "POST" && new URL(request.url).pathname === "/mcp") {
       const response = await handleMcpRouteRequest(request, {
         cloudflare: { env, ctx },
       });
-      return finalizeResponse(response, env);
+      return finalizeResponse(request, response, env);
     }
 
     // Static assets already served the current build; a hashed asset that reaches the Worker
     // belongs to an earlier release, so serve it from the release archive before the 404 page.
     const archivedAsset = await serveReleaseAssetFallback(request, env.PHOTOS);
     if (archivedAsset) {
-      return finalizeResponse(archivedAsset, env);
+      return finalizeResponse(request, archivedAsset, env);
     }
 
     // One nonce per request: it must appear identically in the selected CSP
@@ -338,7 +339,7 @@ async function handleFetch(request: Request, env: CloudflareEnvironment, ctx: Ex
       cloudflare: { env, ctx },
       nonce,
     });
-    return finalizeResponse(response, env, nonce);
+    return finalizeResponse(request, response, env, nonce);
   } catch (error) {
     // Outer catch: errors that escaped React Router's onError (e.g. thrown
     // before the response stream started, or from a non-route boundary).
