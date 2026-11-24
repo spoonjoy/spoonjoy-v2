@@ -586,7 +586,7 @@ async function recipes(run: Run, opened: Opened, chunkSize: number, cache: RunCa
   }
   if (end < kitchen.size) return;
   const status = (await store.hasIssues(job.id)) ? "done-with-issues" : "done";
-  await store.updateJob(job.id, { status, phase: "done", cursor: null }, run.token, { events: [event("job-done", `${plural(kitchen.size, "recipe")} moved in.`)] });
+  await store.updateJob(job.id, { status, phase: "done", cursor: null, lastError: null }, run.token, { events: [event("job-done", `${plural(kitchen.size, "recipe")} moved in.`)] });
   await discard(job, ports);
 }
 
@@ -609,7 +609,8 @@ async function waitOnSource(run: Run): Promise<boolean> {
     await ports.store.updateJob(job.id, { lastError: WAITING_ON_SOURCE }, run.token);
     return false;
   }
-  if (ports.now().getTime() - Date.parse(String(current.updatedAt)) < MOVE_IN_BUSY_MAX_MS) return false;
+  // A wait whose start can't be read is taken as just begun, so it never ends the move-in early.
+  if (!(ports.now().getTime() - Date.parse(String(current.updatedAt)) >= MOVE_IN_BUSY_MAX_MS)) return false;
   await fail(run, "server-busy");
   return true;
 }

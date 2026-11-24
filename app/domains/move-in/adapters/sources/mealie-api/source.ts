@@ -74,6 +74,12 @@ export const BUSY_MAX_MS = 5 * 60_000;
 export const BUSY_DEFAULT_MS = 30_000;
 
 /** A Retry-After header, in seconds or as a date, as milliseconds from `now`, kept between BUSY_MIN_MS and BUSY_MAX_MS. */
+/**
+ * A 429: the server, or a proxy in front of it, is limiting how fast the move-in asks. Unlike a 503 that says when to
+ * come back, it is never one recipe's trouble, so the move-in waits rather than asking whether the server is up.
+ */
+class RateLimitedError extends SourceBusyError {}
+
 export function retryAfterMs(header: string | null, now: number): number {
   const value = header?.trim() ?? "";
   let ms = BUSY_DEFAULT_MS;
@@ -134,7 +140,8 @@ function client({ address, token, fetch }: MealieApiConnection) {
     // The server, or a proxy in front of it, asked the move-in to slow down: a 429, or a 503 that says when to come back.
     if (response.status === 429 || (response.status === 503 && response.headers.has("retry-after"))) {
       const wait = retryAfterMs(response.headers.get("retry-after"), Date.now());
-      throw new SourceBusyError(`the recipe server asked the move-in to wait ${Math.round(wait / 1000)} s at ${path}`, wait);
+      const Busy = response.status === 429 ? RateLimitedError : SourceBusyError;
+      throw new Busy(`the recipe server asked the move-in to wait ${Math.round(wait / 1000)} s at ${path}`, wait);
     }
     if (response.status >= 500) throw new SourceUnavailableError(`the recipe server answered ${response.status} for ${path}`);
     if (response.status !== 200) throw new AnswerError(response.status, `the recipe server answered ${response.status} for ${path}`);
@@ -157,7 +164,7 @@ function client({ address, token, fetch }: MealieApiConnection) {
      * page answers even while its database is down.
      */
     async itemOutage(error: unknown): Promise<never> {
-      if (!(error instanceof SourceUnavailableError) || error instanceof SourceBusyError) throw error;
+      if (!(error instanceof SourceUnavailableError) || error instanceof RateLimitedError) throw error;
       const answers = await request("/api/users/self", JSON_MAX_BYTES).then(
         () => true,
         (probe: unknown) => {
