@@ -1,9 +1,8 @@
-// The meal plan: a week of recipes and notes, day by day. Behind the meal-planner flag until it ships.
+// The meal plan: a week of recipes and notes, day by day.
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { data, Form as RouterForm, redirect, useActionData, useLoaderData } from "react-router";
 import type { Route } from "./+types/plan";
-import { isFlagOn } from "~/domains/platform";
 import {
   MEAL_TYPES,
   addDays,
@@ -50,9 +49,7 @@ export function meta(_args: Route.MetaArgs) {
 
 async function plannerUser(request: Request, context: Route.LoaderArgs["context"]) {
   const env = getCloudflareEnv(context);
-  const userId = await requireUserId(request, "/login", env);
-  if (!isFlagOn("meal-planner", env, userId)) throw new Response("Not found", { status: 404 });
-  return userId;
+  return requireUserId(request, "/login", env);
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {

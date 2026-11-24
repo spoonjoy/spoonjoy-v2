@@ -18,11 +18,11 @@ import { errorsFor } from "~/domains/planning";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { captureException } from "~/lib/analytics-server";
 
-const FLAGS_ON = { SPOONJOY_FLAGS: "meal-planner" };
+const ENV: Record<string, string> = {};
 let chefId: string;
 let cookie: string;
 
-function context(env: Record<string, string> | null = FLAGS_ON) {
+function context(env: Record<string, string> | null = ENV) {
   return { cloudflare: { env } } as never;
 }
 
@@ -89,8 +89,8 @@ describe("meal plan route", () => {
       });
     });
 
-    it("is not found while the meal-planner flag is off, as in production", async () => {
-      await expect(load("/plan", null)).rejects.toSatisfy((error: Response) => error.status === 404);
+    it("opens for a signed-in cook with no flag set", async () => {
+      await expect(load("/plan", null)).resolves.toMatchObject({ week: { days: expect.any(Array) } });
     });
 
     it("loads the asked week and the cook's own live recipes to plan, by title", async () => {
@@ -253,10 +253,6 @@ describe("meal plan route", () => {
       expect(answer(await act({}))).toEqual({ status: 400, data: { errors: { general: "That isn't something the plan can do." } } });
     });
 
-    it("is not found while the flag is off", async () => {
-      await expect(action({ request: post({ intent: "remove", entryId: "x" }), context: context(null), params: {} } as never)).rejects.toSatisfy((error: Response) => error.status === 404);
-    });
-
     it("keeps the form as it was and says so when the database is busy", async () => {
       vi.spyOn(db.planEntry, "create").mockRejectedValueOnce(new D1WriteUnavailableError("plan_entry.add", new Error("busy")));
       const result = answer(await act({ intent: "add-note", entryToken: "token-note-3", date: "2026-11-26", mealType: "lunch", title: "Eat out" }));
@@ -273,7 +269,7 @@ describe("meal plan route", () => {
       const waitUntil = vi.fn();
       const failure = new Error("boom");
       vi.spyOn(db.planEntry, "updateMany").mockRejectedValueOnce(failure);
-      const withTelemetry = { cloudflare: { env: { ...FLAGS_ON, POSTHOG_KEY: "phc_test" }, ctx: { waitUntil } } } as never;
+      const withTelemetry = { cloudflare: { env: { ...ENV, POSTHOG_KEY: "phc_test" }, ctx: { waitUntil } } } as never;
       await expect(action({ request: post({ intent: "remove", entryId: "x" }), context: withTelemetry, params: {} } as never)).rejects.toBe(failure);
       expect(captureException).toHaveBeenCalledWith(
         expect.objectContaining({ enabled: true }),

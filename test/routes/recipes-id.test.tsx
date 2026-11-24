@@ -4393,8 +4393,8 @@ describe("Recipes $id Route", () => {
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "Recipe actions" }));
       const items = await screen.findAllByRole("menuitem");
-      expect(items.map((item) => item.textContent)).toEqual(["Edit", "Manage covers", "Make a variation", "Log cook", "Delete"]);
-      expect(items[4]).toHaveAttribute("data-tone", "destructive");
+      expect(items.map((item) => item.textContent)).toEqual(["Edit", "Manage covers", "Make a variation", "Log cook", "Plan this meal", "Delete"]);
+      expect(items[5]).toHaveAttribute("data-tone", "destructive");
       // Make a variation opens the same confirmation the page's old button did.
       await userEvent.click(items[2]!);
       expect(await screen.findByRole("dialog", { name: 'Make a variation of "My Recipe"?' })).toBeInTheDocument();

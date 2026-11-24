@@ -164,6 +164,7 @@ describe("AppNavbar", () => {
     expect(screen.getByRole("link", { name: "My Recipes" })).toHaveAttribute("href", "/my-recipes");
     expect(screen.getByRole("link", { name: "Saved" })).toHaveAttribute("href", "/saved-recipes");
     expect(screen.getByRole("link", { name: "Cookbooks" })).toHaveAttribute("href", "/cookbooks");
+    expect(screen.getByRole("link", { name: "Plan" })).toHaveAttribute("href", "/plan");
     expect(screen.getByRole("link", { name: "Shopping List" })).toHaveAttribute("href", "/shopping-list");
     expect(screen.getByRole("link", { name: "Chefs" })).toHaveAttribute("href", "/chefs");
     expect(screen.getByRole("link", { name: "Kitchen Search" })).toHaveAttribute("href", "/search");

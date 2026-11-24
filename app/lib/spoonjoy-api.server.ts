@@ -30,7 +30,7 @@ import {
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { canRead, readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
-import { isFlagOn, likeContainsSearch, type FlagEnv } from "~/domains/platform";
+import { likeContainsSearch, type FlagEnv } from "~/domains/platform";
 import { addEntry, getWeek, parseLocalDate, prismaPlanStore, removeEntry, type PlanEntry } from "~/domains/planning";
 import { recipeVisibilityChoices } from "~/lib/recipe-visibility-choices";
 import { recipeViewerFor } from "~/lib/recipe-viewer.server";
@@ -3240,13 +3240,9 @@ const getShoppingListTool: SpoonjoyApiOperation = {
   },
 };
 
-/** The cook behind a meal plan call, refused as not found while the meal planner is off for them. */
+/** The cook behind a meal plan call. */
 async function mealPlanner(args: Record<string, unknown>, context: SpoonjoyApiContext) {
-  const owner = await getOrCreateOwner(context, requireOwnerEmail(args, context));
-  if (!isFlagOn("meal-planner", context.env, owner.id)) {
-    throw new ApiAuthError("The meal planner isn't available on this account yet.", 404);
-  }
-  return owner;
+  return getOrCreateOwner(context, requireOwnerEmail(args, context));
 }
 
 function formatPlannedMeal(entry: PlanEntry) {

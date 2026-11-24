@@ -11,7 +11,6 @@ import {
   weekdayOf,
   type PlanEntry,
 } from "~/domains/planning";
-import { FLAG_NAMES, isFlagOn } from "~/domains/platform";
 
 function entry(overrides: Partial<PlanEntry>): PlanEntry {
   return {
@@ -137,13 +136,5 @@ describe("planning week", () => {
     expect(week[0].entries.map((planned) => planned.id)).toEqual(["breakfast", "dinner-1", "dinner-1b", "dinner-2"]);
     expect(week[6].entries.map((planned) => planned.id)).toEqual(["sunday"]);
     expect(week.slice(1, 6).every((day) => day.entries.length === 0)).toBe(true);
-  });
-});
-
-describe("planning flag", () => {
-  it("hides the meal planner behind meal-planner, off in production and on in QA", () => {
-    expect(FLAG_NAMES).toContain("meal-planner");
-    expect(isFlagOn("meal-planner", {}, "user-1")).toBe(false);
-    expect(isFlagOn("meal-planner", { SPOONJOY_FLAGS: "all" }, "user-1")).toBe(true);
   });
 });

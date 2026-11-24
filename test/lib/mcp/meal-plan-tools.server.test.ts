@@ -8,9 +8,9 @@ import { addEntry, prismaPlanStore } from "~/domains/planning";
 import { cleanupDatabase } from "../../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../../utils";
 
-const FLAG_ON = { SPOONJOY_FLAGS: "meal-planner" };
+const ENV: Record<string, string> = {};
 
-async function signedIn(scopes: string[], env: Record<string, string> | null = FLAG_ON): Promise<SpoonjoyMcpContext & { userId: string }> {
+async function signedIn(scopes: string[], env: Record<string, string> | null = ENV): Promise<SpoonjoyMcpContext & { userId: string }> {
   const db = await getLocalDb();
   const user = await db.user.create({ data: createTestUser() });
   const { token } = await createApiCredential(db, user.id, "Planner", { scopes });
@@ -80,9 +80,9 @@ describe("meal plan tools", () => {
     await expect(call("get_meal_plan", {}, context)).rejects.toThrow("Missing required scope: kitchen:read");
   });
 
-  it("is not found while the meal planner is off for the caller", async () => {
+  it("answers any signed-in cook, with no flag set", async () => {
     const context = await signedIn(["kitchen:read"], {});
-    await expect(call("get_meal_plan", {}, context)).rejects.toMatchObject({ message: "The meal planner isn't available on this account yet.", status: 404 });
+    await expect(call("get_meal_plan", { week: "2026-11-25" }, context)).resolves.toMatchObject({ mealPlan: { days: expect.any(Array) } });
   });
 });
 
@@ -141,11 +141,9 @@ describe("planning and removing meals by tool", () => {
     expect(mealPlan.days[2].meals).toEqual([]);
   });
 
-  it("needs kitchen:write, and is not found while the meal planner is off for the caller", async () => {
+  it("needs kitchen:write", async () => {
     const reader = await signedIn(["kitchen:read"]);
     await expect(write("plan_meal", { date: "2026-11-25", mealType: "dinner", title: "Out" }, reader)).rejects.toThrow("Missing required scope: kitchen:write");
-    const flagOff = await signedIn(["kitchen:write"], {});
-    await expect(write("remove_meal_plan_entry", { entryId: "x" }, flagOff)).rejects.toMatchObject({ status: 404 });
   });
 });
 
@@ -158,7 +156,7 @@ describe("meal plan REST endpoints", () => {
     await cleanupDatabase();
   });
 
-  async function get(path: string, token: string, env: Record<string, string> = FLAG_ON) {
+  async function get(path: string, token: string, env: Record<string, string> = ENV) {
     const request = new UndiciRequest(`http://localhost/api/${path}`, { headers: { Authorization: `Bearer ${token}` } }) as unknown as Request;
     const splat = path.split("?")[0];
     const response = (await apiLoader({ request, params: { "*": splat }, context: { cloudflare: { env, ctx: { waitUntil: () => {} } } } } as never)) as Response;
@@ -172,7 +170,6 @@ describe("meal plan REST endpoints", () => {
     const { status, body } = await get("meal-plan?week=2026-11-26", token);
     expect({ status, error: body.error }).toEqual({ status: 200, error: undefined });
     expect(body.data?.mealPlan.weekStart).toBe("2026-11-23");
-    expect((await get("meal-plan", token, {})).status).toBe(404);
   });
 
   it("plans a meal at POST /api/meal-plan/meals and removes it at DELETE /api/meal-plan/meals/:id", async () => {
@@ -185,7 +182,7 @@ describe("meal plan REST endpoints", () => {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }) as unknown as Request;
-      const response = (await apiAction({ request, params: { "*": path }, context: { cloudflare: { env: FLAG_ON, ctx: { waitUntil: () => {} } } } } as never)) as Response;
+      const response = (await apiAction({ request, params: { "*": path }, context: { cloudflare: { env: ENV, ctx: { waitUntil: () => {} } } } } as never)) as Response;
       return { status: response.status, body: (await response.json()) as { data?: Answer } };
     };
     const planned = await send("POST", "meal-plan/meals", { date: "2026-11-25", mealType: "dinner", title: "Out" });

@@ -44,16 +44,10 @@ async function openRecipeActions() {
 describe("recipe page: plan this meal", () => {
   afterEach(() => cleanup());
 
-  it("offers a signed-in cook a way to put the recipe on their meal plan while the planner is on", async () => {
-    renderRecipe(["meal-planner"]);
-    await openRecipeActions();
-    expect(screen.getByRole("menuitem", { name: "Plan this meal" })).toHaveAttribute("href", "/plan?recipe=recipe-1");
-  });
-
-  it("leaves the planner out while its flag is off", async () => {
+  it("offers a signed-in cook a way to put the recipe on their meal plan, with no flag set", async () => {
     renderRecipe([]);
     await openRecipeActions();
-    expect(screen.queryByRole("menuitem", { name: "Plan this meal" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Plan this meal" })).toHaveAttribute("href", "/plan?recipe=recipe-1");
   });
 
   it("leaves the planner out for someone who isn't signed in", async () => {

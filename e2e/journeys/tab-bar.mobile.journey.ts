@@ -31,6 +31,7 @@ const TAB_PAGES: ReadonlyArray<readonly [path: string, currentTab: string]> = [
   ["/recipes/qa-kitchen-recipe-lemon-rice", "Recipes"],
   ["/cookbooks", "Cookbooks"],
   ["/cookbooks/qa-kitchen-cookbook-weeknight", "Cookbooks"],
+  ["/plan", "Plan"],
   ["/shopping-list", "Shopping"],
   ["/search", "Search"],
 ];
@@ -109,7 +110,7 @@ test.describe("Tab bar on iPhone", () => {
       await page.goto(path);
       await waitForHydration(page);
       await expect(tabBar, `${path}: tab bar`).toBeVisible();
-      await expect(tabBar.getByRole("link"), `${path}: the tabs, in order`).toHaveText(["Kitchen", "Recipes", "Cookbooks", "Shopping", "Search"]);
+      await expect(tabBar.getByRole("link"), `${path}: the tabs, in order`).toHaveText(["Kitchen", "Recipes", "Cookbooks", "Plan", "Shopping", "Search"]);
       await expect(tabBar.getByRole("button"), `${path}: no page actions in the tab bar`).toHaveCount(0);
       await expect(page.getByTestId("phone-brand-bar"), `${path}: no sign-up bar for a signed-in chef`).toHaveCount(0);
       await expect(tabBar.locator('[aria-current="page"]'), `${path}: one current tab`).toHaveCount(1);
@@ -120,9 +121,9 @@ test.describe("Tab bar on iPhone", () => {
       expect(await backgroundAlpha(tabList), `${path}: tab bar background alpha (0-255)`).toBe(255);
       expect(await backgroundAlpha(search), `${path}: search circle background alpha (0-255)`).toBe(255);
 
-      // The four tabs share the bar evenly.
+      // The five tabs share the bar evenly.
       const widths: number[] = [];
-      for (let index = 0; index < 4; index += 1) {
+      for (let index = 0; index < 5; index += 1) {
         widths.push((await boxOf(tabs.nth(index), `${path} tab ${index + 1}`)).width);
       }
       expect(Math.max(...widths) - Math.min(...widths), `${path}: widest tab minus narrowest tab (px)`).toBeLessThanOrEqual(1);

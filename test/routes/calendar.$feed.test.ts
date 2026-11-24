@@ -6,9 +6,9 @@ import { loader } from "~/routes/calendar.$feed";
 import { makeFeedLink, prismaFeedLinkStore, prismaPlanStore, revokeFeedLink } from "~/domains/planning";
 import { cleanupDatabase } from "../helpers/cleanup";
 
-const FLAGS_ON = { SPOONJOY_FLAGS: "meal-planner" };
+const ENV: Record<string, string> = {};
 
-function load(feed: string, env: Record<string, string> = FLAGS_ON) {
+function load(feed: string, env: Record<string, string> = ENV) {
   const request = new UndiciRequest(`http://localhost:3000/calendar/${feed}?include_notes=true`) as unknown as Request;
   return loader({ request, context: { cloudflare: { env } } as never, params: { feed } } as never);
 }
@@ -56,7 +56,7 @@ describe("calendar feed route", () => {
     expect(await status(load(`${token}.ics`))).toBe(404);
   });
 
-  it("is not found while the meal planner is off for the plan's cook", async () => {
-    expect(await status(load(`${token}.ics`, {}))).toBe(404);
+  it("serves the feed with no flag set", async () => {
+    expect(await status(load(`${token}.ics`, {}))).toBe(200);
   });
 });
