@@ -43,7 +43,9 @@
 //   deploy    deploy this build to the run's Worker with the run's secrets, retrying code 10007
 //             or the specific internal authentication server error (code 10500).
 //   verify    after deploy: the run's Worker has its secrets, its D1 has no pending migration,
-//             and the URL serves /health and a hashed asset.
+//             and the URL serves /health and every built asset. While Cloudflare keeps answering a
+//             server error for a built file, it deploys the build again under a fresh Worker name
+//             (`-r<n>`) and points the rest of the run at it.
 //   teardown  delete this run's jobs queue, Worker and D1 (always; a failure only warns, and a
 //             later sweep deletes anything older than STALE_AFTER_MS).
 //   sweep     delete run stacks older than STALE_AFTER_MS; run on a schedule as well as by each
@@ -84,7 +86,8 @@ import { QA_BASE_URL, QA_D1_DATABASE_ID, QA_D1_DATABASE_NAME } from "./script-en
 export const CANONICAL_WORKER_NAME = "spoonjoy-v2-qa";
 export const RUN_WORKER_PREFIX = "spoonjoy-v2-qa-run-";
 export const RUN_DATABASE_PREFIX = "spoonjoy-qa-run-";
-export const RUN_WORKER_PATTERN = /^spoonjoy-v2-qa-run-\d+-\d+(?:-p[2-9])?$/;
+// `-r<n>`: verify deployed the build again under a fresh name (deployFresh says why).
+export const RUN_WORKER_PATTERN = /^spoonjoy-v2-qa-run-\d+-\d+(?:-p[2-9])?(?:-r[2-9])?$/;
 export const RUN_DATABASE_PATTERN = /^spoonjoy-qa-run-\d+-\d+(?:-p[2-9])?$/;
 // Background jobs (app/domains/platform, the Jobs port) go through a Cloudflare queue bound as
 // JOBS. Shared QA has its own; each run gets one too, so a run's Worker only ever takes its own
@@ -114,6 +117,20 @@ export const READY_POLL_MS = 5_000;
 export const CLIENT_ASSETS_DIR = join("build", "client", "assets");
 export const ASSETS_READY_TIMEOUT_MS = 2 * 60_000;
 export const ASSET_FETCH_CONCURRENCY = 8;
+// Cloudflare's own static file serving has answered 500 for a few built files of a freshly
+// deployed run Worker, a different few each run, for the whole two-minute window, while it served
+// the rest (#1031: Journeys runs 45430868319, 45437129781 and 45454463278, 2026-11-24). Those
+// files were not ones wrangler skipped as "already uploaded": that count is exactly the build's
+// duplicate files (41 identical empty route modules and three other pairs), and one failing file,
+// devtools-well-known-BRs2crOX.js, is in wrangler's own list of files it uploaded. Deploying the
+// same Worker again would re-send nothing (wrangler skips every file the Worker already has), so
+// after this grace window a file still answering a server error makes verify deploy the build
+// again under a fresh Worker name, which uploads every file again, at most MAX_ASSET_REDEPLOYS
+// times. A 404 or a wrong content-type keeps the full window: a 404 has cleared on its own (#668).
+export const ASSET_SERVER_ERROR_GRACE_MS = 45_000;
+export const MAX_ASSET_REDEPLOYS = 2;
+// How much of a failing answer's body the log keeps, for a report to Cloudflare.
+const ASSET_BODY_SNIPPET_CHARS = 200;
 export const EXPECTED_ASSET_TYPES = { ".js": /javascript/, ".css": /^text\/css/ };
 // Cloudflare's API allows 1,200 requests per 5 minutes per user, shared by every concurrent run.
 // A rate-limited request backs off for up to about 4 minutes in all (each delay jittered between
@@ -728,41 +745,86 @@ export function builtAssetPaths(fs) {
   return paths;
 }
 
-async function assetProblem(fetchImpl, url, path) {
+// What Cloudflare said about a failing answer: its request id, which a report to Cloudflare names,
+// and whether its cache served it.
+function cfDetail(headers) {
+  const ray = headers?.get?.("cf-ray");
+  const cache = headers?.get?.("cf-cache-status");
+  return [`cf-ray ${ray || "none"}`, cache ? `cf-cache-status ${cache}` : ""].filter(Boolean).join(", ");
+}
+
+async function bodySnippet(response) {
   try {
-    const response = await fetchImpl(url, { redirect: "manual" });
-    if (response.status !== 200) return `${path} returned ${response.status}`;
-    const expected = EXPECTED_ASSET_TYPES[/\.[A-Za-z0-9]+$/.exec(path)[0]];
-    const type = response.headers?.get?.("content-type") ?? "";
-    if (expected && !expected.test(type)) return `${path} was served as ${type || "no content-type"}`;
-    return null;
-  } catch (error) {
-    return `${path} failed: ${error instanceof Error ? error.message : String(error)}`;
+    return (await response.text()).replace(/\s+/g, " ").trim().slice(0, ASSET_BODY_SNIPPET_CHARS);
+  } catch {
+    return "";
   }
 }
 
+// null when the file is live; otherwise what went wrong, the status (if any) and a note for the log.
+async function assetProblem(fetchImpl, url, path) {
+  try {
+    const response = await fetchImpl(url, { redirect: "manual" });
+    if (response.status !== 200) {
+      const ray = response.headers?.get?.("cf-ray");
+      return {
+        problem: `${path} returned ${response.status}${ray ? ` (cf-ray ${ray})` : ""}`,
+        status: response.status,
+        note: `${path} answered ${response.status} (${cfDetail(response.headers)}): ${await bodySnippet(response)}`,
+      };
+    }
+    const expected = EXPECTED_ASSET_TYPES[/\.[A-Za-z0-9]+$/.exec(path)[0]];
+    const type = response.headers?.get?.("content-type") ?? "";
+    if (expected && !expected.test(type)) return { problem: `${path} was served as ${type || "no content-type"}` };
+    return null;
+  } catch (error) {
+    return { problem: `${path} failed: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
+/** Thrown when built files still answer a server error after the grace window, so verify deploys again. */
+export class AssetServerErrors extends Error {}
+
+function listProblems(problems) {
+  return `${problems.slice(0, 5).map(({ problem }) => problem).join("; ")}${problems.length > 5 ? "; …" : ""}`;
+}
+
 // Polls every built asset until each returns 200 with the right content-type, re-checking only the
-// ones still missing, and fails with a clear message (not a test failure) after the bound.
-export async function waitForBuiltAssets({ fs, fetchImpl, now, sleep, baseUrl, timeoutMs = ASSETS_READY_TIMEOUT_MS }) {
+// ones still missing, and fails with a clear message (not a test failure) after the bound. Each
+// failing file's first answer is logged once, with its cf-ray and the start of its body. With
+// serverErrorGraceMs, it throws AssetServerErrors once that much time has passed while any file
+// still answers a server error.
+export async function waitForBuiltAssets({ fs, fetchImpl, now, sleep, baseUrl, log = () => {}, timeoutMs = ASSETS_READY_TIMEOUT_MS, serverErrorGraceMs }) {
   const all = builtAssetPaths(fs);
   let pending = all;
+  const noted = new Set();
   const started = now();
   for (;;) {
     const problems = [];
     for (let index = 0; index < pending.length; index += ASSET_FETCH_CONCURRENCY) {
       const batch = pending.slice(index, index + ASSET_FETCH_CONCURRENCY);
       const results = await Promise.all(batch.map((path) => assetProblem(fetchImpl, `${baseUrl}${path}`, path)));
-      results.forEach((problem, offset) => {
-        if (problem) problems.push({ path: batch[offset], problem });
+      results.forEach((result, offset) => {
+        if (result) problems.push({ path: batch[offset], ...result });
       });
     }
     if (problems.length === 0) return all.length;
+    for (const { path, note } of problems) {
+      if (note && !noted.has(path)) {
+        noted.add(path);
+        log(note);
+      }
+    }
     pending = problems.map(({ path }) => path);
-    if (now() - started >= timeoutMs) {
-      const shown = problems.slice(0, 5).map(({ problem }) => problem).join("; ");
-      throw new Error(
-        `${problems.length} of ${all.length} built assets not live on ${baseUrl} after ${Math.round(timeoutMs / 1000)} s: ${shown}${problems.length > 5 ? "; …" : ""}.`,
+    const waited = now() - started;
+    const serverErrors = problems.filter(({ status }) => status >= 500);
+    if (serverErrorGraceMs !== undefined && waited >= serverErrorGraceMs && serverErrors.length > 0) {
+      throw new AssetServerErrors(
+        `${serverErrors.length} of ${all.length} built assets still answered a server error on ${baseUrl} after ${Math.round(waited / 1000)} s: ${listProblems(serverErrors)}.`,
       );
+    }
+    if (waited >= timeoutMs) {
+      throw new Error(`${problems.length} of ${all.length} built assets not live on ${baseUrl} after ${Math.round(timeoutMs / 1000)} s: ${listProblems(problems)}.`);
     }
     await sleep(READY_POLL_MS);
   }
@@ -791,10 +853,8 @@ async function untilCloudflareKnows(task, { now, sleep, deadline, workerName }) 
   }
 }
 
-export async function verify({ env, exec, fs, fetchImpl, now, sleep, log }) {
-  requireGitHubActions(env);
-  const state = readState(fs);
-  assertWranglerIsRunScoped(fs, state);
+// Secrets set, no pending migration, and the URL serves /health, / and the hashed script / names.
+async function waitForWorker({ exec, fetchImpl, now, sleep, state }) {
   const known = { now, sleep, deadline: now() + READY_TIMEOUT_MS, workerName: state.workerName };
 
   // Right after deploy, `secret list` can also answer with an empty or partial list for a script
@@ -833,11 +893,84 @@ export async function verify({ env, exec, fs, fetchImpl, now, sleep, log }) {
     const script = await fetchImpl(`${state.baseUrl}${asset}`, { redirect: "manual" });
     return script.status === 200 ? true : `${asset} returned ${script.status}`;
   }, { now, sleep, timeoutMs: READY_TIMEOUT_MS, describe: `${state.baseUrl} did not become ready` });
+}
 
-  const served = await waitForBuiltAssets({ fs, fetchImpl, now, sleep, baseUrl: state.baseUrl });
+// The run's Worker under the name `-r<n>` gives it: same database and queue, a new URL.
+function freshWorker(env, state, ordinal) {
+  const workerName = `${runIdentity(env).workerName}-r${ordinal}`;
+  return { ...state, workerName, baseUrl: `https://${workerName}${WORKERS_DEV_SUFFIX}` };
+}
 
-  log(`${state.baseUrl} serves this build: secrets set, no pending migrations, /health and all ${served} hashed assets live.`);
-  return state;
+// Points a scoped config section at another name and URL for the run's Worker; nothing else moves.
+function renamedSection(section, fresh) {
+  const next = structuredClone(section);
+  next.name = fresh.workerName;
+  next.vars = { ...next.vars, SPOONJOY_BASE_URL: fresh.baseUrl };
+  assertOnlyIdentityChanged(section, next);
+  return next;
+}
+
+// Deploys this build again as a fresh Worker: the old one first lets go of the run's queue (a
+// queue has one consumer) and is deleted, the configs, secrets, state and GITHUB_ENV name the new
+// one, and deploy uploads every file again, since the new Worker has none.
+async function deployFresh({ env, exec, fs, sleep, log, api, state, ordinal }) {
+  const fresh = freshWorker(env, state, ordinal);
+  assertRunNames(fresh);
+  for (const queue of (await api.listQueues()).filter((entry) => entry.queue_name === state.queueName)) {
+    await detachQueueConsumers(api, queue.queue_id);
+  }
+  try {
+    await deleteTolerating404(() => api.deleteWorker(state.workerName));
+  } catch (error) {
+    log(`::warning::Could not delete ${state.workerName} before deploying again (${error.message}); teardown deletes it.`);
+  }
+
+  const wranglerConfig = readJson(fs, WRANGLER_CONFIG);
+  writeJson(fs, WRANGLER_CONFIG, { ...wranglerConfig, env: { ...wranglerConfig.env, qa: renamedSection(wranglerConfig.env.qa, fresh) } });
+  writeJson(fs, GENERATED_BUILD_CONFIG, renamedSection(readJson(fs, GENERATED_BUILD_CONFIG), fresh));
+  writeJson(fs, SECRETS_FILE, { ...readJson(fs, SECRETS_FILE), VAPID_SUBJECT: fresh.baseUrl }, 0o600);
+  const next = { ...fresh, retiredWorkers: [...(state.retiredWorkers ?? []), state.workerName] };
+  writeJson(fs, STATE_FILE, next);
+  if (env.GITHUB_ENV) {
+    fs.appendFile(env.GITHUB_ENV, `SPOONJOY_JOURNEYS_BASE_URL=${fresh.baseUrl}\nSPOONJOY_QA_RUN_WORKER=${fresh.workerName}\n`);
+  }
+  await deploy({ env, exec, fs, sleep, log });
+  return next;
+}
+
+export async function verify({ env, exec, fs, fetchImpl, now, sleep, log, api }) {
+  requireGitHubActions(env);
+  let state = readState(fs);
+  for (let redeploys = 0; ; redeploys += 1) {
+    assertWranglerIsRunScoped(fs, state);
+    await waitForWorker({ exec, fetchImpl, now, sleep, state });
+    let served;
+    try {
+      served = await waitForBuiltAssets({
+        fs,
+        fetchImpl,
+        now,
+        sleep,
+        log,
+        baseUrl: state.baseUrl,
+        serverErrorGraceMs: redeploys < MAX_ASSET_REDEPLOYS ? ASSET_SERVER_ERROR_GRACE_MS : undefined,
+      });
+    } catch (error) {
+      if (redeploys > 0 && !(error instanceof AssetServerErrors)) {
+        throw new Error(`Setup error, not a test failure: built files still not served after ${redeploys} fresh deploys of this build: ${error.message}`);
+      }
+      if (!(error instanceof AssetServerErrors)) throw error;
+      const ordinal = redeploys + 2;
+      log(
+        `::warning::Cloudflare kept answering a server error for built files of ${state.workerName}: ${error.message} ` +
+          `Deploying this build again as ${freshWorker(env, state, ordinal).workerName}, which uploads every file again.`,
+      );
+      state = await deployFresh({ env, exec, fs, sleep, log, api, state, ordinal });
+      continue;
+    }
+    log(`${state.baseUrl} serves this build: secrets set, no pending migrations, /health and all ${served} hashed assets live.`);
+    return state;
+  }
 }
 
 // The run's database id: from the state prepare wrote, or, if prepare failed before writing it,
@@ -848,6 +981,21 @@ async function runDatabaseIds(fs, api, identity) {
     if (state.databaseName === identity.databaseName) return [state.databaseId];
   }
   return (await api.listDatabases()).filter((database) => database.name === identity.databaseName).map((database) => database.uuid);
+}
+
+// This run's Worker names: the one the state names, then those verify replaced, each only if it is
+// this run's own Worker or a fresh-name deploy of it; with no such state, the plain name.
+function runWorkerNames(fs, identity) {
+  const ours = (name) => typeof name === "string" && RUN_WORKER_PATTERN.test(name) && (name === identity.workerName || name.startsWith(`${identity.workerName}-r`));
+  let state = {};
+  try {
+    if (fs.exists(STATE_FILE)) state = readJson(fs, STATE_FILE);
+  } catch {
+    state = {};
+  }
+  const current = ours(state.workerName) ? state.workerName : identity.workerName;
+  const retired = (Array.isArray(state.retiredWorkers) ? state.retiredWorkers : []).filter((name) => ours(name) && name !== current);
+  return [current, ...new Set(retired)];
 }
 
 export async function teardown({ env, fs, api, log }) {
@@ -866,12 +1014,21 @@ export async function teardown({ env, fs, api, log }) {
   } catch (error) {
     failures.push(error.message);
   }
+  // The Worker verify last deployed, then any it replaced: only names of this run's own Worker.
+  const [current, ...retired] = runWorkerNames(fs, identity);
   try {
-    const deleted = await deleteTolerating404(() => api.deleteWorker(identity.workerName));
-    if (deleted) log(`Deleted QA run Worker ${identity.workerName}.`);
-    else warnings.push(`no Worker named ${identity.workerName} existed`);
+    const deleted = await deleteTolerating404(() => api.deleteWorker(current));
+    if (deleted) log(`Deleted QA run Worker ${current}.`);
+    else warnings.push(`no Worker named ${current} existed`);
   } catch (error) {
     failures.push(error.message);
+  }
+  for (const name of retired) {
+    try {
+      if (await deleteTolerating404(() => api.deleteWorker(name))) log(`Deleted QA run Worker ${name}.`);
+    } catch (error) {
+      failures.push(error.message);
+    }
   }
   for (const queue of queues) {
     try {
@@ -941,7 +1098,7 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   const api = () => deps.api ?? createCloudflareApi({ env, fetchImpl, sleep });
   if (command === "prepare") return prepare({ env, fs, api: api(), now, log, secrets });
   if (command === "deploy") return deploy({ env, exec, fs, sleep, log });
-  if (command === "verify") return verify({ env, exec, fs, fetchImpl, now, sleep, log });
+  if (command === "verify") return verify({ env, exec, fs, fetchImpl, now, sleep, log, api: api() });
   if (command === "teardown") return teardown({ env, fs, api: api(), log });
   if (command === "sweep") return sweep({ api: api(), now, log });
   if (command === "shared-queue") return ensureSharedQueue({ env, api: api(), log });

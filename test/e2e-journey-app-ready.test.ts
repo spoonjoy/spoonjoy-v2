@@ -295,6 +295,24 @@ describe("answerStaticAsset", () => {
     expect((assets.fulfill.mock.calls[0] as unknown as [{ response: { status(): number } }])[0].response.status()).toBe(200);
   });
 
+  it("asks again on the same schedule when a file this run built answers 500 (#1031)", async () => {
+    const assets = route(500, 500, 200);
+    const wait = vi.fn(async () => undefined);
+    const onRetry = vi.fn();
+
+    await answerStaticAsset(assets as never, wait, onRetry, () => true, () => undefined);
+
+    expect(assets.fetch).toHaveBeenCalledTimes(3);
+    expect(wait.mock.calls.map(([ms]) => ms)).toEqual(BUILT_FILE_404_RETRY_DELAYS_MS.slice(0, 2));
+    expect(onRetry.mock.calls).toEqual([["/assets/heading-BIJmUf4w.js", 500, 2, "ray1-IAD", 6], ["/assets/heading-BIJmUf4w.js", 500, 3, "ray2-IAD", 6]]);
+    expect((assets.fulfill.mock.calls[0] as unknown as [{ response: { status(): number } }])[0].response.status()).toBe(200);
+
+    const exhausted = route(500, 500, 500, 500, 500, 500, 200);
+    await answerStaticAsset(exhausted as never, async () => undefined, () => undefined, () => true, () => undefined);
+    expect(exhausted.fetch).toHaveBeenCalledTimes(6);
+    expect((exhausted.fulfill.mock.calls[0] as unknown as [{ response: { status(): number } }])[0].response.status()).toBe(500);
+  });
+
   it("hands the page a built file's 404 after six tries, waiting 250 ms, 1 s, 4 s, 15 s and 30 s, instead of asking a seventh time", async () => {
     const assets = route(404, 404, 404, 404, 404, 404, 200);
     const wait = vi.fn(async () => undefined);

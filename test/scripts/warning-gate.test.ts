@@ -392,6 +392,10 @@ describe("warning gate", () => {
       assetRecoveredNote("/assets/button-CXqvcQew.js", 404, 6, "none", 6),
       assetRetryNote("/assets/button-CXqvcQew.js", 404, 2, "8f1e2d3c4b5a6978-IAD, cf-cache-status HIT, age 42", 6),
       assetRetryNote("/assets/button-CXqvcQew.js", 404, 3, "8f1e2d3c4b5a6978-IAD, cf-cache-status NONE/UNKNOWN", 6),
+      // A built file Cloudflare answered 500 for after verify saw it served (#1031).
+      assetRetryNote("/assets/useControlled-C35sufZN.js", 500, 2, "8f1e2d3c4b5a6979-IAD", 6),
+      assetRetryNote("/assets/useControlled-C35sufZN.js", 500, 6, "none", 6),
+      assetRecoveredNote("/assets/useControlled-C35sufZN.js", 500, 6, "none", 6),
     ];
 
     it.each(notes)("tolerates %s", (line) => {
@@ -408,6 +412,7 @@ describe("warning gate", () => {
       ["a last answer on the first try", assetRecoveredNote("/assets/a.js", 200, 1)],
       ["a 502 asked a fourth time", assetRetryNote("/assets/a.js", 502, 4, "none", 6)],
       ["a built file's 404 asked a seventh time", assetRetryNote("/assets/a.js", 404, 7, "none", 7)],
+      ["a built file's 500 asked a seventh time", assetRetryNote("/assets/a.js", 500, 7, "none", 7)],
       ["a last answer for a file outside the built files", assetRecoveredNote("/photos/a.jpg", 200, 2)],
       ["extra text after a note", `${assetRetryNote("/assets/a.js", 502, 2)} and a page error`],
       ["another note from the journeys", "Journeys: the page never hydrated"],
