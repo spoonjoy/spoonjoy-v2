@@ -129,6 +129,8 @@ function outboundInit(request) {
   return { method: request.method, headers, body: request.body, duplex: "half", redirect: request.redirect };
 }
 
+const JOBS_QUEUE = "spoonjoy-jobs";
+
 export function miniflareOptions({ built, env, settings, sessionSecret, pushKeys, version, serverAssetFiles, outboundFetch, hostService }) {
   const { appDir, dataDir, port } = settings;
   const serverDir = path.join(appDir, "build/server");
@@ -147,6 +149,12 @@ export function miniflareOptions({ built, env, settings, sessionSecret, pushKeys
     d1Databases: { DB: "spoonjoy" },
     r2Buckets: { PHOTOS: "spoonjoy-photos" },
     durableObjects: { COOK_SESSIONS: { className: "CookSession", useSQLite: true } },
+    // Platform jobs (app/domains/platform/ports/jobs.ts) on an in-process queue that delivers to the
+    // Worker's queue() handler, one job at a time, as the JOBS queue does on spoonjoy.app. The queue
+    // lives in memory: a job waiting when the server stops is dropped, and its key in D1 can be
+    // claimed again a day later.
+    queueProducers: { JOBS: { queueName: JOBS_QUEUE } },
+    queueConsumers: { [JOBS_QUEUE]: { maxBatchSize: 1, maxRetries: 100 } },
     ratelimits: selfHostRateLimits(built, env),
     assets: { directory: path.join(appDir, "build/client"), routerConfig: { has_user_worker: true } },
     defaultPersistRoot: dataDir,

@@ -223,6 +223,11 @@ describe("miniflareOptions", () => {
     });
   });
 
+  it("delivers platform jobs on a JOBS queue to the Worker, one at a time, retried as on spoonjoy.app", () => {
+    expect(options.queueProducers).toEqual({ JOBS: { queueName: "spoonjoy-jobs" } });
+    expect(options.queueConsumers).toEqual({ "spoonjoy-jobs": { maxBatchSize: 1, maxRetries: 100 } });
+  });
+
   it("runs the build at its own compatibility date and flags, and serves its client assets", () => {
     expect(options.compatibilityDate).toBe("2024-12-01");
     expect(options.compatibilityFlags).toEqual(["nodejs_compat"]);
