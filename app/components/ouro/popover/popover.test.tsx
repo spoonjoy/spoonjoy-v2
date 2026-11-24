@@ -317,6 +317,20 @@ describe("Popover modal", () => {
     await expect.poll(locked).toBe(false);
   });
 
+  it("takes the page behind out of the accessibility tree while open, so a role query finds only the popover, and gives it back on close", async () => {
+    const outside = () => page.getByRole("button", { name: "Outside" }).query();
+    const button = await openBeside(() => {});
+    expect(outside()).toBeNull();
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => popup()).toBeNull();
+    await expect.poll(outside).toBe(button);
+  });
+
+  it("leaves the page behind in the accessibility tree with modal={false}", async () => {
+    await openBeside(() => {}, { modal: false });
+    expect(page.getByRole("button", { name: "Outside" }).query()).not.toBeNull();
+  });
+
   it("closes on a right-click outside, with no menu of the browser's", async () => {
     const button = await openBeside(() => {});
     const shown: boolean[] = [];
