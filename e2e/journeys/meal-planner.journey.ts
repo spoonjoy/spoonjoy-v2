@@ -1,12 +1,13 @@
-// Meal planner on both devices, as scratch user 9 (AGENTS.md's scratch index table): open the week, plan another
-// chef's seeded recipe at twice its size from the page a recipe links to, add a note, put the week on the shopping list
-// (the salmon's ingredients at twice their amounts), and remove the note; each change survives a reload. The week is a fixed one far from today, so the run's date never moves the days.
+// Meal planner on both devices, as scratch user 9 (AGENTS.md's scratch index table): open the week from the page a
+// recipe links to, plan that chef's seeded recipe at twice its size by pressing an empty day, add a note from another
+// day's Add, put the week on the shopping list (the salmon's ingredients at twice their amounts), and remove the note;
+// each change survives a reload. The week is a fixed one far from today, so the run's date never moves the days.
 //
 // A cook has one plan, and the two device projects run at the same time, so each device signs in as its own account:
 // scratch 9's base account on iPhone, its desktop twin on desktop Chrome (support/personas.ts's
 // scratchStorageStateForProject). Each device owns its whole plan, so the test asserts on the week's full contents.
 import { test, expect } from "./support/journey";
-import type { Page } from "@playwright/test";
+import type { Locator, Page, TestInfo } from "@playwright/test";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { personaStorageStatePath, scratchStorageStateForProject } from "./support/personas";
 
@@ -18,12 +19,14 @@ function day(page: Page, name: string) {
   return page.getByRole("region", { name, exact: true });
 }
 
-function recipeForm(page: Page) {
-  return page.getByRole("region", { name: "Plan a recipe", exact: true });
+function addSheet(page: Page, name: string) {
+  return page.getByRole("dialog", { name: `Add to ${name}`, exact: true });
 }
 
-function noteForm(page: Page) {
-  return page.getByRole("region", { name: "Add a note", exact: true });
+/** Attaches a screenshot of one element, scrolled into view first, so the phone's tab bar never covers it. */
+async function attachElement(testInfo: TestInfo, name: string, element: Locator) {
+  await element.scrollIntoViewIfNeeded();
+  await testInfo.attach(name, { body: await element.screenshot({ animations: "disabled" }), contentType: "image/png" });
 }
 
 test.describe("Meal planner", () => {
@@ -35,29 +38,46 @@ test.describe("Meal planner", () => {
 
     await page.goto(PLAN_SALMON);
     await waitForHydration(page);
+    // Opened from a recipe's link, the week opens its first day's sheet on that recipe; close it to pick the day.
+    const mondaySheet = addSheet(page, "Monday, Mar 1");
+    await expect(mondaySheet.getByRole("combobox", { name: "Recipe", exact: true })).toHaveValue(SALMON.id);
+    await mondaySheet.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(mondaySheet).toBeHidden();
     await expect(page.getByRole("heading", { level: 1, name: "Week of Mar 1", exact: true })).toBeVisible();
-    await expect(day(page, "Monday, Mar 1").getByText("Nothing planned yet.", { exact: true })).toBeVisible();
     await expectAccessible();
 
-    // The recipe the page was opened for is chosen; plan it for Tuesday's dinner at twice its size.
-    await expect(recipeForm(page).getByRole("combobox", { name: "Recipe", exact: true })).toHaveValue(SALMON.id);
-    await recipeForm(page).getByRole("combobox", { name: "Day", exact: true }).selectOption({ label: "Tuesday, Mar 2" });
-    await recipeForm(page).getByRole("combobox", { name: "Meal", exact: true }).selectOption({ label: "Dinner" });
-    await recipeForm(page).getByRole("textbox", { name: "Scale", exact: true }).fill("2");
-    await recipeForm(page).getByRole("button", { name: "Add to plan", exact: true }).click();
+    // An empty day is the way to plan it: no "nothing planned" line, just its button.
+    const planTuesday = tuesday.getByRole("button", { name: "Plan a meal for Tuesday", exact: true });
+    await expect(page.getByText("Nothing planned yet.", { exact: true })).toHaveCount(0);
+    await attachElement(testInfo, "meal-planner-empty-day", tuesday);
+    await planTuesday.click();
+    const tuesdaySheet = addSheet(page, "Tuesday, Mar 2");
+    await expect(tuesdaySheet.getByRole("combobox", { name: "Recipe", exact: true })).toHaveValue(SALMON.id);
+    await tuesdaySheet.getByRole("combobox", { name: "Meal", exact: true }).selectOption({ label: "Dinner" });
+    await tuesdaySheet.getByRole("textbox", { name: "Scale", exact: true }).fill("2");
+    await expectAccessible();
+    await attachElement(testInfo, "meal-planner-day-sheet-recipe", tuesdaySheet);
+    await tuesdaySheet.getByRole("button", { name: "Add to plan", exact: true }).click();
+    await expect(tuesdaySheet).toBeHidden();
     await expect(page).toHaveURL(pathUrl(`/plan?week=2027-03-02`));
     const salmon = tuesday.getByRole("link", { name: new RegExp(`^${SALMON.title}`) });
     await expect(salmon).toHaveAttribute("href", `/recipes/${SALMON.id}?scale=2`);
     await expect(tuesday.getByText("Dinner · 2× the recipe", { exact: true })).toBeVisible();
+    await expect(planTuesday).toHaveCount(0);
 
-    // A note for Thursday's lunch.
-    await noteForm(page).getByRole("combobox", { name: "Day", exact: true }).selectOption({ label: "Thursday, Mar 4" });
-    await noteForm(page).getByRole("combobox", { name: "Meal", exact: true }).selectOption({ label: "Lunch" });
-    await noteForm(page).getByRole("textbox", { name: "Title", exact: true }).fill("Eat out");
-    await noteForm(page).getByRole("textbox", { name: "Note", exact: true }).fill("Tacos on Main Street");
-    await noteForm(page).getByRole("button", { name: "Add note", exact: true }).click();
+    // A note for Thursday's lunch, from the day's own Add.
+    await thursday.getByRole("button", { name: "Add to Thursday", exact: true }).click();
+    const thursdaySheet = addSheet(page, "Thursday, Mar 4");
+    await thursdaySheet.getByRole("radio", { name: "Note", exact: true }).click();
+    await thursdaySheet.getByRole("combobox", { name: "Meal", exact: true }).selectOption({ label: "Lunch" });
+    await thursdaySheet.getByRole("textbox", { name: "Title", exact: true }).fill("Eat out");
+    await thursdaySheet.getByRole("textbox", { name: "Note", exact: true }).fill("Tacos on Main Street");
+    await attachElement(testInfo, "meal-planner-day-sheet-note", thursdaySheet);
+    await thursdaySheet.getByRole("button", { name: "Add note", exact: true }).click();
+    await expect(thursdaySheet).toBeHidden();
     await expect(thursday.getByText("Eat out", { exact: true })).toBeVisible();
     await expect(thursday.getByText("Lunch · Tacos on Main Street", { exact: true })).toBeVisible();
+    await attachElement(testInfo, "meal-planner-day-with-meals", tuesday);
 
     await verifyAfterReload(async () => {
       await expect(salmon).toBeVisible();
@@ -86,9 +106,9 @@ test.describe("Meal planner", () => {
 
     // Remove the note; the recipe stays.
     await thursday.getByRole("button", { name: "Remove Eat out from Thursday", exact: true }).click();
-    await expect(thursday.getByText("Nothing planned yet.", { exact: true })).toBeVisible();
+    await expect(thursday.getByRole("button", { name: "Plan a meal for Thursday", exact: true })).toBeVisible();
     await verifyAfterReload(async () => {
-      await expect(thursday.getByText("Nothing planned yet.", { exact: true })).toBeVisible();
+      await expect(thursday.getByRole("button", { name: "Plan a meal for Thursday", exact: true })).toBeVisible();
       await expect(salmon).toBeVisible();
     });
   });
@@ -99,7 +119,8 @@ test.describe("Meal planner", () => {
     test("the recipe picker offers the chef's own recipes and the ones saved in their cookbooks", async ({ page, expectAccessible }) => {
       await page.goto(`/plan?week=${WEEK}`);
       await waitForHydration(page);
-      const picker = recipeForm(page).getByRole("combobox", { name: "Recipe", exact: true });
+      await day(page, "Monday, Mar 1").getByRole("button", { name: "Add to Monday", exact: true }).click();
+      const picker = addSheet(page, "Monday, Mar 1").getByRole("combobox", { name: "Recipe", exact: true });
       // Lemon Herb Rice is the chef's own; Saffron Risotto is the friend's, saved in the chef's Weeknight Dinners.
       await expect(picker.getByRole("option", { name: "Lemon Herb Rice", exact: true })).toBeAttached();
       await expect(picker.getByRole("option", { name: "Saffron Risotto", exact: true })).toBeAttached();

@@ -1,4 +1,6 @@
 // The meal plan: a week of recipes and notes, day by day. Behind the meal-planner flag until it ships.
+import { useState } from "react";
+import { Plus } from "lucide-react";
 import { data, Form as RouterForm, redirect, useActionData, useLoaderData } from "react-router";
 import type { Route } from "./+types/plan";
 import { isFlagOn } from "~/domains/platform";
@@ -33,6 +35,8 @@ import { ItemGroup } from "~/components/ouro/item/item-group";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { NumberField } from "~/components/ouro/number-field/number-field";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
+import { SegmentedControl } from "~/components/ouro/segmented-control/segmented-control";
+import { Sheet } from "~/components/ouro/sheet/sheet";
 import { SectionHeader } from "~/components/ouro/section-header/section-header";
 import { Text } from "~/components/ouro/text/text";
 import { TextField } from "~/components/ouro/text-field/text-field";
@@ -184,13 +188,30 @@ function RemoveEntry({ entry, weekday }: { entry: PlanEntry; weekday: string }) 
   );
 }
 
-function DaySection({ day, today, lastMade }: { day: PlanDay; today: string; lastMade: Record<string, string> }) {
+function DaySection({ day, today, lastMade, onAdd }: { day: PlanDay; today: string; lastMade: Record<string, string>; onAdd: (date: string) => void }) {
   const heading = dayHeading.format(utc(day.date));
   const weekday = weekdayName.format(utc(day.date));
   return (
     <section aria-label={heading}>
-      <SectionHeader title={heading} meta={day.date === today ? "Today" : undefined} />
-      <ItemGroup variant="divided" aria-label={`${weekday}'s meals`} empty={<Text tone="muted">Nothing planned yet.</Text>}>
+      <SectionHeader
+        title={heading}
+        meta={day.date === today ? "Today" : undefined}
+        actions={
+          <Button variant="plain" size="sm" startIcon={Plus} aria-label={`Add to ${weekday}`} onClick={() => onAdd(day.date)}>
+            Add
+          </Button>
+        }
+      />
+      <ItemGroup
+        variant="divided"
+        aria-label={`${weekday}'s meals`}
+        // An empty day is itself the way to plan it.
+        empty={
+          <Button variant="outline" tone="secondary" fullWidth startIcon={Plus} aria-label={`Plan a meal for ${weekday}`} onClick={() => onAdd(day.date)}>
+            Plan a meal
+          </Button>
+        }
+      >
         {day.entries.map((entry) => {
           const row = { title: entryTitle(entry), description: entryDescription(entry, entry.recipeId ? lastMade[entry.recipeId] : undefined, today), actions: <RemoveEntry entry={entry} weekday={weekday} /> };
           return entry.recipeId ? <Item key={entry.id} href={recipeHref(entry.recipeId, entry.scaleFactor)} {...row} /> : <Item key={entry.id} {...row} />;
@@ -200,16 +221,64 @@ function DaySection({ day, today, lastMade }: { day: PlanDay; today: string; las
   );
 }
 
-function DayAndMeal({ days, defaultDay }: { days: PlanDay[]; defaultDay: string }) {
+type Adding = { date: string; kind: "recipe" | "note"; formKey: string };
+
+const ADD_KINDS = [
+  { value: "recipe", label: "Recipe" },
+  { value: "note", label: "Note" },
+] as const;
+
+type SheetProps = {
+  recipes: ReadonlyArray<{ id: string; title: string }>;
+  chosenRecipeId: string | null;
+  answer: PlanActionAnswer | undefined;
+};
+
+/** The sheet a day's Add opens: a recipe or a note for that day, on one form or the other. */
+function AddSheet({ adding, onChange, onClose, ...forms }: SheetProps & { adding: Adding | null; onChange: (adding: Adding) => void; onClose: () => void }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <NativeSelect
-        label="Day"
-        name="date"
-        defaultValue={defaultDay}
-        options={days.map((day) => ({ value: day.date, label: dayHeading.format(utc(day.date)) }))}
-      />
-      <NativeSelect label="Meal" name="mealType" defaultValue="dinner" options={MEAL_TYPES.map((type) => ({ value: type.id, label: type.label }))} />
+    <Sheet open={adding !== null} onOpenChange={onClose} title={adding ? `Add to ${dayHeading.format(utc(adding.date))}` : "Add a meal"} className="mx-auto max-w-lg">
+      {adding ? <AddForms adding={adding} onChange={onChange} {...forms} /> : null}
+    </Sheet>
+  );
+}
+
+function AddForms({ adding, onChange, recipes, chosenRecipeId, answer }: SheetProps & { adding: Adding; onChange: (adding: Adding) => void }) {
+  const recipeErrors = useFormErrors(errorsFor(answer, "add-recipe"), undefined, answer);
+  const noteErrors = useFormErrors(errorsFor(answer, "add-note"), undefined, answer);
+  const [recipeToken] = useWriteToken();
+  const [noteToken] = useWriteToken();
+  const { date, formKey } = adding;
+  const mealType = <NativeSelect label="Meal" name="mealType" defaultValue="dinner" options={MEAL_TYPES.map((type) => ({ value: type.id, label: type.label }))} />;
+
+  return (
+    <div className="grid gap-6">
+      <SegmentedControl label="Add" hideLabel fullWidth items={ADD_KINDS} value={adding.kind} onValueChange={(kind) => onChange({ ...adding, kind: kind as Adding["kind"] })} />
+      {adding.kind === "note" ? (
+        <Form key={`note-${date}-${formKey}`} method="post" errors={noteErrors} render={<RouterForm />} className="gap-4">
+          <input type="hidden" name="intent" value="add-note" />
+          <input type="hidden" name="entryToken" value={`${noteToken}-${formKey}`} />
+          <input type="hidden" name="date" value={date} />
+          {mealType}
+          <TextField label="Title" name="title" required placeholder="Eat out, leftovers, pizza night" />
+          <TextField label="Note" name="note" placeholder="Optional" />
+          <Button type="submit">Add note</Button>
+        </Form>
+      ) : recipes.length > 0 ? (
+        <Form key={`recipe-${date}-${formKey}`} method="post" errors={recipeErrors} render={<RouterForm />} className="gap-4">
+          <input type="hidden" name="intent" value="add-recipe" />
+          <input type="hidden" name="entryToken" value={`${recipeToken}-${formKey}`} />
+          <input type="hidden" name="date" value={date} />
+          {mealType}
+          <NativeSelect label="Recipe" name="recipeId" defaultValue={chosenRecipeId ?? undefined} options={recipes.map((recipe) => ({ value: recipe.id, label: recipe.title }))} />
+          <NumberField label="Scale" name="scaleFactor" defaultValue={1} min={0.25} max={50} step={0.25} description="1 cooks the recipe as written; 2 doubles it." />
+          <Button type="submit">Add to plan</Button>
+        </Form>
+      ) : (
+        <Text tone="muted">
+          Your recipes and the ones you save to a cookbook show up here to plan. <Button href="/recipes/new" variant="plain" size="inline">Write a recipe</Button>
+        </Text>
+      )}
     </div>
   );
 }
@@ -236,14 +305,15 @@ export function WeekListAnswer({ answer }: { answer: PlanActionAnswer }) {
 export default function PlanPage() {
   const { week, recipes, chosenRecipeId } = useLoaderData<typeof loader>();
   const answer = useActionData<PlanActionAnswer>();
-  const recipeErrors = useFormErrors(errorsFor(answer, "add-recipe"), undefined, answer);
-  const noteErrors = useFormErrors(errorsFor(answer, "add-note"), undefined, answer);
-  const [recipeToken] = useWriteToken();
-  const [noteToken] = useWriteToken();
   const [listToken] = useWriteToken();
   const entryCount = week.days.reduce((count, day) => count + day.entries.length, 0);
+  // A new key after each add or remove, so a sheet left from the last add closes and its form starts fresh.
   const formKey = `${week.start}-${entryCount}`;
   const defaultDay = week.days.some((day) => day.date === week.today) ? week.today : week.start;
+  const firstKind = recipes.length > 0 ? "recipe" : "note";
+  // A recipe's "Plan this meal" link opens the sheet on that recipe.
+  const [adding, setAdding] = useState<Adding | null>(chosenRecipeId ? { date: defaultDay, kind: "recipe", formKey } : null);
+  const open = adding?.formKey === formKey ? adding : null;
 
   return (
     <CookbookPage>
@@ -268,45 +338,20 @@ export default function PlanPage() {
         <WeekListAnswer answer={answer} />
       </PageHeader>
 
-      <div className="mt-6 grid gap-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="grid gap-8 md:grid-cols-2">
-          {week.days.map((day) => (
-            <DaySection key={day.date} day={day} today={week.today} lastMade={week.lastMade} />
-          ))}
-        </div>
-
-        <div className="grid content-start gap-10">
-          <section aria-label="Plan a recipe">
-            <SectionHeader title="Plan a recipe" />
-            {recipes.length > 0 ? (
-              <Form key={`recipe-${formKey}`} method="post" errors={recipeErrors} render={<RouterForm />} className="gap-4">
-                <input type="hidden" name="intent" value="add-recipe" />
-                <input type="hidden" name="entryToken" value={`${recipeToken}-${formKey}`} />
-                <DayAndMeal days={week.days} defaultDay={defaultDay} />
-                <NativeSelect label="Recipe" name="recipeId" defaultValue={chosenRecipeId ?? undefined} options={recipes.map((recipe) => ({ value: recipe.id, label: recipe.title }))} />
-                <NumberField label="Scale" name="scaleFactor" defaultValue={1} min={0.25} max={50} step={0.25} description="1 cooks the recipe as written; 2 doubles it." />
-                <Button type="submit">Add to plan</Button>
-              </Form>
-            ) : (
-              <Text tone="muted">
-                Your recipes and the ones you save to a cookbook show up here to plan. <Button href="/recipes/new" variant="plain" size="inline">Write a recipe</Button>
-              </Text>
-            )}
-          </section>
-
-          <section aria-label="Add a note">
-            <SectionHeader title="Add a note" />
-            <Form key={`note-${formKey}`} method="post" errors={noteErrors} render={<RouterForm />} className="gap-4">
-              <input type="hidden" name="intent" value="add-note" />
-              <input type="hidden" name="entryToken" value={`${noteToken}-${formKey}`} />
-              <DayAndMeal days={week.days} defaultDay={defaultDay} />
-              <TextField label="Title" name="title" required placeholder="Eat out, leftovers, pizza night" />
-              <TextField label="Note" name="note" placeholder="Optional" />
-              <Button type="submit">Add note</Button>
-            </Form>
-          </section>
-        </div>
+      <div className="mt-6 grid gap-8 md:grid-cols-2 xl:grid-cols-3">
+        {week.days.map((day) => (
+          <DaySection key={day.date} day={day} today={week.today} lastMade={week.lastMade} onAdd={(date) => setAdding({ date, kind: firstKind, formKey })} />
+        ))}
       </div>
+
+      <AddSheet
+        adding={open}
+        onChange={setAdding}
+        onClose={() => setAdding(null)}
+        recipes={recipes}
+        chosenRecipeId={chosenRecipeId}
+        answer={answer}
+      />
     </CookbookPage>
   );
 }
