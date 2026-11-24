@@ -35,6 +35,14 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in main",
+          "count": 1
+        },
+        {
           "identity": "slider \"Zoom\" [slider/thumb] in group \"Zoom\"",
           "count": 1
         }
@@ -94,6 +102,14 @@
         },
         {
           "identity": "link \"What gets deleted\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Household\" [radio-group/circle] in main",
           "count": 1
         },
         {
@@ -188,6 +204,14 @@
         },
         {
           "identity": "link \"What gets deleted\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Household\" [radio-group/circle] in main",
           "count": 1
         },
         {
@@ -1921,6 +1945,14 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Household\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Only me\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
@@ -1948,6 +1980,14 @@
         },
         {
           "identity": "button \"Confirm\" [confirm-dialog/confirm] in alertdialog \"Delete step\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
           "count": 1
         }
       ]
@@ -2073,11 +2113,19 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
           "identity": "radio \"From a photo\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Household\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
         {
@@ -2143,11 +2191,19 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
           "identity": "radio \"From a photo\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Household\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
         {
@@ -2205,11 +2261,19 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
           "identity": "radio \"From a photo\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Household\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
         {
@@ -4327,6 +4391,14 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in main",
+          "count": 1
+        },
+        {
           "identity": "slider \"Zoom\" [slider/thumb] in group \"Zoom\"",
           "count": 1
         }
@@ -4386,6 +4458,14 @@
         },
         {
           "identity": "link \"What gets deleted\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Household\" [radio-group/circle] in main",
           "count": 1
         },
         {
@@ -4460,6 +4540,14 @@
         },
         {
           "identity": "link \"What gets deleted\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Household\" [radio-group/circle] in main",
           "count": 1
         },
         {
@@ -6201,6 +6289,14 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Household\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Only me\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
@@ -6228,6 +6324,14 @@
         },
         {
           "identity": "button \"Confirm\" [confirm-dialog/confirm] in alertdialog \"Delete step\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/circle] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
           "count": 1
         }
       ]
@@ -6353,11 +6457,19 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
           "identity": "radio \"From a photo\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Household\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
         {
@@ -6423,11 +6535,19 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
           "identity": "radio \"From a photo\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Household\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
         {
@@ -6485,11 +6605,19 @@
           "count": 1
         },
         {
+          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
           "identity": "radio \"From a photo\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Household\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
         {
