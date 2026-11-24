@@ -9,6 +9,7 @@ import { defineJob, type JobHandler, type Jobs } from "~/domains/platform";
 import { FINISHED, runMoveInSegment, type MoveInJob, type MoveInStatus } from "../../application/run-move-in";
 import { readMoveInPosition } from "../storage/job-store.server";
 import { moveInPorts, type MoveInEnv } from "./move-in-ports.server";
+import { moveInSegmentLine, timeMoveInPorts } from "./move-in-timing.server";
 
 /** How long one segment runs before it hands over to the next, a stretch the page-driven runs have kept to. */
 export const MOVE_IN_SEGMENT_MS = 20_000;
@@ -88,7 +89,13 @@ const isPayload = (payload: unknown): payload is MoveInJobPayload =>
 export function moveInJobHandler(
   env: MoveInEnv,
   jobs: Jobs,
-  { budgetMs = MOVE_IN_SEGMENT_MS, chunkSize, now = () => new Date() }: { budgetMs?: number; chunkSize?: number; now?: () => Date } = {},
+  {
+    budgetMs = MOVE_IN_SEGMENT_MS,
+    chunkSize,
+    now = () => new Date(),
+    clock = Date.now,
+    log = console.log,
+  }: { budgetMs?: number; chunkSize?: number; now?: () => Date; clock?: () => number; log?: (line: string) => void } = {},
 ): JobHandler<MoveInJobPayload> {
   return async (payload) => {
     // A message that names no move-in has nothing to run.
@@ -98,7 +105,12 @@ export function moveInJobHandler(
     if (!before || FINISHED.includes(before.status)) return;
     // An error lets the move-in go and is passed on, so the port's backoff paces the next try, which resumes from the
     // runner's cursor.
-    const { job: after, claimed } = await runMoveInSegment(before.id, ports, { budgetMs, chunkSize, releaseOnError: true });
+    // Each segment logs where its time went, whether it ran to its budget, finished the move-in or stopped on an error.
+    const { ports: timed, times } = timeMoveInPorts(ports, clock);
+    const started = clock();
+    const { job: after, claimed } = await runMoveInSegment(before.id, timed, { budgetMs, chunkSize, releaseOnError: true }).finally(() =>
+      log(moveInSegmentLine(clock() - started, times)),
+    );
     if (!after || FINISHED.includes(after.status)) return;
     // Another run holds it, and queues what comes after its own segment. If that run's Worker died instead, the move-in
     // goes quiet, and the watch or the page queues it again.

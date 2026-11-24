@@ -36,7 +36,9 @@
 # `slowCalls` and `isolates` read only the fixed fields of the slow_call, isolate_request and
 # isolate_colo lines (app/lib/slow-call.server.ts) a per-run QA Worker writes, each checked
 # against its expected shape, and `platformRetries` counts the platform_retry lines by their call
-# label alone.
+# label alone. `moveInSegments` adds up the move_in_segment lines a move-in's queued segments write
+# (app/domains/move-in/adapters/worker/move-in-timing.server.ts): only their wall time and each
+# fixed stage's calls and milliseconds are read.
 
 def keep_error_logs: ($ARGS.named.keepErrorLogs == true);
 def tail_reconnects: ($ARGS.named.tailReconnects // 0 | if type == "number" then . else 0 end);
@@ -152,6 +154,18 @@ def isolate_request_of:
 def isolate_colos:
   [.[] | log_objects("isolate_colo")[] | { isolate: (.isolate | isolate_id), runsIn: (.runsIn | colo_or_null) } | select(.isolate != null)]
   | map({ key: .isolate, value: .runsIn }) | from_entries;
+
+# The stages a move-in segment's time is split into, as move-in-timing.server.ts names them.
+def move_in_stages: ["job", "backupReads", "recipeWrites", "photoWrites", "photoChecks", "organizers"];
+def move_in_segments:
+  [.[] | log_objects("move_in_segment")[] | select((.wallMs | count_or_null) != null)] as $lines
+  | { segments: ($lines | length),
+      wallMs: ([$lines[] | .wallMs | count_or_null] | add // 0),
+      stages: (reduce move_in_stages[] as $stage ({};
+        .[$stage] = ([$lines[] | (.stages | objects | .[$stage] | objects) // {}] as $times
+          | { calls: ([$times[] | .calls | count_or_null // 0] | add // 0),
+              ms: ([$times[] | .ms | count_or_null // 0] | add // 0) }))) }
+  | . + { otherMs: ([.wallMs - ([.stages[].ms] | add // 0), 0] | max) };
 
 # The URL's path: scheme, authority (including any user:pass@), query and fragment removed.
 def request_path:
@@ -405,6 +419,8 @@ def stalled: (.cpuTime | type) == "number" and (.wallTime | type) == "number" an
     | { total: length,
         byCall: (map((.call | ident) // "other") | group_by(.) | map({ key: .[0], value: length }) | from_entries),
         unmarked: (map(select(.marked == false)) | length) }),
+  # Where the move-ins' queued segments spent their time, by stage, summed over the run.
+  moveInSegments: move_in_segments,
   slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
   byPath: by_path,
   # Routes whose p95 CPU time is over the budget, worst first. The Journeys workflow prints
