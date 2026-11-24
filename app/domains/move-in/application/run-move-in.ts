@@ -4,10 +4,11 @@
 // holds the job's claim may write it, and every claim counts as an attempt until the job moves
 // forward, so a job whose runs keep dying ends. The ports keep this free of D1, R2 and the request.
 import type { RangeSource } from "../adapters/archive/zip";
-import { openMealieBackup, type MealieBackup } from "../adapters/sources/mealie-backup/backup";
-import { chooseGroup, inspectGroup, listGroups, recipeDrafts } from "../adapters/sources/mealie-backup/database";
+import { openMealieBackup } from "../adapters/sources/mealie-backup/backup";
+import { mealieBackupSource } from "../adapters/sources/mealie-backup/source";
 import { MOVE_IN_ERROR_MESSAGES, MoveInError } from "../model/move-in-error";
 import type { RecipeDraft } from "../model/recipe-draft";
+import type { MoveInKitchen, MoveInSource } from "./source";
 
 export type MoveInStatus = "queued" | "running" | "done" | "done-with-issues" | "failed";
 export type MoveInPhase = "inspect" | "recipes" | "done";
@@ -135,9 +136,8 @@ function event(kind: MoveInEvent["kind"], message: string, more: Partial<MoveInE
 }
 
 interface Opened {
-  backup: MealieBackup;
-  groupKey: string;
-  drafts: RecipeDraft[];
+  source: MoveInSource;
+  kitchen: MoveInKitchen;
 }
 
 /** One chunk's context: the job, the ports, the claim it writes under. */
@@ -158,28 +158,28 @@ export interface RunCache {
 
 async function open({ job, ports }: Run, cache: RunCache): Promise<Opened> {
   if (cache.opened) return cache.opened;
-  const backup = await openMealieBackup(await ports.openArchive(job));
+  const source = mealieBackupSource(await openMealieBackup(await ports.openArchive(job)));
   // Once inspect has chosen the kitchen, the job keeps to it.
-  const groupKey = job.sourceId
+  const key = job.sourceId
     ? await ports.store.sourceInstanceKey(job.sourceId)
-    : chooseGroup(backup.database, await ports.ownerEmail(job.ownerId));
-  if (!groupKey) throw new MoveInError("pick-a-group");
-  cache.opened = { backup, groupKey, drafts: recipeDrafts(backup.database, groupKey) };
+    : await source.chooseKitchen(await ports.ownerEmail(job.ownerId));
+  const kitchen = key ? await source.openKitchen(key) : null;
+  if (!kitchen) throw new MoveInError("pick-a-group");
+  cache.opened = { source, kitchen };
   return cache.opened;
 }
 
-async function inspect(run: Run, { backup, groupKey, drafts }: Opened) {
+async function inspect(run: Run, { source, kitchen }: Opened) {
   const { job, ports: { store } } = run;
-  const group = listGroups(backup.database).find((candidate) => candidate.key === groupKey) as { name: string };
   const sourceId = await store.ensureSource({
     ownerId: job.ownerId,
     kind: job.kind,
-    instanceKey: groupKey,
-    label: group.name,
-    sourceVersion: backup.database.version.label,
+    instanceKey: kitchen.key,
+    label: kitchen.name,
+    sourceVersion: source.version,
   });
-  const counted = inspectGroup(backup.database, groupKey);
-  const photos = drafts.filter((draft) => backup.hasFile(draft.photoPath)).length;
+  const counted = await kitchen.count();
+  const { photos } = counted;
   // A cook with organizers gets the tags, categories and tools on each recipe as it moves in; for anyone else they are
   // counted, and left for a later move-in. The choice is made here, once: the recipes follow what these counts say.
   const organizing = run.ports.organizers?.on(job.ownerId) ?? false;
@@ -189,12 +189,12 @@ async function inspect(run: Run, { backup, groupKey, drafts }: Opened) {
     // An inspect that runs again (after a stop before it saved) starts the report from nothing.
     restart: true,
     counts: [
-      ["recipes", { found: drafts.length }],
+      ["recipes", { found: kitchen.size }],
       ["photos", { found: photos }],
       ...waiting.filter(([, found]) => found).map(([entity, found]) => [entity, organizing ? { found } : { found, skipped: found }] as [string, Partial<MoveInCounts>]),
     ],
     events: [
-      event("phase-done", `Found ${plural(drafts.length, "recipe")}, ${photos} with a photo, in ${group.name}.`),
+      event("phase-done", `Found ${plural(kitchen.size, "recipe")}, ${photos} with a photo, in ${kitchen.name}.`),
       ...(left.length && !organizing ? [event("item-skipped", `Spoonjoy doesn't have tags, categories or tools yet, so ${left.join(", ")} stayed in the backup.`, { entity: "tags" })] : []),
     ],
   };
@@ -204,11 +204,10 @@ async function inspect(run: Run, { backup, groupKey, drafts }: Opened) {
 /** Brings the recipe's photo, adding what happened to the report. */
 type Report = Required<Pick<MoveInReport, "counts" | "events">>;
 
-async function bringPhoto({ job, ports }: Run, backup: MealieBackup, draft: RecipeDraft, recipeId: string, report: Report) {
-  // A damaged photo loses only the photo, never the job.
-  const bytes = await backup.readFile(draft.photoPath).catch(() => null);
+async function bringPhoto({ job, ports }: Run, kitchen: MoveInKitchen, draft: RecipeDraft, recipeId: string, report: Report) {
+  // A photo that can't be read loses only the photo, never the job.
   try {
-    if (!bytes) throw new Error("the photo in the backup is damaged");
+    const bytes = await kitchen.readPhoto(draft);
     await ports.attachPhoto({ ownerId: job.ownerId, recipeId, bytes });
     report.counts.push(["photos", { created: 1 }]);
   } catch (error) {
@@ -230,11 +229,11 @@ async function bringOrganizers({ job, organizers }: Run, draft: RecipeDraft, rec
 }
 
 /** Brings one recipe, its photo and its organizers, and returns what to report; writes nothing to the job itself. */
-async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft): Promise<Report> {
+async function bringRecipe(run: Run, kitchen: MoveInKitchen, draft: RecipeDraft): Promise<Report> {
   const { job, ports } = run;
   const report: Report = { counts: [], events: [] };
   const at = { entity: "recipes", sourceKey: draft.sourceKey };
-  const hasPhoto = backup.hasFile(draft.photoPath);
+  const hasPhoto = kitchen.hasPhoto(draft);
   // An error here is passed on, for bringOrPassOver to try the recipe again or pass it over.
   const result: RecipeWriteResult = await ports.writeRecipe({ sourceId: job.sourceId as string, jobId: job.id, chefId: job.ownerId, draft });
   const target = { ...at, targetId: result.recipeId };
@@ -257,7 +256,7 @@ async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft): 
     if (!hasPhoto) return report;
     // A run that stopped between the recipe and its photo left the photo out; bring it now.
     if (await ports.hasMovedInPhoto(result.recipeId)) report.counts.push(["photos", ours ? { created: 1 } : { unchanged: 1 }]);
-    else await bringPhoto(run, backup, draft, result.recipeId, report);
+    else await bringPhoto(run, kitchen, draft, result.recipeId, report);
     return report;
   }
   report.counts.push(["recipes", { created: 1 }]);
@@ -266,7 +265,7 @@ async function bringRecipe(run: Run, backup: MealieBackup, draft: RecipeDraft): 
   }
   for (const warning of result.warnings) report.events.push(event("item-degraded", warning, target));
   await bringOrganizers(run, draft, result.recipeId, report);
-  if (hasPhoto) await bringPhoto(run, backup, draft, result.recipeId, report);
+  if (hasPhoto) await bringPhoto(run, kitchen, draft, result.recipeId, report);
   return report;
 }
 
@@ -283,55 +282,56 @@ function describeError(error: unknown): string {
  * passed over, so one bad recipe never holds the rest back or sends the move-in through the queue's backoff. Only when
  * the database itself can't be reached is the error passed on, for the queue to try the whole segment again later.
  */
-async function bringOrPassOver(run: Run, backup: MealieBackup, draft: RecipeDraft): Promise<Report> {
+async function bringOrPassOver(run: Run, kitchen: MoveInKitchen, index: number): Promise<Report> {
   let failure: unknown;
   for (let tries = 0; tries < 2; tries++) {
     try {
-      return await bringRecipe(run, backup, draft);
+      return await bringRecipe(run, kitchen, await kitchen.draft(index));
     } catch (error) {
       failure = error;
     }
   }
   // A database that can't be reached throws here, and the segment goes back to the queue with the recipe still next.
   await run.ports.store.loadJob(run.job.id);
+  const entry = kitchen.entry(index);
   return {
     counts: [["recipes", { failed: 1 }]],
-    events: [event("item-failed", `${draft.title} didn't move in this time. Moving the same backup in again tries it once more.`, {
+    events: [event("item-failed", `${entry.title} didn't move in this time. Moving the same backup in again tries it once more.`, {
       entity: "recipes",
-      sourceKey: draft.sourceKey,
+      sourceKey: entry.sourceKey,
       detail: describeError(failure),
     })],
   };
 }
 
-async function recipes(run: Run, { backup, drafts }: Opened, chunkSize: number, cache: RunCache) {
+async function recipes(run: Run, { kitchen }: Opened, chunkSize: number, cache: RunCache) {
   const { job, ports } = run;
   const { store } = ports;
   if (ports.organizers && (cache.organizing ??= await store.organizing(job.id))) run.organizers = ports.organizers;
   let start = Number(job.cursor);
   // The recipe at the cursor has stopped every run since the job last moved, whether it threw or took the Worker down:
   // report it and move past it, so it never holds the rest back.
-  if (job.attempt >= RECIPE_TRIES && start < drafts.length) {
-    const draft = drafts[start];
+  if (job.attempt >= RECIPE_TRIES && start < kitchen.size) {
+    const entry = kitchen.entry(start);
     await store.updateJob(job.id, { cursor: String(++start), attempt: 0 }, run.token, {
       counts: [["recipes", { failed: 1 }]],
-      events: [event("item-failed", `${draft.title} didn't move in this time. Moving the same backup in again tries it once more.`, {
+      events: [event("item-failed", `${entry.title} didn't move in this time. Moving the same backup in again tries it once more.`, {
         entity: "recipes",
-        sourceKey: draft.sourceKey,
+        sourceKey: entry.sourceKey,
         detail: `It stopped the move-in ${RECIPE_TRIES} times in a row.`,
       })],
     });
     job.attempt = 0;
   }
-  const end = Math.min(start + chunkSize, drafts.length);
+  const end = Math.min(start + chunkSize, kitchen.size);
   for (let i = start; i < end; i++) {
-    const report = await bringOrPassOver(run, backup, drafts[i]);
+    const report = await bringOrPassOver(run, kitchen, i);
     await store.updateJob(job.id, { cursor: String(i + 1), attempt: 0 }, run.token, report);
     job.attempt = 0;
   }
-  if (end < drafts.length) return;
+  if (end < kitchen.size) return;
   const status = (await store.hasIssues(job.id)) ? "done-with-issues" : "done";
-  await store.updateJob(job.id, { status, phase: "done", cursor: null }, run.token, { events: [event("job-done", `${plural(drafts.length, "recipe")} moved in.`)] });
+  await store.updateJob(job.id, { status, phase: "done", cursor: null }, run.token, { events: [event("job-done", `${plural(kitchen.size, "recipe")} moved in.`)] });
   await discard(job, ports);
 }
 
