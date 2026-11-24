@@ -2,7 +2,7 @@
 // never reaches into the shopping list's storage; the shopping list scales each recipe and merges its ingredients.
 import { addDays, type LocalDate } from "../model/local-date";
 import { recipesToShop } from "../model/plan-entry";
-import type { PlanStore } from "./plan";
+import type { PlanScope, PlanStore } from "./plan";
 
 export interface ShoppingListPort {
   /**
@@ -21,16 +21,16 @@ export type DaysToShop = { from: LocalDate; to: LocalDate };
 export async function addPlannedMealsToList(
   store: PlanStore,
   list: ShoppingListPort,
-  ownerId: string,
+  scope: PlanScope,
   days: DaysToShop,
   submissionKey: string,
 ): Promise<{ recipes: number; missing: number }> {
   if (days.to < days.from) throw new Error("The days to shop for must run from an earlier day to a later one.");
   if (days.to > addDays(days.from, 6)) throw new Error("Shop for a week at most.");
-  const plan = await store.planFor(ownerId);
+  const plan = await store.planFor(scope);
   let recipes = 0;
   let missing = 0;
-  for (const recipe of recipesToShop(await store.entriesBetween(plan.id, days.from, days.to))) {
+  for (const recipe of recipesToShop(await store.entriesBetween(plan, days.from, days.to))) {
     if (await list.addRecipe(recipe.recipeId, recipe.scaleFactor, `${submissionKey}:${recipe.recipeId}`)) recipes += 1;
     else missing += 1;
   }

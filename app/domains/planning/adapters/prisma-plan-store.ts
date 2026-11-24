@@ -8,50 +8,52 @@ type PlanDb = Pick<PrismaClient, "mealPlan" | "planEntry" | "recipe" | "recipeSp
 
 export function prismaPlanStore(db: PlanDb): PlanStore {
   return {
-    async planFor(ownerId) {
+    async planFor(scope) {
+      if (!("cook" in scope)) throw new Error("Household plans aren't stored yet.");
       const select = { id: true, firstDayOfWeek: true, timeZone: true } as const;
-      return db.mealPlan.upsert({ where: { ownerId }, create: { ownerId }, update: {}, select });
+      const plan = await db.mealPlan.upsert({ where: { ownerId: scope.cook }, create: { ownerId: scope.cook }, update: {}, select });
+      return { ...plan, scope };
     },
-    async entriesBetween(planId, from, to) {
+    async entriesBetween(plan, from, to) {
       const rows = await db.planEntry.findMany({
-        where: { mealPlanId: planId, deletedAt: null, date: { gte: from, lte: to } },
+        where: { mealPlanId: plan.id, deletedAt: null, date: { gte: from, lte: to } },
         select: ENTRY_SELECT,
       });
       return rows.map(toEntry);
     },
-    async plannableRecipeTitle(ownerId, recipeId) {
-      const recipe = await db.recipe.findFirst({ where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: ownerId }) }, select: { title: true } });
+    async plannableRecipeTitle(cookId, recipeId) {
+      const recipe = await db.recipe.findFirst({ where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: cookId }) }, select: { title: true } });
       return recipe?.title ?? null;
     },
-    async ownAndSavedRecipes(ownerId, limit) {
+    async ownAndSavedRecipes(cookId, limit) {
       return db.recipe.findMany({
         where: {
           deletedAt: null,
-          ...readableRecipeWhere({ id: ownerId }),
-          AND: [{ OR: [{ chefId: ownerId }, { cookbooks: { some: { cookbook: { authorId: ownerId } } } }] }],
+          ...readableRecipeWhere({ id: cookId }),
+          AND: [{ OR: [{ chefId: cookId }, { cookbooks: { some: { cookbook: { authorId: cookId } } } }] }],
         },
         select: { id: true, title: true },
         orderBy: [{ title: "asc" }, { id: "asc" }],
         take: limit,
       });
     },
-    async findEntry(entryId) {
-      const row = await db.planEntry.findUnique({ where: { id: entryId }, select: ENTRY_SELECT });
-      return row ? { entry: toEntry(row), planId: row.mealPlanId, removed: row.deletedAt !== null } : null;
+    async findEntry(plan, entryId) {
+      const row = await db.planEntry.findFirst({ where: { id: entryId, mealPlanId: plan.id }, select: ENTRY_SELECT });
+      return row ? { entry: toEntry(row), removed: row.deletedAt !== null } : null;
     },
-    async insertEntry(planId, addedById, entry) {
+    async insertEntry(plan, addedById, entry) {
       const { id, date, mealType, position, kind, recipeId, recipeTitle, title, note, scaleFactor } = entry;
       await db.planEntry.create({
-        data: { id, mealPlanId: planId, addedById, date, mealType, position, kind, recipeId, recipeTitle, title, note, scaleFactor },
+        data: { id, mealPlanId: plan.id, addedById, date, mealType, position, kind, recipeId, recipeTitle, title, note, scaleFactor },
       });
     },
-    async removeEntry(planId, entryId) {
-      const { count } = await db.planEntry.updateMany({ where: { id: entryId, mealPlanId: planId, deletedAt: null }, data: { deletedAt: new Date() } });
+    async removeEntry(plan, entryId) {
+      const { count } = await db.planEntry.updateMany({ where: { id: entryId, mealPlanId: plan.id, deletedAt: null }, data: { deletedAt: new Date() } });
       return count > 0;
     },
-    async placeEntries(planId, placements) {
+    async placeEntries(plan, placements) {
       for (const { id, date, mealType, position } of placements) {
-        await db.planEntry.updateMany({ where: { id, mealPlanId: planId }, data: { date, mealType, position } });
+        await db.planEntry.updateMany({ where: { id, mealPlanId: plan.id }, data: { date, mealType, position } });
       }
     },
 

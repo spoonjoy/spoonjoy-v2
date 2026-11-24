@@ -63,8 +63,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // ?recipe=<id> opens the page to plan that recipe, any chef's the cook may read, so a recipe's page can link here.
   const store = prismaPlanStore(db);
   const [week, { recipes, chosenRecipeId }] = await Promise.all([
-    getWeek(store, userId, asked),
-    plannableRecipes(store, userId, params.get("recipe")),
+    getWeek(store, { cook: userId }, asked),
+    plannableRecipes(store, { cook: userId }, params.get("recipe")),
   ]);
   return { week, recipes, chosenRecipeId };
 }
@@ -106,16 +106,16 @@ export async function action({ request, context }: Route.ActionArgs) {
   const store = prismaPlanStore(await getRequestDb(context));
   try {
     if (intent === "remove") {
-      const removed = await retryD1Write({ scope: "plan_entry.remove" }, () => removeEntry(store, userId, fields.entryId ?? ""));
+      const removed = await retryD1Write({ scope: "plan_entry.remove" }, () => removeEntry(store, { cook: userId }, fields.entryId ?? ""));
       return data({ intent, removed });
     }
     if (intent === "add-week-to-list") {
       const day = parseLocalDate(fields.week);
       if (!day) return refused(intent, "Choose a week to shop for.");
-      const { start } = await getWeek(store, userId, day);
+      const { start } = await getWeek(store, { cook: userId }, day);
       const listToken = formWriteToken(fields.listToken) ?? crypto.randomUUID();
       const list = await shoppingListRecipeAdder(context, userId);
-      const added = await addPlannedMealsToList(store, list, userId, { from: start, to: addDays(start, 6) }, `plan-week:${start}:${listToken}`);
+      const added = await addPlannedMealsToList(store, list, { cook: userId }, { from: start, to: addDays(start, 6) }, `plan-week:${start}:${listToken}`);
       return data({ intent, added });
     }
     if (intent !== "add-recipe" && intent !== "add-note") return refused(intent, "That isn't something the plan can do.");
@@ -132,7 +132,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       scaleFactor: intent === "add-recipe" ? Number(fields.scaleFactor) : 1,
     };
     // addEntry finds an entry its id already made, so running it again after a transient error plans the meal once.
-    const added = await retryD1Write({ scope: "plan_entry.add" }, () => addEntry(store, userId, entryId, input));
+    const added = await retryD1Write({ scope: "plan_entry.add" }, () => addEntry(store, { cook: userId }, entryId, input));
     if (!added.ok) return refused(intent, added.error);
     return redirect(`/plan?week=${added.value.date}`);
   } catch (error) {

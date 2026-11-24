@@ -37,7 +37,7 @@ export async function hashFeedToken(token: string): Promise<string> {
 
 /** Makes the cook's feed link and returns its token; any link they had stops working. */
 export async function makeFeedLink(plans: PlanStore, links: FeedLinkStore, ownerId: string, now: Date = new Date()): Promise<string> {
-  const plan = await plans.planFor(ownerId);
+  const plan = await plans.planFor({ cook: ownerId });
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
   const token = base64Url(bytes);
@@ -47,13 +47,13 @@ export async function makeFeedLink(plans: PlanStore, links: FeedLinkStore, owner
 
 /** Turns off the cook's feed link; false when they had none. */
 export async function revokeFeedLink(plans: PlanStore, links: FeedLinkStore, ownerId: string): Promise<boolean> {
-  const plan = await plans.planFor(ownerId);
+  const plan = await plans.planFor({ cook: ownerId });
   return links.deleteLink(plan.id);
 }
 
 /** When the cook's current feed link was made, or null when they have none. */
 export async function feedLinkMadeAt(plans: PlanStore, links: FeedLinkStore, ownerId: string): Promise<Date | null> {
-  const plan = await plans.planFor(ownerId);
+  const plan = await plans.planFor({ cook: ownerId });
   return links.linkMadeAt(plan.id);
 }
 
@@ -74,7 +74,7 @@ export async function feedForToken(
 ): Promise<{ ownerId: string; entries: number; calendar: string } | null> {
   const owner = await planForFeedToken(links, input.token);
   if (!owner) return null;
-  const plan = await plans.planFor(owner.ownerId);
+  const plan = await plans.planFor({ cook: owner.ownerId });
   const today = todayIn(plan.timeZone, input.now);
   const entries = await links.feedEntries(owner.planId, addDays(today, -FEED_DAYS_BACK), addDays(today, FEED_DAYS_AHEAD));
   const options = parseFeedOptions(input.params);

@@ -21,7 +21,7 @@ export interface PlanRuleStore {
 export const MAX_PLAN_RULES = 50;
 
 export async function listRules(plans: PlanStore, rules: PlanRuleStore, ownerId: string): Promise<PlanRule[]> {
-  const plan = await plans.planFor(ownerId);
+  const plan = await plans.planFor({ cook: ownerId });
   return rules.rulesFor(plan.id);
 }
 
@@ -33,7 +33,7 @@ export async function addRule(
   ruleId: string,
   raw: Record<string, unknown>,
 ): Promise<Validated<PlanRule>> {
-  const plan = await plans.planFor(ownerId);
+  const plan = await plans.planFor({ cook: ownerId });
   const existing = await rules.rulesFor(plan.id);
   const same = existing.find((rule) => rule.id === ruleId);
   if (same) return { ok: true, value: same };
@@ -48,7 +48,7 @@ export async function addRule(
 }
 
 export async function removeRule(plans: PlanStore, rules: PlanRuleStore, ownerId: string, ruleId: string): Promise<boolean> {
-  const plan = await plans.planFor(ownerId);
+  const plan = await plans.planFor({ cook: ownerId });
   return rules.deleteRule(plan.id, ruleId);
 }
 
@@ -67,12 +67,12 @@ export async function pickForMeal(
   if (!date) return { ok: false, error: "Choose a day for this meal." };
   const mealType = parseMealType(meal.mealType);
   if (!mealType) return { ok: false, error: "Choose a meal type." };
-  const plan = await plans.planFor(ownerId);
+  const plan = await plans.planFor({ cook: ownerId });
   const start: LocalDate = startOfWeek(date, plan.firstDayOfWeek);
   const [planRules, candidates, week] = await Promise.all([
     rules.rulesFor(plan.id),
     rules.pickCandidates(ownerId),
-    plans.entriesBetween(plan.id, start, addDays(start, 6)),
+    plans.entriesBetween(plan, start, addDays(start, 6)),
   ]);
   const rule = ruleFor(planRules, date, mealType);
   const planned = week.flatMap((entry) => (entry.recipeId ? [entry.recipeId] : []));

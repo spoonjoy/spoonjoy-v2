@@ -50,8 +50,8 @@ describe("meal plan tools", () => {
     const context = await signedIn(["kitchen:read"]);
     const recipe = await context.db.recipe.create({ data: { ...createTestRecipe(context.userId), title: "Miso soup" } });
     const store = prismaPlanStore(context.db);
-    await addEntry(store, context.userId, "e-dinner", { kind: "recipe", recipeId: recipe.id, date: "2026-11-25", mealType: "dinner", scaleFactor: 2 });
-    await addEntry(store, context.userId, "e-lunch", { kind: "note", title: "Leftovers", note: "From Monday", date: "2026-11-25", mealType: "lunch" });
+    await addEntry(store, { cook: context.userId }, "e-dinner", { kind: "recipe", recipeId: recipe.id, date: "2026-11-25", mealType: "dinner", scaleFactor: 2 });
+    await addEntry(store, { cook: context.userId }, "e-lunch", { kind: "note", title: "Leftovers", note: "From Monday", date: "2026-11-25", mealType: "lunch" });
 
     const { mealPlan } = await call("get_meal_plan", { week: "2026-11-26" }, context);
     expect(mealPlan.weekStart).toBe("2026-11-23");
