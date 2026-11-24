@@ -161,6 +161,12 @@ describe("startServerMoveIn", () => {
     expect(kept).not.toContain("recipes.example.com");
     expect(await openServerConnection(SECRET, key, bucket.objects[key])).toEqual({ address: "https://recipes.example.com", token: SERVER_TOKEN });
     expect(await openServerConnection("another secret", key, bucket.objects[key])).toBeNull();
+    expect(await openServerConnection(SECRET, `${key}.copy`, bucket.objects[key])).toBeNull();
+    // Any change to the sealed bytes opens as nothing.
+    const sealed = JSON.parse(kept) as { data: string };
+    const flipped = atob(sealed.data);
+    const tampered = { ...sealed, data: btoa(String.fromCharCode(flipped.charCodeAt(0) ^ 1) + flipped.slice(1)) };
+    expect(await openServerConnection(SECRET, key, new TextEncoder().encode(JSON.stringify(tampered)))).toBeNull();
     const job = database.sqlite.prepare(`SELECT "kind", "status", "archiveKey", "archiveName" FROM "ImportJob"`).get();
     expect(job).toEqual({ kind: "mealie-api", status: "queued", archiveKey: key, archiveName: "recipes.example.com" });
   });

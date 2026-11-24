@@ -144,7 +144,7 @@ describe("moveInPorts from a server", () => {
 
   it("stops a server move-in whose token is no longer kept, as expired", async () => {
     const job = { id: "j", ownerId: "chef-1", kind: "mealie-api", sourceId: null, status: "running", phase: "inspect", cursor: null, archiveKey: "gone.json", lastError: null, attempt: 0 } as const;
-    await expect(openMoveInSource(memoryBucket() as never, job, recipeServer(), SECRET)).rejects.toMatchObject({ code: "expired" });
+    await expect(openMoveInSource(memoryBucket() as never, job, recipeServer(), () => SECRET)).rejects.toMatchObject({ code: "expired" });
   });
 
   it("stops a server move-in whose connection doesn't open under the Worker's secret, as expired", async () => {
@@ -153,10 +153,10 @@ describe("moveInPorts from a server", () => {
     const connection = { address: "https://recipes.example.com", token: SERVER_TOKEN };
     const kept = (bytes: Uint8Array) => memoryBucket({ [key]: bytes }) as never;
     // Sealed under another secret, sealed for another key, or kept in the clear as before they were sealed.
-    await expect(openMoveInSource(kept(await sealServerConnection("another secret", key, connection)), job, recipeServer(), SECRET)).rejects.toMatchObject({ code: "expired" });
-    await expect(openMoveInSource(kept(await sealServerConnection(SECRET, "elsewhere.json", connection)), job, recipeServer(), SECRET)).rejects.toMatchObject({ code: "expired" });
-    await expect(openMoveInSource(kept(new TextEncoder().encode(JSON.stringify(connection))), job, recipeServer(), SECRET)).rejects.toMatchObject({ code: "expired" });
-    const source = await openMoveInSource(kept(await sealServerConnection(SECRET, key, connection)), job, recipeServer(), SECRET);
+    await expect(openMoveInSource(kept(await sealServerConnection("another secret", key, connection)), job, recipeServer(), () => SECRET)).rejects.toMatchObject({ code: "expired" });
+    await expect(openMoveInSource(kept(await sealServerConnection(SECRET, "elsewhere.json", connection)), job, recipeServer(), () => SECRET)).rejects.toMatchObject({ code: "expired" });
+    await expect(openMoveInSource(kept(new TextEncoder().encode(JSON.stringify(connection))), job, recipeServer(), () => SECRET)).rejects.toMatchObject({ code: "expired" });
+    const source = await openMoveInSource(kept(await sealServerConnection(SECRET, key, connection)), job, recipeServer(), () => SECRET);
     expect(source.serverUrl).toBe("https://recipes.example.com");
   });
 

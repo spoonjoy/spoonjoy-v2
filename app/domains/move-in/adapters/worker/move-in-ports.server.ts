@@ -63,15 +63,15 @@ export async function r2RangeSource(bucket: Pick<R2Bucket, "head" | "get">, key:
 
 /**
  * Where a job's recipes come from: the other app's server, through the address and token its start sealed under
- * `secret`, or the uploaded backup. Gone from storage means the job went quiet for a day and the sweep deleted it; a
+ * `secret` (read only for a server), or the uploaded backup. Gone from storage means the job went quiet for a day and the sweep deleted it; a
  * connection that won't open under `secret` can't be read either, so it stops the same way.
  */
-export async function openMoveInSource(bucket: Pick<R2Bucket, "head" | "get">, job: MoveInJob, fetch: typeof globalThis.fetch, secret: string): Promise<MoveInSource> {
+export async function openMoveInSource(bucket: Pick<R2Bucket, "head" | "get">, job: MoveInJob, fetch: typeof globalThis.fetch, secret: () => string): Promise<MoveInSource> {
   const key = job.archiveKey as string;
   if (!readsAServer(job.kind)) return mealieBackupSource(await openMealieBackup(await r2RangeSource(bucket, key)));
   const stored = await bucket.get(key);
   if (!stored) throw new MoveInError("expired", "the server connection is no longer in storage");
-  const connection = await openServerConnection(secret, key, new Uint8Array(await stored.arrayBuffer()));
+  const connection = await openServerConnection(secret(), key, new Uint8Array(await stored.arrayBuffer()));
   if (!connection) throw new MoveInError("expired", "the server connection in storage doesn't open");
   return mealieApiSource({ ...connection, fetch });
 }
@@ -94,7 +94,7 @@ export function moveInPorts(env: MoveInEnv, now: () => Date): MoveInPorts {
   return {
     store: moveInJobStore(db, now),
     openArchive: (job) => r2RangeSource(env.PHOTOS, job.archiveKey as string),
-    openSource: (job) => openMoveInSource(env.PHOTOS, job, (input, init) => fetch(input, init), serverConnectionSecret(env)),
+    openSource: (job) => openMoveInSource(env.PHOTOS, job, (input, init) => fetch(input, init), () => serverConnectionSecret(env)),
     ownerEmail: (ownerId) => ownerEmail(db, ownerId),
     writeRecipe: (input) => writeMovedInRecipe({ db, ...input, now: now() }),
     attachPhoto: (input) => attachMovedInPhoto({ db, bucket: env.PHOTOS, ...input, now: now() }),
