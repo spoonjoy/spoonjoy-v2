@@ -77,6 +77,9 @@ test.describe("Households", () => {
     verifyAfterReload,
     expectAccessible,
   }, testInfo) => {
+    // Two people and some 30 reloads and page loads: about 40 s on a quiet QA Worker, and 60 s, the journey default,
+    // when the Worker is busy (run 45368418228 used it all, with no step stalled), so it gets twice the default.
+    test.setTimeout(120_000);
     const owner = scratch(SCRATCH_INDEX);
     const joiner = scratchDesktop(SCRATCH_INDEX);
     // A name like one a person would give, with the run's tag so each run finds its own household.
