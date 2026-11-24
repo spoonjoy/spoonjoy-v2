@@ -1631,45 +1631,103 @@
       ]
     },
     "meal-plan": {
-      "default": [
+      "add-sheet": [
         {
-          "identity": "button \"Add note\" [button/root] in region \"Add a note\"",
+          "identity": "button \"Add to plan\" [button/root] in dialog \"Add to Monday, Mar 1\"",
           "count": 1
         },
+        {
+          "identity": "button \"Close\" [sheet/close] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Decrease\" [number-field/decrement] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Increase\" [number-field/increment] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "combobox \"Meal\" [native-select/select] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "combobox \"Recipe\" [native-select/select] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Note\" [segmented-control/segment] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Recipe\" [segmented-control/segment] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Scale\" [number-field/input] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        }
+      ],
+      "default": [
         {
           "identity": "button \"Add this week to my list\" [button/root] in main",
           "count": 1
         },
         {
-          "identity": "button \"Add to plan\" [button/root] in region \"Plan a recipe\"",
+          "identity": "button \"Add to Friday\" [button/root] in region \"Friday, Mar 5\"",
           "count": 1
         },
         {
-          "identity": "button \"Decrease\" [number-field/decrement] in region \"Plan a recipe\"",
+          "identity": "button \"Add to Monday\" [button/root] in region \"Monday, Mar 1\"",
           "count": 1
         },
         {
-          "identity": "button \"Increase\" [number-field/increment] in region \"Plan a recipe\"",
+          "identity": "button \"Add to Saturday\" [button/root] in region \"Saturday, Mar 6\"",
           "count": 1
         },
         {
-          "identity": "combobox \"Day\" [native-select/select] in region \"Add a note\"",
+          "identity": "button \"Add to Sunday\" [button/root] in region \"Sunday, Mar 7\"",
           "count": 1
         },
         {
-          "identity": "combobox \"Day\" [native-select/select] in region \"Plan a recipe\"",
+          "identity": "button \"Add to Thursday\" [button/root] in region \"Thursday, Mar 4\"",
           "count": 1
         },
         {
-          "identity": "combobox \"Meal\" [native-select/select] in region \"Add a note\"",
+          "identity": "button \"Add to Tuesday\" [button/root] in region \"Tuesday, Mar 2\"",
           "count": 1
         },
         {
-          "identity": "combobox \"Meal\" [native-select/select] in region \"Plan a recipe\"",
+          "identity": "button \"Add to Wednesday\" [button/root] in region \"Wednesday, Mar 3\"",
           "count": 1
         },
         {
-          "identity": "combobox \"Recipe\" [native-select/select] in region \"Plan a recipe\"",
+          "identity": "button \"Plan a meal for Friday\" [button/root] in region \"Friday, Mar 5\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Plan a meal for Monday\" [button/root] in region \"Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Plan a meal for Saturday\" [button/root] in region \"Saturday, Mar 6\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Plan a meal for Sunday\" [button/root] in region \"Sunday, Mar 7\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Plan a meal for Thursday\" [button/root] in region \"Thursday, Mar 4\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Plan a meal for Tuesday\" [button/root] in region \"Tuesday, Mar 2\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Plan a meal for Wednesday\" [button/root] in region \"Wednesday, Mar 3\"",
           "count": 1
         },
         {
@@ -1686,18 +1744,6 @@
         },
         {
           "identity": "link \"This week\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Note\" [text-field/input] in region \"Add a note\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Scale\" [number-field/input] in region \"Plan a recipe\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Title\" [text-field/input] in region \"Add a note\"",
           "count": 1
         }
       ]
@@ -5891,45 +5937,103 @@
       ]
     },
     "meal-plan": {
-      "default": [
+      "add-sheet": [
         {
-          "identity": "button \"Add note\" [button/root] in region \"Add a note\"",
+          "identity": "button \"Add to plan\" [button/root] in dialog \"Add to Monday, Mar 1\"",
           "count": 1
         },
+        {
+          "identity": "button \"Close\" [sheet/close] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Decrease\" [number-field/decrement] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Increase\" [number-field/increment] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "combobox \"Meal\" [native-select/select] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "combobox \"Recipe\" [native-select/select] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Note\" [segmented-control/segment] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Recipe\" [segmented-control/segment] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Scale\" [number-field/input] in dialog \"Add to Monday, Mar 1\"",
+          "count": 1
+        }
+      ],
+      "default": [
         {
           "identity": "button \"Add this week to my list\" [button/root] in main",
           "count": 1
         },
         {
-          "identity": "button \"Add to plan\" [button/root] in region \"Plan a recipe\"",
+          "identity": "button \"Add to Friday\" [button/root] in region \"Friday, Mar 5\"",
           "count": 1
         },
         {
-          "identity": "button \"Decrease\" [number-field/decrement] in region \"Plan a recipe\"",
+          "identity": "button \"Add to Monday\" [button/root] in region \"Monday, Mar 1\"",
           "count": 1
         },
         {
-          "identity": "button \"Increase\" [number-field/increment] in region \"Plan a recipe\"",
+          "identity": "button \"Add to Saturday\" [button/root] in region \"Saturday, Mar 6\"",
           "count": 1
         },
         {
-          "identity": "combobox \"Day\" [native-select/select] in region \"Add a note\"",
+          "identity": "button \"Add to Sunday\" [button/root] in region \"Sunday, Mar 7\"",
           "count": 1
         },
         {
-          "identity": "combobox \"Day\" [native-select/select] in region \"Plan a recipe\"",
+          "identity": "button \"Add to Thursday\" [button/root] in region \"Thursday, Mar 4\"",
           "count": 1
         },
         {
-          "identity": "combobox \"Meal\" [native-select/select] in region \"Add a note\"",
+          "identity": "button \"Add to Tuesday\" [button/root] in region \"Tuesday, Mar 2\"",
           "count": 1
         },
         {
-          "identity": "combobox \"Meal\" [native-select/select] in region \"Plan a recipe\"",
+          "identity": "button \"Add to Wednesday\" [button/root] in region \"Wednesday, Mar 3\"",
           "count": 1
         },
         {
-          "identity": "combobox \"Recipe\" [native-select/select] in region \"Plan a recipe\"",
+          "identity": "button \"Plan a meal for Friday\" [button/root] in region \"Friday, Mar 5\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Plan a meal for Monday\" [button/root] in region \"Monday, Mar 1\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Plan a meal for Saturday\" [button/root] in region \"Saturday, Mar 6\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Plan a meal for Sunday\" [button/root] in region \"Sunday, Mar 7\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Plan a meal for Thursday\" [button/root] in region \"Thursday, Mar 4\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Plan a meal for Tuesday\" [button/root] in region \"Tuesday, Mar 2\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Plan a meal for Wednesday\" [button/root] in region \"Wednesday, Mar 3\"",
           "count": 1
         },
         {
@@ -5946,18 +6050,6 @@
         },
         {
           "identity": "link \"This week\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Note\" [text-field/input] in region \"Add a note\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Scale\" [number-field/input] in region \"Plan a recipe\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Title\" [text-field/input] in region \"Add a note\"",
           "count": 1
         }
       ]
