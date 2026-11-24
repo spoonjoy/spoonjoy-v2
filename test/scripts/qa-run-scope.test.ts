@@ -1674,6 +1674,7 @@ describe("Journeys workflow", () => {
       mode: "${{ steps.scope.outputs.mode }}",
       census: "${{ steps.scope.outputs.census }}",
       specs: "${{ steps.scope.outputs.specs }}",
+      parts: "${{ steps.scope.outputs.parts }}",
     });
     // The base branch's copy of the script decides, so a pull request cannot widen the list for its
     // own run, and the job never sees a secret.
@@ -1713,16 +1714,19 @@ describe("Journeys workflow", () => {
 
   it("runs the full suite in two parts, each with its own QA stack, and one part otherwise", () => {
     expect(journeys.name).toBe("journeys part ${{ matrix.part }}");
+    // A pull request runs only part 1 unless the scope check says parts=2 (the journeys-full label);
+    // the merge queue, main and the schedule run both.
     expect(journeys.strategy).toEqual({
       "fail-fast": false,
       matrix: {
-        part: "${{ fromJSON(((github.event_name == 'workflow_dispatch' && inputs.suite == 'explore') || (github.event_name == 'pull_request' && needs.changes.outputs.mode == 'affected')) && '[1]' || '[1, 2]') }}",
+        part: "${{ fromJSON(((github.event_name == 'workflow_dispatch' && inputs.suite == 'explore') || (github.event_name == 'pull_request' && (needs.changes.outputs.mode == 'affected' || needs.changes.outputs.parts != '2'))) && '[1]' || '[1, 2]') }}",
       },
     });
     // runIdentity names part 2's stack apart from part 1's.
     expect(journeys.env).toEqual({ SPOONJOY_QA_RUN_PART: "${{ matrix.part }}" });
     const suite = step("Run test suite");
-    expect(suite.env).toMatchObject({ PART: "${{ matrix.part }}", PARTS: "${{ strategy.job-total }}" });
+    // The suite is always split in two, so part 1 alone still runs shard 1 of 2.
+    expect(suite.env).toMatchObject({ PART: "${{ matrix.part }}", PARTS: 2 });
     // Part 1 runs the census first, then its shard of the rest without the personas setup the
     // census already ran; a later part signs the personas in, then runs its shard without them.
     // Every shard leaves out the census and the Move in journeys, so the parts split one list.
