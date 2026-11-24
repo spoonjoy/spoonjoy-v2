@@ -54,7 +54,11 @@ test.describe("A move-in on a self-hosted server that restarts", () => {
     await page.goto("/move-in");
     // The page may ask where the kitchen comes from first; the backup field shows once "From a backup" is picked.
     const fromBackup = page.getByRole("main").getByRole("radio", { name: /^From a backup/ });
-    if ((await fromBackup.count()) > 0) await fromBackup.check();
+    // The choice card's radio is hidden under its label, which takes the click, so the check doesn't wait for the radio.
+    if ((await fromBackup.count()) > 0) {
+      await fromBackup.check({ force: true });
+      await expect(fromBackup).toBeChecked();
+    }
     await page.getByLabel(requiredLabel("Backup zip"), { exact: true }).setInputFiles({ name: `kitchen-${source.version}.zip`, mimeType: "application/zip", buffer: backup });
     await page.getByRole("button", { name: "Move in", exact: true }).click();
     // The move-in is accepted, and waits: the server's queue takes jobs but runs none (SPOONJOY_JOBS_PAUSED).
