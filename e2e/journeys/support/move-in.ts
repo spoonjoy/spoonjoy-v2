@@ -30,7 +30,7 @@ interface Manifest {
 
 let manifest: Manifest | undefined;
 const backups = new Map<string, Buffer>();
-/** One recipe with a photo and tags from each version's kitchen, to find after it moves in, with its organizers' slugs. */
+/** One recipe with a photo and tags from each version's kitchen, to find after it moves in, with its organizers' names. */
 const samples = new Map<string, { title: string; tags: string[]; categories: string[]; tools: string[] }>();
 /**
  * Each version's tags, categories and tools that are on at least one of its recipes, read from the backup's own link
@@ -57,7 +57,7 @@ async function fixtures(): Promise<Manifest> {
     const drafts = recipeDrafts(backup.database, group);
     const sample = drafts.find((draft) => backup.hasFile(draft.photoPath) && draft.tags.length);
     if (!sample) throw new Error(`The ${source.version} kitchen has no recipe with a photo and tags`);
-    samples.set(source.version, { title: sample.title, tags: slugs(sample.tags), categories: slugs(sample.categories), tools: slugs(sample.tools) });
+    samples.set(source.version, { title: sample.title, tags: names(sample.tags), categories: names(sample.categories), tools: names(sample.tools) });
     const used = (links: string, column: string, table: string) => {
       const exists = new Set(backup.database.rows(table).map((row) => guid(row.id)));
       return new Set(backup.database.rows(links).map((row) => guid(row[column])).filter((id) => exists.has(id))).size;
@@ -185,9 +185,9 @@ const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** A backup id, whichever way its version writes it. */
 const guid = (id: unknown) => String(id).toLowerCase().replace(/-/g, "");
 
-/** The organizers these names make in an empty kitchen, by slug, once each: Kitchen's own matching. */
-function slugs(names: string[]): string[] {
-  return planOrganizerAssignment([], names).create.map((organizer) => organizer.slug);
+/** The organizers these names make in an empty kitchen, by name, once each: Kitchen's own matching. */
+function names(raw: string[]): string[] {
+  return planOrganizerAssignment([], raw).create.map((organizer) => organizer.name);
 }
 
 /**
@@ -223,9 +223,10 @@ export async function inTheKitchen(version: string, { page, verifyAfterReload }:
   await chooseMenuItem(page, main.getByRole("button", { name: "Recipe actions", exact: true }), "Organize");
   await expect(page).toHaveURL(pathUrl(`${recipePath}/organize`));
   await verifyAfterReload(async () => {
-    for (const [label, segment, kindSlugs] of [["Tags", "tags", tags], ["Categories", "categories", categories], ["Tools", "tools", tools]] as const) {
-      const region = main.getByRole("region", { name: `${label} on this recipe`, exact: true });
-      for (const slug of kindSlugs) await expect(region.locator(`a[href="/${segment}/${encodeURIComponent(slug)}"]`)).toBeVisible();
+    // Each kind's token field holds a chip per organizer, named by its Remove button.
+    for (const [segment, kindNames] of [["tags", tags], ["categories", categories], ["tools", tools]] as const) {
+      const field = main.locator(`div:has(> input[name="organize"][value="${segment}"])`);
+      for (const name of kindNames) await expect(field.getByRole("button", { name: `Remove ${name}`, exact: true })).toBeVisible();
     }
   });
   await snapshot(page, version, "4-recipe-tags");
