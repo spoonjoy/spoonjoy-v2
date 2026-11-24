@@ -65,32 +65,31 @@ export interface D1TransientErrorReport {
 }
 
 /**
- * The static path segments of app/routes (and of the cook-session API in workers/app.ts). Any
- * other segment is a recipe slug, an id or a name, which `d1RouteLabel` never logs.
+ * The static segments of the app's route paths: every segment of a React Router route's `path`
+ * that is not a parameter or a splat, plus any `extra` ones (paths the Worker answers itself).
  */
-const STATIC_SEGMENTS = new Set([
-  "account", "agent", "api", "apple", "apple-app-site-association", "auth", "authenticate", "authorize",
-  "calendar", "callback", "categories", "chefs", "connect", "cook-sessions", "cookbooks", "cooking-now",
-  "csp-report", "deleted", "developer", "developers", "devtools-well-known", "docs", "edit", "export",
-  "fellow-chefs", "forgot-password", "fork", "github", "google", "health", "households", "join", "json",
-  "kitchen-visitors", "lists", "login", "logout", "mcp", "moderation", "move-in", "my-recipes", "new", "oauth",
-  "oauth-authorization-server", "oauth-protected-resource", "og", "oidc", "openapi", "openapi-json",
-  "openapi-spec", "options", "organize", "pages", "photo-uploads", "photos", "plan", "playground", "png",
-  "preferences", "privacy", "public-key", "push", "ready", "recipes", "redwood-functions-auth-oauth",
-  "register", "reset-password", "revoke", "roadmap", "robots", "saved-recipes", "search", "server-backups",
-  "server-settings", "settings", "shopping-list", "signup", "sitemap", "spoonjoy-release-readiness", "steps",
-  "subscriptions", "support", "tags", "terms", "test-kitchen", "token", "tools", "try", "txt", "users", "v1",
-  "verify", "webauthn", "well-known", "xml",
-]);
+export function staticRouteSegments(
+  routes: Record<string, { path?: string } | undefined>,
+  extra: readonly string[] = [],
+): ReadonlySet<string> {
+  const segments = new Set(extra.filter(Boolean));
+  for (const route of Object.values(routes)) {
+    for (const segment of route?.path?.split("/") ?? []) {
+      if (segment && !/^[:*]/.test(segment)) segments.add(segment);
+    }
+  }
+  return segments;
+}
 
 /**
- * A request path as a route, safe to log: each static segment kept, every other one ":id", and a
- * React Router data request's ".data" kept, so /recipes/lemon-rice.data becomes /recipes/:id.data.
+ * A request path as a route, safe to log: each static segment kept, every other one (a recipe
+ * slug, an id, a name) ":id", and a React Router data request's ".data" kept, so
+ * /recipes/lemon-rice.data becomes /recipes/:id.data.
  */
-export function d1RouteLabel(pathname: string): string {
+export function d1RouteLabel(pathname: string, staticSegments: ReadonlySet<string>): string {
   const data = pathname.endsWith(".data");
   const path = data ? pathname.slice(0, -".data".length) : pathname;
-  const segments = path.split("/").filter(Boolean).map((segment) => (STATIC_SEGMENTS.has(segment) ? segment : ":id"));
+  const segments = path.split("/").filter(Boolean).map((segment) => (staticSegments.has(segment) ? segment : ":id"));
   return `/${segments.join("/")}${data ? ".data" : ""}`;
 }
 

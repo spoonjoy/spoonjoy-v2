@@ -1,10 +1,10 @@
 // @vitest-environment node
-import { readdirSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectConsoleWarning } from "../warning-policy";
 import {
   d1RouteLabel,
   d1TransientKind,
+  staticRouteSegments,
   DEFAULT_D1_MAX_READ_REISSUES,
   DEFAULT_D1_READ_REISSUE_MS,
   DEFAULT_D1_BINDING_RETRY_DELAYS_MS,
@@ -326,23 +326,33 @@ const TRANSIENT_LINE = JSON.stringify({
     kind: "network_connection_lost",
   });
 
+const SEGMENTS = staticRouteSegments(
+  {
+    root: {},
+    recipes: { path: "recipes" },
+    recipe: { path: "recipes/:id" },
+    edit: { path: "recipes/:id/edit" },
+    visitors: { path: "users/:username/kitchen-visitors" },
+    splat: { path: "*" },
+    gone: undefined,
+  },
+  "/api/cook-sessions".split("/"),
+);
+
 describe("d1RouteLabel", () => {
-  it("keeps static segments and a data request's suffix, and hides every slug, id and name", () => {
-    expect(d1RouteLabel("/")).toBe("/");
-    expect(d1RouteLabel("/recipes.data")).toBe("/recipes.data");
-    expect(d1RouteLabel("/recipes/lemon-rice")).toBe("/recipes/:id");
-    expect(d1RouteLabel("/recipes/lemon-rice/edit.data")).toBe("/recipes/:id/edit.data");
-    expect(d1RouteLabel("/api/cook-sessions/lemon-rice")).toBe("/api/cook-sessions/:id");
-    expect(d1RouteLabel("/users/someone/kitchen-visitors")).toBe("/users/:id/kitchen-visitors");
-    expect(d1RouteLabel("/no-such-page")).toBe("/:id");
+  it("collects the fixed words of the route paths, and none of their parameters or splats", () => {
+    expect([...SEGMENTS].sort()).toEqual(["api", "cook-sessions", "edit", "kitchen-visitors", "recipes", "users"]);
+    expect([...staticRouteSegments({})]).toEqual([]);
   });
 
-  it("knows every static segment of the app's route files", () => {
-    const segments = readdirSync("app/routes")
-      .map((file) => file.replace(/\.(tsx|ts)$/, ""))
-      .flatMap((name) => name.split("."))
-      .filter((part) => part && !/^[$_]|[[\]]/.test(part) && part !== "route");
-    for (const segment of new Set(segments)) expect(d1RouteLabel(`/${segment}`), segment).toBe(`/${segment}`);
+  it("keeps static segments and a data request's suffix, and hides every slug, id and name", () => {
+    expect(d1RouteLabel("/", SEGMENTS)).toBe("/");
+    expect(d1RouteLabel("/recipes.data", SEGMENTS)).toBe("/recipes.data");
+    expect(d1RouteLabel("/recipes/lemon-rice", SEGMENTS)).toBe("/recipes/:id");
+    expect(d1RouteLabel("/recipes/lemon-rice/edit.data", SEGMENTS)).toBe("/recipes/:id/edit.data");
+    expect(d1RouteLabel("/api/cook-sessions/lemon-rice", SEGMENTS)).toBe("/api/cook-sessions/:id");
+    expect(d1RouteLabel("/users/someone/kitchen-visitors", SEGMENTS)).toBe("/users/:id/kitchen-visitors");
+    expect(d1RouteLabel("/no-such-page", SEGMENTS)).toBe("/:id");
   });
 });
 
@@ -391,7 +401,7 @@ describe("withTransientD1Retry", () => {
       route: "/recipes/:id.data",
     }));
     const { db } = fakeD1([INTERNAL]);
-    const env = withTransientD1Retry({ DB: db }, { delaysMs: [0], route: d1RouteLabel("/recipes/lemon-rice.data") });
+    const env = withTransientD1Retry({ DB: db }, { delaysMs: [0], route: d1RouteLabel("/recipes/lemon-rice.data", SEGMENTS) });
     await expect(env.DB.prepare("INSERT INTO Recipe (id) VALUES (?)").bind("r1").run()).rejects.toBe(INTERNAL);
   });
 });
