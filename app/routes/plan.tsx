@@ -14,6 +14,7 @@ import {
   type PlanActionAnswer,
   type PlanDay,
   type PlanEntry,
+  plannableRecipes,
 } from "~/domains/planning";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
@@ -53,16 +54,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const db = await getRequestDb(context);
   const params = new URL(request.url).searchParams;
   const asked = parseLocalDate(params.get("week"));
-  // ?recipe=<id> opens the page to plan that recipe, any chef's, so a recipe's page can link here.
-  const recipeParam = params.get("recipe");
-  const select = { id: true, title: true } as const;
-  const [week, own, chosen] = await Promise.all([
-    getWeek(prismaPlanStore(db), userId, asked),
-    db.recipe.findMany({ where: { chefId: userId, deletedAt: null }, select, orderBy: { title: "asc" }, take: 500 }),
-    recipeParam ? db.recipe.findFirst({ where: { id: recipeParam, deletedAt: null }, select }) : null,
+  // ?recipe=<id> opens the page to plan that recipe, any chef's the cook may read, so a recipe's page can link here.
+  const store = prismaPlanStore(db);
+  const [week, { recipes, chosenRecipeId }] = await Promise.all([
+    getWeek(store, userId, asked),
+    plannableRecipes(store, userId, params.get("recipe")),
   ]);
-  const recipes = chosen ? [chosen, ...own.filter((recipe) => recipe.id !== chosen.id)] : own;
-  return { week, recipes, chosenRecipeId: chosen?.id ?? null };
+  return { week, recipes, chosenRecipeId };
 }
 
 type Fields = Record<string, string>;
@@ -241,7 +239,7 @@ export default function PlanPage() {
               </Form>
             ) : (
               <Text tone="muted">
-                Your recipes show up here to plan. <Button href="/recipes/new" variant="plain" size="inline">Write a recipe</Button>
+                Your recipes and the ones you save to a cookbook show up here to plan. <Button href="/recipes/new" variant="plain" size="inline">Write a recipe</Button>
               </Text>
             )}
           </section>
