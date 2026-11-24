@@ -31,6 +31,19 @@ async function attachElementShot(element: Locator, testInfo: TestInfo, name: str
   });
 }
 
+// From the top of `first` to the bottom of `last`, scrolled to the top of the viewport first, in one picture.
+async function attachRangeShot(page: Page, first: Locator, last: Locator, testInfo: TestInfo, name: string): Promise<void> {
+  await first.evaluate((node) => node.scrollIntoView({ block: "start" }));
+  const top = await first.boundingBox();
+  const bottom = await last.boundingBox();
+  if (!top || !bottom) throw new Error(`${name}: nothing to capture`);
+  const width = page.viewportSize()?.width ?? top.x + top.width;
+  await testInfo.attach(`${name}-${testInfo.project.name}`, {
+    body: await page.screenshot({ clip: { x: 0, y: top.y, width, height: bottom.y + bottom.height - top.y }, animations: "disabled" }),
+    contentType: "image/png",
+  });
+}
+
 // A token field's input: in the form, or on a phone (iphone-webkit) in the sheet its button opens. `done` closes it.
 async function openTokens(page: Page, label: string, phone: boolean): Promise<{ input: Locator; scope: Page | Locator; done: () => Promise<void> }> {
   const field = page.getByRole("combobox", { name: label, exact: true });
@@ -245,7 +258,13 @@ test.describe("Organizers", () => {
     await verifyAfterReload(async () => {
       await expect(page.getByRole("list", { name: `Recipes tagged ${snug}`, exact: true }).getByRole("link", { name: title })).toBeVisible();
     });
-    await attachElementShot(page.getByRole("list", { name: `Recipes tagged ${snug}`, exact: true }), testInfo, "tag-merged-recipes-after-reload");
+    await attachRangeShot(
+      page,
+      page.getByRole("heading", { level: 1, name: snug, exact: true }),
+      page.getByRole("list", { name: `Recipes tagged ${snug}`, exact: true }),
+      testInfo,
+      "tag-merged-recipes-after-reload",
+    );
 
     // Delete it, after saying yes: the list no longer has either.
     await waitForHydration(page);
