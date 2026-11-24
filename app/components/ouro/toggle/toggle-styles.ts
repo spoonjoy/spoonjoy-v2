@@ -46,7 +46,7 @@ const toggleBase =
   // Stryker disable next-line StringLiteral: a class string in a class position; test/state-hovers.test.tsx reads its tokens, outside this file's tests
   "not-data-disabled:not-active:pointer-fine:hover:before:opacity-[var(--ouro-state-hover,8%)] not-data-disabled:active:before:opacity-[var(--ouro-state-pressed,14%)] " +
   // Where corner-shape is missing, the surface slot paints the background, border and state layer instead (see ouro-base.css).
-  "bg-(--ouro-bg) border-(--ouro-bd) [--ouro-sq-w:1px] " +
+  "bg-(--ouro-bg) border-(--ouro-bd) " +
   // Stryker disable next-line StringLiteral: a class string in a class position; test/state-hovers.test.tsx reads its tokens, outside this file's tests
   "not-data-disabled:not-active:pointer-fine:hover:[--ouro-state:var(--ouro-state-hover,8%)] not-data-disabled:active:[--ouro-state:var(--ouro-state-pressed,14%)] " +
   "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +

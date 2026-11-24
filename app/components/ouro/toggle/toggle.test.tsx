@@ -243,8 +243,7 @@ describe("Toggle looks", () => {
     const toggle = host.querySelector<HTMLElement>('[data-ouro="toggle"]')!;
     toggle.style.setProperty("--ouro-control-radius", "9999px");
     const half = toggle.getBoundingClientRect().height / 2;
-    const fallback = Number.parseFloat(getComputedStyle(toggle).getPropertyValue("--ouro-corner-fallback")) || 1;
-    expect(Number.parseFloat(getComputedStyle(toggle).borderTopLeftRadius)).toBeCloseTo(half * fallback, 1);
+    expect(Number.parseFloat(getComputedStyle(toggle).borderTopLeftRadius)).toBeCloseTo(half, 1);
   });
 
   it("rounds fully with regular-weight text with shape pill", async () => {
@@ -265,7 +264,7 @@ describe("Toggle looks", () => {
     // its height, so a theme's 9999px capsule is compared at that.
     const probe = rect!.appendChild(document.createElement("span"));
     const half = `${rect!.getBoundingClientRect().height / 2}px`;
-    probe.style.borderRadius = `calc(min(calc(var(--ouro-control-radius, var(--radius)) * var(--ouro-radius-scale, 1)), ${half}) * var(--ouro-corner-fallback, 1))`;
+    probe.style.borderRadius = `calc(min(calc(var(--ouro-control-radius, var(--radius)) * var(--ouro-radius-scale, 1)), ${half}))`;
     expect(radius(rect!)).toBe(radius(probe));
     probe.remove();
     expect(radius(pill!)).toBeGreaterThanOrEqual(pill!.getBoundingClientRect().height / 2);
@@ -521,23 +520,4 @@ describe("Toggle under forced colours", () => {
     }
   });
 
-  it("carries the squircle marker and a hidden surface behind the label on a rect, and neither on a pill", async () => {
-    const { host } = await render(
-      <>
-        <Toggle label="Rect" />
-        <Toggle label="Pill" shape="pill" />
-      </>,
-    );
-    const [rect, pill] = [...host.querySelectorAll<HTMLElement>('[data-ouro="toggle"]')];
-    const surface = rect!.querySelector<HTMLElement>("[data-ouro-surface]")!;
-    expect(rect!.getAttribute("data-ouro-squircle")).toBe("");
-    expect(rect!.className).toContain("press relative isolate");
-    expect(rect!.className).toContain("[--ouro-state:var(--ouro-state-hover,8%)]");
-    expect(surface.getAttribute("aria-hidden")).toBe("true");
-    expect(surface.style.zIndex).toBe("-1");
-    expect(surface.previousElementSibling?.className).toContain("pointer-coarse:block");
-    expect(getComputedStyle(rect!).getPropertyValue("--ouro-sq-w").trim()).toBe("1px");
-    expect(pill!.hasAttribute("data-ouro-squircle")).toBe(false);
-    expect(pill!.querySelector("[data-ouro-surface]")).toBeNull();
-  });
 });

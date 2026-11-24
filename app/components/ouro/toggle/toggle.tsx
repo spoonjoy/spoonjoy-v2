@@ -232,11 +232,9 @@ export function Toggle(props: ToggleProps): JSX.Element {
       data-ouro="toggle"
       data-variant={variant}
       data-shape={shape}
-      data-ouro-squircle={shape === "rect" ? "" : undefined}
       className={cn(toggleBase, shapes[shape], sizes[size], looks[variant], iconOnly && squareClass, className)}
     >
       <TouchTarget />
-      {shape === "rect" && <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />}
       {Icon && <Icon aria-hidden="true" className={cn(iconClass, "relative", !hideLabel && "-ms-0.5")} />}
       {!iconOnly && <span className={cn("relative", hideLabel && "sr-only")}>{label}</span>}
       {reason.note}

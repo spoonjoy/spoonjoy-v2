@@ -44,8 +44,8 @@ const viewportClass =
 const popupClass =
   "relative isolate box-border flex max-h-full min-h-0 flex-col outline-none " +
   "rounded-ouro-xl bg-(--ouro-bg) text-popover-foreground ring-1 ring-border/60 " +
-  "[--ouro-bg:var(--popover)] [--ouro-scroller-surface:var(--popover)] [--ouro-bd:color-mix(in_oklab,var(--border)_60%,transparent)] [--ouro-sq-w:1px] " +
-  "[--ouro-sq-r:calc(var(--radius)*var(--ouro-radius-scale,1)*1.4)] shadow-(--shadow-xl) " +
+  "[--ouro-bg:var(--popover)] [--ouro-scroller-surface:var(--popover)] [--ouro-bd:color-mix(in_oklab,var(--border)_60%,transparent)] " +
+  "shadow-(--shadow-xl) " +
   "[transition:transform_var(--ouro-dialog-duration)_var(--ouro-dialog-ease),opacity_var(--ouro-dialog-duration)_var(--ouro-dialog-ease)] " +
   "data-starting-style:[transform:scale(0.96)] data-starting-style:opacity-0 " +
   "data-ending-style:[transform:scale(0.96)] data-ending-style:opacity-0 " +
@@ -265,10 +265,8 @@ export function DialogPopupUnchecked({
       aria-modal="true"
       data-ouro="dialog"
       data-ouro-presentation="dialog"
-      data-ouro-squircle=""
       data-size={size}
     >
-      <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />
       {children}
     </BaseDialog.Popup>
   );

@@ -99,7 +99,7 @@ describe("button branch", () => {
     mounted.push(step);
     step.className = "absolute font-medium";
     const half = `${button.getBoundingClientRect().height / 2}px`;
-    step.style.borderRadius = `calc(min(calc(var(--ouro-control-radius, var(--radius)) * var(--ouro-radius-scale, 1)), ${half}) * var(--ouro-corner-fallback, 1))`;
+    step.style.borderRadius = `calc(min(calc(var(--ouro-control-radius, var(--radius)) * var(--ouro-radius-scale, 1)), ${half}))`;
     expect(style.fontWeight).toBe(getComputedStyle(step).fontWeight);
     expect(style.borderTopLeftRadius).toBe(getComputedStyle(step).borderTopLeftRadius);
   }
@@ -126,8 +126,7 @@ describe("button branch", () => {
     mounted.push(scoped);
     scoped.textContent = ":root { --ouro-control-radius: 9999px; }";
     const half = button.getBoundingClientRect().height / 2;
-    const fallback = Number.parseFloat(getComputedStyle(button).getPropertyValue("--ouro-corner-fallback")) || 1;
-    expect(Number.parseFloat(getComputedStyle(button).borderTopLeftRadius)).toBeCloseTo(half * fallback, 1);
+    expect(Number.parseFloat(getComputedStyle(button).borderTopLeftRadius)).toBeCloseTo(half, 1);
     expectThemeLook(button);
   });
 
@@ -353,13 +352,6 @@ describe("loading", () => {
     const s = spinner.getBoundingClientRect();
     expect(Math.abs(s.left + s.width / 2 - (b.left + b.width / 2))).toBeLessThanOrEqual(1);
     expect(Math.abs(s.top + s.height / 2 - (b.top + b.height / 2))).toBeLessThanOrEqual(1);
-  });
-
-  it("paints the surface behind the label with a negative z-index", async () => {
-    const { button } = await render(<Button>Save recipe</Button>);
-    const surface = button.querySelector<HTMLElement>("[data-ouro-surface]")!;
-    expect(surface).not.toBeNull();
-    expect(getComputedStyle(surface).zIndex).toBe("-1");
   });
 
   it("does not submit its form while loading", async () => {

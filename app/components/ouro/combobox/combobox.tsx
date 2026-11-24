@@ -163,6 +163,13 @@ export interface ComboboxBaseProps {
    */
   doneLabel?: string | undefined;
   /**
+   * The name of the sheet's own close button on a phone: an icon button in the top corner,
+   * distinct from `doneLabel`'s visible footer button with `multiple`, so a screen reader
+   * does not read a matching name for both controls. Translate it with your app.
+   * @default "Close"
+   */
+  closeLabel?: string | undefined;
+  /**
    * Layout only: margins, width, grid placement (`mt-4`, `col-span-2`). Appearance classes
    * warn in development; style fields in your theme.
    */
@@ -348,6 +355,7 @@ interface ControlProps {
   empty: ReactNode;
   clearLabel: string;
   doneLabel: string;
+  closeLabel: string;
   removeLabel: (label: string) => string;
   customValueLabel: (text: string) => string;
   /** `allowCustomValue` on a phone: one value, which may be typed text. */
@@ -482,6 +490,7 @@ export function Combobox(props: ComboboxProps): JSX.Element {
     empty,
     clearLabel = "Clear",
     doneLabel = "Done",
+    closeLabel = "Close",
     className,
     ref,
     multiple = false,
@@ -578,6 +587,7 @@ export function Combobox(props: ComboboxProps): JSX.Element {
     empty,
     clearLabel,
     doneLabel,
+    closeLabel,
     removeLabel,
     customValueLabel,
     custom,
@@ -799,7 +809,7 @@ function useCustomReset(ref: RefObject<HTMLInputElement | HTMLButtonElement | nu
 /** A Combobox that picks one item or several, on Base UI Combobox. */
 function ComboboxControl(props: ControlProps): JSX.Element {
   const { label, items, multiple, value, defaultValue, onValueChange, onInputChange, placeholder, required, loading } = props;
-  const { loadingLabel, emptyLabel, empty, clearLabel, doneLabel, removeLabel, customValueLabel, custom, tokens, inputRef, sheet } = props;
+  const { loadingLabel, emptyLabel, empty, clearLabel, doneLabel, closeLabel, removeLabel, customValueLabel, custom, tokens, inputRef, sheet } = props;
   const { autoHighlight, onInputKeyDown, readOnly, inputValue } = props;
   const field = useField()!;
   // Ouro's own invalid state (the error prop or the Form's error for this name), not Base UI's,
@@ -1037,7 +1047,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
           )}
           <SheetFrame
             title={label}
-            closeLabel={doneLabel}
+            closeLabel={closeLabel}
             side="bottom"
             // One tall snap point: the sheet keeps its height as results filter and load, so the
             // search input stays where the thumb left it.

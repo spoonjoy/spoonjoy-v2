@@ -77,10 +77,8 @@ export interface CardOwnProps {
    * A picture behind the whole card, edge to edge, with the title, body and footer over it:
    * usually an `<img alt="" />` (it fills the card, cropped to cover), and a shade of your own
    * where the text needs it. Only the picture is clipped to the card's squircle, so its title,
-   * text and controls repaint without a clip, and where the engine has no corner-shape it takes
-   * the same squircle clip as an avatar's photo, at the card's radius.
+   * text and controls repaint without a clip.
    * @claim "Only the picture is clipped to" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card > lays a backdrop behind the whole card, edge to edge, clipping only the picture and not the card or its text)
-   * @claim "where the engine has no corner-shape" registry/ouro/theme/squircle-surface.test.tsx verify:testExists(registry/ouro/theme/squircle-surface.test.tsx::squircle surface where the engine has no corner-shape > clips a Card's backdrop, and only it, to the squircle at the card's radius)
    */
   backdrop?: ReactNode;
   /** The card's body, under the title. */
@@ -160,7 +158,7 @@ const levels = [2, 3, 4, 5, 6] as const;
 const variants = {
   // Where corner-shape is missing, the surface slot paints the background and border instead (see ouro-base.css).
   outline:
-    "rounded-ouro-xl border border-border bg-(--ouro-bg) border-(--ouro-bd) [--ouro-bg:var(--card)] [--ouro-scroller-surface:var(--card)] [--ouro-bd:var(--border)] [--ouro-sq-w:1px] [--ouro-sq-r:calc(var(--radius)*var(--ouro-radius-scale,1)*1.4)] text-card-foreground shadow-(--shadow-xs)",
+    "rounded-ouro-xl border border-border bg-(--ouro-bg) border-(--ouro-bd) [--ouro-bg:var(--card)] [--ouro-scroller-surface:var(--card)] [--ouro-bd:var(--border)] text-card-foreground shadow-(--shadow-xs)",
   plain: "bg-transparent text-foreground",
 } as const;
 
@@ -172,18 +170,15 @@ const rootSizes = {
 const inset = { outline: { md: "px-6", sm: "px-4" }, plain: { md: "px-0", sm: "px-0" } } as const;
 const mediaPull = { outline: { md: "-mt-6", sm: "-mt-4" }, plain: { md: "rounded-ouro-xl", sm: "rounded-ouro-lg" } } as const;
 
-// The backdrop covers the card's border box and clips itself to the card's corner: the corner shape where the engine
-// draws it, and elsewhere ouro-base's avatar clip at the card's --ouro-sq-r, with no circular corner of its own.
+// The backdrop covers the card's border box and clips itself to the card's corner (squircleCorners() draws it where the engine lacks corner-shape).
 // An outlined card's backdrop takes the card's own corner; a plain card has none, so its backdrop rounds itself as plain
 // media does. What is the backdrop's alone is inline style, not a class, so an app whose cards have no backdrop compiles
-// none of it (#2643); ouro-base's fallback sets --ouro-card-backdrop-inset where the engine lacks corner-shape.
+// none of it (#2643).
 const backdropCorner = { outline: { md: "rounded-[inherit]", sm: "rounded-[inherit]" }, plain: { md: "rounded-ouro-xl", sm: "rounded-ouro-lg" } } as const;
 const backdropClass = "pointer-events-none absolute -z-1 overflow-clip";
-const backdropStyle: CSSProperties = { inset: "var(--ouro-card-backdrop-inset, calc(var(--ouro-sq-w, 0px) * -1))" };
-const plainBackdropStyle = {
-  md: { ...backdropStyle, "--ouro-sq-w": "0px", "--ouro-sq-r": "calc(var(--radius) * var(--ouro-radius-scale, 1) * 1.4)" },
-  sm: { ...backdropStyle, "--ouro-sq-w": "0px", "--ouro-sq-r": "calc(var(--radius) * var(--ouro-radius-scale, 1))" },
-} as Record<"md" | "sm", CSSProperties>;
+// An outlined card's picture reaches under its 1px border, to the border box's edge.
+const backdropStyle: CSSProperties = { inset: "-1px" };
+const plainBackdropStyle: CSSProperties = { inset: 0 };
 /** The picture fills the backdrop, cropped to it. */
 const backdropPictureStyle: CSSProperties = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" };
 // A linked card's hover and press tint, which its stretched link draws as a plain rectangle, lies on the backdrop
@@ -435,7 +430,6 @@ export function Card(props: CardProps): JSX.Element {
         onPointerLeave: (event: PointerEvent<HTMLElement>) => (rest.onPointerLeave?.(event), setTint("none")),
       }),
       "data-ouro": "card",
-      "data-ouro-squircle": variant === "outline" ? "" : undefined,
       "data-linked": linked ? "" : undefined,
       "data-follows-link": linked ? "" : undefined,
       className: cn(
@@ -450,14 +444,13 @@ export function Card(props: CardProps): JSX.Element {
         className,
       ),
     },
-    variant === "outline" && <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />,
     backdrop && (
       <div
         data-slot="card-backdrop"
         data-card-backdrop=""
         data-ouro-avatar-surface=""
         className={cn(backdropClass, backdropCorner[variant][size])}
-        style={variant === "plain" ? plainBackdropStyle[size] : backdropStyle}
+        style={variant === "plain" ? plainBackdropStyle : backdropStyle}
       >
         {isValidElement<{ style?: CSSProperties }>(backdrop) ? cloneElement(backdrop, { style: { ...backdropPictureStyle, ...backdrop.props.style } }) : backdrop}
         {linked && (

@@ -149,9 +149,9 @@ describe("Avatar", () => {
   it("sets the squircle corner size of its surface by shape", async () => {
     const circle = await render(<Avatar name="Ada Lovelace" />);
     const square = await render(<Avatar name="Ada Lovelace" shape="square" />);
-    expect(surface(circle.avatar).className).toContain("[--ouro-sq-r:44%]");
+    expect(surface(circle.avatar).className).toContain("rounded-[44%]");
     expect(surface(circle.avatar).className).not.toContain("24%");
-    expect(surface(square.avatar).className).toContain("[--ouro-sq-r:24%]");
+    expect(surface(square.avatar).className).toContain("rounded-[24%]");
     expect(surface(square.avatar).className).not.toContain("44%");
   });
 
@@ -454,7 +454,7 @@ describe("Avatar", () => {
       expect(avatar.querySelector("[data-ouro-avatar-initials]")).toBeNull();
       const fallback = avatar.querySelector<HTMLElement>('[data-ouro="skeleton"]')!.parentElement!;
       expect(getComputedStyle(fallback).overflow).toBe("hidden");
-      expect(getComputedStyle(fallback).borderTopLeftRadius).toBe(getComputedStyle(avatar).borderTopLeftRadius);
+      expect(getComputedStyle(fallback).borderTopLeftRadius).toBe(getComputedStyle(surface(avatar)).borderTopLeftRadius);
       const box = avatar.getBoundingClientRect();
       expect([box.width, box.height]).toEqual([named.width, named.height]);
       expect(avatar.querySelector('[data-ouro="skeleton"]')!.getBoundingClientRect().width).toBe(box.width);
@@ -686,8 +686,8 @@ describe("Avatar shapes and icons", () => {
     const corner = parseFloat(getComputedStyle(square!).borderTopLeftRadius);
     expect(corner).toBeGreaterThan(0);
     expect(corner).toBeLessThan(34);
-    expect(getComputedStyle(circle!).borderTopLeftRadius).toBe("44%");
-    expect(getComputedStyle(square!).borderTopLeftRadius).toBe("24%");
+    expect(getComputedStyle(circle!).borderTopLeftRadius).toBe("24%");
+    expect(getComputedStyle(square!).borderTopLeftRadius).toBe("13%");
     for (const plain of [circle!, square!]) {
       expect(getComputedStyle(plain, "::after").borderTopWidth).not.toBe("1px");
       expect(getComputedStyle(surface(plain)).backgroundColor).not.toBe("rgb(255, 255, 255)");
@@ -738,7 +738,7 @@ describe("Avatar shapes and icons", () => {
     const avatars = [...host.querySelectorAll<HTMLElement>('[data-ouro="avatar"]')];
     for (const avatar of avatars) {
       expect(avatar.getAttribute("data-shape")).toBe("agent");
-      expect(getComputedStyle(avatar).borderTopLeftRadius).toBe("24%");
+      expect(getComputedStyle(avatar).borderTopLeftRadius).toBe("13%");
     }
     for (const avatar of avatars.slice(0, -1)) {
       const box = avatar.getBoundingClientRect();
@@ -782,7 +782,7 @@ describe("Avatar shapes and icons", () => {
   it("clips a square's picture to its corners", async () => {
     const { avatar } = await render(<Avatar name="Design reviews" shape="square" src={photo} />);
     await expect.poll(() => avatar.querySelector("img")).not.toBeNull();
-    expect(getComputedStyle(avatar.querySelector("img")!).borderTopLeftRadius).toBe(getComputedStyle(avatar).borderTopLeftRadius);
+    expect(getComputedStyle(avatar.querySelector("img")!).borderTopLeftRadius).toBe(getComputedStyle(surface(avatar)).borderTopLeftRadius);
   });
 
   it("shows an icon instead of initials, keeping the name for screen readers", async () => {
@@ -958,10 +958,10 @@ describe("Avatar presence", () => {
       </>,
     );
     const [team] = [...host.querySelectorAll<HTMLElement>('[data-shape="square"]')];
-    expect(getComputedStyle(team!).borderTopLeftRadius).toBe("24%");
+    expect(getComputedStyle(team!).borderTopLeftRadius).toBe("13%");
     for (const avatar of host.querySelectorAll<HTMLElement>('[data-shape="circle"]')) {
       const box = avatar.getBoundingClientRect();
-      expect(getComputedStyle(avatar).borderTopLeftRadius).toBe("44%");
+      expect(getComputedStyle(avatar).borderTopLeftRadius).toBe("24%");
       const dot = avatar.querySelector<HTMLElement>("[data-ouro-avatar-presence]")!.getBoundingClientRect();
       // The dot's center is on the edge's diagonal point: a squircle's lies 8% of the size in from the corner.
       expect(Math.abs(box.right - (dot.left + dot.width / 2) - box.width * 0.08)).toBeLessThan(0.6);
@@ -1001,7 +1001,7 @@ describe("Avatar presence", () => {
       for (const avatar of host.querySelectorAll<HTMLElement>('[data-ouro="avatar"]')) {
         const fill = getComputedStyle(surface(avatar));
         expect(fill.maskImage).toBe("none");
-        expect(fill.clipPath).toContain("evenodd");
+        expect(fill.clipPath).toContain("shape(");
         const dot = avatar.querySelector<HTMLElement>("[data-ouro-avatar-presence]")!;
         const style = getComputedStyle(dot);
         expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
@@ -1129,7 +1129,7 @@ describe("Avatar group chats", () => {
       // The same box as a person's avatar, and the person's rounder squircle, not a team's tile.
       expect([box.width, box.height]).toEqual([person.width, person.height]);
       expect(avatar.getAttribute("data-shape")).toBe("group");
-      expect(surface(avatar).className).toContain("[--ouro-sq-r:44%]");
+      expect(surface(avatar).className).toContain("rounded-[44%]");
       expect(getComputedStyle(avatar).boxShadow).toBe("none");
       const slices = slicesOf(avatar);
       const small = size === "xs" || size === "sm";

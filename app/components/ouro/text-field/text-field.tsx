@@ -430,11 +430,9 @@ export function TextField(props: TextFieldProps): JSX.Element {
           data-ouro-input-group=""
           data-variant={variant}
           data-size={size}
-          data-ouro-squircle={variant === "outline" ? "" : undefined}
           className={cn(groupBaseClass, groupVariants[variant], groupSizes[size])}
           onMouseDown={focusInput}
         >
-          {variant === "outline" && <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />}
           {hasStart && (
             <span data-slot="text-field-adornment" id={startId} data-ouro-adornment="start" className={adornmentClass}>
               {startAdornment}
