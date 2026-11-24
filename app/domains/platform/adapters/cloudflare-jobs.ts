@@ -6,7 +6,8 @@
 // out a lease or a deploy also counts as a delivery to Queues; if Queues drops a message anyway, its key
 // is claimable again once its lease is up (or after a day waiting). It needs max_batch_size 1 for long
 // jobs, so one job's run never holds up another's.
-import { isJobMessage, retryDelaySeconds, runJob, JobsUnavailableError, type JobKeys, type JobMessage, type JobRegistry, type Jobs } from "../ports/jobs";
+import { isJobMessage, retryDelaySeconds, runJob, type JobKeys, type JobMessage, type JobRegistry, type Jobs } from "../ports/jobs";
+import { PlatformUnavailableError } from "../ports/ports";
 
 /** The slice of a D1 binding the job keys use. */
 export interface JobKeysDatabase {
@@ -21,7 +22,7 @@ export interface JobKeysDatabase {
 export function queueJobs(queue: Queue<JobMessage> | undefined, keys: JobKeys): Jobs {
   return {
     async enqueue(kind, payload, { key, delaySeconds }) {
-      if (!queue) throw new JobsUnavailableError("the JOBS queue binding");
+      if (!queue) throw new PlatformUnavailableError("jobs", "the JOBS queue binding");
       if (!(await keys.claim(key, kind.type))) return { enqueued: false };
       try {
         await queue.send({ type: kind.type, key, payload }, delaySeconds ? { delaySeconds } : {});
