@@ -83,12 +83,14 @@ describe("password reset", () => {
     const mail = await db.emailOutbox.findFirstOrThrow({ where: { toAddress: user.email } });
     expect(mail).toMatchObject({ purpose: "reset_password", subject: "Reset your Spoonjoy password" });
     expect(mail.textBody).toContain("https://spoonjoy-v2-qa.mendelow-studio.workers.dev/reset-password?token=");
-    expect(mail.textBody).toContain("If you didn't ask for this, ignore this email");
+    expect(mail.textBody).toContain("Didn't ask for this? Ignore this email");
+    expect(mail.htmlBody).toContain('href="https://spoonjoy-v2-qa.mendelow-studio.workers.dev/reset-password?token=');
 
     const send = vi.fn().mockResolvedValue(undefined);
     await db.accountEmailToken.deleteMany({ where: { userId: user.id } });
     expect(await requestPasswordReset(db, { EMAIL: { send }, SPOONJOY_EMAIL_FROM: "hello@spoonjoy.app" }, user.email)).toBe("sent");
     expect(send.mock.calls[0][0].text).toContain("https://spoonjoy.app/reset-password?token=");
+    expect(send.mock.calls[0][0].html).toContain('src="https://spoonjoy.app/images/email/spoonjoy-mark.png"');
   });
 
   it("does nothing for an address with no account, or one shared by two accounts in different case", async () => {

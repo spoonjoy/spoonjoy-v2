@@ -5,6 +5,7 @@ import { revokeAllAccountAccess } from "~/lib/account-revocation.server";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { canSendAccountEmail, sendTransactionalEmail, type TransactionalEmailEnv } from "~/lib/transactional-email.server";
+import { renderAccountEmail, type AccountEmailContent } from "~/domains/platform";
 import { captureEvent, resolvePostHogServerConfig, type PostHogServerEnv } from "~/lib/analytics-server";
 import { PASSWORD_MIN_LENGTH } from "~/lib/password-policy";
 
@@ -39,6 +40,20 @@ export function generatePasswordResetToken(): string {
 export async function hashPasswordResetToken(token: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
   return Buffer.from(digest).toString("hex");
+}
+
+/** The reset mail's words around its link. */
+export function passwordResetEmail(link: string): AccountEmailContent {
+  return {
+    preview: "Choose a new password. The link works for 30 minutes.",
+    heading: "Reset your password",
+    body: ["Someone asked to reset the password for your Spoonjoy account. If it was you, choose a new one here."],
+    action: { label: "Choose a new password", url: link },
+    footer: [
+      "The link works once, for the next 30 minutes. A new password signs you out on your other devices and disconnects apps, agents and API tokens.",
+      "Didn't ask for this? Ignore this email and your password stays as it is.",
+    ],
+  };
 }
 
 export type PasswordResetRequestOutcome = "sent" | "no_account" | "throttled" | "send_failed";
@@ -103,12 +118,7 @@ export async function requestPasswordReset(
       to: user.email,
       purpose: "reset_password",
       subject: "Reset your Spoonjoy password",
-      text: [
-        "Someone asked to reset the password for your Spoonjoy account. If it was you, choose a new password here:",
-        link,
-        "The link works once, for the next 30 minutes. Resetting your password signs you out on every other device and disconnects apps, agents and API tokens.",
-        "If you didn't ask for this, ignore this email; your password stays as it is.",
-      ].join("\n\n"),
+      ...renderAccountEmail(passwordResetEmail(link), baseUrl),
     });
   } catch {
     // Mail refused (already recorded by sendTransactionalEmail). The person sees the same answer

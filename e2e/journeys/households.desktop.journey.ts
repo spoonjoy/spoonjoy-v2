@@ -10,6 +10,7 @@ import type { Locator, Page, TestInfo } from "@playwright/test";
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
 import { waitForHydrationOnLoad } from "./support/app-ready";
 import { pathUrl, waitForHydration } from "./support/navigation";
+import { attachCapturedMail, waitForCapturedMail } from "./support/captured-mail";
 import { scratch, scratchDesktop, scratchDesktopStorageStatePath, scratchStorageStatePath } from "./support/personas";
 
 const SCRATCH_INDEX = 10;
@@ -306,6 +307,11 @@ test.describe("Households", () => {
     await expect(form.getByLabel("Email address")).toHaveValue("");
     await expectAccessible();
     await attachElementScreenshot(testInfo, form, "owner-invite-form");
+
+    // The invite mail the stack captured, as the invited person would see it.
+    const mail = await waitForCapturedMail(address, "household_invite");
+    expect(mail.text).toContain(`Join ${name}`);
+    await attachCapturedMail(testInfo, page, mail, "household-invite");
 
     const waiting = page.getByRole("list", { name: "Waiting to join" });
     await verifyAfterReload(async () => {

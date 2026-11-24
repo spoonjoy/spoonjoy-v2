@@ -61,7 +61,17 @@ describe("transactional-email.server", () => {
 
     const rows = await db.emailOutbox.findMany({ where: { toAddress: message.to } });
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ purpose: "verify_email", subject: message.subject, textBody: message.text });
+    expect(rows[0]).toMatchObject({ purpose: "verify_email", subject: message.subject, textBody: message.text, htmlBody: textToHtml(message.text) });
+  });
+
+  it("sends and captures a mail's own HTML part when it has one", async () => {
+    const withHtml = { ...message, html: "<!doctype html><p>Styled</p>" };
+    const send = vi.fn().mockResolvedValue({ messageId: "m2" });
+    await sendTransactionalEmail(db, { EMAIL: { send }, SPOONJOY_EMAIL_FROM: "hello@spoonjoy.app" }, withHtml);
+    expect(send.mock.calls[0][0]).toMatchObject({ text: message.text, html: withHtml.html });
+
+    await sendTransactionalEmail(db, { SPOONJOY_EMAIL_MODE: "capture", SPOONJOY_BASE_URL: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev" }, withHtml);
+    expect(await db.emailOutbox.findFirst({ where: { toAddress: message.to } })).toMatchObject({ textBody: message.text, htmlBody: withHtml.html });
   });
 
   it("drops captured QA mail older than a day, so sign-in links do not pile up", async () => {
