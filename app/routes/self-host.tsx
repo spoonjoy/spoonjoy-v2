@@ -1,5 +1,4 @@
 import type { Route } from "./+types/self-host";
-import compose from "../../self-host/compose.yaml?raw";
 import type { ReactNode } from "react";
 import { CookbookPage } from "~/components/cookbook/page";
 import { Alert } from "~/components/ouro/alert/alert";
@@ -20,6 +19,24 @@ const DESCRIPTION =
  * flip this then, and the Self-host Pull workflow (.github/workflows/self-host-pull.yml) proves it.
  */
 export const IMAGE_PUBLIC = false;
+
+/** self-host/compose.yaml as it stands; test/routes/self-host.test.tsx fails when the two differ. */
+export const COMPOSE = `# Spoonjoy with Docker Compose: \`docker compose up -d\` beside this file, then open http://localhost:8080.
+# Set SPOONJOY_BASE_URL to the address people use (docs/self-hosting.md lists every setting).
+services:
+  spoonjoy:
+    image: \${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}
+    restart: unless-stopped
+    ports:
+      - "\${SPOONJOY_PORT:-8080}:8080"
+    volumes:
+      - spoonjoy-data:/data
+    environment:
+      SPOONJOY_BASE_URL: \${SPOONJOY_BASE_URL:-http://localhost:8080}
+
+volumes:
+  spoonjoy-data:
+`;
 
 export const START = "docker compose up -d";
 export const UPDATE = "docker compose pull && docker compose up -d";
@@ -67,7 +84,7 @@ export default function SelfHost() {
 
         <Section id="self-host-start" title="Start it">
           <Text>Save this as <code>compose.yaml</code>:</Text>
-          <CodeBlock code={compose} title="compose.yaml" language="yaml" />
+          <CodeBlock code={COMPOSE} title="compose.yaml" language="yaml" />
           <Text>Then start it beside that file:</Text>
           <CodeBlock code={START} language="sh" />
           <Text>
