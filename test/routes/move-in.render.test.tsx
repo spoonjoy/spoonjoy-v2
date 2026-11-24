@@ -26,6 +26,7 @@ function view(fields: Partial<MoveInView> = {}): MoveInView {
     archiveName: "mealie.zip",
     recipes: { found: 0, done: 0, created: 0, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 },
     photos: { found: 0, in: 0 },
+    organizers: { tags: 0, categories: 0, tools: 0 },
     failure: null,
     notes: [],
     renamed: [],
@@ -252,8 +253,23 @@ describe("the Move in page", () => {
     expect(screen.queryByRole("button", { name: /got a number/ })).toBeNull();
   });
 
+  it("counts the tags, categories and tools that came over with the recipes", async () => {
+    page(view({
+      status: "done",
+      finished: true,
+      recipes: { found: 20, done: 20, created: 20, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 },
+      photos: { found: 20, in: 20 },
+      organizers: { tags: 8, categories: 6, tools: 0 },
+    }));
+    expect(await screen.findByRole("heading", { level: 2, name: "20 recipes moved in" })).toBeTruthy();
+    for (const [term, details] of [["Recipes moved in", "20"], ["Photos", "20 of 20"], ["Tags", "8"], ["Categories", "6"]]) {
+      expect(screen.getByText(term).nextElementSibling?.textContent).toBe(details);
+    }
+    expect(screen.queryByText("Tools")).toBeNull();
+  });
+
   it("says when everything was already here", async () => {
-    page(view({ status: "done", finished: true, recipes: { found: 2, done: 2, created: 0, already: 2, updated: 0, unchanged: 2, skipped: 0, failed: 0 }, photos: { found: 0, in: 0 } }));
+    page(view({ status: "done", finished: true, recipes: { found: 2, done: 2, created: 0, already: 2, updated: 0, unchanged: 2, skipped: 0, failed: 0 }, photos: { found: 0, in: 0 }, organizers: { tags: 1, categories: 1, tools: 1 } }));
     expect(await screen.findByRole("heading", { level: 2, name: "Everything was already here" })).toBeTruthy();
     expect(screen.getByText("2 already here, 0 changed.")).toBeTruthy();
     expect(screen.queryByRole("heading", { level: 3, name: "What to look over" })).toBeNull();
