@@ -8,18 +8,28 @@
 //   node self-host/server.mjs photos <dir> [prefix]
 //                                         put each image in a folder into the photo store, under
 //                                         prefix, with the server stopped
+//   node self-host/server.mjs backup [file]
+//                                         back up the database and photos to one file (in the
+//                                         backups folder unless named), with the server stopped
+//   node self-host/server.mjs restore <file>
+//                                         replace the kitchen with a backup's, with the server
+//                                         stopped, backing up what was there first
+//
+// While it serves, the server also backs itself up on SPOONJOY_BACKUP_SCHEDULE (self-host/backup.mjs).
 import { randomBytes } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Miniflare, fetch as nodeFetch } from "miniflare";
-import { miniflareOptions, photoUploads, settingsFromEnv } from "./config.mjs";
-import { startCronTimers } from "./cron.mjs";
+import { createBackup, backupFileName, pruneBackups, restoreBackup } from "./backup.mjs";
+import { backupSettings, miniflareOptions, photoUploads, settingsFromEnv } from "./config.mjs";
+import { nextCronTime, startCronTimers } from "./cron.mjs";
 import { applyMigrations, migrationFiles, splitSql } from "./migrations.mjs";
 
 const startedAt = Date.now();
 const [command = "serve", ...args] = process.argv.slice(2);
 const settings = settingsFromEnv(process.env);
 const { appDir, dataDir } = settings;
+const backups = backupSettings(process.env, dataDir, (cron) => nextCronTime(cron, Date.now()));
 const log = (event, fields = {}) => console.log(JSON.stringify({ event, ...fields }));
 
 mkdirSync(dataDir, { recursive: true });
@@ -47,7 +57,17 @@ const mf = new Miniflare(options);
 await mf.ready;
 
 const db = await mf.getD1Database("DB");
-const migrations = await applyMigrations(db, migrationFiles(path.join(appDir, "migrations")));
+const knownMigrations = migrationFiles(path.join(appDir, "migrations"));
+const migrations = await applyMigrations(db, knownMigrations);
+const version = options.bindings.CF_VERSION_METADATA.id;
+
+async function backUp(kind, file = path.join(backups.dir, backupFileName(kind))) {
+  mkdirSync(path.dirname(file), { recursive: true });
+  const photos = await mf.getR2Bucket("PHOTOS");
+  const made = await createBackup({ db, photos, file, version });
+  log("backup", { kind, file, rows: made.rows, photos: made.photos, photoBytes: made.photoBytes, bytes: statSync(file).size });
+  return made;
+}
 
 if (command === "sql") {
   const file = args[0];
@@ -76,8 +96,27 @@ if (command === "sql") {
   log("photos", { dir, prefix, photos: uploads.length });
   await mf.dispose();
   process.exit(0);
+} else if (command === "backup") {
+  await backUp("manual", args[0] ? path.resolve(args[0]) : undefined);
+  await mf.dispose();
+  process.exit(0);
+} else if (command === "restore") {
+  const file = args[0];
+  if (!file) {
+    console.error("Usage: server.mjs restore <file>");
+    await mf.dispose();
+    process.exit(2);
+  }
+  const users = (await db.prepare('SELECT COUNT(*) AS count FROM "User"').first()).count;
+  if (users > 0) await backUp("before-restore");
+  const photos = await mf.getR2Bucket("PHOTOS");
+  const restored = await restoreBackup({ db, photos, file, knownMigrations: knownMigrations.map((migration) => migration.name) });
+  const after = await applyMigrations(db, knownMigrations);
+  log("restore", { ...restored, migrationsRun: after.ran });
+  await mf.dispose();
+  process.exit(0);
 } else if (command !== "serve") {
-  console.error(`Unknown command "${command}". Commands: serve, sql <file>, photos <dir> [prefix].`);
+  console.error(`Unknown command "${command}". Commands: serve, sql <file>, photos <dir> [prefix], backup [file], restore <file>.`);
   await mf.dispose();
   process.exit(2);
 }
@@ -88,10 +127,18 @@ const stopCron = startCronTimers(built.triggers?.crons ?? [], async (cron) => {
   await worker.scheduled({ cron });
   log("scheduled", { cron });
 });
+const stopBackups = backups.schedule
+  ? startCronTimers([backups.schedule], async () => {
+      await backUp("auto");
+      const removed = pruneBackups(backups.dir, backups.keep);
+      if (removed.length > 0) log("backups-pruned", { removed });
+    }, (error) => log("backup-failed", { error: String(error?.message ?? error) }))
+  : () => {};
 
 log("ready", {
-  version: options.bindings.CF_VERSION_METADATA.id,
+  version,
   port: settings.port,
+  backups: backups.schedule ? { schedule: backups.schedule, keep: backups.keep, dir: backups.dir } : "off",
   migrationsRun: migrations.ran,
   migrations: migrations.total,
   bootMs: Date.now() - startedAt,
@@ -100,6 +147,7 @@ log("ready", {
 for (const signal of ["SIGTERM", "SIGINT"]) {
   process.on(signal, async () => {
     stopCron();
+    stopBackups();
     await mf.dispose();
     process.exit(0);
   });

@@ -1,8 +1,9 @@
 # Self-hosted Spoonjoy's image, ghcr.io/spoonjoy/spoonjoy (self-host/Dockerfile, docs/self-hosting.md).
 # Each arch builds natively, boots the image on a clean runner, seeds the QA kitchen through the
 # image's own `sql` command, runs the Journeys sign-in and round-trip smoke set against it with a
-# screenshot of every test, and checks the kitchen survives a restart. Only a push to main pushes,
-# and the multi-arch `latest` and version tags are published only after both arches pass.
+# screenshot of every test, checks the kitchen survives a restart, and restores a backup of it into
+# a fresh server. Only a push to main pushes, and the multi-arch `latest` and version tags are
+# published only after both arches pass.
 name: Self-host Image
 
 on:
@@ -260,11 +261,59 @@ jobs:
           echo "{\"restartToFirstPageMs\": $(( end - start ))}" > "$OUT/restart.json"
           cat "$OUT/restart.json"
 
+      # A backup of the seeded kitchen (`server.mjs backup`, the server stopped), restored into a
+      # second, empty volume (`server.mjs restore`), must bring back the risotto and its photo byte
+      # for byte; Playwright's screenshot shows it. The restored server backs itself up every minute
+      # here, keeping one, to show the schedule runs. The container's user (node) writes the backup,
+      # so the folder is open to it; the backup holds this run's scratch passwords' hashes and isn't
+      # uploaded.
+      - name: Back up the kitchen and restore it into a fresh server
+        if: success()
+        run: |
+          docker stop sj
+          mkdir -p .self-host/backups
+          chmod 777 .self-host/backups
+          docker run --rm -v sj-data:/data -v "$PWD/.self-host/backups:/backups" "$LOCAL_IMAGE" \
+            node /app/self-host/server.mjs backup /backups/kitchen.tar.gz
+          docker volume create sj-restored
+          start=$(date +%s%3N)
+          docker run --rm -v sj-restored:/data -v "$PWD/.self-host/backups:/backups:ro" "$LOCAL_IMAGE" \
+            node /app/self-host/server.mjs restore /backups/kitchen.tar.gz
+          end=$(date +%s%3N)
+          bytes=$(docker run --rm -v "$PWD/.self-host/backups:/backups:ro" "$LOCAL_IMAGE" stat -c %s /backups/kitchen.tar.gz)
+          echo "{\"restoreMs\": $(( end - start )), \"backupBytes\": $bytes}" > "$OUT/restore.json"
+          cat "$OUT/restore.json"
+          docker run -d --name sj-restored -p 8080:8080 -v sj-restored:/data \
+            -e "SPOONJOY_BACKUP_SCHEDULE=* * * * *" -e SPOONJOY_BACKUPS_KEPT=1 "$LOCAL_IMAGE"
+          for _ in $(seq 1 600); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health/ready || true)" = "200" ] && break
+            sleep 0.1
+          done
+          curl -sf http://localhost:8080/recipes/qa-kitchen-recipe-risotto -o .self-host/risotto.html
+          grep -q "Saffron Risotto" .self-host/risotto.html
+          grep -q "/photos/samples/covers/penne-ragu.jpg" .self-host/risotto.html
+          curl -sf http://localhost:8080/photos/samples/covers/penne-ragu.jpg -o .self-host/penne-ragu.jpg
+          cmp .self-host/penne-ragu.jpg assets/sample-covers/penne-ragu.jpg
+          docker run --rm --network host --user "$(id -u):$(id -g)" --ipc host \
+            -v "$PWD:/work" -w /work -e HOME=/tmp -e CI=true \
+            -e SPOONJOY_JOURNEYS_BASE_URL=http://localhost:8080 \
+            -e SPOONJOY_SELF_HOST_RESTORED=1 \
+            mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f \
+            node node_modules/@playwright/test/cli.js test -c playwright.self-host-fresh.config.ts e2e/self-host/restored.spec.ts --output test-results-self-host-restored
+          for _ in $(seq 1 90); do
+            docker logs sj-restored 2>/dev/null | grep -q '"event":"backup","kind":"auto"' && break
+            sleep 1
+          done
+          docker logs sj-restored 2>/dev/null | grep '"event":"backup","kind":"auto"'
+          docker exec sj-restored ls /data/backups
+
       - name: Stop the server
         if: always()
         run: |
           docker logs sj > "$OUT/container.log" 2>&1 || true
           docker stop sj || true
+          docker logs sj-restored > "$OUT/restored.log" 2>&1 || true
+          docker stop sj-restored || true
           docker logs dex > "$OUT/dex.log" 2>&1 || true
           docker stop dex || true
 
@@ -275,7 +324,7 @@ jobs:
 
       - name: Strip network logs from traces
         if: always()
-        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report test-results-self-host-fresh test-results-self-host-oidc
+        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report test-results-self-host-fresh test-results-self-host-oidc test-results-self-host-restored
 
       - name: Summary
         if: always()
@@ -284,7 +333,7 @@ jobs:
             const fs = require("fs");
             const out = process.env.OUT;
             const metrics = { arch: process.env.ARCH, version: process.env.VERSION };
-            for (const file of ["image", "boot", "restart"]) {
+            for (const file of ["image", "boot", "restart", "restore"]) {
               try { Object.assign(metrics, JSON.parse(fs.readFileSync(`${out}/${file}.json`, "utf8"))); } catch {}
             }
             try { metrics.memoryIdle = JSON.parse(fs.readFileSync(`${out}/memory-idle.json`, "utf8")).MemUsage; } catch {}
@@ -305,6 +354,7 @@ jobs:
             test-results/
             test-results-self-host-fresh/
             test-results-self-host-oidc/
+            test-results-self-host-restored/
           retention-days: 30
           include-hidden-files: false
 
