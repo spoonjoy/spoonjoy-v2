@@ -50,6 +50,9 @@ const ARCHIVED_ASSET_CONTENT_TYPES: Record<string, string> = {
   map: "application/json",
 };
 const ARCHIVE_UPLOAD_CONCURRENCY = 8;
+// R2 sometimes answers one put with a 500 "internal error, please try again" (code 10001).
+// A put writes the same bytes each time, so each object gets two more tries after these waits.
+export const ARCHIVE_UPLOAD_RETRY_DELAYS_MS: readonly number[] = [2_000, 5_000];
 const R2_BUCKET_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 const CLOUDFLARE_SECRET_ENV_NAMES = [
   "CF_API_KEY",
@@ -515,7 +518,7 @@ export async function listClientAssetNames(directory: string = CLIENT_ASSET_DIRE
 // running an earlier build keep loading their chunks after the promotion (asset skew).
 // Re-uploading an unchanged name writes identical bytes, so the step is idempotent.
 async function archiveReleaseAssets(
-  deps: Pick<RunProductionCanaryReleaseDeps, "readGeneratedWorkerConfig" | "runCommand"> & {
+  deps: Pick<RunProductionCanaryReleaseDeps, "readGeneratedWorkerConfig" | "runCommand" | "sleep"> & {
     listClientAssets: () => Promise<readonly string[]>;
   },
   env: NodeJS.ProcessEnv,
@@ -533,13 +536,23 @@ async function archiveReleaseAssets(
       const name = names[next];
       next += 1;
       const extension = name.slice(name.lastIndexOf(".") + 1);
-      await deps.runCommand("pnpm", [
+      const put = () => deps.runCommand("pnpm", [
         "exec", "wrangler", "r2", "object", "put", `${bucket}/${RELEASE_ASSET_ARCHIVE_PREFIX}${name}`,
         "--file", `${CLIENT_ASSET_DIRECTORY}/${name}`,
         "--content-type", ARCHIVED_ASSET_CONTENT_TYPES[extension],
         "--cache-control", "public, max-age=31536000, immutable",
         "--remote",
       ], { env });
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          await put();
+          break;
+        } catch (error) {
+          if (attempt >= ARCHIVE_UPLOAD_RETRY_DELAYS_MS.length) throw error;
+          console.warn(`Archiving release asset ${name} failed; trying again (${attempt + 2} of ${ARCHIVE_UPLOAD_RETRY_DELAYS_MS.length + 1}).`);
+          await deps.sleep(ARCHIVE_UPLOAD_RETRY_DELAYS_MS[attempt]);
+        }
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(ARCHIVE_UPLOAD_CONCURRENCY, names.length) }, upload));
