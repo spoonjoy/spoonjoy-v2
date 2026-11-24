@@ -42,10 +42,15 @@ test.describe("Account mail from a self-hosted server through its SMTP server", 
     }).toPass({ timeout: 30_000 });
     expect(found[0]!.From.Address).toBe("kitchen@example.com");
 
-    const mail = (await (await request.get(`${mailpit}/api/v1/message/${found[0]!.ID}`)).json()) as { Text: string };
+    const mail = (await (await request.get(`${mailpit}/api/v1/message/${found[0]!.ID}`)).json()) as { Text: string; HTML: string };
     const link = mail.Text.match(/http\S+\/reset-password\?token=\S+/)?.[0];
     expect(link, "the mail carries a reset link to this server").toBeDefined();
     expect(new URL(link!).origin).toBe(new URL(page.url()).origin);
+
+    // The mail has a plain-text part and an HTML part, sent as alternatives, and both carry the same link.
+    const headers = (await (await request.get(`${mailpit}/api/v1/message/${found[0]!.ID}/headers`)).json()) as Record<string, string[]>;
+    expect(headers["Content-Type"]?.[0]).toMatch(/^multipart\/alternative;/);
+    expect(mail.HTML).toContain(link!.replaceAll("&", "&amp;"));
 
     // The mail as the SMTP server caught it, outside the app, so the app's browser checks don't apply to its page.
     const inbox = await browser.newContext({ viewport: { width: 900, height: 700 } });
@@ -53,6 +58,10 @@ test.describe("Account mail from a self-hosted server through its SMTP server", 
     await view.goto(`${mailpit}/view/${found[0]!.ID}`);
     await expect(view.getByRole("cell", { name: "Reset your Spoonjoy password" })).toBeVisible();
     await view.screenshot({ path: testInfo.outputPath("mail-reset-caught.png") });
+    // The HTML part on its own, as a mail app shows it.
+    await view.goto(`${mailpit}/view/${found[0]!.ID}.html`);
+    await expect(view.locator("body")).toContainText(/spoonjoy/i);
+    await view.screenshot({ path: testInfo.outputPath("mail-reset-html.png"), fullPage: true });
     await inbox.close();
 
     await page.goto(link!);
