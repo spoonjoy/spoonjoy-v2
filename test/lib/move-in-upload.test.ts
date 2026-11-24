@@ -1,7 +1,8 @@
 // The Move in page's upload of a backup in parts, against a server stand-in that answers like the
 // upload endpoints (app/routes/move-in.uploads*.ts).
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { UPLOAD_ATTEMPTS, fileFingerprint, formatBytes, uploadBackup } from "~/lib/move-in-upload";
+import { createHash } from "node:crypto";
+import { FILE_HEAD_BYTES, UPLOAD_ATTEMPTS, fileFingerprint, fileHead, formatBytes, uploadBackup } from "~/lib/move-in-upload";
 
 const PART = 10;
 
@@ -64,7 +65,10 @@ function memoryStore() {
 
 const backupFile = (size = 35) => new File([new Uint8Array(size)], "mealie.zip", { lastModified: 1_700_000_000_000 });
 const noWait = async () => undefined;
-const keyFor = (file: File) => `spoonjoy:move-in-upload:${fileFingerprint(file)}`;
+const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+/** The head of a test backup: every test file holds zeros, so its head is the digest of its zeros, up to 1 MiB. */
+const headOf = (file: File) => sha256(new Uint8Array(Math.min(file.size, FILE_HEAD_BYTES)));
+const keyFor = (file: File) => `spoonjoy:move-in-upload:${fileFingerprint(file, headOf(file))}`;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -77,6 +81,23 @@ describe("formatBytes", () => {
   });
 });
 
+describe("fileHead", () => {
+  it("is the SHA-256 of the file's first MiB, so the same file chosen again, whatever its last change, gives the same", async () => {
+    const bytes = new Uint8Array(FILE_HEAD_BYTES + 10).map((_, index) => index % 251);
+    const file = new File([bytes], "mealie.zip", { lastModified: 1 });
+    const again = new File([bytes], "mealie.zip", { lastModified: 2 });
+    expect(await fileHead(file)).toBe(sha256(bytes.slice(0, FILE_HEAD_BYTES)));
+    expect(await fileHead(again)).toBe(await fileHead(file));
+    expect(fileFingerprint(again, await fileHead(again))).toBe(fileFingerprint(file, await fileHead(file)));
+    // A byte past the first MiB doesn't change it; one inside it does.
+    const changed = bytes.slice();
+    changed[FILE_HEAD_BYTES + 1] = 255;
+    expect(await fileHead(new File([changed], "mealie.zip"))).toBe(await fileHead(file));
+    changed[0] = 255;
+    expect(await fileHead(new File([changed], "mealie.zip"))).not.toBe(await fileHead(file));
+  });
+});
+
 describe("uploadBackup", () => {
   it("begins, sends every part a few at a time, finishes, and says how far it has got", async () => {
     const file = backupFile();
@@ -86,7 +107,7 @@ describe("uploadBackup", () => {
     const checking = vi.fn();
     const outcome = await uploadBackup(file, { app: "mealie", fetch: api.fetch, storage: store, sleep: noWait, concurrency: 2, onProgress: (sent, total) => progress.push([sent, total]), onChecking: checking });
     expect(outcome).toEqual({ ok: true, jobId: "movein_1" });
-    expect(api.begins).toEqual([{ app: "mealie", name: "mealie.zip", size: 35, fingerprint: fileFingerprint(file), resume: null }]);
+    expect(api.begins).toEqual([{ app: "mealie", name: "mealie.zip", size: 35, head: headOf(file), resume: null }]);
     expect([...api.parts].sort()).toEqual([1, 2, 3, 4]);
     expect(api.mostInFlight).toBe(2);
     expect(progress[0]).toEqual([0, 35]);
@@ -206,6 +227,17 @@ describe("uploadBackup", () => {
     });
     expect(signals).toHaveLength(2);
     expect(signals.every((signal) => signal.aborted)).toBe(true);
+  });
+
+  it("says so when the browser can't read the file", async () => {
+    const file = backupFile();
+    vi.spyOn(file, "slice").mockImplementation(() => ({ arrayBuffer: () => Promise.reject(new Error("NotReadableError")) }) as never);
+    const api = server(file.size);
+    expect(await uploadBackup(file, { app: "mealie", fetch: api.fetch, storage: null, sleep: noWait })).toEqual({
+      ok: false,
+      error: "This browser couldn't read the backup. Choose the file again, then press Move in.",
+    });
+    expect(api.calls).toEqual([]);
   });
 
   it("uploads in a browser that refuses storage", async () => {

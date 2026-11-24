@@ -34,6 +34,7 @@ export {
   MOVE_IN_BACKUP_MAX_BYTES,
   MOVE_IN_PART_BYTES,
   UPLOAD_REFUSAL_MESSAGES,
+  isFileHead,
   type UploadRefusal,
 } from "./model/backup-upload";
 export {

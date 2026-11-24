@@ -24,6 +24,20 @@ export function partBytes(size: number, partSize: number, partNumber: number): n
   return partNumber < count ? partSize : size - partSize * (count - 1);
 }
 
+/** A file head's digest as the page sends it: SHA-256 in lowercase hex. */
+export function isFileHead(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+/**
+ * What tells one backup file from another across a reload: its name, size and the digest of its first MiB. Not its
+ * last-change time, which iOS's file picker may report differently each time the same file is chosen
+ * (inference: unverified on a device), so a resume keyed on it would quietly start over.
+ */
+export function uploadFingerprint(name: string, size: number, head: string): string {
+  return JSON.stringify([name, size, head]);
+}
+
 /** Why a step of an upload in parts was turned away, besides the reasons a move-in itself can stop. */
 export const UPLOAD_REFUSAL_MESSAGES = {
   "upload-gone": "That upload isn't here any more: an unfinished one is cleared away after a day. Press Move in to send the backup again from the start.",

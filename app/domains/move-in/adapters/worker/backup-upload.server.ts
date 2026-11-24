@@ -2,7 +2,7 @@
 // and a dropped connection costs only the parts that hadn't arrived. The page begins the upload (or
 // resumes the unfinished one of the same file), sends each part, and finishes it, which checks the
 // backup in storage the way the form's upload is checked and creates its move-in job.
-import { MOVE_IN_BACKUP_MAX_BYTES, MOVE_IN_PART_BYTES, partBytes, partCount, type UploadRefusal } from "../../model/backup-upload";
+import { MOVE_IN_BACKUP_MAX_BYTES, MOVE_IN_PART_BYTES, partBytes, partCount, uploadFingerprint, type UploadRefusal } from "../../model/backup-upload";
 import type { MoveInErrorCode } from "../../model/move-in-error";
 import {
   createUploadJob,
@@ -51,21 +51,23 @@ async function plan(env: MoveInEnv, upload: BackupUpload): Promise<UploadPlan> {
 
 /**
  * Begins sending a backup of `size` bytes, or resumes this owner's unfinished upload of the same file: the one
- * `resume` names when it still fits, otherwise the newest with the same fingerprint and size.
+ * `resume` names when it still fits, otherwise the newest of the same file: same name, size and `head`, the
+ * SHA-256 of its first MiB.
  */
-export async function beginBackupUpload({ env, ownerId, app, name, size, fingerprint, resume, now }: {
+export async function beginBackupUpload({ env, ownerId, app, name, size, head, resume, now }: {
   env: MoveInEnv;
   ownerId: string;
   app: string;
   name: string;
   size: number;
-  fingerprint: string;
+  head: string;
   resume?: string | null;
   now: Date;
 }): Promise<UploadResult<UploadPlan>> {
   if (!moveInKind(app)) return { ok: false, code: "unknown-app" };
   if (!Number.isSafeInteger(size) || size <= 0) return { ok: false, code: "no-file" };
   if (size > MOVE_IN_BACKUP_MAX_BYTES) return { ok: false, code: "backup-too-large" };
+  const fingerprint = uploadFingerprint(name, size, head);
   const since = new Date(now.getTime() - MOVE_IN_UPLOAD_KEPT_MS + RESUME_MARGIN_MS);
   const named = resume ? await loadUpload(env.DB, ownerId, resume) : null;
   const fits = named && named.fingerprint === fingerprint && named.size === size && !named.jobId && named.startedAt >= since.toISOString();

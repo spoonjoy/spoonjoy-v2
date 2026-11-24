@@ -20,6 +20,10 @@ import { makeZip } from "./support/make-zip";
 import { mealieDatabase } from "./support/mealie-database";
 import { multipartBucket, type MemoryMultipartBucket } from "./support/multipart-bucket";
 
+/** The SHA-256 of a backup's first MiB, as the page sends it: one hex digit, 64 times, stands in for one. */
+const head = (digit: string) => digit.repeat(64);
+const HEAD = head("a");
+
 let database: MigratedSqlite;
 let bucket: MemoryMultipartBucket;
 const now = new Date("2026-11-24T12:00:00.000Z");
@@ -37,7 +41,7 @@ const env = () => ({ DB: database.binding, PHOTOS: bucket }) as never;
 const rows = (sql: string) => database.sqlite.prepare(sql).all();
 
 function begin(bytes: Uint8Array, overrides: Partial<Parameters<typeof beginBackupUpload>[0]> = {}) {
-  return beginBackupUpload({ env: env(), ownerId: "chef-1", app: "mealie", name: "mealie.zip", size: bytes.length, fingerprint: "fp-1", now, ...overrides });
+  return beginBackupUpload({ env: env(), ownerId: "chef-1", app: "mealie", name: "mealie.zip", size: bytes.length, head: HEAD, now, ...overrides });
 }
 
 function part(bytes: Uint8Array, uploadId: string, n: number, { ownerId = "chef-1", length }: { ownerId?: string; length?: number | null } = {}) {
@@ -77,7 +81,7 @@ describe("beginning an upload", () => {
     const [upload] = [...bucket.uploads.values()];
     expect(upload.key).toMatch(/^pending-uploads\/move-in\/chef-1\/[0-9a-f-]{36}\.zip$/);
     expect(rows(`SELECT "ownerId", "fingerprint", "archiveKey", "uploadId", "name", "size", "partSize", "startedAt", "jobId" FROM "ImportUpload"`)).toEqual([
-      { ownerId: "chef-1", fingerprint: "fp-1", archiveKey: upload.key, uploadId: "r2-upload-1", name: "mealie.zip", size: bytes.length, partSize: MOVE_IN_PART_BYTES, startedAt: now.toISOString(), jobId: null },
+      { ownerId: "chef-1", fingerprint: JSON.stringify(["mealie.zip", bytes.length, HEAD]), archiveKey: upload.key, uploadId: "r2-upload-1", name: "mealie.zip", size: bytes.length, partSize: MOVE_IN_PART_BYTES, startedAt: now.toISOString(), jobId: null },
     ]);
   });
 
@@ -97,7 +101,7 @@ describe("beginning an upload", () => {
     const first = await begin(bytes);
     if (!first.ok) throw new Error("not begun");
     await part(bytes, first.uploadId, 2);
-    // By the id the page kept, and by the file's fingerprint when the page kept nothing.
+    // By the id the page kept, and by the file's name, size and head when the page kept nothing.
     expect(await begin(bytes, { resume: first.uploadId, now: later(60_000) })).toEqual({ ...first, done: [2] });
     expect(await begin(bytes, { resume: null, now: later(60_000) })).toEqual({ ...first, done: [2] });
     expect(bucket.uploads.size).toBe(1);
@@ -107,8 +111,9 @@ describe("beginning an upload", () => {
     const bytes = backup();
     const first = await begin(bytes);
     if (!first.ok) throw new Error("not begun");
-    // The id it names is for another file, so it goes by this file's fingerprint, and there is none.
-    expect(await begin(bytes, { fingerprint: "fp-2", resume: first.uploadId })).toMatchObject({ ok: true, uploadId: expect.not.stringMatching(first.uploadId) });
+    // The id it names is for another file, so it goes by this file's name, size and head, and there is none.
+    expect(await begin(bytes, { head: head("b"), resume: first.uploadId })).toMatchObject({ ok: true, uploadId: expect.not.stringMatching(first.uploadId) });
+    expect(await begin(bytes, { name: "other.zip" })).toMatchObject({ ok: true, uploadId: expect.not.stringMatching(first.uploadId) });
     expect(await begin(bytes, { ownerId: "chef-2", resume: first.uploadId })).toMatchObject({ ok: true, uploadId: expect.not.stringMatching(first.uploadId) });
     expect(await begin(bytes, { now: later(MOVE_IN_UPLOAD_KEPT_MS - 60 * 60 * 1000 + 1) })).toMatchObject({ ok: true, uploadId: expect.not.stringMatching(first.uploadId) });
     database.sqlite.prepare(`UPDATE "ImportUpload" SET "jobId" = 'movein_x'`).run();
@@ -273,23 +278,23 @@ describe("a cook's open uploads", () => {
     const bytes = backup();
     const ids: string[] = [];
     for (let index = 0; index < 4; index++) {
-      const begun = await begin(bytes, { fingerprint: `fp-${index}`, now: later(index * 1000) });
+      const begun = await begin(bytes, { head: head(String(index)), now: later(index * 1000) });
       if (!begun.ok) throw new Error("not begun");
       ids.push(begun.uploadId);
     }
     expect(rows(`SELECT "id" FROM "ImportUpload" ORDER BY "startedAt"`)).toEqual(ids.slice(1).map((id) => ({ id })));
     expect([...bucket.uploads.values()].map((upload) => upload.state)).toEqual(["aborted", "open", "open", "open"]);
     // Another cook's uploads and finished ones don't count.
-    expect((await begin(bytes, { ownerId: "chef-2", fingerprint: "fp-x" })).ok).toBe(true);
+    expect((await begin(bytes, { ownerId: "chef-2", head: head("c") })).ok).toBe(true);
     expect(rows(`SELECT COUNT(*) AS n FROM "ImportUpload" WHERE "ownerId" = 'chef-1'`)).toEqual([{ n: 3 }]);
   });
 
   it("still begins when storage won't abort the oldest", async () => {
     const bytes = backup();
-    for (let index = 0; index < 3; index++) await begin(bytes, { fingerprint: `fp-${index}`, now: later(index * 1000) });
+    for (let index = 0; index < 3; index++) await begin(bytes, { head: head(String(index)), now: later(index * 1000) });
     const [oldest] = [...bucket.uploads.values()];
     oldest.state = "aborted";
-    expect((await begin(bytes, { fingerprint: "fp-3", now: later(5000) })).ok).toBe(true);
+    expect((await begin(bytes, { head: head("3"), now: later(5000) })).ok).toBe(true);
     expect(rows(`SELECT COUNT(*) AS n FROM "ImportUpload"`)).toEqual([{ n: 3 }]);
   });
 });
