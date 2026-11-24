@@ -39,7 +39,7 @@ export type TransactionalEmailEnv = PostHogServerEnv & {
   SPOONJOY_SELF_HOSTED?: string;
   /** "smtp" on a self-hosted server whose owner set SPOONJOY_SMTP_HOST (self-host/config.mjs). */
   SPOONJOY_SELF_HOST_MAIL?: string;
-  SELF_HOST?: Pick<Fetcher, "fetch"> | unknown;
+  SELF_HOST?: HostFetch | unknown;
 };
 
 // Capture mode stores account mail, including its sign-in links, in a table anyone with database
@@ -84,10 +84,13 @@ class SmtpRefusedError extends Error {
   }
 }
 
+/** The part of the SELF_HOST service binding this file uses. */
+type HostFetch = { fetch(input: string, init?: RequestInit): Promise<Response> };
+
 // A self-hosted server's SMTP mail, sent by the server around the Worker (POST /mail, self-host/host-api.mjs).
 function selfHostMailBinding(env: TransactionalEmailEnv): SendEmailBinding | null {
   if (env.SPOONJOY_SELF_HOSTED !== "true" || env.SPOONJOY_SELF_HOST_MAIL !== "smtp") return null;
-  const host = env.SELF_HOST as Partial<Pick<Fetcher, "fetch">> | undefined;
+  const host = env.SELF_HOST as Partial<HostFetch> | undefined;
   if (typeof host?.fetch !== "function") return null;
   return {
     async send(message) {
