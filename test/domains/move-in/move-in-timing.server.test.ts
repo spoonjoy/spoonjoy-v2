@@ -47,6 +47,13 @@ describe("timeMoveInPorts", () => {
     expect(timeMoveInPorts(fakePorts()).ports.writeRecipes).toBeUndefined();
   });
 
+  it("times a chunk's photo writes as photo writes, and leaves a Worker without a chunk photo writer without one", async () => {
+    const { ports, times } = timeMoveInPorts(fakePorts({ attachPhotos: async () => [null] }));
+    expect(await ports.attachPhotos?.([])).toEqual([null]);
+    expect(times.photoWrites.calls).toBe(1);
+    expect(timeMoveInPorts(fakePorts()).ports.attachPhotos).toBeUndefined();
+  });
+
   it("leaves a Worker without organizers without them", () => {
     expect(timeMoveInPorts(fakePorts()).ports.organizers).toBeUndefined();
   });

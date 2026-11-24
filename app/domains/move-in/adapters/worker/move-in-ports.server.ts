@@ -14,7 +14,7 @@ import { openMealieBackup } from "../sources/mealie-backup/backup";
 import { mealieBackupSource } from "../sources/mealie-backup/source";
 import { moveInJobStore } from "../storage/job-store.server";
 import { attachMovedInOrganizers } from "../storage/organizer-writer.server";
-import { attachMovedInPhoto, hasMovedInPhoto } from "../storage/photo-writer.server";
+import { attachMovedInPhoto, attachMovedInPhotos, hasMovedInPhoto } from "../storage/photo-writer.server";
 import { writeMovedInRecipe, writeMovedInRecipes } from "../storage/recipe-writer.server";
 import { readsAServer } from "./apps";
 import { openServerConnection, serverConnectionSecret } from "./server-connection.server";
@@ -99,6 +99,7 @@ export function moveInPorts(env: MoveInEnv, now: () => Date): MoveInPorts {
     writeRecipe: (input) => writeMovedInRecipe({ db, ...input, now: now() }),
     writeRecipes: (inputs) => writeMovedInRecipes(inputs.map((input) => ({ db, ...input, now: now() }))),
     attachPhoto: (input) => attachMovedInPhoto({ db, bucket: env.PHOTOS, ...input, now: now() }),
+    attachPhotos: (inputs) => attachMovedInPhotos(inputs.map((input) => ({ db, bucket: env.PHOTOS, ...input, now: now() }))),
     hasMovedInPhoto: (recipeId) => hasMovedInPhoto(db, recipeId),
     organizers: {
       on: (ownerId) => isFlagOn("organizers", env, ownerId),

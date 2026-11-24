@@ -11,6 +11,7 @@ import {
   type MoveInEvent,
   type MoveInJob,
   type MoveInPorts,
+  type PhotosInput,
   type RecipeWriteInput,
   type RecipeWriteResult,
 } from "~/domains/move-in/application/run-move-in";
@@ -34,12 +35,14 @@ function backup(json: unknown = tables) {
 
 type Organized = Parameters<NonNullable<MoveInPorts["organizers"]>["attach"]>[0];
 
-function harness({ zip = backup(), email = "cook@example.com", write, writeMany, organizers }: {
+function harness({ zip = backup(), email = "cook@example.com", write, writeMany, attachMany, organizers }: {
   zip?: Uint8Array;
   email?: string | null;
   write?: MoveInPorts["writeRecipe"];
   /** A chunk writer: true for one that writes each recipe as writeRecipe would; left out, the Worker writes each alone. */
   writeMany?: true | ((inputs: RecipeWriteInput[], one: MoveInPorts["writeRecipe"]) => Promise<Array<RecipeWriteResult | null>>);
+  /** A chunk photo writer: true for one that stores every photo; left out, the Worker brings each photo alone. */
+  attachMany?: true | ((inputs: PhotosInput[]) => Promise<Array<Error | null>>);
   /** Whether the cook has organizers, and how putting them on a recipe goes; left out, the Worker has no organizers port. */
   organizers?: { on: boolean; attach?: (input: Organized) => Promise<void> };
 } = {}) {
@@ -56,6 +59,8 @@ function harness({ zip = backup(), email = "cook@example.com", write, writeMany,
   const organized: Organized[] = [];
   // Each chunk write, as the source keys it was given.
   const chunkWrites: string[][] = [];
+  // Each chunk photo write, as the recipes it was given.
+  const photoBatches: string[][] = [];
   let holder: string | null = null;
   let tokens = 0;
   let opens = 0;
@@ -117,6 +122,19 @@ function harness({ zip = backup(), email = "cook@example.com", write, writeMany,
       },
     } : {}),
     attachPhoto: async ({ recipeId, bytes }) => void photos.push({ recipeId, bytes }),
+    ...(attachMany ? {
+      attachPhotos: async (inputs: PhotosInput[]) => {
+        photoBatches.push(inputs.map((input) => input.recipeId));
+        const read: Array<Uint8Array | Error> = [];
+        for (const input of inputs) read.push(await input.read());
+        const answers = attachMany === true ? read.map((bytes) => (bytes instanceof Error ? bytes : null)) : await attachMany(inputs);
+        inputs.forEach(({ recipeId }, i) => {
+          const bytes = read[i];
+          if (answers[i] === null && !(bytes instanceof Error)) photos.push({ recipeId, bytes });
+        });
+        return answers;
+      },
+    } : {}),
     hasMovedInPhoto: async (recipeId) => photos.some((photo) => photo.recipeId === recipeId),
     discardArchive: async (job) => void discarded.push(job.archiveKey as string),
     now: () => new Date("2026-11-23T12:00:00.000Z"),
@@ -137,7 +155,7 @@ function harness({ zip = backup(), email = "cook@example.com", write, writeMany,
     return job();
   };
   return {
-    ports, jobs, job, counts, events, sources, photos, discarded, written, organized, chunkWrites, runAll,
+    ports, jobs, job, counts, events, sources, photos, discarded, written, organized, chunkWrites, photoBatches, runAll,
     isClaimed: () => holder !== null,
     steal: () => void (holder = "another-run"),
     /** The claim's time runs out, as if a while had passed. */
@@ -582,6 +600,83 @@ describe("a chunk written together", () => {
     expect(await h.runAll(3)).toMatchObject({ status: "done-with-issues" });
     expect(h.counts.get("recipes")).toMatchObject({ found: 3, created: 3, unchanged: 0 });
     expect(h.counts.get("photos")).toMatchObject({ found: 1, created: 1, unchanged: 0 });
+  });
+});
+
+describe("a chunk's photos brought together", () => {
+  it("are read and put on their recipes once the chunk's recipes are written", async () => {
+    const h = harness({ writeMany: true, attachMany: true });
+    await runNextChunk("job-1", h.ports);
+    await runNextChunk("job-1", h.ports, { chunkSize: 3 });
+    expect(h.photoBatches).toEqual([["spoonjoy-" + h.chunkWrites[0][0]]]);
+    expect(h.photos).toHaveLength(1);
+    expect(h.counts.get("photos")).toMatchObject({ found: 1, created: 1, failed: 0 });
+  });
+
+  it("report a photo kept out, and the recipe moves in without it", async () => {
+    const h = harness({ writeMany: true, attachMany: async (inputs) => inputs.map(() => new Error("R2 refused it")) });
+    await runNextChunk("job-1", h.ports);
+    await runNextChunk("job-1", h.ports, { chunkSize: 3 });
+    expect(h.counts.get("photos")).toMatchObject({ created: 0, failed: 1 });
+    expect(h.counts.get("recipes")).toMatchObject({ created: 3 });
+    expect(h.events.find((event) => event.entity === "photos")?.message).toMatch(/moved in without its photo: R2 refused it\.$/);
+  });
+
+  it("report a photo the backup can't give, and put the rest on", async () => {
+    const h = harness({ writeMany: true, attachMany: true });
+    changedSource(h, () => ({ readPhoto: () => Promise.reject(new Error("the photo in the backup is damaged")) }));
+    await runNextChunk("job-1", h.ports);
+    await runNextChunk("job-1", h.ports, { chunkSize: 3 });
+    expect(h.photoBatches).toHaveLength(1);
+    expect(h.counts.get("photos")).toMatchObject({ created: 0, failed: 1 });
+    expect(h.events.find((event) => event.entity === "photos")?.message).toMatch(/without its photo: the photo in the backup is damaged\.$/);
+  });
+
+  it("pass an outage while reading a photo on, with the chunk still next", async () => {
+    const h = harness({ writeMany: true, attachMany: true });
+    changedSource(h, () => ({ readPhoto: () => Promise.reject(new SourceUnavailableError("server down")) }));
+    await runNextChunk("job-1", h.ports);
+    await expect(runNextChunk("job-1", h.ports, { chunkSize: 3 })).rejects.toBeInstanceOf(SourceUnavailableError);
+    expect(h.job()).toMatchObject({ cursor: "0" });
+    expect(h.counts.get("photos")).toMatchObject({ failed: 0 });
+  });
+
+  it("pass a failed cover write on, with the chunk still next, and the repeat brings the photos", async () => {
+    let down = true;
+    const h = harness({ writeMany: true, attachMany: async (inputs) => (down ? Promise.reject(new Error("D1 is down")) : inputs.map(() => null)) });
+    await runNextChunk("job-1", h.ports);
+    await expect(runNextChunk("job-1", h.ports, { chunkSize: 3 })).rejects.toThrow("D1 is down");
+    expect(h.job()).toMatchObject({ cursor: "0" });
+    down = false;
+    expect(await h.runAll(3)).toMatchObject({ status: "done-with-issues" });
+    expect(h.counts.get("recipes")).toMatchObject({ created: 3 });
+    expect(h.counts.get("photos")).toMatchObject({ found: 1, created: 1, failed: 0 });
+  });
+
+  it("bring the photo of a recipe a repeated chunk finds without one", async () => {
+    const h = harness({ writeMany: true, attachMany: true });
+    await runNextChunk("job-1", h.ports);
+    const updateJob = h.ports.store.updateJob;
+    let stopped = false;
+    h.ports.store.updateJob = async (...args) => {
+      if (args[1].cursor === "3" && !stopped) {
+        stopped = true;
+        h.photos.length = 0;
+        throw new Error("the Worker stopped");
+      }
+      return updateJob(...args);
+    };
+    await expect(runNextChunk("job-1", h.ports, { chunkSize: 3 })).rejects.toThrow("the Worker stopped");
+    expect(await h.runAll(3)).toMatchObject({ status: "done-with-issues" });
+    expect(h.photoBatches).toHaveLength(2);
+    expect(h.counts.get("photos")).toMatchObject({ found: 1, created: 1, unchanged: 0 });
+  });
+
+  it("go alone, as before, on a Worker that writes recipes together but has no chunk photo writer", async () => {
+    const h = harness({ writeMany: true });
+    await runNextChunk("job-1", h.ports);
+    await runNextChunk("job-1", h.ports, { chunkSize: 3 });
+    expect(h.photos).toHaveLength(1);
   });
 });
 

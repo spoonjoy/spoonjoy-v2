@@ -69,6 +69,20 @@ export type RecipeWriteResult =
   | { outcome: "kept"; recipeId: string; reason: string }
   | { outcome: "skipped"; recipeId: string; reason: string };
 
+export interface PhotoInput {
+  ownerId: string;
+  recipeId: string;
+  bytes: Uint8Array;
+}
+
+/** A photo for attachPhotos, read only when its turn comes, so a chunk never holds all its photos at once. */
+export interface PhotosInput {
+  ownerId: string;
+  recipeId: string;
+  /** The photo's bytes, or why it couldn't be read; it throws for an outage, which stops the run. */
+  read(): Promise<Uint8Array | Error>;
+}
+
 export interface RecipeWriteInput {
   sourceId: string;
   jobId: string;
@@ -135,7 +149,13 @@ export interface MoveInPorts {
    * alone with writeRecipe (one that moved in before, say). A Worker without it writes every recipe alone.
    */
   writeRecipes?(inputs: RecipeWriteInput[]): Promise<Array<RecipeWriteResult | null>>;
-  attachPhoto(input: { ownerId: string; recipeId: string; bytes: Uint8Array }): Promise<void>;
+  attachPhoto(input: PhotoInput): Promise<void>;
+  /**
+   * Reads a chunk's photos and puts them on their recipes in one go, a few at a time: each answer, in the inputs' order,
+   * null for a photo now on its recipe or the error that kept it out. An error a read throws is passed on. A Worker
+   * without it brings each photo alone.
+   */
+  attachPhotos?(inputs: PhotosInput[]): Promise<Array<Error | null>>;
   /** Whether the recipe already has a cover that moved in. */
   hasMovedInPhoto(recipeId: string): Promise<boolean>;
   /**
@@ -259,8 +279,7 @@ async function bringPhoto({ job, ports }: Run, kitchen: MoveInKitchen, draft: Re
     report.counts.push(["photos", { created: 1 }]);
   } catch (error) {
     if (stopsTheRun(error)) throw error;
-    report.counts.push(["photos", { failed: 1 }]);
-    report.events.push(event("item-degraded", `${draft.title} moved in without its photo: ${(error as Error).message}.`, { entity: "photos", sourceKey: draft.sourceKey, targetId: recipeId }));
+    photoLeftOut(report, draft, recipeId, error);
   }
 }
 
@@ -284,8 +303,18 @@ async function bringRecipe(run: Run, opened: Opened, draft: RecipeDraft): Promis
   return afterWrite(run, opened, draft, result);
 }
 
-/** Brings a written recipe's photo and organizers, and returns what to report. */
-async function afterWrite(run: Run, { source, kitchen }: Opened, draft: RecipeDraft, result: RecipeWriteResult): Promise<Report> {
+/** A photo a chunk brings once its recipes are written, and the recipe's report, which it adds to. */
+interface PendingPhoto {
+  draft: RecipeDraft;
+  recipeId: string;
+  report: Report;
+}
+
+/**
+ * Brings a written recipe's photo and organizers, and returns what to report. With `photos`, a photo to bring is added
+ * there instead, for the chunk to bring with the others.
+ */
+async function afterWrite(run: Run, { source, kitchen }: Opened, draft: RecipeDraft, result: RecipeWriteResult, photos?: PendingPhoto[]): Promise<Report> {
   const { job, ports } = run;
   const report: Report = { counts: [], events: [] };
   const at = { entity: "recipes", sourceKey: draft.sourceKey };
@@ -310,6 +339,7 @@ async function afterWrite(run: Run, { source, kitchen }: Opened, draft: RecipeDr
     if (!hasPhoto) return report;
     // A run that stopped between the recipe and its photo left the photo out; bring it now.
     if (await ports.hasMovedInPhoto(result.recipeId)) report.counts.push(["photos", ours ? { created: 1 } : { unchanged: 1 }]);
+    else if (photos) photos.push({ draft, recipeId: result.recipeId, report });
     else await bringPhoto(run, kitchen, draft, result.recipeId, report);
     return report;
   }
@@ -319,8 +349,37 @@ async function afterWrite(run: Run, { source, kitchen }: Opened, draft: RecipeDr
   }
   for (const warning of result.warnings) report.events.push(event("item-degraded", warning, target));
   await bringOrganizers(run, source.words, draft, result.recipeId, report);
-  if (hasPhoto) await bringPhoto(run, kitchen, draft, result.recipeId, report);
+  if (hasPhoto && photos) photos.push({ draft, recipeId: result.recipeId, report });
+  else if (hasPhoto) await bringPhoto(run, kitchen, draft, result.recipeId, report);
   return report;
+}
+
+/** Reports a photo kept out of its recipe, which still moved in. */
+function photoLeftOut(report: Report, draft: RecipeDraft, recipeId: string, error: unknown) {
+  report.counts.push(["photos", { failed: 1 }]);
+  report.events.push(event("item-degraded", `${draft.title} moved in without its photo: ${(error as Error).message}.`, { entity: "photos", sourceKey: draft.sourceKey, targetId: recipeId }));
+}
+
+/** Puts a chunk's photos on their recipes in one go, adding what happened to each report. */
+async function bringPhotos({ job }: Run, kitchen: MoveInKitchen, pending: PendingPhoto[], attachPhotos: NonNullable<MoveInPorts["attachPhotos"]>) {
+  const answers = await attachPhotos(pending.map(({ draft, recipeId }) => ({
+    ownerId: job.ownerId,
+    recipeId,
+    read: async () => {
+      try {
+        return await kitchen.readPhoto(draft);
+      } catch (error) {
+        // An outage stops the run; a photo that can't be read loses only the photo.
+        if (stopsTheRun(error)) throw error;
+        return error as Error;
+      }
+    },
+  })));
+  pending.forEach(({ draft, recipeId, report }, i) => {
+    const error = answers[i];
+    if (error) photoLeftOut(report, draft, recipeId, error);
+    else report.counts.push(["photos", { created: 1 }]);
+  });
 }
 
 /**
@@ -347,16 +406,17 @@ async function bringChunk(run: Run, opened: Opened, start: number, end: number, 
     if (stopsTheRun(error)) throw error;
     // Each goes on its own instead, so one recipe's error is that recipe's alone.
   }
-  const chunk: Report = { counts: [], events: [] };
+  const { attachPhotos } = run.ports;
+  const photos: PendingPhoto[] | undefined = attachPhotos ? [] : undefined;
+  const reports: Report[] = [];
   let next = 0;
   for (let i = start; i < end; i++) {
     const draft = drafts[i - start];
     const result = draft ? (written[next++] ?? null) : null;
-    const report = draft && result ? await afterWrite(run, opened, draft, result) : await bringOrPassOver(run, opened, i);
-    chunk.counts.push(...report.counts);
-    chunk.events.push(...report.events);
+    reports.push(draft && result ? await afterWrite(run, opened, draft, result, photos) : await bringOrPassOver(run, opened, i));
   }
-  return chunk;
+  if (attachPhotos && photos?.length) await bringPhotos(run, opened.kitchen, photos, attachPhotos);
+  return { counts: reports.flatMap((report) => report.counts), events: reports.flatMap((report) => report.events) };
 }
 
 /**
