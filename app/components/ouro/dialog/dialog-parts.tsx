@@ -20,8 +20,9 @@ export type { DialogSize } from "~/components/ouro/dialog/dialog-styles";
 const DialogContext = createContext(false);
 
 /*
- * Styles. The popup scales from 0.96 and fades in over 300ms, and scales and
- * fades out in 200ms, on the ease-out token; reduced motion keeps only the fade. The viewport keeps a 1rem
+ * Styles. The popup scales from 0.96 and fades in, and scales and fades out; the backdrop fades with it. Enter
+ * reads --ouro-dialog-duration and --ouro-dialog-ease (300ms, ease-out), exit --ouro-dialog-exit-duration and
+ * --ouro-dialog-exit-ease (200ms, the enter easing); reduced motion keeps only the fade. The viewport keeps a 1rem
  * margin (or the safe area) on every side, so the dialog fits a phone; the body scrolls
  * when the dialog is taller than that. Class strings are literal so the app's Tailwind
  * finds them when it compiles.
@@ -30,8 +31,8 @@ const DialogContext = createContext(false);
 // On iOS the backdrop's top is anchored to the screen (useBackdropAnchor), so the inset clips it there instead.
 const backdropClass =
   "fixed inset-0 top-(--ouro-inset-top,0px) z-1000 min-h-dvh bg-(--ouro-backdrop-color) opacity-(--ouro-backdrop-max) " +
-  "transition-opacity duration-(--ouro-duration-slow) ease-(--ouro-ease-out) " +
-  "data-starting-style:opacity-0 data-ending-style:opacity-0 data-ending-style:duration-(--ouro-duration-base) data-ouro-instant:transition-none " +
+  "transition-opacity duration-(--ouro-dialog-duration) ease-(--ouro-dialog-ease) " +
+  "data-starting-style:opacity-0 data-ending-style:opacity-0 data-ending-style:duration-(--ouro-dialog-exit-duration) data-ending-style:ease-(--ouro-dialog-exit-ease) data-ouro-instant:transition-none " +
   iosBackdrop +
   " supports-[-webkit-touch-callout:none]:[clip-path:inset(var(--ouro-inset-top,0px)_0_0_0)]";
 
@@ -45,10 +46,10 @@ const popupClass =
   "rounded-ouro-xl bg-(--ouro-bg) text-popover-foreground ring-1 ring-border/60 " +
   "[--ouro-bg:var(--popover)] [--ouro-scroller-surface:var(--popover)] [--ouro-bd:color-mix(in_oklab,var(--border)_60%,transparent)] [--ouro-sq-w:1px] " +
   "[--ouro-sq-r:calc(var(--radius)*var(--ouro-radius-scale,1)*1.4)] shadow-(--shadow-xl) " +
-  "[transition:transform_var(--ouro-duration-slow)_var(--ouro-ease-out),opacity_var(--ouro-duration-slow)_var(--ouro-ease-out)] " +
+  "[transition:transform_var(--ouro-dialog-duration)_var(--ouro-dialog-ease),opacity_var(--ouro-dialog-duration)_var(--ouro-dialog-ease)] " +
   "data-starting-style:[transform:scale(0.96)] data-starting-style:opacity-0 " +
   "data-ending-style:[transform:scale(0.96)] data-ending-style:opacity-0 " +
-  "data-ending-style:duration-(--ouro-duration-base) " +
+  "data-ending-style:duration-(--ouro-dialog-exit-duration) data-ending-style:ease-(--ouro-dialog-exit-ease) " +
   "motion-reduce:[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out)] " +
   "motion-reduce:data-starting-style:[transform:none] motion-reduce:data-ending-style:[transform:none] data-ouro-instant:[transition:none]";
 
@@ -213,8 +214,12 @@ export type DialogPopupProps = Omit<BaseDialog.Popup.Props, "className"> & {
 };
 
 /**
- * Part: the dialog panel. It scales up from 0.96 and fades in over 300ms, and scales and
- * fades out in 200ms; reduced motion keeps only the fade.
+ * Part: the dialog panel. It scales up from 0.96 and fades in over `--ouro-dialog-duration` (300ms) on
+ * `--ouro-dialog-ease` (the ease-out token), and scales and fades out over `--ouro-dialog-exit-duration` (200ms)
+ * on `--ouro-dialog-exit-ease` (the enter easing); the backdrop uses the same four tokens. An app sets them on
+ * `:root` to give its dialogs, command palettes and lightboxes their own timing, such as `--ouro-dialog-duration: 320ms`
+ * with `--ouro-dialog-exit-duration: 320ms` and `--ouro-dialog-ease: cubic-bezier(0.32, 0.72, 0, 1)`. Reduced motion
+ * keeps only the fade.
  * @claim "It scales up from 0.96 and" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::motion > scales from 0.96 on the ease-out token and fades, entering in 300ms and leaving in 200ms)
  * @claim "It scales up from 0.96 and" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::motion > drops the scale under reduced motion and keeps the fade)
  */

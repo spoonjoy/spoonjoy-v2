@@ -309,6 +309,16 @@ describe("audit", () => {
     expect(await measureTextContrast(text, 4.5)).toEqual({ pass: true });
   });
 
+  it("scans the page as first painted: a scrolling region a resize report makes a tab stop passes, one that never becomes one fails", async () => {
+    // A ResizeObserver's first report comes in the frame before the first paint, after a test's render has returned.
+    const long = `<p>${"Text that runs past the bottom of its box. ".repeat(40)}</p>`;
+    mountPage(`<div id="reported" role="region" aria-label="Reported" style="height:40px;overflow:auto">${long}</div><div id="never" role="region" aria-label="Never" style="height:40px;overflow:auto">${long}</div>`);
+    const reported = document.querySelector<HTMLElement>("#reported")!;
+    new ResizeObserver(() => (reported.tabIndex = reported.scrollHeight > reported.clientHeight ? 0 : -1)).observe(reported);
+    const findings = await scanPage();
+    expect(findings.map((finding) => `${finding.rule} ${finding.target}`)).toEqual(["scrollable-region-focusable #never"]);
+  });
+
   it("fails a popup trigger whose expanded popup is missing, and passes it once the popup is there", async () => {
     mountPage('<button type="button" aria-haspopup="menu" aria-expanded="true" aria-controls="actions-menu">Actions</button>');
     expect(rules(await scanPage())).toEqual(["undecided aria-valid-attr-value"]);

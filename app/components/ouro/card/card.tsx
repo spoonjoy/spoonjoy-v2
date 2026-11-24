@@ -99,6 +99,14 @@ export interface CardOwnProps {
    */
   headingLevel?: 2 | 3 | 4 | 5 | 6 | (number & { "Use 2 to 6, one below the section's heading": never }) | undefined;
   /**
+   * `inherit` sizes the title from the surrounding text instead of `size`'s own type-scale
+   * step, at semibold: a link preview drawn as a card inside a chat bubble, at the bubble's
+   * own text size, reads as heavy as the messages around it otherwise.
+   * @default sized from Card's own `size`
+   * @claim "a link preview drawn as a card" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card > sizes the title from the surrounding text with titleSize="inherit", staying semibold)
+   */
+  titleSize?: "inherit" | (string & { 'Use "inherit", or omit it so Card sizes the title itself': never }) | undefined;
+  /**
    * `outline` is a bordered surface in the theme's card colors; `plain` has no frame or
    * padding, for a card's structure inside a surface of your own.
    * @default "outline"
@@ -273,6 +281,7 @@ function cardHint(token: string): string {
  *   description="A dry pan and patience"
  *   revealDescription="rise"
  * />
+ * <Card href="/recipes/1" title="Weeknight dinners" variant="plain" size="sm" titleSize="inherit" />
  */
 export function Card(props: CardProps): JSX.Element {
   const {
@@ -290,6 +299,7 @@ export function Card(props: CardProps): JSX.Element {
     footer,
     stackBelow: stackBelowProp,
     headingLevel = 3,
+    titleSize: titleSizeProp,
     variant: variantProp = "outline",
     size: sizeProp = "md",
     as: asProp = "div",
@@ -309,6 +319,7 @@ export function Card(props: CardProps): JSX.Element {
   const element = (elements as readonly string[]).includes(asProp) ? (asProp as (typeof elements)[number]) : "div";
   const level = (levels as readonly unknown[]).includes(headingLevel) ? (headingLevel as (typeof levels)[number]) : 3;
   const stackBelow: "sm" | "md" | undefined = stackBelowProp === "sm" ? "sm" : stackBelowProp === "md" ? "md" : undefined;
+  const titleSize: "inherit" | undefined = titleSizeProp === "inherit" ? "inherit" : undefined;
   const linked = href !== undefined && Boolean(title);
   // The backdrop's tint follows the link's hover (a mouse or pen, as pointer-fine:hover) and press.
   const [tint, setTint] = useState<keyof typeof backdropTint>("none");
@@ -338,6 +349,9 @@ export function Card(props: CardProps): JSX.Element {
             asProp === "a" ? '<Card href="/path" title="…">' : '<Card as="div">',
           ],
           level !== headingLevel && [`headingLevel must be 2, 3, 4, 5 or 6, got ${String(headingLevel)}`, "<Card headingLevel={2}>"],
+          // Stryker disable next-line ConditionalExpression: forcing this half true changes nothing — titleSize always equals titleSizeProp (both undefined) whenever titleSizeProp is undefined, so the second half is false either way.
+          titleSizeProp !== undefined &&
+            titleSize !== titleSizeProp && [`titleSize="${String(titleSizeProp)}" is not a size; use "inherit"`, '<Card titleSize="inherit">'],
           subtitle !== undefined && ["subtitle is not a prop", `<Card description="${String(subtitle)}">`],
           image !== undefined && ["image is not a prop", '<Card media={<AspectRatio ratio={4 / 3}><img src=… alt="" /></AspectRatio>}>'],
           header !== undefined && ["header is not a prop", '<Card title="…" description="…" action={…}>'],
@@ -361,7 +375,7 @@ export function Card(props: CardProps): JSX.Element {
   // A rising title lies on a surface of its own over the media, so it keeps an outlined card's inset whatever the variant.
   const titlePad = rise ? inset.outline[size] : pad;
   const heading = title ? (
-    <Heading data-slot="card-title" level={level} size={size === "sm" ? "sm" : "md"}>
+    <Heading data-slot="card-title" level={level} size={titleSize ?? (size === "sm" ? "sm" : "md")}>
       {linked ? (
         <RouterLink
           href={href}

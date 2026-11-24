@@ -4,7 +4,7 @@ import "~/lib/ouro/last-input";
 import { Autocomplete as BaseAutocomplete } from "@base-ui/react/autocomplete";
 import { Combobox as BaseCombobox } from "@base-ui/react/combobox";
 import { mergeProps } from "@base-ui/react/merge-props";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, type ReactNode, type Ref, type RefCallback, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type JSX, type KeyboardEvent, type ReactNode, type Ref, type RefCallback, type RefObject } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { Field } from "~/components/ouro/field/field";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
@@ -227,17 +227,15 @@ export type ComboboxSingleProps = ComboboxBaseProps & {
   customValueLabel?: never;
 };
 
-/** A Combobox that picks several items, shown as chips in the input. */
-export type ComboboxMultipleProps = ComboboxBaseProps & {
+/** What both ways of picking several items take: chips, an array value and the input's text. */
+interface ComboboxChipsProps {
   /** Pick several items, shown as chips; the value is an array. */
   multiple: true;
-  /** Not with `multiple`: `allowCustomValue` keeps one typed value. */
-  allowCustomValue?: false | undefined;
-  /** The picked items' values, when you control them. */
+  /** The chips' values, when you control them. */
   value?: string[] | undefined;
-  /** The items picked at first, when the field keeps its own. */
+  /** The chips at first, when the field keeps its own. */
   defaultValue?: string[] | undefined;
-  /** Called with the picked items' values. */
+  /** Called with the chips' values: picked items' values, and typed text with `allowCustomValue`. */
   onValueChange?: ((value: string[]) => void) | undefined;
   /**
    * The input's text, when you control it with `onInputChange`. Set it to `""` in
@@ -246,20 +244,51 @@ export type ComboboxMultipleProps = ComboboxBaseProps & {
    */
   inputValue?: string | undefined;
   /**
-   * The name of a chip's remove button, from the item's label, as visually hidden text and not
+   * The name of a chip's remove button, from the chip's label, as visually hidden text and not
    * an `aria-label`. Translate it with your app.
    * @default (label) => `Remove ${label}`
    */
   removeLabel?: ((label: string) => string) | undefined;
+}
+
+/** A Combobox that picks several items, shown as chips in the input. */
+export type ComboboxMultipleProps = ComboboxBaseProps & ComboboxChipsProps & {
+  /** Also take typed text as chips: see {@link ComboboxTokensProps}. */
+  allowCustomValue?: false | undefined;
   /** Only with `allowCustomValue`. */
   customValueLabel?: never;
+};
+
+/**
+ * A token input: picks several items as chips, and makes typed text a chip too, as for a
+ * recipe's tags. Suggestions match ignoring case and extra spaces. Enter picks the highlighted
+ * suggestion, or, with none highlighted, makes the typed text a chip; a comma also makes a chip,
+ * so a pasted "quick, vegan" becomes two. Text that matches an item ignoring case picks that
+ * item, so "weeknight" adds the existing "Weeknight" and no duplicate chip appears.
+ *
+ * @claim "Enter picks the highlighted suggestion, or" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox multiple allowCustomValue > makes typed text a chip on Enter when no suggestion is highlighted, and submits one entry per chip)
+ * @claim "Enter picks the highlighted suggestion, or" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox multiple allowCustomValue > picks a highlighted suggestion on Enter)
+ * @claim "Suggestions match ignoring case and extra spaces" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox multiple allowCustomValue > suggests items ignoring case and extra spaces)
+ * @claim "a comma also makes a chip" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox multiple allowCustomValue > makes a chip at each comma, and a pasted list becomes a chip per entry)
+ * @claim "Text that matches an item ignoring case picks that" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox multiple allowCustomValue > picks the item that typed text matches ignoring case, so no duplicate chip appears)
+ */
+export type ComboboxTokensProps = ComboboxBaseProps & ComboboxChipsProps & {
+  /** Typed text becomes a chip too, on Enter or at a comma. */
+  allowCustomValue: true;
+  /**
+   * The sheet's row (on a phone) that adds what was typed as a chip, from the text. Translate it
+   * with your app.
+   * @default (text) => `Use “${text}”`
+   * @claim "The sheet's row (on a phone) that adds" registry/ouro/components/ouro/combobox/combobox.touch.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.touch.test.tsx::Combobox on a phone > adds typed text as a chip from the sheet's row with multiple and allowCustomValue)
+   */
+  customValueLabel?: ((text: string) => string) | undefined;
 };
 
 /** A Combobox that accepts any text, suggesting matching items as people type. */
 export type ComboboxCustomProps = ComboboxBaseProps & {
   /** Accept any text: the value is what is in the input, and items are suggestions. */
   allowCustomValue: true;
-  /** Not with `allowCustomValue`: it keeps one typed value. */
+  /** One typed value. With `multiple` too, typed text becomes chips: see {@link ComboboxTokensProps}. */
   multiple?: false | undefined;
   /** The text, when you control it. */
   value?: string | undefined;
@@ -283,10 +312,10 @@ export type ComboboxCustomProps = ComboboxBaseProps & {
 };
 
 /**
- * Props for {@link Combobox}: one item (the default), several with `multiple`, or any text
- * with `allowCustomValue`.
+ * Props for {@link Combobox}: one item (the default), several with `multiple`, any text
+ * with `allowCustomValue`, or several items and typed text as chips with both.
  */
-export type ComboboxProps = ComboboxSingleProps | ComboboxMultipleProps | ComboboxCustomProps;
+export type ComboboxProps = ComboboxSingleProps | ComboboxMultipleProps | ComboboxTokensProps | ComboboxCustomProps;
 
 /** An item as Base UI's list holds it. */
 interface Option {
@@ -323,6 +352,8 @@ interface ControlProps {
   customValueLabel: (text: string) => string;
   /** `allowCustomValue` on a phone: one value, which may be typed text. */
   custom: boolean;
+  /** `multiple` with `allowCustomValue`: typed text becomes chips. */
+  tokens: boolean;
   inputRef: Ref<HTMLInputElement> | undefined;
   autoHighlight: boolean | undefined;
   onInputKeyDown: ((event: KeyboardEvent<HTMLInputElement>) => void) | undefined;
@@ -358,6 +389,8 @@ const markDismiss = dismissMarker("combobox", "dismiss");
 const markPopupDismiss = dismissMarker("combobox", "popup-dismiss");
 
 const toOption = (item: ComboboxItem): Option => (typeof item === "string" ? { value: item, label: item } : item);
+/** Text as a token input compares it: trimmed, inner runs of space as one, and in upper case, where "ß" is "SS". */
+const normalized = (text: string) => text.trim().replace(/\s+/g, " ").toLocaleUpperCase();
 
 /**
  * Icons drawn in the text color at 16px, like the other Ouro icons.
@@ -398,11 +431,13 @@ const ChevronIcon = () => (
  * A text input that filters a list of items as people type, on the Field contract: pass
  * `label`, `items`, and `error` from your server action or client check. It picks one item,
  * several as chips with `multiple`, or accepts any text with `allowCustomValue`. Pass
- * `onInputChange` and `loading` to search on your server. A clear button shows while there
+ * `onInputChange` and `loading` to search on your server. With `multiple` and `allowCustomValue`
+ * together it is a token input, for tags: typed text becomes a chip on Enter or at a comma, and
+ * text that matches an item ignoring case picks that item. A clear button shows while there
  * is a value. On a phone (below 640px with touch) the field is a button that opens a
  * full-height bottom sheet with the search input pinned at the top, and a clear button sits
  * beside it. With `allowCustomValue` the sheet's first row keeps what was typed
- * (`customValueLabel`). The sheet opens with focus on itself, not the search input, so the
+ * (`customValueLabel`), and with `multiple` that row adds it as a chip. The sheet opens with focus on itself, not the search input, so the
  * keyboard does not cover the list until people tap the search (as Base UI does for touch).
  * In a right-to-left page (`dir="rtl"` on `<html>`) the arrow keys move between chips from the right: ArrowRight goes from the input to the last chip.
  * There, End also scrolls long typed text to its end, on the left.
@@ -418,6 +453,9 @@ const ChevronIcon = () => (
  * <Combobox label="Tags" name="tags" multiple items={tags} defaultValue={["Quick"]} />
  * <Combobox label="Recipe" items={results} loading={searching} onInputChange={search} />
  * <Combobox label="Cuisine" name="cuisine" allowCustomValue items={["Italian", "Thai"]} />
+ * <Combobox label="Tags" name="tags" multiple allowCustomValue items={["Weeknight", "Vegan"]} />
+ * @claim "With `multiple` and `allowCustomValue`" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox multiple allowCustomValue > makes a chip at each comma, and a pasted list becomes a chip per entry)
+ * @claim "With `multiple` and `allowCustomValue`" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox multiple allowCustomValue > picks the item that typed text matches ignoring case, so no duplicate chip appears)
  * @claim "On a phone (below 640px with" registry/ouro/components/ouro/combobox/combobox.touch.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.touch.test.tsx::Combobox on a phone > is a button in the field that opens a sheet titled with the label)
  * @claim "In a right-to-left page" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox multiple > moves between its chips with the arrow keys of a right-to-left page, where the last chip sits right of the input)
  * @claim "There, End also scrolls long" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox allowCustomValue > shows the end of long text on End in a right-to-left page, where the end is on the left)
@@ -518,11 +556,6 @@ export function Combobox(props: ComboboxProps): JSX.Element {
           isClearable !== undefined && ["isClearable is not a prop; the clear button shows whenever there is a value", "<Combobox>"],
           inputValue !== undefined &&
             !onInputChange && ["inputValue needs onInputChange, or the text can never change", "<Combobox inputValue={text} onInputChange={setText}>"],
-          multiple &&
-            allowCustomValue && [
-              "multiple and allowCustomValue do not combine; allowCustomValue keeps one typed value",
-              "<Combobox multiple items={tags}>",
-            ],
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
@@ -548,6 +581,7 @@ export function Combobox(props: ComboboxProps): JSX.Element {
     removeLabel,
     customValueLabel,
     custom,
+    tokens: allowCustomValue && multiple,
     inputRef: ref,
     autoHighlight,
     onInputKeyDown,
@@ -765,7 +799,7 @@ function useCustomReset(ref: RefObject<HTMLInputElement | HTMLButtonElement | nu
 /** A Combobox that picks one item or several, on Base UI Combobox. */
 function ComboboxControl(props: ControlProps): JSX.Element {
   const { label, items, multiple, value, defaultValue, onValueChange, onInputChange, placeholder, required, loading } = props;
-  const { loadingLabel, emptyLabel, empty, clearLabel, doneLabel, removeLabel, customValueLabel, custom, inputRef, sheet } = props;
+  const { loadingLabel, emptyLabel, empty, clearLabel, doneLabel, removeLabel, customValueLabel, custom, tokens, inputRef, sheet } = props;
   const { autoHighlight, onInputKeyDown, readOnly, inputValue } = props;
   const field = useField()!;
   // Ouro's own invalid state (the error prop or the Form's error for this name), not Base UI's,
@@ -793,20 +827,92 @@ function ComboboxControl(props: ControlProps): JSX.Element {
       : picked == null || (custom && picked === "")
         ? null
         : toSelected(picked as string);
-  // With allowCustomValue, typed text that is not an item gets a row of its own, first.
+  // A token input keeps its own chips unless the app controls them, so typed text can join them.
+  const [ownTokens, setOwnTokens] = useState(() => (defaultValue as string[] | undefined) ?? []);
+  // The chips: read only by a token input, the one mode whose value is the app's array or its own.
+  const picked = (value as string[] | undefined) ?? ownTokens;
   const typed = text.trim();
-  const listed =
-    custom && typed !== "" && !options.some((option) => option.label === typed)
-      ? [{ value: typed, label: customValueLabel(typed), custom: true }, ...options]
-      : options;
+  // With allowCustomValue, typed text that is not an item gets a row of its own, first: on a
+  // token input, only in the sheet, and only for text no item or chip already holds.
+  const offerTyped =
+    typed !== "" &&
+    (tokens
+      ? sheet && ![...options, ...picked.map(toSelected)].some((option) => normalized(option.label) === normalized(typed))
+      : custom && !options.some((option) => option.label === typed));
+  const listed = offerTyped ? [{ value: typed, label: customValueLabel(typed), custom: true }, ...options] : options;
   const shown = (option: Option) => (option.custom ? option.value : option.label);
 
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const resetInputRef = useRef<HTMLInputElement>(null);
   const setInputRef = useMergedRef(inputRef, resetInputRef);
-  useCustomReset(sheet ? triggerRef : resetInputRef, value, props.onReset);
-  const report = onValueChange as ((value: string | string[] | null) => void) | undefined;
+  // Combobox always passes its own handler, which calls the app's.
+  const report = onValueChange as (value: string | string[] | null) => void;
+  // The item highlighted in the list, so Enter knows whether to pick it or keep the typed text.
+  const [highlighted, setHighlighted] = useState(false);
+
+  /**
+   * Sets a token input's chips, leaving out a chip whose label is already there ignoring case.
+   * @claim "Sets a token input's chips" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox multiple allowCustomValue > picks the item that typed text matches ignoring case, so no duplicate chip appears)
+   */
+  const setTokens = (next: string[]) => {
+    const values: string[] = [];
+    for (const chip of next) {
+      if (!values.some((kept) => normalized(toSelected(kept).label) === normalized(toSelected(chip).label))) values.push(chip);
+    }
+    if (values.length === picked.length && values.every((chip, index) => chip === picked[index])) return;
+    // Kept even when the app controls the chips, where `value` wins over it.
+    setOwnTokens(values);
+    report(values);
+  };
+  /**
+   * Makes typed text chips, one per comma-separated entry: an entry becomes the item whose label it
+   * matches ignoring case, nothing when that item is disabled, or else itself with its spaces tidied.
+   * False when there is nothing to add.
+   */
+  const addTyped = (entered: string) => {
+    const entries = entered.split(",").filter((entry) => entry.trim() !== "");
+    if (readOnly || entries.length === 0) return false;
+    const chips: string[] = [];
+    for (const entry of entries) {
+      const text = entry.trim().replace(/\s+/g, " ");
+      const item = options.find((option) => normalized(option.label) === normalized(text));
+      if (item?.disabled) continue;
+      chips.push(item ? item.value : text);
+    }
+    setTokens([...picked, ...chips]);
+    return true;
+  };
+  const setTyped = (next: string) => {
+    setText(next);
+    onInputChange?.(next);
+  };
+  useCustomReset(
+    sheet ? triggerRef : resetInputRef,
+    tokens ? picked : value,
+    tokens && value === undefined ? () => setTokens((defaultValue as string[] | undefined) ?? []) : props.onReset,
+  );
+  const tokenHandlers = tokens
+    ? {
+        onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
+          onInputKeyDown?.(event);
+          // Enter with no suggestion highlighted makes the typed text a chip, and leaves an empty input's Enter to the form.
+          if (event.defaultPrevented || event.key !== "Enter" || event.nativeEvent.isComposing || (open && highlighted)) return;
+          if (addTyped(event.currentTarget.value)) {
+            event.preventDefault();
+            setTyped("");
+          }
+        },
+        onPaste: (event: ClipboardEvent<HTMLInputElement>) => {
+          const pasted = event.clipboardData.getData("text/plain");
+          if (!pasted.includes(",")) return;
+          event.preventDefault();
+          // A text input always has a selection, so neither end is null.
+          const input = event.currentTarget;
+          if (addTyped(input.value.slice(0, input.selectionStart!) + pasted + input.value.slice(input.selectionEnd!))) setTyped("");
+        },
+      }
+    : { onKeyDown: onInputKeyDown };
   // The sheet's clear button, beside the field for a single pick that can change.
   // Stryker disable next-line ConditionalExpression,LogicalOperator,BooleanLiteral: the sheet shows only on a coarse-pointer phone, which the Chromium project mutation runs in cannot be; combobox.touch.test.tsx holds a read-only field's missing clear button there.
   const sheetClear = !multiple && !readOnly;
@@ -837,7 +943,8 @@ function ComboboxControl(props: ControlProps): JSX.Element {
   const input = (className: string, extra: { "aria-label"?: string } = {}) => (
     <BaseCombobox.Input
       {...extra}
-      {...inputHandlers(onInputKeyDown)}
+      {...inputHandlers(tokenHandlers.onKeyDown)}
+      onPaste={tokenHandlers.onPaste}
       readOnly={readOnly}
       ref={setInputRef}
       data-ouro-control="combobox"
@@ -855,12 +962,21 @@ function ComboboxControl(props: ControlProps): JSX.Element {
       multiple={multiple}
       isItemEqualToValue={(item: Option, picked: Option) => item.value === picked.value}
       itemToStringLabel={shown}
-      filter={onInputChange ? null : undefined}
+      filter={onInputChange ? null : tokens ? (option: Option, query: string) => option.custom || normalized(option.label).includes(normalized(query)) : undefined}
       onInputValueChange={(next, details) => {
+        // On a token input a comma ends a chip: what comes before it becomes chips.
+        const comma = tokens ? next.lastIndexOf(",") : -1;
+        // Stryker disable next-line EqualityOperator: a comma first leaves no text before it, which addTyped turns down, the same as no comma.
+        if (comma >= 0 && addTyped(next.slice(0, comma))) {
+          setTyped(next.slice(comma + 1).trimStart());
+          return;
+        }
         setText(next);
         if (details.reason !== "item-press") onInputChange?.(next);
       }}
-      inputValue={inputValue}
+      onItemHighlighted={(option: Option | undefined) => setHighlighted(option !== undefined)}
+      // Stryker disable next-line ConditionalExpression: the other modes' uncontrolled input shows the same text that onInputValueChange keeps in step.
+      inputValue={tokens ? (inputValue ?? text) : inputValue}
       autoHighlight={autoHighlight}
       readOnly={readOnly}
       required={required}
@@ -871,10 +987,11 @@ function ComboboxControl(props: ControlProps): JSX.Element {
         // An inline trigger closes Base UI's always-open list; its own click opens our sheet.
         if (!sheet || details.reason !== "trigger-press") setOpen(next);
       }}
-      {...(value !== undefined ? { value: toBase(value) } : { defaultValue: toBase(defaultValue) })}
-      onValueChange={(next: Option | Option[] | null) =>
-        report?.(Array.isArray(next) ? next.map((option) => option.value) : (next?.value ?? (custom ? "" : null)))
-      }
+      {...(tokens ? { value: toBase(picked) } : value !== undefined ? { value: toBase(value) } : { defaultValue: toBase(defaultValue) })}
+      onValueChange={(next: Option | Option[] | null) => {
+        if (tokens) setTokens((next as Option[]).map((option) => option.value));
+        else report(Array.isArray(next) ? next.map((option) => option.value) : (next?.value ?? (custom ? "" : null)));
+      }}
       {...(sheet
         ? {
             inline: true,

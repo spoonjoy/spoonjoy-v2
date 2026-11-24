@@ -4,7 +4,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, HTMLAttributes, JSX, Ref, RefCallback } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
-import { joinWave } from "~/components/ouro/skeleton/skeleton-styles";
+import { correctAnimationClock, joinWave } from "~/components/ouro/skeleton/skeleton-styles";
 import { useMergedRef } from "~/lib/ouro/refs";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
@@ -228,11 +228,6 @@ function useBreathes(shimmer: boolean): { breathes: boolean; style: CSSPropertie
          fire, so this callback never actually observes cancelled true; the guard only protects a browser race
          no test can force. */
       if (cancelled) return;
-      // Reusing joinWave with a nonzero `breathing` always takes its `waveStart` argument as the wave's start,
-      // so this reads the same join fresh, from this placeholder's own start, without touching the shared module
-      // state a placeholder mounting or unmounting elsewhere since may have moved on.
-      const freshDelayMs = Number.parseFloat(joinWave(performance.now(), 1, 0, start).delay);
-      const correction = staleDelayMs - freshDelayMs;
       for (const node of nodesRef.current.values()) {
         // jsdom, where apps often run their component tests, has no getAnimations: there is no wave to correct.
         for (const animation of node.getAnimations?.({ subtree: true }) ?? []) {
@@ -241,7 +236,26 @@ function useBreathes(shimmer: boolean): { breathes: boolean; style: CSSPropertie
           /* istanbul ignore next @preserve -- registerNode only ever sees this component's own Bar elements,
              which carry no animation but the breathe one this component applies itself, so the non-matching
              branch never runs. */
-          if (animation instanceof CSSAnimation && animation.animationName === breatheAnimationName) animation.currentTime = correction;
+          if (!(animation instanceof CSSAnimation) || animation.animationName !== breatheAnimationName) continue;
+          // A freshly created animation can still be pending here (its play has not yet committed): a
+          // currentTime write made while pending can be silently discarded once that pending play resolves,
+          // undoing the correction. Waiting for ready makes this write the last one and so the one that
+          // sticks; joinWave reruns here, at ready's later moment, rather than reusing the frame's own read,
+          // because the delay this correction is chasing keeps moving while the wait lasts.
+          void animation.ready
+            .then(() => {
+              // Stryker disable next-line ConditionalExpression: a test can unmount before this resolves,
+              // but not deterministically between this and the real ready event a browser alone fires.
+              /* istanbul ignore next @preserve -- a test can unmount before this resolves, but not
+                 deterministically land between this and the real ready event only a browser fires; the
+                 guard only protects that race, same as the frame's own cancelled check above. */
+              if (cancelled) return;
+              correctAnimationClock(animation, performance.now(), start, staleDelayMs);
+            })
+            // A node unmounting or shrinking out from under this animation before ready settles cancels
+            // it, which rejects ready with an AbortError: nothing is left here to correct, so this just
+            // stops that rejection going unhandled.
+            .catch(() => undefined);
         }
       }
     });

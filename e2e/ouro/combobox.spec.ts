@@ -29,6 +29,18 @@ test("allowCustomValue keeps free text", async ({ page }) => {
   await expect(cuisine).toHaveValue("Georgian");
 });
 
+test("multiple with allowCustomValue makes typed text a chip, and a comma makes another", async ({ page }) => {
+  await openStory(page, "forms-combobox--tags");
+  const tags = page.getByRole("combobox", { name: "Tags" });
+  await tags.click();
+  await tags.pressSequentially("Date night");
+  await tags.press("Enter");
+  await tags.pressSequentially("vegan,");
+  await expect(page.getByRole("button", { name: "Remove Date night" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove Vegan" })).toBeVisible();
+  await expect(tags).toHaveValue("");
+});
+
 test.describe("by touch on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 

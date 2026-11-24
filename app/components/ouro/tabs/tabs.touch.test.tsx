@@ -88,7 +88,7 @@ it("selects a tab on tap", async () => {
   expect(host.querySelectorAll('[role="tab"]')[1]!.getAttribute("aria-selected")).toBe("true");
 });
 
-it("keeps the selected tab in view in a row that scrolls, with the indicator under it and an edge fade", async () => {
+it("keeps the selected tab in view in a row that scrolls and the indicator under it", async () => {
   await rotate(390, 844);
   const items = Array.from({ length: 8 }, (_, index) => ({ value: `s${index}`, label: `Section ${index + 1}`, content: `Panel ${index + 1}` }));
   const host = await render(<Tabs label="Recipe" items={items} defaultValue="s7" />);
@@ -102,7 +102,6 @@ it("keeps the selected tab in view in a row that scrolls, with the indicator und
   expect(tabBox.right).toBeLessThanOrEqual(listBox.right + 1);
   const indicator = host.querySelector<HTMLElement>("[data-ouro-tabs-indicator]")!;
   await expect.poll(() => Math.abs(indicator.getBoundingClientRect().left - tab.getBoundingClientRect().left)).toBeLessThanOrEqual(1);
-  await expect.poll(() => list.getAttribute("data-fade")).toMatch(/left|both/);
 });
 
 it("stacks vertical tabs in a row on a phone", async () => {
@@ -128,7 +127,6 @@ it("keeps 44px links with 16px text on a phone, and the current one in view in a
   const link = host.querySelector<HTMLElement>('[aria-current="page"]')!;
   expect(list.scrollWidth).toBeGreaterThan(list.clientWidth);
   expect(link.getBoundingClientRect().right).toBeLessThanOrEqual(list.getBoundingClientRect().right + 1);
-  await expect.poll(() => list.getAttribute("data-fade")).toMatch(/left|both/);
   await expectTouchSize(host, '[data-ouro-part="link"]');
   for (const target of host.querySelectorAll('[data-ouro-part="link"]')) expect(target.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
 });

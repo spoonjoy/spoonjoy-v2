@@ -239,6 +239,24 @@ describe("opening and closing", () => {
     expect(getComputedStyle(sheet).maxHeight).toBe(`${innerHeight - 32}px`);
   });
 
+  it("squares the corners of a side sheet docked full height, and keeps a bottom sheet's rounded top corners", async () => {
+    for (const side of ["left", "right"] as const) {
+      const docked = await openUncontrolled({ side });
+      expect(Math.round(docked.getBoundingClientRect().height), side).toBe(innerHeight);
+      const style = getComputedStyle(docked);
+      for (const radius of [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomLeftRadius, style.borderBottomRightRadius]) {
+        expect(radius, side).toBe("0px");
+      }
+      await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+      for (const node of mounted) node.remove();
+      mounted = [];
+    }
+    const style = getComputedStyle(await openUncontrolled());
+    expect(parseFloat(style.borderTopLeftRadius)).toBeGreaterThan(0);
+    expect(parseFloat(style.borderTopRightRadius)).toBeGreaterThan(0);
+    expect(style.borderBottomLeftRadius).toBe("0px");
+  });
+
   it("stays on the bottom edge after something scrolls a control into view while the sheet is off it", async () => {
     // Scrolling a control into view while the sheet sits lower than its resting place (as it
     // does while it enters) must not scroll the full-screen viewport: the offset would stay

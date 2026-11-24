@@ -244,36 +244,6 @@ describe("Tabs", () => {
     expect(tabs[1]!.getAttribute("aria-selected")).toBe("true");
   });
 
-  it("fades the edge of a tab row that scrolls, on the side with more tabs", async () => {
-    const many = Array.from({ length: 10 }, (_, index) => ({ value: `s${index}`, label: `Section ${index + 1}`, content: <p>Panel {index + 1}</p> }));
-    const { host, root } = await render(<Tabs label="Recipe" items={many} />);
-    host.style.width = "320px";
-    const list = root.querySelector<HTMLElement>('[role="tablist"]')!;
-    await expect.poll(() => list.getAttribute("data-fade")).toBe("right");
-    expect(getComputedStyle(list).maskImage).toMatch(/gradient/);
-    await act(async () => list.scrollTo({ left: 100 }));
-    await expect.poll(() => list.getAttribute("data-fade")).toBe("both");
-    await act(async () => list.scrollTo({ left: list.scrollWidth }));
-    await expect.poll(() => list.getAttribute("data-fade")).toBe("left");
-    // Once every tab fits, there is no fade.
-    host.style.maxWidth = "none";
-    host.style.width = "2000px";
-    await expect.poll(() => list.hasAttribute("data-fade")).toBe(false);
-    expect(getComputedStyle(list).maskImage).toBe("none");
-  });
-
-  it("fades the leading edge on the right in a right-to-left row", async () => {
-    const many = Array.from({ length: 10 }, (_, index) => ({ value: `s${index}`, label: `Section ${index + 1}`, content: <p>Panel {index + 1}</p> }));
-    const { host, root } = await render(
-      <div dir="rtl">
-        <Tabs label="Recipe" items={many} />
-      </div>,
-    );
-    host.style.width = "320px";
-    const list = root.querySelector<HTMLElement>('[role="tablist"]')!;
-    await expect.poll(() => list.getAttribute("data-fade")).toBe("left");
-  });
-
   it("slides the indicator under the selected tab", async () => {
     const r = await render(<Tabs label="Recipe" items={items} />);
     await expect.poll(() => r.indicator).not.toBeNull();
@@ -651,18 +621,6 @@ describe("Tabs as links", () => {
     host.firstElementChild!.setAttribute("dir", "ltr");
     expect(hairline(column)).toBe("-1");
     expect(hairline(tablist)).toBe("-1");
-  });
-
-  it("fades the edge of a row of links that scrolls, on the right in a right-to-left row", async () => {
-    const many = Array.from({ length: 10 }, (_, index) => ({ value: `s${index}`, label: `Section ${index + 1}`, href: `/s/${index}` }));
-    const { host, root } = await render(<Tabs label="Sections" items={many} currentPath="/s/0" />);
-    host.style.width = "320px";
-    const list = root.querySelector<HTMLElement>("ul")!;
-    await expect.poll(() => list.getAttribute("data-fade")).toBe("right");
-    expect(getComputedStyle(list).maskImage).toMatch(/gradient/);
-    host.setAttribute("dir", "rtl");
-    await act(async () => list.scrollTo({ left: 0 }));
-    await expect.poll(() => list.getAttribute("data-fade")).toBe("left");
   });
 
   it("scrolls a row of links to the current page's link, at either end and in a right-to-left row", async () => {

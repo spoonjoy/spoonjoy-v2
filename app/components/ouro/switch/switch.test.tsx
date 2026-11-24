@@ -337,7 +337,7 @@ describe("Switch look and motion", () => {
     const { track, thumb } = await render(<Switch label="Wi-Fi" />);
     const backdrop = () => getComputedStyle(thumb).getPropertyValue("backdrop-filter") || getComputedStyle(thumb).getPropertyValue("-webkit-backdrop-filter");
     expect(backdrop()).toBe("none");
-    expect(getComputedStyle(thumb).backgroundImage).toMatch(/^linear-gradient\(/);
+    expect(getComputedStyle(thumb).backgroundImage).toBe("none");
     await userEvent.click(track);
     await settled(thumb);
     expect(backdrop()).toBe("none");

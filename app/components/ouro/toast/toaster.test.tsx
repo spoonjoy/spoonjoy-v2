@@ -1573,13 +1573,14 @@ describe("swiping", () => {
     await gone("Thrown");
   });
 
-  it("fades a swiped toast on the way it was thrown, and slides a closed one down", async () => {
+  it("fades a swiped toast on the way it was thrown, and a closed one where it is, shrinking a little", async () => {
     await render(<Toaster />);
-    /** Where the toast's own `transform` ends up once its exit has run: how far down it slides. */
-    const slidesTo = (item: HTMLElement) => {
+    /** The toast's own `transform` once its exit has run. */
+    const endsAt = (item: HTMLElement) => {
       for (const animation of item.getAnimations()) animation.finish();
-      return new DOMMatrix(getComputedStyle(item).transform).m42;
+      return new DOMMatrix(getComputedStyle(item).transform);
     };
+    const slidesTo = (item: HTMLElement) => endsAt(item).m42;
     const swiped = await show("Swiped", { duration: 0 });
     swiped.style.transitionDuration = "20s";
     const send = pointerOn(swiped);
@@ -1595,9 +1596,30 @@ describe("swiping", () => {
     closed.style.transitionDuration = "20s";
     await userEvent.click(closed.querySelector("button")!);
     await expect.poll(() => closed.hasAttribute("data-ending-style")).toBe(true);
-    // One and a half times its height, down and off the screen.
-    expect(slidesTo(closed)).toBeCloseTo(closed.offsetHeight * 1.5, 0);
+    // It stays where it was, a little smaller, rather than sliding off past the toasts in front of it.
+    const end = endsAt(closed);
+    expect(end.m42).toBeCloseTo(0, 0);
+    expect(end.a).toBeCloseTo(0.96, 2);
     await gone("Closed");
+  });
+
+  it("fades a closed toast where it sat in a fanned-out stack, shrinking a little, not where a folded stack would put it", async () => {
+    await render(<Toaster />);
+    await show("Older", { duration: 0 });
+    await show("Newer", { duration: 0 });
+    await userEvent.hover(toastNamed("Newer")!);
+    await until(() => viewport()!.hasAttribute("data-expanded"), true);
+    const older = toastNamed("Older")!;
+    await until(() => older.getAnimations().length, 0);
+    const sat = new DOMMatrix(getComputedStyle(older).transform).m42;
+    older.style.transitionDuration = "20s";
+    await userEvent.click(older.querySelector<HTMLButtonElement>('[data-ouro-part="close"]')!);
+    await expect.poll(() => older.hasAttribute("data-ending-style")).toBe(true);
+    for (const animation of older.getAnimations()) animation.finish();
+    const end = new DOMMatrix(getComputedStyle(older).transform);
+    expect(end.m42).toBeCloseTo(sat, 0);
+    expect(end.a).toBeCloseTo(0.96, 2);
+    await gone("Older");
   });
 
   it("throws a swiped toast on under OuroProvider's motion=\"full\", and lets it fade where it is under \"reduced\", whatever the device says", async () => {

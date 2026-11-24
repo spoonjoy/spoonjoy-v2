@@ -60,21 +60,6 @@ describe("ToggleGroup overflow scroll", () => {
     expect(rowHeight).toBeLessThanOrEqual(toggleHeight + 2);
   });
 
-  it("fades no side once every toggle fits, and the side that hides one once it doesn't", async () => {
-    await page.viewport(1024, 768);
-    const fits = await render(
-      <ToggleGroup label="Show" hideLabel overflow="scroll" items={filters.slice(0, 2)} value="all" onValueChange={() => {}} />,
-    );
-    await expect.poll(() => fits.row.hasAttribute("data-ouro-scroll-fade")).toBe(false);
-
-    await page.viewport(320, 400);
-    const cut = await render(
-      <ToggleGroup label="Show" hideLabel overflow="scroll" items={filters} value="all" onValueChange={() => {}} />,
-    );
-    await expect.poll(() => cut.row.hasAttribute("data-ouro-scroll-fade")).toBe(true);
-    await expect.poll(() => getComputedStyle(cut.row).maskImage).toContain("gradient");
-  });
-
   it("brings the last toggle fully into view when End moves focus to it", async () => {
     await page.viewport(320, 400);
     const { row, toggles } = await render(

@@ -40,6 +40,7 @@ expectTypeOf<{ trigger: ReactElement; label: "File"; children: "Items" }>().not.
 expectTypeOf<{ contextTrigger: ReactElement; side: "top"; children: "Items" }>().not.toExtend<MenuProps>();
 // A dropdown can leave the page live; a context menu and a MenuBar's menu always hold it.
 expectTypeOf<{ trigger: ReactElement; modal: false; children: "Items" }>().toExtend<MenuProps>();
+expectTypeOf<{ anchor: Element; open: boolean; onOpenChange: (open: boolean) => void; "aria-label": "Actions"; modal: false; children: "Items" }>().toExtend<MenuProps>();
 expectTypeOf<{ contextTrigger: ReactElement; modal: false; children: "Items" }>().not.toExtend<MenuProps>();
 expectTypeOf<{ label: "File"; modal: false; children: "Items" }>().not.toExtend<MenuProps>();
 // Named options only.

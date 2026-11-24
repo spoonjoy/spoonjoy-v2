@@ -62,6 +62,15 @@ export const Modes: Story = {
   ),
 };
 
+/** A token input for tags: pick a suggestion, or type a new tag and press Enter or a comma. */
+export const Tags: Story = {
+  render: () => (
+    <Surface>
+      <Combobox label="Tags" name="tags" multiple allowCustomValue items={["Weeknight", "Vegan", "Quick lunch"]} defaultValue={["Weeknight"]} placeholder="Add a tag" />
+    </Surface>
+  ),
+};
+
 /** Items that come from a search: the app filters in onInputChange and sets loading. */
 export const Search: Story = {
   render: function Render() {

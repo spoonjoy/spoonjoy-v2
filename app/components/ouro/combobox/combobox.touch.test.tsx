@@ -514,6 +514,58 @@ describe("Combobox on a phone", () => {
     await expect.poll(() => panel.querySelector('[role="option"]')?.textContent).toBe("„Thai“ verwenden");
   });
 
+  it("offers the sheet's row for typed text only, even when its label does not repeat the text", async () => {
+    const onValueChange = vi.fn();
+    await render(<Combobox label="Tags" multiple allowCustomValue items={["Weeknight", "Vegan"]} onValueChange={onValueChange} customValueLabel={() => "Add as a new tag"} />);
+    await commands.tap(TRIGGER);
+    const panel = await opened();
+    const rows = () => [...panel.querySelectorAll('[role="option"]')].map((option) => option.textContent);
+    await expect.poll(rows).toEqual(["Weeknight", "Vegan"]);
+    await commands.tap('[data-ouro="sheet"] input[role="combobox"]');
+    await userEvent.type(panel.querySelector("input")!, "Picnic");
+    await expect.poll(rows).toEqual(["Add as a new tag"]);
+    await commands.tap('[role="option"]:nth-child(1)');
+    expect(onValueChange).toHaveBeenLastCalledWith(["Picnic"]);
+  });
+
+  it("adds typed text as a chip from the sheet's row with multiple and allowCustomValue", async () => {
+    const onValueChange = vi.fn();
+    const host = await render(
+      <form>
+        <Combobox
+          label="Tags"
+          name="tags"
+          multiple
+          allowCustomValue
+          items={["Weeknight", "Vegan"]}
+          defaultValue={["Vegan"]}
+          onValueChange={onValueChange}
+          customValueLabel={(text) => `Add “${text}”`}
+        />
+      </form>,
+    );
+    await commands.tap(TRIGGER);
+    const panel = await opened();
+    const rows = () => [...panel.querySelectorAll('[role="option"]')].map((option) => option.textContent);
+    await commands.tap('[data-ouro="sheet"] input[role="combobox"]');
+    await userEvent.type(panel.querySelector("input")!, "Date night");
+    await expect.poll(rows).toEqual(["Add “Date night”"]);
+    await commands.tap('[role="option"]:nth-child(1)');
+    expect(onValueChange).toHaveBeenLastCalledWith(["Vegan", "Date night"]);
+    await expect.poll(() => host.querySelector(TRIGGER)!.textContent).toContain("Vegan, Date night");
+    expect(new FormData(host.querySelector("form")!).getAll("tags")).toEqual(["Vegan", "Date night"]);
+
+    // Text that is an item, ignoring case, offers the item and no row of its own.
+    if (!sheet()) {
+      await commands.tap(TRIGGER);
+      await opened();
+    }
+    const search = sheet()!.querySelector("input")!;
+    await userEvent.clear(search);
+    await userEvent.type(search, "weeknight");
+    await expect.poll(() => [...sheet()!.querySelectorAll('[role="option"]')].map((option) => option.textContent)).toEqual(["Weeknight"]);
+  });
+
   it("gives chip remove buttons a 44px hit area", async () => {
     await rotate(844, 390);
     const host = await render(<Combobox label="Herbs" multiple items={herbs} defaultValue={["Basil"]} />);

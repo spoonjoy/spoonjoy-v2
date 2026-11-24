@@ -595,7 +595,8 @@ describe("Inspector", () => {
       }
     }
     document.documentElement.classList.remove("dark");
-  }, 30_000);
+    // Every line of text measured twice in each scheme: about 16 s in WebKit on CI, so the budget is twice that.
+  }, 60_000);
 
   it("does not outline itself, an overlay's wrappers, a hidden component or a part apart from its component", async () => {
     const { host } = await render(
@@ -1138,7 +1139,7 @@ describe("Inspector", () => {
     await page.viewport(1280, 800);
     await render(
       <Page>
-        <Popover title="Filters" trigger={<Button>Filters</Button>}>
+        <Popover title="Filters" modal={false} trigger={<Button>Filters</Button>}>
           <Combobox label="Herb" items={["Basil", "Dill", "Thyme"]} />
         </Popover>
       </Page>,
@@ -1161,7 +1162,7 @@ describe("Inspector", () => {
     await page.viewport(1280, 800);
     await render(
       <Page>
-        <Popover title="Share recipe" trigger={<Button>Share</Button>}>
+        <Popover title="Share recipe" modal={false} trigger={<Button>Share</Button>}>
           <p>Send it to a friend.</p>
         </Popover>
       </Page>,

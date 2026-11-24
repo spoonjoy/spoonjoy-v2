@@ -8,8 +8,12 @@ import { devThrow } from "~/lib/ouro/dev";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { alignClasses, checkAlign, type TextAlign } from "~/components/ouro/text/text-styles";
 
-/** A heading size from the theme's type scale. `display` is for a page's hero headline. */
-export type HeadingSize = "sm" | "md" | "lg" | "xl" | "2xl" | "display";
+/**
+ * A heading size from the theme's type scale. `display` is for a page's hero headline.
+ * `inherit` takes the surrounding text's size, line height and tracking, at semibold, for a
+ * heading set inside smaller text, such as a `Card` title inside a chat bubble.
+ */
+export type HeadingSize = "sm" | "md" | "lg" | "xl" | "2xl" | "display" | "inherit";
 
 /** Props for {@link Heading}. */
 export interface HeadingProps extends Omit<HTMLAttributes<HTMLHeadingElement>, "color" | "className" | "children"> {
@@ -24,13 +28,15 @@ export interface HeadingProps extends Omit<HTMLAttributes<HTMLHeadingElement>, "
    * landing page, tightly set and larger from the `sm` breakpoint: `<Heading level={1} size="display">`.
    * Each size above `sm` is set tighter than the last. A theme whose `--font-heading` is a serif sets
    * `--ouro-heading-tracking` below its default of `1`, such as `0.5`, to tighten by that share and
-   * keep more of the font's own spacing; `0` sets every size at the font's own spacing.
+   * keep more of the font's own spacing; `0` sets every size at the font's own spacing. `inherit`
+   * takes the surrounding text's own size, line height and tracking instead of a type-scale step.
    * @default derived from `level` (1 is `2xl`, 2 is `xl`, 3 is `lg`, 4 is `md`, 5 and 6 are `sm`)
    * @claim "derived from `level`" registry/ouro/components/ouro/text/heading.test.tsx verify:testExists(registry/ouro/components/ouro/text/heading.test.tsx::Heading > derives a smaller default size for deeper levels)
    * @claim "Each size above `sm` is set tighter than the last" registry/ouro/components/ouro/text/heading.test.tsx verify:testExists(registry/ouro/components/ouro/text/heading.test.tsx::Heading tracking > tightens as the text grows: none at body size, more at each larger size)
    * @claim "to tighten by that share" registry/ouro/components/ouro/text/heading.test.tsx verify:testExists(registry/ouro/components/ouro/text/heading.test.tsx::Heading tracking > scales the tightening by the theme's --ouro-heading-tracking, so a serif heading font can keep its own spacing)
+   * @claim "`inherit` takes the surrounding text's" registry/ouro/components/ouro/text/heading.test.tsx verify:testExists(registry/ouro/components/ouro/text/heading.test.tsx::Heading > inherits the surrounding text's size, line height and tracking with size="inherit", staying semibold)
    */
-  size?: HeadingSize | (string & { 'Use "sm", "md", "lg", "xl", "2xl" or, larger, "display"': never }) | undefined;
+  size?: HeadingSize | (string & { 'Use "sm", "md", "lg", "xl", "2xl", "display" or "inherit" to match the surrounding text': never }) | undefined;
   /**
    * Cuts the heading to one line with an ellipsis, as a list row or a title bar needs. A heading
    * otherwise balances its lines, which would wrap it again, so `truncate` drops the balancing.
@@ -63,6 +69,8 @@ const sizes = {
   xl: "text-2xl tracking-[calc(-0.02em*var(--ouro-heading-tracking,1))]",
   "2xl": "text-3xl tracking-[calc(-0.025em*var(--ouro-heading-tracking,1))]",
   display: "text-[2.5rem] leading-[1.05] tracking-[calc(-0.035em*var(--ouro-heading-tracking,1))] sm:text-6xl sm:leading-[1.02]",
+  // No type-scale step of its own: the surrounding text sets the size, line height and tracking.
+  inherit: "text-[length:inherit] leading-[inherit] tracking-[inherit]",
 } as const;
 
 const sizeByLevel = { 1: "2xl", 2: "xl", 3: "lg", 4: "md", 5: "sm", 6: "sm" } as const;

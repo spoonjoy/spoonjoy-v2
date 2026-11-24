@@ -28,12 +28,14 @@ test.describe("on a desktop", () => {
     await expect(popover).toBeHidden();
   });
 
-  test("a controlled popover toggles from its anchor button", async ({ page }) => {
+  test("a controlled popover opens from its anchor button, and a press on the anchor only closes it", async ({ page }) => {
     await openStory(page, "overlays-popover--controlled");
-    const anchor = page.getByRole("button", { name: "Servings" });
+    // Found while hidden too: the open popover hides the page from assistive technology.
+    const anchor = page.getByRole("button", { name: "Servings", includeHidden: true });
     await anchor.click();
     await expect(page.getByRole("dialog", { name: "Servings" })).toBeVisible();
-    await anchor.click();
+    // Forced: the open popover keeps the pointer from the page, so the press lands where the anchor is.
+    await anchor.click({ force: true });
     await expect(page.getByRole("dialog", { name: "Servings" })).toBeHidden();
   });
 });

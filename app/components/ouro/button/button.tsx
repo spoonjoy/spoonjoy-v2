@@ -58,7 +58,11 @@ export interface ButtonBaseProps {
     | undefined;
   /**
    * Visual weight: `solid` for the primary action, `soft` for secondary actions,
-   * `outline` for a quiet bordered control, `plain` for a borderless one.
+   * `outline` for a quiet bordered control, `plain` for a borderless one, and `glass` for a
+   * Liquid Glass capsule (a circle when it holds only an icon) that floats over
+   * content, such as a window toolbar's button. A glass button stays pressed while the popup it opens is open
+   * (`aria-expanded`), draws solid with a defined edge under reduced transparency or more contrast,
+   * and takes the tone's text colour.
    * shadcn's `default` is `solid` (the default), `ghost` and `link` are `plain`, and
    * `destructive` and `secondary` are tones: `tone="destructive"`. Any other
    * string is a type error whose message names the fix.
@@ -71,6 +75,7 @@ export interface ButtonBaseProps {
     | "soft"
     | "outline"
     | "plain"
+    | "glass"
     | (string & { 'From shadcn? Use tone="destructive" or tone="secondary". default is "solid"; ghost and link are "plain"': never })
     | undefined;
   /**
@@ -234,7 +239,7 @@ export type ButtonProps = ButtonLinkProps | ButtonButtonProps;
 
 // Class strings are literal so the app's Tailwind finds them when it compiles.
 const base =
-  "press relative box-border inline-flex shrink-0 items-center justify-center align-middle " +
+  "press relative isolate box-border inline-flex shrink-0 items-center justify-center align-middle " +
   "rounded-ouro-control border border-solid font-medium whitespace-nowrap " +
   // A plain button stays borderless at rest in forced colours too, matching a ghost action
   // elsewhere; its focus-visible outline below still marks it.
@@ -275,6 +280,18 @@ const sizes = {
   // negative margin gives that back, so the line keeps its height and the label sits on its baseline.
   inline: "h-auto min-w-6 px-1 py-[3px] -my-1 gap-1 rounded-ouro-md align-baseline text-[length:inherit] leading-[inherit]",
 } as const;
+
+// Liquid Glass: the theme's glass tint over what is behind, blurred, with its rim as the border and a soft shadow, in a
+// capsule 40px tall (the capsule radius stops at half the height, so Ouro's squircle capsule, a circle for an icon). It stays pressed
+// while the popup it opened is open. Solid, with a defined edge, under reduced transparency or more contrast.
+const glass =
+  "[--ouro-bd:var(--ouro-glass-rim)] [--ouro-bg:color-mix(in_oklab,var(--ouro-glass)_var(--ouro-glass-tint),transparent)] " +
+  "[--ouro-control-radius:9999px] [--ouro-control-corner-shape:superellipse(1.05)] " +
+  "[--ouro-button-h:calc(var(--spacing)*10)] sm:[--ouro-button-h:calc(var(--spacing)*10)] " +
+  "shadow-(--shadow-sm) backdrop-blur-xl aria-expanded:[--ouro-state:var(--ouro-state-pressed,14%)] aria-expanded:before:opacity-[var(--ouro-state-pressed,14%)] " +
+  // Stryker disable next-line StringLiteral: a test cannot emulate reduced transparency (Playwright has no option for it)
+  "[@media(prefers-reduced-transparency:reduce)]:[--ouro-bg:var(--ouro-glass-solid)] [@media(prefers-reduced-transparency:reduce)]:[--ouro-bd:var(--ouro-glass-edge)] [@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none " +
+  "contrast-more:[--ouro-bg:var(--ouro-glass-solid)] contrast-more:[--ouro-bd:currentColor] contrast-more:backdrop-blur-none";
 
 // `soft` is the tone at low opacity behind text in the tone, the pattern shadcn uses for
 // destructive, with the text mixed 20% toward the foreground so it keeps 4.5:1 on the
@@ -320,6 +337,13 @@ const looks = {
     destructive: "[--ouro-bd:transparent] [--ouro-bg:transparent] text-destructive",
     success: "[--ouro-bd:transparent] [--ouro-bg:transparent] text-success",
     warning: "[--ouro-bd:transparent] [--ouro-bg:transparent] text-warning",
+  },
+  glass: {
+    primary: `${glass} text-primary`,
+    secondary: `${glass} text-foreground`,
+    destructive: `${glass} text-destructive`,
+    success: `${glass} text-success`,
+    warning: `${glass} text-warning`,
   },
 } as const;
 
@@ -558,14 +582,24 @@ export function Button(props: ButtonProps): JSX.Element {
     Boolean(named["aria-label"] || named["aria-labelledby"]);
   const classes = cn(base, iconChildClass, sizes[size], iconOnly && iconOnlyClass, looks[variant][tone], fullWidth && "w-full", className);
 
-  // The touch target comes first and the label is positioned, so the label paints above
+  // The touch target comes first and the label is its own stacking context, so the label paints above
   // the target: the target still enlarges the hit area, and nothing covers the text
-  // (axe can check its contrast).
-  const fade = cn("relative transition-opacity duration-(--ouro-duration-fast) ease-(--ouro-ease-out)", loading && "opacity-0");
+  // (axe can check its contrast). It is `isolate`, not `relative`, so it is no containing block
+  // for an app's absolutely placed children. The label is otherwise non-positioned (static), so it
+  // paints in an earlier step than the surface's own `position: absolute` unless the surface takes a
+  // negative z-index first, as every other `data-ouro-surface` consumer (Badge, Card, Toggle, Dialog,
+  // TextField, ThemePicker) already does for the same reason (#3396). The root itself carries `isolate`
+  // (in `base`, above) for the same reason: without its own stacking context, a negative z-index on the
+  // surface escapes the root's own box entirely and paints behind whatever the *page* puts there instead
+  // (an ancestor with its own background, painted in a later step than the surface once it has left the
+  // root) -- not just behind the label. In the design check's forced-fallback job, where every engine runs
+  // the clip-path surface, that let the docs demo panel's own translucent background paint over the
+  // surface, muting its true color and failing color-contrast on the label.
+  const fade = cn("isolate transition-opacity duration-(--ouro-duration-fast) ease-(--ouro-ease-out)", loading && "opacity-0");
   const content = (
     <>
       <TouchTarget />
-      <span data-ouro-surface="" aria-hidden="true" />
+      <span data-ouro-surface="" aria-hidden="true" style={{ zIndex: -1 }} />
       <span
         data-slot="button-label"
         data-ouro-label=""

@@ -164,7 +164,7 @@ const labelClass = "relative w-fit max-w-full text-base leading-6 sm:pointer-fin
  */
 const strikeClass =
   "pointer-events-none absolute inset-0 " +
-  "[background-image:linear-gradient(transparent_calc(50%_-_0.75px),currentColor_calc(50%_-_0.75px)_calc(50%_+_0.75px),transparent_calc(50%_+_0.75px))] [background-size:100%_1lh] [background-repeat:repeat-y] " +
+  "[background-image:linear-gradient(transparent_calc(50%_-_0.75px),currentColor_calc(50%_-_0.75px)_calc(50%_+_0.75px),transparent_calc(50%_+_0.75px))] [background-size:100%_1lh] [background-repeat:repeat-y] " + // gradient-ok: a hard-stop line the strike draws, no blend
   "[transform-origin:left_center] rtl:[transform-origin:right_center] [scale:0_1] group-data-checked/row:[scale:1] " +
   "motion-safe:[transition:scale_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
   "motion-safe:group-data-checked/row:[transition:scale_var(--ouro-duration-draw)_var(--ouro-ease-out)_calc(var(--ouro-duration-fast)*2)] " +

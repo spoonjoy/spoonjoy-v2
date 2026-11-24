@@ -571,6 +571,220 @@ describe("Combobox allowCustomValue", () => {
   });
 });
 
+describe("Combobox multiple allowCustomValue", () => {
+  const tags = ["Weeknight", "Quick lunch", "Vegan"];
+  const chips = (host: HTMLElement) => [...host.querySelectorAll("[data-ouro-combobox-chip]")].map((chip) => chip.querySelector("span")!.textContent);
+  const submitted = (host: HTMLElement) => [...host.querySelectorAll<HTMLInputElement>('input[name="tags"]')].map((hidden) => hidden.value);
+  /** Pastes text into the input as a person would, with the clipboard's text on the event; false when Combobox took the paste over. */
+  const paste = async (input: HTMLInputElement, text: string) => {
+    const data = new DataTransfer();
+    data.setData("text/plain", text);
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: data });
+    let kept = true;
+    await act(async () => {
+      kept = input.dispatchEvent(event);
+    });
+    return kept;
+  };
+
+  it("makes typed text a chip on Enter when no suggestion is highlighted, and submits one entry per chip", async () => {
+    const onValueChange = vi.fn();
+    const { input, host } = await render(<Combobox label="Tags" name="tags" multiple allowCustomValue items={tags} onValueChange={onValueChange} />);
+    await userEvent.click(input);
+    await userEvent.type(input, "Date   night");
+    // The popup offers no row for typed text: Enter is how it becomes a chip.
+    expect(options()).toEqual([]);
+    await userEvent.keyboard("{Enter}");
+    expect(onValueChange).toHaveBeenLastCalledWith(["Date night"]);
+    expect(chips(host)).toEqual(["Date night"]);
+    expect(input.value).toBe("");
+    expect(submitted(host)).toEqual(["Date night"]);
+  });
+
+  it("makes a chip on Enter in a form without submitting it, and leaves Enter in an empty input to the form", async () => {
+    const onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault());
+    const { input, host } = await render(
+      <form onSubmit={(event) => onSubmit(event.nativeEvent)}>
+        <Combobox label="Tags" multiple allowCustomValue items={tags} />
+        <button type="submit" data-test-harness="">
+          Save
+        </button>
+      </form>,
+    );
+    await userEvent.click(input);
+    await userEvent.type(input, "Picnic{Enter}");
+    expect(chips(host)).toEqual(["Picnic"]);
+    expect(onSubmit).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Enter}");
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("picks a highlighted suggestion on Enter", async () => {
+    const onValueChange = vi.fn();
+    const { input, host } = await render(<Combobox label="Tags" multiple allowCustomValue items={tags} onValueChange={onValueChange} />);
+    await userEvent.click(input);
+    await userEvent.type(input, "veg");
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    expect(onValueChange).toHaveBeenLastCalledWith(["Vegan"]);
+    expect(chips(host)).toEqual(["Vegan"]);
+  });
+
+  it("suggests items ignoring case and extra spaces", async () => {
+    const { input } = await render(<Combobox label="Tags" multiple allowCustomValue items={tags} />);
+    await userEvent.click(input);
+    await userEvent.type(input, "  QUICK   lu");
+    await expect.poll(options).toEqual(["Quick lunch"]);
+  });
+
+  it("picks the item that typed text matches ignoring case, so no duplicate chip appears", async () => {
+    const onValueChange = vi.fn();
+    const { input, host } = await render(
+      <Combobox label="Tags" name="tags" multiple allowCustomValue items={[{ value: "weeknight", label: "Weeknight" }]} onValueChange={onValueChange} />,
+    );
+    await userEvent.click(input);
+    await userEvent.type(input, "  weeknight ");
+    await userEvent.keyboard("{Enter}");
+    expect(onValueChange).toHaveBeenLastCalledWith(["weeknight"]);
+    await userEvent.type(input, "WEEKNIGHT");
+    await userEvent.keyboard("{Enter}");
+    // The same chip again changes nothing, so the app hears nothing.
+    expect(onValueChange).toHaveBeenCalledTimes(1);
+    await userEvent.type(input, "Picnic{Enter}picnic{Enter}");
+    expect(chips(host)).toEqual(["Weeknight", "Picnic"]);
+    expect(submitted(host)).toEqual(["weeknight", "Picnic"]);
+  });
+
+  it("matches an item past its stray spaces and with ß as SS, and keeps a space that is not extra", async () => {
+    const { input, host } = await render(<Combobox label="Tags" name="tags" multiple allowCustomValue items={["Quick lunch", "Straße", "Vegan "]} />);
+    await userEvent.click(input);
+    await userEvent.type(input, "quicklunch{Enter}strasse{Enter}vegan{Enter}");
+    expect(chips(host)).toEqual(["quicklunch", "Straße", "Vegan "]);
+    expect(submitted(host)).toEqual(["quicklunch", "Straße", "Vegan "]);
+  });
+
+  it("makes no chip of a disabled item's name, and keeps a disabled item already picked", async () => {
+    const items = [
+      { value: "feta", label: "Feta", disabled: true },
+      { value: "gouda", label: "Gouda", disabled: true },
+      "Brie",
+    ];
+    const { input, host } = await render(<Combobox label="Cheeses" multiple allowCustomValue items={items} defaultValue={["feta"]} />);
+    await userEvent.click(input);
+    await userEvent.type(input, "gouda{Enter}");
+    expect(chips(host)).toEqual(["Feta"]);
+    await userEvent.type(input, "Picnic{Enter}");
+    expect(chips(host)).toEqual(["Feta", "Picnic"]);
+  });
+
+  it("makes a chip at each comma, and a pasted list becomes a chip per entry", async () => {
+    const onValueChange = vi.fn();
+    const { input, host } = await render(<Combobox label="Tags" multiple allowCustomValue items={tags} onValueChange={onValueChange} />);
+    await userEvent.click(input);
+    await userEvent.type(input, "spicy,");
+    expect(chips(host)).toEqual(["spicy"]);
+    expect(input.value).toBe("");
+    // Blank entries make no chip, and Combobox takes the paste over so the text does not land in the input.
+    expect(await paste(input, "quick lunch, ,one pot")).toBe(false);
+    expect(chips(host)).toEqual(["spicy", "Quick lunch", "one pot"]);
+    expect(onValueChange).toHaveBeenLastCalledWith(["spicy", "Quick lunch", "one pot"]);
+    expect(input.value).toBe("");
+    // Text with no comma pastes as text.
+    expect(await paste(input, "Picnic")).toBe(true);
+    expect(chips(host)).toEqual(["spicy", "Quick lunch", "one pot"]);
+  });
+
+  it("splits at a comma where the text is, and pastes over the selected text", async () => {
+    const { input, host } = await render(<Combobox label="Tags" multiple allowCustomValue items={tags} />);
+    await userEvent.click(input);
+    await userEvent.type(input, "vegan dinner");
+    input.setSelectionRange(6, 12);
+    await paste(input, "lunch, picnic");
+    expect(chips(host)).toEqual(["vegan lunch", "picnic"]);
+    await userEvent.type(input, "date night");
+    input.setSelectionRange(4, 4);
+    await userEvent.keyboard(",");
+    expect(chips(host)).toEqual(["vegan lunch", "picnic", "date"]);
+    expect(input.value).toBe("night");
+  });
+
+  it("leaves commas alone without allowCustomValue", async () => {
+    const onValueChange = vi.fn();
+    const { input, host } = await render(<Combobox label="Herbs" multiple items={herbs} onValueChange={onValueChange} />);
+    await userEvent.click(input);
+    await userEvent.type(input, "Basil,");
+    expect(input.value).toBe("Basil,");
+    expect(host.querySelectorAll("[data-ouro-combobox-chip]")).toHaveLength(0);
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("removes a typed chip with its remove button", async () => {
+    const onValueChange = vi.fn();
+    const { button } = await render(<Combobox label="Tags" multiple allowCustomValue items={tags} defaultValue={["Date night", "Vegan"]} onValueChange={onValueChange} />);
+    await userEvent.click(button("Remove Vegan")!);
+    expect(onValueChange).toHaveBeenLastCalledWith(["Date night"]);
+    await userEvent.click(button("Remove Date night")!);
+    expect(onValueChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it("puts its first chips back when its form resets, and leaves a controlled field to the app", async () => {
+    const onHerb = vi.fn();
+    function Fields() {
+      const [value, setValue] = useState<string[]>(["Date night"]);
+      return (
+        <form>
+          <Combobox label="Tags" name="tags" multiple allowCustomValue items={tags} defaultValue={["Weeknight", "Vegan"]} />
+          <Combobox label="Tools" name="tools" multiple allowCustomValue items={["Wok"]} />
+          <Combobox label="Moods" multiple allowCustomValue items={tags} value={value} onValueChange={setValue} />
+          <Combobox label="Herb" name="herb" items={herbs} defaultValue="Dill" onValueChange={onHerb} />
+          <output>{value.join("|")}</output>
+        </form>
+      );
+    }
+    const { host, button } = await render(<Fields />);
+    const field = (name: string) => page.getByRole("combobox", { name, exact: true }).element() as HTMLInputElement;
+    const chipsOf = (name: string) => chips(field(name).closest<HTMLElement>("[data-ouro-input-group]")!);
+    await userEvent.click(button("Remove Vegan")!);
+    await userEvent.click(field("Tags"));
+    await userEvent.type(field("Tags"), "Picnic{Enter}{Escape}");
+    await userEvent.click(field("Tools"));
+    await userEvent.type(field("Tools"), "Skillet{Enter}{Escape}");
+    await userEvent.click(field("Moods"));
+    await userEvent.type(field("Moods"), "Cozy{Enter}{Escape}");
+    expect([chipsOf("Tags"), chipsOf("Tools"), chipsOf("Moods")]).toEqual([["Weeknight", "Picnic"], ["Skillet"], ["Date night", "Cozy"]]);
+    await act(async () => host.querySelector("form")!.reset());
+    await expect.poll(() => [chipsOf("Tags"), chipsOf("Tools")]).toEqual([["Weeknight", "Vegan"], []]);
+    expect(host.querySelector("output")!.textContent).toBe("Date night|Cozy");
+    expect(onHerb.mock.calls.some(([next]) => Array.isArray(next))).toBe(false);
+  });
+
+  it("follows a controlled value of typed text", async () => {
+    function Tags() {
+      const [value, setValue] = useState<string[]>(["Date night"]);
+      return (
+        <>
+          <Combobox label="Tags" multiple allowCustomValue items={tags} value={value} onValueChange={setValue} />
+          <output>{value.join("|")}</output>
+        </>
+      );
+    }
+    const { input, host } = await render(<Tags />);
+    expect(chips(host)).toEqual(["Date night"]);
+    await userEvent.click(input);
+    await userEvent.type(input, "Picnic{Enter}");
+    expect(host.querySelector("output")!.textContent).toBe("Date night|Picnic");
+    expect(chips(host)).toEqual(["Date night", "Picnic"]);
+  });
+
+  it("adds nothing to a read-only field", async () => {
+    const { input, host } = await render(<Combobox label="Tags" multiple allowCustomValue readOnly items={tags} defaultValue={["Vegan"]} />);
+    input.focus();
+    await paste(input, "a, b");
+    expect(chips(host)).toEqual(["Vegan"]);
+  });
+});
+
 describe("Combobox looks", () => {
   it("draws TextField's bordered box around the input", async () => {
     const { group } = await render(<Combobox label="Herb" items={herbs} />);
@@ -698,12 +912,9 @@ describe("Combobox development messages", () => {
     for (const element of host.querySelectorAll("*")) expect(element.hasAttribute(name.toLowerCase())).toBe(false);
   });
 
-  it("warns when multiple and allowCustomValue are both set", async () => {
-    const props = { label: "Tags", items: herbs, multiple: true, allowCustomValue: true } as unknown as ComboboxProps;
-    await render(<Combobox {...props} />);
-    expect(warn).toHaveBeenCalledWith(
-      "[ouro-ui] Combobox: multiple and allowCustomValue do not combine; allowCustomValue keeps one typed value. Fix: <Combobox multiple items={tags}>.",
-    );
+  it("says nothing when multiple and allowCustomValue are both set, which makes a token input", async () => {
+    await render(<Combobox label="Tags" items={herbs} multiple allowCustomValue />);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("names Combobox in Field's messages", async () => {

@@ -124,6 +124,13 @@ export interface DialogBaseProps {
    * Your classes win over Ouro UI's. Appearance classes warn in development.
    */
   className?: string | undefined;
+  /**
+   * Called with `true` once the open has finished and with `false` once the close has finished, its exit transition
+   * included, centered or as a sheet. Use it to unmount a dialog the app keeps mounted while it leaves: render it with
+   * `open={show}` and drop it in `onOpenChangeComplete={(open) => !open && setMounted(false)}`.
+   * @claim "Called with `true` once the open" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::onOpenChangeComplete > tells once an open and a close have finished, centered and as a sheet)
+   */
+  onOpenChangeComplete?: ((open: boolean) => void) | undefined;
 
   /** Not a prop. Ouro UI uses `open` with `onOpenChange`: `<Dialog open={open} onOpenChange={setOpen}>`. */
   isOpen?: { 'Use <Dialog open={open} onOpenChange={setOpen}>': never };
@@ -295,6 +302,7 @@ export function Dialog(props: DialogProps): JSX.Element {
     footer,
     children,
     className,
+    onOpenChangeComplete,
     trigger,
     open,
     onOpenChange,
@@ -370,6 +378,7 @@ export function Dialog(props: DialogProps): JSX.Element {
       trigger={trigger}
       open={open}
       onOpenChange={onOpenChange}
+      onOpenChangeComplete={onOpenChangeComplete}
     >
       {children}
     </DialogFrame>
@@ -393,6 +402,8 @@ export interface DialogFrameProps {
   trigger?: ReactElement | undefined;
   open?: boolean | undefined;
   onOpenChange?: ((open: boolean) => void) | undefined;
+  /** Called once an open or a close has finished, its transition included (`Dialog`'s `onOpenChangeComplete`). */
+  onOpenChangeComplete?: ((open: boolean) => void) | undefined;
   /** Disables the close button, as `EditSheet` does while a save is pending. */
   closeDisabled?: boolean | undefined;
 }
@@ -418,6 +429,7 @@ export function DialogFrame({
   trigger,
   open,
   onOpenChange,
+  onOpenChangeComplete,
   closeDisabled,
 }: DialogFrameProps): JSX.Element {
   // The Dialog owns the open state even with a trigger, so the dialog stays open
@@ -495,12 +507,18 @@ export function DialogFrame({
       footer={footer}
       presentation="sheet"
       closeDisabled={closeDisabled}
+      onOpenChangeComplete={onOpenChangeComplete}
       {...finalFocus}
     >
       {children}
     </SheetFrame>
   ) : (
-    <DialogRoot open={isOpenNow} onOpenChange={(next) => setOpen(next)} disablePointerDismissal={!closeOnOutsidePress}>
+    <DialogRoot
+      open={isOpenNow}
+      onOpenChange={(next) => setOpen(next)}
+      onOpenChangeComplete={onOpenChangeComplete}
+      disablePointerDismissal={!closeOnOutsidePress}
+    >
       <DialogPortal>
         <DialogBackdrop />
         <DialogViewport>

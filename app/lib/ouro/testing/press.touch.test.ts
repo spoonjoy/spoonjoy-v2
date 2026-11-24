@@ -29,7 +29,9 @@ test("reports a tint that only :active explains", async () => {
 
 test("fails on an element with no pressed tint", async () => {
   const element = box("button { background: rgb(255, 255, 255); }");
-  await expect(pressTint(element)).rejects.toThrow();
+  // short poll: the default poll bound is 10 s; a color that never changes proves the same
+  // true negative in far less of it.
+  await expect(pressTint(element, { pollTimeoutMs: 500 })).rejects.toThrow();
 });
 
 test("runs `during` while the button is still down", async () => {
@@ -45,7 +47,9 @@ test("leaves no listener or data-press-target behind, even after a failure", asy
   const note = (event: Event) => seen.push(event.type);
   addEventListener("pointermove", note);
   try {
-    await expect(pressTint(element)).rejects.toThrow();
+    // short poll: the default poll bound is 10 s; a color that never changes proves the same
+    // true negative in far less of it.
+    await expect(pressTint(element, { pollTimeoutMs: 500 })).rejects.toThrow();
     expect(element.hasAttribute("data-press-target")).toBe(false);
     // The moves it blocked are delivered again.
     seen.length = 0;

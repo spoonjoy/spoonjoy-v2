@@ -48,13 +48,18 @@ const viewportClass =
  * `--toast-index`, `--toast-offset-y` and `--toast-height`. The swipe (`useSwipeAway`)
  * moves the toast with `translate`, which adds to this `transform` and is not in the
  * transition, so it follows the finger at once. A swiped toast (`data-ouro-swiped`)
- * fades on the way it was thrown; a toast closed any other way slides back out past its edge. With
- * reduced motion nothing slides or springs: toasts fade in and out where they are.
+ * fades on the way it was thrown; a toast closed any other way fades where it is, shrinking a
+ * little, and the ones behind it glide into its place. The transform reads `--height` with a fallback
+ * of no height, because Base UI drops a closing front toast's heights and an unset `--height` would void
+ * the whole transform; the front toast's own share of the stack's height is nothing to begin with. With reduced motion nothing slides or
+ * springs: toasts fade in and out where they are.
  * A toast swipes away toward its edge (down at the bottom, up at the top) as well as sideways, so
  * it takes every touch gesture (`touch-none`, not `touch-pan-y`): otherwise a swipe on a
  * scrollable page scrolls the page, and the browser cancels the swipe.
  *
  * @internal
+ * @claim "The transform reads `--height` with a fallback of no height" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::swiping > fades a swiped toast on the way it was thrown, and a closed one where it is, shrinking a little)
+ * @claim "a toast closed any other way fades where it is" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::swiping > fades a swiped toast on the way it was thrown, and a closed one where it is, shrinking a little)
  * @claim "A toast swipes away toward its edge" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > puts the newest toast first in the page, where F6 then Tab reaches it, then each older one)
  * @claim "A toast swipes away toward its edge" registry/ouro/components/ouro/toast/toaster.touch.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.touch.test.tsx::the swipe follows the finger (rule 12) > goes back to rest when the browser cancels the touch, however far out it was)
  * @claim "A toast swipes away toward its edge" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::pausing > pauses while the pointer is over the toasts, and resumes after)
@@ -69,16 +74,16 @@ const rootClass =
   "select-none [-webkit-tap-highlight-color:transparent] " +
   "rounded-ouro-lg border border-solid border-border bg-popover [--ouro-scroller-surface:var(--popover)] text-popover-foreground shadow-(--shadow-lg) " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
-  "[--gap:0.75rem] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))] " +
+  "[--gap:0.75rem] [--peek:0.75rem] [--leave:1] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))] " +
   "[--height:var(--toast-frontmost-height,var(--toast-height))] " +
   "[--offset-y:calc(var(--ouro-toast-dir)*(var(--toast-offset-y)+var(--toast-index)*var(--gap)))] " +
   "z-[calc(1000-var(--toast-index))] h-(--height) data-expanded:h-(--toast-height) " +
-  "[transform:translateY(calc(var(--ouro-toast-dir)*(var(--toast-index)*var(--peek)+var(--shrink)*var(--height))))_scale(var(--scale))] " +
-  "data-expanded:[transform:translateY(var(--offset-y))] " +
+  "[transform:translateY(calc(var(--ouro-toast-dir)*(var(--toast-index)*var(--peek)+var(--shrink)*var(--height,0px))))_scale(calc(var(--scale)*var(--leave)))] " +
+  "data-expanded:[transform:translateY(var(--offset-y))_scale(var(--leave))] " +
 
   "data-starting-style:opacity-0 data-ending-style:opacity-0 data-limited:opacity-0 " +
   "motion-safe:data-starting-style:[transform:translateY(calc(var(--ouro-toast-dir)*-150%))] motion-safe:data-expanded:data-starting-style:[transform:translateY(calc(var(--ouro-toast-dir)*-150%))] " +
-  "motion-safe:[&[data-ending-style]:not([data-limited]):not([data-ouro-swiped])]:[transform:translateY(calc(var(--ouro-toast-dir)*-150%))] " +
+  "motion-safe:[&[data-ending-style]:not([data-limited]):not([data-ouro-swiped])]:[--leave:0.96] " +
   "motion-safe:[transition:transform_var(--ouro-duration-slow)_var(--ouro-ease-out),opacity_var(--ouro-duration-base)_var(--ouro-ease-out)] " +
   "motion-reduce:[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out)]";
 

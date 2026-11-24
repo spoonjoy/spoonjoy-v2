@@ -1,7 +1,6 @@
 import type { ComponentType, SVGProps } from "react";
 import { radiusFor, sizeFor } from "~/lib/ouro/appearance-hints";
 import { cn } from "~/lib/ouro/cn";
-import { scrollFadeClass } from "~/lib/ouro/scroll-fade";
 
 export {
   iconClass,
@@ -149,10 +148,9 @@ const iconClass = "size-[1.25em] shrink-0";
 
 /**
  * {@link ToggleGroupBaseProps.overflow} `"scroll"`: the row keeps to one line and scrolls
- * sideways, with its scrollbar hidden and the fade {@link scrollFadeClass} draws at a cut edge
- * (a fine pointer's wheel still scrolls it; `overscroll-x-contain` keeps a swipe at either end
- * from paging back). Forced colours, which flatten the fade, keep an outline around the row
- * instead, as a second sign that it scrolls.
+ * sideways, with its scrollbar hidden (a fine pointer's wheel still scrolls it;
+ * `overscroll-x-contain` keeps a swipe at either end from paging back). Forced colours keep an
+ * outline around the row, as a sign that it scrolls.
  *
  * @internal
  */
@@ -160,7 +158,6 @@ const overflowScrollerClass = cn(
   "flex-nowrap overflow-x-auto overflow-y-hidden overscroll-x-contain " +
     "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden " +
     "forced-colors:rounded-ouro-md forced-colors:outline-1 forced-colors:outline-solid forced-colors:-outline-offset-1",
-  scrollFadeClass,
 );
 
 /**

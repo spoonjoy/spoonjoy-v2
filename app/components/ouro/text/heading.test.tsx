@@ -83,6 +83,22 @@ describe("Heading", () => {
     expect(parseFloat(getComputedStyle(small!).fontSize)).toBeLessThan(parseFloat(getComputedStyle(h1!).fontSize));
   });
 
+  it('inherits the surrounding text\'s size, line height and tracking with size="inherit", staying semibold', async () => {
+    const { host } = await render(
+      <div style={{ fontSize: "14px", lineHeight: "20px", letterSpacing: "0.3px" }}>
+        <Heading level={3} size="inherit">
+          Title
+        </Heading>
+      </div>,
+    );
+    const el = host.firstElementChild!.firstElementChild as HTMLElement;
+    const style = getComputedStyle(el);
+    expect(style.fontSize).toBe("14px");
+    expect(style.lineHeight).toBe("20px");
+    expect(style.letterSpacing).toBe("0.3px");
+    expect(style.fontWeight).toBe("600");
+  });
+
   it("sets display larger than 2xl, and larger again from the sm breakpoint, for a hero headline", async () => {
     const { host } = await render(
       <>
@@ -102,8 +118,8 @@ describe("Heading", () => {
   });
 
   it.each([
-    ["3xl", '[ouro-ui] Heading: size="3xl" is not a size; use "sm", "md", "lg", "xl", "2xl", "display". Fix: <Heading level={1} size="display">.'],
-    ["huge", '[ouro-ui] Heading: size="huge" is not a size; use "sm", "md", "lg", "xl", "2xl", "display". Fix: <Heading level={1} size="2xl">.'],
+    ["3xl", '[ouro-ui] Heading: size="3xl" is not a size; use "sm", "md", "lg", "xl", "2xl", "display", "inherit". Fix: <Heading level={1} size="display">.'],
+    ["huge", '[ouro-ui] Heading: size="huge" is not a size; use "sm", "md", "lg", "xl", "2xl", "display", "inherit". Fix: <Heading level={1} size="2xl">.'],
   ])("renders the level's default size for size=%j and warns once with the fix", async (size, message) => {
     const { host } = await render(
       <>

@@ -136,15 +136,13 @@ describe("ScrollArea", () => {
     await expect.poll(() => viewport.tabIndex).toBe(0);
   });
 
-  it("fades out at the side that hides more, drawing its focus ring over the fade, and keeps keyboard scrolling", async () => {
+  it("draws its focus ring over a row that scrolls sideways, and keeps keyboard scrolling", async () => {
     const { area, viewport } = await render(
       <ScrollArea orientation="horizontal" label="Tags">
         {wide}
       </ScrollArea>,
     );
-    await expect.poll(() => viewport.hasAttribute("data-ouro-scroll-fade")).toBe(true);
-    expect(viewport.style.getPropertyValue("--ouro-scroll-fade-right")).toBe(`${900 - viewport.clientWidth}px`);
-    expect(getComputedStyle(viewport).maskImage).toContain("linear-gradient");
+    expect(getComputedStyle(viewport).maskImage).toBe("none");
     await expect.poll(() => viewport.tabIndex).toBe(0);
     const ring = area.querySelector<HTMLElement>("[data-scroll-focus-ring]")!;
     expect(getComputedStyle(ring).outlineStyle).toBe("none");
@@ -152,20 +150,10 @@ describe("ScrollArea", () => {
     expect(getComputedStyle(viewport).outlineStyle).toBe("none");
     expect(getComputedStyle(ring).outlineStyle).toBe("solid");
     expect(getComputedStyle(ring).outlineWidth).toBe("2px");
-    // WebKit under Playwright scrolls a focused box with no arrow key, masked or not, so it scrolls by script there.
+    // WebKit under Playwright scrolls a focused box with no arrow key, so it scrolls by script there.
     if (server.browser === "chromium") await userEvent.keyboard("{ArrowRight}");
     else viewport.scrollLeft = 40;
     await expect.poll(() => viewport.scrollLeft).toBeGreaterThan(0);
-    // The arrow key may scroll smoothly, so the fade catches up with each frame of it.
-    await expect.poll(() => viewport.style.getPropertyValue("--ouro-scroll-fade-left") === `${viewport.scrollLeft}px`).toBe(true);
-    // Content that fits adds no fade.
-    const { viewport: clipped } = await render(<ScrollArea className="h-40" orientation="horizontal">{tall}</ScrollArea>);
-    await act(async () => new Promise(requestAnimationFrame));
-    expect(clipped.hasAttribute("data-ouro-scroll-fade-y")).toBe(false);
-    const { viewport: fits } = await render(<ScrollArea className="h-80">{<div style={{ height: 20 }} />}</ScrollArea>);
-    await act(async () => new Promise(requestAnimationFrame));
-    expect(fits.hasAttribute("data-ouro-scroll-fade")).toBe(false);
-    expect(getComputedStyle(fits).maskImage).toBe("none");
   });
 
   it("draws its focus ring whole over content that sticks to an edge, and leaves the pointer to the content", async () => {
@@ -212,26 +200,25 @@ describe("ScrollArea", () => {
     expect(document.elementFromPoint(box.left + box.width / 2, box.top + 1)).toBe(header);
   });
 
-  it("fades the top and bottom edge that hides more, and says how far it is scrolled, from the scroll event", async () => {
+  it("says how far it is scrolled, from the scroll event", async () => {
     const { viewport } = await render(<ScrollArea className="h-40">{tall}</ScrollArea>);
     const hidden = () => viewport.scrollHeight - viewport.clientHeight;
     await expect.poll(() => viewport.hasAttribute("data-overflow-y-end")).toBe(true);
     expect(viewport.hasAttribute("data-overflow-y-start")).toBe(false);
     expect(viewport.style.getPropertyValue("--scroll-area-overflow-y-start")).toBe("0px");
     expect(viewport.style.getPropertyValue("--scroll-area-overflow-y-end")).toBe(`${hidden()}px`);
-    expect(getComputedStyle(viewport).maskImage).toContain("linear-gradient");
+    expect(getComputedStyle(viewport).maskImage).toBe("none");
     viewport.scrollTop = 40;
     await expect.poll(() => viewport.hasAttribute("data-overflow-y-start")).toBe(true);
     expect(viewport.style.getPropertyValue("--scroll-area-overflow-y-start")).toBe(`${viewport.scrollTop}px`);
     viewport.scrollTop = hidden();
     await expect.poll(() => viewport.hasAttribute("data-overflow-y-end")).toBe(false);
-    // A row that scrolls sideways, or content that fits, has no vertical fade.
+    // A row that scrolls sideways, or content that fits, marks no vertical overflow.
     const { viewport: row } = await render(<ScrollArea orientation="horizontal">{wide}</ScrollArea>);
     await act(async () => new Promise(requestAnimationFrame));
-    expect(row.hasAttribute("data-overflow-y-start") || row.hasAttribute("data-ouro-scroll-fade-y")).toBe(false);
+    expect(row.hasAttribute("data-overflow-y-start")).toBe(false);
     const { viewport: fits } = await render(<ScrollArea className="h-80">{<div style={{ height: 20 }} />}</ScrollArea>);
     await act(async () => new Promise(requestAnimationFrame));
-    expect(fits.hasAttribute("data-ouro-scroll-fade-y")).toBe(false);
     expect(fits.style.getPropertyValue("--scroll-area-overflow-y-end")).toBe("0px");
   });
 

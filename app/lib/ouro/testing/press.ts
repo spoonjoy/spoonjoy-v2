@@ -11,8 +11,10 @@ const MOVES = ["pointermove", "mousemove", "pointerover", "mouseover", "pointere
  * are kept from the page (the browser still applies `:active`). Base UI lists highlight an
  * item on pointer-down; pass `clearHighlight` to drop `data-highlighted` while the button is
  * held, so only `:active` can explain the colour. `during` runs while the button is still
- * down, for checks on the pressed element. It throws if the element never tints. Run it in the `ouro-touch` project where
- * `pointer-fine:` hover rules are off.
+ * down, for checks on the pressed element. It throws if the element never tints, after
+ * `pollTimeoutMs` (10s by default, the project's own poll bound); a test proving that true
+ * negative can pass a shorter bound, since nothing it waits for changes once the colour has
+ * settled. Run it in the `ouro-touch` project where `pointer-fine:` hover rules are off.
  *
  * @example
  * const { rest, pressed, active } = await pressTint(option);
@@ -21,9 +23,9 @@ const MOVES = ["pointermove", "mousemove", "pointerover", "mouseover", "pointere
  */
 export async function pressTint(
   element: HTMLElement,
-  options: { blockMoves?: boolean; clearHighlight?: boolean; during?: () => void } = {},
+  options: { blockMoves?: boolean; clearHighlight?: boolean; during?: () => void; pollTimeoutMs?: number } = {},
 ): Promise<{ rest: string; pressed: string; active: boolean }> {
-  const { blockMoves = true, clearHighlight = false, during } = options;
+  const { blockMoves = true, clearHighlight = false, during, pollTimeoutMs } = options;
   const block = (event: Event) => event.stopImmediatePropagation();
   if (blockMoves) for (const type of MOVES) window.addEventListener(type, block, true);
   element.setAttribute("data-press-target", "");
@@ -32,11 +34,14 @@ export async function pressTint(
   try {
     let pressed = rest;
     await expect
-      .poll(() => {
-        if (clearHighlight) element.removeAttribute("data-highlighted");
-        pressed = getComputedStyle(element).backgroundColor;
-        return element.matches(":active") && pressed !== rest && element.getAnimations().length === 0;
-      })
+      .poll(
+        () => {
+          if (clearHighlight) element.removeAttribute("data-highlighted");
+          pressed = getComputedStyle(element).backgroundColor;
+          return element.matches(":active") && pressed !== rest && element.getAnimations().length === 0;
+        },
+        pollTimeoutMs === undefined ? undefined : { timeout: pollTimeoutMs },
+      )
       .toBe(true);
     during?.();
     return { rest, pressed, active: element.matches(":active") };
