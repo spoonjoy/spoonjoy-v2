@@ -362,8 +362,10 @@ jobs:
           echo "$jobs" | tee "$OUT/jobs.json"
 
       # A move-in the server restarts in the middle of: a cook starts moving the large proof kitchen
-      # in and leaves, the server restarts (losing whatever its in-process queue held), and the move-in
-      # must finish with no page open to nudge it. On 8084, on the host network.
+      # in and leaves, and the server stops at once (losing whatever its in-process queue held). Its
+      # backup shows the move-in unfinished at the stop, so the check can't pass on a move-in that beat
+      # the restart. Then it starts again, and the move-in must finish with no page open to nudge it.
+      # On 8084, on the host network.
       - name: Finish a move-in the server restarts in the middle of
         if: success()
         run: |
@@ -387,7 +389,24 @@ jobs:
           docker run -d --name sj-restart --network host -v sj-restart:/data -e PORT=8084 -e SPOONJOY_FLAGS=move_in "$LOCAL_IMAGE"
           ready
           restart_half before
-          docker restart sj-restart
+          docker stop sj-restart
+          mkdir -p .self-host/backups && chmod 777 .self-host/backups
+          docker run --rm --network none -v sj-restart:/data -v "$PWD/.self-host/backups:/backups" "$LOCAL_IMAGE" \
+            node /app/self-host/server.mjs backup /backups/restart.tar.gz
+          # The result is captured first, so a failed check fails the step rather than vanishing in a pipe.
+          stopped=$(docker run --rm --network none -v "$PWD/.self-host/backups:/backups:ro" "$LOCAL_IMAGE" node --input-type=module -e '
+            import { readTarGz } from "/app/self-host/backup.mjs";
+            let jobs;
+            for await (const { name, data } of readTarGz("/backups/restart.tar.gz")) {
+              if (name === "database.json") jobs = JSON.parse(Buffer.from(data).toString("utf8")).tables.find((table) => table.name === "ImportJob");
+            }
+            if (!jobs || jobs.rows.length !== 1) throw new Error("The server had no move-in when it stopped.");
+            const row = Object.fromEntries(jobs.columns.map((column, index) => [column, jobs.rows[0][index]]));
+            if (row.finishedAt) throw new Error(`The move-in finished before the server stopped (${row.status}), so the restart proves nothing.`);
+            console.log(JSON.stringify({ moveInAtStop: { status: row.status, phase: row.phase } }));
+          ')
+          echo "$stopped" | tee "$OUT/move-in-restart.json"
+          docker start sj-restart
           ready
           restart_half after
           docker logs sj-restart > "$OUT/move-in-restart.log" 2>&1
