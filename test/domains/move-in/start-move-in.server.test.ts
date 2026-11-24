@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { MOVE_IN_UPLOAD_MAX_BYTES, startMoveIn, startServerMoveIn } from "~/domains/move-in/adapters/worker/start-move-in.server";
+import { MOVE_IN_UPLOAD_MAX_BYTES, admitStoredBackup, moveInKind, startMoveIn, startServerMoveIn } from "~/domains/move-in/adapters/worker/start-move-in.server";
 import { migratedSqliteD1, type MigratedSqlite } from "../../helpers/migrated-sqlite";
 import { makeZip } from "./support/make-zip";
 import { mealieDatabase } from "./support/mealie-database";
@@ -117,6 +117,22 @@ describe("startMoveIn", () => {
   it("refuses an app it can't read yet", async () => {
     const result = await startMoveIn({ env: { DB: database.binding, PHOTOS: memoryBucket() } as never, ownerId: "chef-1", app: "paprika", file: { name: "x.zip", size: 1, data: zip() }, now });
     expect(result).toEqual({ ok: false, code: "unknown-app" });
+  });
+
+  it("refuses an app name that is only a property of every object", async () => {
+    expect(moveInKind("toString")).toBeNull();
+    expect(moveInKind("mealie")).toBe("mealie-backup");
+  });
+});
+
+describe("admitStoredBackup", () => {
+  it("keeps a backup it couldn't finish checking for an upload whose finish is sent again", async () => {
+    const bucket = memoryBucket();
+    await bucket.put("pending-uploads/move-in/chef-1/a.zip", zip());
+    const down = { prepare: database.binding.prepare, batch: () => Promise.reject(new Error("D1 is down")) };
+    await expect(admitStoredBackup({ env: { DB: down, PHOTOS: bucket } as never, ownerId: "chef-1", archiveKey: "pending-uploads/move-in/chef-1/a.zip", createJob: async () => "movein_1", keepOnSaveFailure: true }))
+      .rejects.toThrow("D1 is down");
+    expect(Object.keys(bucket.objects)).toEqual(["pending-uploads/move-in/chef-1/a.zip"]);
   });
 });
 

@@ -3,8 +3,8 @@
 // flag until moved-in recipes can be kept private. Where the Worker has a jobs queue, the move-in
 // runs there and the page only shows how far it has got; elsewhere each poll keeps it running.
 import { Utensils } from "lucide-react";
-import { useEffect, useRef } from "react";
-import { data, Form as RouterForm, redirect, useActionData, useFetcher, useLoaderData, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { data, Form as RouterForm, redirect, useActionData, useFetcher, useLoaderData, useNavigate, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/move-in";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Button } from "~/components/ouro/button/button";
@@ -20,32 +20,23 @@ import { Spinner } from "~/components/ouro/spinner/spinner";
 import { Text } from "~/components/ouro/text/text";
 import {
   FINISHED,
+  MOVE_IN_BACKUP_MAX_BYTES,
   MOVE_IN_ERROR_MESSAGES,
   MOVE_IN_UPLOAD_MAX_BYTES,
-  moveInEnv,
-  moveInPorts,
   nudgeMoveIn,
   readMoveInOrganizerCounts,
   readMoveInProgress,
-  runForAWhile,
   startMoveIn,
-  startMoveInJob,
   timeLeft,
-  type MoveInEnv,
   type MoveInOrganizerCounts,
   type MoveInProgress,
 } from "~/domains/move-in";
-import { isFlagOn } from "~/domains/platform";
-import { cloudflarePlatform } from "~/domains/platform/index.server";
-import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { getDb } from "~/lib/db.server";
+import { keepRunning, reportMoveIn, signedInWithFlag, startQueuedMoveIn } from "~/lib/move-in-route.server";
+import { formatBytes, uploadBackup } from "~/lib/move-in-upload";
 import { revalidateUnlessNetworkFailure, submitOrReportLostRequest } from "~/lib/network-failure";
-import { getCloudflareEnv } from "~/lib/route-platform.server";
-import { requireUserId } from "~/lib/session.server";
 import { CookbookPage } from "~/components/cookbook/page";
 
-/** How long one request keeps a move-in running after it answers; a Worker allows about 30 seconds. */
-const RUN_BUDGET_MS = 20_000;
 /** How often the page asks for more while a move-in runs. */
 const POLL_MS = 3_000;
 // A server-side move-in needs no page to keep it going, so while it shows no change the page asks
@@ -54,36 +45,6 @@ const POLL_MAX_MS = 30_000;
 
 export function meta() {
   return [{ title: "Move in - Spoonjoy" }, { name: "robots", content: "noindex" }];
-}
-
-async function signedInWithFlag(request: Request, context: Route.LoaderArgs["context"]) {
-  const env = getCloudflareEnv(context);
-  const userId = await requireUserId(request, "/login", env);
-  if (!isFlagOn("move_in", env, userId)) throw new Response("Not found", { status: 404 });
-  const moveIn = moveInEnv(env);
-  if (!env || !moveIn) throw new Response("Move-in needs its database and photo storage, and this server has neither.", { status: 503 });
-  // The jobs port is always there and only refuses on enqueue, so without a queue the page runs the move-in itself.
-  const jobs = env.JOBS ? cloudflarePlatform(env).jobs : null;
-  return { userId, env: moveIn, workerEnv: env, jobs };
-}
-
-/** Reports a move-in the page couldn't run or queue; the next poll tries again. */
-async function report(workerEnv: Env, userId: string, phase: "run" | "queue", error: unknown) {
-  await captureException(resolvePostHogServerConfig(workerEnv), {
-    error,
-    distinctId: userId,
-    route: "/move-in",
-    extras: { phase },
-  });
-}
-
-/** Keeps the move-in running after the response, inside the request's waitUntil. */
-function keepRunning(context: Route.ActionArgs["context"], { env, workerEnv }: { env: MoveInEnv; workerEnv: Env }, jobId: string, userId: string) {
-  const ctx = context.cloudflare?.ctx;
-  if (!ctx) return;
-  // The page's next poll resumes the move-in; the report says how often runs stop, and why.
-  const run = runForAWhile(jobId, moveInPorts(env, () => new Date()), { budgetMs: RUN_BUDGET_MS }).catch((error: unknown) => report(workerEnv, userId, "run", error));
-  ctx.waitUntil(run);
 }
 
 export interface MoveInView {
@@ -149,8 +110,9 @@ function view(progress: MoveInProgress, organizers: MoveInOrganizerCounts, runsO
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { userId, env, jobs } = await signedInWithFlag(request, context);
   const jobId = new URL(request.url).searchParams.get("job");
-  const maxBytes = MOVE_IN_UPLOAD_MAX_BYTES;
-  if (!jobId) return { move: null, maxBytes };
+  // The page's script sends a backup in parts, up to this; the plain form, without it, takes up to MOVE_IN_UPLOAD_MAX_BYTES.
+  const uploadMaxBytes = MOVE_IN_BACKUP_MAX_BYTES;
+  if (!jobId) return { move: null, uploadMaxBytes };
   const progress = await readMoveInProgress(env.DB, { ownerId: userId, jobId });
   if (!progress) throw new Response("Not found", { status: 404 });
   // Only a finished move-in shows them: what is on its recipes now, each counted once.
@@ -159,11 +121,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     FINISHED.includes(job.status) && job.sourceId
       ? await readMoveInOrganizerCounts(await getDb({ DB: env.DB as unknown as D1Database }), { ownerId: userId, sourceId: job.sourceId, jobId: job.id })
       : NO_ORGANIZERS;
-  return { move: view(progress, organizers, jobs !== null, new Date()), maxBytes };
+  return { move: view(progress, organizers, jobs !== null, new Date()), uploadMaxBytes };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
-  const { userId, env, workerEnv, jobs } = await signedInWithFlag(request, context);
+  const gate = await signedInWithFlag(request, context);
+  const { userId, env, workerEnv, jobs } = gate;
   const fail = (code: keyof typeof MOVE_IN_ERROR_MESSAGES, status = 400) => data({ error: MOVE_IN_ERROR_MESSAGES[code] }, { status });
   if (Number(request.headers.get("Content-Length") ?? 0) > MOVE_IN_UPLOAD_MAX_BYTES + 1024 * 1024) return fail("backup-too-large", 413);
 
@@ -173,7 +136,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const progress = await readMoveInProgress(env.DB, { ownerId: userId, jobId });
     if (!progress) throw new Response("Not found", { status: 404 });
     // On the server, the page only picks up a move-in whose segments stopped coming.
-    if (jobs) await nudgeMoveIn(jobs, progress.job, new Date()).catch((error: unknown) => report(workerEnv, userId, "queue", error));
+    if (jobs) await nudgeMoveIn(jobs, progress.job, new Date()).catch((error: unknown) => reportMoveIn(workerEnv, userId, "queue", error));
     else keepRunning(context, { env, workerEnv }, jobId, userId);
     return { error: null };
   }
@@ -188,9 +151,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     now: new Date(),
   });
   if (!started.ok) return fail(started.code, started.code === "backup-too-large" ? 413 : 400);
-  // A move-in that couldn't be queued waits for the page, which queues it once it has been quiet a while.
-  if (jobs) await startMoveInJob(jobs, started.jobId).catch((error: unknown) => report(workerEnv, userId, "queue", error));
-  else keepRunning(context, { env, workerEnv }, started.jobId, userId);
+  await startQueuedMoveIn(context, gate, started.jobId);
   return redirect(`/move-in?job=${started.jobId}`);
 }
 
@@ -210,11 +171,40 @@ function plural(n: number, one: string, many = `${one}s`) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-function UploadForm({ error, maxBytes }: { error: string | null; maxBytes: number }) {
-  const busy = useNavigation().state === "submitting";
+/** How far the page's upload has got: bytes sent of the file's size, then the check once every part is in. */
+type Sending = { sent: number; total: number; checking: boolean };
+
+function UploadForm({ error, uploadMaxBytes }: { error: string | null; uploadMaxBytes: number }) {
+  const submitting = useNavigation().state === "submitting";
+  const navigate = useNavigate();
+  const [sending, setSending] = useState<Sending | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  // With JavaScript, the backup goes straight to storage in parts and the page shows how much has been sent;
+  // without it, the plain form posts the file, up to the form's own limit.
+  const send = async (event: FormEvent<HTMLFormElement>) => {
+    const form = new FormData(event.currentTarget);
+    const file = (event.currentTarget.elements.namedItem("backup") as HTMLInputElement).files?.[0];
+    if (!file?.size) return;
+    event.preventDefault();
+    setFailure(null);
+    setSending({ sent: 0, total: file.size, checking: false });
+    const outcome = await uploadBackup(file, {
+      app: String(form.get("app")),
+      onProgress: (sent, total) => setSending({ sent, total, checking: false }),
+      onChecking: () => setSending((now) => now && { ...now, checking: true }),
+    });
+    if (outcome.ok) {
+      await navigate(`/move-in?job=${outcome.jobId}`);
+      return;
+    }
+    setSending(null);
+    setFailure(outcome.error);
+  };
+  const shown = failure ?? (sending ? null : error);
+  const busy = submitting || sending !== null;
   return (
-    <Form method="post" render={<RouterForm encType="multipart/form-data" />} className="gap-6">
-      {error ? <Alert tone="destructive" title="That backup didn't move in" description={error} /> : null}
+    <Form method="post" render={<RouterForm encType="multipart/form-data" />} className="gap-6" onSubmit={send}>
+      {shown ? <Alert tone="destructive" title="That backup didn't move in" description={shown} /> : null}
       <ChoiceCard
         legend="Where are you coming from?"
         name="app"
@@ -226,14 +216,23 @@ function UploadForm({ error, maxBytes }: { error: string | null; maxBytes: numbe
         label="Backup zip"
         name="backup"
         accept=".zip,application/zip"
-        maxSize={maxBytes}
+        maxSize={uploadMaxBytes}
         required
+        disabled={busy}
         prompt="Drop the backup's .zip file here"
         description="Drop the zip just as you downloaded it, without unzipping it. It is deleted once your recipes are in."
       />
+      {sending ? (
+        <div role="status" className="flex items-center gap-3">
+          <Spinner label={sending.checking ? "Checking the backup" : "Sending the backup"} />
+          <Text>
+            {sending.checking ? "All of it arrived. Checking the backup…" : `${formatBytes(sending.sent)} of ${formatBytes(sending.total)} sent`}
+          </Text>
+        </div>
+      ) : null}
       <div className="flex justify-end">
         <Button type="submit" disabled={busy}>
-          {busy ? "Checking the backup…" : "Move in"}
+          {sending && !sending.checking ? "Sending the backup…" : busy ? "Checking the backup…" : "Move in"}
         </Button>
       </div>
     </Form>
@@ -373,7 +372,7 @@ function Finished({ move }: { move: MoveInView }) {
 }
 
 export default function MoveIn() {
-  const { move, maxBytes } = useLoaderData<typeof loader>();
+  const { move, uploadMaxBytes } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   return (
     // The app's layout owns the page's one main landmark; this is its content.
@@ -386,7 +385,7 @@ export default function MoveIn() {
           divider
         />
         {!move || move.status === "failed" ? (
-          <UploadForm error={actionData?.error ?? move?.failure ?? null} maxBytes={maxBytes} />
+          <UploadForm error={actionData?.error ?? move?.failure ?? null} uploadMaxBytes={uploadMaxBytes} />
         ) : move.finished ? (
           <Finished move={move} />
         ) : (

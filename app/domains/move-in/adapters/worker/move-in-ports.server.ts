@@ -24,7 +24,8 @@ import { readsAServer } from "./apps";
  */
 export { MOVE_IN_ARCHIVE_PREFIX } from "~/lib/photo-variants";
 
-type ArchiveBucket = Pick<R2Bucket, "head" | "get" | "put" | "delete">;
+// A backup comes in whole from the form, or in parts from the page (backup-upload.server.ts).
+type ArchiveBucket = Pick<R2Bucket, "head" | "get" | "put" | "delete" | "createMultipartUpload" | "resumeMultipartUpload">;
 
 export interface MoveInEnv extends NonNullable<FlagEnv> {
   DB: D1ReadDatabase;

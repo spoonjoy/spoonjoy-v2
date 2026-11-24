@@ -1,10 +1,23 @@
 // The Move in page as a person sees it: the upload form, a move-in under way, and what arrived.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import MoveIn, { meta, type MoveInView } from "~/routes/move-in";
 
-const MAX_BYTES = 50 * 1024 * 1024;
+const UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+
+// The upload in parts, held at each step the test lets it reach.
+const sent = vi.hoisted(() => ({
+  calls: [] as Array<{ file: File; app: string }>,
+  run: null as null | ((options: { onProgress: (sent: number, total: number) => void; onChecking: () => void }) => Promise<unknown>),
+}));
+vi.mock("~/lib/move-in-upload", async (original) => ({
+  ...(await original<typeof import("~/lib/move-in-upload")>()),
+  uploadBackup: (file: File, options: { app: string; onProgress: (sent: number, total: number) => void; onChecking: () => void }) => {
+    sent.calls.push({ file, app: options.app });
+    return sent.run!(options);
+  },
+}));
 
 // The test DOM can't put a file in the form, so the browser's own check would stop it being sent: a test sets the
 // states that follow a send here instead.
@@ -38,12 +51,14 @@ function view(fields: Partial<MoveInView> = {}): MoveInView {
 }
 
 function page(move: MoveInView | null, action: () => unknown = () => ({ error: null })) {
-  const Stub = createTestRoutesStub([{ path: "/move-in", Component: MoveIn, loader: () => ({ move, maxBytes: MAX_BYTES }), action }]);
+  const Stub = createTestRoutesStub([{ path: "/move-in", Component: MoveIn, loader: () => ({ move, uploadMaxBytes: UPLOAD_MAX_BYTES }), action }]);
   render(<Stub initialEntries={["/move-in"]} />);
 }
 
 afterEach(() => {
   cleanup();
+  sent.calls.length = 0;
+  sent.run = null;
   routerState.navigation = null;
   routerState.actionData = undefined;
   vi.useRealTimers();
@@ -68,6 +83,67 @@ describe("the Move in page", () => {
     page(null);
     expect(await screen.findByRole("button", { name: "Checking the backup…" })).toBeTruthy();
     expect(screen.getByText("That zip isn't a backup.")).toBeTruthy();
+  });
+
+  /** Puts `file` in the backup field, as the picker would, and presses Move in. */
+  async function chooseAndSend(file: File | null) {
+    const input = (await screen.findByLabelText(/^Backup zip/)) as HTMLInputElement;
+    Object.defineProperty(input, "files", { configurable: true, value: file ? [file] : [] });
+    input.required = false;
+    await act(async () => {
+      fireEvent.submit(input.form!);
+    });
+  }
+
+  it("sends a backup in parts, says how much has been sent, then opens its move-in", async () => {
+    let step!: { onProgress: (sent: number, total: number) => void; onChecking: () => void };
+    let finish!: (outcome: unknown) => void;
+    sent.run = (options) => {
+      step = options;
+      return new Promise((resolve) => (finish = resolve));
+    };
+    const moves: string[] = [];
+    const Stub = createTestRoutesStub([{
+      path: "/move-in",
+      Component: MoveIn,
+      loader: ({ request }: { request: Request }) => {
+        const job = new URL(request.url).searchParams.get("job");
+        if (job) moves.push(job);
+        return { move: job ? view({ jobId: job }) : null, uploadMaxBytes: UPLOAD_MAX_BYTES };
+      },
+    }]);
+    render(<Stub initialEntries={["/move-in"]} />);
+    await chooseAndSend(new File([new Uint8Array(8)], "mealie.zip"));
+    expect(sent.calls.map((call) => [call.file.name, call.app])).toEqual([["mealie.zip", "mealie"]]);
+    // The count is in a live region, so a screen reader hears it as it changes.
+    const status = () => (screen.getByText(/ sent$|^All of it arrived/) as HTMLElement).closest("[role=status]:not([data-ouro=spinner])");
+    expect((await screen.findByText("0 MB of 0 MB sent")).closest("[role=status]")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Sending the backup…" }) as HTMLButtonElement).disabled).toBe(true);
+    act(() => step.onProgress(84_000_000, 512_000_000));
+    expect(within(status() as HTMLElement).getByText("84 MB of 512 MB sent")).toBeTruthy();
+    act(() => step.onChecking());
+    expect(within(status() as HTMLElement).getByText("All of it arrived. Checking the backup…")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Checking the backup…" })).toBeTruthy();
+    await act(async () => finish({ ok: true, jobId: "movein_9" }));
+    expect(await screen.findByRole("heading", { level: 2, name: "Moving in" })).toBeTruthy();
+    expect(moves).toEqual(["movein_9"]);
+  });
+
+  it("says why a backup didn't move in, and offers the form again", async () => {
+    sent.run = async () => ({ ok: false, error: "The connection dropped after 84 MB of 512 MB was sent." });
+    page(null);
+    await chooseAndSend(new File([new Uint8Array(8)], "mealie.zip"));
+    expect(await screen.findByText("The connection dropped after 84 MB of 512 MB was sent.")).toBeTruthy();
+    expect(screen.queryByText(/ sent$/)).toBeNull();
+    expect((screen.getByRole("button", { name: "Move in" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("leaves a send with no file to the form, which says to choose one", async () => {
+    const action = vi.fn(() => ({ error: "Choose your backup's .zip file first, then press Move in." }));
+    page(null, action);
+    await chooseAndSend(null);
+    await vi.waitFor(() => expect(action).toHaveBeenCalled());
+    expect(sent.calls).toEqual([]);
   });
 
   it("offers the form again, with what went wrong, when a move-in failed", async () => {
@@ -173,7 +249,7 @@ describe("the Move in page", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const action = vi.fn(() => ({ error: null }));
     let move = view({ runsOnServer: true });
-    const Stub = createTestRoutesStub([{ path: "/move-in", Component: MoveIn, loader: () => ({ move, maxBytes: MAX_BYTES }), action }]);
+    const Stub = createTestRoutesStub([{ path: "/move-in", Component: MoveIn, loader: () => ({ move, uploadMaxBytes: UPLOAD_MAX_BYTES }), action }]);
     render(<Stub initialEntries={["/move-in"]} />);
     await screen.findByText("Reading the backup…");
     await act(async () => vi.advanceTimersByTimeAsync(3_000));

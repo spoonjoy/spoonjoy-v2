@@ -31,6 +31,20 @@ export {
 } from "./application/run-move-in";
 export { runScheduledMoveInSweep } from "./adapters/worker/sweep-move-in-archives.server";
 export {
+  MOVE_IN_BACKUP_MAX_BYTES,
+  MOVE_IN_PART_BYTES,
+  UPLOAD_REFUSAL_MESSAGES,
+  type UploadRefusal,
+} from "./model/backup-upload";
+export {
+  abortBackupUpload,
+  beginBackupUpload,
+  finishBackupUpload,
+  putBackupPart,
+  type UploadPlan,
+  type UploadResult,
+} from "./adapters/worker/backup-upload.server";
+export {
   MOVE_IN_JOB,
   MOVE_IN_WATCH,
   moveInJobHandler,

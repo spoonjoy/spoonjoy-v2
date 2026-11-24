@@ -132,7 +132,7 @@ describe("the Move in page", () => {
   });
 
   it("offers the upload form when nothing is moving in", async () => {
-    expect(await load("/move-in")).toEqual({ move: null, maxBytes: 50 * 1024 * 1024 });
+    expect(await load("/move-in")).toEqual({ move: null, uploadMaxBytes: 2 * 1024 * 1024 * 1024 });
   });
 
   it("moves a backup in and shows what arrived", async () => {

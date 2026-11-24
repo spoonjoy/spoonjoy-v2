@@ -32,6 +32,23 @@ declare global {
     ): Promise<unknown>;
     /** Deletes one key or, in one call, up to 1000 keys. */
     delete(keys: string | string[]): Promise<void>;
+    /** Starts an upload in parts to `key`; storage holds the parts until it is completed or aborted. */
+    createMultipartUpload(key: string, options?: { httpMetadata?: { contentType?: string } }): Promise<R2MultipartUpload>;
+    /** The upload in parts started earlier, by its key and upload id; this makes no request of its own. */
+    resumeMultipartUpload(key: string, uploadId: string): R2MultipartUpload;
+  }
+
+  interface R2UploadedPart {
+    partNumber: number;
+    etag: string;
+  }
+
+  interface R2MultipartUpload {
+    readonly key: string;
+    readonly uploadId: string;
+    uploadPart(partNumber: number, value: ReadableStream | ArrayBuffer | ArrayBufferView | string | Blob): Promise<R2UploadedPart>;
+    abort(): Promise<void>;
+    complete(uploadedParts: R2UploadedPart[]): Promise<unknown>;
   }
 
   interface ExecutionContext {
