@@ -1,0 +1,15 @@
+# Spoonjoy with Docker Compose: `docker compose up -d` beside this file, then open http://localhost:8080.
+# Set SPOONJOY_BASE_URL to the address people use (docs/self-hosting.md lists every setting).
+services:
+  spoonjoy:
+    image: ${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}
+    restart: unless-stopped
+    ports:
+      - "${SPOONJOY_PORT:-8080}:8080"
+    volumes:
+      - spoonjoy-data:/data
+    environment:
+      SPOONJOY_BASE_URL: ${SPOONJOY_BASE_URL:-http://localhost:8080}
+
+volumes:
+  spoonjoy-data:

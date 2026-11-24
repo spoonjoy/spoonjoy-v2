@@ -170,7 +170,15 @@ describe("Self-host Image workflow", () => {
     expect(stop.if).toBe("always()");
     expect(stop.run).toContain("docker stop sj-restored || true");
     expect(stop.run).toContain('docker logs sj-restored > "$OUT/restored.log"');
-    expect(runs(image)).toContain('for (const file of ["image", "boot", "restart", "restore"])');
+    expect(runs(image)).toContain('for (const file of ["image", "boot", "restart", "restore", "compose"])');
+  });
+
+  it("starts the guide's Compose file with this image and waits for its health check, then takes it down", () => {
+    const up = stepNamed(image, /Start it with Docker Compose/);
+    expect(up.run).toContain('SPOONJOY_IMAGE="$LOCAL_IMAGE"');
+    expect(up.run).toContain("docker compose -f self-host/compose.yaml -p sj-compose up -d --wait");
+    expect(up.run).toContain("curl -sf http://localhost:8081/health/ready");
+    expect(stepNamed(image, /Stop the server/).run).toContain("docker compose -f self-host/compose.yaml -p sj-compose down -v || true");
   });
 
   it("removes credentials and strips traces before uploading screenshots", () => {
