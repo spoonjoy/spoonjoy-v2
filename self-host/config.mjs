@@ -151,8 +151,8 @@ export function miniflareOptions({ built, env, settings, sessionSecret, pushKeys
     durableObjects: { COOK_SESSIONS: { className: "CookSession", useSQLite: true } },
     // Platform jobs (app/domains/platform/ports/jobs.ts) on an in-process queue that delivers to the
     // Worker's queue() handler, one job at a time, as the JOBS queue does on spoonjoy.app. The queue
-    // lives in memory: a job waiting when the server stops is dropped, and its key in D1 can be
-    // claimed again a day later.
+    // lives in memory, so each job's message is kept on its key in D1 too, and the Worker sends again
+    // whatever was waiting when the server starts (replayJobMessages).
     queueProducers: { JOBS: { queueName: JOBS_QUEUE } },
     // SPOONJOY_JOBS_PAUSED=1 is for tests only, and stays out of the guide: the queue takes jobs but runs none, so the
     // Self-host Image workflow can stop a server with a job surely still waiting (e2e/self-host/move-in-restart.spec.ts).
