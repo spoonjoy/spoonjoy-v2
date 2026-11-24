@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import * as smokeHelpers from "../../scripts/smoke-live-helpers.mjs";
 import {
+  requestFromCandidateWorker,
   assertConsentActionRedirect,
   assertWorkerVersionResponse,
   buildWorkerVersionRequestHeaders,
@@ -1492,7 +1493,10 @@ describe("smoke-live helpers", () => {
     expect(source).not.toContain('page.context().route("**/api/mcp/auth_callback**"');
     expect(source).toContain('context.on("response"');
     expect(source).toContain("createWorkerVersionResponseTracker({");
-    expect(source).toContain("assertWorkerVersionResponse(response.headers(), workerVersionId, label)");
+    expect(source).toContain("return requestFromCandidateWorker({");
+    expect(source).toContain('const REPEATABLE_MCP_METHODS = new Set(["initialize", "tools/list", "server/discover"]);');
+    expect(source).toContain('repeatable: method === "get" || REPEATABLE_MCP_METHODS.has(options.data?.method)');
+    expect(source).toContain("\n    otherVersionAnswers,\n");
     expect(source).toContain("return waitForWorkerChannelsReady({");
     const readinessSource = source.match(/async function waitForCandidateWorker\([\s\S]*?\n}\n/)?.[0] ?? "";
     expect(readinessSource).toContain("page.goto(url");
@@ -2216,5 +2220,71 @@ describe("smoke-live helpers", () => {
       verifiedDeletedKeys: ["recipes/user-1/uploads/oriented.jpg"],
       generatedCoverKeys: ["covers/generated.jpg"],
     });
+  });
+});
+
+describe("requestFromCandidateWorker", () => {
+  // Production Deploy 45371021499: the candidate answered the canary steadily for 22 s and through
+  // eight checks, then one MCP initialize carrying the version override was answered by the live
+  // Worker, and the release rolled back.
+  const CANDIDATE = "304bc1c6-2f6e-4fc3-9856-cf5f265628b1";
+  const LIVE = "1b84e5ab-a9f8-494a-b8a2-dc8c0ec8eab8";
+  const answer = (version: string | null, body = version) => ({
+    body,
+    headers: () => (version === null ? {} : { "x-spoonjoy-worker-version": version }),
+  });
+  const clock = () => {
+    let now = 0;
+    return { now: () => now, sleep: vi.fn(async (ms: number) => { now += ms; }) };
+  };
+
+  it("returns the candidate's answer at once", async () => {
+    const send = vi.fn(async () => answer(CANDIDATE));
+    await expect(requestFromCandidateWorker({ send, workerVersionId: CANDIDATE, label: "MCP initialize response", repeatable: true }))
+      .resolves.toMatchObject({ body: CANDIDATE });
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends a repeatable request again until the candidate answers it, and reports the other version", async () => {
+    const answers = [answer(LIVE), answer(LIVE), answer(CANDIDATE)];
+    const send = vi.fn(async () => answers.shift()!);
+    const onOtherVersion = vi.fn();
+    const { now, sleep } = clock();
+
+    await expect(requestFromCandidateWorker({
+      send, workerVersionId: CANDIDATE, label: "MCP initialize response", repeatable: true, onOtherVersion, now, sleep,
+    })).resolves.toMatchObject({ body: CANDIDATE });
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(onOtherVersion).toHaveBeenCalledWith({ label: "MCP initialize response", observed: LIVE });
+  });
+
+  it("fails with the version it last saw when the candidate never answers within the limit", async () => {
+    const send = vi.fn(async () => answer(LIVE));
+    const { now, sleep } = clock();
+
+    await expect(requestFromCandidateWorker({
+      send, workerVersionId: CANDIDATE, label: "MCP initialize response", repeatable: true, timeoutMs: 2_000, now, sleep,
+    })).rejects.toThrow(`MCP initialize response expected candidate Worker ${CANDIDATE} but received ${LIVE}.`);
+    expect(send.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it("never sends a request that changes state again", async () => {
+    const send = vi.fn(async () => answer(LIVE));
+    await expect(requestFromCandidateWorker({ send, workerVersionId: CANDIDATE, label: "token exchange response" }))
+      .rejects.toThrow(`token exchange response expected candidate Worker ${CANDIDATE} but received ${LIVE}.`);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("still fails an answer with no version header", async () => {
+    const send = vi.fn(async () => answer(null));
+    const { now, sleep } = clock();
+    await expect(requestFromCandidateWorker({ send, workerVersionId: CANDIDATE, label: "MCP tools/list response", repeatable: true, timeoutMs: 1_000, now, sleep }))
+      .rejects.toThrow(/MCP tools\/list response is missing X-Spoonjoy-Worker-Version/);
+  });
+
+  it("checks nothing when no candidate is pinned", async () => {
+    const send = vi.fn(async () => answer(null));
+    await expect(requestFromCandidateWorker({ send, workerVersionId: null, label: "x", repeatable: true })).resolves.toMatchObject({ body: null });
+    expect(send).toHaveBeenCalledTimes(1);
   });
 });
