@@ -8,6 +8,8 @@ import {
   CLIENT_ASSETS_DIR,
   DATA_REQUEST_RETRY_DELAY_MS,
   ROUTED_FETCH_TIMEOUT_MS,
+  UPLOAD_FETCH_TIMEOUT_MS,
+  isFileUpload,
   STATIC_ASSET_RETRY_DELAYS_MS,
   TRANSPORT_RETRY_DELAY_MS,
   answerDataRequest,
@@ -450,7 +452,18 @@ describe("answerDataRequest", () => {
     return routeFor("POST", ...answers);
   }
 
+  const boundary = "----WebKitFormBoundaryLbjKjgVETlV91UKU";
+
   function routeFor(method: string, ...answers: Array<number | Error>) {
+    return routeWith(method, "application/x-www-form-urlencoded;charset=UTF-8", Buffer.from("intent=continue"), ...answers);
+  }
+
+  function upload(...answers: Array<number | Error>) {
+    const body = `--${boundary}\r\nContent-Disposition: form-data; name="backup"; filename="kitchen.zip"\r\n\r\nPK\r\n--${boundary}--\r\n`;
+    return routeWith("POST", `multipart/form-data; boundary=${boundary}`, Buffer.from(body), ...answers);
+  }
+
+  function routeWith(method: string, contentType: string, body: Buffer, ...answers: Array<number | Error>) {
     let tries = 0;
     return {
       fetch: vi.fn(async (_options?: { maxRedirects?: number; timeout?: number }) => {
@@ -460,7 +473,7 @@ describe("answerDataRequest", () => {
       }),
       fulfill: vi.fn(async (_options: { response: { status(): number } }) => undefined),
       abort: vi.fn(async (_code?: string) => undefined),
-      request: () => ({ url: () => url, method: () => method }),
+      request: () => ({ url: () => url, method: () => method, headers: () => ({ "content-type": contentType }), postDataBuffer: () => body }),
     };
   }
 
@@ -551,6 +564,30 @@ describe("answerDataRequest", () => {
     expect(data.abort).toHaveBeenCalledExactlyOnceWith("connectionreset");
   });
 
+  it("gives a form with a file UPLOAD_FETCH_TIMEOUT_MS to be answered, since the Worker reads all of it first", async () => {
+    const data = upload(302);
+
+    await answerDataRequest(data as never, async () => undefined, () => undefined);
+
+    expect(data.fetch).toHaveBeenCalledExactlyOnceWith({ maxRedirects: 0, timeout: UPLOAD_FETCH_TIMEOUT_MS });
+    expect(UPLOAD_FETCH_TIMEOUT_MS).toBe(60_000);
+    expect(data.fulfill.mock.calls[0][0].response.status()).toBe(302);
+  });
+
+  it.each([
+    ["no answer in time", timeoutError()],
+    ["its connection dropped", new Error("read ECONNRESET")],
+  ])("never sends a form with a file again after %s, since a second copy could start a second move-in", async (_why, error) => {
+    const data = upload(error, 302);
+    const onRetry = vi.fn();
+
+    await answerDataRequest(data as never, async () => undefined, onRetry);
+
+    expect(data.fetch).toHaveBeenCalledTimes(1);
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(data.abort).toHaveBeenCalledExactlyOnceWith("connectionreset");
+  });
+
   it("says in the test's output when a request is sent again for want of an answer", async () => {
     const data = routeFor("GET", timeoutError(), 200);
     expectConsoleWarning("Journeys: sending GET /recipes/6fd4f6b4/steps/new.data again after it had no answer (route.fetch: Timeout 6000ms exceeded.)");
@@ -565,6 +602,29 @@ describe("answerDataRequest", () => {
 
     await answerDataRequest(data as never, async () => undefined);
     expect(data.fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("isFileUpload", () => {
+  const filePart = Buffer.from('--x\r\nContent-Disposition: form-data; name="backup"; filename="kitchen.zip"\r\n\r\nPK\r\n--x--\r\n');
+  const fieldsOnly = Buffer.from('--x\r\nContent-Disposition: form-data; name="intent"\r\n\r\ncontinue\r\n--x--\r\n');
+  const request = (method: string, contentType: string | undefined, body: Buffer | null) => ({
+    method: () => method,
+    headers: () => (contentType ? { "content-type": contentType } : {}),
+    postDataBuffer: () => body,
+  });
+
+  it("is a multipart submission with a file part, or one whose body Playwright can't show", () => {
+    expect(isFileUpload(request("POST", "multipart/form-data; boundary=x", filePart))).toBe(true);
+    expect(isFileUpload(request("PUT", "Multipart/Form-Data; boundary=x", filePart))).toBe(true);
+    expect(isFileUpload(request("POST", "multipart/form-data; boundary=x", null))).toBe(true);
+  });
+
+  it("isn't a multipart form of plain fields, a plain form, a body with no type, or a read", () => {
+    expect(isFileUpload(request("POST", "multipart/form-data; boundary=x", fieldsOnly))).toBe(false);
+    expect(isFileUpload(request("POST", "application/x-www-form-urlencoded;charset=UTF-8", filePart))).toBe(false);
+    expect(isFileUpload(request("POST", undefined, filePart))).toBe(false);
+    expect(isFileUpload(request("GET", "multipart/form-data; boundary=x", filePart))).toBe(false);
   });
 });
 
