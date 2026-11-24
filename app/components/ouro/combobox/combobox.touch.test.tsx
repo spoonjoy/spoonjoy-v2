@@ -39,6 +39,7 @@ async function render(node: ReactNode) {
 
 const sheet = () => document.querySelector<HTMLElement>('[data-ouro="sheet"]');
 const TRIGGER = "[data-ouro-combobox-trigger]";
+const chipLabels = (host: HTMLElement) => [...host.querySelectorAll("[data-ouro-combobox-chip] > span")].map((span) => span.textContent);
 
 /** Waits for the sheet's entrance to finish. */
 async function opened() {
@@ -137,11 +138,11 @@ describe("Combobox on a phone", () => {
       return <Combobox label="Herbs" multiple items={herbs} value={value} onValueChange={setValue} doneLabel="Fertig" />;
     }
     const host = await render(<Picker />);
-    expect(host.querySelector(TRIGGER)!.textContent).toContain("Basil");
+    expect(chipLabels(host)).toEqual(["Basil"]);
     await commands.tap(TRIGGER);
     await opened();
     await commands.tap('[role="option"]:nth-child(3)');
-    await expect.poll(() => host.querySelector(TRIGGER)!.textContent).toContain("Basil, Dill");
+    await expect.poll(() => chipLabels(host)).toEqual(["Basil", "Dill"]);
     expect(sheet()).not.toBeNull();
     await userEvent.click(page.getByRole("button", { name: "Fertig" }));
     await expect.poll(sheet).toBeNull();
@@ -565,7 +566,7 @@ describe("Combobox on a phone", () => {
     await expect.poll(rows).toEqual(["Add “Date night”"]);
     await commands.tap('[role="option"]:nth-child(1)');
     expect(onValueChange).toHaveBeenLastCalledWith(["Vegan", "Date night"]);
-    await expect.poll(() => host.querySelector(TRIGGER)!.textContent).toContain("Vegan, Date night");
+    await expect.poll(() => chipLabels(host)).toEqual(["Vegan", "Date night"]);
     expect(new FormData(host.querySelector("form")!).getAll("tags")).toEqual(["Vegan", "Date night"]);
 
     // Text that is an item, ignoring case, offers the item and no row of its own.
@@ -588,6 +589,98 @@ describe("Combobox on a phone", () => {
     const cy = rect.top + rect.height / 2;
     expect(document.elementFromPoint(cx, cy - 21)?.closest("button")).toBe(remove);
     expect(document.elementFromPoint(cx, cy + 21)?.closest("button")).toBe(remove);
+  });
+});
+
+describe("Combobox multiple on a phone", () => {
+  const tags = ["Weeknight dinner", "Quick lunch", "Vegan", "One pot", "Make ahead"];
+  const chipsIn = (host: HTMLElement) => [...host.querySelectorAll("[data-ouro-combobox-chip]")];
+  const center = (element: Element) => {
+    const rect = element.getBoundingClientRect();
+    return [rect.left + rect.width / 2, rect.top + rect.height / 2] as const;
+  };
+
+  it("shows each pick as a chip beside the field's button, wrapping onto more lines, with no text cut", async () => {
+    const host = await render(<Combobox label="Tags" multiple items={tags} defaultValue={tags} placeholder="Add tags" />);
+    const trigger = host.querySelector<HTMLButtonElement>(TRIGGER)!;
+    const chips = chipsIn(host);
+    expect(chips.map((chip) => chip.textContent)).toEqual(tags.map((tag) => `${tag}Remove ${tag}`));
+    // A button can't hold buttons: the chips sit beside the field's button, which keeps the label as its name.
+    expect(chips.every((chip) => !trigger.contains(chip))).toBe(true);
+    expect(trigger.querySelector("button")).toBeNull();
+    expect(trigger.labels![0]!.textContent).toBe("Tags");
+    expect(trigger.textContent).not.toContain("Vegan");
+    // Nor the placeholder, which the chips would cover.
+    expect(trigger.textContent).not.toContain("Add tags");
+    // Several rows of chips, the field grown around them, and every label whole.
+    expect(new Set(chips.map((chip) => Math.round(chip.getBoundingClientRect().top))).size).toBeGreaterThanOrEqual(2);
+    const field = host.querySelector<HTMLElement>("[data-ouro-combobox-field]")!.getBoundingClientRect();
+    expect(field.height).toBeGreaterThan(44);
+    for (const chip of chips) {
+      const box = chip.getBoundingClientRect();
+      expect(box.top).toBeGreaterThanOrEqual(field.top);
+      expect(box.bottom).toBeLessThanOrEqual(field.bottom);
+      const text = chip.querySelector("span")!;
+      expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth);
+    }
+    // The button's box is the field's: its outline and pressed tint cover the chips.
+    expect(trigger.getBoundingClientRect().height).toBe(field.height);
+  });
+
+  it("opens the sheet from a tap anywhere on the field but a chip's remove button", async () => {
+    const host = await render(<Combobox label="Tags" multiple items={tags} defaultValue={["Vegan", "One pot"]} />);
+    const trigger = host.querySelector<HTMLButtonElement>(TRIGGER)!;
+    const [chip] = chipsIn(host);
+    const label = chip!.querySelector("span")!;
+    expect(document.elementFromPoint(...center(label))?.closest("button")).toBe(trigger);
+    const field = host.querySelector<HTMLElement>("[data-ouro-combobox-field]")!.getBoundingClientRect();
+    expect(document.elementFromPoint(field.right - 60, field.top + field.height / 2)?.closest("button")).toBe(trigger);
+    const remove = chip!.querySelector("button")!;
+    expect(document.elementFromPoint(...center(remove))?.closest("button")).toBe(remove);
+    // The chevron, at the end, which no chip covers.
+    await commands.tap(`${TRIGGER} svg`);
+    await opened();
+  });
+
+  it("removes a pick from its chip's Remove button without opening the sheet, and puts focus back on the field", async () => {
+    const onValueChange = vi.fn();
+    const host = await render(
+      <form>
+        <Combobox label="Tags" name="tags" multiple allowCustomValue items={tags} defaultValue={["Vegan", "Picnic", "One pot"]} onValueChange={onValueChange} removeLabel={(label) => `Drop ${label}`} />
+      </form>,
+    );
+    const remove = page.getByRole("button", { name: "Drop Picnic" });
+    await expect.element(remove).toBeVisible();
+    await remove.click();
+    expect(onValueChange).toHaveBeenLastCalledWith(["Vegan", "One pot"]);
+    expect(chipsIn(host).map((chip) => chip.querySelector("span")!.textContent)).toEqual(["Vegan", "One pot"]);
+    expect(new FormData(host.querySelector("form")!).getAll("tags")).toEqual(["Vegan", "One pot"]);
+    expect(sheet()).toBeNull();
+    expect(document.activeElement).toBe(host.querySelector(TRIGGER));
+  });
+
+  it("reaches each Remove button with Tab after the field's button", async () => {
+    const host = await render(<Combobox label="Tags" multiple items={tags} defaultValue={["Vegan", "One pot"]} />);
+    host.querySelector<HTMLButtonElement>(TRIGGER)!.focus();
+    await pressTab();
+    expect(document.activeElement?.textContent).toBe("Remove Vegan");
+    await pressTab();
+    expect(document.activeElement?.textContent).toBe("Remove One pot");
+  });
+
+  it("gives a chip's Remove button a 44px hit area in the field", async () => {
+    const host = await render(<Combobox label="Tags" multiple items={tags} defaultValue={["Vegan"]} />);
+    const remove = host.querySelector<HTMLElement>("button[data-ouro-combobox-chip-remove]")!;
+    const [cx, cy] = center(remove);
+    expect(document.elementFromPoint(cx, cy - 21)?.closest("button")).toBe(remove);
+    expect(document.elementFromPoint(cx, cy + 21)?.closest("button")).toBe(remove);
+  });
+
+  it("shows the placeholder in the field's button while nothing is picked", async () => {
+    const host = await render(<Combobox label="Tags" multiple items={tags} placeholder="Add tags" />);
+    expect(chipsIn(host)).toHaveLength(0);
+    expect(host.querySelector(TRIGGER)!.textContent).toContain("Add tags");
+    expect(host.querySelector(TRIGGER)!.getBoundingClientRect().height).toBe(44);
   });
 });
 

@@ -8,6 +8,9 @@ export {
   listClass,
   popupClass,
   sheetClearClass,
+  sheetChipsClass,
+  sheetChipsFieldClass,
+  sheetChipsTriggerClass,
   sheetFieldClass,
   sheetInputClass,
   sheetListClass,
@@ -142,6 +145,38 @@ const triggerClass =
  * @internal
  */
 const sheetFieldClass = "group/combobox-field relative min-w-0";
+
+/**
+ * The field on a phone with `multiple`: the button under the chips, which grows a row at a
+ * time as they wrap.
+ *
+ * @internal
+ */
+const sheetChipsFieldClass = "group/combobox-field relative grid min-w-0";
+
+/**
+ * The button under a phone's chips: the field's whole box, so a tap anywhere but a remove
+ * button opens the sheet, and its outline, pressed tint and invalid border cover the chips.
+ *
+ * @internal
+ */
+const sheetChipsTriggerClass =
+  "relative col-start-1 row-start-1 m-0 box-border flex h-full min-h-(--ouro-control-h) w-full min-w-0 items-center justify-between gap-2 px-3 py-0 " +
+  "[--ouro-control-h:calc(var(--spacing)*11)] rounded-ouro-control-md border border-solid border-input bg-transparent " +
+  "text-start text-base text-foreground font-[inherit] cursor-pointer [-webkit-tap-highlight-color:transparent] " +
+  "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
+  "not-disabled:active:bg-accent/60 aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 " +
+  "data-placeholder:text-muted-foreground [&>span]:truncate [&_svg]:shrink-0 [&_svg]:text-muted-foreground";
+
+/**
+ * A phone's chips, over the button: they wrap, leaving the chevron its room. Only the remove
+ * buttons take a tap; the rest goes through to the button.
+ *
+ * @internal
+ */
+const sheetChipsClass =
+  "pointer-events-none relative col-start-1 row-start-1 box-border flex min-w-0 flex-wrap items-center gap-1.5 self-center py-1.5 ps-1.5 pe-9 " +
+  "empty:hidden [&_button]:pointer-events-auto";
 
 /**
  * The clear button on a phone, over the end of the field's button, left of the chevron. It

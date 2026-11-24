@@ -9,6 +9,7 @@ import { Avatar, AvatarGroup } from "~/components/ouro/avatar/avatar";
 import { act } from "~/lib/ouro/testing/act";
 import { audit, describeFindings } from "~/lib/ouro/testing/axe";
 
+const native = CSS.supports("corner-shape", "squircle");
 const roots: Root[] = [];
 let mounted: Element[] = [];
 
@@ -686,8 +687,12 @@ describe("Avatar shapes and icons", () => {
     const corner = parseFloat(getComputedStyle(square!).borderTopLeftRadius);
     expect(corner).toBeGreaterThan(0);
     expect(corner).toBeLessThan(34);
-    expect(getComputedStyle(circle!).borderTopLeftRadius).toBe("24%");
-    expect(getComputedStyle(square!).borderTopLeftRadius).toBe("13%");
+    expect(getComputedStyle(circle!).borderTopLeftRadius).toBe(native ? "44%" : "24%");
+    expect(getComputedStyle(square!).borderTopLeftRadius).toBe(native ? "24%" : "13%");
+    if (native) {
+      expect(getComputedStyle(circle!).getPropertyValue("corner-shape")).toMatch(/squircle|superellipse\(2\)/);
+      expect(getComputedStyle(square!).getPropertyValue("corner-shape")).toMatch(/squircle|superellipse\(2\)/);
+    }
     for (const plain of [circle!, square!]) {
       expect(getComputedStyle(plain, "::after").borderTopWidth).not.toBe("1px");
       expect(getComputedStyle(surface(plain)).backgroundColor).not.toBe("rgb(255, 255, 255)");
@@ -738,7 +743,7 @@ describe("Avatar shapes and icons", () => {
     const avatars = [...host.querySelectorAll<HTMLElement>('[data-ouro="avatar"]')];
     for (const avatar of avatars) {
       expect(avatar.getAttribute("data-shape")).toBe("agent");
-      expect(getComputedStyle(avatar).borderTopLeftRadius).toBe("13%");
+      expect(getComputedStyle(avatar).borderTopLeftRadius).toBe(native ? "24%" : "13%");
     }
     for (const avatar of avatars.slice(0, -1)) {
       const box = avatar.getBoundingClientRect();
@@ -958,10 +963,10 @@ describe("Avatar presence", () => {
       </>,
     );
     const [team] = [...host.querySelectorAll<HTMLElement>('[data-shape="square"]')];
-    expect(getComputedStyle(team!).borderTopLeftRadius).toBe("13%");
+    expect(getComputedStyle(team!).borderTopLeftRadius).toBe(native ? "24%" : "13%");
     for (const avatar of host.querySelectorAll<HTMLElement>('[data-shape="circle"]')) {
       const box = avatar.getBoundingClientRect();
-      expect(getComputedStyle(avatar).borderTopLeftRadius).toBe("24%");
+      expect(getComputedStyle(avatar).borderTopLeftRadius).toBe(native ? "44%" : "24%");
       const dot = avatar.querySelector<HTMLElement>("[data-ouro-avatar-presence]")!.getBoundingClientRect();
       // The dot's center is on the edge's diagonal point: a squircle's lies 8% of the size in from the corner.
       expect(Math.abs(box.right - (dot.left + dot.width / 2) - box.width * 0.08)).toBeLessThan(0.6);
@@ -1032,10 +1037,14 @@ describe("Avatar presence", () => {
         <Avatar name="Ana Lind" />
         <Avatar name="Halden" shape="agent" />
         <Avatar name="Ana Lind" presence="away" presenceLabel="Away" />
+        <Avatar name="Ana Lind" presence="unknown" presenceLabel="Presence unknown" />
       </div>,
     );
-    const [plain, agent, dotted] = [...host.querySelectorAll<HTMLElement>('[data-ouro="avatar"]')];
-    for (const avatar of [plain!, agent!]) {
+    const [plain, agent, dotted, unknown] = [...host.querySelectorAll<HTMLElement>('[data-ouro="avatar"]')];
+    const hidden = unknown!.querySelector<HTMLElement>("[data-ouro-avatar-presence]")!;
+    expect(hidden.childElementCount).toBe(0);
+    expect(getComputedStyle(hidden).visibility).toBe("hidden");
+    for (const avatar of [plain!, agent!, unknown!]) {
       const fill = getComputedStyle(surface(avatar));
       expect(surface(avatar).hasAttribute("data-ouro-bite")).toBe(false);
       expect(fill.maskImage).toBe("none");
@@ -1509,7 +1518,7 @@ describe("Avatar development messages", () => {
     [
       "presence",
       { presence: "dnd", presenceLabel: "Do not disturb" },
-      'presence="dnd" is not a presence; use "available", "busy", "away", "do-not-disturb", "offline", "out-of-office"',
+      'presence="dnd" is not a presence; use "available", "busy", "away", "do-not-disturb", "offline", "out-of-office", "unknown"',
       '<Avatar presence="do-not-disturb" presenceLabel="Do not disturb">',
     ],
   ])("renders the default for an unknown %s, with the fix", async (_name, extra, problem, fix) => {

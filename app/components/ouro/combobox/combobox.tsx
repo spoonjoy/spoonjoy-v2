@@ -30,6 +30,9 @@ import {
   listClass,
   popupClass,
   sheetClearClass,
+  sheetChipsClass,
+  sheetChipsFieldClass,
+  sheetChipsTriggerClass,
   sheetFieldClass,
   sheetInputClass,
   sheetListClass,
@@ -928,6 +931,42 @@ function ComboboxControl(props: ControlProps): JSX.Element {
   const sheetClear = !multiple && !readOnly;
   const showEmpty = !onInputChange || (inputValue ?? text) !== "";
 
+  // A picked item's chip, in the desktop box or beside the button on a phone. On a phone its
+  // remove button is in the Tab order, since no input is there to arrow into the chips from, and
+  // removing puts focus back on the button.
+  const renderChip = (option: Option) => (
+    // Base UI marks a read-only field's chips aria-readonly, which a chip (no role) may
+    // not carry; the input's readonly already says it. On a phone the chip leaves keys to the
+    // browser: Base UI's arrow keys lead to an input that is not there, and its Tab handling
+    // puts focus back on the chip, so Tab would never leave it.
+    <BaseCombobox.Chip
+      key={option.value}
+      data-ouro-combobox-chip=""
+      className={chipClass}
+      render={(chip) => <div {...chip} aria-readonly={undefined} onKeyDown={sheet ? undefined : chip.onKeyDown} />}
+    >
+      {option.media != null && (
+        <div data-ouro-combobox-chip-media="" className="-ms-1 flex shrink-0">
+          {option.media}
+        </div>
+      )}
+      <span>{option.label}</span>
+      {!readOnly && (
+        <BaseCombobox.ChipRemove
+          data-ouro-combobox-chip-remove=""
+          data-ouro-control="combobox"
+          data-ouro-part="chip-remove"
+          className={chipRemoveClass}
+          {...(sheet ? { tabIndex: 0, onClick: () => triggerRef.current!.focus() } : {})}
+        >
+          <TouchTarget />
+          <CrossIcon />
+          <span className="sr-only">{removeLabel(option.label)}</span>
+        </BaseCombobox.ChipRemove>
+      )}
+    </BaseCombobox.Chip>
+  );
+
   const renderItem = (option: Option) => (
     <BaseCombobox.Item key={option.value} value={option} disabled={option.disabled} data-ouro-control="combobox" data-ouro-part="option" className={itemClass}>
       <BaseCombobox.ItemIndicator className="col-start-1 flex">
@@ -1009,7 +1048,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
         : {})}
     >
       {sheet ? (
-        <div data-ouro-combobox-field="" className={sheetFieldClass}>
+        <div data-ouro-combobox-field="" className={multiple ? sheetChipsFieldClass : sheetFieldClass}>
           <BaseCombobox.Trigger
             ref={triggerRef}
             aria-describedby={field.describedBy}
@@ -1017,18 +1056,27 @@ function ComboboxControl(props: ControlProps): JSX.Element {
             data-ouro-combobox-trigger=""
             data-ouro-control="combobox"
             data-ouro-part="trigger"
-            className={triggerClass}
+            className={multiple ? sheetChipsTriggerClass : triggerClass}
             // With an inline list there is no Base UI popup for the trigger to open: it opens the sheet.
             onClick={() => setOpen(true)}
           >
             <BaseCombobox.Value placeholder={placeholder}>
               {(picked: Option | Option[] | null) => {
-                const labels = (Array.isArray(picked) ? picked : picked ? [picked] : []).map(shown);
-                return <span>{labels.length > 0 ? labels.join(", ") : placeholder}</span>;
+                // With multiple the chips beside the button show the picks: the button shows only the placeholder.
+                if (Array.isArray(picked)) return <span>{picked.length > 0 ? null : placeholder}</span>;
+                return <span>{picked ? shown(picked) : placeholder}</span>;
               }}
             </BaseCombobox.Value>
             <ChevronIcon />
           </BaseCombobox.Trigger>
+          {multiple && (
+            // Beside the button, over it, not in it: a button can't hold the chips' remove buttons.
+            // A tap on a chip's label goes through to the button, which opens the sheet.
+            // Not a toolbar, as Base UI makes it: Tab, not the arrow keys, moves between the remove buttons.
+            <BaseCombobox.Chips data-slot="combobox-chips" data-ouro-combobox-chips="" className={sheetChipsClass} render={(chips) => <div {...chips} role={undefined} />}>
+              <BaseCombobox.Value>{(picked: Option[]) => picked.map(renderChip)}</BaseCombobox.Value>
+            </BaseCombobox.Chips>
+          )}
           {sheetClear && (
             // Beside the button, not in it: a button can't hold another. It is in the Tab order
             // here, since the button, not an input, has focus; clearing puts focus back on the button.
@@ -1079,25 +1127,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
                 <BaseCombobox.Value>
                   {(picked: Option[]) => (
                     <>
-                      {picked.map((option) => (
-                        // Base UI marks a read-only field's chips aria-readonly, which a chip (no role) may
-                        // not carry; the input's readonly already says it.
-                        <BaseCombobox.Chip key={option.value} data-ouro-combobox-chip="" className={chipClass} render={(chip) => <div {...chip} aria-readonly={undefined} />}>
-                          {option.media != null && (
-                            <div data-ouro-combobox-chip-media="" className="-ms-1 flex shrink-0">
-                              {option.media}
-                            </div>
-                          )}
-                          <span>{option.label}</span>
-                          {!readOnly && (
-                            <BaseCombobox.ChipRemove data-ouro-combobox-chip-remove="" data-ouro-control="combobox" data-ouro-part="chip-remove" className={chipRemoveClass}>
-                              <TouchTarget />
-                              <CrossIcon />
-                              <span className="sr-only">{removeLabel(option.label)}</span>
-                            </BaseCombobox.ChipRemove>
-                          )}
-                        </BaseCombobox.Chip>
-                      ))}
+                      {picked.map(renderChip)}
                       {input(chipsInputClass)}
                     </>
                   )}

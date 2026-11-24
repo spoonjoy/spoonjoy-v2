@@ -71,6 +71,27 @@ export const Tags: Story = {
   ),
 };
 
+/**
+ * On a phone's touch screen: each tag is a chip with a Remove button, the chips wrap onto more
+ * lines and the field grows, and a tap anywhere else on the field opens the sheet.
+ */
+export const PhoneTags: Story = {
+  globals: { viewport: { value: "mobile2", isRotated: false } },
+  render: () => (
+    <Surface>
+      <Combobox
+        label="Tags"
+        name="tags"
+        multiple
+        allowCustomValue
+        items={["Weeknight", "Quick lunch", "Vegan", "One pot", "Make ahead"]}
+        defaultValue={["Weeknight", "Quick lunch", "Vegan", "One pot"]}
+        placeholder="Add a tag"
+      />
+    </Surface>
+  ),
+};
+
 /** Items that come from a search: the app filters in onInputChange and sets loading. */
 export const Search: Story = {
   render: function Render() {

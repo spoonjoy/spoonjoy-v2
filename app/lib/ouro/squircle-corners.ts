@@ -70,7 +70,7 @@ function squircleCorners(): { postcssPlugin: string; OnceExit(root: unknown): vo
         params: "squircle-corners",
         nodes: [
           { name: "supports", params: "(corner-shape: squircle)", nodes: [{ selector: list, nodes: [{ prop: "corner-shape", value: "squircle" }] }] },
-          { name: "supports", params: MISSING, nodes: [{ selector: list, nodes: [{ prop: "clip-path", value: clipPath() }] }] },
+          { name: "supports", params: MISSING, nodes: [{ selector: list, nodes: [{ prop: "--sq-clip", value: clipPath() }, { prop: "clip-path", value: "var(--sq-clip)" }] }] },
         ],
       };
       root.append(layer);
@@ -129,7 +129,9 @@ function isRound(value: string, rule: Node): boolean {
 
 // One path: a rectangle far outside, minus the box, plus the squircle. Under the nonzero rule the slivers a plain circular corner
 // leaves are the only part cut, so a shadow, an outline and overflow outside the corners survive. --sq-notch is one more subpath an
-// element may set (a circle wound like the box cuts a hole, as an avatar's presence dot does); unset, it is an empty one.
+// element may set (a circle wound like the box cuts a hole, as an avatar's presence dot does); unset, it is an empty one. The caller
+// reads this shape() back through --sq-clip rather than writing it straight into clip-path: Chromium 149 to 157 drops every later
+// rule in the stylesheet when a shape() segment is a bare var(), and --sq-notch's fallback here is exactly that (ourostack/ouro-ui#3491).
 function clipPath(): string {
   const n = (x: number, k: string) => `calc(var(--sq-${k}) * ${Number(x.toFixed(4))})`;
   const curves = KEYS.map((k, i) => {
