@@ -4,10 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 import { parseDocument } from "yaml";
 import {
   MIN_AGE_MS,
+  STUCK_WAIT_MS,
   cancelStaleQueueRuns,
   createGitHub,
   main,
   runCliIfEntry,
+  stalePullRequestRuns,
   staleQueueRuns,
 } from "../../scripts/cancel-stale-queue-runs.mjs";
 
@@ -41,16 +43,37 @@ describe("staleQueueRuns", () => {
     const runs = [run(1, "new", { run_started_at: ago(1) }), run(2, "old")];
     expect(staleQueueRuns(runs, [], { now: NOW, selfRunId: "2" })).toEqual([]);
     expect(MIN_AGE_MS).toBe(120_000);
+    expect(STUCK_WAIT_MS).toBe(30_000);
   });
 });
 
-function fakeFetch(answers: Record<string, { status?: number; body?: unknown }>) {
+describe("stalePullRequestRuns", () => {
+  const prRun = (id: number, head_sha: string, extra: Record<string, unknown> = {}) =>
+    run(id, head_sha, { event: "pull_request", head_branch: "feature", ...extra });
+
+  it("picks unfinished pull-request runs whose head is no open pull request's head", () => {
+    const runs = [
+      prRun(1, "current"),
+      prRun(2, "superseded"),
+      prRun(3, "superseded", { status: "completed" }),
+      prRun(4, "closed-pr", { status: "queued", run_started_at: undefined }),
+      run(5, "superseded"),
+      prRun(6, "superseded", { run_started_at: ago(1) }),
+      prRun(7, "superseded"),
+    ];
+    expect(stalePullRequestRuns(runs, ["current"], { now: NOW, selfRunId: "7" }).map((each) => each.id)).toEqual([2, 4]);
+  });
+});
+
+type Answer = { status?: number; body?: unknown };
+function fakeFetch(answers: Record<string, Answer | Answer[]>) {
   const calls: { url: string; method: string; body?: string; auth: string }[] = [];
   const fetchImpl = vi.fn(async (url: string, init: { method?: string; body?: string; headers: Record<string, string> }) => {
     const method = init.method ?? "GET";
     calls.push({ url, method, body: init.body, auth: init.headers.authorization });
     const key = Object.keys(answers).find((each) => `${method} ${url}`.includes(each));
-    const answer = key ? answers[key] : { status: 404, body: "missing" };
+    const found = key ? answers[key] : { status: 404, body: "missing" };
+    const answer = Array.isArray(found) ? (found.length > 1 ? found.shift() : found[0]) : found;
     const status = answer.status ?? 200;
     return {
       ok: status < 400,
@@ -65,11 +88,16 @@ function fakeFetch(answers: Record<string, { status?: number; body?: unknown }>)
 const queue = (heads: (string | null)[]) => ({
   data: { repository: { mergeQueue: { entries: { nodes: heads.map((oid) => ({ headCommit: oid ? { oid } : null })) } } } },
 });
-const runsFor = (status: string, runs: unknown[]) => ({ [`GET https://api.github.com/repos/o/r/actions/runs?event=merge_group&status=${status}&`]: { body: { workflow_runs: runs } } });
+const runsFor = (status: string, runs: unknown[], event = "merge_group") => ({ [`GET https://api.github.com/repos/o/r/actions/runs?event=${event}&status=${status}&`]: { body: { workflow_runs: runs } } });
+const STATUSES = ["queued", "in_progress", "waiting", "pending", "requested"];
+const openPulls = (heads: string[]) => ({ "GET https://api.github.com/repos/o/r/pulls?state=open&per_page=100&page=1": { body: heads.map((sha) => ({ head: { sha } })) } });
 const noRuns = Object.assign(
   {},
-  ...["queued", "in_progress", "waiting", "pending", "requested"].map((status) => runsFor(status, [])),
+  ...STATUSES.map((status) => runsFor(status, [])),
+  ...STATUSES.map((status) => runsFor(status, [], "pull_request")),
+  openPulls([]),
 );
+const noWait = async () => {};
 
 describe("cancelStaleQueueRuns against the GitHub API", () => {
   it("cancels each stale run and leaves the current groups' runs", async () => {
@@ -78,17 +106,18 @@ describe("cancelStaleQueueRuns against the GitHub API", () => {
       ...runsFor("in_progress", [run(11, "a9d2172e"), run(12, "af5b7e11")]),
       "POST https://api.github.com/graphql": { body: queue(["a9d2172e", null]) },
       "POST https://api.github.com/repos/o/r/actions/runs/12/cancel": { status: 202, body: {} },
+      "GET https://api.github.com/repos/o/r/actions/runs/12": { body: { id: 12, status: "completed" } },
     });
     const log = vi.fn();
     const github = createGitHub({ token: "t", repository: "o/r", fetchImpl });
-    const cancelled = await cancelStaleQueueRuns({ github, branch: "main", now: NOW, selfRunId: undefined, log });
+    const cancelled = await cancelStaleQueueRuns({ github, branch: "main", now: NOW, selfRunId: undefined, log, wait: noWait });
     expect(cancelled.map((each: { id: number }) => each.id)).toEqual([12]);
     expect(calls.filter((call) => call.method === "POST" && call.url.endsWith("/cancel")).map((call) => call.url)).toEqual([
       "https://api.github.com/repos/o/r/actions/runs/12/cancel",
     ]);
     expect(JSON.parse(calls.find((call) => call.url.endsWith("/graphql"))!.body!).variables).toEqual({ owner: "o", name: "r", branch: "main" });
     expect(calls.every((call) => call.auth === "Bearer t")).toBe(true);
-    expect(log).toHaveBeenLastCalledWith("1 stale merge-queue run(s) cancelled; 1 queue entry live.");
+    expect(log).toHaveBeenLastCalledWith("1 stale merge-queue run(s) and 0 stale pull-request run(s) cancelled; 1 queue entry live.");
   });
 
   it("reads a no-content answer as success and counts several entries", async () => {
@@ -97,22 +126,89 @@ describe("cancelStaleQueueRuns against the GitHub API", () => {
       ...runsFor("queued", [run(21, "gone")]),
       "POST https://api.github.com/graphql": { body: queue(["x", "y"]) },
       "POST https://api.github.com/repos/o/r/actions/runs/21/cancel": { status: 204 },
+      "GET https://api.github.com/repos/o/r/actions/runs/21": { body: { id: 21, status: "completed" } },
     });
     const log = vi.fn();
     const github = createGitHub({ token: "t", repository: "o/r", fetchImpl });
-    await cancelStaleQueueRuns({ github, branch: "main", now: NOW, selfRunId: undefined, log });
-    expect(log).toHaveBeenLastCalledWith("1 stale merge-queue run(s) cancelled; 2 queue entries live.");
+    await cancelStaleQueueRuns({ github, branch: "main", now: NOW, selfRunId: undefined, log, wait: noWait });
+    expect(log).toHaveBeenLastCalledWith("1 stale merge-queue run(s) and 0 stale pull-request run(s) cancelled; 2 queue entries live.");
+  });
+
+  it("cancels pull-request runs for superseded heads and closed pull requests, reading every page of open pull requests", async () => {
+    const page1 = Array.from({ length: 100 }, (_, index) => ({ head: { sha: `open-${index}` } }));
+    const { fetchImpl, calls } = fakeFetch({
+      ...noRuns,
+      ...runsFor("queued", [run(51, "x", { event: "pull_request" }), run(52, "open-3", { event: "pull_request" }), run(53, "open-101", { event: "pull_request" })], "pull_request"),
+      "GET https://api.github.com/repos/o/r/pulls?state=open&per_page=100&page=1": { body: page1 },
+      "GET https://api.github.com/repos/o/r/pulls?state=open&per_page=100&page=2": { body: [{ head: { sha: "open-101" } }] },
+      "POST https://api.github.com/graphql": { body: queue([]) },
+      "POST https://api.github.com/repos/o/r/actions/runs/51/cancel": { status: 202, body: {} },
+      "GET https://api.github.com/repos/o/r/actions/runs/51": { body: { id: 51, status: "completed" } },
+    });
+    const log = vi.fn();
+    const github = createGitHub({ token: "t", repository: "o/r", fetchImpl });
+    const cancelled = await cancelStaleQueueRuns({ github, branch: "main", now: NOW, selfRunId: undefined, log, wait: noWait });
+    expect(cancelled.map((each: { id: number }) => each.id)).toEqual([51]);
+    expect(calls.filter((call) => call.method === "POST" && /cancel$/.test(call.url)).map((call) => call.url)).toEqual([
+      "https://api.github.com/repos/o/r/actions/runs/51/cancel",
+    ]);
+    expect(log).toHaveBeenCalledWith("Cancelled CI run 51 (gh-readonly-queue/main/pr-1-x): its head x is no open pull request's head.");
+    expect(log).toHaveBeenLastCalledWith("0 stale merge-queue run(s) and 1 stale pull-request run(s) cancelled; 0 queue entries live.");
+  });
+
+  it("force-cancels a cancelled run that is still queued after the wait, and leaves one that is finishing", async () => {
+    const { fetchImpl, calls } = fakeFetch({
+      ...noRuns,
+      ...runsFor("queued", [run(61, "old"), run(62, "old")]),
+      "POST https://api.github.com/graphql": { body: queue([]) },
+      "POST https://api.github.com/repos/o/r/actions/runs/61/cancel": { status: 202, body: {} },
+      "POST https://api.github.com/repos/o/r/actions/runs/62/cancel": { status: 202, body: {} },
+      "GET https://api.github.com/repos/o/r/actions/runs/61": { body: { id: 61, status: "queued" } },
+      "GET https://api.github.com/repos/o/r/actions/runs/62": { body: { id: 62, status: "in_progress" } },
+      "POST https://api.github.com/repos/o/r/actions/runs/61/force-cancel": { status: 202, body: {} },
+    });
+    const log = vi.fn();
+    const wait = vi.fn(async () => {});
+    const github = createGitHub({ token: "t", repository: "o/r", fetchImpl });
+    await cancelStaleQueueRuns({ github, branch: "main", now: NOW, selfRunId: undefined, log, wait });
+    expect(wait).toHaveBeenCalledWith(STUCK_WAIT_MS);
+    expect(calls.filter((call) => call.url.endsWith("/force-cancel")).map((call) => call.url)).toEqual([
+      "https://api.github.com/repos/o/r/actions/runs/61/force-cancel",
+    ]);
+    expect(log).toHaveBeenCalledWith("Force-cancelled CI run 61: it was still queued 30 s after it was cancelled.");
+  });
+
+  it("does not wait when it cancelled nothing", async () => {
+    const { fetchImpl } = fakeFetch({ ...noRuns, "POST https://api.github.com/graphql": { body: queue([]) } });
+    const wait = vi.fn(async () => {});
+    await cancelStaleQueueRuns({ github: createGitHub({ token: "t", repository: "o/r", fetchImpl }), branch: "main", now: NOW, selfRunId: undefined, log: vi.fn(), wait });
+    expect(wait).not.toHaveBeenCalled();
   });
 
   it("stops before cancelling anything when the queue can't be read", async () => {
     for (const body of [{ errors: [{ message: "denied" }] }, { data: { repository: { mergeQueue: null } } }]) {
       const { fetchImpl, calls } = fakeFetch({ ...noRuns, ...runsFor("queued", [run(31, "old")]), "POST https://api.github.com/graphql": { body } });
       const github = createGitHub({ token: "t", repository: "o/r", fetchImpl });
-      await expect(cancelStaleQueueRuns({ github, branch: "main", now: NOW, selfRunId: undefined, log: vi.fn() })).rejects.toThrow(
+      await expect(cancelStaleQueueRuns({ github, branch: "main", now: NOW, selfRunId: undefined, log: vi.fn(), wait: noWait })).rejects.toThrow(
         "Could not read the main merge queue",
       );
       expect(calls.some((call) => call.url.endsWith("/cancel"))).toBe(false);
     }
+  });
+
+  it("waits with a real timer by default", async () => {
+    vi.useFakeTimers();
+    const { fetchImpl } = fakeFetch({
+      ...noRuns,
+      ...runsFor("queued", [run(71, "old")]),
+      "POST https://api.github.com/graphql": { body: queue([]) },
+      "POST https://api.github.com/repos/o/r/actions/runs/71/cancel": { status: 202, body: {} },
+      "GET https://api.github.com/repos/o/r/actions/runs/71": { body: { id: 71, status: "completed" } },
+    });
+    const done = cancelStaleQueueRuns({ github: createGitHub({ token: "t", repository: "o/r", fetchImpl }), branch: "main", now: NOW, selfRunId: undefined, log: vi.fn() });
+    await vi.advanceTimersByTimeAsync(STUCK_WAIT_MS);
+    await expect(done).resolves.toHaveLength(1);
+    vi.useRealTimers();
   });
 
   it("fails on an error answer, naming the request", async () => {
@@ -177,9 +273,9 @@ describe("Merge Queue Sweep workflow", () => {
     expect(workflow.concurrency).toEqual({ group: "merge-queue-sweep", "cancel-in-progress": true });
   });
 
-  it("can cancel runs and nothing more, and runs the sweep script", () => {
+  it("can cancel runs and read pull requests and nothing more, and runs the sweep script", () => {
     expect(workflow.permissions).toEqual({ contents: "read" });
-    expect(workflow.jobs.sweep.permissions).toEqual({ actions: "write", contents: "read" });
+    expect(workflow.jobs.sweep.permissions).toEqual({ actions: "write", contents: "read", "pull-requests": "read" });
     expect(workflow.jobs.sweep.steps.at(-1).run).toBe("node scripts/cancel-stale-queue-runs.mjs");
     expect(workflow.jobs.sweep.steps[0].with["sparse-checkout"]).toBe("scripts/cancel-stale-queue-runs.mjs");
   });
