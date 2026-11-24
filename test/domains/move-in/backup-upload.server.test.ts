@@ -123,7 +123,7 @@ describe("beginning an upload", () => {
   it("starts over when asked, discarding every unfinished upload of the same file and no other", async () => {
     const bytes = backup();
     const first = await begin(bytes);
-    const other = await begin(bytes, { fingerprint: "fp-2" });
+    const other = await begin(bytes, { head: head("b") });
     if (!first.ok || !other.ok) throw new Error("not begun");
     await part(bytes, first.uploadId, 1);
     const fresh = await begin(bytes, { fresh: true, resume: first.uploadId });
