@@ -308,14 +308,26 @@ describe("the other app's server as a move-in source", () => {
     const slug = (routes["/api/recipes"] as { items: Json[] }).items[0].slug;
     const index = (routes["/api/recipes"] as { items: Json[] }).items.findIndex((item) => item.slug === slug);
     const status: Record<string, number> = {};
-    const headers: Record<string, Record<string, string>> = {};
+    const headers: Record<string, Record<string, string>> = { "/api/app/about": { "retry-after": "12" }, [`/api/recipes/${slug}`]: { "retry-after": "12" } };
     const { fetch } = server(routes, { status, headers });
     const kitchen = await (await mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).openKitchen(KITCHEN);
-    for (const code of [429, 503]) {
-      status[`/api/recipes/${slug}`] = code;
-      headers[`/api/recipes/${slug}`] = { "retry-after": "12" };
-      await expect(kitchen?.draft(index)).rejects.toMatchObject({ name: "SourceBusyError", retryAfterMs: 12_000 });
-    }
+    status[`/api/recipes/${slug}`] = 429;
+    await expect(kitchen?.draft(index)).rejects.toMatchObject({ name: "SourceBusyError", retryAfterMs: 12_000 });
+    status["/api/app/about"] = 503;
+    await expect(mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).rejects.toMatchObject({ name: "SourceBusyError", retryAfterMs: 12_000 });
+  });
+
+  it("passes over one recipe that answers 503 with a Retry-After while the server itself answers, rather than waiting on it", async () => {
+    const { routes } = kitchenRoutes();
+    const slug = (routes["/api/recipes"] as { items: Json[] }).items[0].slug;
+    const index = (routes["/api/recipes"] as { items: Json[] }).items.findIndex((item) => item.slug === slug);
+    const status: Record<string, number> = {};
+    const { fetch } = server(routes, { status, headers: { [`/api/recipes/${slug}`]: { "retry-after": "12" } } });
+    const kitchen = await (await mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).openKitchen(KITCHEN);
+    status[`/api/recipes/${slug}`] = 503;
+    const error = await kitchen?.draft(index).catch((thrown: unknown) => thrown);
+    expect(error).not.toBeInstanceOf(SourceUnavailableError);
+    expect(error).toMatchObject({ message: expect.stringContaining("couldn't give this one") });
   });
 
   it("reads Retry-After in seconds or as a date, and keeps the wait between its bounds", () => {

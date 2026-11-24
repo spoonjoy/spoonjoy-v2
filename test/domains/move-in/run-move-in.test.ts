@@ -768,8 +768,12 @@ describe("a source other than a backup", () => {
     const token = (await h.ports.store.claim("job-1", new Date())) as string;
     await runNextChunk("job-1", h.ports, { chunkSize: 1, token });
     await runNextChunk("job-1", h.ports, { chunkSize: 1, token });
+    h.jobs.set("job-1", { ...h.job(), attempt: 2 });
     await expect(runNextChunk("job-1", h.ports, { chunkSize: 1, token })).rejects.toBeInstanceOf(SourceBusyError);
-    expect(h.job()).toMatchObject({ status: "running", cursor: "1", lastError: WAITING_ON_SOURCE, attempt: 0 });
+    expect(h.job()).toMatchObject({ status: "running", cursor: "1", lastError: WAITING_ON_SOURCE, attempt: 1 });
+    // A store that can't say when the wait began has it begin now, rather than ending the move-in.
+    await expect(runNextChunk("job-1", h.ports, { chunkSize: 1, token })).rejects.toBeInstanceOf(SourceBusyError);
+    expect(h.job()).toMatchObject({ status: "running", lastError: WAITING_ON_SOURCE });
     busy = false;
     await runNextChunk("job-1", h.ports, { chunkSize: 1, token });
     expect(h.job()).toMatchObject({ status: "running", cursor: "2", lastError: null });
@@ -815,9 +819,9 @@ describe("a source other than a backup", () => {
     clock += MOVE_IN_BUSY_MAX_MS - 1;
     await run();
     expect(h.job().status).toBe("running");
+    // A chunk that moves forward and then is asked to wait again starts the wait again.
     busyFrom = 2;
-    await run();
-    await run();
+    await runNextChunk("job-1", h.ports, { chunkSize: 2, token }).catch(() => undefined);
     expect(h.job()).toMatchObject({ status: "running", cursor: "2", lastError: WAITING_ON_SOURCE });
     clock += MOVE_IN_BUSY_MAX_MS - 1;
     await run();
