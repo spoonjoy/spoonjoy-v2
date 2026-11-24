@@ -5,20 +5,13 @@
       "nav",
       "footer"
     ],
-    "fork-dialog": [
-      "banner",
-      "nav",
-      "footer"
-    ]
+    "fork-dialog": []
   },
   "iphone-webkit": {
     "default": [
       "tabBar",
       "footer"
     ],
-    "fork-dialog": [
-      "tabBar",
-      "footer"
-    ]
+    "fork-dialog": []
   }
 }

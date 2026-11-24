@@ -6,26 +6,10 @@
       "nav",
       "footer"
     ],
-    "delete-dialog": [
-      "banner",
-      "nav",
-      "footer"
-    ],
-    "log-cook-dialog": [
-      "banner",
-      "nav",
-      "footer"
-    ],
-    "save-dialog": [
-      "banner",
-      "nav",
-      "footer"
-    ],
-    "variation-dialog": [
-      "banner",
-      "nav",
-      "footer"
-    ]
+    "delete-dialog": [],
+    "log-cook-dialog": [],
+    "save-dialog": [],
+    "variation-dialog": []
   },
   "iphone-webkit": {
     "cook-mode": [],
@@ -33,21 +17,9 @@
       "tabBar",
       "footer"
     ],
-    "delete-dialog": [
-      "tabBar",
-      "footer"
-    ],
-    "log-cook-dialog": [
-      "tabBar",
-      "footer"
-    ],
-    "save-dialog": [
-      "tabBar",
-      "footer"
-    ],
-    "variation-dialog": [
-      "tabBar",
-      "footer"
-    ]
+    "delete-dialog": [],
+    "log-cook-dialog": [],
+    "save-dialog": [],
+    "variation-dialog": []
   }
 }

@@ -5,38 +5,24 @@
       "nav",
       "footer"
     ],
-    "delete-cookbook-dialog": [
-      "banner",
-      "nav",
-      "footer"
-    ],
+    "delete-cookbook-dialog": [],
     "owner-tools-open": [
       "banner",
       "nav",
       "footer"
     ],
-    "remove-recipe-dialog": [
-      "banner",
-      "nav",
-      "footer"
-    ]
+    "remove-recipe-dialog": []
   },
   "iphone-webkit": {
     "default": [
       "tabBar",
       "footer"
     ],
-    "delete-cookbook-dialog": [
-      "tabBar",
-      "footer"
-    ],
+    "delete-cookbook-dialog": [],
     "owner-tools-open": [
       "tabBar",
       "footer"
     ],
-    "remove-recipe-dialog": [
-      "tabBar",
-      "footer"
-    ]
+    "remove-recipe-dialog": []
   }
 }

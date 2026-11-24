@@ -5,18 +5,12 @@
       "nav",
       "footer"
     ],
-    "delete-step-dialog": [
-      "banner",
-      "nav",
-      "footer"
-    ]
+    "delete-step-dialog": []
   },
   "iphone-webkit": {
     "default": [
       "footer"
     ],
-    "delete-step-dialog": [
-      "footer"
-    ]
+    "delete-step-dialog": []
   }
 }
