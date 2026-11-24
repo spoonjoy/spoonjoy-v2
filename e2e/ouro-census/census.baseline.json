@@ -2387,19 +2387,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Saucepan\" [badge/root] in region \"Tools on this recipe\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Sides\" [badge/root] in region \"Categories on this recipe\"",
-          "count": 1
-        },
-        {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "link \"Weeknight\" [badge/root] in region \"Tags on this recipe\"",
           "count": 1
         }
       ]
@@ -6785,6 +6773,18 @@
           "count": 1
         },
         {
+          "identity": "button \"Remove Saucepan\" [combobox/chip-remove] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Remove Sides\" [combobox/chip-remove] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Remove Weeknight\" [combobox/chip-remove] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Save\" [button/root] in main",
           "count": 1
         },
@@ -6801,19 +6801,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Saucepan\" [badge/root] in region \"Tools on this recipe\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Sides\" [badge/root] in region \"Categories on this recipe\"",
-          "count": 1
-        },
-        {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "link \"Weeknight\" [badge/root] in region \"Tags on this recipe\"",
           "count": 1
         }
       ]
