@@ -175,6 +175,8 @@ describe("choosing who can see a recipe", () => {
     expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "household" }), WITH_HOUSEHOLDS)))
       .toMatchObject({ success: true, intent: "setRecipeVisibilityDefault" });
     expect(await stored()).toBe("household");
+    expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "friends" }), WITH_HOUSEHOLDS)))
+      .toMatchObject({ success: false, error: "invalid_visibility", message: "Choose public, household or only me." });
     expect((await createLoader(args<LoaderArgs>(await get("http://localhost/recipes/new"), WITH_HOUSEHOLDS))).visibilityDefault).toBe("household");
     // A household default is not one the cook can choose while households is off, so new recipes start public.
     expect((await createLoader(args<LoaderArgs>(await get("http://localhost/recipes/new"), FLAG_ON))).visibilityDefault).toBe("public");
