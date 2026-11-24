@@ -103,6 +103,9 @@ function view(progress: MoveInProgress, runsOnServer: boolean, now: Date): MoveI
   const photos = progress.counts.photos ?? { found: 0, created: 0, unchanged: 0 };
   const failure = [...progress.events].reverse().find((event) => event.kind === "job-failed")?.message ?? null;
   const done = recipes.created + recipes.updated + recipes.unchanged + recipes.skipped + recipes.failed;
+  // Recipes begin to come in once the backup has been read, so the rate counts from then, not from the
+  // job's start, which also takes in its time waiting to run and reading the backup.
+  const recipesBegan = progress.events.find((event) => event.kind === "phase-done")?.createdAt;
   return {
     jobId: progress.job.id,
     status: progress.job.status,
@@ -126,7 +129,7 @@ function view(progress: MoveInProgress, runsOnServer: boolean, now: Date): MoveI
     latest: progress.latest,
     renamed: progress.events.flatMap((event) => (event.kind === "item-renamed" ? [{ seq: event.seq, message: event.message }] : [])),
     runsOnServer,
-    timeLeft: FINISHED.includes(progress.job.status) ? null : timeLeft({ done, found: recipes.found, startedAt: progress.job.createdAt, now }),
+    timeLeft: FINISHED.includes(progress.job.status) || !recipesBegan ? null : timeLeft({ done, found: recipes.found, startedAt: recipesBegan, now }),
   };
 }
 
@@ -215,10 +218,11 @@ function Progress({ move }: { move: MoveInView }) {
   });
   const { jobId, runsOnServer } = move;
   const done = move.recipes.done;
+  const found = move.recipes.found;
   // Asks how the move-in is going, from 3 s after the last change. A move-in this page keeps going
   // is asked at that pace, seen or not. A server-side one is asked less often each time it shows no
   // change, not at all while the page is out of sight, and at once when the page is back in view. A
-  // change in the count starts the pace over.
+  // change in the count, or in the recipes found once the backup is read, starts the pace over.
   useEffect(() => {
     let wait = POLL_MS;
     let timer: ReturnType<typeof setTimeout>;
@@ -241,7 +245,7 @@ function Progress({ move }: { move: MoveInView }) {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", back);
     };
-  }, [jobId, runsOnServer, done]);
+  }, [jobId, runsOnServer, done, found]);
   const counted = move.recipes.found > 0;
   return (
     <section aria-labelledby="move-in-progress" className="flex flex-col gap-4">

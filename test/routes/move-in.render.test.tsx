@@ -168,6 +168,25 @@ describe("the Move in page", () => {
     stillHidden.mockRestore();
   });
 
+  it("starts the pace over when the backup has been read and its recipes are counted", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const action = vi.fn(() => ({ error: null }));
+    let move = view({ runsOnServer: true });
+    const Stub = createTestRoutesStub([{ path: "/move-in", Component: MoveIn, loader: () => ({ move, maxBytes: MAX_BYTES }), action }]);
+    render(<Stub initialEntries={["/move-in"]} />);
+    await screen.findByText("Reading the backup…");
+    await act(async () => vi.advanceTimersByTimeAsync(3_000));
+    await vi.waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    // The next ask, 6 s on, finds the backup read: 500 recipes found, none in yet.
+    move = view({ runsOnServer: true, recipes: { ...view().recipes, found: 500 } });
+    await act(async () => vi.advanceTimersByTimeAsync(6_000));
+    await vi.waitFor(() => expect(action).toHaveBeenCalledTimes(2));
+    await screen.findByText("0 of 500 recipes in so far.");
+    // So it asks again 3 s later, not 12.
+    await act(async () => vi.advanceTimersByTimeAsync(3_500));
+    await vi.waitFor(() => expect(action).toHaveBeenCalledTimes(3));
+  });
+
   it("keeps asking at the same pace, seen or not, when the page is what keeps the move-in going", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const action = vi.fn(() => ({ error: null }));

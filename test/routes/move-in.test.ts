@@ -221,14 +221,22 @@ describe("the Move in page", () => {
       expect((await load(location)).move).toMatchObject({ status: "queued", finished: false, runsOnServer: true });
     });
 
-    it("says how long is left from the rate so far while it runs, and nothing once it's finished", async () => {
+    it("says how long is left from the rate since recipes began to come in, and nothing before that or once it's finished", async () => {
       const { location, jobId } = await started();
-      // 100 of 500 in 130 s: 400 more at that rate is 520 s, about 9 minutes (away from a minute's edge, so the test's own time doesn't tip it).
-      const twoMinutesAgo = new Date(Date.now() - 130_000).toISOString();
-      await d1.binding.prepare(`UPDATE "ImportJob" SET "createdAt" = ?, "status" = 'running'`).bind(twoMinutesAgo).run();
+      // The job waited and read its backup for 20 minutes; recipes began coming in when that phase was done.
+      const twentyMinutesAgo = new Date(Date.now() - 20 * 60_000).toISOString();
+      await d1.binding.prepare(`UPDATE "ImportJob" SET "createdAt" = ?, "status" = 'running'`).bind(twentyMinutesAgo).run();
       await d1.binding
         .prepare(`INSERT INTO "ImportEntityCount" ("jobId", "entity", "found", "created", "updated", "unchanged", "skipped", "failed") VALUES (?, 'recipes', 500, 100, 0, 0, 0, 0)`)
         .bind(jobId)
+        .run();
+      // No recipes phase yet, so no rate to go on.
+      expect((await load(location)).move?.timeLeft).toBeNull();
+      // 100 of 500 in 130 s since then: 400 more at that rate is 520 s, about 9 minutes (away from a minute's edge, so the test's own time doesn't tip it).
+      const recipesBegan = new Date(Date.now() - 130_000).toISOString();
+      await d1.binding
+        .prepare(`INSERT INTO "ImportEvent" ("id", "jobId", "seq", "level", "kind", "message", "createdAt") VALUES ('event_found', ?, 1, 'info', 'phase-done', 'Found 500 recipes.', ?)`)
+        .bind(jobId, recipesBegan)
         .run();
       expect((await load(location)).move?.timeLeft).toBe("About 9 minutes left");
       await d1.binding.prepare(`UPDATE "ImportJob" SET "status" = 'done'`).run();

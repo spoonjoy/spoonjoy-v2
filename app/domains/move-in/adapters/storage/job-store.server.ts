@@ -123,7 +123,7 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
 export interface MoveInProgress {
   job: Omit<MoveInJob, "archiveKey"> & { archiveName: string | null; createdAt: string; updatedAt: string; finishedAt: string | null };
   counts: Record<string, MoveInCounts>;
-  events: Array<MoveInEvent & { seq: number }>;
+  events: Array<MoveInEvent & { seq: number; createdAt: string }>;
   /** The newest recipes this move-in brought in that are still in the kitchen, newest first, with their photos. */
   latest: Array<{ id: string; title: string; photoUrl: string | null }>;
 }
@@ -145,7 +145,7 @@ export async function readMoveInProgress(db: D1ReadDatabase, { ownerId, jobId }:
   const [[job], counts, events, latest] = await d1ReadBatch(db, [
     [`SELECT ${PROGRESS_COLUMNS} FROM "ImportJob" WHERE "id" = ? AND "ownerId" = ?`, jobId, ownerId],
     [`SELECT * FROM "ImportEntityCount" WHERE "jobId" = ? ORDER BY "entity"`, jobId],
-    [`SELECT "seq", "level", "kind", "entity", "sourceKey", "targetId", "message" FROM "ImportEvent" WHERE "jobId" = ? ORDER BY "seq"`, jobId],
+    [`SELECT "seq", "level", "kind", "entity", "sourceKey", "targetId", "message", "createdAt" FROM "ImportEvent" WHERE "jobId" = ? ORDER BY "seq"`, jobId],
     // A move-in's records are all under its source, so this reads one source's records, not every one.
     [
       `SELECT r."id", r."title", c."imageUrl" AS "photoUrl" FROM "SourceRecord" s

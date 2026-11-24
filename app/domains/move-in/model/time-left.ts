@@ -9,8 +9,8 @@ export const TIME_LEFT_AFTER_RECIPES = 20;
 const MINUTE_MS = 60_000;
 
 /**
- * "About 4 minutes left" (rounded up) or "Less than a minute left", from the recipes in so far since the move-in
- * started; null until TIME_LEFT_AFTER_MS and TIME_LEFT_AFTER_RECIPES have both gone by, and once every recipe is in.
+ * "About 4 minutes left" (rounded up) or "Less than a minute left", from the recipes in so far since they began to
+ * come in; null until TIME_LEFT_AFTER_MS and TIME_LEFT_AFTER_RECIPES have both gone by, and once every recipe is in.
  */
 export function timeLeft({ done, found, startedAt, now }: { done: number; found: number; startedAt: string; now: Date }): string | null {
   const elapsedMs = now.getTime() - Date.parse(startedAt);
