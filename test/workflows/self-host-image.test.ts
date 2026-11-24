@@ -283,6 +283,8 @@ describe("Self-host Image workflow", () => {
     expect(script).not.toContain("'");
     expect(stepNamed(image, /Stop the server/).run).toContain("docker rm -f sj-restart || true");
     expect(runs(image)).toMatch(/sanitize-journey-traces\.mjs [^\n]*test-results-self-host-move-in-restart-after/);
+  });
+
   it("signs in at a plain http network address the server declares, on its own bridge network made before the browser starts", () => {
     const step = stepNamed(image, /Sign in at a plain http network address/);
     const run = step.run ?? "";
