@@ -4,7 +4,7 @@
 // runs there and the page only shows how far it has got; elsewhere each poll keeps it running.
 import { Utensils } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { data, Form as RouterForm, redirect, useActionData, useFetcher, useLoaderData, useNavigation } from "react-router";
+import { data, Form as RouterForm, redirect, useActionData, useFetcher, useLoaderData, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/move-in";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Button } from "~/components/ouro/button/button";
@@ -39,6 +39,7 @@ import { isFlagOn } from "~/domains/platform";
 import { cloudflarePlatform } from "~/domains/platform/index.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { getDb } from "~/lib/db.server";
+import { revalidateUnlessNetworkFailure, submitOrReportLostRequest } from "~/lib/network-failure";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { CookbookPage } from "~/components/cookbook/page";
@@ -193,6 +194,18 @@ export async function action({ request, context }: Route.ActionArgs) {
   return redirect(`/move-in?job=${started.jobId}`);
 }
 
+// A submission that got no answer no longer shows the error page: in Journeys run 45399041506 one unanswered
+// progress check replaced a running move-in with "That's on our side". A lost upload shows the no-answer
+// message on the form. A lost progress check shows nothing and isn't sent again here, since the page asks
+// again on its own a few seconds later.
+export async function clientAction({ serverAction }: Route.ClientActionArgs) {
+  return submitOrReportLostRequest(serverAction, { intent: null, resend: null });
+}
+
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return revalidateUnlessNetworkFailure(args, args.defaultShouldRevalidate);
+}
+
 function plural(n: number, one: string, many = `${one}s`) {
   return `${n} ${n === 1 ? one : many}`;
 }
@@ -241,13 +254,15 @@ function Progress({ move }: { move: MoveInView }) {
   // is asked at that pace, seen or not. A server-side one is asked less often each time it shows no
   // change, not at all while the page is out of sight, and at once when the page is back in view. A
   // change in the count, or in the recipes found once the backup is read, starts the pace over.
+  // Each check sends the same plain form, so a check that got no answer and the next one that did
+  // are the same request, which is how Journeys knows the page recovered.
   useEffect(() => {
     let wait = POLL_MS;
     let timer: ReturnType<typeof setTimeout>;
     const ask = () => {
       const current = latest.current;
       const unseen = runsOnServer && document.visibilityState === "hidden";
-      if (current.state === "idle" && !unseen) current.submit({ intent: "continue", jobId }, { method: "post", encType: "multipart/form-data" });
+      if (current.state === "idle" && !unseen) current.submit({ intent: "continue", jobId }, { method: "post" });
       if (runsOnServer) wait = Math.min(wait * 2, POLL_MAX_MS);
       timer = setTimeout(ask, wait);
     };

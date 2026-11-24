@@ -87,9 +87,11 @@ async function load(url: string, { as = ownerId, flags }: { as?: string; flags?:
   } as never);
 }
 
-async function post(fields: Record<string, string | UndiciFile>, { as = ownerId, headers = {}, flags }: { as?: string; headers?: Record<string, string>; flags?: string } = {}) {
-  const body = new UndiciFormData();
-  for (const [name, value] of Object.entries(fields)) body.append(name, value);
+// `plain` sends the fields url-encoded, as the page's progress checks are sent; otherwise they go as multipart.
+async function post(fields: Record<string, string | UndiciFile>, { as = ownerId, headers = {}, flags, plain = false }: { as?: string; headers?: Record<string, string>; flags?: string; plain?: boolean } = {}) {
+  const form = new UndiciFormData();
+  for (const [name, value] of Object.entries(fields)) form.append(name, value);
+  const body = plain ? new URLSearchParams(fields as Record<string, string>) : form;
   return action({
     request: new UndiciRequest("http://localhost/move-in", { method: "POST", headers: { cookie: await cookie(as), ...headers }, body }) as unknown as Request,
     params: {},
@@ -209,7 +211,7 @@ describe("the Move in page", () => {
     const jobId = new URL(location, "http://localhost").searchParams.get("job") as string;
     await Promise.all(waiting);
     waiting = [];
-    expect(await post({ intent: "continue", jobId })).toEqual({ error: null });
+    expect(await post({ intent: "continue", jobId }, { plain: true })).toEqual({ error: null });
     expect(waiting).toHaveLength(1);
     await Promise.all(waiting);
   });
