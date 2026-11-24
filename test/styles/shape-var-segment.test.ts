@@ -1,14 +1,10 @@
 import postcss from "postcss";
 import { describe, expect, it } from "vitest";
-import { hasShapeVarSegment, shapeVarFallback } from "../../scripts/shape-var-fallback.mjs";
 import { squircleCorners } from "../../app/lib/ouro/squircle-corners";
-import { readStylesheet } from "../styles/theme-css";
+import { hasShapeVarSegment } from "./shape-var-segment";
+import { readStylesheet } from "./theme-css";
 
 const NOTCH = "shape(nonzero from 0 0, hline to 100%, vline to 100%, hline to 0, close, var(--sq-notch))";
-
-function run(css: string, plugins = [shapeVarFallback()]): string {
-  return postcss(plugins).process(css, { from: undefined }).css;
-}
 
 describe("hasShapeVarSegment", () => {
   it("finds a var() that is a whole segment of a shape(), with or without a fallback", () => {
@@ -26,26 +22,16 @@ describe("hasShapeVarSegment", () => {
   });
 });
 
-describe("shapeVarFallback", () => {
-  it("reads such a shape() through --sj-clip-path, which does not inherit, on the same rule", () => {
-    const out = run(`[data-ouro-bite] { clip-path: ${NOTCH}; }`);
-    expect(out).toMatch(/^@property --sj-clip-path \{\s*syntax: "\*";\s*inherits: false;?\s*\}/);
-    expect(out).toContain(`[data-ouro-bite] { --sj-clip-path: ${NOTCH}; clip-path: var(--sj-clip-path); }`);
-  });
-
-  it("changes nothing when no clip-path has a var() segment", () => {
-    const css = ".a { clip-path: inset(0 round var(--r)); } .b { clip-path: shape(from 0 0, hline to var(--w), close); }";
-    expect(run(css)).toBe(css);
-  });
-
-  it("leaves no var() segment in a shape() in Spoonjoy's built stylesheet, ouro-base and squircleCorners() included", () => {
-    const out = run(readStylesheet(), [squircleCorners(), shapeVarFallback()]);
-    const root = postcss.parse(out);
+describe("Spoonjoy's built stylesheet", () => {
+  it("has no var() segment in a shape() outside a custom property, so Chromium before 158 reads all of it", () => {
+    // Ouro UI reads its notch and squircle shape() values back through custom properties since v1.3.520
+    // (ourostack/ouro-ui#3491); this keeps an update or Spoonjoy's own CSS from bringing the bare form back.
+    const out = postcss([squircleCorners()]).process(readStylesheet(), { from: undefined }).css;
     const offenders: string[] = [];
-    root.walkDecls((decl) => {
+    postcss.parse(out).walkDecls((decl) => {
       if (!decl.prop.startsWith("--") && hasShapeVarSegment(decl.value)) offenders.push(`${decl.prop}: ${decl.value.slice(0, 60)}`);
     });
     expect(offenders).toEqual([]);
-    expect(out).toContain("clip-path: var(--sj-clip-path)");
+    expect(out).toContain("clip-path: var(--sq-clip)");
   });
 });
