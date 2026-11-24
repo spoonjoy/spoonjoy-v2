@@ -186,8 +186,7 @@ describe("Spoonjoy UI design-system hygiene", () => {
       default: { plugins: { postcssPlugin?: string }[] };
     };
     const names = config.plugins.map((plugin) => plugin.postcssPlugin);
-    // shapeVarFallback() rewrites squircleCorners()' clip path for Chromium before 158, so it runs after it.
-    expect(names).toEqual(["@tailwindcss/postcss", "autoprefixer", "ouro-squircle-corners", "spoonjoy-shape-var-fallback"]);
+    expect(names).toEqual(["@tailwindcss/postcss", "autoprefixer", "ouro-squircle-corners"]);
     expect(readSourceFile("vite.config.ts")).not.toMatch(/\bpostcss\s*:/);
     expect(readSourceFile(".storybook/vite.config.ts")).not.toMatch(/\bpostcss\s*:/);
   });
@@ -203,7 +202,7 @@ describe("Spoonjoy UI design-system hygiene", () => {
     expect(out).toMatch(
       /@supports \(not \(corner-shape: squircle\)\) and \(clip-path: shape\(from 0 0, close\)\) \{\s*\.sj-counter-card \{\s*--sq-tl: var\(--ouro-sq-r\);/,
     );
-    expect(out).toMatch(/\.sj-counter-card \{\s*clip-path: shape\(nonzero from -9999px -9999px[^;]*curve by/);
+    expect(out).toMatch(/\.sj-counter-card \{\s*--sq-clip: shape\(nonzero from -9999px -9999px[^;]*curve by[^;]*;\s*clip-path: var\(--sq-clip\)/);
   });
 
   it("keeps page mastheads from stacking a top rule under the desktop nav", () => {
