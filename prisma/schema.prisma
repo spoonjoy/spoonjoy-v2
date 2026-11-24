@@ -1174,7 +1174,7 @@ model ServerInvite {
   createdAt   DateTime  @default(now())
 }
 
-// Platform jobs: one row per job key, so a job is enqueued and run once (migrations/0047_platform_job_keys.sql).
+// Platform jobs: one row per job key, so a job is enqueued and run once (migrations/0049_platform_job_keys.sql).
 model PlatformJobKey {
   key        String    @id
   type       String
