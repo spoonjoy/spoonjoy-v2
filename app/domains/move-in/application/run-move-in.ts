@@ -224,8 +224,8 @@ async function bringOrganizers({ job, organizers }: Run, draft: RecipeDraft, rec
   try {
     await organizers.attach({ ownerId: job.ownerId, recipeId, sourceId: job.sourceId as string, jobId: job.id, tags, categories, tools });
   } catch (error) {
-    const message = `${draft.title} moved in without its tags, categories and tools: ${(error as Error).message}. Moving the same backup in again adds them.`;
-    report.events.push(event("item-degraded", message, { entity: "recipes", sourceKey: draft.sourceKey, targetId: recipeId }));
+    const message = `${draft.title} moved in without some of its tags, categories and tools. Moving the same backup in again adds them.`;
+    report.events.push(event("item-degraded", message, { entity: "recipes", sourceKey: draft.sourceKey, targetId: recipeId, detail: describeError(error) }));
   }
 }
 

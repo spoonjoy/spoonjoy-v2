@@ -29,7 +29,11 @@ let manifest: Manifest | undefined;
 const backups = new Map<string, Buffer>();
 /** One recipe with a photo and tags from each version's kitchen, to find after it moves in, with its organizers' slugs. */
 const samples = new Map<string, { title: string; tags: string[]; categories: string[]; tools: string[] }>();
-/** Each version's tags, categories and tools on its recipes, each counted once by Kitchen's slug, as the finish screen counts them. */
+/**
+ * Each version's tags, categories and tools that are on at least one of its recipes, read from the backup's own link
+ * tables rather than through the move-in's parser. Each proof kitchen names its organizers apart, so one id is one
+ * organizer on the finish screen.
+ */
 const organizerCounts = new Map<string, { tags: number; categories: number; tools: number }>();
 
 /** The manifest and each version's small kitchen backup, read once per worker. */
@@ -51,10 +55,14 @@ async function fixtures(): Promise<Manifest> {
     const sample = drafts.find((draft) => backup.hasFile(draft.photoPath) && draft.tags.length);
     if (!sample) throw new Error(`The ${source.version} kitchen has no recipe with a photo and tags`);
     samples.set(source.version, { title: sample.title, tags: slugs(sample.tags), categories: slugs(sample.categories), tools: slugs(sample.tools) });
+    const used = (links: string, column: string, table: string) => {
+      const exists = new Set(backup.database.rows(table).map((row) => guid(row.id)));
+      return new Set(backup.database.rows(links).map((row) => guid(row[column])).filter((id) => exists.has(id))).size;
+    };
     organizerCounts.set(source.version, {
-      tags: slugs(drafts.flatMap((draft) => draft.tags)).length,
-      categories: slugs(drafts.flatMap((draft) => draft.categories)).length,
-      tools: slugs(drafts.flatMap((draft) => draft.tools)).length,
+      tags: used("recipes_to_tags", "tag_id", "tags"),
+      categories: used("recipes_to_categories", "category_id", "categories"),
+      tools: used("recipes_to_tools", "tool_id", "tools"),
     });
   }
   if (groups.size !== read.sources.length) throw new Error("Two proof kitchens share a kitchen id, so they would move in as one");
@@ -164,6 +172,9 @@ export async function moveInAgain(version: string, { page }: Pick<JourneyArgs, "
 }
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** A backup id, whichever way its version writes it. */
+const guid = (id: unknown) => String(id).toLowerCase().replace(/-/g, "");
 
 /** The organizers these names make in an empty kitchen, by slug, once each: Kitchen's own matching. */
 function slugs(names: string[]): string[] {

@@ -36,23 +36,25 @@ export async function attachMovedInOrganizers(db: OrganizerDb, moved: MovedInOrg
     const on = new Set((await store.organizersOnRecipe(moved.recipeId, kind)).map((organizer) => organizer.id));
     const add = linked.filter((organizer) => !on.has(organizer.id)).map((organizer) => ({ recipeId: moved.recipeId, organizerId: organizer.id }));
     if (add.length) await store.apply({ add, remove: [] });
+    // Kept per move-in, so a later move-in of the same backup counts its own and leaves this one's as it was.
     for (const organizer of linked) {
-      const key = { sourceId: moved.sourceId, sourceTable: table, sourceKey: organizer.slug };
+      const key = { sourceId: moved.sourceId, sourceTable: table, sourceKey: `${moved.jobId}/${organizer.slug}` };
       await db.sourceRecord.upsert({
         where: { sourceId_sourceTable_sourceKey: key },
         create: { id: crypto.randomUUID(), ...key, targetType: "Organizer", targetId: organizer.id, lastJobId: moved.jobId },
-        update: { targetId: organizer.id, lastJobId: moved.jobId },
+        update: { targetId: organizer.id },
       });
     }
   }
 }
 
-/** How many tags, categories and tools a move-in put on its recipes, each counted once, among those still in the kitchen. */
+/** How many tags, categories and tools a move-in put on its recipes, each counted once, among those still on a recipe in the kitchen. */
 export async function readMoveInOrganizerCounts(db: OrganizerDb, { ownerId, sourceId, jobId }: { ownerId: string; sourceId: string; jobId: string }): Promise<MoveInOrganizerCounts> {
   const rows = await db.$queryRaw<Array<{ entity: string; count: number | bigint }>>`
-    SELECT s."sourceTable" AS "entity", COUNT(*) AS "count" FROM "SourceRecord" s
+    SELECT s."sourceTable" AS "entity", COUNT(DISTINCT s."targetId") AS "count" FROM "SourceRecord" s
     JOIN "Organizer" o ON o."id" = s."targetId" AND o."ownerId" = ${ownerId}
     WHERE s."sourceId" = ${sourceId} AND s."lastJobId" = ${jobId} AND s."targetType" = 'Organizer'
+      AND EXISTS (SELECT 1 FROM "RecipeOrganizer" ro JOIN "Recipe" r ON r."id" = ro."recipeId" AND r."deletedAt" IS NULL WHERE ro."organizerId" = o."id")
     GROUP BY s."sourceTable"`;
   const counts: MoveInOrganizerCounts = { tags: 0, categories: 0, tools: 0 };
   for (const row of rows) counts[row.entity as keyof MoveInOrganizerCounts] = Number(row.count);
