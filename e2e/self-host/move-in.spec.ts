@@ -37,6 +37,8 @@ test.describe("A move-in on a self-hosted server", () => {
     await page.goto("/move-in");
     const main = page.getByRole("main");
     await expect(main.getByRole("heading", { level: 1, name: "Bring your kitchen with you." })).toBeVisible();
+    // The page offers a server address or a backup; this one moves in from the backup.
+    await main.getByRole("radio", { name: /^From a backup/ }).check();
     await page.getByLabel(requiredLabel("Backup zip"), { exact: true }).setInputFiles({ name: `kitchen-${source.version}.zip`, mimeType: "application/zip", buffer: backup });
     await page.getByRole("button", { name: "Move in", exact: true }).click();
     await expect(page).toHaveURL(/\/move-in\?job=movein_/);
