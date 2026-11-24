@@ -8,7 +8,8 @@ import { proofFixtures } from "../journeys/support/move-in-fixtures";
 
 // A move-in that the server restarts in the middle of carries on by itself, with nobody on the page.
 // The Self-host Image workflow runs this in two halves around a `docker restart`:
-// - before: a cook starts moving the large proof kitchen in and leaves as soon as it is accepted;
+// - before: a cook starts moving the large proof kitchen in and leaves as soon as it is accepted, and the workflow
+//   kills the server then;
 // - after: the move-in finishes with no page open to nudge it. Progress is read with JavaScript off,
 //   because the open page asks the server to pick up a stalled move-in, which would hide the bug.
 // SPOONJOY_SELF_HOST_MOVE_IN_RESTART picks the half; without it, this is skipped.
@@ -53,13 +54,15 @@ test.describe("A move-in on a self-hosted server that restarts", () => {
     await page.goto("/move-in");
     await page.getByLabel(requiredLabel("Backup zip"), { exact: true }).setInputFiles({ name: `kitchen-${source.version}.zip`, mimeType: "application/zip", buffer: backup });
     await page.getByRole("button", { name: "Move in", exact: true }).click();
-    // The move-in is accepted. The cook leaves at once and the workflow stops the server, since 500 recipes can come in
-    // within two minutes; the workflow then checks the move-in was unfinished when the server stopped.
+    // The move-in is accepted. The cook leaves at once, and the state file tells the workflow to kill the server: 500
+    // recipes come in within seconds, so it must land at once. The workflow then checks the move-in was unfinished.
     await expect(page).toHaveURL(/\/move-in\?job=movein_/);
+    const url = page.url();
+    await page.goto("about:blank");
     const recipes = read.kitchens.large.counts.recipes;
 
     mkdirSync(dirname(statePath), { recursive: true });
-    const state: State = { email, password: plainPassword, url: page.url(), recipes };
+    const state: State = { email, password: plainPassword, url, recipes };
     writeFileSync(statePath, JSON.stringify(state));
   });
 
