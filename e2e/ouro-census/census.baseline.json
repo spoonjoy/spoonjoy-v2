@@ -23,14 +23,6 @@
           "count": 1
         },
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 10
-        },
-        {
-          "identity": "button \"\" [image-field/choose] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Cancel\" [image-cropper/cancel] in dialog \"Crop your photo\"",
           "count": 1
         },
@@ -43,39 +35,7 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [switch/hidden-input] in main",
-          "count": 4
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "radio \"\" [radio-group/circle] in main",
-          "count": 2
-        },
-        {
-          "identity": "radio \"\" [radio-group/hidden-input] in main",
-          "count": 2
-        },
-        {
           "identity": "slider \"Zoom\" [slider/thumb] in group \"Zoom\"",
-          "count": 1
-        },
-        {
-          "identity": "switch \"\" [switch/track] in main",
-          "count": 4
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
           "count": 1
         }
       ],
@@ -125,10 +85,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [switch/hidden-input] in group \"What to notify me about\"",
-          "count": 4
-        },
-        {
           "identity": "link \"Download my data\" [button/root] in main",
           "count": 1
         },
@@ -139,10 +95,6 @@
         {
           "identity": "link \"What gets deleted\" [link/root] in main",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [radio-group/hidden-input] in main",
-          "count": 2
         },
         {
           "identity": "radio \"Only me\" [radio-group/circle] in main",
@@ -227,10 +179,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [switch/hidden-input] in group \"What to notify me about\"",
-          "count": 4
-        },
-        {
           "identity": "link \"Download my data\" [button/root] in main",
           "count": 1
         },
@@ -241,10 +189,6 @@
         {
           "identity": "link \"What gets deleted\" [link/root] in main",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [radio-group/hidden-input] in main",
-          "count": 2
         },
         {
           "identity": "radio \"Only me\" [radio-group/circle] in main",
@@ -473,39 +417,11 @@
       ],
       "delete-cookbook-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Delete it\" [confirm-dialog/confirm] in alertdialog \"Delete this cookbook?\"",
           "count": 1
         },
         {
           "identity": "button \"Keep it\" [confirm-dialog/cancel] in alertdialog \"Delete this cookbook?\"",
-          "count": 1
-        },
-        {
-          "identity": "combobox \"\" [native-select/select] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [item/link] in region \"Contents\"",
-          "count": 2
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
           "count": 1
         }
       ],
@@ -561,39 +477,11 @@
       ],
       "remove-recipe-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Keep it\" [confirm-dialog/cancel] in alertdialog \"Remove from cookbook?\"",
           "count": 1
         },
         {
           "identity": "button \"Remove it\" [confirm-dialog/confirm] in alertdialog \"Remove from cookbook?\"",
-          "count": 1
-        },
-        {
-          "identity": "combobox \"\" [native-select/select] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [item/link] in region \"Contents\"",
-          "count": 2
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
           "count": 1
         }
       ]
@@ -1801,10 +1689,6 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Plan a recipe\"",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Note\" [text-field/input] in region \"Add a note\"",
           "count": 1
         },
@@ -1834,10 +1718,6 @@
         },
         {
           "identity": "checkbox \"\" [checkbox/box] in form \"Filter my recipes\"",
-          "count": 6
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in form \"Filter my recipes\"",
           "count": 6
         },
         {
@@ -1875,14 +1755,6 @@
         {
           "identity": "button \"Search\" [button/root] in search",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in group \"Has\"",
-          "count": 3
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in group \"Leave out\"",
-          "count": 3
         },
         {
           "identity": "checkbox \"Saucepan\" [checkbox/box] in group \"Has\"",
@@ -2029,10 +1901,6 @@
           "count": 1
         },
         {
-          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
-          "count": 2
-        },
-        {
           "identity": "radio \"Only me\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
@@ -2055,56 +1923,12 @@
       ],
       "delete-step-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 2
-        },
-        {
-          "identity": "button \"\" [button/root] in region \"Recipe steps\"",
-          "count": 9
-        },
-        {
-          "identity": "button \"\" [image-field/choose] in group \"Recipe details\"",
-          "count": 1
-        },
-        {
           "identity": "button \"Cancel\" [confirm-dialog/cancel] in alertdialog \"Delete step\"",
           "count": 1
         },
         {
           "identity": "button \"Confirm\" [confirm-dialog/confirm] in alertdialog \"Delete step\"",
           "count": 1
-        },
-        {
-          "identity": "link \"\" [button/root] in region \"Recipe steps\"",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in region \"Recipe steps\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "radio \"\" [radio-group/circle] in group \"Recipe details\"",
-          "count": 2
-        },
-        {
-          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
-          "count": 2
-        },
-        {
-          "identity": "textbox \"\" [text-area/input] in group \"Recipe details\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in group \"Recipe details\"",
-          "count": 2
         }
       ]
     },
@@ -2141,10 +1965,6 @@
         {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 5
         },
         {
           "identity": "checkbox \"Step 1: Cook the rice\" [checklist/box] in group \"Ingredients\"",
@@ -2189,14 +2009,6 @@
       ],
       "fork-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 7
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Cancel\" [button/root] in dialog \"Fork \\\"Lemon Herb Rice\\\"?\"",
           "count": 1
         },
@@ -2206,26 +2018,6 @@
         },
         {
           "identity": "button \"Fork\" [button/root] in dialog \"Fork \\\"Lemon Herb Rice\\\"?\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 5
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
           "count": 1
         }
       ]
@@ -2259,10 +2051,6 @@
         {
           "identity": "link \"← Back to recipes\" [link/root] in main",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
-          "count": 2
         },
         {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
@@ -2335,10 +2123,6 @@
           "count": 1
         },
         {
-          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
-          "count": 2
-        },
-        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
@@ -2399,10 +2183,6 @@
         {
           "identity": "link \"← Back to recipes\" [link/root] in main",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
-          "count": 2
         },
         {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
@@ -2509,10 +2289,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 5
-        },
-        {
           "identity": "checkbox \"Step 1: Cook the rice\" [checklist/box] in group \"Ingredients\"",
           "count": 1
         },
@@ -2615,10 +2391,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 2
-        },
-        {
           "identity": "checkbox \"chicken stock\" [checklist/box] in group \"Ingredients\"",
           "count": 1
         },
@@ -2647,23 +2419,11 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Cook the rice\"",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Scale\" [number-field/input] in region \"Cook the rice\"",
           "count": 1
         }
       ],
       "covers-dialog": [
-        {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
         {
           "identity": "button \"Close\" [dialog/close] in dialog \"Manage covers\"",
           "count": 1
@@ -2689,18 +2449,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in region \"Photos\"",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 5
-        },
-        {
           "identity": "checkbox \"Also log this as a cook\" [checkbox/box] in region \"Photos\"",
           "count": 1
         },
@@ -2710,18 +2458,6 @@
         },
         {
           "identity": "generic \"Photos Recipe covers\" [dialog/content] in dialog \"Manage covers\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
           "count": 1
         },
         {
@@ -2761,10 +2497,6 @@
         {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 5
         },
         {
           "identity": "checkbox \"Step 1: Cook the rice\" [checklist/box] in group \"Ingredients\"",
@@ -2809,51 +2541,15 @@
       ],
       "delete-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Cancel\" [confirm-dialog/cancel] in alertdialog \"Delete \\\"Lemon Herb Rice\\\"?\"",
           "count": 1
         },
         {
           "identity": "button \"Delete\" [confirm-dialog/confirm] in alertdialog \"Delete \\\"Lemon Herb Rice\\\"?\"",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 5
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
         }
       ],
       "log-cook-dialog": [
-        {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
         {
           "identity": "button \"Cancel\" [button/root] in dialog \"Log a cook\"",
           "count": 1
@@ -2871,26 +2567,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 5
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Cooked at\" [field/control] in dialog \"Log a cook\"",
           "count": 1
         },
@@ -2904,14 +2580,6 @@
         }
       ],
       "save-dialog": [
-        {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
         {
           "identity": "button \"Close\" [dialog/close] in dialog \"Save to cookbook\"",
           "count": 1
@@ -2929,39 +2597,11 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 5
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Create new cookbook\" [text-field/input] in dialog \"Save to cookbook\"",
           "count": 1
         }
       ],
       "variation-dialog": [
-        {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
         {
           "identity": "button \"Cancel\" [button/root] in dialog \"Make a variation of \\\"Lemon Herb Rice\\\"?\"",
           "count": 1
@@ -2972,26 +2612,6 @@
         },
         {
           "identity": "button \"Make variation\" [button/root] in dialog \"Make a variation of \\\"Lemon Herb Rice\\\"?\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 5
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
           "count": 1
         }
       ]
@@ -3035,10 +2655,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 2
-        },
-        {
           "identity": "checkbox \"chicken stock\" [checklist/box] in group \"Ingredients\"",
           "count": 1
         },
@@ -3064,10 +2680,6 @@
         },
         {
           "identity": "radio \"US\" [segmented-control/segment] in region \"Cook the rice\"",
-          "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Cook the rice\"",
           "count": 1
         },
         {
@@ -3109,10 +2721,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 2
-        },
-        {
           "identity": "checkbox \"lemon\" [checklist/box] in group \"Ingredients\"",
           "count": 1
         },
@@ -3141,10 +2749,6 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Make the dressing\"",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Scale\" [number-field/input] in region \"Make the dressing\"",
           "count": 1
         }
@@ -3169,10 +2773,6 @@
         {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 5
         },
         {
           "identity": "checkbox \"Step 1: Cook the rice\" [checklist/box] in group \"Ingredients\"",
@@ -3767,67 +3367,15 @@
     "shopping-list": {
       "clear-all-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "button \"\" [swipe-actions/action] in main",
-          "count": 3
-        },
-        {
-          "identity": "button \"\" [swipe-actions/menu] in main",
-          "count": 3
-        },
-        {
           "identity": "button \"Clear all\" [confirm-dialog/confirm] in alertdialog \"Start fresh?\"",
           "count": 1
         },
         {
           "identity": "button \"Keep list\" [confirm-dialog/cancel] in alertdialog \"Start fresh?\"",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 3
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 3
-        },
-        {
-          "identity": "combobox \"\" [native-select/select] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "radio \"\" [segmented-control/segment] in main",
-          "count": 3
-        },
-        {
-          "identity": "spinbutton \"\" [field/control] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
-          "count": 1
         }
       ],
       "default": [
-        {
-          "identity": "button \"\" [swipe-actions/action] in group \"Pantry\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [swipe-actions/action] in group \"Produce\"",
-          "count": 2
-        },
         {
           "identity": "button \"Actions for jasmine rice\" [swipe-actions/menu] in group \"Pantry\"",
           "count": 1
@@ -3851,14 +3399,6 @@
         {
           "identity": "button \"List actions\" [button/root] in main",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Pantry\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Produce\"",
-          "count": 2
         },
         {
           "identity": "checkbox \"jasmine rice\" [checklist/box] in group \"Pantry\"",
@@ -3907,14 +3447,6 @@
       ],
       "item-actions-menu": [
         {
-          "identity": "button \"\" [swipe-actions/action] in group \"Pantry\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [swipe-actions/action] in group \"Produce\"",
-          "count": 2
-        },
-        {
           "identity": "button \"Actions for jasmine rice\" [swipe-actions/menu] in group \"Pantry\"",
           "count": 1
         },
@@ -3937,14 +3469,6 @@
         {
           "identity": "button \"List actions\" [button/root] in main",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Pantry\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Produce\"",
-          "count": 2
         },
         {
           "identity": "checkbox \"jasmine rice\" [checklist/box] in group \"Pantry\"",
@@ -3997,55 +3521,11 @@
       ],
       "remove-item-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "button \"\" [swipe-actions/action] in main",
-          "count": 3
-        },
-        {
-          "identity": "button \"\" [swipe-actions/menu] in main",
-          "count": 3
-        },
-        {
           "identity": "button \"Cancel\" [confirm-dialog/cancel] in alertdialog \"Remove \\\"jasmine rice\\\"?\"",
           "count": 1
         },
         {
           "identity": "button \"Remove\" [confirm-dialog/confirm] in alertdialog \"Remove \\\"jasmine rice\\\"?\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 3
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 3
-        },
-        {
-          "identity": "combobox \"\" [native-select/select] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "radio \"\" [segmented-control/segment] in main",
-          "count": 3
-        },
-        {
-          "identity": "spinbutton \"\" [field/control] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
           "count": 1
         }
       ]
@@ -4193,10 +3673,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [switch/hidden-input] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"Cancel\" [button/root] in main",
           "count": 1
         },
@@ -4265,35 +3741,11 @@
       ],
       "remove-ingredient-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 4
-        },
-        {
           "identity": "button \"Keep it\" [confirm-dialog/cancel] in alertdialog \"Remove this ingredient?\"",
           "count": 1
         },
         {
           "identity": "button \"Remove it\" [confirm-dialog/confirm] in alertdialog \"Remove this ingredient?\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-area/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
           "count": 1
         }
       ]
@@ -4322,10 +3774,6 @@
         },
         {
           "identity": "link \"← Back to recipe\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [select/hidden-input] in main",
           "count": 1
         },
         {
@@ -4371,10 +3819,6 @@
           "count": 1
         },
         {
-          "identity": "textbox \"\" [select/hidden-input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Description\" [text-area/input] in main",
           "count": 1
         },
@@ -4388,10 +3832,6 @@
       "default": [
         {
           "identity": "button \"Create\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [switch/hidden-input] in main",
           "count": 1
         },
         {
@@ -4415,10 +3855,6 @@
           "count": 1
         },
         {
-          "identity": "textbox \"\" [select/hidden-input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Description\" [text-area/input] in main",
           "count": 1
         },
@@ -4434,10 +3870,6 @@
       "uses-output-open": [
         {
           "identity": "button \"Create\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [switch/hidden-input] in main",
           "count": 1
         },
         {
@@ -4470,10 +3902,6 @@
         },
         {
           "identity": "switch \"AI Parse\" [switch/track] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [select/hidden-input] in main",
           "count": 1
         },
         {
@@ -4617,10 +4045,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 4
-        },
-        {
           "identity": "checkbox \"cooked chickpeas\" [checklist/box] in group \"Ingredients\"",
           "count": 1
         },
@@ -4638,10 +4062,6 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Roast the chickpeas\"",
           "count": 1
         },
         {
@@ -4664,14 +4084,6 @@
         },
         {
           "identity": "button \"Start cooking\" [button/root] in region \"Crispy Lemon Chickpeas\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 12
-        },
-        {
-          "identity": "checkbox \"\" [switch/hidden-input] in region \"What to try\"",
           "count": 1
         },
         {
@@ -4728,10 +4140,6 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Crispy Lemon Chickpeas\"",
           "count": 1
         },
         {
@@ -4769,14 +4177,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 12
-        },
-        {
-          "identity": "checkbox \"\" [switch/hidden-input] in region \"What to try\"",
-          "count": 1
-        },
-        {
           "identity": "checkbox \"Step 1: Roast the chickpeas\" [checklist/box] in group \"Ingredients\"",
           "count": 1
         },
@@ -4825,19 +4225,11 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [inspector/tag] in -",
-          "count": 9
-        },
-        {
           "identity": "link \"Make it yours: sign up\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Crispy Lemon Chickpeas\"",
           "count": 1
         },
         {
@@ -4903,14 +4295,6 @@
           "count": 1
         },
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 9
-        },
-        {
-          "identity": "button \"\" [image-field/choose] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Cancel\" [image-cropper/cancel] in dialog \"Crop your photo\"",
           "count": 1
         },
@@ -4921,26 +4305,6 @@
         {
           "identity": "button \"Save\" [image-cropper/save] in dialog \"Crop your photo\"",
           "count": 1
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 2
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "radio \"\" [radio-group/circle] in main",
-          "count": 2
-        },
-        {
-          "identity": "radio \"\" [radio-group/hidden-input] in main",
-          "count": 2
         },
         {
           "identity": "slider \"Zoom\" [slider/thumb] in group \"Zoom\"",
@@ -5003,10 +4367,6 @@
         {
           "identity": "link \"What gets deleted\" [link/root] in main",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [radio-group/hidden-input] in main",
-          "count": 2
         },
         {
           "identity": "radio \"Only me\" [radio-group/circle] in main",
@@ -5081,10 +4441,6 @@
         {
           "identity": "link \"What gets deleted\" [link/root] in main",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [radio-group/hidden-input] in main",
-          "count": 2
         },
         {
           "identity": "radio \"Only me\" [radio-group/circle] in main",
@@ -5293,39 +4649,11 @@
       ],
       "delete-cookbook-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Delete it\" [confirm-dialog/confirm] in alertdialog \"Delete this cookbook?\"",
           "count": 1
         },
         {
           "identity": "button \"Keep it\" [confirm-dialog/cancel] in alertdialog \"Delete this cookbook?\"",
-          "count": 1
-        },
-        {
-          "identity": "combobox \"\" [native-select/select] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [item/link] in region \"Contents\"",
-          "count": 2
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
           "count": 1
         }
       ],
@@ -5381,39 +4709,11 @@
       ],
       "remove-recipe-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [collapsible/trigger] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Keep it\" [confirm-dialog/cancel] in alertdialog \"Remove from cookbook?\"",
           "count": 1
         },
         {
           "identity": "button \"Remove it\" [confirm-dialog/confirm] in alertdialog \"Remove from cookbook?\"",
-          "count": 1
-        },
-        {
-          "identity": "combobox \"\" [native-select/select] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [item/link] in region \"Contents\"",
-          "count": 2
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
           "count": 1
         }
       ]
@@ -6625,10 +5925,6 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Plan a recipe\"",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Note\" [text-field/input] in region \"Add a note\"",
           "count": 1
         },
@@ -6658,10 +5954,6 @@
         },
         {
           "identity": "checkbox \"\" [checkbox/box] in form \"Filter my recipes\"",
-          "count": 6
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in form \"Filter my recipes\"",
           "count": 6
         },
         {
@@ -6711,14 +6003,6 @@
         {
           "identity": "button \"Search\" [button/root] in search",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in group \"Has\"",
-          "count": 3
-        },
-        {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in group \"Leave out\"",
-          "count": 3
         },
         {
           "identity": "checkbox \"Saucepan\" [checkbox/box] in group \"Has\"",
@@ -6877,10 +6161,6 @@
           "count": 1
         },
         {
-          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
-          "count": 2
-        },
-        {
           "identity": "radio \"Only me\" [radio-group/circle] in group \"Recipe details\"",
           "count": 1
         },
@@ -6903,56 +6183,12 @@
       ],
       "delete-step-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 2
-        },
-        {
-          "identity": "button \"\" [button/root] in region \"Recipe steps\"",
-          "count": 9
-        },
-        {
-          "identity": "button \"\" [image-field/choose] in group \"Recipe details\"",
-          "count": 1
-        },
-        {
           "identity": "button \"Cancel\" [confirm-dialog/cancel] in alertdialog \"Delete step\"",
           "count": 1
         },
         {
           "identity": "button \"Confirm\" [confirm-dialog/confirm] in alertdialog \"Delete step\"",
           "count": 1
-        },
-        {
-          "identity": "link \"\" [button/root] in region \"Recipe steps\"",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in region \"Recipe steps\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "radio \"\" [radio-group/circle] in group \"Recipe details\"",
-          "count": 2
-        },
-        {
-          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
-          "count": 2
-        },
-        {
-          "identity": "textbox \"\" [text-area/input] in group \"Recipe details\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in group \"Recipe details\"",
-          "count": 2
         }
       ]
     },
@@ -6989,10 +6225,6 @@
         {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 5
         },
         {
           "identity": "checkbox \"Step 1: Cook the rice\" [checklist/box] in group \"Ingredients\"",
@@ -7037,14 +6269,6 @@
       ],
       "fork-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 7
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Cancel\" [button/root] in dialog \"Fork \\\"Lemon Herb Rice\\\"?\"",
           "count": 1
         },
@@ -7054,26 +6278,6 @@
         },
         {
           "identity": "button \"Fork\" [button/root] in dialog \"Fork \\\"Lemon Herb Rice\\\"?\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 5
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
           "count": 1
         }
       ]
@@ -7107,10 +6311,6 @@
         {
           "identity": "link \"← Back to recipes\" [link/root] in main",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
-          "count": 2
         },
         {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
@@ -7183,10 +6383,6 @@
           "count": 1
         },
         {
-          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
-          "count": 2
-        },
-        {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
@@ -7247,10 +6443,6 @@
         {
           "identity": "link \"← Back to recipes\" [link/root] in main",
           "count": 1
-        },
-        {
-          "identity": "radio \"\" [radio-group/hidden-input] in group \"Recipe details\"",
-          "count": 2
         },
         {
           "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
@@ -7357,10 +6549,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 5
-        },
-        {
           "identity": "checkbox \"Step 1: Cook the rice\" [checklist/box] in group \"Ingredients\"",
           "count": 1
         },
@@ -7455,10 +6643,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 2
-        },
-        {
           "identity": "checkbox \"chicken stock\" [checklist/box] in group \"Ingredients\"",
           "count": 1
         },
@@ -7487,23 +6671,11 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Cook the rice\"",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Scale\" [number-field/input] in region \"Cook the rice\"",
           "count": 1
         }
       ],
       "covers-dialog": [
-        {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
         {
           "identity": "button \"Close\" [sheet/close] in dialog \"Manage covers\"",
           "count": 1
@@ -7529,18 +6701,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checkbox/hidden-input] in region \"Photos\"",
-          "count": 2
-        },
-        {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 5
-        },
-        {
           "identity": "checkbox \"Also log this as a cook\" [checkbox/box] in region \"Photos\"",
           "count": 1
         },
@@ -7550,18 +6710,6 @@
         },
         {
           "identity": "generic \"Photos Recipe covers\" [sheet/content] in dialog \"Manage covers\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
           "count": 1
         },
         {
@@ -7601,10 +6749,6 @@
         {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 5
         },
         {
           "identity": "checkbox \"Step 1: Cook the rice\" [checklist/box] in group \"Ingredients\"",
@@ -7649,51 +6793,15 @@
       ],
       "delete-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Cancel\" [confirm-dialog/cancel] in alertdialog \"Delete \\\"Lemon Herb Rice\\\"?\"",
           "count": 1
         },
         {
           "identity": "button \"Delete\" [confirm-dialog/confirm] in alertdialog \"Delete \\\"Lemon Herb Rice\\\"?\"",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 5
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
         }
       ],
       "log-cook-dialog": [
-        {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
         {
           "identity": "button \"Cancel\" [button/root] in dialog \"Log a cook\"",
           "count": 1
@@ -7711,27 +6819,7 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 5
-        },
-        {
           "identity": "generic \"Add a photo to create the recipe cover Photo JPG, PNG, or WebP. 5 MB max. Drag a file here, or choose one Note How did it go? Next time What would you change? Cooked at CancelLog cook\" [sheet/content] in dialog \"Log a cook\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
           "count": 1
         },
         {
@@ -7749,14 +6837,6 @@
       ],
       "save-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Close\" [sheet/close] in dialog \"Save to cookbook\"",
           "count": 1
         },
@@ -7773,39 +6853,11 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 5
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Create new cookbook\" [text-field/input] in dialog \"Save to cookbook\"",
           "count": 1
         }
       ],
       "variation-dialog": [
-        {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
-        },
-        {
-          "identity": "button \"\" [share-button/trigger] in main",
-          "count": 1
-        },
         {
           "identity": "button \"Cancel\" [button/root] in dialog \"Make a variation of \\\"Lemon Herb Rice\\\"?\"",
           "count": 1
@@ -7816,26 +6868,6 @@
         },
         {
           "identity": "button \"Make variation\" [button/root] in dialog \"Make a variation of \\\"Lemon Herb Rice\\\"?\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 5
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 5
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
           "count": 1
         }
       ]
@@ -7867,10 +6899,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 2
-        },
-        {
           "identity": "checkbox \"chicken stock\" [checklist/box] in group \"Ingredients\"",
           "count": 1
         },
@@ -7899,10 +6927,6 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Cook the rice\"",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Scale\" [number-field/input] in region \"Cook the rice\"",
           "count": 1
         }
@@ -7927,10 +6951,6 @@
         {
           "identity": "button \"Previous step\" [pagination/previous] in navigation \"Cook steps\"",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 2
         },
         {
           "identity": "checkbox \"lemon\" [checklist/box] in group \"Ingredients\"",
@@ -7961,10 +6981,6 @@
           "count": 1
         },
         {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Make the dressing\"",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Scale\" [number-field/input] in region \"Make the dressing\"",
           "count": 1
         }
@@ -7989,10 +7005,6 @@
         {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 5
         },
         {
           "identity": "checkbox \"Step 1: Cook the rice\" [checklist/box] in group \"Ingredients\"",
@@ -8563,67 +7575,15 @@
     "shopping-list": {
       "clear-all-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "button \"\" [swipe-actions/action] in main",
-          "count": 3
-        },
-        {
-          "identity": "button \"\" [swipe-actions/menu] in main",
-          "count": 3
-        },
-        {
           "identity": "button \"Clear all\" [confirm-dialog/confirm] in alertdialog \"Start fresh?\"",
           "count": 1
         },
         {
           "identity": "button \"Keep list\" [confirm-dialog/cancel] in alertdialog \"Start fresh?\"",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 3
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 3
-        },
-        {
-          "identity": "combobox \"\" [native-select/select] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "radio \"\" [segmented-control/segment] in main",
-          "count": 3
-        },
-        {
-          "identity": "spinbutton \"\" [field/control] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
-          "count": 1
         }
       ],
       "default": [
-        {
-          "identity": "button \"\" [swipe-actions/action] in group \"Pantry\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [swipe-actions/action] in group \"Produce\"",
-          "count": 2
-        },
         {
           "identity": "button \"Actions for jasmine rice\" [swipe-actions/menu] in group \"Pantry\"",
           "count": 1
@@ -8647,14 +7607,6 @@
         {
           "identity": "button \"List actions\" [button/root] in main",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Pantry\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Produce\"",
-          "count": 2
         },
         {
           "identity": "checkbox \"jasmine rice\" [checklist/box] in group \"Pantry\"",
@@ -8703,14 +7655,6 @@
       ],
       "item-actions-menu": [
         {
-          "identity": "button \"\" [swipe-actions/action] in group \"Pantry\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"\" [swipe-actions/action] in group \"Produce\"",
-          "count": 2
-        },
-        {
           "identity": "button \"Actions for jasmine rice\" [swipe-actions/menu] in group \"Pantry\"",
           "count": 1
         },
@@ -8733,14 +7677,6 @@
         {
           "identity": "button \"List actions\" [button/root] in main",
           "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Pantry\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Produce\"",
-          "count": 2
         },
         {
           "identity": "checkbox \"jasmine rice\" [checklist/box] in group \"Pantry\"",
@@ -8797,55 +7733,11 @@
       ],
       "remove-item-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 3
-        },
-        {
-          "identity": "button \"\" [swipe-actions/action] in main",
-          "count": 3
-        },
-        {
-          "identity": "button \"\" [swipe-actions/menu] in main",
-          "count": 3
-        },
-        {
           "identity": "button \"Cancel\" [confirm-dialog/cancel] in alertdialog \"Remove \\\"jasmine rice\\\"?\"",
           "count": 1
         },
         {
           "identity": "button \"Remove\" [confirm-dialog/confirm] in alertdialog \"Remove \\\"jasmine rice\\\"?\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/box] in main",
-          "count": 3
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in main",
-          "count": 3
-        },
-        {
-          "identity": "combobox \"\" [native-select/select] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "radio \"\" [segmented-control/segment] in main",
-          "count": 3
-        },
-        {
-          "identity": "spinbutton \"\" [field/control] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
           "count": 1
         }
       ]
@@ -8989,10 +7881,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [switch/hidden-input] in main",
-          "count": 1
-        },
-        {
           "identity": "link \"Cancel\" [button/root] in main",
           "count": 1
         },
@@ -9061,35 +7949,11 @@
       ],
       "remove-ingredient-dialog": [
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 4
-        },
-        {
           "identity": "button \"Keep it\" [confirm-dialog/cancel] in alertdialog \"Remove this ingredient?\"",
           "count": 1
         },
         {
           "identity": "button \"Remove it\" [confirm-dialog/confirm] in alertdialog \"Remove this ingredient?\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-area/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [text-field/input] in main",
           "count": 1
         }
       ]
@@ -9118,10 +7982,6 @@
         },
         {
           "identity": "link \"← Back to recipe\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [select/hidden-input] in main",
           "count": 1
         },
         {
@@ -9167,10 +8027,6 @@
           "count": 1
         },
         {
-          "identity": "textbox \"\" [select/hidden-input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Description\" [text-area/input] in main",
           "count": 1
         },
@@ -9184,10 +8040,6 @@
       "default": [
         {
           "identity": "button \"Create\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [switch/hidden-input] in main",
           "count": 1
         },
         {
@@ -9211,10 +8063,6 @@
           "count": 1
         },
         {
-          "identity": "textbox \"\" [select/hidden-input] in main",
-          "count": 1
-        },
-        {
           "identity": "textbox \"Description\" [text-area/input] in main",
           "count": 1
         },
@@ -9230,10 +8078,6 @@
       "uses-output-open": [
         {
           "identity": "button \"Create\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [switch/hidden-input] in main",
           "count": 1
         },
         {
@@ -9266,10 +8110,6 @@
         },
         {
           "identity": "switch \"AI Parse\" [switch/track] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"\" [select/hidden-input] in main",
           "count": 1
         },
         {
@@ -9401,10 +8241,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 4
-        },
-        {
           "identity": "checkbox \"cooked chickpeas\" [checklist/box] in group \"Ingredients\"",
           "count": 1
         },
@@ -9422,10 +8258,6 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Roast the chickpeas\"",
           "count": 1
         },
         {
@@ -9448,14 +8280,6 @@
         },
         {
           "identity": "button \"Start cooking\" [button/root] in region \"Crispy Lemon Chickpeas\"",
-          "count": 1
-        },
-        {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 12
-        },
-        {
-          "identity": "checkbox \"\" [switch/hidden-input] in region \"What to try\"",
           "count": 1
         },
         {
@@ -9512,10 +8336,6 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Crispy Lemon Chickpeas\"",
           "count": 1
         },
         {
@@ -9553,14 +8373,6 @@
           "count": 1
         },
         {
-          "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
-          "count": 12
-        },
-        {
-          "identity": "checkbox \"\" [switch/hidden-input] in region \"What to try\"",
-          "count": 1
-        },
-        {
           "identity": "checkbox \"Step 1: Roast the chickpeas\" [checklist/box] in group \"Ingredients\"",
           "count": 1
         },
@@ -9609,19 +8421,11 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [inspector/tag] in -",
-          "count": 3
-        },
-        {
           "identity": "link \"Make it yours: sign up\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "spinbutton \"\" [number-field/hidden-input] in region \"Crispy Lemon Chickpeas\"",
           "count": 1
         },
         {
