@@ -138,7 +138,7 @@ export async function emailInvite(
     });
   } catch {
     await store.revokeInvite(householdId, invite.id, now);
-    return { ok: false, error: "The invite email couldn't be sent. Make an invite link instead.", unavailable: true };
+    return { ok: false, error: `The mail service turned down the invite to ${to}, so it is turned off. Make an invite link and send it to them yourself.`, unavailable: true };
   }
   return { ok: true, value: { to } };
 }
