@@ -128,6 +128,7 @@ describe("/account/server", () => {
     ]);
     render(<Stub initialEntries={["/account/server"]} />);
     expect(await screen.findByRole("heading", { name: "This server" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "review open reports" })).toHaveAttribute("href", "/moderation");
     expect(screen.getByText("Invite only")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open sign-ups" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Make an invite link" })).toBeInTheDocument();
