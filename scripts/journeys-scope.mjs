@@ -10,11 +10,13 @@
 //     control change and an author should see that before the queue.
 //   - full: anything else (app-wide files such as app/root.tsx, app/routes.ts and app/styles/,
 //     dependencies, config, migrations, scripts, the journeys harness, any unknown path), the `visual` label, too many affected specs, or any doubt.
+// The full suite runs in two parts. A pull request's full run runs part 1 only (`parts` 1); the
+// merge queue runs both before anything merges. The `journeys-full` label runs both parts here too.
 //
 // Run in the Journeys workflow's `changes` job from the base branch's copy of this file, so a pull
 // request cannot change the rules for its own run. It reads the pull request's files and labels
 // and the head commit's journey specs from GitHub at run time (so adding `visual` and re-running
-// the run forces the full suite) and writes `journeys`, `mode`, `census` and `specs` to
+// the run forces the full suite) and writes `journeys`, `mode`, `census`, `specs` and `parts` to
 // GITHUB_OUTPUT with the reason in the job summary.
 import { execFile } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -25,6 +27,8 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 export const FORCE_LABEL = "visual";
+// Runs both parts of the full suite on the pull request, as the merge queue does.
+export const BOTH_PARTS_LABEL = "journeys-full";
 // GitHub lists at most 3,000 files for a pull request; at that size the list may be incomplete.
 export const MAX_LISTED_FILES = 3000;
 
@@ -84,11 +88,14 @@ export function relatedSpecs(files, specs) {
   return specs.filter((spec) => words(path.posix.basename(spec, ".journey.ts")).some((word) => changedWords.has(word)));
 }
 
-const full = (why) => ({ journeys: true, mode: "full", census: true, specs: [], why });
+const full = (why, parts = 1) => ({ journeys: true, mode: "full", census: true, specs: [], parts, why });
 
-// Pure decision: { journeys, mode, census, specs, why }. `specs` lists the head commit's journey
+// Pure decision: { journeys, mode, census, specs, parts, why }. `specs` lists the head commit's journey
 // specs, or is null when they could not be read.
 export function decide({ files, labels, specs = null }) {
+  if (labels.includes(BOTH_PARTS_LABEL)) {
+    return full(`The pull request has the \`${BOTH_PARTS_LABEL}\` label, so both parts of the full suite run.`, 2);
+  }
   if (labels.includes(FORCE_LABEL)) return full(`The pull request has the \`${FORCE_LABEL}\` label.`);
   if (files.length === 0) return full("GitHub listed no changed files, so the full suite runs.");
   if (files.length >= MAX_LISTED_FILES) {
@@ -101,6 +108,7 @@ export function decide({ files, labels, specs = null }) {
       mode: "skip",
       census: false,
       specs: [],
+      parts: 1,
       why: `All ${files.length} changed file(s) are documentation, unit tests or other workflows, so this pull request's Journeys run skips the suite. The merge queue still runs it.`,
     };
   }
@@ -130,6 +138,7 @@ export function decide({ files, labels, specs = null }) {
     mode: "affected",
     census,
     specs: selected,
+    parts: 1,
     why: [
       `Only app code or journey specs changed, so this pull request runs ${selected.length} affected journey spec(s)${census ? " and the HX census" : ""}: ${selected.map((spec) => `\`${spec}\``).join(", ")}.`,
       "The merge queue runs the full suite before anything reaches main. Add the `visual` label and re-run to run the full suite here.",
@@ -214,6 +223,7 @@ export async function runJourneysScope({
   appendFile(output, `mode=${decision.mode}\n`);
   appendFile(output, `census=${decision.census}\n`);
   appendFile(output, `specs=${decision.specs.join(" ")}\n`);
+  appendFile(output, `parts=${decision.parts}\n`);
   appendFile(summary, ["### Journeys scope", "", decision.why, ""].join("\n"));
   return decision;
 }

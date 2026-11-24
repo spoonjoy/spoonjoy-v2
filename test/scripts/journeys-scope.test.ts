@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AFFECTED_PATHS,
   APP_WIDE_PATHS,
+  BOTH_PARTS_LABEL,
   FORCE_LABEL,
   MAX_AFFECTED_SPECS,
   MAX_LISTED_FILES,
@@ -149,6 +150,7 @@ describe("skippableReason", () => {
       "^(?:LICENSE|\\.editorconfig)$",
     ]);
     expect(FORCE_LABEL).toBe("visual");
+    expect(BOTH_PARTS_LABEL).toBe("journeys-full");
   });
 
   it("never lets a file the QA config check reads skip", () => {
@@ -181,6 +183,7 @@ describe("decide", () => {
       mode: "skip",
       census: false,
       specs: [],
+      parts: 1,
       why: expect.stringContaining("All 3 changed file(s)"),
     });
     const mixed = decide({ files: ["docs/a.md", "package.json"], labels: [], specs: SPECS });
@@ -202,8 +205,27 @@ describe("decide", () => {
       mode: "full",
       census: true,
       specs: [],
+      parts: 1,
       why: `The pull request has the \`${FORCE_LABEL}\` label.`,
     });
+  });
+
+  it("runs only part 1 of a pull request's full suite, because the merge queue runs both parts", () => {
+    expect(decide({ files: ["workers/app.ts"], labels: [], specs: SPECS })).toMatchObject({ mode: "full", parts: 1 });
+    expect(decide({ files: ["docs/a.md"], labels: [], specs: SPECS }).parts).toBe(1);
+  });
+
+  it("runs both parts of the full suite for the journeys-full label, whatever changed", () => {
+    for (const files of [["docs/a.md"], ["app/routes/shopping-list.tsx"], ["workers/app.ts"]]) {
+      expect(decide({ files, labels: [FORCE_LABEL, BOTH_PARTS_LABEL], specs: SPECS })).toEqual({
+        journeys: true,
+        mode: "full",
+        census: true,
+        specs: [],
+        parts: 2,
+        why: `The pull request has the \`${BOTH_PARTS_LABEL}\` label, so both parts of the full suite run.`,
+      });
+    }
   });
 
   it("runs the full suite when the file list is empty or may be truncated", () => {
@@ -224,6 +246,7 @@ describe("decide", () => {
         "e2e/journeys/shopping-list.mobile.journey.ts",
         "e2e/journeys/sign-in.journey.ts",
       ],
+      parts: 1,
       why: expect.stringContaining("runs 4 affected journey spec(s) and the HX census"),
     });
   });
@@ -347,6 +370,7 @@ describe("runJourneysScope", () => {
     expect(appendFile).toHaveBeenCalledWith(OUTPUT, "mode=skip\n");
     expect(appendFile).toHaveBeenCalledWith(OUTPUT, "census=false\n");
     expect(appendFile).toHaveBeenCalledWith(OUTPUT, "specs=\n");
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "parts=1\n");
     expect(summary).toContain("### Journeys scope");
     expect(summary).toContain("The merge queue still runs it.");
   });
@@ -366,6 +390,13 @@ describe("runJourneysScope", () => {
     const { decision, appendFile } = await scope(scopeEnv(), githubRunner({ labels: [{ name: FORCE_LABEL }] }));
     expect(decision.journeys).toBe(true);
     expect(appendFile).toHaveBeenCalledWith(OUTPUT, "journeys=true\n");
+  });
+
+  it("reads the labels at run time, so adding journeys-full and re-running runs both parts", async () => {
+    const { decision, appendFile } = await scope(scopeEnv(), githubRunner({ labels: [{ name: BOTH_PARTS_LABEL }] }));
+    expect(decision.parts).toBe(2);
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "mode=full\n");
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "parts=2\n");
   });
 
   it.each([
