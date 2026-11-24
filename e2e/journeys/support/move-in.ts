@@ -18,6 +18,7 @@ import { requiredLabel } from "./forms";
 import { chooseMenuItem } from "./menu";
 import { pathUrl, waitForHydration } from "./navigation";
 import { proofFixtures } from "./move-in-fixtures";
+import { UPLOAD_ATTEMPTS, UPLOAD_CONCURRENCY } from "../../../app/lib/move-in-upload";
 
 // A move-in of a small kitchen polls every few seconds; give it room on a slow QA run.
 const MOVE_IN_MS = 150_000;
@@ -312,8 +313,11 @@ export async function moveInAfterADrop(version: string, { page, expectConsoleErr
   const { recipes } = (await fixtures()).kitchens.small.counts;
   const total = PADDING_PARTS + 1;
   const main = page.getByRole("main");
-  // The dropped parts, and any cut off by the reload, are logged as failed loads.
-  expectConsoleError(/^Failed to load resource: net::/, { url: PART_URL, optional: true });
+  // The dropped parts, and any cut off by the reload, are logged as failed loads: each try of each part in flight, up
+  // to every try of as many parts as go at once, plus those cut off. Each allowance covers one log line.
+  for (let copy = 0; copy < UPLOAD_CONCURRENCY * (UPLOAD_ATTEMPTS + 1); copy++) {
+    expectConsoleError(/^Failed to load resource: net::/, { url: PART_URL, optional: true });
+  }
 
   const sent: number[] = [];
   page.on("requestfinished", async (request) => {
