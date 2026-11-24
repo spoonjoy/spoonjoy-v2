@@ -6,8 +6,10 @@
 // the published proof fixtures (scripts/move-in-proof, release move-in-proof-fixtures-v1), read from
 // the public release and checked against the pinned manifest. Each version's kitchen has its own ids
 // (checked below), and each journey moves into its own fresh scratch account.
-import type { Locator, Page } from "@playwright/test";
-import { test, expect } from "./journey";
+import { open } from "node:fs/promises";
+import { crc32 } from "node:zlib";
+import type { Locator, Page, Request } from "@playwright/test";
+import { test, expect, type ExpectConsoleError } from "./journey";
 import { bytesSource } from "../../../app/domains/move-in/adapters/archive/zip";
 import { openMealieBackup } from "../../../app/domains/move-in/adapters/sources/mealie-backup/backup";
 import { chooseGroup, recipeDrafts } from "../../../app/domains/move-in/adapters/sources/mealie-backup/database";
@@ -74,13 +76,19 @@ function detail(page: Page, term: string) {
   return page.getByRole("main").locator("dt", { hasText: term }).locator("xpath=following-sibling::dd[1]");
 }
 
+/** A part of a backup on its way to storage: the page sends a backup in parts, never through the form. */
+const PART_URL = /\/move-in\/uploads\/[^/]+\/parts\/\d+$/;
+const isPart = (request: Request) => request.method() === "PUT" && PART_URL.test(new URL(request.url()).pathname);
+
 async function dropBackup(page: Page, version: string) {
   await page.getByLabel(requiredLabel("Backup zip"), { exact: true }).setInputFiles({
     name: `kitchen-${version}.zip`,
     mimeType: "application/zip",
     buffer: backups.get(version) as Buffer,
   });
+  const part = page.waitForRequest(isPart);
   await page.getByRole("button", { name: "Move in", exact: true }).click();
+  await part;
   await expect(page).toHaveURL(/\/move-in\?job=movein_/);
 }
 
@@ -220,4 +228,133 @@ export async function inTheKitchen(version: string, { page, verifyAfterReload }:
     }
   });
   await snapshot(page, version, "4-recipe-tags");
+}
+
+const PART_BYTES = 10 * 1024 * 1024;
+/** Padding parts in the big backup: with the kitchen, 21 parts of 10 MiB. */
+const PADDING_PARTS = 20;
+
+/**
+ * Writes a backup of over 200 MB: the version's small kitchen with 20 padding files of 10 MiB in front of
+ * it, stored as they are, which the move-in reads past. The kitchen's own entries are copied byte for byte,
+ * so it moves in as the small kitchen does. Returns the file's path.
+ */
+async function bigBackup(version: string): Promise<string> {
+  await fixtures();
+  const path = test.info().outputPath(`kitchen-${version}-big.zip`);
+  await padBackup(backups.get(version) as Buffer, path);
+  return path;
+}
+
+/** Writes `small` to `path` with the padding in front of its entries. */
+export async function padBackup(small: Buffer, path: string): Promise<void> {
+  const end = small.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  const count = small.readUInt16LE(end + 10);
+  const directorySize = small.readUInt32LE(end + 12);
+  const directoryOffset = small.readUInt32LE(end + 16);
+  const padding = Buffer.alloc(PART_BYTES, 0x5a);
+  const crc = crc32(padding);
+  const file = await open(path, "w");
+  const central: Buffer[] = [];
+  let at = 0;
+  for (let index = 0; index < PADDING_PARTS; index++) {
+    const name = Buffer.from(`spoonjoy-journey-padding/${String(index).padStart(2, "0")}.bin`);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(10, 4);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(PART_BYTES, 18);
+    local.writeUInt32LE(PART_BYTES, 22);
+    local.writeUInt16LE(name.length, 26);
+    const record = Buffer.alloc(46);
+    record.writeUInt32LE(0x02014b50, 0);
+    record.writeUInt16LE(20, 4);
+    record.writeUInt16LE(10, 6);
+    record.writeUInt32LE(crc, 16);
+    record.writeUInt32LE(PART_BYTES, 20);
+    record.writeUInt32LE(PART_BYTES, 24);
+    record.writeUInt16LE(name.length, 28);
+    record.writeUInt32LE(at, 42);
+    central.push(record, name);
+    await file.write(Buffer.concat([local, name]));
+    await file.write(padding);
+    at += local.length + name.length + PART_BYTES;
+  }
+  // The kitchen's entries, moved along by the padding in front of them.
+  await file.write(small.subarray(0, directoryOffset));
+  const directory = Buffer.from(small.subarray(directoryOffset, directoryOffset + directorySize));
+  for (let offset = 0; offset < directory.length; ) {
+    directory.writeUInt32LE(directory.readUInt32LE(offset + 42) + at, offset + 42);
+    offset += 46 + directory.readUInt16LE(offset + 28) + directory.readUInt16LE(offset + 30) + directory.readUInt16LE(offset + 32);
+  }
+  central.push(directory);
+  const directoryBytes = Buffer.concat(central);
+  const record = Buffer.alloc(22);
+  record.writeUInt32LE(0x06054b50, 0);
+  record.writeUInt16LE(count + PADDING_PARTS, 8);
+  record.writeUInt16LE(count + PADDING_PARTS, 10);
+  record.writeUInt32LE(directoryBytes.length, 12);
+  record.writeUInt32LE(at + directoryOffset, 16);
+  await file.write(directoryBytes);
+  await file.write(record);
+  await file.close();
+}
+
+/**
+ * Sends a backup of over 200 MB whose connection drops partway, as on a phone: the parts after the first few
+ * never arrive, the page says how far it got, and the cook reloads and chooses the same file again. The page
+ * carries on from the parts that arrived, sending fewer than all of them, and the backup moves in. Returns
+ * that last check, for the test to run again after a reload.
+ */
+export async function moveInAfterADrop(version: string, { page, expectConsoleError }: Pick<JourneyArgs, "page"> & { expectConsoleError: ExpectConsoleError }): Promise<() => Promise<void>> {
+  test.setTimeout(Math.max(test.info().timeout, 4 * MOVE_IN_MS));
+  const path = await bigBackup(version);
+  const { recipes } = (await fixtures()).kitchens.small.counts;
+  const total = PADDING_PARTS + 1;
+  const main = page.getByRole("main");
+  // The dropped parts, and any cut off by the reload, are logged as failed loads.
+  expectConsoleError(/^Failed to load resource: net::/, { url: PART_URL, optional: true });
+
+  const sent: number[] = [];
+  page.on("requestfinished", async (request) => {
+    if (isPart(request) && (await request.response())?.ok()) sent.push(Number(request.url().split("/").at(-1)));
+  });
+  let through = 0;
+  await page.route(PART_URL, async (route) => {
+    if (route.request().method() === "PUT" && through >= 5) return route.abort("connectionreset");
+    through += 1;
+    return route.continue();
+  });
+  await page.goto("/move-in");
+  await waitForHydration(page);
+  const field = page.getByLabel(requiredLabel("Backup zip"), { exact: true });
+  await field.setInputFiles(path);
+  await page.getByRole("button", { name: "Move in", exact: true }).click();
+  await expect(main.getByText(/ of 2\d\d MB sent$/)).toBeVisible();
+  // Each part is tried five times over about 15 s before the page gives up.
+  await expect(main.getByText(/^The connection dropped after \d+ MB of 2\d\d MB was sent\. Press Move in again with the same file to carry on from there\.$/)).toBeVisible({ timeout: 90_000 });
+  await snapshot(page, version, "6-dropped");
+  const before = sent.length;
+  expect(before, "parts that arrived before the drop").toBeGreaterThanOrEqual(5);
+  expect(before).toBeLessThan(total);
+
+  await page.unroute(PART_URL);
+  await page.reload();
+  await waitForHydration(page);
+  await field.setInputFiles(path);
+  await page.getByRole("button", { name: "Move in", exact: true }).click();
+  await expect(page).toHaveURL(/\/move-in\?job=movein_/, { timeout: MOVE_IN_MS });
+  const again = sent.slice(before);
+  // Only the parts that hadn't arrived went again, and together they make the whole backup.
+  expect(again.length, "parts sent after the reload").toBeLessThan(total);
+  expect(new Set(sent)).toEqual(new Set(Array.from({ length: total }, (_, index) => index + 1)));
+  // The account's v1 kitchen moved in earlier in the run, unless this journey ran alone.
+  const movedIn = async () => {
+    const outcome = main.getByRole("heading", { level: 2, name: new RegExp(`^(${recipes} recipes moved in|Everything was already here)$`) });
+    await expect(outcome).toBeVisible({ timeout: MOVE_IN_MS });
+    await expect(main.getByText(/stayed in the backup/)).toHaveCount(0);
+  };
+  await movedIn();
+  await snapshot(page, version, "7-moved-in-after-a-drop");
+  return movedIn;
 }
