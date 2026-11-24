@@ -10,7 +10,7 @@
 // message: open it, use it, and it is dead.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { expect, type Page, type TestInfo } from "@playwright/test";
+import type { Page, TestInfo } from "@playwright/test";
 
 const execFileAsync = promisify(execFile);
 
@@ -100,6 +100,9 @@ export async function attachCapturedMail(testInfo: TestInfo, page: Page, mail: C
       await mailPage.emulateMedia({ colorScheme });
       await mailPage.setContent(mail.html, { waitUntil: "load" });
       // The button's corners: a squircle where the browser draws one (Chromium), else square, never round.
+      // Loaded here, not at the top: the unit tests import this file, and loading @playwright/test in
+      // Vitest opens a connection to localhost:3000 that nothing answers, which crashes the worker.
+      const { expect } = await import("@playwright/test");
       const corners = await mailPage.locator(".sj-button").evaluate((cell) => {
         const style = getComputedStyle(cell);
         return { squircle: CSS.supports("corner-shape", "squircle"), shape: style.getPropertyValue("corner-shape"), radius: style.borderTopLeftRadius };
