@@ -16,7 +16,7 @@ import { createContext, useContext, useEffect, useRef, type RefObject } from "re
 import { usePostHog } from "~/lib/use-posthog";
 import { getUserId } from "~/lib/session.server";
 import { House } from "lucide-react";
-import { flagsFor, useFlag } from "~/domains/platform";
+import { flagsFor } from "~/domains/platform";
 import { touchLastSeen } from "~/lib/account-activity.server";
 import { NonceContext } from "~/lib/nonce";
 import { FOLD_BOOTSTRAP } from "~/lib/fold";
@@ -173,7 +173,6 @@ export function AppNavbar({
 }) {
   const location = useLocation();
   const currentNav = getActiveNav(location.pathname);
-  const households = useFlag("households");
   const links = userId ? signedInLinks : signedOutLinks;
 
   return (
@@ -190,15 +189,13 @@ export function AppNavbar({
         <>
           <CookingNowPill count={cookingNowCount} />
           <ColorSchemeToggle />
-          {/* Behind the households flag. An icon action, as on the phone's Kitchen row, since a ninth page
-              link overflows the bar at 1280px and folds every link behind Menu. */}
-          {households ? (
-            <Tooltip content="Households" side="bottom">
-              <Button href="/households" variant="outline" tone="secondary" aria-label="Households" aria-current={currentNav === "households" ? "page" : undefined}>
-                <House />
-              </Button>
-            </Tooltip>
-          ) : null}
+          {/* An icon action, as on the phone's Kitchen row, since a ninth page link overflows the bar at 1280px and
+              folds every link behind Menu. */}
+          <Tooltip content="Households" side="bottom">
+            <Button href="/households" variant="outline" tone="secondary" aria-label="Households" aria-current={currentNav === "households" ? "page" : undefined}>
+              <House />
+            </Button>
+          </Tooltip>
           <Button href="/account/settings" variant="outline" tone="secondary" aria-current={currentNav === "account" ? "page" : undefined}>Account</Button>
           <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
             <Button type="submit" variant="outline" tone="secondary">Log out</Button>

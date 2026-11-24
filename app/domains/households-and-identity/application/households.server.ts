@@ -108,7 +108,7 @@ export function householdInviteEmail({ inviter, household, viewer, link, days }:
   link: string;
   days: number;
 }): AccountEmailContent {
-  const what = viewer ? `to see what ${household} shares` : `to share lists and meal plans in ${household}`;
+  const what = viewer ? `to see what ${household} shares` : `to share shopping lists in ${household}`;
   return {
     preview: `${inviter} invited you ${what}.`,
     heading: `Join ${household}`,

@@ -129,9 +129,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const d1 = requestD1(context);
   const renderedAt = Date.now();
   const readInput = { viewerId: currentUserId, kitchenUserWhere, now: renderedAt };
-  const { viewer, kitchenUser, recipes, cookbooks, cookingNow, hides } = d1
-    ? await readKitchenHomeFromD1(d1, readInput)
-    : await readKitchenHomeWithPrisma(await getRequestDb(context), readInput);
+  // On their own kitchen the cook's households for Cook together are read alongside the page, not after it.
+  const [{ viewer, kitchenUser, recipes, cookbooks, cookingNow, hides }, ownHouseholds] = await Promise.all([
+    d1 ? readKitchenHomeFromD1(d1, readInput) : readKitchenHomeWithPrisma(await getRequestDb(context), readInput),
+    hasExplicitChefRequest ? undefined : kitchenHouseholds(context, currentUserId as string),
+  ]);
 
   if (!kitchenUser && hasExplicitChefRequest) {
     throw new Response("Kitchen not found", { status: 404 });
@@ -179,8 +181,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   const isOwner = viewer?.id === kitchenUser.id;
   return {
-    // The owner's households for Cook together, or null (flag off, or another chef's kitchen) to leave it out.
-    households: isOwner ? await kitchenHouseholds(context, kitchenUser.id) : null,
+    // The owner's households for Cook together, or null (no D1 binding, or another chef's kitchen) to leave it out.
+    households: isOwner ? (ownHouseholds ?? (await kitchenHouseholds(context, kitchenUser.id))) : null,
     tab,
     viewer,
     kitchenUser,

@@ -245,7 +245,7 @@ describe("kitchen home loader on a D1 binding", () => {
     return { loader, getRequestDb };
   }
 
-  it("reads the page from D1 in two round trips and never constructs a Prisma client", async () => {
+  it("reads the page and the cook's households from D1 side by side, and never constructs a Prisma client", async () => {
     const { owner } = await seedKitchen();
     const cookie = (await createUserSessionCookie(owner.id)).split(";")[0]!;
     const { loader, getRequestDb } = await loaderWithoutPrisma();
@@ -258,8 +258,9 @@ describe("kitchen home loader on a D1 binding", () => {
     } as never);
 
     expect(getRequestDb).not.toHaveBeenCalled();
-    // The session version check, then one batch for the page.
-    expect(d1.roundTrips()).toBe(2);
+    // The session version check, then one batch for the page and the households read alongside it.
+    expect(d1.roundTrips()).toBe(3);
+    expect(result.households).toEqual([]);
     expect(result.isOwner).toBe(true);
     expect(result.kitchenUser?.id).toBe(owner.id);
     expect(result.recipes[2]).toMatchObject({ title: "With cover", coverImageUrl: "https://example.com/c.jpg" });
@@ -276,10 +277,57 @@ describe("kitchen home loader on a D1 binding", () => {
       request: new UndiciRequest("http://localhost:3000/", {
         headers: { Cookie: (await createUserSessionCookie(owner.id)).split(";")[0]! },
       }),
-      context: { cloudflare: { env: { DB: { ...d1.binding, batch: async () => [[], [], [], [], [], [], []].map((results) => ({ results })) } } } },
+      context: { cloudflare: { env: { DB: { ...d1.binding, batch: async (statements: unknown[]) => statements.map(() => ({ results: [] })) } } } },
       params: {},
     } as never);
     expect(orphan).toMatchObject({ kitchenUser: null, viewer: null, recipes: [], cookbooks: [] });
     expect(getRequestDb).not.toHaveBeenCalled();
+  });
+
+  /** A binding that holds the page's batch until released, so a test can see what the loader sends meanwhile. */
+  function heldPageBatch() {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const householdsAsked = () => d1.statements.some(({ sql }) => sql.includes('AS "memberCount"'));
+    const binding = {
+      ...d1.binding,
+      batch: async (statements: Parameters<typeof d1.binding.batch>[0]) => {
+        if (!statements.some(({ sql }) => sql.includes('AS "memberCount"'))) await held;
+        return d1.binding.batch(statements);
+      },
+    };
+    return { binding, release, householdsAsked };
+  }
+
+  it("asks for the cook's households while the page batch is still out, on their own kitchen", async () => {
+    const { owner } = await seedKitchen();
+    const cookie = (await createUserSessionCookie(owner.id)).split(";")[0]!;
+    const { loader } = await loaderWithoutPrisma();
+    const { binding, release, householdsAsked } = heldPageBatch();
+    const loading = loader({
+      request: new UndiciRequest("http://localhost:3000/", { headers: { Cookie: cookie } }),
+      context: { cloudflare: { env: { DB: binding } } },
+      params: {},
+    } as never);
+    await vi.waitFor(() => expect(householdsAsked()).toBe(true));
+    release();
+    expect(await loading).toMatchObject({ isOwner: true, households: [] });
+  });
+
+  it("asks for the cook's households only after the page when they open their own kitchen by name", async () => {
+    const { owner } = await seedKitchen();
+    const cookie = (await createUserSessionCookie(owner.id)).split(";")[0]!;
+    const { loader } = await loaderWithoutPrisma();
+    const { binding, release, householdsAsked } = heldPageBatch();
+    const loading = loader({
+      request: new UndiciRequest(`http://localhost:3000/?chef=${owner.username}`, { headers: { Cookie: cookie } }),
+      context: { cloudflare: { env: { DB: binding } } },
+      params: {},
+    } as never);
+    // Some 50 ms is plenty for the loader to reach the held batch and anything it would send alongside it.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(householdsAsked()).toBe(false);
+    release();
+    expect(await loading).toMatchObject({ isOwner: true, households: [] });
   });
 });

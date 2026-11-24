@@ -40,7 +40,7 @@ export function KitchenHome({
   recipes: KitchenRecipe[];
   cookbooks: KitchenCookbook[];
   /**
-   * The owner's households for Cook together, read by the route loader (the households flag is on): an empty list
+   * The owner's households for Cook together, read by the route loader: an empty list
    * offers to start one, and null leaves the section out.
    */
   households?: { id: string; name: string }[] | null;
@@ -156,7 +156,7 @@ function CookTogether({ households }: { households: { id: string; name: string }
         </ItemGroup>
       ) : (
         <Text tone="muted" className="mt-2">
-          Share shopping lists, a meal plan and recipes with the people you cook with.{" "}
+          Share shopping lists with the people you cook with.{" "}
           <Link href="/households">Start a household</Link>
         </Text>
       )}

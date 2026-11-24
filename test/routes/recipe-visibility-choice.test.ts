@@ -8,11 +8,10 @@ import { action as editAction, loader as editLoader } from "~/routes/recipes.$id
 import { action as settingsAction, loader as settingsLoader } from "~/routes/account.settings";
 import { cleanupDatabase } from "../helpers/cleanup";
 
-// While recipe_visibility is on, the create and edit forms carry who can see the recipe, and a
-// new recipe starts at the cook's default. While it is off they ignore it, as before.
+// While recipe_visibility is on, the create and edit forms carry who can see the recipe (public, household or only me),
+// and a new recipe starts at the cook's default. While it is off they ignore it, as before.
 
 const FLAG_ON = { SPOONJOY_FLAGS: "recipe_visibility" };
-const WITH_HOUSEHOLDS = { SPOONJOY_FLAGS: "recipe_visibility,households" };
 
 let cookId: string;
 
@@ -53,7 +52,7 @@ describe("choosing who can see a recipe", () => {
   it("starts the create form at the cook's default, and hides the choice while it is off", async () => {
     type LoaderArgs = Parameters<typeof createLoader>[0];
     expect(await createLoader(args<LoaderArgs>(await get("http://localhost/recipes/new"), FLAG_ON)))
-      .toEqual({ visibilityDefault: "private", visibilityChoices: ["public", "private"] });
+      .toEqual({ visibilityDefault: "private", visibilityChoices: ["public", "household", "private"] });
     expect(await createLoader(args<LoaderArgs>(await get("http://localhost/recipes/new"), null)))
       .toEqual({ visibilityDefault: null, visibilityChoices: null });
   });
@@ -72,7 +71,7 @@ describe("choosing who can see a recipe", () => {
     expect((await created("Flag Off")).visibility).toBe("public");
   });
 
-  it("shows the recipe's level in the editor and saves a new one, keeping it when none or household is sent", async () => {
+  it("shows the recipe's level in the editor and saves a new one, keeping it when none is sent", async () => {
     type EditLoaderArgs = Parameters<typeof editLoader>[0];
     type EditActionArgs = Parameters<typeof editAction>[0];
     const recipe = await db.recipe.create({ data: { title: "Edit Me", chefId: cookId } });
@@ -88,7 +87,6 @@ describe("choosing who can see a recipe", () => {
 
     await editAction(args<EditActionArgs>(await post(url, { title: "Edit Me", visibility: "private" }), FLAG_ON, params));
     expect((await created("Edit Me")).visibility).toBe("private");
-    await editAction(args<EditActionArgs>(await post(url, { title: "Edit Me", visibility: "household" }), FLAG_ON, params));
     await editAction(args<EditActionArgs>(await post(url, { title: "Edit Me" }), FLAG_ON, params));
     await editAction(args<EditActionArgs>(await post(url, { title: "Edit Me", visibility: "public" }), null, params));
     expect((await created("Edit Me")).visibility).toBe("private");
@@ -106,79 +104,44 @@ describe("choosing who can see a recipe", () => {
     expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "public" }), FLAG_ON)))
       .toMatchObject({ success: true, intent: "setRecipeVisibilityDefault" });
     expect(await stored()).toBe("public");
-    for (const [visibility, env] of [["household", FLAG_ON], ["private", null]] as const) {
+    for (const [visibility, env] of [["friends", FLAG_ON], ["private", null]] as const) {
       expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility }), env)))
         .toMatchObject({ success: false, error: "invalid_visibility" });
     }
     expect(await stored()).toBe("public");
   });
 
-  it("offers Household on the create form and in the editor only while households is on, and saves it then", async () => {
-    type LoaderArgs = Parameters<typeof createLoader>[0];
+  it("offers Household on the create form and in the editor, and saves it", async () => {
     type ActionArgs = Parameters<typeof createAction>[0];
     type EditLoaderArgs = Parameters<typeof editLoader>[0];
     type EditActionArgs = Parameters<typeof editAction>[0];
-    const newUrl = "http://localhost/recipes/new";
-    expect(await createLoader(args<LoaderArgs>(await get(newUrl), WITH_HOUSEHOLDS)))
-      .toEqual({ visibilityDefault: "private", visibilityChoices: ["public", "household", "private"] });
-    expect(await createLoader(args<LoaderArgs>(await get(newUrl), FLAG_ON)))
-      .toEqual({ visibilityDefault: "private", visibilityChoices: ["public", "private"] });
-
-    await createAction(args<ActionArgs>(await post(newUrl, { title: "Shared Stew", steps: "[]", visibility: "household" }), WITH_HOUSEHOLDS));
-    await createAction(args<ActionArgs>(await post(newUrl, { title: "Not Yet Shared", steps: "[]", visibility: "household" }), FLAG_ON));
+    await createAction(args<ActionArgs>(await post("http://localhost/recipes/new", { title: "Shared Stew", steps: "[]", visibility: "household" }), FLAG_ON));
     expect((await created("Shared Stew")).visibility).toBe("household");
-    expect((await created("Not Yet Shared")).visibility).toBe("private");
 
     const recipe = await db.recipe.create({ data: { title: "Edit Household", chefId: cookId } });
     const url = `http://localhost/recipes/${recipe.id}/edit`;
     const params = { id: recipe.id };
-    expect(await editLoader(args<EditLoaderArgs>(await get(url), WITH_HOUSEHOLDS, params)))
+    expect(await editLoader(args<EditLoaderArgs>(await get(url), FLAG_ON, params)))
       .toMatchObject({ visibility: "public", visibilityChoices: ["public", "household", "private"] });
-    expect(await editLoader(args<EditLoaderArgs>(await get(url), FLAG_ON, params)))
-      .toMatchObject({ visibility: "public", visibilityChoices: ["public", "private"] });
-    await editAction(args<EditActionArgs>(await post(url, { title: "Edit Household", visibility: "household" }), FLAG_ON, params));
-    expect((await created("Edit Household")).visibility).toBe("public");
-    await editAction(args<EditActionArgs>(await post(url, { title: "Edit Household", visibility: "household" }), WITH_HOUSEHOLDS, params));
-    expect((await created("Edit Household")).visibility).toBe("household");
-    // With households off again the editor keeps the stored level.
     await editAction(args<EditActionArgs>(await post(url, { title: "Edit Household", visibility: "household" }), FLAG_ON, params));
     expect((await created("Edit Household")).visibility).toBe("household");
+    expect((await editLoader(args<EditLoaderArgs>(await get(url), FLAG_ON, params))).visibility).toBe("household");
   });
 
-  it("shows a Household recipe as Household in the editor while households is off, and makes it Only me when that is picked", async () => {
-    type EditLoaderArgs = Parameters<typeof editLoader>[0];
-    type EditActionArgs = Parameters<typeof editAction>[0];
-    const recipe = await db.recipe.create({ data: { title: "Still Shared", chefId: cookId, visibility: "household" } });
-    const url = `http://localhost/recipes/${recipe.id}/edit`;
-    const params = { id: recipe.id };
-    expect(await editLoader(args<EditLoaderArgs>(await get(url), FLAG_ON, params)))
-      .toMatchObject({ visibility: "household", visibilityChoices: ["public", "household", "private"] });
-    await editAction(args<EditActionArgs>(await post(url, { title: "Still Shared", visibility: "private" }), FLAG_ON, params));
-    expect((await created("Still Shared")).visibility).toBe("private");
-    // Once it is no longer Household, households being off takes Household away again.
-    expect(await editLoader(args<EditLoaderArgs>(await get(url), FLAG_ON, params)))
-      .toMatchObject({ visibility: "private", visibilityChoices: ["public", "private"] });
-  });
-
-  it("offers Household as the default for new recipes only while households is on", async () => {
+  it("offers Household as the default for new recipes", async () => {
     type SettingsActionArgs = Parameters<typeof settingsAction>[0];
     type SettingsLoaderArgs = Parameters<typeof settingsLoader>[0];
     type LoaderArgs = Parameters<typeof createLoader>[0];
     const url = "http://localhost/account/settings";
     const stored = async () => (await db.user.findUniqueOrThrow({ where: { id: cookId }, select: { defaultRecipeVisibility: true } })).defaultRecipeVisibility;
 
-    expect(await settingsLoader(args<SettingsLoaderArgs>(await get(url), WITH_HOUSEHOLDS)))
-      .toMatchObject({ recipeVisibilityDefault: "private", recipeVisibilityChoices: ["public", "household", "private"] });
     expect(await settingsLoader(args<SettingsLoaderArgs>(await get(url), FLAG_ON)))
-      .toMatchObject({ recipeVisibilityDefault: "private", recipeVisibilityChoices: ["public", "private"] });
-
-    expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "household" }), WITH_HOUSEHOLDS)))
+      .toMatchObject({ recipeVisibilityDefault: "private", recipeVisibilityChoices: ["public", "household", "private"] });
+    expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "household" }), FLAG_ON)))
       .toMatchObject({ success: true, intent: "setRecipeVisibilityDefault" });
     expect(await stored()).toBe("household");
-    expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "friends" }), WITH_HOUSEHOLDS)))
+    expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "friends" }), FLAG_ON)))
       .toMatchObject({ success: false, error: "invalid_visibility", message: "Choose public, household or only me." });
-    expect((await createLoader(args<LoaderArgs>(await get("http://localhost/recipes/new"), WITH_HOUSEHOLDS))).visibilityDefault).toBe("household");
-    // A household default is not one the cook can choose while households is off, so new recipes start public.
-    expect((await createLoader(args<LoaderArgs>(await get("http://localhost/recipes/new"), FLAG_ON))).visibilityDefault).toBe("public");
+    expect((await createLoader(args<LoaderArgs>(await get("http://localhost/recipes/new"), FLAG_ON))).visibilityDefault).toBe("household");
   });
 });

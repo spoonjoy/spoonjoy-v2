@@ -180,7 +180,7 @@ test.describe("Tab bar on iPhone", () => {
     const main = page.getByRole("main");
     const tabBar = page.getByRole("navigation", { name: "Spoonjoy navigation" });
 
-    // The narrowest phone the page is laid out for. QA has the households flag on.
+    // The narrowest phone the page is laid out for.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
     await waitForHydration(page);

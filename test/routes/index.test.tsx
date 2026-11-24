@@ -788,7 +788,7 @@ describe("Kitchen Index Route", () => {
       const None = kitchen([]);
       const { unmount: unmountNone } = render(<None initialEntries={["/"]} />);
       const empty = await screen.findByRole("region", { name: "Cook together" });
-      expect(within(empty).getByText("Share shopping lists, a meal plan and recipes with the people you cook with.")).toBeInTheDocument();
+      expect(within(empty).getByText("Share shopping lists with the people you cook with.")).toBeInTheDocument();
       expect(within(empty).getByRole("link", { name: "Start a household" })).toHaveAttribute("href", "/households");
       expect(within(empty).queryByRole("list")).not.toBeInTheDocument();
       unmountNone();

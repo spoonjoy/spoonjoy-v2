@@ -194,6 +194,13 @@ describe("invites by email", () => {
     expect((await getHousehold(store, id, "ann"))!.members.find((member) => member.userId === "cal")?.role).toBe("viewer");
   });
 
+  it("tells a member they're invited to share the shopping lists, the one thing a household shares everywhere yet", async () => {
+    const id = await homeOf("ann");
+    const box = mailbox();
+    await emailInvite(store, box.email, { householdId: id, userId: "ann", input: { email: "cal@example.com", role: "member" }, now, joinUrl });
+    expect(box.sent[0]!.text).toContain("to share shopping lists in The Lee kitchen");
+  });
+
   it("needs an address, and an owner to send it", async () => {
     const id = await homeOf("ann");
     const box = mailbox();

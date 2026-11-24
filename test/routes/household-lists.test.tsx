@@ -53,7 +53,7 @@ const run = (sql: string) => database.sqlite.prepare(sql).run();
 
 beforeEach(async () => {
   database = migratedSqliteD1();
-  env = { DB: database.binding, SPOONJOY_FLAGS: "households" };
+  env = { DB: database.binding };
   for (const id of ["ann", "ben", "cal", "dee"]) {
     run(`INSERT INTO "User" ("id", "email", "username") VALUES ('${id}', '${id}@example.com', '${id}_cooks')`);
     cookies[id] = (await createUserSessionCookie(id, { DB: database.binding } as Parameters<typeof createUserSessionCookie>[1])).split(";")[0]!;
@@ -75,12 +75,7 @@ async function makeList(user = "ann", name = "Groceries"): Promise<string> {
 }
 
 describe("/households/:id/lists", () => {
-  it("hides the pages while the households flag is off, and from people outside the household", async () => {
-    const off = { DB: database.binding };
-    expect(statusOf(await call(listsLoader, { id: "h1" }, "ann", undefined, off))).toBe(404);
-    expect(statusOf(await call(listsAction, { id: "h1" }, "ann", { intent: "create", name: "x" }, off))).toBe(404);
-    expect(statusOf(await call(listLoader, { id: "h1", listId: "l" }, "ann", undefined, off))).toBe(404);
-    expect(statusOf(await call(listAction, { id: "h1", listId: "l" }, "ann", { intent: "add", text: "x" }, off))).toBe(404);
+  it("hides the pages from people outside the household", async () => {
     expect(statusOf(await call(listsLoader, { id: "h1" }, "dee"))).toBe(404);
     const listId = await makeList();
     expect(statusOf(await call(listLoader, { id: "h1", listId }, "dee"))).toBe(404);
