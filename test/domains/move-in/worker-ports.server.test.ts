@@ -12,6 +12,9 @@ import { createTestRecipe, createTestUser } from "../../utils";
 import { makeZip } from "./support/make-zip";
 import { mealieDatabase } from "./support/mealie-database";
 import { recipeServer, SERVER_TOKEN } from "./support/recipe-server";
+import { sealServerConnection, serverConnectionSecret } from "~/domains/move-in/adapters/worker/server-connection.server";
+
+const SECRET = "the deployment's session secret";
 
 // Prisma on D1 in the Worker; here, the tests' own SQLite.
 vi.mock("~/lib/db.server", async (original) => {
@@ -107,7 +110,7 @@ describe("moveInPorts from a server", () => {
   it("moves a kitchen in from the server its start checked, records the address, and deletes the token once done", async () => {
     vi.stubGlobal("fetch", recipeServer());
     const archiveKey = "pending-uploads/move-in/chef-1/a.json";
-    const connection = new TextEncoder().encode(JSON.stringify({ address: "https://recipes.example.com", token: SERVER_TOKEN }));
+    const connection = await sealServerConnection(serverConnectionSecret(null), archiveKey, { address: "https://recipes.example.com", token: SERVER_TOKEN });
     const photos = memoryBucket({ [archiveKey]: connection });
     const jobId = await createMoveInJob(database.binding, { ownerId: "chef-1", kind: "mealie-api", archiveKey, archiveName: "recipes.example.com", now });
     const ports = moveInPorts({ DB: database.binding, PHOTOS: photos } as never, () => now);
@@ -125,7 +128,7 @@ describe("moveInPorts from a server", () => {
     const serverKey = "pending-uploads/move-in/chef-1/b.json";
     const photos = memoryBucket({
       [backupKey]: makeZip([{ name: "database.json", data: JSON.stringify(tables) }]),
-      [serverKey]: new TextEncoder().encode(JSON.stringify({ address: "https://recipes.example.com", token: SERVER_TOKEN })),
+      [serverKey]: await sealServerConnection(serverConnectionSecret(null), serverKey, { address: "https://recipes.example.com", token: SERVER_TOKEN }),
     });
     // The backup's recipes by id, with dashes as the server gives them; their content differs, so the backup updates them.
     const recipes = [["pancakes", "Pancakes"], ["soup", "Soup"]].map(([slug, name]) => ({ id: keys[slug as "soup"], slug, name, image: null, createdAt: "2026-11-23T16:00:00Z" }));
@@ -141,7 +144,31 @@ describe("moveInPorts from a server", () => {
 
   it("stops a server move-in whose token is no longer kept, as expired", async () => {
     const job = { id: "j", ownerId: "chef-1", kind: "mealie-api", sourceId: null, status: "running", phase: "inspect", cursor: null, archiveKey: "gone.json", lastError: null, attempt: 0 } as const;
-    await expect(openMoveInSource(memoryBucket() as never, job, recipeServer())).rejects.toMatchObject({ code: "expired" });
+    await expect(openMoveInSource(memoryBucket() as never, job, recipeServer(), SECRET)).rejects.toMatchObject({ code: "expired" });
+  });
+
+  it("stops a server move-in whose connection doesn't open under the Worker's secret, as expired", async () => {
+    const key = "pending-uploads/move-in/chef-1/c.json";
+    const job = { id: "j", ownerId: "chef-1", kind: "mealie-api", sourceId: null, status: "running", phase: "inspect", cursor: null, archiveKey: key, lastError: null, attempt: 0 } as const;
+    const connection = { address: "https://recipes.example.com", token: SERVER_TOKEN };
+    const kept = (bytes: Uint8Array) => memoryBucket({ [key]: bytes }) as never;
+    // Sealed under another secret, sealed for another key, or kept in the clear as before they were sealed.
+    await expect(openMoveInSource(kept(await sealServerConnection("another secret", key, connection)), job, recipeServer(), SECRET)).rejects.toMatchObject({ code: "expired" });
+    await expect(openMoveInSource(kept(await sealServerConnection(SECRET, "elsewhere.json", connection)), job, recipeServer(), SECRET)).rejects.toMatchObject({ code: "expired" });
+    await expect(openMoveInSource(kept(new TextEncoder().encode(JSON.stringify(connection))), job, recipeServer(), SECRET)).rejects.toMatchObject({ code: "expired" });
+    const source = await openMoveInSource(kept(await sealServerConnection(SECRET, key, connection)), job, recipeServer(), SECRET);
+    expect(source.serverUrl).toBe("https://recipes.example.com");
+  });
+
+  it("deletes a server move-in's sealed token when it fails, under the Worker's own secret", async () => {
+    const key = "pending-uploads/move-in/chef-1/d.json";
+    // A token the server no longer takes, as when the cook deleted it there, fails the move-in.
+    const photos = memoryBucket({ [key]: await sealServerConnection(SECRET, key, { address: "https://recipes.example.com", token: "a deleted token" }) });
+    vi.stubGlobal("fetch", recipeServer());
+    const ports = moveInPorts({ DB: database.binding, PHOTOS: photos, SESSION_SECRET: SECRET } as never, () => now);
+    const job = await createMoveInJob(database.binding, { ownerId: "chef-1", kind: "mealie-api", archiveKey: key, archiveName: "recipes.example.com", now });
+    expect(await runForAWhile(job, ports, { budgetMs: 1000 })).toMatchObject({ status: "failed", lastError: "server-token" });
+    expect(photos.objects).toEqual({});
   });
 });
 

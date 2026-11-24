@@ -9,6 +9,7 @@ import { MoveInError, type MoveInErrorCode } from "../../model/move-in-error";
 import { MOVE_IN_APPS } from "./apps";
 import { createMoveInJob } from "../storage/job-store.server";
 import { MOVE_IN_ARCHIVE_PREFIX, ownerEmail, r2RangeSource, type MoveInEnv } from "./move-in-ports.server";
+import { sealServerConnection, serverConnectionSecret, type ServerConnection } from "./server-connection.server";
 
 /**
  * The largest backup the plain form takes, for a page without JavaScript. A form upload is held in the Worker's
@@ -88,16 +89,10 @@ export async function startMoveIn({ env, ownerId, app, file, now }: {
   });
 }
 
-/** What a move-in from a server keeps in storage while it runs: where the server is, and the cook's token for it. */
-export interface ServerConnection {
-  address: string;
-  token: string;
-}
-
 /**
  * Starts a move-in from the other app's server: asks it, with the cook's token, for the kitchen it would bring, so a
- * wrong address or token is answered at once with its fix-it message. The token is kept only in storage that is never
- * served, and deleted with the job, like a backup.
+ * wrong address or token is answered at once with its fix-it message. The address and token are kept sealed
+ * (server-connection.server.ts) in storage that is never served, and deleted with the job, like a backup.
  */
 export async function startServerMoveIn({ env, ownerId, app, address, token, fetch, now }: {
   env: MoveInEnv;
@@ -127,7 +122,7 @@ export async function startServerMoveIn({ env, ownerId, app, address, token, fet
     return { ok: false, code: "server-address" };
   }
   const archiveKey = `${MOVE_IN_ARCHIVE_PREFIX}${ownerId}/${crypto.randomUUID()}.json`;
-  await env.PHOTOS.put(archiveKey, new TextEncoder().encode(JSON.stringify(connection)));
+  await env.PHOTOS.put(archiveKey, await sealServerConnection(serverConnectionSecret(env), archiveKey, connection));
   try {
     const jobId = await createMoveInJob(env.DB, { ownerId, kind: chosen.serverKind, archiveKey, archiveName: name, now });
     return { ok: true, jobId };
