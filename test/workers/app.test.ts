@@ -71,9 +71,11 @@ vi.mock("../../app/lib/photo-lifecycle.server", async (importOriginal) => ({
 }));
 
 const consumeJobBatch = vi.hoisted(() => vi.fn(async () => undefined));
-vi.mock("../../app/domains/platform", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../app/domains/platform")>()),
+const expireDoneJobKeys = vi.hoisted(() => vi.fn(async (): Promise<number> => 0));
+vi.mock("../../app/domains/platform/index.server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../app/domains/platform/index.server")>()),
   consumeJobBatch,
+  expireDoneJobKeys,
 }));
 
 const worker = (await import("../../workers/app")).default;
@@ -153,6 +155,22 @@ describe("Cloudflare worker app", () => {
     await worker.scheduled!({ cron: "23 */6 * * *", scheduledTime: 0, noRetry: () => undefined } as ScheduledController, env, ctx);
     expect(runScheduledPhotoSweep).toHaveBeenCalledWith(env);
     expect(ctx.waitUntil).toHaveBeenCalledWith(runScheduledPhotoSweep.mock.results[0].value);
+  });
+
+  it("forgets old done job keys from the cron trigger where there is a database, and reports a sweep that fails", async () => {
+    const cron = { cron: "23 */6 * * *", scheduledTime: 0, noRetry: () => undefined } as ScheduledController;
+    expireDoneJobKeys.mockClear();
+    await worker.scheduled!(cron, versionedEnvironment(), context());
+    expect(expireDoneJobKeys).not.toHaveBeenCalled();
+
+    captureException.mockClear();
+    const error = new Error("D1 is down");
+    expireDoneJobKeys.mockRejectedValueOnce(error);
+    const ctx = context();
+    await worker.scheduled!(cron, versionedEnvironment({ DB: { prepare: vi.fn() } as unknown as D1Database }), ctx);
+    expect(expireDoneJobKeys).toHaveBeenCalledTimes(1);
+    await Promise.all(vi.mocked(ctx.waitUntil).mock.calls.map(([promise]) => promise));
+    expect(captureException).toHaveBeenCalledWith(expect.anything(), { error, distinctId: "platform-jobs", route: "scheduled", extras: { sweep: "job-keys" } });
   });
 
   it("needs the DB binding to run a batch of platform jobs", async () => {
