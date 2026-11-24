@@ -4,6 +4,7 @@
 // landing-first-screen.mobile.journey.ts).
 import { devices, type Browser, type BrowserContextOptions } from "@playwright/test";
 import { test, expect } from "./support/journey";
+import { waitForHydrationOnLoad } from "./support/app-ready";
 import { waitForHydration } from "./support/navigation";
 import { personaStorageStatePath } from "./support/personas";
 import { coveringElements } from "./support/readability";
@@ -18,6 +19,7 @@ async function expectFooterAboveTabBar(browser: Browser, context: BrowserContext
   const browserContext = await browser.newContext({ ...context, storageState });
   try {
     const page = await browserContext.newPage();
+    waitForHydrationOnLoad(page);
     await page.goto(path);
     await waitForHydration(page);
     const tabBar = page.getByRole("navigation", { name: "Spoonjoy navigation" });
@@ -73,6 +75,7 @@ test.describe("Site footer on a phone", () => {
     const context = await browser.newContext({ ...devices["iPhone 15"], storageState: { cookies: [], origins: [] } });
     try {
       const page = await context.newPage();
+      waitForHydrationOnLoad(page);
       await page.goto("/test-kitchen");
       await waitForHydration(page);
       await expect(page.getByRole("contentinfo")).toBeVisible();
