@@ -312,9 +312,25 @@ jobs:
           docker logs sj-restored 2>/dev/null | grep '"event":"backup","kind":"auto"'
           docker exec sj-restored ls /data/backups
 
+      # The Compose file in the guide (self-host/compose.yaml) starts this image and waits for its
+      # health check; on 8081, beside the restored server.
+      - name: Start it with Docker Compose
+        if: success()
+        run: |
+          start=$(date +%s%3N)
+          SPOONJOY_IMAGE="$LOCAL_IMAGE" SPOONJOY_PORT=8081 SPOONJOY_BASE_URL=http://localhost:8081 \
+            docker compose -f self-host/compose.yaml -p sj-compose up -d --wait --wait-timeout 120
+          end=$(date +%s%3N)
+          curl -sf http://localhost:8081/health/ready
+          curl -sf http://localhost:8081/ -o /dev/null
+          echo "{\"composeUpToHealthyMs\": $(( end - start ))}" > "$OUT/compose.json"
+          cat "$OUT/compose.json"
+
       - name: Stop the server
         if: always()
         run: |
+          SPOONJOY_IMAGE="$LOCAL_IMAGE" docker compose -f self-host/compose.yaml -p sj-compose logs > "$OUT/compose.log" 2>&1 || true
+          SPOONJOY_IMAGE="$LOCAL_IMAGE" docker compose -f self-host/compose.yaml -p sj-compose down -v || true
           docker logs sj > "$OUT/container.log" 2>&1 || true
           docker stop sj || true
           docker logs sj-restored > "$OUT/restored.log" 2>&1 || true
@@ -338,7 +354,7 @@ jobs:
             const fs = require("fs");
             const out = process.env.OUT;
             const metrics = { arch: process.env.ARCH, version: process.env.VERSION };
-            for (const file of ["image", "boot", "restart", "restore"]) {
+            for (const file of ["image", "boot", "restart", "restore", "compose"]) {
               try { Object.assign(metrics, JSON.parse(fs.readFileSync(`${out}/${file}.json`, "utf8"))); } catch {}
             }
             try { metrics.memoryIdle = JSON.parse(fs.readFileSync(`${out}/memory-idle.json`, "utf8")).MemUsage; } catch {}
