@@ -221,7 +221,7 @@ export function generatePersonaPasswords(random = randomBytes) {
 //
 // Journeys that change data use a scratch index (via support/personas.ts's scratch(n)) instead of
 // signing up a throwaway user through /signup, so they stop spending QA's shared auth rate limit
-// (AUTH_IP_RATE_LIMITER, 60/minute in QA — see docs/deployment.md). Each index is owned by one
+// (AUTH_IP_RATE_LIMITER, 100/minute in QA — see docs/deployment.md). Each index is owned by one
 // journey area and has its own file, e2e/journeys/scratch/<n>-<area>.setup.ts, which signs it in.
 // The seed counts those files, so a pull request that adds an area adds one file and edits no
 // shared line. test/scripts/journey-sign-in-budget.test.ts keeps the sign-ins under QA's limit.

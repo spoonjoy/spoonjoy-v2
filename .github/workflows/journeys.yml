@@ -349,9 +349,13 @@ jobs:
       # A pull request whose `changes` job chose the affected run (MODE=affected) runs only SPECS,
       # with the personas setup, after the census when CENSUS is true. An empty MODE (a base-branch
       # scope script that predates modes) or any other value runs the full suite.
+      # The suite gets the Cloudflare credentials only so password-reset.journey.ts can read the
+      # reset mail the run's Worker captured, from this run's D1 (e2e/journeys/support/captured-mail.ts).
       - name: Run test suite
         id: suite
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           MODE: ${{ github.event_name == 'pull_request' && needs.changes.outputs.mode || 'full' }}
           CENSUS: ${{ needs.changes.outputs.census }}
           SPECS: ${{ needs.changes.outputs.specs }}

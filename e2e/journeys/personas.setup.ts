@@ -10,7 +10,7 @@
 // storage state it writes is stored for signed-in journeys to start from; cookies are
 // engine-independent, so journeys on either device project can reuse it.
 //
-// Rate-limit budget: QA's AUTH_IP_RATE_LIMITER allows 60 sign-in/sign-up attempts per minute
+// Rate-limit budget: QA's AUTH_IP_RATE_LIMITER allows 100 sign-in/sign-up attempts per minute
 // per IP (wrangler.json's `env.qa` — raised from the shared default of 20 specifically because
 // CI's Journeys workflow exercises QA from shared GitHub-hosted runner IPs; see
 // docs/deployment.md's Dedicated QA Environment section. Production stays at 20). The "personas"

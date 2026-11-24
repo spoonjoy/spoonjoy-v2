@@ -154,7 +154,7 @@
         {
           "name": "AUTH_IP_RATE_LIMITER",
           "namespace_id": "2003",
-          "simple": { "limit": 60, "period": 60 }
+          "simple": { "limit": 100, "period": 60 }
         },
         {
           "name": "INGREDIENT_PARSE_RATE_LIMITER",
