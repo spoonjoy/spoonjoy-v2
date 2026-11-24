@@ -1,5 +1,6 @@
-// Move in: bring a kitchen over from another recipe app. The person picks the app, drops its
-// backup zip, watches it come in, and lands on what arrived and what didn't. Behind the move_in
+// Move in: bring a kitchen over from another recipe app. The person picks the app, then gives its
+// server's address and an API token, or drops its backup zip, watches it come in, and lands on what
+// arrived and what didn't. Behind the move_in
 // flag until moved-in recipes can be kept private. Where the Worker has a jobs queue, the move-in
 // runs there and the page only shows how far it has got; elsewhere each poll keeps it running.
 import { Utensils } from "lucide-react";
@@ -18,6 +19,7 @@ import { Form } from "~/components/ouro/form/form";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Spinner } from "~/components/ouro/spinner/spinner";
 import { Text } from "~/components/ouro/text/text";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import {
   FINISHED,
   MOVE_IN_BACKUP_MAX_BYTES,
@@ -26,9 +28,12 @@ import {
   nudgeMoveIn,
   readMoveInOrganizerCounts,
   readMoveInProgress,
+  readsAServer,
   startMoveIn,
+  startServerMoveIn,
   timeLeft,
   WAITING_ON_SOURCE,
+  type MoveInEnv,
   type MoveInOrganizerCounts,
   type MoveInProgress,
 } from "~/domains/move-in";
@@ -36,6 +41,7 @@ import { getDb } from "~/lib/db.server";
 import { keepRunning, reportMoveIn, signedInWithFlag, startQueuedMoveIn } from "~/lib/move-in-route.server";
 import { UPLOAD_STOPPED_MESSAGE, formatBytes, uploadBackup } from "~/lib/move-in-upload";
 import { revalidateUnlessNetworkFailure, submitOrReportLostRequest } from "~/lib/network-failure";
+import { enforceRateLimit } from "~/lib/rate-limit.server";
 import { CookbookPage } from "~/components/cookbook/page";
 
 /** How often the page asks for more while a move-in runs. */
@@ -53,6 +59,8 @@ export interface MoveInView {
   status: MoveInProgress["job"]["status"];
   finished: boolean;
   archiveName: string | null;
+  /** It reads the other app's server rather than a backup. */
+  fromServer: boolean;
   recipes: { found: number; done: number; created: number; already: number; updated: number; unchanged: number; skipped: number; failed: number };
   /** Photos found in the backup, and how many of those are on their recipes now. */
   photos: { found: number; in: number };
@@ -87,6 +95,7 @@ function view(progress: MoveInProgress, organizers: MoveInOrganizerCounts, runsO
     status: progress.job.status,
     finished: FINISHED.includes(progress.job.status),
     archiveName: progress.job.archiveName,
+    fromServer: readsAServer(progress.job.kind),
     recipes: {
       found: recipes.found,
       done,
@@ -145,15 +154,22 @@ export async function action({ request, context }: Route.ActionArgs) {
     return { error: null };
   }
 
-  const file = form.get("backup");
-  if (!(file instanceof File) || file.size === 0) return fail("no-file");
-  const started = await startMoveIn({
-    env,
-    ownerId: userId,
-    app: String(form.get("app") ?? ""),
-    file: { name: file.name, size: file.size, data: file },
-    now: new Date(),
-  });
+  const app = String(form.get("app") ?? "");
+  const fromServer = form.get("from") === "server";
+  // Checking a server asks the address the cook typed, so a cook, and a network, only get so many tries a minute.
+  if (fromServer && !(await mayAskAServer(request, workerEnv, userId))) return fail("too-many-tries", 429);
+  const started = fromServer
+    ? await startServerMoveIn({
+      env,
+      ownerId: userId,
+      app,
+      address: String(form.get("address") ?? ""),
+      token: String(form.get("token") ?? ""),
+      fetch: (input, init) => fetch(input, init),
+      now: new Date(),
+    })
+    : await startFromBackup(form.get("backup"), { env, ownerId: userId, app });
+  if (!started) return fail("no-file");
   if (!started.ok) return fail(started.code, started.code === "backup-too-large" ? 413 : 400);
   await startQueuedMoveIn(context, gate, started.jobId);
   return redirect(`/move-in?job=${started.jobId}`);
@@ -171,6 +187,19 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
   return revalidateUnlessNetworkFailure(args, args.defaultShouldRevalidate);
 }
 
+async function mayAskAServer(request: Request, workerEnv: Env, userId: string): Promise<boolean> {
+  const byCook = await enforceRateLimit({ ip: `move-in:${userId}`, ipLimiter: workerEnv.AUTH_IP_RATE_LIMITER });
+  if (!byCook.allowed) return false;
+  const byNetwork = await enforceRateLimit({ ip: request.headers.get("CF-Connecting-IP"), ipLimiter: workerEnv.API_IP_RATE_LIMITER });
+  return byNetwork.allowed;
+}
+
+/** A move-in from an uploaded backup; null when no file came with the form. */
+function startFromBackup(file: FormDataEntryValue | null, { env, ownerId, app }: { env: MoveInEnv; ownerId: string; app: string }) {
+  if (!(file instanceof File) || file.size === 0) return null;
+  return startMoveIn({ env, ownerId, app, file: { name: file.name, size: file.size, data: file }, now: new Date() });
+}
+
 function plural(n: number, one: string, many = `${one}s`) {
   return `${n} ${n === 1 ? one : many}`;
 }
@@ -178,8 +207,19 @@ function plural(n: number, one: string, many = `${one}s`) {
 /** How far the page's upload has got: bytes sent of the file's size, then the check once every part is in. */
 type Sending = { sent: number; total: number; checking: boolean };
 
-function UploadForm({ error, uploadMaxBytes }: { error: string | null; uploadMaxBytes: number }) {
+const FROM = [
+  {
+    value: "server",
+    label: "From your server",
+    description: "Its address and an API token: in Mealie, open your profile, then API Tokens, and make one.",
+  },
+  { value: "backup", label: "From a backup", description: "In Mealie, open Settings, then Backups, make a backup and download it." },
+] as const;
+
+function UploadForm({ error, uploadMaxBytes, from: failedFrom }: { error: string | null; uploadMaxBytes: number; from: "server" | "backup" }) {
   const submitting = useNavigation().state === "submitting";
+  const [from, setFrom] = useState<string>(failedFrom);
+  const server = from === "server";
   const navigate = useNavigate();
   const [sending, setSending] = useState<Sending | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -192,11 +232,11 @@ function UploadForm({ error, uploadMaxBytes }: { error: string | null; uploadMax
     if (stopped) stoppedAlert.current?.focus();
   }, [stopped]);
   // With JavaScript, the backup goes straight to storage in parts and the page shows how much has been sent;
-  // without it, the plain form posts the file, up to the form's own limit.
+  // without it, the plain form posts the file, up to the form's own limit. A server's address posts as it is.
   const send = async (event: FormEvent<HTMLFormElement>) => {
     const element = event.currentTarget;
     const form = new FormData(element);
-    const file = (element.elements.namedItem("backup") as HTMLInputElement).files?.[0];
+    const file = (element.elements.namedItem("backup") as HTMLInputElement | null)?.files?.[0];
     // A page that isn't secure (http on a LAN address while testing) has no crypto.subtle to tell the file apart by,
     // so the plain form sends it instead.
     if (!file?.size || !globalThis.crypto?.subtle) return;
@@ -229,25 +269,46 @@ function UploadForm({ error, uploadMaxBytes }: { error: string | null; uploadMax
   const busy = submitting || sending !== null;
   return (
     <Form method="post" render={<RouterForm encType="multipart/form-data" />} className="gap-6" onSubmit={send}>
-      {shown ? <Alert tone="destructive" title="That backup didn't move in" description={shown} /> : null}
+      {shown ? <Alert tone="destructive" title={server ? "Your kitchen didn't move in" : "That backup didn't move in"} description={shown} /> : null}
       {stopped ? <Alert ref={stoppedAlert} tabIndex={-1} title="Upload stopped" description={UPLOAD_STOPPED_MESSAGE} /> : null}
-      <ChoiceCard
-        legend="Where are you coming from?"
-        name="app"
-        defaultValue="mealie"
-        required
-        items={[{ value: "mealie", label: "Mealie", description: "From a backup zip: in Mealie, open Settings, then Backups, make a backup and download it." }]}
-      />
-      <FileField
-        label="Backup zip"
-        name="backup"
-        accept=".zip,application/zip"
-        maxSize={uploadMaxBytes}
-        required
-        disabled={busy}
-        prompt="Drop the backup's .zip file here"
-        description="Drop the zip just as you downloaded it, without unzipping it. It is deleted once your recipes are in."
-      />
+      <ChoiceCard legend="Where are you coming from?" name="app" defaultValue="mealie" required items={[{ value: "mealie", label: "Mealie" }]} />
+      <ChoiceCard legend="How do you want to bring it?" name="from" value={from} onValueChange={setFrom} required items={FROM} />
+      {server ? (
+        <>
+          <TextField
+            label="Server address"
+            name="address"
+            type="url"
+            required
+            autoComplete="url"
+            placeholder="https://recipes.example.com"
+            description="The address you open Mealie at. It has to open from anywhere on the internet, not only at home."
+          />
+          <TextField
+            label="API token"
+            name="token"
+            type="password"
+            required
+            // A password manager would keep the token as a Spoonjoy password, and offer it at sign-in.
+            autoComplete="new-password"
+            data-1p-ignore=""
+            data-lpignore="true"
+            data-bwignore=""
+            description="Spoonjoy only reads your recipes with it, and forgets it once they're in. You can delete the token in Mealie then."
+          />
+        </>
+      ) : (
+        <FileField
+          label="Backup zip"
+          name="backup"
+          accept=".zip,application/zip"
+          maxSize={uploadMaxBytes}
+          required
+          disabled={busy}
+          prompt="Drop the backup's .zip file here"
+          description="Drop the zip just as you downloaded it, without unzipping it. It is deleted once your recipes are in."
+        />
+      )}
       {sending ? (
         <div role="status" className="flex items-center gap-3">
           <Spinner label={sending.checking ? "Checking the backup" : stopping ? "Stopping the upload" : "Sending the backup"} />
@@ -275,7 +336,7 @@ function UploadForm({ error, uploadMaxBytes }: { error: string | null; uploadMax
           </Button>
         ) : null}
         <Button type="submit" disabled={busy}>
-          {sending && !sending.checking ? "Sending the backup…" : busy ? "Checking the backup…" : "Move in"}
+          {sending && !sending.checking ? "Sending the backup…" : busy ? (server ? "Checking your server…" : "Checking the backup…") : "Move in"}
         </Button>
       </div>
     </Form>
@@ -329,7 +390,7 @@ function Progress({ move }: { move: MoveInView }) {
         <Spinner label="Moving in" />
         <div className="flex flex-col">
           <Text>
-            {counted ? `${move.recipes.done} of ${plural(move.recipes.found, "recipe")} in so far.` : "Reading the backup…"}
+            {counted ? `${move.recipes.done} of ${plural(move.recipes.found, "recipe")} in so far.` : move.fromServer ? "Reading your kitchen…" : "Reading the backup…"}
           </Text>
           {move.waiting ? <Text tone="muted">Waiting for your server…</Text> : move.timeLeft ? <Text tone="muted">{move.timeLeft}</Text> : null}
         </div>
@@ -408,7 +469,7 @@ function Finished({ move }: { move: MoveInView }) {
       ) : null}
       <div className="flex flex-wrap gap-3">
         <Button href="/my-recipes">See your recipes</Button>
-        <Button href="/move-in" variant="outline" tone="secondary">Move in another backup</Button>
+        <Button href="/move-in" variant="outline" tone="secondary">{move.fromServer ? "Move in again" : "Move in another backup"}</Button>
       </div>
     </section>
   );
@@ -428,7 +489,7 @@ export default function MoveIn() {
           divider
         />
         {!move || move.status === "failed" ? (
-          <UploadForm error={actionData?.error ?? move?.failure ?? null} uploadMaxBytes={uploadMaxBytes} />
+          <UploadForm error={actionData?.error ?? move?.failure ?? null} uploadMaxBytes={uploadMaxBytes} from={move && !move.fromServer ? "backup" : "server"} />
         ) : move.finished ? (
           <Finished move={move} />
         ) : (

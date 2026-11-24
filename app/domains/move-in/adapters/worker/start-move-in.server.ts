@@ -105,7 +105,7 @@ export async function startServerMoveIn({ env, ownerId, app, address, token, fet
 }): Promise<StartMoveInResult> {
   const chosen = MOVE_IN_APPS[app as keyof typeof MOVE_IN_APPS];
   if (!chosen) return { ok: false, code: "unknown-app" };
-  if (!address.trim()) return { ok: false, code: "server-address" };
+  if (!address.trim()) return { ok: false, code: "no-address" };
   if (!token.trim()) return { ok: false, code: "no-token" };
   let connection: ServerConnection;
   let name: string;

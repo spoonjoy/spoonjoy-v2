@@ -1747,11 +1747,11 @@
     "move-in": {
       "default": [
         {
-          "identity": "button \"Backup zip\" [file-field/input] in main",
+          "identity": "button \"Move in\" [button/root] in main",
           "count": 1
         },
         {
-          "identity": "button \"Move in\" [button/root] in main",
+          "identity": "button \"Show password\" [text-field/show-password] in main",
           "count": 1
         },
         {
@@ -1759,7 +1759,23 @@
           "count": 1
         },
         {
+          "identity": "radio \"From a backup\" [choice-card/input] in group \"How do you want to bring it?\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From your server\" [choice-card/input] in group \"How do you want to bring it?\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Mealie\" [choice-card/input] in group \"Where are you coming from?\"",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"API token\" [text-field/input] in main",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Server address\" [text-field/input] in main",
           "count": 1
         }
       ]
@@ -6173,11 +6189,11 @@
     "move-in": {
       "default": [
         {
-          "identity": "button \"Backup zip\" [file-field/input] in main",
+          "identity": "button \"Move in\" [button/root] in main",
           "count": 1
         },
         {
-          "identity": "button \"Move in\" [button/root] in main",
+          "identity": "button \"Show password\" [text-field/show-password] in main",
           "count": 1
         },
         {
@@ -6185,7 +6201,23 @@
           "count": 1
         },
         {
+          "identity": "radio \"From a backup\" [choice-card/input] in group \"How do you want to bring it?\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From your server\" [choice-card/input] in group \"How do you want to bring it?\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Mealie\" [choice-card/input] in group \"Where are you coming from?\"",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"API token\" [text-field/input] in main",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Server address\" [text-field/input] in main",
           "count": 1
         }
       ]

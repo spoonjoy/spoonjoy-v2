@@ -34,6 +34,7 @@ import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
 import { makeZip } from "../domains/move-in/support/make-zip";
 import { mealieDatabase } from "../domains/move-in/support/mealie-database";
+import { recipeServer, SERVER_TOKEN } from "../domains/move-in/support/recipe-server";
 
 const webp = new Uint8Array([82, 73, 70, 70, 4, 0, 0, 0, 87, 69, 66, 80, 86, 80, 56, 32]);
 
@@ -42,9 +43,10 @@ function memoryBucket() {
   return {
     objects,
     head: async (key: string) => (objects[key] ? { size: objects[key].length } : null),
-    get: async (key: string, options: { range: { offset: number; length: number } }) => {
+    get: async (key: string, options?: { range: { offset: number; length: number } }) => {
       const bytes = objects[key];
       if (!bytes) return null;
+      if (!options) return { arrayBuffer: async () => bytes.slice().buffer };
       const { offset, length } = options.range;
       return { arrayBuffer: async () => bytes.slice(offset, offset + length).buffer };
     },
@@ -69,11 +71,14 @@ async function cookie(userId: string) {
 
 /** What the Worker hands a request; a test can leave the photo bucket or the waitUntil context out. */
 const platform = { photos: true, ctx: true };
+/** The keys the rate limiters were asked about, and whether they say no. */
+const limits = { asked: [] as string[], full: false };
+const limiter = { limit: async ({ key }: { key: string }) => (limits.asked.push(key), { success: !limits.full }) };
 
 function context(flags: string | undefined = "move_in") {
   return {
     cloudflare: {
-      env: { DB: d1.binding, PHOTOS: platform.photos ? photos : undefined, SPOONJOY_FLAGS: flags, JOBS: jobsQueue },
+      env: { DB: d1.binding, PHOTOS: platform.photos ? photos : undefined, SPOONJOY_FLAGS: flags, JOBS: jobsQueue, AUTH_IP_RATE_LIMITER: limiter, API_IP_RATE_LIMITER: limiter },
       ctx: platform.ctx ? { waitUntil: (promise: Promise<unknown>) => void waiting.push(promise), passThroughOnException() {} } : undefined,
     },
   } as never;
@@ -305,7 +310,7 @@ describe("the Move in page", () => {
     expect(await post({ app: "mealie" })).toMatchObject({ init: { status: 400 }, data: { error: "Choose your backup's .zip file first, then press Move in." } });
     const notZip = new UndiciFile(["hello"], "notes.zip", { type: "application/zip" });
     expect(await post({ app: "mealie", backup: notZip })).toMatchObject({ init: { status: 400 }, data: { error: expect.stringMatching(/^That file isn't a zip archive/) } });
-    expect(await post({ app: "other", backup: backup() })).toMatchObject({ data: { error: expect.stringMatching(/^Move-in reads backups only/) } });
+    expect(await post({ app: "other", backup: backup() })).toMatchObject({ data: { error: expect.stringMatching(/^Move-in works only/) } });
     expect(photos.objects).toEqual({});
   });
 
@@ -342,5 +347,44 @@ describe("the Move in page", () => {
     const jobId = new URL(location, "http://localhost").searchParams.get("job") as string;
     await expect(load(location, { as: otherId })).rejects.toMatchObject({ status: 404 });
     await expect(post({ intent: "continue", jobId }, { as: otherId })).rejects.toMatchObject({ status: 404 });
+  });
+
+  describe("from the other app's server", () => {
+    const server = { app: "mealie", from: "server", address: "https://recipes.example.com", token: SERVER_TOKEN };
+    beforeEach(() => {
+      limits.asked = [];
+      limits.full = false;
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("moves a kitchen in from its server's address and token, and says it came from the server", async () => {
+      vi.stubGlobal("fetch", recipeServer());
+      const location = ((await post(server, { headers: { "CF-Connecting-IP": "203.0.113.9" } })) as Response).headers.get("Location") as string;
+      await Promise.all(waiting);
+      const { move } = await load(location);
+      expect(move).toMatchObject({ status: "done", fromServer: true, archiveName: "recipes.example.com", recipes: { created: 2 } });
+      expect(limits.asked).toEqual([`ip:move-in:${ownerId}`, "ip:203.0.113.9"]);
+      // The token is gone once the kitchen is in.
+      expect(photos.objects).toEqual({});
+    });
+
+    it("says how to fix a token the server refuses, and keeps nothing", async () => {
+      vi.stubGlobal("fetch", recipeServer());
+      expect(await post({ ...server, token: "wrong" })).toMatchObject({ init: { status: 400 }, data: { error: expect.stringMatching(/^Your recipe server didn't accept that token/) } });
+      expect(photos.objects).toEqual({});
+    });
+
+    it("asks for the address, then the token, when either is left out", async () => {
+      expect(await post({ app: "mealie", from: "server" })).toMatchObject({ init: { status: 400 }, data: { error: expect.stringMatching(/^Paste your recipe server's address first/) } });
+      expect(await post({ app: "mealie", from: "server", address: "https://recipes.example.com" })).toMatchObject({ data: { error: expect.stringMatching(/^Paste your recipe app's API token first/) } });
+    });
+
+    it("asks a cook to wait after too many tries in a minute, before asking the server", async () => {
+      const fetch = vi.fn(recipeServer());
+      vi.stubGlobal("fetch", fetch);
+      limits.full = true;
+      expect(await post(server)).toMatchObject({ init: { status: 429 }, data: { error: expect.stringMatching(/^That's a lot of tries/) } });
+      expect(fetch).not.toHaveBeenCalled();
+    });
   });
 });

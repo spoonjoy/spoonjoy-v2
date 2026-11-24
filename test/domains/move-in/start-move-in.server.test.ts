@@ -172,7 +172,7 @@ describe("startServerMoveIn", () => {
   });
 
   it.each([
-    ["no address", { address: " " }, "server-address"],
+    ["no address", { address: " " }, "no-address"],
     ["no token", { token: " " }, "no-token"],
     ["a token the server refuses", { token: "wrong" }, "server-token"],
     ["an address that isn't the recipe app", { address: "https://example.com" }, "server-address"],
