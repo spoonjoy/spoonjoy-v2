@@ -239,7 +239,7 @@ describe("the Move in page", () => {
       expect(waiting).toEqual([]);
       expect(jobsQueue?.sent).toEqual([
         { type: "move-in.watch", key: `move-in:${jobId}:watch:1`, payload: { jobId, look: 1 } },
-        { type: "move-in.run", key: `move-in:${jobId}:inspect:-`, payload: { jobId } },
+        { type: "move-in.run", key: `move-in:${jobId}:inspect:-`, payload: { jobId, queuedAt: expect.any(Number) } },
       ]);
       expect((await load(location)).move).toMatchObject({ status: "queued", finished: false, runsOnServer: true });
     });
@@ -278,7 +278,7 @@ describe("the Move in page", () => {
       await post({ intent: "continue", jobId });
       await post({ intent: "continue", jobId });
       expect(jobsQueue?.sent).toHaveLength(3);
-      expect(jobsQueue?.sent.at(-1)).toEqual({ type: "move-in.run", key: expect.stringMatching(new RegExp(`^move-in:${jobId}:nudge:${quiet}:\\d+$`)), payload: { jobId } });
+      expect(jobsQueue?.sent.at(-1)).toEqual({ type: "move-in.run", key: expect.stringMatching(new RegExp(`^move-in:${jobId}:nudge:${quiet}:\\d+$`)), payload: { jobId, queuedAt: expect.any(Number) } });
     });
 
     it("reports a move-in it couldn't queue, and leaves it for the page to pick up", async () => {
