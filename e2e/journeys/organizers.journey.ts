@@ -38,7 +38,8 @@ async function openTokens(page: Page, label: string, phone: boolean): Promise<{ 
     await field.click();
     return { input: field, scope: page, done: () => field.press("Escape") };
   }
-  await field.click();
+  // The phone's field is a button that opens the sheet: a combobox while empty, a plain button once it shows chips.
+  await field.or(page.getByRole("button", { name: label, exact: true })).click();
   const sheet = page.getByRole("dialog", { name: label, exact: true });
   await expect(sheet).toBeVisible();
   const input = sheet.getByRole("combobox", { name: label, exact: true });
