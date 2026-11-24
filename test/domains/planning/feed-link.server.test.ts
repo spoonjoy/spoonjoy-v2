@@ -50,7 +50,7 @@ describe("calendar feed links, stored", () => {
     const token = await makeFeedLink(plans, links, chef.id, now);
     expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
 
-    const plan = await plans.planFor(chef.id);
+    const plan = await plans.planFor({ cook: chef.id });
     expect(await planForFeedToken(links, token)).toEqual({ planId: plan.id, ownerId: chef.id });
     expect(await feedLinkMadeAt(plans, links, chef.id)).toEqual(now);
     const stored = await db.calendarFeed.findMany();
@@ -117,9 +117,9 @@ describe("the calendar feed behind a link", () => {
   async function plannedCook() {
     const chef = await cook();
     const recipe = await db.recipe.create({ data: { ...createTestRecipe(chef.id), title: "Miso soup", servings: "4", description: "Warm." } });
-    const plan = await plans.planFor(chef.id);
+    const plan = await plans.planFor({ cook: chef.id });
     await db.mealPlan.update({ where: { id: plan.id }, data: { timeZone: "America/Los_Angeles" } });
-    const plan2 = (date: string, id: string, input: Record<string, unknown>) => addEntry(plans, chef.id, id, { date, mealType: "dinner", ...input });
+    const plan2 = (date: string, id: string, input: Record<string, unknown>) => addEntry(plans, { cook: chef.id }, id, { date, mealType: "dinner", ...input });
     await plan2("2026-11-23", "e-soup", { kind: "recipe", recipeId: recipe.id, scaleFactor: 2 });
     await plan2("2026-11-24", "e-out", { kind: "note", title: "Eating out" });
     await plan2("2026-10-25", "e-too-old", { kind: "note", title: "Long ago" });

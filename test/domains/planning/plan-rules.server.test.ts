@@ -87,8 +87,8 @@ describe("plan rules, stored", () => {
     await recipe(other.id, "Their quick dish");
     await db.recipe.update({ where: { id: (await recipe(chef.id, "Deleted", [quick.id])).id }, data: { deletedAt: new Date() } });
     await addRule(plans, rules, chef.id, "dinners", { mealType: "dinner", organizerIds: [quick.id] });
-    await addEntry(plans, chef.id, "planned", { kind: "recipe", recipeId: pasta.id, date: "2026-11-23", mealType: "lunch" });
-    await addEntry(plans, chef.id, "out", { kind: "note", title: "Eating out", date: "2026-11-24", mealType: "dinner" });
+    await addEntry(plans, { cook: chef.id }, "planned", { kind: "recipe", recipeId: pasta.id, date: "2026-11-23", mealType: "lunch" });
+    await addEntry(plans, { cook: chef.id }, "out", { kind: "note", title: "Eating out", date: "2026-11-24", mealType: "dinner" });
 
     const meal = { date: "2026-11-26", mealType: "dinner" };
     expect(await pickForMeal(plans, rules, chef.id, meal, () => 0)).toEqual({ ok: true, value: { recipeId: salad.id, title: "Salad", ruleId: "dinners" } });
@@ -107,7 +107,7 @@ describe("plan rules, stored", () => {
 
   it("reads a stored rule whose organizer list isn't a JSON array of ids as naming the ids it can", async () => {
     const chef = await cook();
-    const plan = await plans.planFor(chef.id);
+    const plan = await plans.planFor({ cook: chef.id });
     await db.planRule.create({ data: { id: "a", mealPlanId: plan.id, organizerIds: "not json" } });
     await db.planRule.create({ data: { id: "b", mealPlanId: plan.id, organizerIds: '{"id":"x"}' } });
     await db.planRule.create({ data: { id: "c", mealPlanId: plan.id, organizerIds: '["x",1]', mealType: "dinner", weekday: 2 } });

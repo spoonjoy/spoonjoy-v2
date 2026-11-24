@@ -52,15 +52,15 @@ describe("adding planned meals to the shopping list", () => {
     const chef = await db.user.create({ data: createTestUser() });
     const rice = await db.recipe.create({ data: { ...createTestRecipe(chef.id), title: "Rice" } });
     const soup = await db.recipe.create({ data: { ...createTestRecipe(chef.id), title: "Soup" } });
-    await addEntry(store, chef.id, "mon", { kind: "recipe", date: "2026-11-23", mealType: "dinner", recipeId: rice.id, scaleFactor: 2 });
-    await addEntry(store, chef.id, "wed", { kind: "recipe", date: "2026-11-25", mealType: "lunch", recipeId: rice.id, scaleFactor: 1 });
-    await addEntry(store, chef.id, "thu", { kind: "recipe", date: "2026-11-26", mealType: "dinner", recipeId: soup.id });
-    await addEntry(store, chef.id, "removed", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: soup.id });
-    await removeEntry(store, chef.id, "removed");
-    await addEntry(store, chef.id, "next-week", { kind: "recipe", date: "2026-11-30", mealType: "dinner", recipeId: soup.id });
-    await addEntry(store, chef.id, "note", { kind: "note", date: "2026-11-24", mealType: "dinner", title: "Eat out" });
+    await addEntry(store, { cook: chef.id }, "mon", { kind: "recipe", date: "2026-11-23", mealType: "dinner", recipeId: rice.id, scaleFactor: 2 });
+    await addEntry(store, { cook: chef.id }, "wed", { kind: "recipe", date: "2026-11-25", mealType: "lunch", recipeId: rice.id, scaleFactor: 1 });
+    await addEntry(store, { cook: chef.id }, "thu", { kind: "recipe", date: "2026-11-26", mealType: "dinner", recipeId: soup.id });
+    await addEntry(store, { cook: chef.id }, "removed", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: soup.id });
+    await removeEntry(store, { cook: chef.id }, "removed");
+    await addEntry(store, { cook: chef.id }, "next-week", { kind: "recipe", date: "2026-11-30", mealType: "dinner", recipeId: soup.id });
+    await addEntry(store, { cook: chef.id }, "note", { kind: "note", date: "2026-11-24", mealType: "dinner", title: "Eat out" });
 
-    const result = await addPlannedMealsToList(store, list, chef.id, { from: "2026-11-23", to: "2026-11-29" }, "submit-1");
+    const result = await addPlannedMealsToList(store, list, { cook: chef.id }, { from: "2026-11-23", to: "2026-11-29" }, "submit-1");
 
     expect(added).toEqual([
       { recipeId: rice.id, scaleFactor: 3, writeKey: `submit-1:${rice.id}` },
@@ -72,16 +72,16 @@ describe("adding planned meals to the shopping list", () => {
   it("adds just one day when asked, and counts a recipe the list could not find", async () => {
     const chef = await db.user.create({ data: createTestUser() });
     const rice = await db.recipe.create({ data: { ...createTestRecipe(chef.id), title: "Rice" } });
-    await addEntry(store, chef.id, "mon", { kind: "recipe", date: "2026-11-23", mealType: "dinner", recipeId: rice.id });
-    await addEntry(store, chef.id, "tue", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: rice.id, scaleFactor: 4 });
+    await addEntry(store, { cook: chef.id }, "mon", { kind: "recipe", date: "2026-11-23", mealType: "dinner", recipeId: rice.id });
+    await addEntry(store, { cook: chef.id }, "tue", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: rice.id, scaleFactor: 4 });
     list = { addRecipe: async () => false };
 
-    expect(await addPlannedMealsToList(store, list, chef.id, { from: "2026-11-24", to: "2026-11-24" }, "k")).toEqual({ recipes: 0, missing: 1 });
+    expect(await addPlannedMealsToList(store, list, { cook: chef.id }, { from: "2026-11-24", to: "2026-11-24" }, "k")).toEqual({ recipes: 0, missing: 1 });
   });
 
   it("refuses a range backwards or longer than a week", async () => {
     const chef = await db.user.create({ data: createTestUser() });
-    await expect(addPlannedMealsToList(store, list, chef.id, { from: "2026-11-25", to: "2026-11-24" }, "k")).rejects.toThrow("from");
-    await expect(addPlannedMealsToList(store, list, chef.id, { from: "2026-11-23", to: "2026-11-30" }, "k")).rejects.toThrow("week");
+    await expect(addPlannedMealsToList(store, list, { cook: chef.id }, { from: "2026-11-25", to: "2026-11-24" }, "k")).rejects.toThrow("from");
+    await expect(addPlannedMealsToList(store, list, { cook: chef.id }, { from: "2026-11-23", to: "2026-11-30" }, "k")).rejects.toThrow("week");
   });
 });

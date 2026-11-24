@@ -3270,7 +3270,7 @@ const getMealPlanTool: SpoonjoyApiOperation = {
     const asked = optionalString(args.week);
     const week = asked === undefined ? null : parseLocalDate(asked);
     if (asked !== undefined && !week) throw new ApiAuthError("week must be a day as YYYY-MM-DD", 400);
-    const plan = await getWeek(prismaPlanStore(context.db), owner.id, week);
+    const plan = await getWeek(prismaPlanStore(context.db), { cook: owner.id }, week);
     return json({
       mealPlan: {
         weekStart: plan.start,
@@ -3301,7 +3301,7 @@ const planMealTool: SpoonjoyApiOperation = {
       scaleFactor: args.scaleFactor,
     };
     const store = prismaPlanStore(context.db);
-    const planned = await retryD1Write({ scope: "plan_entry.add.mcp" }, () => addEntry(store, owner.id, entryId, input));
+    const planned = await retryD1Write({ scope: "plan_entry.add.mcp" }, () => addEntry(store, { cook: owner.id }, entryId, input));
     if (!planned.ok) throw new ApiAuthError(planned.error, 400);
     return json({ meal: formatPlannedMeal(planned.value) });
   },
@@ -3314,7 +3314,7 @@ const removeMealPlanEntryTool: SpoonjoyApiOperation = {
     const owner = await mealPlanner(args, context);
     const entryId = requiredString(args, "entryId");
     const store = prismaPlanStore(context.db);
-    const removed = await retryD1Write({ scope: "plan_entry.remove.mcp" }, () => removeEntry(store, owner.id, entryId));
+    const removed = await retryD1Write({ scope: "plan_entry.remove.mcp" }, () => removeEntry(store, { cook: owner.id }, entryId));
     return json({ removed });
   },
 };

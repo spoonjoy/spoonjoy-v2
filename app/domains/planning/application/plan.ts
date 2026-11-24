@@ -4,26 +4,37 @@ import { parseLocalDate, startOfWeek, todayIn, type LocalDate } from "../model/l
 import { parseMealType, type MealType } from "../model/meal-type";
 import { planWeek, validateEntryInput, type PlanDay, type PlanEntry, type PlanEntryInput, type Validated } from "../model/plan-entry";
 
-export type PlanSettings = { id: string; firstDayOfWeek: number; timeZone: string };
+/**
+ * Whose plan a use case works on: a cook's own, or a household's, changed by one of its cooks. The acting cook is who
+ * adds entries, whose cooks count as last made and whose read rights decide which recipes may be planned.
+ */
+export type PlanScope = { cook: string } | { household: string; actingCook: string };
 
-export type StoredEntry = { entry: PlanEntry; planId: string; removed: boolean };
+export function actingCookOf(scope: PlanScope): string {
+  return "cook" in scope ? scope.cook : scope.actingCook;
+}
+
+/** A plan as its store hands it out. The store's other methods take it back, so they know which plan it is. */
+export type PlanSettings = { id: string; scope: PlanScope; firstDayOfWeek: number; timeZone: string };
+
+export type StoredEntry = { entry: PlanEntry; removed: boolean };
 
 export interface PlanStore {
-  /** The cook's plan, made on first use. */
-  planFor(ownerId: string): Promise<PlanSettings>;
+  /** The scope's plan, made on first use. */
+  planFor(scope: PlanScope): Promise<PlanSettings>;
   /** The plan's live entries from `from` to `to`, both days included. */
-  entriesBetween(planId: string, from: LocalDate, to: LocalDate): Promise<PlanEntry[]>;
+  entriesBetween(plan: PlanSettings, from: LocalDate, to: LocalDate): Promise<PlanEntry[]>;
   /** The title of a recipe the cook may plan (one they can read that isn't deleted), or null when there is none. */
-  plannableRecipeTitle(ownerId: string, recipeId: string): Promise<string | null>;
+  plannableRecipeTitle(cookId: string, recipeId: string): Promise<string | null>;
   /** The recipes the cook may plan that are theirs or saved in their cookbooks, by title, at most `limit`. */
-  ownAndSavedRecipes(ownerId: string, limit: number): Promise<PlannableRecipe[]>;
-  /** The entry with this id in any plan, removed ones included. */
-  findEntry(entryId: string): Promise<StoredEntry | null>;
-  insertEntry(planId: string, addedById: string, entry: PlanEntry): Promise<void>;
+  ownAndSavedRecipes(cookId: string, limit: number): Promise<PlannableRecipe[]>;
+  /** The entry with this id in this plan, removed ones included. */
+  findEntry(plan: PlanSettings, entryId: string): Promise<StoredEntry | null>;
+  insertEntry(plan: PlanSettings, addedById: string, entry: PlanEntry): Promise<void>;
   /** Marks a live entry of this plan removed; false when there was none. */
-  removeEntry(planId: string, entryId: string): Promise<boolean>;
+  removeEntry(plan: PlanSettings, entryId: string): Promise<boolean>;
   /** Sets where each of these entries of this plan sits: its day, meal type and order. */
-  placeEntries(planId: string, placements: readonly EntryPlacement[]): Promise<void>;
+  placeEntries(plan: PlanSettings, placements: readonly EntryPlacement[]): Promise<void>;
   /** When the cook last logged a live cook of each of these recipes; a recipe they never cooked is left out. */
   lastCooked(chefId: string, recipeIds: readonly string[]): Promise<Array<{ recipeId: string; cookedAt: Date }>>;
 }
@@ -43,13 +54,13 @@ export type PlanWeek = {
 };
 
 /** The week holding `date`, or this week where the plan lives when `date` is null. */
-export async function getWeek(store: PlanStore, ownerId: string, date: LocalDate | null, now: Date = new Date()): Promise<PlanWeek> {
-  const plan = await store.planFor(ownerId);
+export async function getWeek(store: PlanStore, scope: PlanScope, date: LocalDate | null, now: Date = new Date()): Promise<PlanWeek> {
+  const plan = await store.planFor(scope);
   const today = todayIn(plan.timeZone, now);
   const start = startOfWeek(date ?? today, plan.firstDayOfWeek);
-  const days = planWeek(await store.entriesBetween(plan.id, start, planWeek([], start)[6].date), start);
+  const days = planWeek(await store.entriesBetween(plan, start, planWeek([], start)[6].date), start);
   const recipeIds = [...new Set(days.flatMap((day) => day.entries.flatMap((entry) => (entry.recipeId ? [entry.recipeId] : []))))];
-  const cooked = recipeIds.length ? await store.lastCooked(ownerId, recipeIds) : [];
+  const cooked = recipeIds.length ? await store.lastCooked(actingCookOf(scope), recipeIds) : [];
   const lastMade = Object.fromEntries(cooked.map(({ recipeId, cookedAt }) => [recipeId, todayIn(plan.timeZone, cookedAt)]));
   return { today, start, firstDayOfWeek: plan.firstDayOfWeek, timeZone: plan.timeZone, days, lastMade };
 }
@@ -62,25 +73,26 @@ function nextPosition(entries: readonly PlanEntry[], input: PlanEntryInput): num
  * Plans a recipe or a note. `entryId` comes from the caller (a form token, an idempotency key), so sending the same
  * add again returns the entry the first one made instead of planning the meal twice.
  */
-export async function addEntry(store: PlanStore, ownerId: string, entryId: string, raw: Record<string, unknown>): Promise<Validated<PlanEntry>> {
-  const plan = await store.planFor(ownerId);
-  const existing = await store.findEntry(entryId);
-  if (existing && existing.planId === plan.id) {
+export async function addEntry(store: PlanStore, scope: PlanScope, entryId: string, raw: Record<string, unknown>): Promise<Validated<PlanEntry>> {
+  const plan = await store.planFor(scope);
+  const cook = actingCookOf(scope);
+  const existing = await store.findEntry(plan, entryId);
+  if (existing) {
     return existing.removed ? { ok: false, error: "That meal was removed from the plan." } : { ok: true, value: existing.entry };
   }
   const input = validateEntryInput(raw);
   if (!input.ok) return input;
-  const recipeTitle = input.value.recipeId ? await store.plannableRecipeTitle(ownerId, input.value.recipeId) : null;
+  const recipeTitle = input.value.recipeId ? await store.plannableRecipeTitle(cook, input.value.recipeId) : null;
   if (input.value.recipeId && recipeTitle === null) return { ok: false, error: "That recipe isn't available to plan." };
-  const sameDay = await store.entriesBetween(plan.id, input.value.date, input.value.date);
+  const sameDay = await store.entriesBetween(plan, input.value.date, input.value.date);
   const entry: PlanEntry = { id: entryId, ...input.value, position: nextPosition(sameDay, input.value), recipeTitle };
-  await store.insertEntry(plan.id, ownerId, entry);
+  await store.insertEntry(plan, cook, entry);
   return { ok: true, value: entry };
 }
 
-export async function removeEntry(store: PlanStore, ownerId: string, entryId: string): Promise<boolean> {
-  const plan = await store.planFor(ownerId);
-  return store.removeEntry(plan.id, entryId);
+export async function removeEntry(store: PlanStore, scope: PlanScope, entryId: string): Promise<boolean> {
+  const plan = await store.planFor(scope);
+  return store.removeEntry(plan, entryId);
 }
 
 /**
@@ -89,25 +101,25 @@ export async function removeEntry(store: PlanStore, ownerId: string, entryId: st
  */
 export async function moveEntry(
   store: PlanStore,
-  ownerId: string,
+  scope: PlanScope,
   entryId: string,
   to: { date: unknown; mealType: unknown; index: number },
 ): Promise<Validated<PlanEntry>> {
-  const plan = await store.planFor(ownerId);
-  const found = await store.findEntry(entryId);
-  if (!found || found.planId !== plan.id || found.removed) return { ok: false, error: "That meal isn't on your plan." };
+  const plan = await store.planFor(scope);
+  const found = await store.findEntry(plan, entryId);
+  if (!found || found.removed) return { ok: false, error: "That meal isn't on your plan." };
   const date = parseLocalDate(to.date);
   if (!date) return { ok: false, error: "Choose a day for this meal." };
   const mealType = parseMealType(to.mealType);
   if (!mealType) return { ok: false, error: "Choose a meal type." };
 
   // planWeek orders the day's entries as the page shows them.
-  const others = planWeek(await store.entriesBetween(plan.id, date, date), date)[0].entries
+  const others = planWeek(await store.entriesBetween(plan, date, date), date)[0].entries
     .filter((entry) => entry.mealType === mealType && entry.id !== entryId);
   const index = Math.min(Math.max(Math.trunc(to.index) || 0, 0), others.length);
   const ordered = [...others.slice(0, index), found.entry, ...others.slice(index)];
   const placements = ordered.map((entry, position) => ({ id: entry.id, date, mealType, position }));
-  await store.placeEntries(plan.id, placements);
+  await store.placeEntries(plan, placements);
   return { ok: true, value: { ...found.entry, date, mealType, position: index } };
 }
 
@@ -115,17 +127,18 @@ export async function moveEntry(
 export const PLANNABLE_RECIPE_LIMIT = 500;
 
 /**
- * The recipes the plan page offers: the cook's own and those saved in their cookbooks, by title. A recipe asked for by
- * link (`?recipe=`) goes first when the cook may plan it, and is ignored when they may not.
+ * The recipes the plan page offers: the acting cook's own and those saved in their cookbooks, by title. A recipe asked
+ * for by link (`?recipe=`) goes first when the cook may plan it, and is ignored when they may not.
  */
 export async function plannableRecipes(
   store: PlanStore,
-  ownerId: string,
+  scope: PlanScope,
   chosenId: string | null,
 ): Promise<{ recipes: PlannableRecipe[]; chosenRecipeId: string | null }> {
+  const cook = actingCookOf(scope);
   const [listed, chosenTitle] = await Promise.all([
-    store.ownAndSavedRecipes(ownerId, PLANNABLE_RECIPE_LIMIT),
-    chosenId ? store.plannableRecipeTitle(ownerId, chosenId) : null,
+    store.ownAndSavedRecipes(cook, PLANNABLE_RECIPE_LIMIT),
+    chosenId ? store.plannableRecipeTitle(cook, chosenId) : null,
   ]);
   if (!chosenId || chosenTitle === null) return { recipes: listed, chosenRecipeId: null };
   return { recipes: [{ id: chosenId, title: chosenTitle }, ...listed.filter((recipe) => recipe.id !== chosenId)], chosenRecipeId: chosenId };
