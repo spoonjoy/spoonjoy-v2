@@ -5,3 +5,8 @@
 # revalidating policy.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Account emails load Fraunces and Source Serif from here (app/domains/platform/model/account-email.ts).
+# A mail client reads the mail from another origin, so these fonts allow any origin.
+/fonts/email/*
+  Access-Control-Allow-Origin: *
