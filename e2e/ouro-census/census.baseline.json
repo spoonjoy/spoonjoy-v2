@@ -2351,7 +2351,35 @@
     "recipe-organize": {
       "default": [
         {
+          "identity": "button \"Clear\" [combobox/clear] in main",
+          "count": 3
+        },
+        {
+          "identity": "button \"Remove Saucepan\" [combobox/chip-remove] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Remove Sides\" [combobox/chip-remove] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Remove Weeknight\" [combobox/chip-remove] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "combobox \"Categories\" [combobox/input] in main",
+          "count": 1
+        },
+        {
+          "identity": "combobox \"Tags\" [combobox/input] in main",
+          "count": 1
+        },
+        {
+          "identity": "combobox \"Tools\" [combobox/input] in main",
           "count": 1
         },
         {
@@ -2372,18 +2400,6 @@
         },
         {
           "identity": "link \"Weeknight\" [badge/root] in region \"Tags on this recipe\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Categories\" [text-field/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Tags\" [text-field/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Tools\" [text-field/input] in main",
           "count": 1
         }
       ]
@@ -6765,7 +6781,19 @@
     "recipe-organize": {
       "default": [
         {
+          "identity": "button \"Categories\" [combobox/trigger] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Save\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Tags\" [combobox/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Tools\" [combobox/trigger] in main",
           "count": 1
         },
         {
@@ -6786,18 +6814,6 @@
         },
         {
           "identity": "link \"Weeknight\" [badge/root] in region \"Tags on this recipe\"",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Categories\" [text-field/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Tags\" [text-field/input] in main",
-          "count": 1
-        },
-        {
-          "identity": "textbox \"Tools\" [text-field/input] in main",
           "count": 1
         }
       ]
