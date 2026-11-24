@@ -198,6 +198,7 @@ const EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES = [
   "Record release source",
   "Ensure release artifact exists",
   "Upload MCP OAuth canary artifacts",
+  "Abort unfinished move-in uploads after a day",
 ] as const;
 const EXPECTED_RELEASE_SOURCE_RUN_SHA256 = "a7cb6362694e1491a024317adecffd7a4d8c4fe8a74266f91cc28e64b75c3de5";
 const EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 = "badae675ff339cc466f30e07564ff2e2874adae02b0b41bd0fef1a25f2c09242";
@@ -1042,6 +1043,16 @@ const PRODUCTION_DEPLOY_STEPS: readonly Record<string, unknown>[] = [
       "if-no-files-found": "error",
       "retention-days": 14,
     },
+  },
+  {
+    name: "Abort unfinished move-in uploads after a day",
+    if: "success()",
+    "continue-on-error": true,
+    env: {
+      CLOUDFLARE_ACCOUNT_ID: "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+      CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}",
+    },
+    run: "node scripts/retry-cloudflare.mjs -- node scripts/ensure-r2-upload-lifecycle.mjs spoonjoy-photos",
   },
 ];
 
