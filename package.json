@@ -106,7 +106,7 @@
     "test:workers": "vitest run --config vitest.workers.config.ts --maxWorkers=1 --no-isolate",
     "test:workers:coverage": "vitest run --config vitest.workers.config.ts --maxWorkers=1 --no-isolate --coverage",
     "test:ouro": "vitest run --config vitest.ouro.config.ts --coverage",
-    "test:ouro:timing": "OURO_TIMING=only vitest run --config vitest.ouro.config.ts app/components/ouro/text-field/text-field.weight.test.tsx app/components/ouro/avatar/avatar.weight.test.tsx app/components/ouro/collapsible/collapsible.test.tsx",
+    "test:ouro:timing": "OURO_TIMING=only vitest run --config vitest.ouro.config.ts --hideSkippedTests app/components/ouro/text-field/text-field.weight.test.tsx app/components/ouro/avatar/avatar.weight.test.tsx app/components/ouro/collapsible/collapsible.test.tsx",
     "test:e2e:ouro": "playwright test -c playwright.ouro.config.ts",
     "test:e2e:storybook-a11y": "playwright test -c playwright.storybook.config.ts",
     "test:e2e:corner-radius": "playwright test -c playwright.corner-radius.config.ts",
