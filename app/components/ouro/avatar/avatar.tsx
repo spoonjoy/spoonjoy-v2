@@ -21,10 +21,11 @@ export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl" | "3xl";
 /**
  * A person's presence, drawn as a dot with its own shape: a check (available), a solid
  * dot (busy), a bar (do not disturb), a clock (away), a ring with a cross (offline) and a
- * ring with an arrow (out of office), so it never relies on color alone.
+ * ring with an arrow (out of office), so it never relies on color alone. `"unknown"` is a face whose
+ * presence has not loaded: its dot is in the tree, not drawn, and the avatar is not cut away.
  * @claim "A person's presence, drawn as a dot" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar presence > draws each state in its own shape and tone)
  */
-export type AvatarPresence = "available" | "busy" | "away" | "do-not-disturb" | "offline" | "out-of-office";
+export type AvatarPresence = "available" | "busy" | "away" | "do-not-disturb" | "offline" | "out-of-office" | "unknown";
 
 /**
  * Avatar's shapes: a squircle for a person, a squircle with a second edge behind it for a team,
@@ -165,7 +166,8 @@ export interface AvatarPresenceProps {
    * circle round the dot (a bite), so whatever lies behind the avatar, a photo or a gradient
    * too, shows through the gap. The dot lies over the corner and takes no room, so
    * the initials, icon or picture stay in the middle with or without it, and the dot stays
-   * below the letters at every size.
+   * below the letters at every size. `"unknown"` keeps the dot in the tree but draws neither it
+   * nor the bite, for a face whose presence has not loaded yet.
    * @claim "The dot lies over the corner" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar presence > keeps the initials in the middle with or without a dot, and the dot off them (%s))
    * @claim "The dot lies over the corner" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar presence > keeps an icon and a picture in the middle with a dot, as without one)
    * @claim "Each state has its own shape" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar presence > draws each state in its own shape and tone)
@@ -308,7 +310,7 @@ const neutral: Tint = ["bg-secondary", "text-secondary-foreground"];
 const shapes = ["circle", "square", "agent"] as const;
 
 const colors = ["colorful", "brand", "neutral"] as const;
-const presences = ["available", "busy", "away", "do-not-disturb", "offline", "out-of-office"] as const;
+const presences = ["available", "busy", "away", "do-not-disturb", "offline", "out-of-office", "unknown"] as const;
 
 /** The group's size, which its avatars take. */
 const GroupSize = createContext<AvatarSize | undefined>(undefined);
@@ -625,6 +627,7 @@ export function Avatar(props: AvatarProps): JSX.Element {
   );
   // A presence's words follow the name, so a screen reader hears "Ana Lind, Busy"; with
   // alt="" (the name written beside it) only the presence is read.
+  const drawn = presence !== undefined && presence !== "unknown";
   const spoken = presence ? presenceLabel || presence.replaceAll("-", " ") : "";
   const groupWords = group ? membersLabel(members!.map((member) => member.name)) : "";
   const label = [alt ?? (nameLoading ? nameLoadingLabel : [name, groupWords].filter(Boolean).join(", ")), spoken].filter(Boolean).join(", ");
@@ -647,19 +650,21 @@ export function Avatar(props: AvatarProps): JSX.Element {
       className={cn(
         "relative box-border inline-flex shrink-0 items-center justify-center align-middle",
         "font-medium leading-none select-none",
-        // The box's own corner is a circle at 0.543 of the surface's squircle radius, the largest circle that encloses it, so a shadow
-        // follows it and the build-time squircle leaves the root unclipped, where the presence dot hangs over its edge.
-        shape === "circle" ? "rounded-[24%] [corner-shape:round]" : "rounded-[13%] [corner-shape:round]",
+        // Where the engine draws corner-shape, the box is the surface's own squircle, so the edge and ring follow it. Elsewhere its corner
+        // is a circle at 0.543 of that radius, the largest circle that encloses the squircle, so a shadow follows it.
+        shape === "circle"
+          ? "rounded-[24%] supports-[corner-shape:squircle]:rounded-[44%] supports-[corner-shape:squircle]:[corner-shape:squircle]"
+          : "rounded-[13%] supports-[corner-shape:squircle]:rounded-[24%] supports-[corner-shape:squircle]:[corner-shape:squircle]",
         shape === "square" && squareEdgeClass,
         !nameLoading && !group && ink,
-        presence && biteSizes[size],
+        drawn && biteSizes[size],
         sizes[size],
         className,
       )}
     >
       <span
         data-ouro-avatar-surface=""
-        data-ouro-bite={presence ? "" : undefined}
+        data-ouro-bite={drawn ? "" : undefined}
         className={cn(
           "absolute inset-0",
           shape === "circle" ? "rounded-[44%]" : "rounded-[24%]",
@@ -697,9 +702,9 @@ export function Avatar(props: AvatarProps): JSX.Element {
       {presence && (
         <span
           data-ouro-avatar-presence=""
-          className={cn("pointer-events-none absolute box-border flex [--corner-shape:round] [corner-shape:round] rounded-full", presenceSizes[size])}
+          className={cn("pointer-events-none absolute box-border flex [--corner-shape:round] [corner-shape:round] rounded-full", presenceSizes[size], !drawn && "invisible")}
         >
-          <PresenceGlyph presence={presence} plain={plainSizes.includes(size)} />
+          {drawn && <PresenceGlyph presence={presence} plain={plainSizes.includes(size)} />}
         </span>
       )}
     </span>

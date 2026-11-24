@@ -440,3 +440,15 @@ describe("ToggleGroup server rendering", () => {
   });
 
 });
+
+describe("ToggleGroup spacing", () => {
+  it("keeps adjacent toggles at least 8px apart, Ouro check's near-miss minimum, in both wrap and scroll overflow", async () => {
+    const { toggles: wrapToggles } = await render(<ToggleGroup label="Alignment" items={align} />);
+    const wrapGap = wrapToggles[1]!.getBoundingClientRect().left - wrapToggles[0]!.getBoundingClientRect().right;
+    expect(wrapGap).toBeGreaterThanOrEqual(8);
+
+    const { toggles: scrollToggles } = await render(<ToggleGroup label="Styles" items={styles} overflow="scroll" />);
+    const scrollGap = scrollToggles[1]!.getBoundingClientRect().left - scrollToggles[0]!.getBoundingClientRect().right;
+    expect(scrollGap).toBeGreaterThanOrEqual(8);
+  });
+});

@@ -427,7 +427,7 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
           role="group"
           aria-labelledby={labelId}
           onKeyDown={move}
-          className="m-0 box-border inline-flex max-w-full flex-wrap items-center gap-1"
+          className="m-0 box-border inline-flex max-w-full flex-wrap items-center gap-2"
         >
           {groupItems}
         </div>
@@ -466,7 +466,7 @@ function ScrollRow(props: {
       role="group"
       aria-labelledby={labelId}
       onKeyDown={onKeyDown}
-      className={cn("m-0 box-border flex max-w-full items-center gap-1", overflowScrollerClass)}
+      className={cn("m-0 box-border flex max-w-full items-center gap-2", overflowScrollerClass)}
     >
       {children}
     </div>

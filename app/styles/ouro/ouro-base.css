@@ -326,7 +326,7 @@
   }
 }
 
-/* An avatar's presence notch: a circle round the dot, cut out of the surface so the picture behind the avatar shows through the gap. It exists only while a dot is drawn (data-ouro-bite). Where corner-shape is missing the squircleCorners() plugin's clip path carries it as one more subpath (--sq-notch), and where corner-shape draws the corners it is the whole clip path. */
+/* An avatar's presence notch: a circle round the dot, cut out of the surface so the picture behind the avatar shows through the gap. It exists only while a dot is drawn (data-ouro-bite). Where corner-shape is missing the squircleCorners() plugin's clip path carries it as one more subpath (--sq-notch), and where corner-shape draws the corners it is the whole clip path. The shape() is read back through --ouro-notch-clip rather than written straight into clip-path: Chromium 149 to 157 drops every later rule in the stylesheet when a shape() segment is a bare var(), because that engine eagerly parses an ordinary property's value but a custom property's value only lazily (ourostack/ouro-ui#3491). */
 @layer base {
   [data-ouro-bite] {
     --ouro-bite-x: calc(100% - var(--ouro-bite-c));
@@ -338,7 +338,8 @@
 }
 @supports (corner-shape: squircle) and (clip-path: shape(from 0 0, close)) {
   [data-ouro-bite] {
-    clip-path: shape(nonzero from 0 0, hline to 100%, vline to 100%, hline to 0, close, var(--sq-notch));
+    --ouro-notch-clip: shape(nonzero from 0 0, hline to 100%, vline to 100%, hline to 0, close, var(--sq-notch));
+    clip-path: var(--ouro-notch-clip);
   }
 }
 
