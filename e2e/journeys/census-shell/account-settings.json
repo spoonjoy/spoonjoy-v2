@@ -1,10 +1,6 @@
 {
   "desktop-chrome": {
-    "crop-photo-dialog": [
-      "banner",
-      "nav",
-      "footer"
-    ],
+    "crop-photo-dialog": [],
     "default": [
       "banner",
       "nav",
@@ -17,10 +13,7 @@
     ]
   },
   "iphone-webkit": {
-    "crop-photo-dialog": [
-      "tabBar",
-      "footer"
-    ],
+    "crop-photo-dialog": [],
     "default": [
       "tabBar",
       "footer"

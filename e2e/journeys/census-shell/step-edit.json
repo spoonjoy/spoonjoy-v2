@@ -10,11 +10,7 @@
       "nav",
       "footer"
     ],
-    "remove-ingredient-dialog": [
-      "banner",
-      "nav",
-      "footer"
-    ]
+    "remove-ingredient-dialog": []
   },
   "iphone-webkit": {
     "add-ingredient-open": [
@@ -23,8 +19,6 @@
     "default": [
       "footer"
     ],
-    "remove-ingredient-dialog": [
-      "footer"
-    ]
+    "remove-ingredient-dialog": []
   }
 }

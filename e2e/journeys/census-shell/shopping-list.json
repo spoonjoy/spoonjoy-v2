@@ -1,10 +1,6 @@
 {
   "desktop-chrome": {
-    "clear-all-dialog": [
-      "banner",
-      "nav",
-      "footer"
-    ],
+    "clear-all-dialog": [],
     "default": [
       "banner",
       "nav",
@@ -15,17 +11,10 @@
       "nav",
       "footer"
     ],
-    "remove-item-dialog": [
-      "banner",
-      "nav",
-      "footer"
-    ]
+    "remove-item-dialog": []
   },
   "iphone-webkit": {
-    "clear-all-dialog": [
-      "tabBar",
-      "footer"
-    ],
+    "clear-all-dialog": [],
     "default": [
       "tabBar",
       "footer"
@@ -34,9 +23,6 @@
       "tabBar",
       "footer"
     ],
-    "remove-item-dialog": [
-      "tabBar",
-      "footer"
-    ]
+    "remove-item-dialog": []
   }
 }
