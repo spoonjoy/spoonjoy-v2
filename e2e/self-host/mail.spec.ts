@@ -56,8 +56,8 @@ test.describe("Account mail from a self-hosted server through its SMTP server", 
     await inbox.close();
 
     await page.goto(link!);
-    await fillSecret(page.getByLabel("New password"), newPassword);
-    await fillSecret(page.getByLabel("Confirm new password"), newPassword);
+    await fillSecret(page.getByLabel("New password", { exact: true }), newPassword);
+    await fillSecret(page.getByLabel("Confirm new password", { exact: true }), newPassword);
     await page.getByRole("button", { name: "Reset password" }).click();
     await expect(page.getByText("Your password has been reset.")).toBeVisible();
 
