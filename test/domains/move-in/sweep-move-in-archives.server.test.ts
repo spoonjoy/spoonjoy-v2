@@ -125,15 +125,24 @@ describe("sweepMoveInArchives", () => {
 });
 
 describe("sweepMoveInUploads", () => {
-  it("aborts an upload in parts left unfinished for a day and forgets it, and keeps a newer one and one that moved in", async () => {
+  it("aborts an upload in parts left unfinished for a day and forgets it, and keeps a newer one", async () => {
     upload("upload_old", start);
     upload("upload_new", at(1));
-    upload("upload_done", start, "movein_1");
     const bucket = memoryBucket({});
     expect(await sweepMoveInUploads({ db: database.binding, bucket, now: at(MOVE_IN_UPLOAD_KEPT_MS) })).toEqual({ aborted: 1 });
     expect(bucket.aborted).toEqual(["r2-upload_old"]);
-    expect(uploadIds()).toEqual(["upload_done", "upload_new"]);
-    expect(database.sqlite.prepare(`SELECT "uploadId" FROM "ImportUploadPart" ORDER BY "uploadId"`).all()).toEqual([{ uploadId: "upload_done" }, { uploadId: "upload_new" }]);
+    expect(uploadIds()).toEqual(["upload_new"]);
+    expect(database.sqlite.prepare(`SELECT "uploadId" FROM "ImportUploadPart" ORDER BY "uploadId"`).all()).toEqual([{ uploadId: "upload_new" }]);
+  });
+
+  it("forgets an upload that became a move-in after a day, without touching storage, and keeps a newer one", async () => {
+    upload("upload_done", start, "movein_1");
+    upload("upload_done_new", at(1), "movein_2");
+    const bucket = memoryBucket({});
+    expect(await sweepMoveInUploads({ db: database.binding, bucket, now: at(MOVE_IN_UPLOAD_KEPT_MS) })).toEqual({ aborted: 0 });
+    expect(bucket.aborted).toEqual([]);
+    expect(uploadIds()).toEqual(["upload_done_new"]);
+    expect(database.sqlite.prepare(`SELECT "uploadId" FROM "ImportUploadPart"`).all()).toEqual([{ uploadId: "upload_done_new" }]);
   });
 
   it("tries again on the next cron when storage won't abort, until storage's own backstop has cleared it", async () => {
@@ -155,6 +164,24 @@ describe("runScheduledMoveInSweep", () => {
     const report = await runScheduledMoveInSweep({ DB: database.binding, PHOTOS: bucket }, at(MOVE_IN_UPLOAD_KEPT_MS), (line) => lines.push(line));
     expect(report).toEqual({ deleted: 1, expired: 0, aborted: 1 });
     expect(lines).toEqual([JSON.stringify({ event: "move_in_archive_sweep", deleted: 1, expired: 0, aborted: 1 })]);
+  });
+
+  it("still sweeps the backups when the uploads' sweep fails, and logs the failure", async () => {
+    database.sqlite.exec(`DROP TABLE "ImportUploadPart"; DROP TABLE "ImportUpload";`);
+    const bucket = memoryBucket({ "pending-uploads/move-in/gone/a.zip": start });
+    const lines: string[] = [];
+    const report = await runScheduledMoveInSweep({ DB: database.binding, PHOTOS: bucket }, at(MOVE_IN_UPLOAD_KEPT_MS), (line) => lines.push(line));
+    expect(report).toEqual({ deleted: 1, expired: 0, aborted: 0 });
+    expect(JSON.parse(lines[0])).toEqual({ event: "move_in_upload_sweep_failed", message: expect.stringContaining("ImportUpload") });
+    expect(lines[1]).toBe(JSON.stringify({ event: "move_in_archive_sweep", deleted: 1, expired: 0, aborted: 0 }));
+  });
+
+  it("logs a failure that isn't an Error as it came", async () => {
+    const lines: string[] = [];
+    const db = { prepare: () => { throw "D1 said no"; }, batch: () => Promise.reject("D1 said no") } as never;
+    // With no backups in storage the backups' sweep never reads the database.
+    expect(await runScheduledMoveInSweep({ DB: db, PHOTOS: memoryBucket({}) }, start, (line) => lines.push(line))).toEqual({ deleted: 0, expired: 0, aborted: 0 });
+    expect(lines[0]).toBe(JSON.stringify({ event: "move_in_upload_sweep_failed", message: "D1 said no" }));
   });
 
   it("does nothing where the Worker has no database or bucket", async () => {

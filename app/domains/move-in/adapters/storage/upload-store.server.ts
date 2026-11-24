@@ -82,14 +82,14 @@ export async function recordPart(db: D1ReadDatabase, id: string, part: UploadedP
 
 /**
  * Creates the upload's move-in job, unless a finish before this one already did, and returns the job
- * the upload became. The job and its record on the upload are written in one transaction, so two
- * finishes at once make one job.
+ * the upload became, with whether this call created it. The job and its record on the upload are
+ * written in one transaction, so two finishes at once make one job.
  */
 export async function createUploadJob(
   db: D1ReadDatabase,
   upload: Pick<BackupUpload, "id" | "ownerId" | "archiveKey" | "name">,
   { kind, now }: { kind: string; now: Date },
-): Promise<string> {
+): Promise<{ jobId: string; created: boolean }> {
   const id = `movein_${crypto.randomUUID()}`;
   const stamp = d1Timestamp(now);
   const unclaimed = `EXISTS (SELECT 1 FROM "ImportUpload" WHERE "id" = ? AND "jobId" IS NULL)`;
@@ -103,7 +103,7 @@ export async function createUploadJob(
     [`SELECT "jobId" FROM "ImportUpload" WHERE "id" = ?`, upload.id],
   ])).map((result) => result.rows);
   if (!row) throw new Error(`The move-in upload ${upload.id} is gone`);
-  return String(row.jobId);
+  return { jobId: String(row.jobId), created: row.jobId === id };
 }
 
 export async function deleteUpload(db: D1ReadDatabase, id: string): Promise<void> {
@@ -117,4 +117,20 @@ export async function deleteUpload(db: D1ReadDatabase, id: string): Promise<void
 export async function abandonedUploads(db: D1ReadDatabase, before: Date): Promise<BackupUpload[]> {
   const [rows] = await d1ReadBatch(db, [[`SELECT ${COLUMNS} FROM "ImportUpload" WHERE "jobId" IS NULL AND "startedAt" <= ? ORDER BY "startedAt"`, d1Timestamp(before)]]);
   return rows.map(upload);
+}
+
+/** The owner's uploads that never became a job, newest first. */
+export async function unfinishedUploads(db: D1ReadDatabase, ownerId: string): Promise<BackupUpload[]> {
+  const [rows] = await d1ReadBatch(db, [[`SELECT ${COLUMNS} FROM "ImportUpload" WHERE "ownerId" = ? AND "jobId" IS NULL ORDER BY "startedAt" DESC`, ownerId]]);
+  return rows.map(upload);
+}
+
+/** Forgets uploads that became a job and were started at or before `before`, with their parts: the job keeps its backup's key. */
+export async function deleteFinishedUploads(db: D1ReadDatabase, before: Date): Promise<void> {
+  const finished = `SELECT "id" FROM "ImportUpload" WHERE "jobId" IS NOT NULL AND "startedAt" <= ?`;
+  const stamp = d1Timestamp(before);
+  await d1WriteBatch(db, [
+    [`DELETE FROM "ImportUploadPart" WHERE "uploadId" IN (${finished})`, stamp],
+    [`DELETE FROM "ImportUpload" WHERE "id" IN (${finished})`, stamp],
+  ]);
 }

@@ -12,6 +12,7 @@ import {
   listParts,
   loadUpload,
   recordPart,
+  unfinishedUploads,
   type BackupUpload,
 } from "../storage/upload-store.server";
 import { MOVE_IN_ARCHIVE_PREFIX, type MoveInEnv } from "./move-in-ports.server";
@@ -21,6 +22,11 @@ import { admitStoredBackup, moveInKind } from "./start-move-in.server";
 export const MOVE_IN_UPLOAD_KEPT_MS = 24 * 60 * 60 * 1000;
 /** An upload resumes only while it has this long left, so the sweep doesn't abort it under a cook still sending it. */
 const RESUME_MARGIN_MS = 60 * 60 * 1000;
+/**
+ * Unfinished uploads a cook may have at once, counting the one being begun. A new one aborts the oldest past this,
+ * so made-up fingerprints can't hold more than three backups' worth of parts in storage for a day.
+ */
+export const MOVE_IN_OPEN_UPLOADS = 3;
 
 export type UploadResult<T> = ({ ok: true } & T) | { ok: false; code: MoveInErrorCode | UploadRefusal; missing?: number[] };
 
@@ -65,6 +71,11 @@ export async function beginBackupUpload({ env, ownerId, app, name, size, fingerp
   const fits = named && named.fingerprint === fingerprint && named.size === size && !named.jobId && named.startedAt >= since.toISOString();
   const existing = fits ? named : await findUnfinishedUpload(env.DB, { ownerId, fingerprint, size, since });
   if (existing) return { ok: true, ...(await plan(env, existing)) };
+
+  for (const stale of (await unfinishedUploads(env.DB, ownerId)).slice(MOVE_IN_OPEN_UPLOADS - 1)) {
+    await env.PHOTOS.resumeMultipartUpload(stale.archiveKey, stale.uploadId).abort().catch(() => undefined);
+    await deleteUpload(env.DB, stale.id);
+  }
 
   const archiveKey = `${MOVE_IN_ARCHIVE_PREFIX}${ownerId}/${crypto.randomUUID()}.zip`;
   const multipart = await env.PHOTOS.createMultipartUpload(archiveKey, { httpMetadata: { contentType: "application/zip" } });
@@ -136,24 +147,35 @@ export async function finishBackupUpload({ env, ownerId, uploadId, app, now }: {
   // they can't be put together twice, so the backup they made is enough.
   const stored = () => env.PHOTOS.head(upload.archiveKey);
   if (!(await stored())) {
-    await env.PHOTOS.resumeMultipartUpload(upload.archiveKey, upload.uploadId)
+    const completed = await env.PHOTOS.resumeMultipartUpload(upload.archiveKey, upload.uploadId)
       .complete(parts.map(({ partNumber, etag }) => ({ partNumber, etag })))
-      .catch(async (error: unknown) => {
-        if (!(await stored())) throw error;
-      });
+      .then(() => true, () => stored().then(Boolean));
+    // With no backup there, the parts were put together before and the backup they made was swept before it became a
+    // move-in, or storage refused them. Either way, finishing again would fail the same way (inference: storage won't
+    // put an upload's parts together twice), so the upload is forgotten and the page sends the backup afresh.
+    if (!completed) {
+      await env.PHOTOS.resumeMultipartUpload(upload.archiveKey, upload.uploadId).abort().catch(() => undefined);
+      await deleteUpload(env.DB, upload.id);
+      return { ok: false, code: "upload-gone" };
+    }
   }
+  let started = false;
   const admitted = await admitStoredBackup({
     env,
     ownerId,
     archiveKey: upload.archiveKey,
     keepOnSaveFailure: true,
-    createJob: () => createUploadJob(env.DB, upload, { kind, now }),
+    createJob: async () => {
+      const job = await createUploadJob(env.DB, upload, { kind, now });
+      started = job.created;
+      return job.jobId;
+    },
   });
   if (!admitted.ok) {
     await deleteUpload(env.DB, upload.id);
     return admitted;
   }
-  return { ok: true, jobId: admitted.jobId, started: true };
+  return { ok: true, jobId: admitted.jobId, started };
 }
 
 /** Stops an unfinished upload: storage drops its parts, or the backup they made, and the upload is forgotten. */

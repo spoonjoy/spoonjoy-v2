@@ -204,6 +204,8 @@ describe("finishing an upload", () => {
     const uploadId = await sendAll(backup());
     const [one, two] = await Promise.all([finish(uploadId), finish(uploadId)]);
     expect(one.ok && two.ok && one.jobId === two.jobId).toBe(true);
+    // Only the finish that created the move-in starts it.
+    expect([one, two].map((finished) => finished.ok && finished.started).sort()).toEqual([false, true]);
     expect(rows(`SELECT COUNT(*) AS n FROM "ImportJob"`)).toEqual([{ n: 1 }]);
   });
 
@@ -219,10 +221,26 @@ describe("finishing an upload", () => {
     expect(await finish(uploadId)).toEqual({ ok: true, jobId: expect.stringMatching(/^movein_/), started: true });
   });
 
-  it("passes on storage refusing to put the parts together", async () => {
+  it("forgets an upload storage won't put together, so the page sends the backup afresh", async () => {
     const uploadId = await sendAll(backup());
     database.sqlite.prepare(`UPDATE "ImportUploadPart" SET "etag" = 'etag-stale' WHERE "partNumber" = 1`).run();
-    await expect(finish(uploadId)).rejects.toThrow("InvalidPart 1");
+    expect(await finish(uploadId)).toEqual({ ok: false, code: "upload-gone" });
+    expect([...bucket.uploads.values()].map((upload) => upload.state)).toEqual(["aborted"]);
+    expect(rows(`SELECT * FROM "ImportUpload"`)).toEqual([]);
+    expect(rows(`SELECT * FROM "ImportUploadPart"`)).toEqual([]);
+  });
+
+  it("forgets an upload whose backup was swept before it became a move-in, rather than failing every finish", async () => {
+    const uploadId = await sendAll(backup());
+    const batch = database.binding.batch;
+    database.binding.batch = (statements) =>
+      (statements as Array<{ sql: string }>).some((statement) => statement.sql.includes(`INSERT INTO "ImportJob"`)) ? Promise.reject(new Error("D1 is down")) : batch(statements);
+    await expect(finish(uploadId)).rejects.toThrow("D1 is down");
+    database.binding.batch = batch;
+    // The archive sweep deletes the backup, which no job names; its parts were already put together.
+    for (const key of Object.keys(bucket.objects)) delete bucket.objects[key];
+    expect(await finish(uploadId)).toEqual({ ok: false, code: "upload-gone" });
+    expect(rows(`SELECT * FROM "ImportUpload"`)).toEqual([]);
   });
 
   it("names the parts still missing, counting one recorded at the wrong size as missing", async () => {
@@ -247,6 +265,32 @@ describe("finishing an upload", () => {
     const uploadId = await sendAll(backup());
     expect(await finish(uploadId, "paprika")).toEqual({ ok: false, code: "unknown-app" });
     expect(await finish("upload_nope")).toEqual({ ok: false, code: "upload-gone" });
+  });
+});
+
+describe("a cook's open uploads", () => {
+  it("keeps three at most: beginning a new one aborts the oldest past that", async () => {
+    const bytes = backup();
+    const ids: string[] = [];
+    for (let index = 0; index < 4; index++) {
+      const begun = await begin(bytes, { fingerprint: `fp-${index}`, now: later(index * 1000) });
+      if (!begun.ok) throw new Error("not begun");
+      ids.push(begun.uploadId);
+    }
+    expect(rows(`SELECT "id" FROM "ImportUpload" ORDER BY "startedAt"`)).toEqual(ids.slice(1).map((id) => ({ id })));
+    expect([...bucket.uploads.values()].map((upload) => upload.state)).toEqual(["aborted", "open", "open", "open"]);
+    // Another cook's uploads and finished ones don't count.
+    expect((await begin(bytes, { ownerId: "chef-2", fingerprint: "fp-x" })).ok).toBe(true);
+    expect(rows(`SELECT COUNT(*) AS n FROM "ImportUpload" WHERE "ownerId" = 'chef-1'`)).toEqual([{ n: 3 }]);
+  });
+
+  it("still begins when storage won't abort the oldest", async () => {
+    const bytes = backup();
+    for (let index = 0; index < 3; index++) await begin(bytes, { fingerprint: `fp-${index}`, now: later(index * 1000) });
+    const [oldest] = [...bucket.uploads.values()];
+    oldest.state = "aborted";
+    expect((await begin(bytes, { fingerprint: "fp-3", now: later(5000) })).ok).toBe(true);
+    expect(rows(`SELECT COUNT(*) AS n FROM "ImportUpload"`)).toEqual([{ n: 3 }]);
   });
 });
 
