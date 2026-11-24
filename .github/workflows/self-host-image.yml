@@ -373,6 +373,59 @@ jobs:
           curl -sf http://localhost:8081/health/ready
           curl -sf http://localhost:8081/ -o /dev/null
           echo "{\"composeUpToHealthyMs\": $(( end - start ))}" > "$OUT/compose.json"
+
+      # Updating a server, as docs/self-hosting.md tells an owner to: the guide's Compose file runs the
+      # last published image (latest), its owner signs up, adds a recipe and opens sign-ups, then the
+      # same Compose project moves to this commit's image (what `docker compose pull && docker compose
+      # up -d` does) on the same data volume. The new image migrates the database on start, and the
+      # owner signs back in to the same recipe and setting after a reload. On 8083.
+      - name: Update a server from the last published image
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The pull signs in with a throwaway Docker config, deleted right after, so no later step
+          # can push with it; only main's push steps sign in for good. (Once the package is public,
+          # the pull needs no sign-in.)
+          pull_config=$(mktemp -d)
+          echo "$GH_TOKEN" | DOCKER_CONFIG="$pull_config" docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          DOCKER_CONFIG="$pull_config" docker pull "$IMAGE:latest"
+          rm -rf "$pull_config"
+          compose() {
+            SPOONJOY_PORT=8083 SPOONJOY_BASE_URL=http://localhost:8083 \
+              docker compose -f self-host/compose.yaml -p sj-upgrade "$@"
+          }
+          upgrade_half() {
+            docker run --rm --network host --user "$(id -u):$(id -g)" --ipc host \
+              -v "$PWD:/work" -w /work -e HOME=/tmp -e CI=true \
+              -e SPOONJOY_JOURNEYS_BASE_URL=http://localhost:8083 \
+              -e SPOONJOY_SELF_HOST_UPGRADE="$1" -e SPOONJOY_SELF_HOST_UPGRADE_STATE=.self-host/upgrade.json \
+              mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f \
+              node node_modules/@playwright/test/cli.js test -c playwright.self-host-fresh.config.ts e2e/self-host/upgrade.spec.ts --output "test-results-self-host-upgrade-$1"
+          }
+          SPOONJOY_IMAGE="$IMAGE:latest" compose up -d --wait --wait-timeout 120
+          upgrade_half before
+          compose logs --no-log-prefix spoonjoy > "$OUT/upgrade-before.log"
+          start=$(date +%s%3N)
+          SPOONJOY_IMAGE="$LOCAL_IMAGE" compose up -d --wait --wait-timeout 120
+          end=$(date +%s%3N)
+          upgrade_half after
+          compose logs --no-log-prefix spoonjoy > "$OUT/upgrade-after.log"
+          # The new image's ready line: every migration in this commit is applied, and the ones the
+          # last image lacked ran on this start.
+          upgrade=$(node -e '
+            const fs = require("fs");
+            const ready = (file) => fs.readFileSync(file, "utf8").split("\n").filter((line) => line.startsWith("{")).map((line) => JSON.parse(line)).filter((entry) => entry.event === "ready").at(-1);
+            const before = ready(process.env.OUT + "/upgrade-before.log");
+            const after = ready(process.env.OUT + "/upgrade-after.log");
+            const files = fs.readdirSync("migrations").filter((name) => name.endsWith(".sql")).length;
+            if (!before || !after) throw new Error("A server never logged its ready line.");
+            if (after.migrations !== files) throw new Error(`The new image knows ${after.migrations} migrations; this commit has ${files}.`);
+            if (before.migrations + after.migrationsRun !== after.migrations) throw new Error(`The last image had ${before.migrations} migrations and the new one ran ${after.migrationsRun} of ${after.migrations}.`);
+            console.log(JSON.stringify({ upgradedFrom: before.version, upgradeToHealthyMs: Number(process.argv[1]), upgradeMigrationsRun: after.migrationsRun }));
+          ' "$(( end - start ))")
+          echo "$upgrade" | tee "$OUT/upgrade.json"
+          compose down -v
           cat "$OUT/compose.json"
 
       - name: Stop the server
@@ -380,6 +433,8 @@ jobs:
         run: |
           SPOONJOY_IMAGE="$LOCAL_IMAGE" docker compose -f self-host/compose.yaml -p sj-compose logs > "$OUT/compose.log" 2>&1 || true
           SPOONJOY_IMAGE="$LOCAL_IMAGE" docker compose -f self-host/compose.yaml -p sj-compose down -v || true
+          SPOONJOY_IMAGE="$LOCAL_IMAGE" docker compose -f self-host/compose.yaml -p sj-upgrade logs > "$OUT/upgrade.log" 2>&1 || true
+          SPOONJOY_IMAGE="$LOCAL_IMAGE" docker compose -f self-host/compose.yaml -p sj-upgrade down -v || true
           docker logs sj > "$OUT/container.log" 2>&1 || true
           docker stop sj || true
           docker logs sj-restored > "$OUT/restored.log" 2>&1 || true
@@ -396,7 +451,7 @@ jobs:
 
       - name: Strip network logs from traces
         if: always()
-        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report test-results-self-host-fresh test-results-self-host-oidc test-results-self-host-restored test-results-self-host-move-in
+        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report test-results-self-host-fresh test-results-self-host-oidc test-results-self-host-restored test-results-self-host-move-in test-results-self-host-upgrade-before test-results-self-host-upgrade-after
 
       - name: Summary
         if: always()
@@ -405,7 +460,7 @@ jobs:
             const fs = require("fs");
             const out = process.env.OUT;
             const metrics = { arch: process.env.ARCH, version: process.env.VERSION };
-            for (const file of ["image", "boot", "restart", "restore", "jobs", "compose"]) {
+            for (const file of ["image", "boot", "restart", "restore", "jobs", "compose", "upgrade"]) {
               try { Object.assign(metrics, JSON.parse(fs.readFileSync(`${out}/${file}.json`, "utf8"))); } catch {}
             }
             try { metrics.memoryIdle = JSON.parse(fs.readFileSync(`${out}/memory-idle.json`, "utf8")).MemUsage; } catch {}
@@ -428,6 +483,8 @@ jobs:
             test-results-self-host-oidc/
             test-results-self-host-restored/
             test-results-self-host-move-in/
+            test-results-self-host-upgrade-before/
+            test-results-self-host-upgrade-after/
           retention-days: 30
           include-hidden-files: false
 
