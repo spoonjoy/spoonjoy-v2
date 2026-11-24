@@ -1645,6 +1645,7 @@ describe("Journeys workflow", () => {
       "Deploy this build to this run's QA Worker",
       "Check this run's QA Worker is live",
       "Put the sample cover images in QA's photo bucket",
+      "Show how QA's photo bucket aborts unfinished uploads",
       "Start QA Worker tail",
       "Seed the QA kitchen",
       "Run test suite",
@@ -1837,18 +1838,24 @@ describe("Journeys workflow", () => {
     expect(deploy.if).toBe("${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.journeys.result == 'success' || (needs.journeys.result == 'skipped' && needs.queue-tested.outputs.tested == 'true')) }}");
     expect(deploy.concurrency).toEqual({ group: "journeys-shared-qa-deploy", "cancel-in-progress": false });
     const deploySteps: Array<{ name?: string; id?: string; if?: string; run?: string; env?: Record<string, string> }> = deploy.steps;
-    expect(deploySteps.at(-1)).toMatchObject({
+    expect(deploySteps.at(-2)).toMatchObject({
       name: "Deploy main to shared QA",
       if: "steps.tip.outputs.current == 'true'",
       // Shared QA's jobs queue must exist before a deploy can bind it.
       run: "node scripts/qa-run-scope.mjs shared-queue && pnpm run deploy:qa",
     });
-    expect(deploySteps.filter((candidate) => candidate.env?.CLOUDFLARE_API_TOKEN)).toHaveLength(1);
+    // Then QA's photo bucket gets the rule that aborts unfinished move-in uploads after a day.
+    expect(deploySteps.at(-1)).toMatchObject({
+      name: "Abort unfinished move-in uploads in QA after a day",
+      if: "steps.tip.outputs.current == 'true'",
+      run: "node scripts/retry-cloudflare.mjs -- node scripts/ensure-r2-upload-lifecycle.mjs spoonjoy-photos-qa",
+    });
+    expect(deploySteps.filter((candidate) => candidate.env?.CLOUDFLARE_API_TOKEN)).toHaveLength(2);
   });
 
   it("never deploys an older main over a newer one", () => {
     const deploySteps: Array<{ name?: string; id?: string; run?: string }> = workflow.jobs["deploy-shared-qa"].steps;
-    const tip = deploySteps.at(-2)!;
+    const tip = deploySteps.at(-3)!;
     expect(tip).toMatchObject({ name: "Check this commit is still main's tip", id: "tip" });
     expect(tip.run).toContain('gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha');
     expect(tip.run).toContain('if [ "$tip" = "$GITHUB_SHA" ]; then');

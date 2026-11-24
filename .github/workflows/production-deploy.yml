@@ -325,6 +325,17 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # Unfinished move-in uploads (pending-uploads/move-in/) are aborted after a day instead of R2's
+      # default 7 (scripts/ensure-r2-upload-lifecycle.mjs). It runs only after a release succeeded,
+      # and a failure here never marks that release failed: the error shows on this run instead.
+      - name: Abort unfinished move-in uploads after a day
+        if: success()
+        continue-on-error: true
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+        run: node scripts/retry-cloudflare.mjs -- node scripts/ensure-r2-upload-lifecycle.mjs spoonjoy-photos
+
   report-canary:
     name: report-canary
     if: always() && needs.deploy.result != 'skipped'
