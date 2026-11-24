@@ -52,6 +52,9 @@ test.describe("A move-in on a self-hosted server that restarts", () => {
     await expect(page).toHaveURL("/");
 
     await page.goto("/move-in");
+    // The page may ask where the kitchen comes from first; the backup field shows once "From a backup" is picked.
+    const fromBackup = page.getByRole("main").getByRole("radio", { name: /^From a backup/ });
+    if ((await fromBackup.count()) > 0) await fromBackup.check();
     await page.getByLabel(requiredLabel("Backup zip"), { exact: true }).setInputFiles({ name: `kitchen-${source.version}.zip`, mimeType: "application/zip", buffer: backup });
     await page.getByRole("button", { name: "Move in", exact: true }).click();
     // The move-in is accepted. The cook leaves at once, and the state file tells the workflow to kill the server: 500
