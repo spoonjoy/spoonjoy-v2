@@ -267,6 +267,14 @@
     "category": {
       "default": [
         {
+          "identity": "button \"Delete category\" [button/root] in region \"Change this category\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Rename\" [button/root] in form \"Rename this category\"",
+          "count": 1
+        },
+        {
           "identity": "link \"All categories\" [link/root] in main",
           "count": 1
         },
@@ -276,6 +284,10 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Name\" [text-field/input] in form \"Rename this category\"",
           "count": 1
         }
       ]
@@ -1741,6 +1753,10 @@
           "count": 6
         },
         {
+          "identity": "link \"Categories\" [link/root] in navigation \"Browse my recipes by\"",
+          "count": 1
+        },
+        {
           "identity": "link \"Create recipe\" [button/root] in main",
           "count": 1
         },
@@ -1754,6 +1770,14 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Tags\" [link/root] in navigation \"Browse my recipes by\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Tools\" [link/root] in navigation \"Browse my recipes by\"",
           "count": 1
         },
         {
@@ -1801,6 +1825,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Categories\" [link/root] in navigation \"Browse my recipes by\"",
+          "count": 1
+        },
+        {
           "identity": "link \"Clear filters\" [link/root] in form \"Filter my recipes\"",
           "count": 1
         },
@@ -1814,6 +1842,14 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Tags\" [link/root] in navigation \"Browse my recipes by\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Tools\" [link/root] in navigation \"Browse my recipes by\"",
           "count": 1
         },
         {
@@ -3973,6 +4009,14 @@
     "tag": {
       "default": [
         {
+          "identity": "button \"Delete tag\" [button/root] in region \"Change this tag\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Rename\" [button/root] in form \"Rename this tag\"",
+          "count": 1
+        },
+        {
           "identity": "link \"All tags\" [link/root] in main",
           "count": 1
         },
@@ -3982,6 +4026,10 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Name\" [text-field/input] in form \"Rename this tag\"",
           "count": 1
         }
       ]
@@ -4265,6 +4313,14 @@
     "tool": {
       "default": [
         {
+          "identity": "button \"Delete tool\" [button/root] in region \"Change this tool\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Rename\" [button/root] in form \"Rename this tool\"",
+          "count": 1
+        },
+        {
           "identity": "link \"All tools\" [link/root] in main",
           "count": 1
         },
@@ -4274,6 +4330,10 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Name\" [text-field/input] in form \"Rename this tool\"",
           "count": 1
         }
       ]
@@ -4519,6 +4579,14 @@
     "category": {
       "default": [
         {
+          "identity": "button \"Delete category\" [button/root] in region \"Change this category\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Rename\" [button/root] in form \"Rename this category\"",
+          "count": 1
+        },
+        {
           "identity": "link \"All categories\" [link/root] in main",
           "count": 1
         },
@@ -4528,6 +4596,10 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Name\" [text-field/input] in form \"Rename this category\"",
           "count": 1
         }
       ]
@@ -5997,6 +6069,10 @@
           "count": 6
         },
         {
+          "identity": "link \"Categories\" [link/root] in navigation \"Browse my recipes by\"",
+          "count": 1
+        },
+        {
           "identity": "link \"Create recipe\" [button/root] in main",
           "count": 1
         },
@@ -6022,6 +6098,14 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Tags\" [link/root] in navigation \"Browse my recipes by\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Tools\" [link/root] in navigation \"Browse my recipes by\"",
           "count": 1
         },
         {
@@ -6069,6 +6153,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Categories\" [link/root] in navigation \"Browse my recipes by\"",
+          "count": 1
+        },
+        {
           "identity": "link \"Clear filters\" [link/root] in form \"Filter my recipes\"",
           "count": 1
         },
@@ -6094,6 +6182,14 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Tags\" [link/root] in navigation \"Browse my recipes by\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Tools\" [link/root] in navigation \"Browse my recipes by\"",
           "count": 1
         },
         {
@@ -8201,6 +8297,14 @@
     "tag": {
       "default": [
         {
+          "identity": "button \"Delete tag\" [button/root] in region \"Change this tag\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Rename\" [button/root] in form \"Rename this tag\"",
+          "count": 1
+        },
+        {
           "identity": "link \"All tags\" [link/root] in main",
           "count": 1
         },
@@ -8210,6 +8314,10 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Name\" [text-field/input] in form \"Rename this tag\"",
           "count": 1
         }
       ]
@@ -8481,6 +8589,14 @@
     "tool": {
       "default": [
         {
+          "identity": "button \"Delete tool\" [button/root] in region \"Change this tool\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Rename\" [button/root] in form \"Rename this tool\"",
+          "count": 1
+        },
+        {
           "identity": "link \"All tools\" [link/root] in main",
           "count": 1
         },
@@ -8490,6 +8606,10 @@
         },
         {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Name\" [text-field/input] in form \"Rename this tool\"",
           "count": 1
         }
       ]
