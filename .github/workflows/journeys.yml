@@ -255,7 +255,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
-        run: pnpm run qa:migrate
+        run: node scripts/retry-cloudflare.mjs -- pnpm run qa:migrate
 
       - name: Deploy this build to this run's QA Worker
         env:
@@ -333,7 +333,7 @@ jobs:
           NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
         run: |
           mkdir -p .journeys
-          pnpm run seed:qa:kitchen -- --credentials-out "$SPOONJOY_QA_CREDENTIALS"
+          node scripts/retry-cloudflare.mjs -- pnpm run seed:qa:kitchen -- --credentials-out "$SPOONJOY_QA_CREDENTIALS"
           for p in chef friend newbie; do
             echo "::add-mask::$(jq -r ".${p}.password" "$SPOONJOY_QA_CREDENTIALS")"
           done
@@ -558,7 +558,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
-        run: pnpm run seed:qa:kitchen -- --rotate
+        run: node scripts/retry-cloudflare.mjs -- pnpm run seed:qa:kitchen -- --rotate
 
       - name: Clean up disposable QA data
         id: cleanup-qa-data
@@ -568,7 +568,19 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
-        run: node scripts/warning-gate.ts -- pnpm run cleanup:remote:qa:apply
+          SUITE_OUTCOME: ${{ steps.suite.outcome }}
+        # The cleanup retries Cloudflare's own API failures. Exit 75 means they outlasted the
+        # retries (Journeys run 45348033648 lost a passing part 2 to one): when every journey
+        # passed, warn and pass, since the QA Run Sweep deletes this run's stack within hours. The
+        # reports still upload: see "Upload journeys report" for why they are safe without it.
+        run: |
+          status=0
+          node scripts/warning-gate.ts -- pnpm run cleanup:remote:qa:apply || status=$?
+          if [ "$status" -eq 75 ] && [ "$SUITE_OUTCOME" = success ]; then
+            echo "::warning title=QA cleanup incomplete::Cloudflare's API kept failing, so this run's disposable QA data was not cleaned up. The journeys passed; the QA Run Sweep deletes this run's stack."
+            exit 0
+          fi
+          exit "$status"
 
       - name: Remove credentials and session files
         if: always()
@@ -616,6 +628,10 @@ jobs:
       # disposable QA data" has removed the (now-invalidated) scratch
       # users and every other disposable row, and (3) "Strip network logs from traces" has
       # removed network logs and redacted session cookies and storage state from every trace.
+      # When Cloudflare's API kept failing the cleanup and the journeys passed, the cleanup step
+      # passes with a warning and the reports still upload: (1) and (3) already make every
+      # password, session and cookie in them useless, no journey creates or shows an API token
+      # or OAuth secret, and the QA Run Sweep deletes the run's whole stack within hours.
       # Upload runs only if all three steps succeeded, and only the report matching $SUITE
       # actually exists; the credentials file and session files are deleted above and are
       # never in the uploaded paths.

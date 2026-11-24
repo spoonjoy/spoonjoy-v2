@@ -12,6 +12,7 @@ import {
   resolveScriptTarget,
   scriptTargetSummary,
 } from "./script-environment.mjs";
+import { isTransientCloudflareApiError } from "./retry-cloudflare.mjs";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_LOCAL_BASE_URL = "http://localhost:5173";
@@ -690,6 +691,48 @@ async function runR2Command({ runCommand, args, options, sleep, stdout, label })
       await sleep(delay);
     }
   }
+}
+
+// Cloudflare's API sometimes fails a D1 query on its own side and serves it again moments later
+// (scripts/retry-cloudflare.mjs has the cases). A D1 command that fails that way is retried here;
+// if it still fails, the CLI exits 75 so the Journeys workflow can tell Cloudflare's failure apart
+// from a cleanup that found something wrong.
+export { isTransientCloudflareApiError };
+export const TRANSIENT_CLOUDFLARE_EXIT_CODE = 75;
+
+export class TransientCloudflareApiError extends Error {
+  constructor(message, options) {
+    super(message, options);
+    this.name = "TransientCloudflareApiError";
+  }
+}
+
+function isD1Command(args) {
+  return args[1] === "wrangler" && args[2] === "d1";
+}
+
+// Wraps `runCommand` so a D1 command Cloudflare fails on its own side is tried again with backoff.
+// R2 commands keep their own retry (runR2Command).
+function retryTransientD1(runCommand, { sleep, stdout }) {
+  return async (command, args, options) => {
+    if (!isD1Command(args)) return runCommand(command, args, options);
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await runCommand(command, args, options);
+      } catch (error) {
+        if (!isTransientCloudflareApiError(error)) throw error;
+        if (attempt >= R2_TRANSIENT_RETRY_DELAYS_MS.length) {
+          throw new TransientCloudflareApiError(
+            `Cloudflare's D1 API still answered an internal error after ${R2_TRANSIENT_RETRY_DELAYS_MS.length} retries, so QA cleanup stopped.`,
+            { cause: error },
+          );
+        }
+        const delay = R2_TRANSIENT_RETRY_DELAYS_MS[attempt];
+        stdout.write(`Cloudflare's D1 API answered an internal error; trying the D1 command again in ${delay / 1000} s (retry ${attempt + 1} of ${R2_TRANSIENT_RETRY_DELAYS_MS.length}).\n`);
+        await sleep(delay);
+      }
+    }
+  };
 }
 
 function r2BlockerError(blockers, targetLabel) {
@@ -1396,7 +1439,7 @@ async function assertNoCleanupBlockers({ dbName, target, runCommand, createdBefo
 
 export async function runCleanupCli({
   argv = process.argv.slice(2),
-  runCommand = execFileAsync,
+  runCommand: runAnyCommand = execFileAsync,
   stdout = process.stdout,
   stderr = process.stderr,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -1406,6 +1449,7 @@ export async function runCleanupCli({
     printHelp(stdout);
     return;
   }
+  const runCommand = retryTransientD1(runAnyCommand, { sleep, stdout });
 
   const options = parseCleanupArgs(argv);
   const summaryTarget = options.target.targetEnv === "qa"
@@ -1516,6 +1560,13 @@ export function isCliEntry(moduleUrl, argv1 = process.argv[1]) {
 }
 
 export function defaultCliErrorHandler(error) {
+  // Cloudflare's own failure gets its own exit code, on stdout, so the Journeys workflow can tell it
+  // apart from a cleanup that found something wrong.
+  if (error instanceof TransientCloudflareApiError) {
+    console.log(error.message);
+    process.exitCode = TRANSIENT_CLOUDFLARE_EXIT_CODE;
+    return;
+  }
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 }
