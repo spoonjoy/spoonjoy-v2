@@ -44,6 +44,16 @@ async function attachRangeShot(page: Page, first: Locator, last: Locator, testIn
   });
 }
 
+// The token field for one kind, by the hidden marker the Organize form sends for it.
+function tokenField(page: Page, segment: string): Locator {
+  return page.locator(`div:has(> input[name="organize"][value="${segment}"])`);
+}
+
+// A chip's Remove button, which is how a chip is named.
+function chipRemove(field: Locator, name: string): Locator {
+  return field.getByRole("button", { name: `Remove ${name}`, exact: true });
+}
+
 // A token field's input: in the form, or on a phone (iphone-webkit) in the sheet its button opens. `done` closes it.
 async function openTokens(page: Page, label: string, phone: boolean): Promise<{ input: Locator; scope: Page | Locator; done: () => Promise<void> }> {
   const field = page.getByRole("combobox", { name: label, exact: true });
@@ -133,12 +143,13 @@ test.describe("Organizers", () => {
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
 
-    const onRecipe = page.getByRole("region", { name: "Tags on this recipe", exact: true });
+    // Each field's chips are what the recipe has, on a phone as on a desktop.
+    const tagChips = tokenField(page, "tags");
     await verifyAfterReload(async () => {
-      await expect(onRecipe.getByRole("link", { name: cozy, exact: true })).toBeVisible();
-      await expect(onRecipe.getByRole("link", { name: spare, exact: true })).toBeVisible();
-      await expect(page.getByRole("region", { name: "Categories on this recipe", exact: true }).getByRole("link", { name: supper, exact: true })).toBeVisible();
-      await expect(page.getByRole("region", { name: "Tools on this recipe", exact: true }).getByRole("link", { name: pot, exact: true })).toBeVisible();
+      await expect(chipRemove(tagChips, cozy)).toBeVisible();
+      await expect(chipRemove(tagChips, spare)).toBeVisible();
+      await expect(chipRemove(tokenField(page, "categories"), supper)).toBeVisible();
+      await expect(chipRemove(tokenField(page, "tools"), pot)).toBeVisible();
     });
 
     // Remove one tag; it stays the cook's, off this recipe.
@@ -147,8 +158,8 @@ test.describe("Organizers", () => {
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
     await verifyAfterReload(async () => {
-      await expect(onRecipe.getByRole("link", { name: cozy, exact: true })).toBeVisible();
-      await expect(onRecipe.getByRole("link", { name: spare, exact: true })).toHaveCount(0);
+      await expect(chipRemove(tagChips, cozy)).toBeVisible();
+      await expect(chipRemove(tagChips, spare)).toHaveCount(0);
     });
 
     // Typing it in lower case suggests the cook's own tag, so it comes back as it was instead of forking; and a new one.
@@ -158,10 +169,10 @@ test.describe("Organizers", () => {
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
     await verifyAfterReload(async () => {
-      await expect(onRecipe.getByRole("link", { name: cozy, exact: true })).toBeVisible();
-      await expect(onRecipe.getByRole("link", { name: quick, exact: true })).toBeVisible();
-      await expect(onRecipe.getByRole("link", { name: spare, exact: true })).toBeVisible();
-      await expect(onRecipe.getByRole("link")).toHaveCount(3);
+      await expect(chipRemove(tagChips, cozy)).toBeVisible();
+      await expect(chipRemove(tagChips, quick)).toBeVisible();
+      await expect(chipRemove(tagChips, spare)).toBeVisible();
+      await expect(tagChips.locator('[data-ouro-part="chip-remove"]')).toHaveCount(3);
     });
     await expectAccessible();
     // The Organize form itself, three tags in it, so nothing floats over it.
@@ -171,9 +182,20 @@ test.describe("Organizers", () => {
       "recipe-organize-form-after-reload",
     );
 
-    // The tag's own page lists the recipe.
+    // The cook's tags list both, with one recipe each.
+    await page.goto("/tags");
     await waitForHydration(page);
-    await onRecipe.getByRole("link", { name: cozy, exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Your tags", exact: true })).toBeVisible();
+    const yourTags = page.getByRole("list", { name: "Your tags", exact: true });
+    await verifyAfterReload(async () => {
+      await expect(yourTags.getByRole("listitem").filter({ hasText: cozy })).toContainText("1 recipe");
+      await expect(yourTags.getByRole("listitem").filter({ hasText: quick })).toContainText("1 recipe");
+    });
+    await attachScreenshot(page, testInfo, "your-tags-after-reload");
+
+    // The tag's own page, from the list, lists the recipe.
+    await waitForHydration(page);
+    await yourTags.getByRole("link", { name: cozy, exact: true }).click();
     await expect(page.getByRole("heading", { level: 1, name: cozy, exact: true })).toBeVisible();
     const tagged = page.getByRole("list", { name: `Recipes tagged ${cozy}`, exact: true });
     await verifyAfterReload(async () => {
@@ -182,17 +204,6 @@ test.describe("Organizers", () => {
     });
     await expectAccessible();
     await attachScreenshot(page, testInfo, "tag-page-after-reload");
-
-    // The cook's tags list both, with one recipe each.
-    await waitForHydration(page);
-    await page.getByRole("link", { name: "All tags", exact: true }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Your tags", exact: true })).toBeVisible();
-    const yourTags = page.getByRole("list", { name: "Your tags", exact: true });
-    await verifyAfterReload(async () => {
-      await expect(yourTags.getByRole("listitem").filter({ hasText: cozy })).toContainText("1 recipe");
-      await expect(yourTags.getByRole("listitem").filter({ hasText: quick })).toContainText("1 recipe");
-    });
-    await attachScreenshot(page, testInfo, "your-tags-after-reload");
 
     // The cook's categories list the new one with the recipe.
     await page.goto("/categories");

@@ -15,7 +15,6 @@ export type OrganizerKindCopy = {
   emptyList: string;
   emptyPage: string;
   emptyPageDescription: string;
-  emptyOnRecipe: string;
   allLabel: string;
   placeholder: string;
   recipesLabel: (name: string) => string;
@@ -32,7 +31,6 @@ export const ORGANIZER_KIND_COPY: Record<OrganizerKind, OrganizerKindCopy> = {
     emptyList: "No tags yet",
     emptyPage: "No recipes with this tag",
     emptyPageDescription: "Recipes you tag with it show up here.",
-    emptyOnRecipe: "No tags on this recipe yet.",
     allLabel: "All tags",
     placeholder: "weeknight, vegetarian, spicy",
     recipesLabel: (name) => `Recipes tagged ${name}`,
@@ -47,7 +45,6 @@ export const ORGANIZER_KIND_COPY: Record<OrganizerKind, OrganizerKindCopy> = {
     emptyList: "No categories yet",
     emptyPage: "No recipes in this category",
     emptyPageDescription: "Recipes you put in it show up here.",
-    emptyOnRecipe: "No categories on this recipe yet.",
     allLabel: "All categories",
     placeholder: "dinner, soup, dessert",
     recipesLabel: (name) => `Recipes in ${name}`,
@@ -62,7 +59,6 @@ export const ORGANIZER_KIND_COPY: Record<OrganizerKind, OrganizerKindCopy> = {
     emptyList: "No tools yet",
     emptyPage: "No recipes use this tool",
     emptyPageDescription: "Recipes that call for it show up here.",
-    emptyOnRecipe: "No tools on this recipe yet.",
     allLabel: "All tools",
     placeholder: "Dutch oven, stand mixer",
     recipesLabel: (name) => `Recipes using ${name}`,

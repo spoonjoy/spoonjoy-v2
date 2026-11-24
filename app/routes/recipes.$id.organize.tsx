@@ -1,15 +1,13 @@
 import type { Route } from "./+types/recipes.$id.organize";
 import { Form as RouterForm, useActionData, useLoaderData } from "react-router";
 import { Alert } from "~/components/ouro/alert/alert";
-import { Badge } from "~/components/ouro/badge/badge";
 import { Button } from "~/components/ouro/button/button";
 import { Combobox } from "~/components/ouro/combobox/combobox";
 import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
-import { Text } from "~/components/ouro/text/text";
 import { CookbookPage } from "~/components/cookbook/page";
-import { ORGANIZER_KIND_COPY, ORGANIZER_KIND_ORDER, organizerAddLabel, organizerHref, organizerMeta } from "~/components/organizers/organizer-kinds";
+import { ORGANIZER_KIND_COPY, ORGANIZER_KIND_ORDER, organizerAddLabel, organizerMeta } from "~/components/organizers/organizer-kinds";
 import { ORGANIZE_MARKER } from "~/domains/kitchen";
 import { recipeOrganizeAction, recipeOrganizeLoader } from "~/domains/kitchen/index.server";
 
@@ -66,25 +64,6 @@ export default function RecipeOrganize() {
             <Button type="submit">Save</Button>
           </div>
         </Form>
-        {ORGANIZER_KIND_ORDER.map((kind) => {
-          const copy = ORGANIZER_KIND_COPY[kind];
-          const current = loaded[copy.segment];
-          return (
-            <section key={kind} className="mt-8" aria-label={`${copy.label} on this recipe`}>
-              {current.length > 0 ? (
-                <ul className="flex flex-wrap gap-2">
-                  {current.map((organizer) => (
-                    <li key={organizer.slug}>
-                      <Badge href={organizerHref(kind, organizer.slug)}>{organizer.name}</Badge>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <Text tone="muted">{copy.emptyOnRecipe}</Text>
-              )}
-            </section>
-          );
-        })}
       </div>
     </CookbookPage>
   );

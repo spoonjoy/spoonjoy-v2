@@ -256,10 +256,9 @@ describe("organizers on recipes", () => {
     expect(new FormData(form).getAll("organize")).toEqual(["tags", "categories", "tools"]);
     expect(new FormData(form).getAll("tags")).toEqual(["Cozy"]);
     expect(new FormData(form).getAll("tools")).toEqual([]);
-    expect(screen.getByRole("region", { name: "Tags on this recipe" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Cozy" }).getAttribute("href")).toBe("/tags/cozy");
-    expect(screen.getByRole("link", { name: "Soup" }).getAttribute("href")).toBe("/categories/soup");
-    expect(screen.getByText("No tools on this recipe yet.")).toBeTruthy();
+    // The fields' chips are the only list of what the recipe has: no second list under Save.
+    expect(screen.queryByRole("region", { name: "Tags on this recipe" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Cozy" })).toBeNull();
     expect(screen.getByRole("link", { name: "Lentil soup" }).getAttribute("href")).toBe("/recipes/r1");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Saved.")).toBeTruthy();
