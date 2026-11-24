@@ -51,7 +51,7 @@ test.describe("Account mail from a self-hosted server through its SMTP server", 
     const inbox = await browser.newContext({ viewport: { width: 900, height: 700 } });
     const view = await inbox.newPage();
     await view.goto(`${mailpit}/view/${found[0]!.ID}`);
-    await expect(view.getByText("Reset your Spoonjoy password").first()).toBeVisible();
+    await expect(view.getByRole("cell", { name: "Reset your Spoonjoy password" })).toBeVisible();
     await view.screenshot({ path: testInfo.outputPath("mail-reset-caught.png") });
     await inbox.close();
 
