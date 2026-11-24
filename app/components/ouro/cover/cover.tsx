@@ -56,9 +56,9 @@ const sizes = { sm: "size-ouro-10", md: "size-ouro-14", lg: "size-ouro-24", fill
 
 /**
  * A thing's cover: its picture, or, without one, the first letter of its title in the theme's
- * heading font on a wash from the muted color toward the primary. Use it beside a recipe, a book
- * or an album in a list row, on a card, or at full width as a page's hero. A theme sets the wash
- * with `--ouro-cover-from` and `--ouro-cover-to`, and the letter's color with `--ouro-cover-ink`.
+ * heading font on a solid tint of the muted color toward the primary. Use it beside a recipe, a book
+ * or an album in a list row, on a card, or at full width as a page's hero. A theme sets the fill
+ * with `--ouro-cover-from`, and the letter's color with `--ouro-cover-ink`.
  *
  * Use `Avatar` instead for a person or an account, and `AspectRatio` instead for a picture
  * that always has one.
@@ -120,7 +120,7 @@ export function Cover(props: CoverProps): JSX.Element {
       aria-label={!picture && alt ? alt : undefined}
       className={cn(
         "relative flex shrink-0 items-center justify-center overflow-hidden [container-type:size]",
-        "bg-[linear-gradient(135deg,var(--ouro-cover-from,var(--muted)),var(--ouro-cover-to,color-mix(in_oklab,var(--primary)_32%,var(--muted))))]",
+        "bg-(--ouro-cover-from,color-mix(in_oklab,var(--primary)_16%,var(--muted)))",
         "forced-colors:border forced-colors:border-solid",
         shape === "rounded" ? "rounded-ouro-lg" : "rounded-none",
         sizes[size],

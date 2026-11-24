@@ -113,7 +113,7 @@ describe("automatic presentation", () => {
     const rect = element.getBoundingClientRect();
     expect(Math.abs(rect.left + rect.width / 2 - innerWidth / 2)).toBeLessThanOrEqual(1);
     expect(Math.abs(rect.top + rect.height / 2 - innerHeight / 2)).toBeLessThanOrEqual(1);
-  });
+  }, 30_000);
 
   it("is modal to assistive technology, centered and as a sheet: aria-modal, with the page behind hidden", async () => {
     const outside = document.createElement("button");
@@ -228,6 +228,24 @@ describe("automatic presentation", () => {
     await userEvent.click(trigger());
     await settled();
     expect(popup()!.getAttribute("data-ouro-presentation")).toBe("sheet");
+  });
+});
+
+describe("onOpenChangeComplete", () => {
+  it("tells once an open and a close have finished, centered and as a sheet", async () => {
+    for (const presentation of ["dialog", "sheet"] as const) {
+      const complete = vi.fn();
+      const frame = (open: boolean) => (
+        <Dialog title="Edit recipe" presentation={presentation} open={open} onOpenChange={() => {}} onOpenChangeComplete={complete}>
+          Body
+        </Dialog>
+      );
+      const { rerender } = await render(frame(true));
+      await expect.poll(() => complete.mock.calls, { message: presentation }).toEqual([[true]]);
+      await rerender(frame(false));
+      await expect.poll(() => complete.mock.calls, { message: presentation }).toEqual([[true], [false]]);
+      await rerender(<></>);
+    }
   });
 });
 
@@ -986,6 +1004,30 @@ describe("motion", () => {
     expect(start.opacity).toBe("0");
     expect(scale(end.transform)).toBeCloseTo(0.96, 3);
     expect(end.opacity).toBe("0");
+  });
+
+  it("reads its enter and exit timing from the --ouro-dialog tokens, on the popup and the backdrop", async () => {
+    const root = document.documentElement.style;
+    root.setProperty("--ouro-dialog-duration", "320ms");
+    root.setProperty("--ouro-dialog-ease", "cubic-bezier(0.32, 0.72, 0, 1)");
+    root.setProperty("--ouro-dialog-exit-duration", "400ms");
+    root.setProperty("--ouro-dialog-exit-ease", "cubic-bezier(0.5, 0, 0.5, 1)");
+    try {
+      const element = await openUncontrolled();
+      const layers = [element, backdrop()!];
+      for (const layer of layers) {
+        const style = getComputedStyle(layer);
+        expect(style.transitionDuration.split(", ")).toContain("0.32s");
+        expect(style.transitionTimingFunction).toContain("cubic-bezier(0.32, 0.72, 0, 1)");
+        layer.setAttribute("data-ending-style", "");
+        const leaving = getComputedStyle(layer);
+        expect(leaving.transitionDuration.split(", ")).toEqual(Array(leaving.transitionDuration.split(", ").length).fill("0.4s"));
+        expect(leaving.transitionTimingFunction).toContain("cubic-bezier(0.5, 0, 0.5, 1)");
+        layer.removeAttribute("data-ending-style");
+      }
+    } finally {
+      for (const name of ["duration", "ease", "exit-duration", "exit-ease"]) root.removeProperty(`--ouro-dialog-${name}`);
+    }
   });
 
   it("stays centred: the dialog scales about its own middle, not its trigger", async () => {

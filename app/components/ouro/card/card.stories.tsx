@@ -104,6 +104,35 @@ export const SizesAndVariants: Story = {
   ),
 };
 
+/**
+ * A link preview inside a chat bubble: at the bubble's own 14px text, `titleSize="inherit"`
+ * keeps the title the same size as the message around it, staying semibold instead of a
+ * heading's own, larger type-scale step. The preview keeps its own card surface and theme
+ * colors, as a received message's bubble does, so the contrast stays the theme's own.
+ */
+export const InAChatBubble: Story = {
+  parameters: { mode: "link" },
+  render: () => (
+    <Page>
+      <div
+        style={{
+          background: "var(--secondary)",
+          color: "var(--secondary-foreground)",
+          borderRadius: "var(--radius-ouro-2xl)",
+          padding: 12,
+          maxWidth: 320,
+          display: "grid",
+          gap: 8,
+          fontSize: 14,
+        }}
+      >
+        <Text style={{ color: "inherit" }}>Here&apos;s the recipe I meant:</Text>
+        <Card href="#weeknight-dinners" size="sm" titleSize="inherit" title="Weeknight dinners" description="12 recipes" />
+      </div>
+    </Page>
+  ),
+};
+
 /** A cookbook tile with its share button over the cover: the button takes its own taps, and the rest of the tile opens the cookbook. */
 export const ShareOverCover: Story = {
   parameters: { mode: "link" },

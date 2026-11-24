@@ -66,16 +66,35 @@ const popoverPopup = () => document.querySelector<HTMLElement>('[data-ouro="popo
 const trigger = () => document.querySelector<HTMLElement>('[data-ouro="button"]')!;
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-/** Waits until the open popup has finished its entrance. */
+/**
+ * Whether the popup's entrance has finished: out of its starting style, with every current
+ * animation in a terminal playState. A browser can report "finished" a tick before it drops
+ * that animation from getAnimations(); under load that bookkeeping step can lag far more than
+ * the animation itself took, so the terminal playState is the signal to trust, not the list.
+ */
+function entranceDone(element: HTMLElement | null) {
+  return Boolean(
+    element &&
+      !element.hasAttribute("data-starting-style") &&
+      element.getAnimations().every((animation) => animation.playState === "finished" || animation.playState === "idle"),
+  );
+}
+
+/** Waits until the open popup has finished its entrance, with its place settled. */
 async function settled() {
+  await expect.poll(() => entranceDone(popup()), { interval: 50 }).toBe(true);
+  // playState can turn "finished" a frame before the entrance transform snaps to its end
+  // value; read the popup's place once two frame-apart reads agree, as Tooltip's settle does.
+  const place = () => JSON.stringify(popup()?.getBoundingClientRect());
+  let rest = place();
   await expect
-    .poll(
-      () => {
-        const element = popup();
-        return Boolean(element && !element.hasAttribute("data-starting-style") && element.getAnimations().length === 0);
-      },
-      { interval: 50 },
-    )
+    .poll(async () => {
+      await nextFrame();
+      const now = place();
+      const same = now === rest;
+      rest = now;
+      return same;
+    })
     .toBe(true);
 }
 
@@ -100,7 +119,7 @@ describe("Popover", () => {
     expect(width()).toBeCloseTo(288);
   });
 
-  it("opens below its trigger as a non-modal dialog named by its title", async () => {
+  it("opens below its trigger as a dialog named by its title", async () => {
     const element = await openUncontrolled({ description: "Anyone with the link can view it." });
     await expect.element(page.getByRole("dialog", { name: "Share recipe" })).toBeVisible();
     expect(element.getAttribute("data-ouro")).toBe("popover");
@@ -112,7 +131,7 @@ describe("Popover", () => {
     const anchor = trigger().getBoundingClientRect();
     expect(Math.round(box.top - anchor.bottom)).toBe(8);
     expect(Math.abs(box.left + box.width / 2 - (anchor.left + anchor.width / 2))).toBeLessThanOrEqual(1);
-    // Non-modal: the page behind it stays scrollable and has no backdrop.
+    // No dimmed backdrop: the page behind it stays in view.
     expect(document.querySelector('[data-ouro="dialog-backdrop"], [data-ouro="sheet-backdrop"]')).toBeNull();
   });
 
@@ -267,6 +286,82 @@ describe("Popover", () => {
   });
 });
 
+describe("Popover modal", () => {
+  /** Whether the page's scroll is locked: Base UI hides the overflow of the element that scrolls the page. */
+  const locked = () => [document.documentElement, document.body].some((element) => /hidden|clip/.test(getComputedStyle(element).overflowY));
+
+  async function openBeside(outside: () => void, props: Partial<PopoverProps> = {}) {
+    await render(
+      <>
+        <Popover title="Share recipe" trigger={<Button>Share</Button>} {...(props as object)}>
+          <input aria-label="Link" />
+        </Popover>
+        <button type="button" data-testid="outside" onClick={outside}>
+          Outside
+        </button>
+      </>,
+    );
+    await userEvent.click(trigger());
+    await settled();
+    return document.querySelector<HTMLElement>("[data-testid=outside]")!;
+  }
+
+  it("holds the page while open: its scroll is locked, and a click outside only closes it", async () => {
+    const outside = vi.fn();
+    const button = await openBeside(outside);
+    await expect.poll(locked).toBe(true);
+    // Forced: the open popover keeps the pointer from the page, so the click lands where the button is.
+    await userEvent.click(button, { force: true });
+    await expect.poll(() => popup()).toBeNull();
+    expect(outside).not.toHaveBeenCalled();
+    await expect.poll(locked).toBe(false);
+  });
+
+  it("closes on a right-click outside, with no menu of the browser's", async () => {
+    const button = await openBeside(() => {});
+    const shown: boolean[] = [];
+    const browserMenu = (event: Event) => shown.push(!event.defaultPrevented);
+    window.addEventListener("contextmenu", browserMenu);
+    try {
+      await userEvent.click(button, { button: "right", force: true });
+      await expect.poll(() => popup()).toBeNull();
+    } finally {
+      window.removeEventListener("contextmenu", browserMenu);
+    }
+    expect(shown).toEqual([false]);
+    // A right-click inside the popover is the page's to answer, as anywhere else.
+    await userEvent.click(trigger());
+    await settled();
+    window.addEventListener("contextmenu", browserMenu);
+    try {
+      await userEvent.click(page.getByRole("textbox", { name: "Link" }), { button: "right" });
+    } finally {
+      window.removeEventListener("contextmenu", browserMenu);
+    }
+    expect(shown).toEqual([false, true]);
+    expect(popup()).not.toBeNull();
+  });
+
+  it("with modal={false}, leaves the page scrolling and its controls live: a click outside reaches them and closes the popover", async () => {
+    const outside = vi.fn();
+    const button = await openBeside(outside, { modal: false });
+    expect(locked()).toBe(false);
+    await userEvent.click(button);
+    expect(outside).toHaveBeenCalledOnce();
+    await expect.poll(() => popup()).toBeNull();
+  });
+
+  it("keeps the sheet holding the page with modal={false}", async () => {
+    const outside = vi.fn();
+    const button = await openBeside(outside, { modal: false, presentation: "sheet" });
+    expect(popup()!.getAttribute("data-ouro-presentation")).toBe("sheet");
+    await expect.poll(locked).toBe(true);
+    await userEvent.click(button, { force: true });
+    await expect.poll(() => popup()).toBeNull();
+    expect(outside).not.toHaveBeenCalled();
+  });
+});
+
 describe("Popover presentation", () => {
   it("stays a popover on a phone by default", async () => {
     await page.viewport(390, 844);
@@ -332,12 +427,32 @@ describe("Popover presentation", () => {
 });
 
 describe("controlled Popover", () => {
-  function Controlled({ onOpenChange, presentation, height }: { onOpenChange?: (open: boolean) => void; presentation?: "auto"; height?: string }) {
+  function Controlled({
+    onOpenChange,
+    onToggle,
+    presentation,
+    height,
+    modal,
+  }: {
+    onOpenChange?: (open: boolean) => void;
+    onToggle?: () => void;
+    presentation?: "auto";
+    height?: string;
+    modal?: boolean;
+  }) {
     const [open, setOpen] = useState(false);
     const anchor = useRef<HTMLButtonElement>(null);
     return (
       <>
-        <button ref={anchor} type="button" style={height ? { height } : undefined} onClick={() => setOpen((value) => !value)}>
+        <button
+          ref={anchor}
+          type="button"
+          style={height ? { height } : undefined}
+          onClick={() => {
+            onToggle?.();
+            setOpen((value) => !value);
+          }}
+        >
           Filters
         </button>
         <Popover
@@ -345,6 +460,7 @@ describe("controlled Popover", () => {
           open={open}
           anchor={anchor}
           presentation={presentation}
+          {...(modal !== undefined ? { modal } : {})}
           onOpenChange={(next) => {
             onOpenChange?.(next);
             setOpen(next);
@@ -365,25 +481,40 @@ describe("controlled Popover", () => {
 
   it("sits its offset below an anchor whose edge falls between pixels, to within half a device pixel", async () => {
     const view = await render(<Controlled />);
-    const toggle = page.getByRole("button", { name: "Filters" });
+    const toggle = page.getByRole("button", { name: "Filters" }).element() as HTMLElement;
     for (const height of ["30.25px", "30.5px", "30.75px"]) {
       await view.rerender(<Controlled height={height} />);
       await userEvent.click(toggle);
       await settled();
-      expect(toggle.element().getBoundingClientRect().bottom % 1, height).not.toBe(0);
-      expectGapBelow(toggle.element(), 8);
-      await userEvent.click(toggle);
+      expect(toggle.getBoundingClientRect().bottom % 1, height).not.toBe(0);
+      expectGapBelow(toggle, 8);
+      await userEvent.keyboard("{Escape}");
       await expect.poll(() => popup()).toBeNull();
     }
   });
 
-  it("positions against anchor, and the app's own toggle closes it without reopening", async () => {
+  it("positions against anchor, and a press on the anchor only closes it, without its onClick", async () => {
     const onOpenChange = vi.fn();
-    await render(<Controlled onOpenChange={onOpenChange} />);
+    const onToggle = vi.fn();
+    await render(<Controlled onOpenChange={onOpenChange} onToggle={onToggle} />);
+    const toggle = page.getByRole("button", { name: "Filters" }).element() as HTMLElement;
+    await userEvent.click(toggle);
+    await settled();
+    expectGapBelow(toggle, 8);
+    expect(onToggle).toHaveBeenCalledOnce();
+    // Forced: the open popover keeps the pointer from the page, so the click lands where the anchor is.
+    await userEvent.click(toggle, { force: true });
+    await expect.poll(() => popup()).toBeNull();
+    expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+    expect(onToggle).toHaveBeenCalledOnce();
+  });
+
+  it("with modal={false}, leaves a press on the anchor to its own onClick, which closes it without reopening", async () => {
+    const onOpenChange = vi.fn();
+    await render(<Controlled onOpenChange={onOpenChange} modal={false} />);
     const toggle = page.getByRole("button", { name: "Filters" });
     await userEvent.click(toggle);
     await settled();
-    expectGapBelow(toggle.element(), 8);
     await userEvent.click(toggle);
     await expect.poll(() => popup()).toBeNull();
     expect(onOpenChange).not.toHaveBeenCalled();
@@ -619,6 +750,17 @@ describe("Popover motion", () => {
     expect(getComputedStyle(element).transform).toBe("none");
     expect(getComputedStyle(element).opacity).toBe("0");
     element.removeAttribute("data-ending-style");
+  });
+
+  it("treats an entrance animation whose playState is finished as done, even if the browser has not yet dropped it from getAnimations()", async () => {
+    const element = await openUncontrolled();
+    // A browser can report an animation's playState as "finished" a tick before it
+    // actually drops that animation from the element's getAnimations() list; under
+    // CI load, that bookkeeping step can lag far more than the animation itself took
+    // (#3103). A stuck-but-finished entry must not block the entrance from reading
+    // as done.
+    vi.spyOn(element, "getAnimations").mockReturnValue([{ playState: "finished" } as Animation]);
+    expect(entranceDone(element)).toBe(true);
   });
 });
 

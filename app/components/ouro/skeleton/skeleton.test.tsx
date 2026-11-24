@@ -6,7 +6,7 @@ import { commands } from "vitest/browser";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Card } from "~/components/ouro/card/card";
 import { Item } from "~/components/ouro/item/item";
-import { breathMs, joinWave, stillMs } from "~/components/ouro/skeleton/skeleton-styles";
+import { breathMs, correctAnimationClock, joinWave, stillMs } from "~/components/ouro/skeleton/skeleton-styles";
 import { Skeleton, type SkeletonProps } from "~/components/ouro/skeleton/skeleton";
 import { Text } from "~/components/ouro/text/text";
 import { act } from "~/lib/ouro/testing/act";
@@ -260,7 +260,9 @@ describe("Skeleton", () => {
     expect(frames.at(0)!["opacity"]).toBe(frames.at(-1)!["opacity"]);
     await commands.emulateMedia({ reducedMotion: "reduce" });
     expect(getComputedStyle(skeleton).animationName).toBe("none");
-    expect(skeleton.getAnimations({ subtree: true })).toEqual([]);
+    // The media change cancels the animation on its own frame, a frame that can land after this
+    // read, as it does elsewhere in the suite: polls past that lag instead of assuming it is done.
+    await expect.poll(() => skeleton.getAnimations({ subtree: true }).length).toBe(0);
   });
 
   it("joins one shared phase: a placeholder mounted mid-breath, or remounted, is where the others are, and reduced motion draws none", async () => {
@@ -278,7 +280,8 @@ describe("Skeleton", () => {
     expect(phaseGap(phase(again), phase(late))).toBeLessThan(phaseGapMs);
     await commands.emulateMedia({ reducedMotion: "reduce" });
     expect(getComputedStyle(late).animationName).toBe("none");
-    expect(late.getAnimations()).toEqual([]);
+    // See the test above: polls past the cancellation's own frame lag.
+    await expect.poll(() => late.getAnimations().length).toBe(0);
   });
 
   it("joins the shared phase past a host held right after it mounts, before its first frame can peg its own clock", async () => {
@@ -289,9 +292,10 @@ describe("Skeleton", () => {
     const holdUntil = performance.now() + 300;
     while (performance.now() < holdUntil) { /* holds the main thread, no yield */ }
     const late = await render(<Skeleton />);
-    // One settled frame past the mount, so both animations' own clocks have had their pending startTime pegged.
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    expect(phaseGap(phase(first), phase(late))).toBeLessThan(phaseGapMs);
+    // Each animation's own clock is pegged, and the correction that follows it lands, on its own
+    // promise-and-frame chain (readiness commits on whatever frame a loaded host gets to it): a fixed
+    // frame count races that chain, so this polls the gap itself until it settles or the poll times out.
+    await expect.poll(() => phaseGap(phase(first), phase(late))).toBeLessThan(phaseGapMs);
   });
 
   it("joins the shared phase past a host held for longer than the mount itself takes", async () => {
@@ -301,8 +305,8 @@ describe("Skeleton", () => {
     const holdUntil = performance.now() + 2000;
     while (performance.now() < holdUntil) { /* holds the main thread, no yield */ }
     const late = await render(<Skeleton />);
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    expect(phaseGap(phase(first), phase(late))).toBeLessThan(phaseGapMs);
+    // See above: polls past the correction's own promise-and-frame chain rather than assuming it settles in two frames.
+    await expect.poll(() => phaseGap(phase(first), phase(late))).toBeLessThan(phaseGapMs);
   });
 
   it("joins the shared phase on a row's and a card's own Bar, past a host held right after mounting", async () => {
@@ -313,11 +317,14 @@ describe("Skeleton", () => {
       const holdUntil = performance.now() + 300;
       while (performance.now() < holdUntil) { /* holds the main thread, no yield */ }
       const late = (await render(<Skeleton shape={shape} />)).parentElement!;
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const firstAnimation = host.getAnimations({ subtree: true })[0]!;
       const lateAnimation = late.getAnimations({ subtree: true })[0]!;
       const localTime = (animation: Animation) => Number(animation.effect!.getComputedTiming().localTime) - Number(animation.effect!.getTiming().delay);
-      expect(phaseGap(localTime(firstAnimation), localTime(lateAnimation)), shape).toBeLessThan(phaseGapMs);
+      // See the host-held test above: polls past the correction's own promise-and-frame chain rather than
+      // assuming it settles in two frames.
+      await expect
+        .poll(() => phaseGap(localTime(firstAnimation), localTime(lateAnimation)), { message: shape })
+        .toBeLessThan(phaseGapMs);
     }
   });
 
@@ -401,6 +408,22 @@ describe("Skeleton", () => {
     expect(joinWave(5000, 1, 0, 4000).delay).toBe("0ms");
     expect(joinWave(5000, 1, 0, 3999).delay).toBe("-1ms");
     expect(joinWave(9000, 2, 0, 1000).delay).toBe(`${-((8000 - stillMs) % breathMs)}ms`);
+  });
+
+  it("does not revive an animation that went idle between its ready settling and the clock correction's write", () => {
+    // A real race here depends on frame timing this suite cannot hold still (reduced motion cancelling the
+    // animation in the gap between its ready resolving and this write running), so this drives the exact
+    // ordering directly with a plain object standing in for the animation: playState already idle, as a
+    // cancel would leave it, by the time the write would run.
+    const animation = { playState: "idle", currentTime: null as number | null };
+    correctAnimationClock(animation, 5000, 4000, 1000);
+    expect(animation.currentTime).toBeNull();
+  });
+
+  it("writes the fresh clock when the animation is still running", () => {
+    const animation = { playState: "running", currentTime: null as number | null };
+    correctAnimationClock(animation, 5000, 4000, 1000);
+    expect(animation.currentTime).toBe(1000 - Number.parseFloat(joinWave(5000, 1, 0, 4000).delay));
   });
 
   it("measures a phase gap the short way around the circle, so a near-whole-breath difference reads as close", () => {

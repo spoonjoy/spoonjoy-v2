@@ -355,6 +355,13 @@ describe("loading", () => {
     expect(Math.abs(s.top + s.height / 2 - (b.top + b.height / 2))).toBeLessThanOrEqual(1);
   });
 
+  it("paints the surface behind the label with a negative z-index", async () => {
+    const { button } = await render(<Button>Save recipe</Button>);
+    const surface = button.querySelector<HTMLElement>("[data-ouro-surface]")!;
+    expect(surface).not.toBeNull();
+    expect(getComputedStyle(surface).zIndex).toBe("-1");
+  });
+
   it("does not submit its form while loading", async () => {
     const onSubmit = vi.fn((event: { preventDefault(): void }) => event.preventDefault());
     const { host } = await render(

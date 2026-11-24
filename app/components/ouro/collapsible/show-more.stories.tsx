@@ -103,7 +103,7 @@ export const LoadMore: Story = {
   },
 };
 
-/** A long post folded to 180px under a fade: Show more unfolds it, and focus that lands below the fold unfolds it too. */
+/** A long post folded to 180px on a hard edge: Show more unfolds it, and focus that lands below the fold unfolds it too. */
 export const LongPost: Story = {
   parameters: { mode: "height" },
   render: () => (

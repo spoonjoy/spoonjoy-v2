@@ -124,7 +124,7 @@ export type ShowMoreLinesProps = ShowMoreBaseProps & ShowMoreOpenProps & {
   href?: never;
 };
 
-/** Long content of any kind folded to `maxHeight` pixels under a fade, with "Show more" and "Show less". */
+/** Long content of any kind folded to `maxHeight` pixels on a hard edge, with "Show more" and "Show less". */
 export type ShowMoreHeightProps = ShowMoreBaseProps & ShowMoreOpenProps & {
   /**
    * How tall the content shows while folded, in CSS pixels, with its last part fading out.
@@ -334,7 +334,7 @@ const DEFAULT_HEIGHT = 240;
 /**
  * "Show more" for a long list or a long text. It cuts a list to its first items, clamps text
  * to a number of lines, folds content of any kind (a long post with pictures) to a height
- * under a fade, or grows a list a page at a time from the server, and moves focus to
+ * on a hard edge, or grows a list a page at a time from the server, and moves focus to
  * the first newly shown item, so keyboard and screen reader users land on what they asked
  * for. A list that loads more also says how many items now show. The button names what it
  * folds (`aria-controls`) and, unless it loads more, says whether it is open (`aria-expanded`).
@@ -358,7 +358,7 @@ const DEFAULT_HEIGHT = 240;
  * <ShowMore lines={3} open={open} onOpenChange={setOpen}>{recipe.description}</ShowMore>
  * @claim "The button names what it folds" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore toggle semantics > names the list, the text or the fold it opens and says whether it is open, in every mode that folds)
  * @claim "The button names what it folds" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore toggle semantics > names the list a load adds to, and claims no open state, since loading more never folds)
- * @claim "folds content of any kind" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore with maxHeight > folds long content to maxHeight under a fade, with Show more)
+ * @claim "folds content of any kind" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore with maxHeight > folds long content to maxHeight on a hard edge, with Show more)
  * @claim "ShowMore draws the list itself: put" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore with items > lets app layout classes win and keys rows by their own keys)
  */
 export function ShowMore(props: ShowMoreProps): JSX.Element {

@@ -60,20 +60,13 @@ const rootClass = "flex min-w-0 gap-4 data-[orientation=horizontal]:flex-col dat
 /**
  * The tab list. A hairline under the row (or on the column's end edge, the left in a right-to-left page) is an inset shadow, not a
  * border, so the row can scroll sideways on a narrow screen without clipping the indicator.
- * While it scrolls, a mask fades the side that hides more tabs (`data-fade`, set by TabsList).
- * The mask's `#000` only means opaque: a gradient mask is read for its alpha (`mask-mode:
- * match-source`), so no color of it reaches the page, whatever the theme.
  *
  * @internal
- * @claim "The mask's `#000` only means opaque" https://developer.mozilla.org/en-US/docs/Web/CSS/mask-mode verify:urlOk(https://developer.mozilla.org/en-US/docs/Web/CSS/mask-mode)
  */
 const listClass =
   "relative z-0 m-0 box-border flex shrink-0 p-0 " +
   "data-[orientation=horizontal]:overflow-x-auto data-[orientation=horizontal]:[scrollbar-width:none] " +
   "data-[orientation=horizontal]:shadow-[inset_0_-1px_0_0_var(--border)] " +
-  "data-[fade=right]:[mask-image:linear-gradient(to_right,#000_calc(100%-2rem),transparent)] " + // fade-ok: fades the hidden end of a row of tabs, not a picture
-  "data-[fade=left]:[mask-image:linear-gradient(to_left,#000_calc(100%-2rem),transparent)] " + // fade-ok: fades the hidden end of a row of tabs, not a picture
-  "data-[fade=both]:[mask-image:linear-gradient(to_right,transparent,#000_2rem,#000_calc(100%-2rem),transparent)] " + // fade-ok: fades the hidden end of a row of tabs, not a picture
   "data-[orientation=vertical]:flex-col data-[orientation=vertical]:shadow-[inset_-1px_0_0_0_var(--border)] " +
   "rtl:data-[orientation=vertical]:shadow-[inset_1px_0_0_0_var(--border)]";
 

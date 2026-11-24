@@ -291,15 +291,21 @@ export function Link(props: LinkProps): JSX.Element {
       data-current={marked ? "" : undefined}
       className={cn(base, iconInlineClass, inlineProp === undefined ? [standalone, inTextFocus, iconRowClass, iconInTextClass] : inlineProp ? [inlineFocus, alwaysIconInTextClass] : [alwaysStandalone, alwaysIconRowClass], tones[tone], currentClass, className)}
     >
-      {children}
       {external ? (
-        // A word joiner (U+2060) forbids a line break just before the icon, whatever the
-        // text is (a string or rich content): the icon never wraps onto a line of its own.
-        <span data-slot="link-icon" className="whitespace-nowrap">
-          <span aria-hidden="true">{"\u2060"}</span>
-          {externalIcon}
+        // On a coarse pointer a standalone link is itself a flex box (for its 44px target), so
+        // the words and the glued icon span would become separate flex items, each centred on
+        // the whole box rather than flowing as one line of text: this inner span keeps them one
+        // flex item, so the word joiner's no-break rule still lands the icon on the last line.
+        <span data-slot="link-text" className="min-w-0">
+          {children}
+          <span data-slot="link-icon" className="whitespace-nowrap">
+            <span aria-hidden="true">{"\u2060"}</span>
+            {externalIcon}
+          </span>
         </span>
-      ) : null}
+      ) : (
+        children
+      )}
       {external ? <span className="sr-only"> (opens in a new tab)</span> : null}
     </RouterLink>
   );

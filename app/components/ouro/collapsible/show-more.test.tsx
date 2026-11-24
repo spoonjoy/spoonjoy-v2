@@ -663,12 +663,12 @@ describe("ShowMore with maxHeight", () => {
   );
   const fold = (root: HTMLElement) => root.querySelector<HTMLElement>("[data-ouro-show-more-fold]")!;
 
-  it("folds long content to maxHeight under a fade, with Show more", async () => {
+  it("folds long content to maxHeight on a hard edge, with Show more", async () => {
     const { root } = await render(<ShowMore maxHeight={120}><Tall height={400} /></ShowMore>);
     await expect.poll(() => root.querySelector("[data-ouro-show-more-toggle]")?.textContent).toBe("Show more");
     expect(fold(root).getBoundingClientRect().height).toBeCloseTo(120, 0);
     expect(fold(root).getAttribute("data-folded")).toBe("");
-    expect(getComputedStyle(fold(root)).maskImage).toContain("linear-gradient");
+    expect(getComputedStyle(fold(root)).maskImage).toBe("none");
   });
 
   it("unfolds to everything and back, keeping focus on the button", async () => {

@@ -75,7 +75,7 @@ function describeFindings(findings: GateFinding[]): string {
 }
 
 /**
- * An accessibility scan that fails closed: once running transitions finish, runs axe over
+ * An accessibility scan that fails closed: once the page has painted and running transitions finish, runs axe over
  * `context` with every rule, and returns every violation whatever its impact, and every check
  * axe could not decide unless a measurement passes it:
  *
@@ -106,6 +106,7 @@ function describeFindings(findings: GateFinding[]): string {
  * expect(describeFindings(findings)).toBe("");
  * @claim "An accessibility scan that fails closed" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails a violation whatever its impact: content outside every landmark is only moderate)
  * @claim "An accessibility scan that fails closed" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > measures text once its color transitions finish, as after a switch to dark)
+ * @claim "once the page has painted" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > scans the page as first painted: a scrolling region a resize report makes a tab stop passes, one that never becomes one fails)
  * @claim "text contrast, only when the worst" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes text over a gradient when every pixel behind it meets 4.5:1, and fails faint text over the same gradient)
  * @claim "a link in a block of text," registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > settles a link in running text whose block's background axe cannot read, as under an open list, by measuring the link against the text around it)
  * @claim "a popup trigger's `aria-controls`, only when" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails a popup trigger whose expanded popup is missing, and passes it once the popup is there)
@@ -171,6 +172,7 @@ class PageChanged extends Error {}
 const keptChanging = "it left the page while it was measured, three scans running: the page never held still";
 
 async function auditOnce(context: axe.ElementContext, last: boolean): Promise<GateFinding[]> {
+  await painted();
   await settleTransitions();
   const result = await axe.run(context, gateRunOptions);
   const findings: GateFinding[] = [];
@@ -699,6 +701,14 @@ function paintedOpacity(element: Element): number {
   let opacity = 1;
   for (let node: Element | null = element; node; node = node.parentElement) opacity *= Number.parseFloat(getComputedStyle(node).opacity);
   return opacity;
+}
+
+// Waits until the page has painted: what the browser reports to a ResizeObserver, in the frame before
+// the first paint, sets state a person meets (a scrolling region becomes a tab stop once it overflows),
+// and a test that scans as soon as its render returns would otherwise see the page before it. The
+// reports come after the frame's animation callbacks, so the second frame is the first after them.
+async function painted(): Promise<void> {
+  for (let frame = 0; frame < 2; frame++) await new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
 // Waits for the page's running CSS transitions, such as the colors easing after a switch to dark,

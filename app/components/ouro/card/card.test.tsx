@@ -300,6 +300,9 @@ describe("Card", () => {
     expect(style.backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
     const body = card.querySelector("[data-body]")!;
     expect(body.getBoundingClientRect().left - card.getBoundingClientRect().left).toBe(25);
+    // size="md" (the default) sizes an untouched title at Heading's own "md" step, not "sm" or the inherited body size.
+    const title = card.querySelector('[data-slot="card-title"]')!;
+    expect(getComputedStyle(title).fontSize).toBe("18px");
   });
 
   it("is tighter with size=sm", async () => {
@@ -311,6 +314,30 @@ describe("Card", () => {
     expect(getComputedStyle(card).paddingTop).toBe("16px");
     const body = card.querySelector("[data-body]")!;
     expect(body.getBoundingClientRect().left - card.getBoundingClientRect().left).toBe(17);
+    // size="sm" sizes an untouched title at Heading's "sm" step, smaller than the default "md" title above.
+    const title = card.querySelector('[data-slot="card-title"]')!;
+    expect(getComputedStyle(title).fontSize).toBe("16px");
+  });
+
+  it('sizes the title from the surrounding text with titleSize="inherit", staying semibold', async () => {
+    const host = document.createElement("div");
+    host.style.fontSize = "14px";
+    host.style.padding = "16px";
+    document.body.append(host);
+    mounted.push(host);
+    const root = createRoot(host);
+    roots.push(root);
+    await act(async () =>
+      root.render(
+        <Card title="Weeknight dinners" variant="plain" titleSize="inherit">
+          Fast dinners
+        </Card>,
+      ),
+    );
+    const title = host.querySelector('[data-slot="card-title"]')!;
+    const style = getComputedStyle(title);
+    expect(style.fontSize).toBe("14px");
+    expect(style.fontWeight).toBe("600");
   });
 
   it("has no frame or padding with variant=plain", async () => {
@@ -1021,6 +1048,7 @@ describe("Card development messages", () => {
     ["as span", { title: "x", as: "span" }, 'as="span" is not an element Card renders; use "div", "article", "section", "li"', '<Card as="div">'],
     ["stackBelow", { title: "x", stackBelow: "lg" }, 'stackBelow="lg" is not a breakpoint; use "sm", "md"', '<Card stackBelow="sm">'],
     ["headingLevel", { title: "x", headingLevel: 1 }, "headingLevel must be 2, 3, 4, 5 or 6, got 1", "<Card headingLevel={2}>"],
+    ["titleSize", { title: "x", titleSize: "lg" }, 'titleSize="lg" is not a size; use "inherit"', '<Card titleSize="inherit">'],
     ["revealDescription", { href: "#x", title: "x", description: "y", revealDescription: "slide" }, 'revealDescription="slide" is not a reveal; use revealDescription or "rise"', '<Card revealDescription="rise">'],
     ["rise without href", { title: "x", description: "y", media: <div />, revealDescription: "rise" }, "revealDescription needs href, a title and a description", '<Card href="/path" title="…" description="…" revealDescription>'],
     ["rise without media", { href: "#x", title: "x", description: "y", revealDescription: "rise" }, 'revealDescription="rise" needs media to rise over', '<Card href="/path" title="…" description="…" media={…} revealDescription="rise">'],
@@ -1033,6 +1061,11 @@ describe("Card development messages", () => {
   it.each([undefined, false, true, "rise"] as const)("says nothing of revealDescription=%s, which is a reveal", async (value) => {
     await render(<Card href="#x" title="x" description="y" media={<div />} revealDescription={value} />);
     expect(warn.mock.calls.filter((call: unknown[]) => String(call[0]).includes("is not a reveal"))).toEqual([]);
+  });
+
+  it.each([undefined, "inherit"] as const)("says nothing of titleSize=%s, which is a size", async (value) => {
+    await render(<Card title="x" titleSize={value} />);
+    expect(warn.mock.calls.filter((call: unknown[]) => String(call[0]).includes("is not a size; use \"inherit\""))).toEqual([]);
   });
 
   it("renders no box for an action it is not given", async () => {

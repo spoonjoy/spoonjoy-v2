@@ -146,7 +146,7 @@ const conversationFilters = [
   { value: "drafts", label: "Saved drafts" },
 ];
 
-/** `overflow="scroll"`, in a place too narrow for the chips: one line, scrolled sideways, with a fade at the cut edge. */
+/** `overflow="scroll"`, in a place too narrow for the chips: one line, scrolled sideways. */
 export const ScrollingPills: Story = {
   render: function Render() {
     const [filter, setFilter] = useState("all");

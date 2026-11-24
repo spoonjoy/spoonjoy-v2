@@ -75,6 +75,19 @@ export interface PopoverBaseProps {
    */
   presentation?: PopoverPresentation | (string & { 'Use "auto", "popover" or "sheet"': never }) | undefined;
   /**
+   * Whether the open popover holds the page: it locks the page's scroll, and a click outside
+   * only closes it, as a right-click there does. `modal={false}` leaves the page scrolling and
+   * its controls live, so a click outside closes the popover and reaches what is under it too.
+   * The sheet always holds the page.
+   * @default true
+   * @claim "it locks the page's scroll" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover modal > holds the page while open: its scroll is locked, and a click outside only closes it)
+   * @claim "a click outside only closes it" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover modal > holds the page while open: its scroll is locked, and a click outside only closes it)
+   * @claim "as a right-click there does" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover modal > closes on a right-click outside, with no menu of the browser's)
+   * @claim "The sheet always holds the page" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover modal > keeps the sheet holding the page with modal={false})
+   * @claim "`modal={false}` leaves the page scrolling" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover modal > with modal={false}, leaves the page scrolling and its controls live: a click outside reaches them and closes the popover)
+   */
+  modal?: boolean | undefined;
+  /**
    * The body. It scrolls when the popover is taller than the space beside the trigger. Its focus ring is drawn over
    * the content, so a header that sticks to the top never hides an edge of it.
    * @claim "Its focus ring is drawn over the content" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > draws its focus ring whole over content that sticks to an edge, and leaves the pointer to the content)
@@ -124,10 +137,11 @@ export type PopoverControlledProps = PopoverBaseProps & {
   onOpenChange: (open: boolean) => void;
   /**
    * The element the popover points at, usually the button that toggles it:
-   * `anchor={buttonRef}`. A press on it never counts as an outside press, so its own
-   * `onClick` can toggle `open`.
-   * @claim "A press on it never counts" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > closes from an outside press, and the trigger toggles it)
-   * @claim "A press on it never counts" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > keeps the trigger's own ref and onClick)
+   * `anchor={buttonRef}`. While the popover holds the page, a press on it only closes the
+   * popover, as any press outside does. With `modal={false}` a press on it never counts as an
+   * outside press, so its own `onClick` can toggle `open`.
+   * @claim "a press on it only closes the" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::controlled Popover > positions against anchor, and a press on the anchor only closes it, without its onClick)
+   * @claim "With `modal={false}` a press on" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::controlled Popover > with modal={false}, leaves a press on the anchor to its own onClick, which closes it without reopening)
    */
   anchor: RefObject<HTMLElement | null>;
   /** Not with `open`. Remove `open`, `onOpenChange` and `anchor` to let a trigger open the popover. */
@@ -138,10 +152,12 @@ export type PopoverControlledProps = PopoverBaseProps & {
 export type PopoverProps = PopoverWithTriggerProps | PopoverControlledProps;
 
 /**
- * A small non-modal panel beside its trigger, for a short form or a few choices: a share
- * link, filters, a quick edit. It is named by its title, closes on Escape and outside
- * presses, returns focus to the trigger, and flips to the other side when there is no
- * room. With `presentation="auto"` it is a bottom sheet on phones (below 640px).
+ * A small panel beside its trigger, for a short form or a few choices: a share link,
+ * filters, a quick edit. It is named by its title, closes on Escape and outside presses,
+ * returns focus to the trigger, and flips to the other side when there is no room. While
+ * it is open it holds the page, as a menu does: a click outside only closes it, and never
+ * also presses what is under it (`modal={false}` lets the click through). With
+ * `presentation="auto"` it is a bottom sheet on phones (below 640px).
  *
  * Use `trigger` for a popover a button opens, or `open` with `onOpenChange` and `anchor`
  * to control it. To give the trigger a tooltip too, put the Tooltip inside `trigger`:
@@ -168,7 +184,8 @@ export type PopoverProps = PopoverWithTriggerProps | PopoverControlledProps;
  * @claim "It stacks above the page at" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover stacking > puts the portal on the --ouro-layer level, as its own stacking context)
  * @claim "Opened from inside a Dialog or a Sheet" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover stacking > shows above a %s it is opened from)
  * @claim "It stacks above the page at" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
- * @claim "It is named by its title" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > opens below its trigger as a non-modal dialog named by its title)
+ * @claim "It is named by its title" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > opens below its trigger as a dialog named by its title)
+ * @claim "a click outside only closes it" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover modal > holds the page while open: its scroll is locked, and a click outside only closes it)
  * @claim "It is named by its title" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > closes on Escape and returns focus to the trigger)
  * @claim "It is named by its title" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > closes from an outside press, and the trigger toggles it)
  * @claim "It is named by its title" https://base-ui.com/react/components/popover verify:urlOk(https://base-ui.com/react/components/popover)
@@ -182,6 +199,7 @@ export function Popover(props: PopoverProps): JSX.Element {
     side: sideProp,
     align: alignProp,
     presentation: presentationProp = "popover",
+    modal = true,
     children,
     className,
     trigger,
@@ -260,8 +278,9 @@ export function Popover(props: PopoverProps): JSX.Element {
   return (
     <PopoverRoot
       open={isOpenNow && !asSheet}
+      modal={modal}
       onOpenChange={(next, details) => {
-        // The app's own toggle (the anchor) is not outside: its onClick decides.
+        // Left live (modal={false}), the app's own toggle (the anchor) is not outside: its onClick decides.
         const target = details.event?.target as Node | undefined;
         if (!next && details.reason === "outside-press" && target && anchor?.current?.contains(target)) return;
         setOpen(next);
@@ -270,7 +289,14 @@ export function Popover(props: PopoverProps): JSX.Element {
       {trigger !== undefined && (
         <PopoverTrigger render={trigger} ref={triggerRef} aria-expanded={isOpenNow} />
       )}
-      <PopoverPortal>
+      <PopoverPortal
+        onContextMenu={(event) => {
+          // A right-click on what holds the page (Base UI's backdrop) only closes the popover, as a click there does.
+          if (!(event.target as Element).hasAttribute("data-base-ui-inert")) return;
+          event.preventDefault();
+          setOpen(false);
+        }}
+      >
         <PopoverPositionerUnchecked side={side} align={align} {...(anchor ? { anchor } : {})}>
           <PopoverPopupUnchecked
             ref={popupRef}

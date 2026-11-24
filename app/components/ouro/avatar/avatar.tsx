@@ -274,7 +274,8 @@ const presenceSizes = {
 
 // Where the dot's center falls (--ouro-bite-c, from the lower end corner) and the radius of
 // its ring (--ouro-bite-r): the avatar's surface is cut away there, so what lies behind the
-// avatar shows through the gap, as a ring in the surface's color could not.
+// avatar shows through the gap, as a ring in the surface's color could not. ouro-base cuts it from
+// the surface's clip path, only while a dot is drawn (data-ouro-bite).
 const biteSizes = {
   xs: "[--ouro-bite-c:1.9px] [--ouro-bite-r:5.5px]",
   sm: "[--ouro-bite-c:2.5px] [--ouro-bite-r:6.1px]",
@@ -286,9 +287,6 @@ const biteSizes = {
 } as const;
 // Below 40px a glyph cannot be read, so the dot is a plain colour; from 40px up it carries its glyph.
 const plainSizes: readonly AvatarSize[] = ["xs", "sm"];
-const biteClass =
-  "[mask-image:radial-gradient(circle_at_calc(100%_-_var(--ouro-bite-c))_calc(100%_-_var(--ouro-bite-c)),transparent_var(--ouro-bite-r),#000_calc(var(--ouro-bite-r)+0.5px))] " + // fade-ok: a bite cut out of the avatar for its presence dot, not a fade
-  "rtl:[mask-image:radial-gradient(circle_at_var(--ouro-bite-c)_calc(100%_-_var(--ouro-bite-c)),transparent_var(--ouro-bite-r),#000_calc(var(--ouro-bite-r)+0.5px))]"; // fade-ok: the same bite, mirrored for right to left
 
 // Each hue tints the surface and colors the initials, mixed toward the theme's background and
 // foreground so the pair keeps at least 4.5:1 in light and dark.
@@ -659,6 +657,7 @@ export function Avatar(props: AvatarProps): JSX.Element {
     >
       <span
         data-ouro-avatar-surface=""
+        data-ouro-bite={presence ? "" : undefined}
         className={cn(
           "absolute inset-0 rounded-[inherit]",
           // A group's slices: a half each, or a half and two quarters, with a hole between them, clipped to the
@@ -667,7 +666,6 @@ export function Avatar(props: AvatarProps): JSX.Element {
           shape === "circle" ? "[--ouro-sq-r:44%]" : "[--ouro-sq-r:24%]",
           shape === "agent" ? agentTileClass : !nameLoading && !group && fill,
           group && image !== "loaded" && slices.length > 1 && "grid-cols-2",
-          presence && biteClass,
           image !== "loaded" && iconShown && !nameLoading && !group && "*:size-[55%]",
           nameLoading && "overflow-hidden",
         )}

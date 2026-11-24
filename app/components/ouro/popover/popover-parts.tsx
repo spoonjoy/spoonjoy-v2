@@ -127,7 +127,7 @@ export type PopoverPositionerProps = Omit<BasePopover.Positioner.Props, "classNa
  * Part: places the popover beside its trigger (or `anchor`), 8px away and at least 8px
  * from the screen edges, and flips it to the other side when there is no room.
  * @claim "Part: places the popover beside its" registry/ouro/components/ouro/popover/popover-parts.tsx verify:fileLine(registry/ouro/components/ouro/popover/popover-parts.tsx, /sideOffset=\{8\}\scollisionPadding=\{8\}/)
- * @claim "Part: places the popover beside its" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > opens below its trigger as a non-modal dialog named by its title)
+ * @claim "Part: places the popover beside its" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > opens below its trigger as a dialog named by its title)
  */
 export function PopoverPositioner({ side: sideProp, align: alignProp, ...props }: PopoverPositionerProps): JSX.Element {
   usePopoverPart("PopoverPositioner", "…");

@@ -1000,7 +1000,8 @@ describe("Avatar presence", () => {
       );
       for (const avatar of host.querySelectorAll<HTMLElement>('[data-ouro="avatar"]')) {
         const fill = getComputedStyle(surface(avatar));
-        expect(fill.maskImage).toContain("radial-gradient");
+        expect(fill.maskImage).toBe("none");
+        expect(fill.clipPath).toContain("evenodd");
         const dot = avatar.querySelector<HTMLElement>("[data-ouro-avatar-presence]")!;
         const style = getComputedStyle(dot);
         expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
@@ -1023,6 +1024,24 @@ describe("Avatar presence", () => {
         expect(Math.abs(px("--ouro-bite-r") - at.width / 2 - Math.max(1.5, box.width * 0.05))).toBeLessThan(0.51);
       }
     }
+  });
+
+  it("cuts no notch and draws no mask or clip when no dot is drawn", async () => {
+    const { host } = await render(
+      <div style={{ background: "rgb(255, 0, 0)", padding: 20 }}>
+        <Avatar name="Ana Lind" />
+        <Avatar name="Halden" shape="agent" />
+        <Avatar name="Ana Lind" presence="away" presenceLabel="Away" />
+      </div>,
+    );
+    const [plain, agent, dotted] = [...host.querySelectorAll<HTMLElement>('[data-ouro="avatar"]')];
+    for (const avatar of [plain!, agent!]) {
+      const fill = getComputedStyle(surface(avatar));
+      expect(surface(avatar).hasAttribute("data-ouro-bite")).toBe(false);
+      expect(fill.maskImage).toBe("none");
+      expect(fill.clipPath).toBe("none");
+    }
+    expect(surface(dotted!).getAttribute("data-ouro-bite")).toBe("");
   });
 
   it("moves to the other corner right to left", async () => {

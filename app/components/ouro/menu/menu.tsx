@@ -200,27 +200,34 @@ interface MenuPlacementProps {
   align?: FloatingAlign | (string & { 'Use "start", "center" or "end": left is "start", right is "end"': never }) | undefined;
 }
 
+/** Whether a dropdown, or a menu the app opens itself, holds the page while it is open. */
+interface MenuModalProps {
+  /**
+   * Whether the open menu holds the page: it locks the page's scroll, and a click outside
+   * only closes it. `modal={false}` leaves the page scrolling and its controls live, and spares
+   * the browser a layout and repaint of the whole page each time the menu opens and closes:
+   * for a small menu that a list repeats on every row. The phone sheet always holds the page.
+   * @default true
+   * @claim "it locks the page's scroll" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > holds the page while open: its scroll is locked, and a click outside only closes it)
+   * @claim "a click outside only closes it" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > holds the page while open: its scroll is locked, and a click outside only closes it)
+   * @claim "a click outside only closes it" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu anchor > holds the page while open: a click outside only closes it, and the button under it gets no click)
+   * @claim "leaves the page scrolling and its controls live" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > with modal={false}, leaves the page's scroll alone while a modal Menu's lock comes and goes) verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > with modal={false}, leaves the page's controls live: a click outside reaches them and closes the menu)
+   * @claim "leaves the page scrolling and its controls live" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu anchor > with modal={false}, leaves the page's controls live: a click outside reaches them and closes the menu)
+   * @claim "The phone sheet always holds the page" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > keeps the phone sheet holding the page with modal={false})
+   */
+  modal?: boolean | undefined;
+}
+
 /**
  * A dropdown: `trigger` opens it. Below 640px it is a bottom sheet.
  *
  * @claim "Below 640px it is a bottom" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu presentation > is a bottom sheet below 640px, with a backdrop, and its submenu is a sheet with a Back item)
  */
 export type MenuDropdownProps = MenuBaseProps &
-  MenuPlacementProps & {
+  MenuPlacementProps &
+  MenuModalProps & {
     /** The button that opens the menu, usually a Button: `trigger={<Button>Actions</Button>}`. */
     trigger: ReactElement;
-    /**
-     * Whether the open dropdown holds the page: it locks the page's scroll, and a click outside
-     * only closes it. `modal={false}` leaves the page scrolling and its controls live, and spares
-     * the browser a layout and repaint of the whole page each time the menu opens and closes:
-     * for a small menu that a list repeats on every row. The phone sheet always holds the page.
-     * @default true
-     * @claim "it locks the page's scroll" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > holds the page while open: its scroll is locked, and a click outside only closes it)
-     * @claim "a click outside only closes it" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > holds the page while open: its scroll is locked, and a click outside only closes it)
-     * @claim "leaves the page scrolling and its controls live" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > with modal={false}, leaves the page's scroll alone while a modal Menu's lock comes and goes) verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > with modal={false}, leaves the page's controls live: a click outside reaches them and closes the menu)
-     * @claim "The phone sheet always holds the page" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > keeps the phone sheet holding the page with modal={false})
-     */
-    modal?: boolean | undefined;
     /** Not with `trigger`. Use one way to open a menu. */
     contextTrigger?: never;
     /** Not with `trigger`. `label` is for a Menu inside `MenuBar`. */
@@ -276,7 +283,8 @@ export type MenuBarMenuProps = MenuBaseProps &
  * @claim "Beside an element it is a" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu anchor > opens beside an element, as a bottom sheet below 640px, and at a point as a menu)
  */
 export type MenuAnchorProps = MenuBaseProps &
-  MenuPlacementProps & {
+  MenuPlacementProps &
+  MenuModalProps & {
     /**
      * Where the menu opens: beside an element (`side` and `align` place it), beside a box measured
      * once (`{ getBoundingClientRect: () => box }`, for an element that goes as the menu opens), or at
@@ -301,8 +309,6 @@ export type MenuAnchorProps = MenuBaseProps &
     contextTrigger?: never;
     /** Not with `anchor`. `label` is for a Menu inside `MenuBar`; name this one with `aria-label`. */
     label?: never;
-    /** Not with `anchor`: it leaves the page live, so it opens and closes without a layout of the whole page. */
-    modal?: never;
   };
 
 /** Where an anchored Menu opens: an element, a box (`{ getBoundingClientRect }`) or a point in the window (`{ x, y }`). */
@@ -724,7 +730,7 @@ export function Menu(props: MenuProps): JSX.Element {
     // Stryker disable next-line ArrowFunction: with no trigger, Base UI has no focus of its own to give back, so a finalFocus that says nothing does as false does.
     const finalFocus = () => false;
     const directed = (
-      <BaseMenu.Root {...control} actionsRef={actions} modal={sheet}>
+      <BaseMenu.Root {...control} actionsRef={actions} modal={sheet || modal}>
         <MenuSurface
           sheet={sheet}
           context={false}

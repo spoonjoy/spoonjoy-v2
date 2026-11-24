@@ -1434,11 +1434,13 @@ describe("Menu anchor", () => {
     onCopy = () => {},
     onChoose,
     align,
+    modal,
   }: {
     at: (row: HTMLElement) => Element | { x: number; y: number };
     onCopy?: () => void;
     onChoose?: () => void;
     align?: "start" | "end";
+    modal?: boolean;
   }) {
     const [open, setOpen] = useState(false);
     const [row, setRow] = useState<HTMLElement | null>(null);
@@ -1457,7 +1459,7 @@ describe("Menu anchor", () => {
         </Button>
         <input aria-label="Elsewhere" />
         {row && (
-          <Menu anchor={at(row)} open={open} onOpenChange={setOpen} aria-label="Actions for the row" returnFocus={row} {...(align ? { align } : {})}>
+          <Menu anchor={at(row)} open={open} onOpenChange={setOpen} aria-label="Actions for the row" returnFocus={row} {...(align ? { align } : {})} {...(modal !== undefined ? { modal } : {})}>
             <MenuItem onClick={onCopy}>Copy</MenuItem>
             <MenuItem onClick={onChoose}>Choose</MenuItem>
           </Menu>
@@ -1601,6 +1603,41 @@ describe("Menu anchor", () => {
     await userEvent.click(page.getByRole("button", { name: "Open" }));
     const at = (await settled()).getBoundingClientRect();
     expect(Math.abs(at.left - (row().getBoundingClientRect().left + 200))).toBeLessThanOrEqual(2);
+  });
+
+  it("holds the page while open: a click outside only closes it, and the button under it gets no click", async () => {
+    const outside = vi.fn();
+    await render(
+      <>
+        <Shared at={(target) => target} />
+        <button type="button" data-testid="outside" onClick={outside}>
+          Outside
+        </button>
+      </>,
+    );
+    await userEvent.click(page.getByRole("button", { name: "Open" }));
+    await settled();
+    // Forced: the open menu keeps the pointer from the page, so the click lands where the button is.
+    await userEvent.click(document.querySelector<HTMLElement>("[data-testid=outside]")!, { force: true });
+    await expect.poll(menu).toBeNull();
+    expect(outside).not.toHaveBeenCalled();
+  });
+
+  it("with modal={false}, leaves the page's controls live: a click outside reaches them and closes the menu", async () => {
+    const outside = vi.fn();
+    await render(
+      <>
+        <Shared at={(target) => target} modal={false} />
+        <button type="button" onClick={outside}>
+          Outside
+        </button>
+      </>,
+    );
+    await userEvent.click(page.getByRole("button", { name: "Open" }));
+    await settled();
+    await userEvent.click(page.getByRole("button", { name: "Outside", exact: true }));
+    expect(outside).toHaveBeenCalledOnce();
+    await expect.poll(menu).toBeNull();
   });
 
   it("closes when focus moves outside it", async () => {

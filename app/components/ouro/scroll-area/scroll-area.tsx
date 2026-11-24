@@ -4,7 +4,6 @@ import { type HTMLAttributes, type JSX, type ReactNode, type Ref, useEffect, use
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { devWarn } from "~/lib/ouro/dev";
-import { scrollFadeClass, useScrollFade } from "~/lib/ouro/scroll-fade";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
 /** Which way a ScrollArea scrolls. */
@@ -68,10 +67,6 @@ const viewports = {
   both: "overflow-auto",
 } as const;
 
-/** The mask for the top and bottom fade, set only while the viewport scrolls. */
-const verticalFade =
-  "data-ouro-scroll-fade-y:[mask-image:linear-gradient(to_bottom,transparent,#000_min(var(--scroll-area-overflow-y-start),2rem),#000_calc(100%-min(var(--scroll-area-overflow-y-end),2rem)),transparent)]"; // fade-ok: fades a scrolling list of rows, not a picture
-
 const focusable =
   "a[href],button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary,[tabindex]:not([tabindex='-1']),[contenteditable='true']";
 
@@ -97,7 +92,6 @@ function useScrollTabStop(viewportRef: { current: HTMLDivElement | null }): void
       const end = Math.max(0, hidden - start);
       // Stryker disable next-line EqualityOperator: a one pixel threshold only absorbs rounding; no test can make content exactly one pixel taller
       const scrolls = hidden > 1 && getComputedStyle(viewport).overflowY !== "hidden";
-      viewport.toggleAttribute("data-ouro-scroll-fade-y", scrolls);
       // Stryker disable next-line EqualityOperator: a one pixel threshold only absorbs rounding; no test can place a scroll offset at exactly one pixel
       viewport.toggleAttribute("data-overflow-y-start", scrolls && start > 1);
       // Stryker disable next-line EqualityOperator: a one pixel threshold only absorbs rounding; no test can place a scroll offset at exactly one pixel
@@ -157,9 +151,8 @@ function useUnnamedRegionCheck(viewportRef: { current: HTMLDivElement | null }, 
 /**
  * A scrolling region with a thin scrollbar in the theme's color, inside a height you set.
  * It keeps the browser's own scrolling, so touch, the mouse wheel, the keyboard and
- * momentum all work; Content
- * wider than the area fades out at the side where it goes on, and a vertical area fades at the
- * top and bottom edge that hides more, so at rest it reads as more to scroll to, not as cut off.
+ * momentum come with it. Content
+ * that goes on past an edge is cut off there.
  * A vertical area also marks the viewport with `data-overflow-y-start` and `data-overflow-y-end`
  * while that edge hides content, and sets `--scroll-area-overflow-y-start` and `--scroll-area-overflow-y-end`
  * (pixels hidden), so a parent can draw a hairline once it is scrolled from the start. Its focus ring
@@ -184,7 +177,6 @@ function useUnnamedRegionCheck(viewportRef: { current: HTMLDivElement | null }, 
  * <ScrollArea orientation="horizontal" label="Tags">
  *   <Row gap="sm">{tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}</Row>
  * </ScrollArea>
- * @claim "Content wider than the area fades out" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > fades out at the side that hides more, drawing its focus ring over the fade, and keeps keyboard scrolling)
  * @claim "The viewport paints `--ouro-scroller-surface`" registry/ouro/components/ouro/scroll-area/scroll-area.surface.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.surface.test.tsx::ScrollArea surface > follows the token an app sets on the surface behind it)
  * @claim "Its focus ring is drawn over the content" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > draws its focus ring whole over content that sticks to an edge, and leaves the pointer to the content)
  * @claim "It keeps the browser's own scrolling" registry/ouro/components/ouro/scroll-area/scroll-area.touch.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.touch.test.tsx::leaves touch scrolling to the browser: the viewport is a native scroll container)
@@ -194,7 +186,6 @@ export function ScrollArea(props: ScrollAreaProps): JSX.Element {
   const { children, orientation: orientationProp = "vertical", label, contain, className, type, maxHeight, height, ...rest } = props;
   const viewportRef = useRef<HTMLDivElement>(null);
   useUnnamedRegionCheck(viewportRef, label);
-  useScrollFade(viewportRef);
   useScrollTabStop(viewportRef);
   const orientation = (orientations as readonly string[]).includes(orientationProp) ? (orientationProp as ScrollAreaOrientation) : "vertical";
   useAppearanceClassNameCheck(
@@ -216,8 +207,6 @@ export function ScrollArea(props: ScrollAreaProps): JSX.Element {
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
-  // Stryker disable next-line ConditionalExpression: the mask needs the data attribute, which only a vertical area gets
-  const fadeY = orientation === "vertical" && verticalFade;
   return (
     <div
       {...rest}
@@ -238,11 +227,11 @@ export function ScrollArea(props: ScrollAreaProps): JSX.Element {
         aria-label={label}
         // While focused, isolate keeps the content's own stacking (a sticky header's z-index) inside the viewport, under the
         // focus ring. Only then: at rest the content stacks with the page, as it always has.
-        className={cn("peer min-h-0 bg-(--ouro-scroller-surface) focus-visible:isolate flex-1 rounded-[inherit] outline-none", viewports[orientation], scrollbar, scrollFadeClass, fadeY, contain && "overscroll-contain")}
+        className={cn("peer min-h-0 bg-(--ouro-scroller-surface) focus-visible:isolate flex-1 rounded-[inherit] outline-none", viewports[orientation], scrollbar, contain && "overscroll-contain")}
       >
         <div className={orientation === "vertical" ? "min-w-0" : "min-w-fit"}>{children}</div>
       </div>
-      {/* The viewport's focus ring, drawn over it, so neither the edge fade nor content that sticks to an edge covers it. It is
+      {/* The viewport's focus ring, drawn over it, so content that sticks to an edge never covers it. It is
           there only while the viewport has focus: at rest nothing lies over the content, so a contrast check sees the text's own background. */}
       <span
         aria-hidden="true"

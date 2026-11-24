@@ -11,9 +11,10 @@
  *   quarter-rem steps (--ouro-size-8 is 2rem), named for their step with a dot as an underscore
  *   (--ouro-size-2_5). Density is --spacing, and these do not follow it, so a compact app keeps
  *   its avatars and icons their size; an app sets one to theme that size.
- * - Motion: a Motion spring(0.4, 0.15) as CSS, quick ease durations, the press scale and
- *   the dimming behind sheets and dialogs. These are not colors, so they keep the
- *   --ouro- prefix.
+ * - Motion: a Motion spring(0.4, 0.15) as CSS (retiring), a fixed bouncy curve for one thing that
+ *   should feel bouncy (--ouro-ease-bounce, --ouro-duration-bounce), quick ease durations, the
+ *   press scale and the dimming behind sheets and dialogs. These are not colors, so they keep
+ *   the --ouro- prefix.
  * - --ouro-corner-shape: the shape of every corner, a squircle (CSS corner-shape, n=4), applied to each
  *   Ouro element; set it to round to go back to circular arcs. Switch, radios, slider thumbs,
  *   presence dots and spinners stay round.
@@ -27,7 +28,13 @@
  * - --ouro-bubble-user and --ouro-bubble-user-foreground: the fill and text of the user's own chat
  *   bubble (Message), which read them before --ouro-action and the primary color. Unset by default,
  *   so the bubble follows the action color; set both as a pair that passes 4.5:1.
+ * - --ouro-bubble-other and --ouro-bubble-other-foreground: the fill and text of others' chat bubble
+ *   (Message), which read them before --muted and --foreground; a link, a mention, a success mark and
+ *   muted text inside it mix toward the resolved text color too. Unset by default, so the bubble
+ *   follows the muted surface; set both as a pair that passes 4.5:1.
  * - --ouro-layer: the z-index of sheet and dialog portals.
+ * - --ouro-gap-min: the least gap between two separate surfaces that don't touch (0.5rem); Ouro check's
+ *   near-miss rule reads it.
  * - --ouro-scroller-surface: the opaque fill of the surface a scroller sits on, the page's background
  *   by default. ScrollArea and MessageList paint their scroll viewport with it, so Chromium on Windows
  *   (which keeps LCD text on a see-through scroller by not promoting it to the compositor) promotes it
@@ -39,6 +46,9 @@
  *   fields draw their border in --input and round their corners on the --radius-ouro-* steps.
  *   shadcn add writes a variable only when the app's stylesheet lacks it, and a theme
  *   loaded after this file wins, so an app that has them keeps its own.
+ * - --ouro-message-run-gap, the space between consecutive messages from one sender (--ouro-size-1), and
+ *   --ouro-message-joined-radius, the corner where two bubbles of a run meet (unset, --radius-ouro-xl, a step
+ *   under the outer --radius-ouro-2xl). A lone bubble has four equal corners.
  * - The press transition and the keyframes for spinners, indeterminate progress, skeletons and the
  *   scroll fade drawn with no script.
  * - The shadow under each side of a sheet, --ouro-shadow-sheet-<side>, which shadcn's
@@ -125,6 +135,7 @@
   --ouro-corner-shape: squircle;
   --ouro-radius-scale: 1;
   --ouro-corner-fallback: 1;
+  --ouro-message-run-gap: var(--ouro-size-1);
   --destructive-foreground: #ffffff;
   --success: #157d3c;
   --success-foreground: #ffffff;
@@ -139,6 +150,8 @@
   --avatar-6: #0f6cbd;
   --avatar-7: #8764b8;
   --avatar-8: #c239b3;
+  /* The least gap between two separate surfaces that don't touch: they touch at 0 or sit at least this far apart, never in between. */
+  --ouro-gap-min: var(--ouro-size-2);
   /* Fixed sizes (ourostack/ouro-ui#417): density is --spacing, and these never follow it, so a compact --spacing leaves icons and avatars their size. */
   --ouro-size-0_5: 0.125rem;
   --ouro-size-1: 0.25rem;
@@ -179,12 +192,26 @@
   --ouro-ease-out: cubic-bezier(0.23, 1, 0.32, 1); /* enter and exit */
   --ouro-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); /* movement on screen */
   --ouro-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); /* sheets */
+  /*
+   * A fixed CSS curve, not a revival of the spring tokens above: a damping 0.6, response
+   * 0.35s spring, sampled the same way, for one thing that should feel bouncy, a new
+   * message's bubble growing in (MessageList). It peaks at 1.0947 before settling, so a
+   * growing bubble overshoots and springs back, unlike --ouro-ease-spring's 1.006 (which
+   * reads as an ease-out). No component reads this with the `motion` package at runtime.
+   */
+  --ouro-duration-bounce: 650ms; /* a new message's bubble growing in (MessageList) */
+  --ouro-ease-bounce: linear(0, 0.1221, 0.3776, 0.6454, 0.8608, 1.002, 1.074, 1.0947, 1.0845, 1.0608, 1.0352, 1.0144, 1.0005, 0.9933, 0.991, 0.9919, 0.9941, 0.9965, 0.9985, 0.9999, 1.0006, 1);
   --ouro-duration-press: 160ms; /* press feedback */
   --ouro-duration-fast: 150ms; /* tooltips, colour, small-popup exits */
   --ouro-duration-base: 200ms; /* popovers, menus, selects, accordions */
   --ouro-duration-draw: 240ms; /* a stroke drawn along its path: the checkbox tick, a checklist strike */
   --ouro-duration-slow: 300ms; /* dialogs, backdrops */
   --ouro-duration-sheet: 500ms; /* sheets only */
+  /* A dialog's enter and exit, popup and backdrop (also Command and Lightbox): an app sets these on :root. */
+  --ouro-dialog-duration: var(--ouro-duration-slow);
+  --ouro-dialog-ease: var(--ouro-ease-out);
+  --ouro-dialog-exit-duration: var(--ouro-duration-base);
+  --ouro-dialog-exit-ease: var(--ouro-dialog-ease);
   --ouro-press-scale: 0.97;
   /* The dimming layer behind sheets and dialogs, at full opacity when open. */
   --ouro-backdrop-color: #18181b;
@@ -365,7 +392,16 @@
 @supports (clip-path: shape(from 0 0, close)) {
   [data-ouro-surface],
   [data-ouro-avatar-surface] {
-    --ouro-sq-path: var(--ouro-sq-capsule-path, shape(from 0 calc(var(--ouro-sq-r)*1), curve to calc(var(--ouro-sq-r)*.1591) calc(var(--ouro-sq-r)*.1591) with 0 calc(var(--ouro-sq-r)*.613) / calc(var(--ouro-sq-r)*-.0092) calc(var(--ouro-sq-r)*.3274), curve to calc(var(--ouro-sq-r)*1) 0 with calc(var(--ouro-sq-r)*.3274) calc(var(--ouro-sq-r)*-.0092) / calc(var(--ouro-sq-r)*.613) 0, line to calc(100% - var(--ouro-sq-r)*1) 0, curve to calc(100% - var(--ouro-sq-r)*.1591) calc(var(--ouro-sq-r)*.1591) with calc(100% - var(--ouro-sq-r)*.613) 0 / calc(100% - var(--ouro-sq-r)*.3274) calc(var(--ouro-sq-r)*-.0092), curve to 100% calc(var(--ouro-sq-r)*1) with calc(100% + var(--ouro-sq-r)*.0092) calc(var(--ouro-sq-r)*.3274) / 100% calc(var(--ouro-sq-r)*.613), line to 100% calc(100% - var(--ouro-sq-r)*1), curve to calc(100% - var(--ouro-sq-r)*.1591) calc(100% - var(--ouro-sq-r)*.1591) with 100% calc(100% - var(--ouro-sq-r)*.613) / calc(100% + var(--ouro-sq-r)*.0092) calc(100% - var(--ouro-sq-r)*.3274), curve to calc(100% - var(--ouro-sq-r)*1) 100% with calc(100% - var(--ouro-sq-r)*.3274) calc(100% + var(--ouro-sq-r)*.0092) / calc(100% - var(--ouro-sq-r)*.613) 100%, line to calc(var(--ouro-sq-r)*1) 100%, curve to calc(var(--ouro-sq-r)*.1591) calc(100% - var(--ouro-sq-r)*.1591) with calc(var(--ouro-sq-r)*.613) 100% / calc(var(--ouro-sq-r)*.3274) calc(100% + var(--ouro-sq-r)*.0092), curve to 0 calc(100% - var(--ouro-sq-r)*1) with calc(var(--ouro-sq-r)*-.0092) calc(100% - var(--ouro-sq-r)*.3274) / 0 calc(100% - var(--ouro-sq-r)*.613), close));
+    --ouro-sq-cmds: from 0 calc(var(--ouro-sq-r)*1), curve to calc(var(--ouro-sq-r)*.1591) calc(var(--ouro-sq-r)*.1591) with 0 calc(var(--ouro-sq-r)*.613) / calc(var(--ouro-sq-r)*-.0092) calc(var(--ouro-sq-r)*.3274), curve to calc(var(--ouro-sq-r)*1) 0 with calc(var(--ouro-sq-r)*.3274) calc(var(--ouro-sq-r)*-.0092) / calc(var(--ouro-sq-r)*.613) 0, line to calc(100% - var(--ouro-sq-r)*1) 0, curve to calc(100% - var(--ouro-sq-r)*.1591) calc(var(--ouro-sq-r)*.1591) with calc(100% - var(--ouro-sq-r)*.613) 0 / calc(100% - var(--ouro-sq-r)*.3274) calc(var(--ouro-sq-r)*-.0092), curve to 100% calc(var(--ouro-sq-r)*1) with calc(100% + var(--ouro-sq-r)*.0092) calc(var(--ouro-sq-r)*.3274) / 100% calc(var(--ouro-sq-r)*.613), line to 100% calc(100% - var(--ouro-sq-r)*1), curve to calc(100% - var(--ouro-sq-r)*.1591) calc(100% - var(--ouro-sq-r)*.1591) with 100% calc(100% - var(--ouro-sq-r)*.613) / calc(100% + var(--ouro-sq-r)*.0092) calc(100% - var(--ouro-sq-r)*.3274), curve to calc(100% - var(--ouro-sq-r)*1) 100% with calc(100% - var(--ouro-sq-r)*.3274) calc(100% + var(--ouro-sq-r)*.0092) / calc(100% - var(--ouro-sq-r)*.613) 100%, line to calc(var(--ouro-sq-r)*1) 100%, curve to calc(var(--ouro-sq-r)*.1591) calc(100% - var(--ouro-sq-r)*.1591) with calc(var(--ouro-sq-r)*.613) 100% / calc(var(--ouro-sq-r)*.3274) calc(100% + var(--ouro-sq-r)*.0092), curve to 0 calc(100% - var(--ouro-sq-r)*1) with calc(var(--ouro-sq-r)*-.0092) calc(100% - var(--ouro-sq-r)*.3274) / 0 calc(100% - var(--ouro-sq-r)*.613), close;
+    --ouro-sq-path: var(--ouro-sq-capsule-path, shape(var(--ouro-sq-cmds)));
+  }
+/* An avatar's presence notch: a circle round the dot, a second subpath of the surface's own clip path, so the picture behind the avatar shows through the gap. It exists only while a dot is drawn (data-ouro-bite). */
+  [data-ouro-avatar-surface][data-ouro-bite] {
+    --ouro-bite-x: calc(100% - var(--ouro-bite-c));
+    clip-path: shape(evenodd var(--ouro-sq-cmds), move to calc(var(--ouro-bite-x) + var(--ouro-bite-r)) calc(100% - var(--ouro-bite-c)), arc to calc(var(--ouro-bite-x) - var(--ouro-bite-r)) calc(100% - var(--ouro-bite-c)) of var(--ouro-bite-r), arc to calc(var(--ouro-bite-x) + var(--ouro-bite-r)) calc(100% - var(--ouro-bite-c)) of var(--ouro-bite-r), close);
+  }
+  [dir="rtl"] [data-ouro-avatar-surface][data-ouro-bite] {
+    --ouro-bite-x: calc(0% + var(--ouro-bite-c));
   }
 }
 
@@ -485,43 +521,6 @@
   }
 }
 
-/*
- * The scroll fade with no script (scrollFadeStaticClass): a box's scroll timeline draws a ramp at each side, from the
- * gradients the class sets in --ouro-scroll-fade-ramps, and slides the left one in, by mask-position, and the right one
- * in, by mask-size, each over the 2rem the box scrolls toward that side. A box with nothing to scroll has no mask.
- */
-@keyframes ouro-scroll-fade-left {
-  from {
-    animation-timing-function: linear;
-    mask-image: var(--ouro-scroll-fade-ramps); /* fade-ok: fades a scrolling row of text or controls, not a picture */
-    mask-repeat: no-repeat;
-    mask-composite: intersect;
-    mask-position:
-      -2rem 0,
-      0 0;
-  }
-  to {
-    mask-image: var(--ouro-scroll-fade-ramps); /* fade-ok: fades a scrolling row of text or controls, not a picture */
-    mask-repeat: no-repeat;
-    mask-composite: intersect;
-    mask-position:
-      0 0,
-      0 0;
-  }
-}
-@keyframes ouro-scroll-fade-right {
-  from {
-    animation-timing-function: linear;
-    mask-size:
-      calc(100% + 2rem) 100%,
-      calc(100% + 2rem) 100%;
-  }
-  to {
-    mask-size:
-      calc(100% + 2rem) 100%,
-      100% 100%;
-  }
-}
 /* A hero's media rises a little as it arrives; reduced motion only fades it. */
 @keyframes ouro-hero-rise {
   from {
@@ -544,5 +543,31 @@
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+/* A state nobody has designed yet: data-ouro-veil covers its element with a plain, solid "Not designed yet" layer, so no
+   one mistakes it for the design. Ouro check skips what is inside it. The value, when set, is added as the reason. */
+@layer base {
+  [data-ouro-veil] {
+    position: relative;
+  }
+  [data-ouro-veil]::after {
+    content: "Not designed yet";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    text-align: center;
+    font: 600 0.875rem/1.4 system-ui, sans-serif;
+    color: CanvasText;
+    background: Canvas;
+    border: 2px dashed currentColor;
+    pointer-events: auto;
+  }
+  [data-ouro-veil]:not([data-ouro-veil=""])::after {
+    content: "Not designed yet: " attr(data-ouro-veil);
   }
 }

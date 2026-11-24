@@ -155,3 +155,34 @@ it("gives a link that is alone in a Text its box when it says inline={false}", a
   );
   expect(links(host)[0]!.getBoundingClientRect().height).toBe(44);
 });
+
+it("keeps a standalone external link's icon on its last word's line across a sweep of touch widths (#3205)", async () => {
+  const text =
+    "Every page here is built with Ouro UI, our open library that helps agents make great interfaces, " +
+    "with a design system, a token set and a full catalog of components for teams that ship fast";
+  const host = await render(
+    <div style={{ width: 150 }}>
+      <Link href="https://ouro.bot" external>
+        {text}
+      </Link>
+    </div>,
+  );
+  const container = host.firstElementChild as HTMLElement;
+  const link = links(host)[0]!;
+  const icon = link.querySelector<SVGElement>("[data-ouro-external]")!;
+  const glue = link.querySelector('[data-slot="link-icon"]')!;
+  // The link's visible text, up to (not including) the glued icon span: its
+  // last line is the one the icon must visually share.
+  const words = document.createRange();
+  words.setStart(link, 0);
+  words.setEndBefore(glue);
+  const alone: number[] = [];
+  for (let width = 150; width <= 390; width += 4) {
+    container.style.width = `${width}px`;
+    const last = [...words.getClientRects()].at(-1)!;
+    const box = icon.getBoundingClientRect();
+    const middle = (box.top + box.bottom) / 2;
+    if (middle < last.top || middle > last.bottom) alone.push(width);
+  }
+  expect(alone).toEqual([]);
+});

@@ -100,45 +100,9 @@ export function TabsRootUnchecked({ className, onPointerDownCapture, ref, ...pro
 export type TabsListProps = Omit<BaseTabs.List.Props, "className"> & { className?: string | undefined };
 
 /**
- * Marks which sides of a scrolling tab row hide more tabs, as `data-fade="left"`, `"right"` or
- * `"both"`, so the row fades out on that edge. Physical sides, so the CSS needs no direction.
- * @claim "Physical sides, so the CSS needs" registry/ouro/components/ouro/tabs/tabs.test.tsx verify:testExists(registry/ouro/components/ouro/tabs/tabs.test.tsx::Tabs > fades the leading edge on the right in a right-to-left row)
- */
-function useEdgeFade(list: { current: HTMLElement | null }): void {
-  useEffect(() => {
-    const element = list.current!;
-    const update = () => {
-      const horizontal = element.getAttribute("aria-orientation") !== "vertical";
-      // In a right-to-left row, scrollLeft runs from 0 down to a negative number.
-      const scrolled = Math.abs(element.scrollLeft);
-      const before = horizontal && scrolled > 1;
-      const after = horizontal && scrolled + element.clientWidth < element.scrollWidth - 1;
-      // The direction matters only when a side hides tabs, so a row that fits reads no style.
-      const rtl = (before || after) && getComputedStyle(element).direction === "rtl";
-      const [left, right] = rtl ? [after, before] : [before, after];
-      const fade = left && right ? "both" : left ? "left" : right ? "right" : null;
-      if (fade) element.setAttribute("data-fade", fade);
-      else element.removeAttribute("data-fade");
-    };
-    update();
-    element.addEventListener("scroll", update, { passive: true });
-    const resize = new ResizeObserver(update);
-    resize.observe(element);
-    // The orientation can change, and tabs can come and go.
-    const mutation = new MutationObserver(update);
-    mutation.observe(element, { attributes: true, attributeFilter: ["aria-orientation"], childList: true });
-    return () => {
-      element.removeEventListener("scroll", update);
-      resize.disconnect();
-      mutation.disconnect();
-    };
-  }, [list]);
-}
-
-/**
  * Part: the row (or column) of tabs. Name it with `aria-label` when the page has more than
  * one set of tabs. `activateOnFocus` selects a tab when the arrow keys focus it. A row that
- * scrolls, on a phone, fades out on the side that hides more tabs. A key that moves the
+ * overflows scrolls sideways, on a phone. A key that moves the
  * selection switches tabs without animation.
  */
 export function TabsList({ className, ref, onKeyDownCapture, ...props }: TabsListProps): JSX.Element {
@@ -146,7 +110,6 @@ export function TabsList({ className, ref, onKeyDownCapture, ...props }: TabsLis
   usePartClassName("TabsList", className);
   const own = useRef<HTMLDivElement>(null);
   const merged = useMergedRef(ref, own);
-  useEdgeFade(own);
   // The tabs say when a key moved the selection (the root clears it on a pointer), so switching
   // by key doesn't animate the indicator or the panel.
   return (
@@ -164,16 +127,13 @@ export function TabsList({ className, ref, onKeyDownCapture, ...props }: TabsLis
 }
 
 /**
- * The list of Tabs' links, in the tab row's look, fading the side of a scrolling row that
- * hides more links. The fade treats the list as a row (a list cannot carry `aria-orientation`):
- * a column of links is as wide as its widest link, so it has nothing to fade. It scrolls the
+ * The list of Tabs' links, in the tab row's look. It scrolls the
  * link to the current page (`current`, its value) into view.
  *
  * @internal Used by Tabs when its items are links; apps pass `items` with `href`.
  */
 export function TabsLinkList({ orientation, current, children }: { orientation: TabsOrientation; current: string | undefined; children: ReactNode }): JSX.Element {
   const own = useRef<HTMLUListElement>(null);
-  useEdgeFade(own);
   // A row that scrolls, on a phone, brings the current page's link into view, as a row of tabs
   // brings the selected tab, without scrolling the page.
   useEffect(() => {

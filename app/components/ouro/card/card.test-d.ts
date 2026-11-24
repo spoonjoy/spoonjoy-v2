@@ -8,6 +8,8 @@ expectTypeOf<ComponentProps<typeof Card>>().toEqualTypeOf<CardProps>();
 expectTypeOf<{ title: "Pantry"; description: "On hand"; children: "Flour" }>().toExtend<CardProps>();
 expectTypeOf<{ children: "Just a body" }>().toExtend<CardProps>();
 expectTypeOf<{ href: "/cookbooks/1"; title: "Dinners"; external: true; variant: "plain"; size: "sm"; as: "li"; headingLevel: 2 }>().toExtend<CardProps>();
+expectTypeOf<{ title: "Weeknight dinners"; titleSize: "inherit" }>().toExtend<CardProps>();
+expectTypeOf<{ title: "x"; titleSize: "lg" }>().not.toExtend<CardProps>();
 
 // A link without a title is a development message, not a type error: a union on href
 // would drop the hover docs on title whenever another prop has a type error.

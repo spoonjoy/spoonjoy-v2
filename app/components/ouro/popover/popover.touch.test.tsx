@@ -74,21 +74,32 @@ describe("Popover on a phone", () => {
     expect(box.right).toBeLessThanOrEqual(innerWidth - 8);
   });
 
-  it("closes from a tap outside", async () => {
+  it("closes from a tap outside, and the button under the tap gets no click", async () => {
     await mount(
       <Popover title="Share recipe" trigger={<Button>Share</Button>}>
         Body
       </Popover>,
     );
     // On the page before the popover opens: Base UI ignores presses on elements added after it.
-    const outside = document.createElement("div");
+    const outside = document.createElement("button");
     Object.assign(outside.style, { position: "fixed", left: "0", bottom: "0", width: "100%", height: "80px" });
     outside.id = "outside";
+    outside.setAttribute("data-test-harness", "");
+    let clicks = 0;
+    outside.addEventListener("click", () => clicks++);
     document.body.append(outside);
     nodes.push(outside);
+    const box = outside.getBoundingClientRect();
+    // A tap at a point: the open popover covers the button, so a tap on it by selector would wait for it forever.
+    const tapOutside = () => commands.touchDrag({ from: [box.left + 40, box.top + 40], to: [box.left + 40, box.top + 40], steps: 1, durationMs: 50 });
+    // The positive control: with the popover closed, the tap reaches the button.
+    await tapOutside();
+    await expect.poll(() => clicks).toBe(1);
     await commands.tap(TRIGGER);
     await opened();
-    await commands.tap("#outside");
+    await tapOutside();
     await expect.poll(() => popup()).toBeNull();
+    await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    expect(clicks).toBe(1);
   });
 });

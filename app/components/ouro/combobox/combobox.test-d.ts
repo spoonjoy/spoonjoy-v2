@@ -56,8 +56,20 @@ expectTypeOf<{ label: "Herb"; items: string[]; customValueLabel: (text: string) 
 expectTypeOf<{ label: "Herbs"; items: string[]; multiple: true; value: "Basil" }>().not.toExtend<ComboboxProps>();
 expectTypeOf<{ label: "Herb"; items: string[]; value: ["Basil"] }>().not.toExtend<ComboboxProps>();
 expectTypeOf<{ label: "Cuisine"; items: string[]; allowCustomValue: true; value: null }>().not.toExtend<ComboboxProps>();
-// One typed value only: multiple and allowCustomValue do not combine.
-expectTypeOf<{ label: "Tags"; items: string[]; multiple: true; allowCustomValue: true }>().not.toExtend<ComboboxProps>();
+// multiple and allowCustomValue together make a token input: chips of items and typed text.
+expectTypeOf<{
+  label: "Tags";
+  items: string[];
+  multiple: true;
+  allowCustomValue: true;
+  value: ["Weeknight", "Date night"];
+  onValueChange: (value: string[]) => void;
+  removeLabel: (label: string) => string;
+  customValueLabel: (text: string) => string;
+}>().toExtend<ComboboxProps>();
+expectTypeOf<{ label: "Tags"; items: string[]; multiple: true; allowCustomValue: true; value: "Weeknight" }>().not.toExtend<ComboboxProps>();
+// customValueLabel names typed text's row, which a multiple without allowCustomValue has not.
+expectTypeOf<{ label: "Herbs"; items: string[]; multiple: true; customValueLabel: (text: string) => string }>().not.toExtend<ComboboxProps>();
 // removeLabel names chips, which only multiple has.
 expectTypeOf<{ label: "Herb"; items: string[]; removeLabel: (label: string) => string }>().not.toExtend<ComboboxProps>();
 

@@ -82,13 +82,12 @@ const listClass = "m-0 box-border grid w-full list-none gap-0 p-0";
 const itemClass = "m-0 rounded-ouro-sm p-0 outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";
 
 /**
- * Content folded to `--ouro-show-more-height`: once measured as too tall, its last 3rem fades
- * out (a mask, so it works on any background).
+ * Content folded to `--ouro-show-more-height`: once measured as too tall, it is cut at that height
+ * on a hard edge.
  *
  * @internal
- * @claim "its last 3rem fades out" registry/ouro/components/ouro/collapsible/collapsible-styles.ts verify:fileLine(registry/ouro/components/ouro/collapsible/collapsible-styles.ts, /mask-image:linear-gradient\(to_bottom,#000_calc\(100%-3rem\),transparent\)/)
  */
-const foldClass = "relative w-full min-w-0 data-folded:[mask-image:linear-gradient(to_bottom,#000_calc(100%-3rem),transparent)]"; // fade-ok: fades folded text, not a picture
+const foldClass = "relative w-full min-w-0";
 
 /**
  * Text clamped to `--ouro-show-more-lines` lines while collapsed.

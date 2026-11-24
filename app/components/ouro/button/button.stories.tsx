@@ -106,6 +106,28 @@ export const TonesAndVariants: Story = {
 };
 
 /**
+ * `variant="glass"` is a Liquid Glass capsule 40px tall, a circle for an icon, for a window
+ * toolbar over content. It stays pressed while the popup it opens is open.
+ */
+export const Glass: Story = {
+  render: () => (
+    <Surface>
+      <div style={{ ...row, padding: 24, borderRadius: 16, background: "var(--muted)" }}>
+        <Button variant="glass" tone="secondary" aria-label="Back">
+          <ArrowRightIcon aria-hidden="true" style={{ width: "1.25em", height: "1.25em", transform: "scaleX(-1)" }} />
+        </Button>
+        <Button variant="glass" tone="secondary" startIcon={DownloadIcon}>
+          Export
+        </Button>
+        <Button variant="glass" tone="secondary" aria-expanded="true" endIcon={ArrowRightIcon}>
+          Open menu
+        </Button>
+      </div>
+    </Surface>
+  ),
+};
+
+/**
  * Three sizes. Each is taller on phones (md is 44px) and steps down to desktop
  * density from 640px; resize the viewport to see it.
  */

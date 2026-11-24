@@ -7,7 +7,6 @@ import { cn } from "~/lib/ouro/cn";
 import { devThrow } from "~/lib/ouro/dev";
 import { useDisabledReason } from "~/lib/ouro/disabled-reason";
 import { useMergedRef } from "~/lib/ouro/refs";
-import { useScrollFade } from "~/lib/ouro/scroll-fade";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { Tooltip } from "~/components/ouro/tooltip/tooltip";
@@ -145,8 +144,8 @@ export interface ToggleGroupBaseProps {
   shape?: "rect" | "pill" | (string & { 'Use "rect" or "pill"; rounded-full is "pill"': never }) | undefined;
   /**
    * `wrap`, the default, lets the row of toggles move onto more lines at the width they need.
-   * `scroll` keeps the row one line tall and scrolls it sideways instead, with a soft fade at
-   * whichever edge cuts a toggle off and none once every toggle fits, and its scrollbar hidden.
+   * `scroll` keeps the row one line tall and scrolls it sideways instead, with its scrollbar
+   * hidden.
    * The roving tab stop still moves with the arrow keys, Home and End, and brings the toggle it
    * focuses fully into view; the pressed toggle scrolls into view too when the value changes. A
    * touch pans the row, and a fine pointer's wheel scrolls it too.
@@ -168,7 +167,6 @@ export interface ToggleGroupBaseProps {
    *   onValueChange={(next) => setFilter(next ?? "all")}
    * />
    * @claim "keeps the row one line tall and scrolls it sideways instead" registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx::ToggleGroup overflow scroll > stays one line tall, narrower than the toggles, instead of wrapping)
-   * @claim "with a soft fade at whichever edge cuts a toggle off and none once every toggle fits" registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx::ToggleGroup overflow scroll > fades no side once every toggle fits, and the side that hides one once it doesn't)
    * @claim "brings the toggle it focuses fully into view" registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx::ToggleGroup overflow scroll > brings the last toggle fully into view when End moves focus to it)
    * @claim "the pressed toggle scrolls into view too when the value changes" registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.overflow.test.tsx::ToggleGroup overflow scroll > scrolls the pressed toggle into view when the value changes)
    */
@@ -442,11 +440,8 @@ export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
 
 /**
  * {@link ToggleGroupBaseProps.overflow} `"scroll"`: the one-line row itself, isolated from
- * {@link ToggleGroup} so the default `"wrap"` row calls {@link useScrollFade} only when it is
- * mounted, keeping the default row's computed-style reads at the same count as before this
- * prop. A layout effect keeps the pressed toggle in view, on mount and whenever the value
- * changes.
- * @claim "keeping the default row's computed-style reads at the same count as before this prop" registry/ouro/components/ouro/toggle/toggle-group.layout.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.layout.test.tsx::ToggleGroup layout reads > reads no computed style while its items mount or its value changes)
+ * {@link ToggleGroup} so the default `"wrap"` row stays free of its scroll handling. A layout
+ * effect keeps the pressed toggle in view, on mount and whenever the value changes.
  *
  * @internal
  */
@@ -458,12 +453,11 @@ function ScrollRow(props: {
   children: ReactNode;
 }): JSX.Element {
   const { labelId, outerRef, onKeyDown, pressedKey, children } = props;
-  const fadeRef = useRef<HTMLDivElement>(null);
-  useScrollFade(fadeRef);
-  const rowRef = useMergedRef(outerRef, fadeRef);
+  const pressedRef = useRef<HTMLDivElement>(null);
+  const rowRef = useMergedRef(outerRef, pressedRef);
   useLayoutEffect(() => {
     // Stryker disable next-line OptionalChaining: the ref is attached by the time this effect runs
-    const pressedButton = fadeRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    const pressedButton = pressedRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]');
     pressedButton?.scrollIntoView({ inline: "nearest", block: "nearest" });
     // Stryker disable next-line ArrayDeclaration: the ref is stable; only a value change need run this again
   }, [pressedKey]);
