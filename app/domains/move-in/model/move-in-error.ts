@@ -8,6 +8,8 @@ export const MOVE_IN_ERROR_MESSAGES = {
   stuck: "The move-in tried five times in a row without moving forward, so it has stopped. Drop the backup here again to carry on: recipes already in stay, and nothing comes in twice.",
   expired: "This move-in went a day without moving forward, so its backup was deleted: it holds the other app's accounts. Drop the backup here again to carry on: recipes already in stay, and nothing comes in twice.",
   "no-file": "Choose your backup's .zip file first, then press Move in.",
+  "server-address": "That address doesn't answer like a recipe server. Copy the address you open your recipe app at, starting with https://, and paste it here again.",
+  "server-token": "Your recipe server didn't accept that token. In your recipe app, make a new API token under your profile, then paste it here again.",
   "unknown-app": "Move-in reads backups only from the apps in the list so far. Pick one of those to carry on.",
 } as const;
 

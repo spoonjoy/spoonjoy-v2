@@ -1,0 +1,289 @@
+{
+  "assets": [],
+  "comments": [
+    {
+      "createdAt": "2026-11-23T16:44:11.058808Z",
+      "id": "b0bd599c-c04f-4af3-95a3-9cf5a329d0a9",
+      "recipeId": "ba734481-8cb7-4a0e-b39e-0efcd77b8fdc",
+      "text": "Freezes really well.",
+      "updatedAt": "2026-11-23T16:44:11.058812Z",
+      "user": {
+        "admin": false,
+        "fullName": "Hallie Cole",
+        "id": "58e94963-6546-49c8-b2cd-4d3d2faf7a75",
+        "username": "hallie.cole"
+      },
+      "userId": "58e94963-6546-49c8-b2cd-4d3d2faf7a75"
+    }
+  ],
+  "createdAt": "2026-11-23T16:44:08.912892Z",
+  "dateAdded": "2026-11-23",
+  "dateUpdated": "2026-11-23T16:44:09.101507Z",
+  "description": "Hearty soy milk and arugula curry, fragrant with ras-el-hanout and ladled over steamed rice.",
+  "extras": {},
+  "groupId": "092b8ed0-4f72-43b4-9ba2-dffc05dc8d47",
+  "householdId": "e67c3599-6a2a-438c-816a-f5b200380628",
+  "id": "ba734481-8cb7-4a0e-b39e-0efcd77b8fdc",
+  "image": "tcZv",
+  "name": "Creamy Turkey Steak",
+  "notes": [
+    {
+      "referenceId": "a43a5178-f6ec-4924-9162-c4e7dc4c46ac",
+      "text": "Any firm white fish works here.",
+      "title": "Substitutions"
+    }
+  ],
+  "nutrition": {
+    "calories": null,
+    "carbohydrateContent": null,
+    "cholesterolContent": null,
+    "fatContent": null,
+    "fiberContent": null,
+    "proteinContent": null,
+    "saturatedFatContent": null,
+    "sodiumContent": null,
+    "sugarContent": null,
+    "transFatContent": null,
+    "unsaturatedFatContent": null
+  },
+  "orgURL": null,
+  "performTime": "60 minutes",
+  "performTimeSeconds": null,
+  "prepTime": "10 minutes",
+  "prepTimeSeconds": null,
+  "rating": 4,
+  "recipeCategory": [
+    {
+      "groupId": "092b8ed0-4f72-43b4-9ba2-dffc05dc8d47",
+      "id": "9e3f3d74-fef5-4fb9-9588-0efe254fa673",
+      "name": "Dinner",
+      "recipeCount": 0,
+      "slug": "dinner"
+    },
+    {
+      "groupId": "092b8ed0-4f72-43b4-9ba2-dffc05dc8d47",
+      "id": "d103eaf0-2640-4e6f-bb8f-72b9c24e3d19",
+      "name": "Dessert",
+      "recipeCount": 0,
+      "slug": "dessert"
+    }
+  ],
+  "recipeIngredient": [
+    {
+      "display": "2 pinch Lentils melted",
+      "food": {
+        "aliases": [],
+        "createdAt": "2026-11-23T16:44:03.356426Z",
+        "description": "",
+        "extras": {},
+        "householdsWithIngredientFood": [],
+        "id": "f1ab6254-ad6a-4b6e-8c76-ca0d56da02a2",
+        "label": null,
+        "labelId": null,
+        "name": "Lentils",
+        "pluralName": null,
+        "recipeCount": 0,
+        "substitutions": [],
+        "updatedAt": "2026-11-23T16:44:03.356427Z"
+      },
+      "note": "melted",
+      "originalText": null,
+      "quantity": 2,
+      "referenceId": "df7243e3-fcd5-4808-8bce-cd506e315e36",
+      "referencedRecipe": null,
+      "substitutions": [],
+      "title": null,
+      "unit": {
+        "abbreviation": "",
+        "aliases": [],
+        "createdAt": "2026-11-23T16:44:04.825313Z",
+        "description": "",
+        "extras": {},
+        "fraction": true,
+        "id": "0bf956ad-0061-4dbb-87c2-7edde35112a2",
+        "name": "pinch",
+        "pluralAbbreviation": "",
+        "pluralName": null,
+        "standardQuantity": null,
+        "standardUnit": null,
+        "updatedAt": "2026-11-23T16:44:04.825316Z",
+        "useAbbreviation": false
+      }
+    },
+    {
+      "display": "2 clove Dandelion",
+      "food": {
+        "aliases": [],
+        "createdAt": "2026-11-23T16:44:04.114115Z",
+        "description": "",
+        "extras": {},
+        "householdsWithIngredientFood": [],
+        "id": "f2039e95-e4e5-4bd3-be76-c681ad3d3cd8",
+        "label": {
+          "color": "#795548",
+          "groupId": "092b8ed0-4f72-43b4-9ba2-dffc05dc8d47",
+          "id": "11d7d6d2-08c1-47c5-838f-d70e5fedf510",
+          "name": "Bakery"
+        },
+        "labelId": "11d7d6d2-08c1-47c5-838f-d70e5fedf510",
+        "name": "Dandelion",
+        "pluralName": null,
+        "recipeCount": 0,
+        "substitutions": [],
+        "updatedAt": "2026-11-23T16:44:04.114118Z"
+      },
+      "note": "",
+      "originalText": null,
+      "quantity": 2,
+      "referenceId": "7ec8b578-3614-422b-8ca0-69645a54877e",
+      "referencedRecipe": null,
+      "substitutions": [],
+      "title": null,
+      "unit": {
+        "abbreviation": "",
+        "aliases": [],
+        "createdAt": "2026-11-23T16:44:04.877209Z",
+        "description": "",
+        "extras": {},
+        "fraction": true,
+        "id": "a42e7b40-6c98-402f-ab80-dce183d81020",
+        "name": "clove",
+        "pluralAbbreviation": "",
+        "pluralName": null,
+        "standardQuantity": null,
+        "standardUnit": null,
+        "updatedAt": "2026-11-23T16:44:04.877211Z",
+        "useAbbreviation": false
+      }
+    },
+    {
+      "display": "2 tsp Cucumber",
+      "food": {
+        "aliases": [],
+        "createdAt": "2026-11-23T16:44:03.738420Z",
+        "description": "",
+        "extras": {},
+        "householdsWithIngredientFood": [],
+        "id": "315634f3-7520-45f2-a83e-401830468ce8",
+        "label": {
+          "color": "#2196F3",
+          "groupId": "092b8ed0-4f72-43b4-9ba2-dffc05dc8d47",
+          "id": "073fe64b-32f2-45a8-bef1-e70b762a8c03",
+          "name": "Dairy"
+        },
+        "labelId": "073fe64b-32f2-45a8-bef1-e70b762a8c03",
+        "name": "Cucumber",
+        "pluralName": null,
+        "recipeCount": 0,
+        "substitutions": [],
+        "updatedAt": "2026-11-23T16:44:03.738423Z"
+      },
+      "note": "",
+      "originalText": null,
+      "quantity": 2,
+      "referenceId": "65b22e23-433a-48e8-afe4-faa909e16aff",
+      "referencedRecipe": null,
+      "substitutions": [],
+      "title": null,
+      "unit": {
+        "abbreviation": "tsp",
+        "aliases": [],
+        "createdAt": "2026-11-23T16:44:04.559795Z",
+        "description": "",
+        "extras": {},
+        "fraction": true,
+        "id": "829611fd-bbee-4b37-92e0-e42876ebe1f0",
+        "name": "teaspoon",
+        "pluralAbbreviation": "",
+        "pluralName": null,
+        "standardQuantity": 0.16666666666666666,
+        "standardUnit": "fluid_ounce",
+        "updatedAt": "2026-11-23T16:44:04.559798Z",
+        "useAbbreviation": true
+      }
+    }
+  ],
+  "recipeInstructions": [
+    {
+      "durationSeconds": null,
+      "id": "91d03f7d-554d-4699-8808-06050e0a1e09",
+      "ingredientReferences": [],
+      "noteReferences": [],
+      "summary": "",
+      "text": "Roast until just combined.",
+      "title": ""
+    },
+    {
+      "durationSeconds": null,
+      "id": "762f6c65-626c-44f2-974f-efe254baa6b1",
+      "ingredientReferences": [
+        {
+          "referenceId": "7ec8b578-3614-422b-8ca0-69645a54877e"
+        }
+      ],
+      "noteReferences": [],
+      "summary": "",
+      "text": "Simmer the Dandelion until tender.",
+      "title": ""
+    },
+    {
+      "durationSeconds": null,
+      "id": "cc6ea550-ccbc-4ac7-8cc9-ab2a771b74ee",
+      "ingredientReferences": [],
+      "noteReferences": [],
+      "summary": "",
+      "text": "Simmer until glossy.",
+      "title": ""
+    }
+  ],
+  "recipeServings": 2,
+  "recipeYield": "2 servings",
+  "recipeYieldQuantity": 0,
+  "settings": {
+    "disableComments": false,
+    "landscapeView": false,
+    "locked": false,
+    "public": false,
+    "showAssets": false,
+    "showNutrition": false
+  },
+  "slug": "creamy-turkey-steak",
+  "tags": [
+    {
+      "groupId": "092b8ed0-4f72-43b4-9ba2-dffc05dc8d47",
+      "id": "2d1ff77d-517c-4e1c-b751-a71494595789",
+      "name": "Vegan",
+      "recipeCount": 0,
+      "slug": "vegan"
+    },
+    {
+      "groupId": "092b8ed0-4f72-43b4-9ba2-dffc05dc8d47",
+      "id": "a4b67f86-f731-4c11-b2e3-3fc44f528358",
+      "name": "Gluten Free",
+      "recipeCount": 0,
+      "slug": "gluten-free"
+    }
+  ],
+  "tools": [
+    {
+      "groupId": "092b8ed0-4f72-43b4-9ba2-dffc05dc8d47",
+      "householdsWithTool": [],
+      "id": "4c8705e4-1b9b-48c3-b1b2-e756936e605d",
+      "name": "Dutch Oven",
+      "recipeCount": 0,
+      "slug": "dutch-oven"
+    },
+    {
+      "groupId": "092b8ed0-4f72-43b4-9ba2-dffc05dc8d47",
+      "householdsWithTool": [],
+      "id": "790087de-2601-4a54-855a-c563439d62a8",
+      "name": "Stand Mixer",
+      "recipeCount": 0,
+      "slug": "stand-mixer"
+    }
+  ],
+  "totalTime": "70 minutes",
+  "totalTimeSeconds": null,
+  "updatedAt": "2026-11-23T16:44:10.122544Z",
+  "userId": "3e988f1c-64dc-483c-a30e-853fda71b7ce"
+}
