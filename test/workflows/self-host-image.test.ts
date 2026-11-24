@@ -194,7 +194,35 @@ describe("Self-host Image workflow", () => {
     expect(stop.if).toBe("always()");
     expect(stop.run).toContain("docker stop sj-restored || true");
     expect(stop.run).toContain('docker logs sj-restored > "$OUT/restored.log"');
-    expect(runs(image)).toContain('for (const file of ["image", "boot", "restart", "restore", "jobs", "compose"])');
+    expect(runs(image)).toContain('for (const file of ["image", "boot", "restart", "restore", "jobs", "compose", "upgrade"])');
+  });
+
+  it("updates a Compose server from the last published image to this one, with its data and migrations checked", () => {
+    const step = stepNamed(image, /Update a server from the last published image/);
+    const run = step.run ?? "";
+    expect(step.if).toBe("success()");
+    const order = [
+      'docker pull "$IMAGE:latest"',
+      'SPOONJOY_IMAGE="$IMAGE:latest" compose up -d --wait',
+      "upgrade_half before",
+      'SPOONJOY_IMAGE="$LOCAL_IMAGE" compose up -d --wait',
+      "upgrade_half after",
+      "after.migrations !== files",
+      "before.migrations + after.migrationsRun !== after.migrations",
+      'echo "$upgrade" | tee "$OUT/upgrade.json"',
+      "compose down -v",
+    ].map((text) => run.indexOf(text));
+    expect(order.every((index) => index > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(run).toContain("-p sj-upgrade");
+    expect(run).toContain("e2e/self-host/upgrade.spec.ts");
+    // The check is a single-quoted node -e script, so a quote inside it would end the script early.
+    const script = run.slice(run.indexOf("upgrade=$(node -e '") + "upgrade=$(node -e '".length, run.indexOf("' \"$(( end - start ))\")"));
+    expect(script).toContain("migrationsRun");
+    expect(script).not.toContain("'");
+    // A check piped into tee would lose its exit status.
+    expect(run).not.toMatch(/node -e '[\s\S]*' [^\n]*\| tee/);
+    expect(stepNamed(image, /Stop the server/).run).toContain("-p sj-upgrade down -v || true");
   });
 
   it("moves a kitchen in on a server with move-in on, and checks its backup for move-in jobs done", () => {
@@ -256,7 +284,13 @@ describe("Self-host Image workflow", () => {
 
   it("pushes only from main, and publishes the multi-arch tags only after both arches pass", () => {
     for (const step of image.steps.filter((candidate) => /docker (push|login)/.test(candidate.run ?? ""))) {
-      expect(step.if).toBe(ON_MAIN);
+      const run = step.run ?? "";
+      if (step.if === ON_MAIN) continue;
+      // Off main, a step may only sign in to pull, into a throwaway config it deletes, and never push.
+      expect(run).not.toMatch(/docker push/);
+      expect(run).toMatch(/\| DOCKER_CONFIG="\$pull_config" docker login/);
+      expect(run).toContain('rm -rf "$pull_config"');
+      expect(run.match(/docker login/g)).toHaveLength(1);
     }
     expect(publish.needs).toBe("image");
     expect(publish.if).toBe(ON_MAIN);
