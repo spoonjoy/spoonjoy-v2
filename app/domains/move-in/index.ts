@@ -23,6 +23,7 @@ export {
   FINISHED,
   runForAWhile,
   runNextChunk,
+  WAITING_ON_SOURCE,
   type MoveInCounts,
   type MoveInEvent,
   type MoveInJob,

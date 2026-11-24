@@ -2,9 +2,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { apiRecipeDraft } from "~/domains/move-in/adapters/sources/mealie-api/recipe";
-import { mealieApiSource } from "~/domains/move-in/adapters/sources/mealie-api/source";
+import { BUSY_DEFAULT_MS, BUSY_MAX_MS, BUSY_MIN_MS, mealieApiSource, retryAfterMs } from "~/domains/move-in/adapters/sources/mealie-api/source";
 import { readMealieDatabase, recipeDrafts } from "~/domains/move-in/adapters/sources/mealie-backup/database";
-import { SourceUnavailableError } from "~/domains/move-in/application/source";
+import { SourceBusyError, SourceUnavailableError } from "~/domains/move-in/application/source";
 import { MoveInError } from "~/domains/move-in/model/move-in-error";
 import type { RecipeDraft } from "~/domains/move-in/model/recipe-draft";
 import { normalizeGuid } from "~/domains/move-in/model/source-key";
@@ -89,14 +89,17 @@ describe("a recipe from the other app's server", () => {
 const KITCHEN = "092b8ed0-4f72-43b4-9ba2-dffc05dc8d47";
 
 /** A stand-in for the other app's server: answers the paths it knows, and records what was asked. */
-function server(routes: Record<string, unknown>, { status = {} as Record<string, number>, down = false } = {}) {
+function server(
+  routes: Record<string, unknown>,
+  { status = {} as Record<string, number>, down = false, headers = {} as Record<string, Record<string, string>> } = {},
+) {
   const asked: Array<{ url: string; authorization: string | null }> = [];
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     asked.push({ url: `${url.pathname}${url.search}`, authorization: new Headers(init?.headers).get("authorization") });
     if (down) throw new TypeError("fetch failed");
     const code = status[url.pathname];
-    if (code) return new Response("no", { status: code });
+    if (code) return new Response("no", { status: code, headers: headers[url.pathname] });
     const body = routes[url.pathname];
     if (body === undefined) return new Response("not found", { status: 404 });
     if (body instanceof Uint8Array) return new Response(body);
@@ -295,9 +298,34 @@ describe("the other app's server as a move-in source", () => {
     const kitchen = await (await mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).openKitchen(KITCHEN);
     status[`/api/recipes/${slug}`] = 429;
     const before = asked.length;
-    await expect(kitchen?.draft(index)).rejects.toThrow("slow down");
-    await expect(kitchen?.draft(index)).rejects.toBeInstanceOf(SourceUnavailableError);
+    await expect(kitchen?.draft(index)).rejects.toThrow("asked the move-in to wait 30 s");
+    await expect(kitchen?.draft(index)).rejects.toBeInstanceOf(SourceBusyError);
     expect(asked.slice(before).map((request) => request.url)).toEqual([`/api/recipes/${slug}`, `/api/recipes/${slug}`]);
+  });
+
+  it("waits as long as the server's Retry-After asks, on a 429 or a 503 that gives one", async () => {
+    const { routes } = kitchenRoutes();
+    const slug = (routes["/api/recipes"] as { items: Json[] }).items[0].slug;
+    const index = (routes["/api/recipes"] as { items: Json[] }).items.findIndex((item) => item.slug === slug);
+    const status: Record<string, number> = {};
+    const headers: Record<string, Record<string, string>> = {};
+    const { fetch } = server(routes, { status, headers });
+    const kitchen = await (await mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).openKitchen(KITCHEN);
+    for (const code of [429, 503]) {
+      status[`/api/recipes/${slug}`] = code;
+      headers[`/api/recipes/${slug}`] = { "retry-after": "12" };
+      await expect(kitchen?.draft(index)).rejects.toMatchObject({ name: "SourceBusyError", retryAfterMs: 12_000 });
+    }
+  });
+
+  it("reads Retry-After in seconds or as a date, and keeps the wait between its bounds", () => {
+    const now = Date.parse("2026-11-24T12:00:00Z");
+    expect(retryAfterMs("12", now)).toBe(12_000);
+    expect(retryAfterMs("Tue, 24 Nov 2026 12:01:00 GMT", now)).toBe(60_000);
+    expect(retryAfterMs(null, now)).toBe(BUSY_DEFAULT_MS);
+    expect(retryAfterMs("soon", now)).toBe(BUSY_DEFAULT_MS);
+    expect(retryAfterMs("0", now)).toBe(BUSY_MIN_MS);
+    expect(retryAfterMs("86400", now)).toBe(BUSY_MAX_MS);
   });
 
   it("waits so long for an answer to start, and so long more for its body", async () => {

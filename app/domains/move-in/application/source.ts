@@ -74,3 +74,14 @@ export class SourceUnavailableError extends Error {
     this.name = "SourceUnavailableError";
   }
 }
+
+/**
+ * The other app's server asked the move-in to slow down. The move-in waits `retryAfterMs`, as long as the server asked
+ * for, before it asks again, rather than trying again on the queue's own schedule.
+ */
+export class SourceBusyError extends SourceUnavailableError {
+  constructor(message: string, readonly retryAfterMs: number) {
+    super(message);
+    this.name = "SourceBusyError";
+  }
+}

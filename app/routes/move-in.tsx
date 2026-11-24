@@ -28,6 +28,7 @@ import {
   readMoveInProgress,
   startMoveIn,
   timeLeft,
+  WAITING_ON_SOURCE,
   type MoveInOrganizerCounts,
   type MoveInProgress,
 } from "~/domains/move-in";
@@ -67,6 +68,8 @@ export interface MoveInView {
   runsOnServer: boolean;
   /** "About 4 minutes left", from the rate so far; null until there is enough to go on. */
   timeLeft: string | null;
+  /** The source server asked the move-in to slow down, and it is waiting before it asks again. */
+  waiting: boolean;
 }
 
 const NO_ORGANIZERS: MoveInOrganizerCounts = { tags: 0, categories: 0, tools: 0 };
@@ -104,6 +107,7 @@ function view(progress: MoveInProgress, organizers: MoveInOrganizerCounts, runsO
     renamed: progress.events.flatMap((event) => (event.kind === "item-renamed" ? [{ seq: event.seq, message: event.message }] : [])),
     runsOnServer,
     timeLeft: FINISHED.includes(progress.job.status) || !recipesBegan ? null : timeLeft({ done, found: recipes.found, startedAt: recipesBegan, now }),
+    waiting: !FINISHED.includes(progress.job.status) && progress.job.lastError === WAITING_ON_SOURCE,
   };
 }
 
@@ -327,7 +331,7 @@ function Progress({ move }: { move: MoveInView }) {
           <Text>
             {counted ? `${move.recipes.done} of ${plural(move.recipes.found, "recipe")} in so far.` : "Reading the backup…"}
           </Text>
-          {move.timeLeft ? <Text tone="muted">{move.timeLeft}</Text> : null}
+          {move.waiting ? <Text tone="muted">Waiting for your server…</Text> : move.timeLeft ? <Text tone="muted">{move.timeLeft}</Text> : null}
         </div>
       </div>
       {move.latest.length ? (

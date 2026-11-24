@@ -4,7 +4,7 @@ import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { FINISHED, LostClaimError, type MoveInCounts, type MoveInEvent, type MoveInJob, type MoveInPorts } from "../../application/run-move-in";
 
-const JOB_COLUMNS = `"id", "ownerId", "kind", "sourceId", "status", "phase", "cursor", "archiveKey", "lastError", "attempt"`;
+const JOB_COLUMNS = `"id", "ownerId", "kind", "sourceId", "status", "phase", "cursor", "archiveKey", "lastError", "attempt", "updatedAt"`;
 // What the owner may see of a job: no archive key, which names where the other app's accounts wait.
 const PROGRESS_COLUMNS = `"id", "ownerId", "kind", "sourceId", "status", "phase", "cursor", "lastError", "attempt", "archiveName", "createdAt", "updatedAt", "finishedAt"`;
 const COUNT_FIELDS = ["found", "created", "updated", "unchanged", "skipped", "failed"] as const;
@@ -153,8 +153,8 @@ export const MOVE_IN_LATEST = 5;
 export async function readMoveInPosition(
   db: D1ReadDatabase,
   jobId: string,
-): Promise<(Pick<MoveInJob, "id" | "phase" | "cursor" | "status"> & { updatedAt: string }) | null> {
-  const [[row]] = await d1ReadBatch(db, [[`SELECT "id", "phase", "cursor", "status", "updatedAt" FROM "ImportJob" WHERE "id" = ?`, jobId]]);
+): Promise<(Pick<MoveInJob, "id" | "phase" | "cursor" | "status" | "lastError"> & { updatedAt: string }) | null> {
+  const [[row]] = await d1ReadBatch(db, [[`SELECT "id", "phase", "cursor", "status", "lastError", "updatedAt" FROM "ImportJob" WHERE "id" = ?`, jobId]]);
   return (row as unknown as Awaited<ReturnType<typeof readMoveInPosition>>) ?? null;
 }
 

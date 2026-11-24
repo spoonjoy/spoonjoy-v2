@@ -13,6 +13,8 @@ import {
   queueMoveIn,
   startMoveInJob,
 } from "~/domains/move-in/adapters/worker/move-in-job.server";
+import { MOVE_IN_BUSY_MAX_MS, WAITING_ON_SOURCE } from "~/domains/move-in/application/run-move-in";
+import { SourceBusyError } from "~/domains/move-in/application/source";
 import { jobRegistry, type EnqueueOptions, type Jobs } from "~/domains/platform";
 import { memoryJobs } from "~/domains/platform/index.server";
 
@@ -256,6 +258,26 @@ describe("the move-in job", () => {
     expect(ran.at(-1)?.outcome).toMatchObject({ status: "failed", error: { message: `A segment of ${jobId} moved nothing` } });
   });
 
+  it("queues the next segment to start after the wait a busy server asked for, rather than on the port's backoff", async () => {
+    const sent: Array<{ type: string; options: EnqueueOptions }> = [];
+    const { jobId, jobs } = await setUp({
+      jobs: (real) => ({ enqueue: async (kind, payload, options) => (sent.push({ type: kind.type, options }), real.enqueue(kind, payload, options)) }),
+    });
+    segment.instead = async () => {
+      segment.instead = null;
+      throw new SourceBusyError("slow down", 12_500);
+    };
+    await queueMoveIn(jobs, { id: jobId, phase: "inspect", cursor: null });
+
+    const ran = await jobs.drain();
+
+    expect(ran[0]).toMatchObject({ key: `move-in:${jobId}:inspect:-`, outcome: { status: "done" } });
+    expect(sent[0]).toEqual({ type: MOVE_IN_JOB.type, options: { key: `move-in:${jobId}:wait:${now.getTime()}`, delaySeconds: 13 } });
+    // The waiting segment carries the move-in on to the end.
+    expect(ran[1]).toMatchObject({ key: `move-in:${jobId}:wait:${now.getTime()}`, outcome: { status: "done" } });
+    expect(job(jobId)).toMatchObject({ status: "done-with-issues" });
+  });
+
   it("queues the next segment again when the first try to queue it fails", async () => {
     let failures = 1;
     const { jobId, jobs } = await setUp({
@@ -286,6 +308,7 @@ describe("readMoveInPosition", () => {
       phase: "inspect",
       cursor: null,
       status: "queued",
+      lastError: null,
       updatedAt: expect.any(String),
     });
     expect(await readMoveInPosition(database.binding, "movein_gone")).toBeNull();
@@ -406,5 +429,14 @@ describe("nudgeMoveIn", () => {
     const later = new Date(now.getTime() + MOVE_IN_QUIET_MS);
     expect(await nudgeMoveIn(jobs, { ...at, updatedAt: quietFor(MOVE_IN_QUIET_MS) }, later)).toBe(true);
     expect(MOVE_IN_QUIET_MS).toBe(60_000);
+  });
+
+  it("leaves a move-in waiting on a busy server to its own delayed segment, until it has waited the most it may", async () => {
+    const { jobs } = await setUp();
+    const at = { id: "movein_1", status: "running", lastError: WAITING_ON_SOURCE } as const;
+
+    expect(await nudgeMoveIn(jobs, { ...at, updatedAt: quietFor(MOVE_IN_QUIET_MS) }, now)).toBe(false);
+    expect(await nudgeMoveIn(jobs, { ...at, updatedAt: quietFor(MOVE_IN_BUSY_MAX_MS - 1) }, now)).toBe(false);
+    expect(await nudgeMoveIn(jobs, { ...at, updatedAt: quietFor(MOVE_IN_BUSY_MAX_MS) }, now)).toBe(true);
   });
 });

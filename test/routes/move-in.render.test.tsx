@@ -46,6 +46,7 @@ function view(fields: Partial<MoveInView> = {}): MoveInView {
     latest: [],
     runsOnServer: false,
     timeLeft: null,
+    waiting: false,
     ...fields,
   };
 }
@@ -350,6 +351,13 @@ describe("the Move in page", () => {
     page(view({ recipes: { found: 500, done: 84, created: 84, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 }, timeLeft: "About 6 minutes left" }));
     const line = await screen.findByText("About 6 minutes left");
     expect(line.closest("[role=status]")?.textContent).toContain("84 of 500 recipes in so far.");
+  });
+
+  it("says it is waiting for the server, in place of the time left, while the server has asked it to slow down", async () => {
+    page(view({ recipes: { found: 500, done: 84, created: 84, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 }, timeLeft: "About 6 minutes left", waiting: true }));
+    const line = await screen.findByText("Waiting for your server…");
+    expect(line.closest("[role=status]")?.textContent).toContain("84 of 500 recipes in so far.");
+    expect(screen.queryByText("About 6 minutes left")).toBeNull();
   });
 
   it("shows what arrived, and what to look over", async () => {
