@@ -47,7 +47,8 @@ async function openTokens(page: Page, label: string, phone: boolean): Promise<{ 
     input,
     scope: sheet,
     done: async () => {
-      await sheet.getByRole("button", { name: "Done", exact: true }).click();
+      // The footer's Done; the sheet's close button is also called Done.
+      await sheet.locator('[data-ouro-part="done"]').click();
       await expect(sheet).toHaveCount(0);
     },
   };
