@@ -358,12 +358,11 @@ describe("the test adapter", () => {
     await jobs.enqueue(welcome, { userId: "u" }, { key: "welcome:u" });
     expect((await jobs.drain()).map((ran) => ran.outcome.status)).toEqual(["unhandled"]);
   });
-
 });
 
 describe("Platform's two barrels", () => {
   it("keeps every adapter out of the port's barrel, behind the server one", () => {
-    for (const adapter of ["queueJobs", "consumeJobBatch", "d1JobKeys", "expireDoneJobKeys", "memoryJobs"]) {
+    for (const adapter of ["queueJobs", "consumeJobBatch", "d1JobKeys", "expireDoneJobKeys", "jobKeysDatabase", "memoryJobs"]) {
       expect(Object.keys(platform)).not.toContain(adapter);
       expect(Object.keys(platformServer)).toContain(adapter);
     }
