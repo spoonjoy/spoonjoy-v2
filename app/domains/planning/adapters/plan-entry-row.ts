@@ -1,10 +1,9 @@
-// A PlanEntry row as the Prisma adapters read it. Not exported from the context's index: only adapters use it.
+// A PlanEntry or HouseholdPlanEntry row as the Prisma adapters read it; both tables have these columns. Not exported from the context's index: only adapters use it.
 import type { PlanEntry } from "../model/plan-entry";
 import type { MealType } from "../model/meal-type";
 
 export type EntryRow = {
   id: string;
-  mealPlanId: string;
   date: string;
   mealType: string;
   position: number;
@@ -18,7 +17,7 @@ export type EntryRow = {
 };
 
 export const ENTRY_SELECT = {
-  id: true, mealPlanId: true, date: true, mealType: true, position: true, kind: true, recipeId: true,
+  id: true, date: true, mealType: true, position: true, kind: true, recipeId: true,
   recipeTitle: true, title: true, note: true, scaleFactor: true, deletedAt: true,
 } as const;
 

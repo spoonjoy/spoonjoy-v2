@@ -1,24 +1,32 @@
 // The PlanStore on Prisma: D1 in the Worker, SQLite in tests. Type-only Prisma import, so this file is safe in any bundle.
+// A cook's plan lives in MealPlan and PlanEntry, a household's in HouseholdPlan and HouseholdPlanEntry (migration 0052
+// says why). Each method picks the tables by the plan's scope, so nothing above this adapter knows there are two.
 import type { PrismaClient } from "@prisma/client";
 import { readableRecipeWhere } from "~/domains/kitchen";
-import type { PlanStore } from "../application/plan";
+import type { PlanSettings, PlanStore } from "../application/plan";
 import { ENTRY_SELECT, toEntry } from "./plan-entry-row";
 
-type PlanDb = Pick<PrismaClient, "mealPlan" | "planEntry" | "recipe" | "recipeSpoon">;
+type PlanDb = Pick<PrismaClient, "mealPlan" | "planEntry" | "householdPlan" | "householdPlanEntry" | "recipe" | "recipeSpoon">;
+
+const PLAN_SELECT = { id: true, firstDayOfWeek: true, timeZone: true } as const;
+
+function isHousehold(plan: PlanSettings): boolean {
+  return "household" in plan.scope;
+}
 
 export function prismaPlanStore(db: PlanDb): PlanStore {
   return {
     async planFor(scope) {
-      if (!("cook" in scope)) throw new Error("Household plans aren't stored yet.");
-      const select = { id: true, firstDayOfWeek: true, timeZone: true } as const;
-      const plan = await db.mealPlan.upsert({ where: { ownerId: scope.cook }, create: { ownerId: scope.cook }, update: {}, select });
+      const plan = "cook" in scope
+        ? await db.mealPlan.upsert({ where: { ownerId: scope.cook }, create: { ownerId: scope.cook }, update: {}, select: PLAN_SELECT })
+        : await db.householdPlan.upsert({ where: { householdId: scope.household }, create: { householdId: scope.household }, update: {}, select: PLAN_SELECT });
       return { ...plan, scope };
     },
     async entriesBetween(plan, from, to) {
-      const rows = await db.planEntry.findMany({
-        where: { mealPlanId: plan.id, deletedAt: null, date: { gte: from, lte: to } },
-        select: ENTRY_SELECT,
-      });
+      const live = { deletedAt: null, date: { gte: from, lte: to } };
+      const rows = isHousehold(plan)
+        ? await db.householdPlanEntry.findMany({ where: { householdPlanId: plan.id, ...live }, select: ENTRY_SELECT })
+        : await db.planEntry.findMany({ where: { mealPlanId: plan.id, ...live }, select: ENTRY_SELECT });
       return rows.map(toEntry);
     },
     async plannableRecipeTitle(cookId, recipeId) {
@@ -38,22 +46,29 @@ export function prismaPlanStore(db: PlanDb): PlanStore {
       });
     },
     async findEntry(plan, entryId) {
-      const row = await db.planEntry.findFirst({ where: { id: entryId, mealPlanId: plan.id }, select: ENTRY_SELECT });
+      const row = isHousehold(plan)
+        ? await db.householdPlanEntry.findFirst({ where: { id: entryId, householdPlanId: plan.id }, select: ENTRY_SELECT })
+        : await db.planEntry.findFirst({ where: { id: entryId, mealPlanId: plan.id }, select: ENTRY_SELECT });
       return row ? { entry: toEntry(row), removed: row.deletedAt !== null } : null;
     },
     async insertEntry(plan, addedById, entry) {
       const { id, date, mealType, position, kind, recipeId, recipeTitle, title, note, scaleFactor } = entry;
-      await db.planEntry.create({
-        data: { id, mealPlanId: plan.id, addedById, date, mealType, position, kind, recipeId, recipeTitle, title, note, scaleFactor },
-      });
+      const fields = { id, addedById, date, mealType, position, kind, recipeId, recipeTitle, title, note, scaleFactor };
+      if (isHousehold(plan)) await db.householdPlanEntry.create({ data: { ...fields, householdPlanId: plan.id } });
+      else await db.planEntry.create({ data: { ...fields, mealPlanId: plan.id } });
     },
     async removeEntry(plan, entryId) {
-      const { count } = await db.planEntry.updateMany({ where: { id: entryId, mealPlanId: plan.id, deletedAt: null }, data: { deletedAt: new Date() } });
+      const data = { deletedAt: new Date() };
+      const { count } = isHousehold(plan)
+        ? await db.householdPlanEntry.updateMany({ where: { id: entryId, householdPlanId: plan.id, deletedAt: null }, data })
+        : await db.planEntry.updateMany({ where: { id: entryId, mealPlanId: plan.id, deletedAt: null }, data });
       return count > 0;
     },
     async placeEntries(plan, placements) {
       for (const { id, date, mealType, position } of placements) {
-        await db.planEntry.updateMany({ where: { id, mealPlanId: plan.id }, data: { date, mealType, position } });
+        const data = { date, mealType, position };
+        if (isHousehold(plan)) await db.householdPlanEntry.updateMany({ where: { id, householdPlanId: plan.id }, data });
+        else await db.planEntry.updateMany({ where: { id, mealPlanId: plan.id }, data });
       }
     },
 
