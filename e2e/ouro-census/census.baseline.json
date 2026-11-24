@@ -3366,6 +3366,26 @@
         }
       ]
     },
+    "self-host": {
+      "default": [
+        {
+          "identity": "button \"Copy code\" [code-block/copy] in region \"Start it\"",
+          "count": 2
+        },
+        {
+          "identity": "button \"Copy code\" [code-block/copy] in region \"Update it\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"self-hosting guide\" [link/root] in main",
+          "count": 1
+        }
+      ]
+    },
     "shell-signed-in": {
       "shell": [
         {
@@ -7760,6 +7780,26 @@
         },
         {
           "identity": "searchbox \"Search terms\" [text-field/input] in search",
+          "count": 1
+        }
+      ]
+    },
+    "self-host": {
+      "default": [
+        {
+          "identity": "button \"Copy code\" [code-block/copy] in region \"Start it\"",
+          "count": 2
+        },
+        {
+          "identity": "button \"Copy code\" [code-block/copy] in region \"Update it\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"self-hosting guide\" [link/root] in main",
           "count": 1
         }
       ]

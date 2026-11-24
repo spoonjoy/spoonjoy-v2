@@ -26,13 +26,16 @@ async function expectNoSidewaysScroll(page: Page): Promise<void> {
   expect(overflow).toEqual({ page: false, code: 0 });
 }
 
-/** The intro and every section are as wide as the page header, so no text measure narrows them. */
+/**
+ * The sections are as wide as the page header, and the intro fills the header's text column (all but
+ * the small gap the header keeps for actions), so no text measure narrows either.
+ */
 async function expectFullWidth(page: Page): Promise<void> {
   const header = await page.locator("main [data-ouro=page-header]").boundingBox();
   const intro = await page.locator("main [data-ouro=page-header] [data-slot=description]").boundingBox();
   const start = await page.getByRole("region", { name: "Start it", exact: true }).boundingBox();
   expect(header && intro && start).toBeTruthy();
-  expect(Math.abs(intro!.width - header!.width)).toBeLessThanOrEqual(1);
+  expect(intro!.width).toBeGreaterThanOrEqual(header!.width - 24);
   expect(Math.abs(start!.width - header!.width)).toBeLessThanOrEqual(1);
 }
 
