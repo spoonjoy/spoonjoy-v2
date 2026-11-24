@@ -91,6 +91,8 @@ describe("moveInPorts", () => {
     expect(await ports.ownerEmail("nobody")).toBeNull();
     expect(await ports.hasMovedInPhoto("no-such-recipe")).toBe(false);
     expect((await ports.openArchive({ archiveKey } as never)).size).toBe(zip.length);
+    // A chunk brings its photos together; a recipe written alone brings its own.
+    await expect(ports.attachPhoto({ ownerId: "chef-1", recipeId: "no-such-recipe", bytes: new Uint8Array([1]) })).rejects.toThrow("it isn't a WebP image");
 
     expect(await runForAWhile(jobId, ports, { budgetMs: 1000 })).toMatchObject({ status: "done-with-issues" });
     const recipes = database.sqlite.prepare(`SELECT "title", "activeCoverId" IS NOT NULL AS "hasCover" FROM "Recipe" ORDER BY "title"`).all();
