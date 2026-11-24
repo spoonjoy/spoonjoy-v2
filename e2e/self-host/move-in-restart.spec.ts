@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { test, expect } from "../fixtures";
 import { Secret, fillSecret } from "../journeys/support/secret";
@@ -7,17 +7,14 @@ import { requiredLabel } from "../journeys/support/forms";
 import { proofFixtures } from "../journeys/support/move-in-fixtures";
 
 // A move-in that the server restarts in the middle of carries on by itself, with nobody on the page.
-// The Self-host Image workflow runs this in two halves around a `docker restart`:
-// - before: a cook starts moving the large proof kitchen in and leaves as soon as it is accepted, and the workflow
-//   kills the server then;
+// The Self-host Image workflow runs this in two halves around a restart:
+// - before: on a server whose queue takes jobs but runs none (the test-only SPOONJOY_JOBS_PAUSED), a cook starts
+//   moving the large proof kitchen in and leaves; the workflow stops the server and checks the move-in is waiting;
 // - after: the move-in finishes with no page open to nudge it. Progress is read with JavaScript off,
 //   because the open page asks the server to pick up a stalled move-in, which would hide the bug.
 // SPOONJOY_SELF_HOST_MOVE_IN_RESTART picks the half; without it, this is skipped.
 const half = process.env.SPOONJOY_SELF_HOST_MOVE_IN_RESTART;
 const statePath = process.env.SPOONJOY_SELF_HOST_MOVE_IN_RESTART_STATE ?? ".self-host/move-in-restart.json";
-// Files beside the state file, for the workflow to slow the server down just before the cook clicks Move in.
-const slowAsked = `${statePath}.slow-asked`;
-const slowed = `${statePath}.slowed`;
 
 interface State {
   email: string;
@@ -59,15 +56,9 @@ test.describe("A move-in on a self-hosted server that restarts", () => {
     const fromBackup = page.getByRole("main").getByRole("radio", { name: /^From a backup/ });
     if ((await fromBackup.count()) > 0) await fromBackup.check();
     await page.getByLabel(requiredLabel("Backup zip"), { exact: true }).setInputFiles({ name: `kitchen-${source.version}.zip`, mimeType: "application/zip", buffer: backup });
-    // A 500-recipe move-in finishes within a second at full speed, before any kill lands. The workflow caps the
-    // server's CPU now, so the move-in is still running when it kills the server, and lifts the cap before it starts again.
-    mkdirSync(dirname(statePath), { recursive: true });
-    writeFileSync(slowAsked, "");
-    await expect.poll(() => existsSync(slowed), { timeout: 60_000 }).toBe(true);
     await page.getByRole("button", { name: "Move in", exact: true }).click();
-    // The move-in is accepted. The cook leaves at once, and the state file tells the workflow to kill the server: 500
-    // recipes come in within seconds, so it must land at once. The workflow then checks the move-in was unfinished.
-    await expect(page).toHaveURL(/\/move-in\?job=movein_/, { timeout: 2 * 60_000 });
+    // The move-in is accepted, and waits: the server's queue takes jobs but runs none (SPOONJOY_JOBS_PAUSED).
+    await expect(page).toHaveURL(/\/move-in\?job=movein_/);
     const url = page.url();
     await page.goto("about:blank");
     const recipes = read.kitchens.large.counts.recipes;
