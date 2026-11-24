@@ -49,7 +49,10 @@ test.describe("Ouro corner radii", () => {
       );
       const radius = measured.base * story.scale;
       if (measured.cornerShape) {
-        expect(measured.shownCornerShape).toBe("squircle");
+        // A squircle by its keyword or as the superellipse it is: Card's superellipse(2), or the theme's control
+        // shape (Cookbook's capsule is superellipse(1.05)); never round, which is superellipse(1).
+        const exponent = measured.shownCornerShape === "squircle" ? 2 : Number(/^superellipse\(([\d.]+)\)$/.exec(measured.shownCornerShape)?.[1]);
+        expect(exponent, measured.shownCornerShape).toBeGreaterThan(1);
         expect(measured.corner).toBeCloseTo(radius, 2);
       } else if (measured.shapeClip) {
         // A capsule stays round by intent: the plugin leaves a radius of half the height or more alone.
