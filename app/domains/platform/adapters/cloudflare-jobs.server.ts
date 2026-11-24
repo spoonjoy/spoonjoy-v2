@@ -191,12 +191,12 @@ export function d1JobKeys(db: JobKeysDatabase, now: () => Date = () => new Date(
  */
 export async function replayJobMessages(db: JobKeysDatabase, queue: Queue<JobMessage>, now: () => Date = () => new Date()): Promise<number> {
   const { results } = await db
-    .prepare(`SELECT "key", "type", "payload", "deliverAt" FROM "PlatformJobKey" WHERE "status" IN ('pending', 'running') AND "payload" IS NOT NULL`)
+    .prepare(`SELECT "key", "type", "payload", "deliverAt" FROM "PlatformJobKey" WHERE "status" IN ('pending', 'running') AND "payload" IS NOT NULL AND "deliverAt" IS NOT NULL`)
     .bind()
-    .all<{ key: string; type: string; payload: string; deliverAt: string | null }>();
+    .all<{ key: string; type: string; payload: string; deliverAt: string }>();
   const at = now().getTime();
   for (const row of results) {
-    const waitMs = row.deliverAt ? new Date(row.deliverAt).getTime() - at : 0;
+    const waitMs = new Date(row.deliverAt).getTime() - at;
     const delaySeconds = Math.max(0, Math.ceil(waitMs / 1000));
     await queue.send({ type: row.type, key: row.key, payload: JSON.parse(row.payload) }, delaySeconds ? { delaySeconds } : {});
   }
