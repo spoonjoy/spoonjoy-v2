@@ -76,9 +76,9 @@ test.describe("Updating a self-hosted server", () => {
     await expect(heading).toBeVisible();
     await expect(page.getByText("Simmer the stock until it smells like home")).toBeVisible();
     await expect(page.locator("#steps").getByRole("checkbox", { name: /chicken stock/ })).toBeVisible();
-    const main = page.getByRole("main");
-    await main.scrollIntoViewIfNeeded();
-    await main.screenshot({ path: testInfo.outputPath("upgrade-after-recipe.png") });
+    // The whole page from the top: a shot of main alone scrolls it under the sticky top bar.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: testInfo.outputPath("upgrade-after-recipe.png"), fullPage: true });
 
     await page.goto("/account/server");
     await page.reload();
