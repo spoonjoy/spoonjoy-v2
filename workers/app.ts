@@ -4,7 +4,7 @@ import { applyServerAi } from "../app/lib/server-ai.server";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
 import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server";
 import { d1Binding } from "../app/lib/d1-read.server";
-import { d1RouteLabel, withTransientD1Retry } from "../app/lib/d1-transient-retry.server";
+import { d1RouteLabel, staticRouteSegments, withTransientD1Retry } from "../app/lib/d1-transient-retry.server";
 import { runWithD1WriteRetryReporter } from "../app/lib/d1-write-retry.server";
 import { qaErrorLogsEnabled } from "../app/lib/qa-error-logs.server";
 import { isolateColoReport, isolateRequestReport } from "../app/lib/slow-call.server";
@@ -38,6 +38,8 @@ declare global {
 const requestHandler = createRequestHandler(serverBuild, import.meta.env.MODE);
 
 const COOK_SESSION_PREFIX = "/api/cook-sessions";
+// The route paths' fixed words, so a transient D1 error's log line names its route without a slug or id.
+const ROUTE_SEGMENTS = staticRouteSegments(serverBuild.routes, COOK_SESSION_PREFIX.split("/"));
 const COOK_SESSION_BOOTSTRAP_PATH = "/.well-known/spoonjoy-cook-session-bootstrap";
 const ACCOUNT_DELETE_INTENT_RESOURCE = "urn:spoonjoy:account-delete-intent:v1";
 
@@ -382,7 +384,7 @@ export default {
       }
     }
     // A self-hosted server's admin may have picked its AI on Server settings (server-ai.server.ts).
-    const env = withTransientD1Retry(await applyServerAi(rawEnv), { route: d1RouteLabel(new URL(request.url).pathname) });
+    const env = withTransientD1Retry(await applyServerAi(rawEnv), { route: d1RouteLabel(new URL(request.url).pathname, ROUTE_SEGMENTS) });
     // A per-run QA Worker logs each write retry for the Journeys tail summary.
     return runWithD1WriteRetryReporter(rawEnv, () => handleFetch(request, env, ctx));
   },
