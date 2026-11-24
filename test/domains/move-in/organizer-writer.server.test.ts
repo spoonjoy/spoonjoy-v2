@@ -96,7 +96,14 @@ describe("attachMovedInOrganizers", () => {
     await db.organizer.deleteMany({ where: { ownerId: at.ownerId, slug: "cozy" } });
     expect(await readMoveInOrganizerCounts(db, at)).toEqual({ tags: 1, categories: 1, tools: 1 });
 
+    // A later move-in of the same backup has its own count, and leaves this one's as it was.
     await attachMovedInOrganizers(db, { ...at, jobId: "job-2", ...none, tags: ["Quick"] });
     expect(await readMoveInOrganizerCounts(db, { ...at, jobId: "job-2" })).toEqual({ tags: 1, categories: 0, tools: 0 });
+    expect(await readMoveInOrganizerCounts(db, at)).toEqual({ tags: 1, categories: 1, tools: 1 });
+
+    // One the cook takes off every recipe, or whose recipes are deleted, is no longer counted.
+    await db.recipeOrganizer.deleteMany({ where: { organizer: { ownerId: at.ownerId, slug: "dinner" } } });
+    await db.recipe.update({ where: { id: second.id }, data: { deletedAt: new Date() } });
+    expect(await readMoveInOrganizerCounts(db, at)).toEqual({ tags: 1, categories: 0, tools: 0 });
   });
 });

@@ -544,7 +544,8 @@ describe("a backup's tags, categories and tools", () => {
     expect(h.events.find((event) => event.targetId === pancakes.recipeId && event.kind === "item-degraded")).toMatchObject({
       level: "warn",
       entity: "recipes",
-      message: "Pancakes moved in without its tags, categories and tools: D1 said no. Moving the same backup in again adds them.",
+      message: "Pancakes moved in without some of its tags, categories and tools. Moving the same backup in again adds them.",
+      detail: "Error: D1 said no",
     });
   });
 
