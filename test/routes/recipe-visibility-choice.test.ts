@@ -78,6 +78,10 @@ describe("choosing who can see a recipe", () => {
 
     expect((await editLoader(args<EditLoaderArgs>(await get(url), FLAG_ON, params))).visibility).toBe("public");
     expect((await editLoader(args<EditLoaderArgs>(await get(url), null, params))).visibility).toBeNull();
+    // A stored level the editor can't name shows as the most closed one.
+    await db.recipe.update({ where: { id: recipe.id }, data: { visibility: "unknown" } });
+    expect((await editLoader(args<EditLoaderArgs>(await get(url), FLAG_ON, params))).visibility).toBe("private");
+    await db.recipe.update({ where: { id: recipe.id }, data: { visibility: "public" } });
 
     await editAction(args<EditActionArgs>(await post(url, { title: "Edit Me", visibility: "private" }), FLAG_ON, params));
     expect((await created("Edit Me")).visibility).toBe("private");
