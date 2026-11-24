@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { data, useFetcher, useLoaderData } from "react-router";
 import type { Route } from "./+types/account.server-settings";
 import { Button } from "~/components/ouro/button/button";
@@ -7,7 +8,9 @@ import { LocalDate } from "~/components/ouro/local-date/local-date";
 import { Text } from "~/components/ouro/text/text";
 import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
+import { RadioGroup } from "~/components/ouro/radio-group/radio-group";
 import { SectionHeader } from "~/components/ouro/section-header/section-header";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
@@ -19,11 +22,12 @@ import {
   setSignupMode,
   signupMode,
 } from "~/lib/server-access.server";
+import { AI_PROVIDERS, serverAi, setServerAi, type AiProvider } from "~/lib/server-ai.server";
 import { ServerBackupError, serverBackups, type BackupMade, type BackupRestored, type ServerBackup, type ServerBackups } from "~/lib/self-host-backups.server";
 
 // A self-hosted server's own settings, for its admin (its first account) only: whether strangers
-// may sign up, invite links that let one person sign up while they may not, and the server's
-// backups. To anyone else, and on spoonjoy.app, the page does not exist.
+// may sign up, invite links that let one person sign up while they may not, which AI the server
+// uses, and the server's backups. To anyone else, and on spoonjoy.app, the page does not exist.
 
 export function meta(_args: Route.MetaArgs) {
   return [{ title: "Server settings - Spoonjoy" }, { name: "robots", content: "noindex" }];
@@ -75,6 +79,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return {
     signups: await signupMode(db, env),
     invites: invites.map((invite) => ({ id: invite.id, createdAt: invite.createdAt.toISOString(), expiresAt: invite.expiresAt.toISOString() })),
+    ai: await serverAi(db, env),
     backups: await loadBackups(context, request, userId),
   };
 }
@@ -103,6 +108,13 @@ export async function action({ request, context }: Route.ActionArgs) {
       const { token } = await createServerInvite(db, userId);
       const origin = env?.SPOONJOY_BASE_URL && URL.canParse(env.SPOONJOY_BASE_URL) ? new URL(env.SPOONJOY_BASE_URL).origin : new URL(request.url).origin;
       return data<ServerSettingsActionData>({ intent, success: true, link: `${origin}/signup?invite=${token}` });
+    }
+    case "ai": {
+      const provider = String(form.get("provider")) as AiProvider;
+      if (!AI_PROVIDERS.includes(provider)) return fail("Choose OpenAI, Gemini or no AI.", 400);
+      const refused = await setServerAi(db, env, { provider, key: String(form.get("key") ?? "") });
+      if (refused) return fail(refused, 400);
+      return data<ServerSettingsActionData>({ intent, success: true });
     }
     case "backup":
     case "restore": {
@@ -152,6 +164,59 @@ function SignupsSwitch({ signups }: { signups: Awaited<ReturnType<typeof loader>
           {open ? "Make invite-only" : "Open sign-ups"}
         </Button>
       )}
+    </section>
+  );
+}
+
+const AI_NAMES: Record<AiProvider, string> = { off: "No AI", openai: "OpenAI", gemini: "Gemini" };
+
+const AI_OPTIONS = [
+  { value: "openai", label: "OpenAI" },
+  { value: "gemini", label: "Gemini" },
+  { value: "off", label: "No AI", description: "Ingredients are read by the built-in parser, and recipes get no drawn covers." },
+];
+
+function AiChoice({ ai }: { ai: Awaited<ReturnType<typeof loader>>["ai"] }) {
+  const fetcher = useFetcher<ServerSettingsActionData>();
+  const [provider, setProvider] = useState<string>(ai.provider);
+  const reply = fetcher.state === "idle" ? fetcher.data : undefined;
+  const failure = reply && !reply.success ? reply.error : null;
+  const keepsKey = ai.setBy === "admin" && provider === ai.provider;
+  return (
+    <section className="mt-10" aria-labelledby="server-ai" data-testid="server-ai">
+      <SectionHeader id="server-ai" title="AI" level={2} />
+      <Text className="mt-2" data-testid="server-ai-provider">{AI_NAMES[ai.provider]}</Text>
+      <Text tone="muted" size="sm" className="mt-1">
+        {ai.setBy === "env"
+          ? "The key this server was started with picks this. Choose here to use your own instead."
+          : ai.setBy === "default"
+            ? "No AI key is set, so this server doesn't use AI."
+            : ai.provider === "off"
+              ? "You turned AI off."
+              : "With the key you saved here."}
+      </Text>
+      <fetcher.Form method="post" className="mt-4 flex flex-col gap-4">
+        <input type="hidden" name="intent" value="ai" />
+        <RadioGroup legend="Use" description="AI reads ingredients and imported recipes, and draws recipe covers." name="provider" options={AI_OPTIONS} value={provider} onValueChange={setProvider} />
+        {provider === "off" ? null : (
+          <TextField
+            key={provider}
+            label={`${AI_NAMES[provider as AiProvider]} API key`}
+            name="key"
+            type="password"
+            autoComplete="off"
+            required={!keepsKey}
+            description={keepsKey ? "Leave it empty to keep the saved key." : "It's kept on this server, and in its backups."}
+          />
+        )}
+        {failure ? <Text role="alert" tone="destructive" size="sm">{failure}</Text> : null}
+        {reply?.success && reply.intent === "ai" ? <Text role="status" size="sm">Saved.</Text> : null}
+        <div>
+          <Button type="submit" variant="outline" disabled={fetcher.state !== "idle"}>
+            {fetcher.state === "idle" ? "Save" : "Saving..."}
+          </Button>
+        </div>
+      </fetcher.Form>
     </section>
   );
 }
@@ -292,7 +357,7 @@ function Backups({ backups }: { backups: Awaited<ReturnType<typeof loader>>["bac
 }
 
 export default function ServerSettings() {
-  const { signups, invites, backups } = useLoaderData<typeof loader>();
+  const { signups, invites, ai, backups } = useLoaderData<typeof loader>();
   return (
     <CookbookPage>
       <PageHeader
@@ -300,10 +365,11 @@ export default function ServerSettings() {
         title="This server"
         size="lg"
         divider
-        description="You made this server's first account, so you decide who else can join it and look after its backups. You can also review reports at /moderation."
+        description="You made this server's first account, so you decide who else can join it, which AI it uses, and look after its backups. You can also review reports at /moderation."
       />
       <SignupsSwitch signups={signups} />
       <Invites invites={invites} />
+      <AiChoice ai={ai} />
       <Backups backups={backups} />
     </CookbookPage>
   );

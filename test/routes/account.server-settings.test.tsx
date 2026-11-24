@@ -10,6 +10,7 @@ import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRoutesStub, createTestUser } from "../utils";
 
 const selfHosted = { SPOONJOY_SELF_HOSTED: "true", SPOONJOY_BASE_URL: "https://kitchen.example.com" };
+const NO_AI = { provider: "off", setBy: "default" } as const;
 
 async function chef(env: Record<string, string> = selfHosted) {
   // The first through the gate is the admin; later chefs are written straight to the database.
@@ -82,7 +83,7 @@ describe("/account/server", () => {
     expect(((await load(other.cookie)) as Response).status).toBe(404);
     expect(((await post(other.cookie, { intent: "invite" })) as Response).status).toBe(404);
     expect(((await load(admin.cookie, {})) as Response).status).toBe(404);
-    expect(await load(admin.cookie)).toEqual({ signups: { mode: "invite", setBy: "default" }, invites: [], backups: null });
+    expect(await load(admin.cookie)).toEqual({ signups: { mode: "invite", setBy: "default" }, invites: [], ai: NO_AI, backups: null });
   });
 
   it("lets the admin open sign-ups and close them again", async () => {
@@ -122,7 +123,7 @@ describe("/account/server", () => {
       {
         path: "/account/server",
         Component: ServerSettings,
-        loader: () => ({ signups: { mode: "invite", setBy: "default" }, invites: [], backups: null }),
+        loader: () => ({ signups: { mode: "invite", setBy: "default" }, invites: [], ai: NO_AI, backups: null }),
       },
     ]);
     render(<Stub initialEntries={["/account/server"]} />);
@@ -162,7 +163,7 @@ describe("/account/server", () => {
 
   it("turns sign-ups off from the page, and shows why it couldn't", async () => {
     const submitted = renderPage(
-      { signups: { mode: "open", setBy: "admin" }, invites: [], backups: null },
+      { signups: { mode: "open", setBy: "admin" }, invites: [], ai: NO_AI, backups: null },
       () => ({ intent: "signups", success: false, error: "Something went wrong." }),
     );
     expect(await screen.findByText("Open")).toBeInTheDocument();
@@ -173,14 +174,14 @@ describe("/account/server", () => {
   });
 
   it("opens sign-ups from the page", async () => {
-    const submitted = renderPage({ signups: { mode: "invite", setBy: "default" }, invites: [], backups: null }, () => ({ intent: "signups", success: true }));
+    const submitted = renderPage({ signups: { mode: "invite", setBy: "default" }, invites: [], ai: NO_AI, backups: null }, () => ({ intent: "signups", success: true }));
     await userEvent.click(await screen.findByRole("button", { name: "Open sign-ups" }));
     await expect.poll(() => submitted.map((form) => Object.fromEntries(form))).toEqual([{ intent: "signups", mode: "open" }]);
     await waitFor(() => expect(screen.getByRole("button", { name: "Open sign-ups" })).toBeEnabled());
   });
 
   it("hides the switch when SPOONJOY_SIGNUPS decides", async () => {
-    renderPage({ signups: { mode: "invite", setBy: "env" }, invites: [], backups: null }, () => ({}));
+    renderPage({ signups: { mode: "invite", setBy: "env" }, invites: [], ai: NO_AI, backups: null }, () => ({}));
     expect(await screen.findByText(/SPOONJOY_SIGNUPS sets this where the server is started\./)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open sign-ups" })).not.toBeInTheDocument();
   });
@@ -190,6 +191,7 @@ describe("/account/server", () => {
       {
         signups: { mode: "invite", setBy: "default" },
         invites: [{ id: "invite-1", createdAt: "2026-11-20T10:00:00.000Z", expiresAt: "2026-11-27T10:00:00.000Z" }],
+        ai: NO_AI,
         backups: null,
       },
       (form) => form.get("intent") === "invite"
@@ -286,7 +288,7 @@ describe("/account/server", () => {
     });
 
     function renderBackups(backups: Awaited<ReturnType<typeof loader>>["backups"], reply: (form: FormData) => Record<string, unknown> = () => ({})) {
-      return renderPage({ signups: { mode: "invite", setBy: "default" }, invites: [], backups }, reply);
+      return renderPage({ signups: { mode: "invite", setBy: "default" }, invites: [], ai: NO_AI, backups }, reply);
     }
 
     it("shows the schedule and each backup with its kind, time and size, to download or restore", async () => {
@@ -364,6 +366,68 @@ describe("/account/server", () => {
         { intent: "restore", name: NAME },
         { intent: "restore", name: "spoonjoy-auto-2026-11-23T03-17-00Z.tar.gz" },
         { intent: "restore", name: "spoonjoy-before-restore-2026-11-23T11-00-00Z.tar.gz" },
+      ]);
+    });
+  });
+  describe("AI", () => {
+    it("shows the AI in use and saves the admin's pick, refusing one without a key", async () => {
+      const admin = await chef();
+      expect(((await load(admin.cookie)) as { ai: unknown }).ai).toEqual(NO_AI);
+      expect(answer(await post(admin.cookie, { intent: "ai", provider: "openai", key: "" }))).toEqual({
+        status: 400,
+        body: { intent: "ai", success: false, error: "Paste the server's OpenAI API key." },
+      });
+      expect(answer(await post(admin.cookie, { intent: "ai", provider: "off" }))).toEqual({ status: 200, body: { intent: "ai", success: true } });
+      expect(answer(await post(admin.cookie, { intent: "ai" }))).toEqual({
+        status: 400,
+        body: { intent: "ai", success: false, error: "Choose OpenAI, Gemini or no AI." },
+      });
+      expect(answer(await post(admin.cookie, { intent: "ai", provider: "gemini", key: "g-synthetic" }))).toEqual({
+        status: 200,
+        body: { intent: "ai", success: true },
+      });
+      expect(((await load(admin.cookie)) as { ai: unknown }).ai).toEqual({ provider: "gemini", setBy: "admin" });
+    });
+
+    function renderAi(ai: Awaited<ReturnType<typeof loader>>["ai"], reply: (form: FormData) => Record<string, unknown> = () => ({})) {
+      return renderPage({ signups: { mode: "invite", setBy: "default" }, invites: [], ai, backups: null }, reply);
+    }
+
+    it("says where the AI in use comes from", async () => {
+      renderAi(NO_AI);
+      expect(await screen.findByTestId("server-ai-provider")).toHaveTextContent("No AI");
+      expect(screen.getByText("No AI key is set, so this server doesn't use AI.")).toBeInTheDocument();
+      expect(screen.queryByLabelText(/API key/)).not.toBeInTheDocument();
+      cleanup();
+      renderAi({ provider: "openai", setBy: "env" });
+      expect(await screen.findByText(/The key this server was started with picks this/)).toBeInTheDocument();
+      expect(screen.getByLabelText("OpenAI API key")).toBeRequired();
+      cleanup();
+      renderAi({ provider: "off", setBy: "admin" });
+      expect(await screen.findByText("You turned AI off.")).toBeInTheDocument();
+      cleanup();
+      renderAi({ provider: "gemini", setBy: "admin" });
+      expect(await screen.findByText("With the key you saved here.")).toBeInTheDocument();
+      expect(screen.getByLabelText("Gemini API key")).not.toBeRequired();
+      expect(screen.getByText("Leave it empty to keep the saved key.")).toBeInTheDocument();
+    });
+
+    it("saves a provider with its key, and says why it couldn't", async () => {
+      let replies = 0;
+      const submitted = renderAi(NO_AI, () =>
+        replies++ === 0 ? { intent: "ai", success: false, error: "Paste the server's OpenAI API key." } : { intent: "ai", success: true },
+      );
+      await userEvent.click(await screen.findByRole("radio", { name: "OpenAI" }));
+      const key = screen.getByLabelText("OpenAI API key");
+      expect(screen.getByText("It's kept on this server, and in its backups.")).toBeInTheDocument();
+      await userEvent.type(key, "sk-synthetic");
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Paste the server's OpenAI API key.");
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(await screen.findByText("Saved.")).toHaveAttribute("role", "status");
+      expect(submitted.map((form) => Object.fromEntries(form))).toEqual([
+        { intent: "ai", provider: "openai", key: "sk-synthetic" },
+        { intent: "ai", provider: "openai", key: "sk-synthetic" },
       ]);
     });
   });

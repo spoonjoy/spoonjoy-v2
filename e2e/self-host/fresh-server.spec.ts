@@ -131,6 +131,28 @@ test.describe("A fresh self-hosted server", () => {
     writeFileSync(out!, link);
   });
 
+  // AI on Server settings (app/lib/server-ai.server.ts). The key is made up: picking a provider only
+  // saves it; the Worker hands it to the AI features on the next request.
+  test("the admin picks the server's AI with their own key, and turns AI off", async ({ page }, testInfo) => {
+    await signInAsOwner(page);
+    await page.goto("/account/server");
+    const ai = page.getByTestId("server-ai");
+    await expect(ai.getByTestId("server-ai-provider")).toHaveText("No AI");
+    await ai.getByRole("radio", { name: "Gemini" }).click();
+    await fillSecret(ai.getByLabel("Gemini API key"), new Secret(`synthetic-${randomBytes(8).toString("hex")}`));
+    await ai.getByRole("button", { name: "Save" }).click();
+    await expect(ai.getByTestId("server-ai-provider")).toHaveText("Gemini");
+    await expect(ai.getByText("With the key you saved here.")).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("ai-gemini-chosen.png"), fullPage: true });
+
+    await ai.getByRole("radio", { name: "No AI" }).click();
+    await ai.getByRole("button", { name: "Save" }).click();
+    await expect(ai.getByTestId("server-ai-provider")).toHaveText("No AI");
+    await page.reload();
+    await expect(page.getByText("You turned AI off.")).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("ai-off.png"), fullPage: true });
+  });
+
   // Backups on Server settings (self-host/backup.mjs, answered through self-host/host-api.mjs). The
   // backup is made after the invite above, so restoring it keeps that invite for the OpenID Connect
   // check; opening sign-ups in between shows the restore putting the server back.
