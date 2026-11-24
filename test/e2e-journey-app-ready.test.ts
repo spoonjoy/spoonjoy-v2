@@ -12,6 +12,8 @@ import {
   TRANSPORT_RETRY_DELAY_MS,
   answerDataRequest,
   answerStaticAsset,
+  apiGetRetryNote,
+  getAgainAfterReset,
   dataRequestPattern,
   isFetchTimeout,
   isFetchTransportFailure,
@@ -144,6 +146,7 @@ describe("waitForHydrationOnLoad", () => {
         goto: vi.fn(async () => { order.push("goto"); return null; }),
         reload: vi.fn(async () => null),
         waitForFunction: vi.fn(async () => undefined),
+        request: { get: vi.fn(async () => null) },
       };
       waitForHydrationOnLoad(page as never);
       await (page as unknown as { goto(url: string): Promise<unknown> }).goto("/recipes");
@@ -157,6 +160,53 @@ describe("waitForHydrationOnLoad", () => {
       if (base === undefined) delete process.env.SPOONJOY_JOURNEYS_BASE_URL;
       else process.env.SPOONJOY_JOURNEYS_BASE_URL = base;
     }
+  });
+});
+
+describe("getAgainAfterReset", () => {
+  // The request Journeys run 45383802562 lost (#1008).
+  const RESET = "apiRequestContext.get: read ECONNRESET";
+
+  it("sends a GET once more, a second later, after its connection dropped, and says so", async () => {
+    vi.useFakeTimers();
+    try {
+      const get = vi.fn().mockRejectedValueOnce(new Error(RESET)).mockResolvedValueOnce("answer");
+      const request = { get };
+      expectConsoleWarning(`Journeys: sending GET /sitemap.xml again after its connection was reset (${RESET})`);
+      getAgainAfterReset(request as never);
+      const answer = request.get("/sitemap.xml", { timeout: 5 });
+      await vi.advanceTimersByTimeAsync(TRANSPORT_RETRY_DELAY_MS);
+
+      await expect(answer).resolves.toBe("answer");
+      expect(get.mock.calls).toEqual([["/sitemap.xml", { timeout: 5 }], ["/sitemap.xml", { timeout: 5 }]]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("throws any other failure without sending again", async () => {
+    const failure = new Error("apiRequestContext.get: getaddrinfo ENOTFOUND example.test");
+    const get = vi.fn().mockRejectedValue(failure);
+    const request = { get };
+    getAgainAfterReset(request as never);
+
+    await expect(request.get("/sitemap.xml")).rejects.toBe(failure);
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("wraps a request context once, however many of its pages are wrapped", async () => {
+    const get = vi.fn().mockRejectedValue(new Error("apiRequestContext.get: getaddrinfo ENOTFOUND example.test"));
+    const request = { get };
+    getAgainAfterReset(request as never);
+    const wrapped = request.get;
+    getAgainAfterReset(request as never);
+
+    expect(request.get).toBe(wrapped);
+  });
+
+  it("names only the path of a full URL in its note", () => {
+    expect(apiGetRetryNote("https://spoonjoy-v2-qa-run-1-1.mendelow-studio.workers.dev/api/v1/recipes/r1?x=1", new Error(`${RESET}\nCall log:`)))
+      .toBe(`Journeys: sending GET /api/v1/recipes/r1 again after its connection was reset (${RESET})`);
   });
 });
 

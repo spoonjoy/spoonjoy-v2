@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { assetRecoveredNote, assetRetryNote, dataRequestRetryNote, loadRetryNote } from "../../e2e/journeys/support/app-ready";
+import { apiGetRetryNote, assetRecoveredNote, assetRetryNote, dataRequestRetryNote, loadRetryNote } from "../../e2e/journeys/support/app-ready";
 import {
   EXPECTED_PRISMA_D1_TRANSACTION_WARNING,
   JOURNEYS_RETRY_NOTE_PATTERN,
@@ -382,6 +382,9 @@ describe("warning gate", () => {
       dataRequestRetryNote("GET", "/recipes.data", new Error("socket hang up")),
       dataRequestRetryNote("POST", "/login.data", new Error("Client network socket disconnected before secure TLS connection was established")),
       dataRequestRetryNote("GET", "/recipes.data", Object.assign(new Error("route.fetch: Timeout 6000ms exceeded."), { name: "TimeoutError" })),
+      // The API GET Journeys run 45383802562 lost (#1008).
+      apiGetRetryNote("/sitemap.xml", new Error("apiRequestContext.get: read ECONNRESET")),
+      apiGetRetryNote("/api/v1/recipes/r1", new Error("apiRequestContext.get: socket hang up")),
       // A built file Cloudflare answered 404 for (#668).
       assetRetryNote("/assets/button-CXqvcQew.js", 404, 2, "none", 6),
       assetRetryNote("/assets/button-CXqvcQew.js", 404, 6, "8f1e2d3c4b5a6978-IAD", 6),
@@ -411,6 +414,8 @@ describe("warning gate", () => {
       ["a data request that failed another way", dataRequestRetryNote("POST", "/login.data", new Error("getaddrinfo ENOTFOUND example.test"))],
       ["a request that is not a data request", dataRequestRetryNote("POST", "/login", new Error("read ECONNRESET"))],
       ["a submission resent after no answer", dataRequestRetryNote("POST", "/login.data", Object.assign(new Error("route.fetch: Timeout 6000ms exceeded."), { name: "TimeoutError" }))],
+      ["an API GET that failed another way", apiGetRetryNote("/sitemap.xml", new Error("apiRequestContext.get: getaddrinfo ENOTFOUND example.test"))],
+      ["an API POST sent again", "Journeys: sending POST /api/v1/recipes again after its connection was reset (apiRequestContext.post: read ECONNRESET)"],
       ["a data request whose retry note has more after it", `${dataRequestRetryNote("POST", "/login.data", new Error("read ECONNRESET"))} and then a page error`],
     ])("still fails %s", (_label, line) => {
       expect(JOURNEYS_RETRY_NOTE_PATTERN.test(line)).toBe(false);
