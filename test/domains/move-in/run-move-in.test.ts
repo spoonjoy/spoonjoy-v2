@@ -12,6 +12,10 @@ import {
   type MoveInJob,
   type MoveInPorts,
 } from "~/domains/move-in/application/run-move-in";
+import { openMealieBackup } from "~/domains/move-in/adapters/sources/mealie-backup/backup";
+import { mealieBackupSource } from "~/domains/move-in/adapters/sources/mealie-backup/source";
+import { SourceUnavailableError, type MoveInKitchen } from "~/domains/move-in/application/source";
+import { MoveInError } from "~/domains/move-in/model/move-in-error";
 import type { RecipeDraft } from "~/domains/move-in/model/recipe-draft";
 import { makeZip } from "./support/make-zip";
 import { mealieDatabase } from "./support/mealie-database";
@@ -407,6 +411,59 @@ describe("runNextChunk", () => {
     h.ports.openArchive = () => ({ size: 100, read: () => Promise.reject(new Error("blob store down")) });
     await expect(runNextChunk("job-1", h.ports)).rejects.toThrow("blob store down");
     expect(h.job()).toMatchObject({ status: "running", phase: "inspect" });
+  });
+});
+
+/** The backup as a source, with some of its kitchen's answers changed, as another source's would be. */
+function changedSource(h: ReturnType<typeof harness>, change: (kitchen: MoveInKitchen) => Partial<MoveInKitchen>) {
+  h.ports.openSource = async (job) => {
+    const source = mealieBackupSource(await openMealieBackup(await h.ports.openArchive(job)));
+    return {
+      ...source,
+      openKitchen: async (key) => {
+        const kitchen = await source.openKitchen(key);
+        return kitchen && { ...kitchen, ...change(kitchen) };
+      },
+    };
+  };
+}
+
+describe("a source other than a backup", () => {
+  it("moves in through the source it is given", async () => {
+    const h = harness();
+    changedSource(h, () => ({}));
+    const given = h.ports.openSource as NonNullable<MoveInPorts["openSource"]>;
+    let opens = 0;
+    h.ports.openSource = (job) => (opens++, given(job));
+    expect(await h.runAll()).toMatchObject({ status: "done-with-issues", phase: "done" });
+    expect(opens).toBeGreaterThan(0);
+    expect(h.written.size).toBe(3);
+  });
+
+  it("passes an outage on, with the recipe still next, rather than counting the recipe as failed", async () => {
+    const h = harness();
+    changedSource(h, (kitchen) => ({ draft: async (index) => (index === 1 ? Promise.reject(new SourceUnavailableError("server down")) : kitchen.draft(index)) }));
+    await runNextChunk("job-1", h.ports);
+    await expect(runNextChunk("job-1", h.ports)).rejects.toBeInstanceOf(SourceUnavailableError);
+    // The first recipe moved in and was kept; the second is next again.
+    expect(h.job()).toMatchObject({ status: "running", cursor: "1" });
+    expect(h.counts.get("recipes")).toMatchObject({ failed: 0 });
+  });
+
+  it("passes an outage on while reading a photo, rather than moving the recipe in without it", async () => {
+    const h = harness();
+    changedSource(h, () => ({ readPhoto: () => Promise.reject(new SourceUnavailableError("server down")) }));
+    await runNextChunk("job-1", h.ports);
+    await expect(runNextChunk("job-1", h.ports)).rejects.toBeInstanceOf(SourceUnavailableError);
+    expect(h.counts.get("photos")).toMatchObject({ failed: 0 });
+    expect(h.events.some((event) => event.kind === "item-degraded")).toBe(false);
+  });
+
+  it("stops with the fix-it message when the source refuses partway, as when the cook's token is revoked", async () => {
+    const h = harness();
+    changedSource(h, () => ({ draft: () => Promise.reject(new MoveInError("server-token")) }));
+    expect(await h.runAll()).toMatchObject({ status: "failed", lastError: "server-token" });
+    expect(h.counts.get("recipes")).toMatchObject({ failed: 0 });
   });
 });
 

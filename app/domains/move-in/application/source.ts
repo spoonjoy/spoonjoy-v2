@@ -39,3 +39,14 @@ export interface MoveInSource {
   /** The kitchen with this key, or null when the source has no such kitchen. */
   openKitchen(key: string): Promise<MoveInKitchen | null>;
 }
+
+/**
+ * The other app's server can't be reached or is struggling right now. Like a database outage, it is passed on, for the
+ * queue to try the segment again later, rather than counted against the recipe the move-in was on.
+ */
+export class SourceUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SourceUnavailableError";
+  }
+}

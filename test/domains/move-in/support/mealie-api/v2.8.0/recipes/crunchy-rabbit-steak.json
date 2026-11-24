@@ -1,0 +1,490 @@
+{
+  "assets": [],
+  "comments": [],
+  "cookTime": null,
+  "createdAt": "2026-11-23T16:59:05.474539Z",
+  "dateAdded": "2026-11-23",
+  "dateUpdated": "2026-11-23T16:59:05.822301Z",
+  "description": "Savor the rich flavors of rich chilli pepper, complemented by tangelo and allspice.",
+  "extras": {},
+  "groupId": "4de0585c-0892-4140-8ead-a21874fc462f",
+  "householdId": "0818b209-f91b-4abd-a272-1df0a6050ae1",
+  "id": "696afc8a-dec5-437f-bd30-f5c65eeaa9b1",
+  "image": "30",
+  "lastMade": null,
+  "name": "Crunchy Rabbit Steak",
+  "notes": [
+    {
+      "text": "Best served warm with crusty bread.",
+      "title": "Serving"
+    },
+    {
+      "text": "Any firm white fish works here.",
+      "title": "Substitutions"
+    }
+  ],
+  "nutrition": {
+    "calories": null,
+    "carbohydrateContent": null,
+    "cholesterolContent": null,
+    "fatContent": null,
+    "fiberContent": null,
+    "proteinContent": null,
+    "saturatedFatContent": null,
+    "sodiumContent": null,
+    "sugarContent": null,
+    "transFatContent": null,
+    "unsaturatedFatContent": null
+  },
+  "orgURL": "https://recipes.example/recipe-003",
+  "performTime": "30 minutes",
+  "prepTime": "30 minutes",
+  "rating": 2,
+  "recipeCategory": [
+    {
+      "id": "d02aad5d-85b9-4af7-880f-08b8a0f6efad",
+      "name": "Dessert",
+      "slug": "dessert"
+    },
+    {
+      "id": "d7162b16-4acf-4ebb-a062-fc9aa31ca58f",
+      "name": "Side",
+      "slug": "side"
+    }
+  ],
+  "recipeIngredient": [
+    {
+      "disableAmount": false,
+      "display": "500 oz Potato Flour",
+      "food": {
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:04.647042Z",
+        "description": "",
+        "extras": {},
+        "householdsWithIngredientFood": [],
+        "id": "87c070c1-3f68-4b48-9ed3-6957c862df53",
+        "label": {
+          "color": "#F44336",
+          "groupId": "4de0585c-0892-4140-8ead-a21874fc462f",
+          "id": "c2ef66bf-a6ba-42bc-9c90-f306d85bcdb6",
+          "name": "Meat and Fish"
+        },
+        "labelId": "c2ef66bf-a6ba-42bc-9c90-f306d85bcdb6",
+        "name": "Potato Flour",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:04.647044Z"
+      },
+      "isFood": true,
+      "note": "",
+      "originalText": null,
+      "quantity": 500,
+      "referenceId": "a0d3b6ac-4b88-43b5-a8cd-83cd2ef40c53",
+      "title": null,
+      "unit": {
+        "abbreviation": "oz",
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:05.195648Z",
+        "description": "",
+        "extras": {},
+        "fraction": true,
+        "id": "f93ff2ac-4de0-4890-8c1d-2ebd7ca31024",
+        "name": "ounce",
+        "pluralAbbreviation": "",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:05.195650Z",
+        "useAbbreviation": true
+      }
+    },
+    {
+      "disableAmount": false,
+      "display": "1 ¹/₂ Brazil Nut",
+      "food": {
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:05.037836Z",
+        "description": "",
+        "extras": {},
+        "householdsWithIngredientFood": [],
+        "id": "b082d539-3f83-4a9e-9667-6fb066888a21",
+        "label": {
+          "color": "#4CAF50",
+          "groupId": "4de0585c-0892-4140-8ead-a21874fc462f",
+          "id": "6f08dcb4-a8e4-4a31-a1e2-6f22c5ddf9a7",
+          "name": "Produce"
+        },
+        "labelId": "6f08dcb4-a8e4-4a31-a1e2-6f22c5ddf9a7",
+        "name": "Brazil Nut",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:05.037838Z"
+      },
+      "isFood": true,
+      "note": "",
+      "originalText": null,
+      "quantity": 1.5,
+      "referenceId": "cf5aff26-f9a7-4f5e-ab48-86e4ec2937da",
+      "title": null,
+      "unit": null
+    },
+    {
+      "disableAmount": false,
+      "display": "1 ¹/₂ lb Radicchio",
+      "food": {
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:05.030795Z",
+        "description": "",
+        "extras": {},
+        "householdsWithIngredientFood": [],
+        "id": "20a6e602-eeac-4011-b38c-4bf21d3d886b",
+        "label": {
+          "color": "#FF9800",
+          "groupId": "4de0585c-0892-4140-8ead-a21874fc462f",
+          "id": "8b88b17b-3533-4b7e-9493-c6b18d2a18e1",
+          "name": "Pantry"
+        },
+        "labelId": "8b88b17b-3533-4b7e-9493-c6b18d2a18e1",
+        "name": "Radicchio",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:05.030797Z"
+      },
+      "isFood": true,
+      "note": "",
+      "originalText": null,
+      "quantity": 1.5,
+      "referenceId": "77bb2537-c1fe-4c39-9491-026a28491150",
+      "title": null,
+      "unit": {
+        "abbreviation": "lb",
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:05.201535Z",
+        "description": "",
+        "extras": {},
+        "fraction": true,
+        "id": "a520b605-97b5-4405-9dcf-84a84737f17d",
+        "name": "pound",
+        "pluralAbbreviation": "",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:05.201537Z",
+        "useAbbreviation": true
+      }
+    },
+    {
+      "disableAmount": false,
+      "display": "8 Limes",
+      "food": {
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:04.632468Z",
+        "description": "",
+        "extras": {},
+        "householdsWithIngredientFood": [],
+        "id": "40a7a185-26c3-45ec-ae00-a5842115e833",
+        "label": {
+          "color": "#795548",
+          "groupId": "4de0585c-0892-4140-8ead-a21874fc462f",
+          "id": "8eba10c3-f242-4039-a3aa-272b8ea26021",
+          "name": "Bakery"
+        },
+        "labelId": "8eba10c3-f242-4039-a3aa-272b8ea26021",
+        "name": "Limes",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:04.632470Z"
+      },
+      "isFood": true,
+      "note": "",
+      "originalText": null,
+      "quantity": 8,
+      "referenceId": "a3a05e0e-df88-4805-9315-da69dd54042c",
+      "title": null,
+      "unit": null
+    },
+    {
+      "disableAmount": false,
+      "display": "¹/₄ tbsp Feta",
+      "food": {
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:05.002594Z",
+        "description": "",
+        "extras": {},
+        "householdsWithIngredientFood": [],
+        "id": "23861352-b6c5-4cfc-b8d3-539e5e508af8",
+        "label": null,
+        "labelId": null,
+        "name": "Feta",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:05.002596Z"
+      },
+      "isFood": true,
+      "note": "",
+      "originalText": null,
+      "quantity": 0.25,
+      "referenceId": "3c3c86d3-af61-4701-8929-cbef7a5fea97",
+      "title": null,
+      "unit": {
+        "abbreviation": "tbsp",
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:05.158897Z",
+        "description": "",
+        "extras": {},
+        "fraction": true,
+        "id": "ef987281-b0f3-4cac-a3d3-c6e10f80d939",
+        "name": "tablespoon",
+        "pluralAbbreviation": "",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:05.158899Z",
+        "useAbbreviation": true
+      }
+    },
+    {
+      "disableAmount": false,
+      "display": "2 lb Mace",
+      "food": {
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:04.588146Z",
+        "description": "",
+        "extras": {},
+        "householdsWithIngredientFood": [],
+        "id": "3be86cf5-af97-4ff2-ac1e-2875efbd2665",
+        "label": {
+          "color": "#F44336",
+          "groupId": "4de0585c-0892-4140-8ead-a21874fc462f",
+          "id": "c2ef66bf-a6ba-42bc-9c90-f306d85bcdb6",
+          "name": "Meat and Fish"
+        },
+        "labelId": "c2ef66bf-a6ba-42bc-9c90-f306d85bcdb6",
+        "name": "Mace",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:04.588148Z"
+      },
+      "isFood": true,
+      "note": "",
+      "originalText": null,
+      "quantity": 2,
+      "referenceId": "88a23db2-7934-4657-a423-263751e9e2ad",
+      "title": null,
+      "unit": {
+        "abbreviation": "lb",
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:05.201535Z",
+        "description": "",
+        "extras": {},
+        "fraction": true,
+        "id": "a520b605-97b5-4405-9dcf-84a84737f17d",
+        "name": "pound",
+        "pluralAbbreviation": "",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:05.201537Z",
+        "useAbbreviation": true
+      }
+    },
+    {
+      "disableAmount": false,
+      "display": "1 tsp Pinto Beans",
+      "food": {
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:05.068727Z",
+        "description": "",
+        "extras": {},
+        "householdsWithIngredientFood": [],
+        "id": "cb3db9bc-ac74-4e68-bdf1-bdb8b1cc14f8",
+        "label": {
+          "color": "#F44336",
+          "groupId": "4de0585c-0892-4140-8ead-a21874fc462f",
+          "id": "c2ef66bf-a6ba-42bc-9c90-f306d85bcdb6",
+          "name": "Meat and Fish"
+        },
+        "labelId": "c2ef66bf-a6ba-42bc-9c90-f306d85bcdb6",
+        "name": "Pinto Beans",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:05.068729Z"
+      },
+      "isFood": true,
+      "note": "",
+      "originalText": null,
+      "quantity": 1,
+      "referenceId": "7706b84d-623d-47d3-a6df-0c00ab155c7e",
+      "title": null,
+      "unit": {
+        "abbreviation": "tsp",
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:05.150072Z",
+        "description": "",
+        "extras": {},
+        "fraction": true,
+        "id": "008f0cdd-ce1f-4b09-aaf8-18917f984384",
+        "name": "teaspoon",
+        "pluralAbbreviation": "",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:05.150074Z",
+        "useAbbreviation": true
+      }
+    },
+    {
+      "disableAmount": false,
+      "display": "¹/₂ c Butternut Lettuce melted",
+      "food": {
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:05.023570Z",
+        "description": "",
+        "extras": {},
+        "householdsWithIngredientFood": [],
+        "id": "6220d74d-7dca-43e2-a9a1-02250ac90904",
+        "label": {
+          "color": "#795548",
+          "groupId": "4de0585c-0892-4140-8ead-a21874fc462f",
+          "id": "8eba10c3-f242-4039-a3aa-272b8ea26021",
+          "name": "Bakery"
+        },
+        "labelId": "8eba10c3-f242-4039-a3aa-272b8ea26021",
+        "name": "Butternut Lettuce",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:05.023572Z"
+      },
+      "isFood": true,
+      "note": "melted",
+      "originalText": null,
+      "quantity": 0.5,
+      "referenceId": "86ca0d45-16ea-4f0c-9d88-10c1302daec2",
+      "title": null,
+      "unit": {
+        "abbreviation": "c",
+        "aliases": [],
+        "createdAt": "2026-11-23T16:59:05.165172Z",
+        "description": "",
+        "extras": {},
+        "fraction": true,
+        "id": "39c050b0-8e24-4d40-9105-1371f637e241",
+        "name": "cup",
+        "pluralAbbreviation": "",
+        "pluralName": null,
+        "updatedAt": "2026-11-23T16:59:05.165174Z",
+        "useAbbreviation": true
+      }
+    },
+    {
+      "disableAmount": false,
+      "display": "Oil for the pan",
+      "food": null,
+      "isFood": true,
+      "note": "Oil for the pan",
+      "originalText": null,
+      "quantity": 0,
+      "referenceId": "083f98a7-e190-4638-9547-b11ad4ada2d9",
+      "title": null,
+      "unit": null
+    }
+  ],
+  "recipeInstructions": [
+    {
+      "id": "a965f5e0-c608-46ce-98d2-8c00d30846cc",
+      "ingredientReferences": [
+        {
+          "referenceId": "cf5aff26-f9a7-4f5e-ab48-86e4ec2937da"
+        }
+      ],
+      "summary": "",
+      "text": "Stir in the Brazil Nut and set aside.",
+      "title": ""
+    },
+    {
+      "id": "bbd0ebc1-1411-4e74-ad05-5f9c661bfa1e",
+      "ingredientReferences": [],
+      "summary": "",
+      "text": "Stir in until fragrant.",
+      "title": ""
+    },
+    {
+      "id": "fa559bf4-6010-4619-95ea-ded3e9740c3a",
+      "ingredientReferences": [],
+      "summary": "",
+      "text": "Whisk over medium heat.",
+      "title": ""
+    },
+    {
+      "id": "bcac41db-0994-467e-b1cf-0d00d41c5b3c",
+      "ingredientReferences": [],
+      "summary": "",
+      "text": "Season until the edges brown.",
+      "title": ""
+    },
+    {
+      "id": "062b48cb-e3ba-4a76-aa61-5087e2015b03",
+      "ingredientReferences": [
+        {
+          "referenceId": "88a23db2-7934-4657-a423-263751e9e2ad"
+        },
+        {
+          "referenceId": "7706b84d-623d-47d3-a6df-0c00ab155c7e"
+        }
+      ],
+      "summary": "",
+      "text": "Fold in the Mace, Pinto Beans until the edges brown.",
+      "title": ""
+    },
+    {
+      "id": "7316e7f1-236b-4ddf-9f1d-c0b9b2cf0c07",
+      "ingredientReferences": [],
+      "summary": "",
+      "text": "Chop and set aside.",
+      "title": ""
+    },
+    {
+      "id": "0947492c-d439-4c0d-bb9a-041bb1e48b73",
+      "ingredientReferences": [
+        {
+          "referenceId": "7706b84d-623d-47d3-a6df-0c00ab155c7e"
+        }
+      ],
+      "summary": "",
+      "text": "Stir in the Pinto Beans until glossy.",
+      "title": ""
+    },
+    {
+      "id": "ab3ab7ec-dfd8-4cc4-877a-a0c2247ad97e",
+      "ingredientReferences": [],
+      "summary": "",
+      "text": "Roast until tender.",
+      "title": ""
+    }
+  ],
+  "recipeServings": 8,
+  "recipeYield": "8 servings",
+  "recipeYieldQuantity": 0,
+  "settings": {
+    "disableAmount": false,
+    "disableComments": false,
+    "landscapeView": false,
+    "locked": false,
+    "public": false,
+    "showAssets": false,
+    "showNutrition": false
+  },
+  "slug": "crunchy-rabbit-steak",
+  "tags": [
+    {
+      "id": "48bd7848-56d1-496c-a6c6-3ef467d6fe42",
+      "name": "Spicy",
+      "slug": "spicy"
+    }
+  ],
+  "tools": [
+    {
+      "householdsWithTool": [],
+      "id": "3fffc3b1-fc61-4bc8-a0ef-e82d3f3e64fc",
+      "name": "Blender",
+      "slug": "blender"
+    },
+    {
+      "householdsWithTool": [],
+      "id": "7de37e0f-0b9d-474c-86a6-d83a98998d19",
+      "name": "Stand Mixer",
+      "slug": "stand-mixer"
+    },
+    {
+      "householdsWithTool": [],
+      "id": "cfeb9355-9dcf-4d18-a73c-5d19c75c8dbf",
+      "name": "Dutch Oven",
+      "slug": "dutch-oven"
+    }
+  ],
+  "totalTime": "60 minutes",
+  "updatedAt": "2026-11-23T16:59:09.173235Z",
+  "userId": "89d0937a-279d-4ed0-8e74-e14b15659548"
+}

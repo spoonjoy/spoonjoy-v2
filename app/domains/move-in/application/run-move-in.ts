@@ -8,7 +8,7 @@ import { openMealieBackup } from "../adapters/sources/mealie-backup/backup";
 import { mealieBackupSource } from "../adapters/sources/mealie-backup/source";
 import { MOVE_IN_ERROR_MESSAGES, MoveInError } from "../model/move-in-error";
 import type { RecipeDraft } from "../model/recipe-draft";
-import type { MoveInKitchen, MoveInSource } from "./source";
+import { SourceUnavailableError, type MoveInKitchen, type MoveInSource } from "./source";
 
 export type MoveInStatus = "queued" | "running" | "done" | "done-with-issues" | "failed";
 export type MoveInPhase = "inspect" | "recipes" | "done";
@@ -106,6 +106,8 @@ export interface MoveInPorts {
     release(jobId: string, token: string): Promise<void>;
   };
   openArchive(job: MoveInJob): RangeSource | Promise<RangeSource>;
+  /** Where the job's recipes come from, when it isn't the uploaded backup that openArchive reads. */
+  openSource?(job: MoveInJob): Promise<MoveInSource>;
   ownerEmail(ownerId: string): Promise<string | null>;
   writeRecipe(input: { sourceId: string; jobId: string; chefId: string; draft: RecipeDraft }): Promise<RecipeWriteResult>;
   attachPhoto(input: { ownerId: string; recipeId: string; bytes: Uint8Array }): Promise<void>;
@@ -158,7 +160,9 @@ export interface RunCache {
 
 async function open({ job, ports }: Run, cache: RunCache): Promise<Opened> {
   if (cache.opened) return cache.opened;
-  const source = mealieBackupSource(await openMealieBackup(await ports.openArchive(job)));
+  const source = ports.openSource
+    ? await ports.openSource(job)
+    : mealieBackupSource(await openMealieBackup(await ports.openArchive(job)));
   // Once inspect has chosen the kitchen, the job keeps to it.
   const key = job.sourceId
     ? await ports.store.sourceInstanceKey(job.sourceId)
@@ -211,6 +215,7 @@ async function bringPhoto({ job, ports }: Run, kitchen: MoveInKitchen, draft: Re
     await ports.attachPhoto({ ownerId: job.ownerId, recipeId, bytes });
     report.counts.push(["photos", { created: 1 }]);
   } catch (error) {
+    if (stopsTheRun(error)) throw error;
     report.counts.push(["photos", { failed: 1 }]);
     report.events.push(event("item-degraded", `${draft.title} moved in without its photo: ${(error as Error).message}.`, { entity: "photos", sourceKey: draft.sourceKey, targetId: recipeId }));
   }
@@ -269,6 +274,14 @@ async function bringRecipe(run: Run, kitchen: MoveInKitchen, draft: RecipeDraft)
   return report;
 }
 
+/**
+ * An error that is about the source, not the recipe: it can't be reached right now, which the queue tries again later,
+ * or it refused the move-in, which stops the job with its fix-it message. Either way the recipe isn't to blame.
+ */
+function stopsTheRun(error: unknown): boolean {
+  return error instanceof SourceUnavailableError || error instanceof MoveInError;
+}
+
 /** How a passed-over recipe's error reads in its report line: its kind and the start of its message. */
 const ERROR_DETAIL_CHARS = 200;
 
@@ -288,6 +301,7 @@ async function bringOrPassOver(run: Run, kitchen: MoveInKitchen, index: number):
     try {
       return await bringRecipe(run, kitchen, await kitchen.draft(index));
     } catch (error) {
+      if (stopsTheRun(error)) throw error;
       failure = error;
     }
   }
