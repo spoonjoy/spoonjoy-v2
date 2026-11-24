@@ -1,8 +1,9 @@
 // @vitest-environment node
 import { spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
 import {
@@ -1702,13 +1703,61 @@ describe("Journeys workflow", () => {
     const suite = step("Run test suite");
     expect(suite.env).toMatchObject({ PART: "${{ matrix.part }}", PARTS: "${{ strategy.job-total }}" });
     // Part 1 runs the census first, then its shard of the rest without the personas setup the
-    // census already ran; part 2 runs its shard with the personas setup and no census.
+    // census already ran; a later part signs the personas in, then runs its shard without them.
+    // Every shard leaves out the census and the Move in journeys, so the parts split one list.
     expect(suite.run).toContain('pnpm run test:journeys:census || census=$?\n  pnpm run test:journeys:after-census --shard="1/$PARTS"');
     expect(suite.run).toContain(
-      'pnpm exec playwright test -c playwright.journeys.config.ts \\\n    --project iphone-webkit --project desktop-chrome --grep-invert @ouro-census --shard="$PART/$PARTS"',
+      'pnpm exec playwright test -c playwright.journeys.config.ts --no-deps \\\n    --project iphone-webkit --project desktop-chrome --grep-invert "@ouro-census|@move-in" --shard="$PART/$PARTS"',
     );
+    expect(JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8")).scripts["test:journeys:after-census"]).toContain('--grep-invert "@ouro-census|@move-in"');
     const reportUpload = steps.find((candidate) => candidate.name === "Upload journeys report") as unknown as { with: { name: string } };
     expect(reportUpload.with.name).toBe("journeys-report${{ matrix.part != 1 && format('-part-{0}', matrix.part) || '' }}");
+  });
+
+  describe("a later part of the full suite", () => {
+    // Runs the step's script with stand-ins for node and pnpm that log their arguments and exit
+    // with the code set for that command.
+    const runPart = (part: string, codes: { personas?: number; shard?: number; moveIn?: number } = {}) => {
+      const bin = mkdtempSync(join(tmpdir(), "journeys-part-"));
+      const log = join(bin, "calls.log");
+      writeFileSync(join(bin, "node"), `#!/bin/bash\necho "node $*" >> "${log}"\ncase "$*" in *"--project personas"*) exit ${codes.personas ?? 0};; *--shard*) sleep 0.2; exit ${codes.shard ?? 0};; esac\n`, { mode: 0o755 });
+      writeFileSync(join(bin, "pnpm"), `#!/bin/bash\necho "pnpm $*" >> "${log}"\nexit ${codes.moveIn ?? 0}\n`, { mode: 0o755 });
+      const result = spawnSync("bash", ["-e", "-c", step("Run test suite").run as string], {
+        env: { PATH: `${bin}:${process.env.PATH}`, MODE: "full", SUITE: "", PART: part, PARTS: "2", GITHUB_OUTPUT: join(bin, "output") },
+        encoding: "utf8",
+      });
+      const calls = readFileSync(log, "utf8").trim().split("\n");
+      rmSync(bin, { recursive: true, force: true });
+      return { status: result.status, calls, stdout: result.stdout };
+    };
+
+    it("signs the personas in first, then runs the Move in journeys beside its shard without the personas setup", () => {
+      const { status, calls, stdout } = runPart("2");
+      expect(status).toBe(0);
+      expect(calls[0]).toBe("node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts --project personas");
+      expect(calls.slice(1).sort()).toEqual([
+        'node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts --no-deps --project iphone-webkit --project desktop-chrome --grep-invert @ouro-census|@move-in --shard=2/2',
+        "pnpm run test:journeys:move-in",
+      ]);
+      expect(stdout).toBe("");
+    });
+
+    it("fails when its shard or the Move in journeys fail, after both finish, and stops when the sign-ins fail", () => {
+      const shardFails = runPart("2", { shard: 3, moveIn: 5 });
+      expect(shardFails.status).toBe(3);
+      expect(shardFails.calls).toHaveLength(3);
+      expect(runPart("2", { moveIn: 5 }).status).toBe(5);
+      const signInFails = runPart("2", { personas: 7 });
+      expect(signInFails.status).toBe(7);
+      expect(signInFails.calls).toHaveLength(1);
+    });
+
+    it("leaves the Move in journeys to part 2", () => {
+      const { status, calls } = runPart("3");
+      expect(status).toBe(0);
+      expect(calls).toHaveLength(2);
+      expect(calls.join("\n")).not.toContain("test:journeys:move-in");
+    });
   });
 
   it("reports the required journeys check as passed only when every part passed or the suite was skipped", () => {
