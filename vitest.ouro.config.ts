@@ -76,6 +76,9 @@ export default defineConfig({
         // Ouro AX (ax-xray) runs in Node, not a browser; HX covers it in its own Node tests, and
         // leaves it out of its browser coverage the same way.
         "app/lib/ouro/ax/**",
+        // squircleCorners() is a PostCSS plugin that runs in the build, not a browser; HX covers it in its own Node
+        // tests (scripts/squircle-corners.test.mjs), and Spoonjoy's unit tests run it on the app's stylesheet.
+        "app/lib/ouro/squircle-corners.ts",
       ],
       thresholds: { lines: 100, branches: 100, functions: 100, statements: 100 },
     },
