@@ -32,7 +32,8 @@ export function queueJobs(queue: Queue<JobMessage> | undefined, keys: JobKeys): 
   return {
     async enqueue(kind, payload, { key, delaySeconds }) {
       if (!queue) throw new PlatformUnavailableError("jobs", "the JOBS queue binding");
-      if (!(await keys.claim(key, kind.type))) return { enqueued: false };
+      const deliverAt = new Date(Date.now() + (delaySeconds ?? 0) * 1000);
+      if (!(await keys.claim(key, kind.type, { payload, deliverAt }))) return { enqueued: false };
       try {
         await queue.send({ type: kind.type, key, payload }, delaySeconds ? { delaySeconds } : {});
       } catch (error) {
@@ -122,18 +123,20 @@ const AFTER_LEASE_SECONDS = 5;
 
 export function d1JobKeys(db: JobKeysDatabase, now: () => Date = () => new Date()): JobKeys {
   return {
-    async claim(key, type) {
+    async claim(key, type, message) {
       const at = now();
       const lostBefore = new Date(at.getTime() - LOST_AFTER_MS).toISOString();
+      const payload = message ? JSON.stringify(message.payload ?? null) : null;
+      const deliverAt = message ? message.deliverAt.toISOString() : null;
       const result = await db
         .prepare(
-          `INSERT INTO "PlatformJobKey" ("key", "type", "status", "createdAt", "updatedAt") VALUES (?, ?, 'pending', ?, ?)
+          `INSERT INTO "PlatformJobKey" ("key", "type", "status", "payload", "deliverAt", "createdAt", "updatedAt") VALUES (?, ?, 'pending', ?, ?, ?, ?)
            ON CONFLICT ("key") DO UPDATE SET "type" = excluded."type", "status" = 'pending', "leaseUntil" = NULL, "runs" = 0,
-             "updatedAt" = excluded."updatedAt"
+             "payload" = excluded."payload", "deliverAt" = excluded."deliverAt", "updatedAt" = excluded."updatedAt"
            WHERE ("PlatformJobKey"."status" = 'pending' AND "PlatformJobKey"."updatedAt" < ?)
               OR ("PlatformJobKey"."status" = 'running' AND "PlatformJobKey"."leaseUntil" < ?)`,
         )
-        .bind(key, type, at.toISOString(), at.toISOString(), lostBefore, at.toISOString())
+        .bind(key, type, payload, deliverAt, at.toISOString(), at.toISOString(), lostBefore, at.toISOString())
         .run();
       return (result.meta.changes ?? 0) > 0;
     },
@@ -167,8 +170,9 @@ export function d1JobKeys(db: JobKeysDatabase, now: () => Date = () => new Date(
         .run();
     },
     async markDone(key) {
+      // A done job's message is never sent again, so it isn't kept.
       await db
-        .prepare(`UPDATE "PlatformJobKey" SET "status" = 'done', "leaseUntil" = NULL, "updatedAt" = ? WHERE "key" = ?`)
+        .prepare(`UPDATE "PlatformJobKey" SET "status" = 'done', "leaseUntil" = NULL, "payload" = NULL, "deliverAt" = NULL, "updatedAt" = ? WHERE "key" = ?`)
         .bind(now().toISOString(), key)
         .run();
     },
@@ -176,4 +180,25 @@ export function d1JobKeys(db: JobKeysDatabase, now: () => Date = () => new Date(
       await db.prepare(`DELETE FROM "PlatformJobKey" WHERE "key" = ?`).bind(key).run();
     },
   };
+}
+
+/**
+ * Sends again every message whose job is still waiting or running, for a queue that lost what it held: a self-hosted
+ * server's queue lives in its memory, so it runs this when it starts. It is safe to run more than once: a job's key lets
+ * one run at a time and skips a done job, so a duplicate finds the job busy (and comes back after its lease) or done.
+ * A job that was running when the server stopped starts again once its lease is up, resuming from what it saved.
+ * Resolves to how many it sent.
+ */
+export async function replayJobMessages(db: JobKeysDatabase, queue: Queue<JobMessage>, now: () => Date = () => new Date()): Promise<number> {
+  const { results } = await db
+    .prepare(`SELECT "key", "type", "payload", "deliverAt" FROM "PlatformJobKey" WHERE "status" IN ('pending', 'running') AND "payload" IS NOT NULL`)
+    .bind()
+    .all<{ key: string; type: string; payload: string; deliverAt: string | null }>();
+  const at = now().getTime();
+  for (const row of results) {
+    const waitMs = row.deliverAt ? new Date(row.deliverAt).getTime() - at : 0;
+    const delaySeconds = Math.max(0, Math.ceil(waitMs / 1000));
+    await queue.send({ type: row.type, key: row.key, payload: JSON.parse(row.payload) }, delaySeconds ? { delaySeconds } : {});
+  }
+  return results.length;
 }

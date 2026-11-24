@@ -1200,6 +1200,10 @@ model PlatformJobKey {
   leaseUntil DateTime?
   // How many times the handler has run, for maxAttempts.
   runs       Int       @default(0)
+  // The job's message as JSON and when it is due, while it waits or runs, so a self-hosted server
+  // can send it again after a restart (migrations/0054_platform_job_message.sql).
+  payload    String?
+  deliverAt  DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 

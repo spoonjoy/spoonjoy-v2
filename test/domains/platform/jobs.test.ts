@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as platform from "~/domains/platform";
 import { defineJob, jobRegistry, PlatformUnavailableError, retryDelaySeconds, runJob, type JobKeys, type JobMessage } from "~/domains/platform";
 import * as platformServer from "~/domains/platform/index.server";
-import { consumeJobBatch, d1JobKeys, expireDoneJobKeys, JOB_KEY_KEPT_DAYS, jobKeysDatabase, memoryJobs, queueJobs } from "~/domains/platform/index.server";
+import { consumeJobBatch, d1JobKeys, expireDoneJobKeys, JOB_KEY_KEPT_DAYS, jobKeysDatabase, memoryJobs, queueJobs, replayJobMessages } from "~/domains/platform/index.server";
 import { migratedSqliteD1, type MigratedSqlite } from "../../helpers/migrated-sqlite";
 
 const moveIn = defineJob<{ jobId: string }>("move-in.run", { maxAttempts: 3 });
@@ -244,7 +244,7 @@ describe("the D1 job keys", () => {
     expect(await gone.start("k", "move-in.run", 600)).toEqual({ state: "busy", retryInSeconds: 5 });
     const unleased = d1JobKeys(answering(`SELECT "status", "leaseUntil"`, { results: [{ status: "running", leaseUntil: null }] }) as never, () => clock);
     expect(await unleased.start("k", "move-in.run", 600)).toEqual({ state: "busy", retryInSeconds: 5 });
-    const quiet = d1JobKeys(answering(`INSERT INTO "PlatformJobKey" ("key", "type", "status", "createdAt"`, { meta: {} }) as never, () => clock);
+    const quiet = d1JobKeys(answering(`INSERT INTO "PlatformJobKey" ("key", "type", "status", "payload"`, { meta: {} }) as never, () => clock);
     expect(await quiet.claim("other", "move-in.run")).toBe(false);
   });
 
@@ -313,6 +313,78 @@ describe("the D1 job keys", () => {
     expect(await keys.start("k", "move-in.run", 60)).toEqual({ state: "started", run: 1 });
   });
 
+  const kept = (key: string) => database.sqlite.prepare(`SELECT "payload", "deliverAt" FROM "PlatformJobKey" WHERE "key" = ?`).get(key);
+
+  it("keeps a waiting job's message on its key, and drops it once the job is done", async () => {
+    clock = new Date("2026-11-23T12:00:00.000Z");
+    const keys = d1JobKeys(database.binding, () => clock);
+    await keys.claim("k", "move-in.run", { payload: { jobId: "job-1" }, deliverAt: new Date("2026-11-23T12:05:00.000Z") });
+    expect(kept("k")).toEqual({ payload: '{"jobId":"job-1"}', deliverAt: "2026-11-23T12:05:00.000Z" });
+    await keys.start("k", "move-in.run", 60);
+    expect(kept("k")).toMatchObject({ payload: '{"jobId":"job-1"}' });
+    await keys.markDone("k");
+    expect(kept("k")).toEqual({ payload: null, deliverAt: null });
+    // A claim with no message (an older Worker's) keeps none.
+    await keys.claim("bare", "move-in.run");
+    expect(kept("bare")).toEqual({ payload: null, deliverAt: null });
+  });
+
+  it("keeps the message a queue adapter sends, with when it is due", async () => {
+    const send = vi.fn(async () => {});
+    const keys = d1JobKeys(database.binding);
+    const before = Date.now();
+    await queueJobs({ send } as never, keys).enqueue(welcome, { userId: "u1" }, { key: "welcome:u1", delaySeconds: 60 });
+    const row = kept("welcome:u1") as { payload: string; deliverAt: string };
+    expect(JSON.parse(row.payload)).toEqual({ userId: "u1" });
+    expect(Date.parse(row.deliverAt) - before).toBeGreaterThanOrEqual(60_000);
+    // A payload that is left out is kept as null, which D1 can store.
+    await queueJobs({ send } as never, keys).enqueue(welcome, undefined as never, { key: "welcome:none" });
+    expect(kept("welcome:none")).toMatchObject({ payload: "null" });
+  });
+
+  it("sends again every waiting or running job after a restart, keeping what is left of each delay, and none that is done", async () => {
+    clock = new Date("2026-11-23T12:00:00.000Z");
+    const keys = d1JobKeys(database.binding, () => clock);
+    await keys.claim("waiting", "move-in.run", { payload: { jobId: "w" }, deliverAt: clock });
+    await keys.claim("running", "move-in.run", { payload: { jobId: "r" }, deliverAt: clock });
+    await keys.start("running", "move-in.run", 300);
+    await keys.claim("later", "welcome.send", { payload: { userId: "u" }, deliverAt: new Date("2026-11-23T12:05:00.000Z") });
+    await keys.claim("done", "move-in.run", { payload: { jobId: "d" }, deliverAt: clock });
+    await keys.markDone("done");
+    await keys.claim("bare", "move-in.run");
+    later(60);
+    const send = vi.fn(async () => {});
+    expect(await replayJobMessages(database.binding, { send } as never, () => clock)).toBe(3);
+    expect(send.mock.calls).toEqual(expect.arrayContaining([
+      [{ type: "move-in.run", key: "waiting", payload: { jobId: "w" } }, {}],
+      [{ type: "move-in.run", key: "running", payload: { jobId: "r" } }, {}],
+      [{ type: "welcome.send", key: "later", payload: { userId: "u" } }, { delaySeconds: 240 }],
+    ]));
+    // By the real clock when told nothing else: nothing is left to send once every job is done.
+    for (const key of ["waiting", "running", "later"]) await keys.markDone(key);
+    expect(await replayJobMessages(database.binding, { send } as never)).toBe(0);
+  });
+
+  it("runs a job once however many times its message is sent again", async () => {
+    clock = new Date("2026-11-23T12:00:00.000Z");
+    const keys = d1JobKeys(database.binding, () => clock);
+    const sent: JobMessage[] = [];
+    const queue = { send: async (message: JobMessage) => void sent.push(message) };
+    await queueJobs(queue as never, keys).enqueue(moveIn, { jobId: "job-1" }, { key: "move-in:job-1" });
+    // The queue lost its message; the server starts, and the replay runs twice.
+    sent.length = 0;
+    await replayJobMessages(database.binding, queue as never, () => clock);
+    await replayJobMessages(database.binding, queue as never, () => clock);
+    expect(sent).toHaveLength(2);
+    const ran = vi.fn(async () => {});
+    const registry = jobRegistry().on(moveIn, ran);
+    const deliveries = sent.map((body) => ({ body, attempts: 1, ack: vi.fn(), retry: vi.fn() }));
+    await consumeJobBatch({ messages: deliveries } as never, registry, keys);
+    expect(ran).toHaveBeenCalledTimes(1);
+    expect(deliveries.every((delivery) => delivery.ack.mock.calls.length === 1)).toBe(true);
+    expect(await replayJobMessages(database.binding, queue as never, () => clock)).toBe(0);
+  });
+
   it("takes the job keys' database only from a binding that is one", () => {
     expect(jobKeysDatabase(database.binding)).toBe(database.binding);
     for (const candidate of [undefined, null, {}, { prepare: "no" }]) expect(jobKeysDatabase(candidate)).toBeNull();
@@ -362,7 +434,7 @@ describe("the test adapter", () => {
 
 describe("Platform's two barrels", () => {
   it("keeps every adapter out of the port's barrel, behind the server one", () => {
-    for (const adapter of ["queueJobs", "consumeJobBatch", "d1JobKeys", "expireDoneJobKeys", "jobKeysDatabase", "memoryJobs"]) {
+    for (const adapter of ["queueJobs", "consumeJobBatch", "d1JobKeys", "expireDoneJobKeys", "jobKeysDatabase", "memoryJobs", "replayJobMessages"]) {
       expect(Object.keys(platform)).not.toContain(adapter);
       expect(Object.keys(platformServer)).toContain(adapter);
     }

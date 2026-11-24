@@ -72,10 +72,12 @@ vi.mock("../../app/lib/photo-lifecycle.server", async (importOriginal) => ({
 
 const consumeJobBatch = vi.hoisted(() => vi.fn(async () => undefined));
 const expireDoneJobKeys = vi.hoisted(() => vi.fn(async (): Promise<number> => 0));
+const replayJobMessages = vi.hoisted(() => vi.fn(async (): Promise<number> => 0));
 vi.mock("../../app/domains/platform/index.server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../app/domains/platform/index.server")>()),
   consumeJobBatch,
   expireDoneJobKeys,
+  replayJobMessages,
 }));
 
 const worker = (await import("../../workers/app")).default;
@@ -179,6 +181,31 @@ describe("Cloudflare worker app", () => {
     expect(rawDatabase.prepare).toHaveBeenCalledWith("SELECT 1");
     await Promise.all(vi.mocked(ctx.waitUntil).mock.calls.map(([promise]) => promise));
     expect(captureException).toHaveBeenCalledWith(expect.anything(), { error, distinctId: "platform-jobs", route: "scheduled", extras: { sweep: "job-keys" } });
+  });
+
+  it("sends again a self-hosted server's waiting jobs when it starts, and runs no sweep then", async () => {
+    const boot = { cron: "self-host:boot", scheduledTime: 0, noRetry: () => undefined } as ScheduledController;
+    runScheduledPhotoSweep.mockClear();
+    replayJobMessages.mockClear();
+    const rawDatabase = { prepare: vi.fn(), batch: vi.fn() } as unknown as D1Database & { prepare: ReturnType<typeof vi.fn> };
+    const queue = { send: vi.fn() } as unknown as Queue<unknown>;
+    await worker.scheduled!(boot, versionedEnvironment({ DB: rawDatabase, JOBS: queue } as Partial<CloudflareEnvironment>), context());
+    expect(replayJobMessages).toHaveBeenCalledTimes(1);
+    const [db, jobs] = replayJobMessages.mock.calls[0] as unknown as [D1Database, Queue<unknown>];
+    expect(jobs).toBe(queue);
+    db.prepare("SELECT 1");
+    expect(rawDatabase.prepare).toHaveBeenCalledWith("SELECT 1");
+    expect(runScheduledPhotoSweep).not.toHaveBeenCalled();
+    // Without a database or a queue there is nothing to send.
+    await worker.scheduled!(boot, versionedEnvironment({ JOBS: queue } as Partial<CloudflareEnvironment>), context());
+    await worker.scheduled!(boot, versionedEnvironment({ DB: rawDatabase }), context());
+    expect(replayJobMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the boot event the same in the Worker and in the self-hosted server that sends it", async () => {
+    const { readFileSync } = await import("node:fs");
+    expect(readFileSync("workers/app.ts", "utf8")).toContain('const SELF_HOST_BOOT_EVENT = "self-host:boot";');
+    expect(readFileSync("self-host/server.mjs", "utf8")).toContain('await worker.scheduled({ cron: "self-host:boot" })');
   });
 
   it("needs the DB binding to run a batch of platform jobs", async () => {

@@ -10,7 +10,7 @@ import { qaErrorLogsEnabled } from "../app/lib/qa-error-logs.server";
 import { isolateColoReport, isolateRequestReport } from "../app/lib/slow-call.server";
 import { getDb } from "../app/lib/db.server";
 import { jobRegistry, type Jobs } from "../app/domains/platform";
-import { consumeJobBatch, d1JobKeys, expireDoneJobKeys, jobKeysDatabase, queueJobs } from "../app/domains/platform/index.server";
+import { consumeJobBatch, d1JobKeys, expireDoneJobKeys, jobKeysDatabase, queueJobs, replayJobMessages } from "../app/domains/platform/index.server";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
 import { defaultPhotoCache, deliverPhoto, photoKeyFromPath } from "../app/lib/photo-delivery.server";
@@ -260,6 +260,9 @@ async function handleCookSessionBootstrapRequest(
   });
 }
 
+/** The scheduled event a self-hosted server sends itself when it starts; Cloudflare never sends it. */
+const SELF_HOST_BOOT_EVENT = "self-host:boot";
+
 function finalizeResponse(
   response: Response,
   env: CloudflareEnvironment,
@@ -386,7 +389,14 @@ export default {
   // The cron trigger in wrangler.json. The photo sweep runs in PHOTO_SWEEP_MODE, which is a dry
   // run unless that setting is exactly "apply" (see app/lib/photo-lifecycle.server.ts). Old job keys
   // are expired alongside it.
-  async scheduled(_controller, rawEnv, ctx) {
+  async scheduled(controller, rawEnv, ctx) {
+    // A self-hosted server that just started (self-host/server.mjs) sends again the jobs its in-memory queue lost.
+    if (controller.cron === SELF_HOST_BOOT_EVENT) {
+      const env = withTransientD1Retry(rawEnv);
+      const db = jobKeysDatabase(env.DB);
+      if (db && env.JOBS) await replayJobMessages(db, env.JOBS);
+      return;
+    }
     const aiEnv = await applyServerAi(rawEnv);
     // Each sweep wraps D1 for retries on its own, so one sweep's stalled reads never use up another's re-sends.
     ctx.waitUntil(runScheduledPhotoSweep(withTransientD1Retry(aiEnv)));

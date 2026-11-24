@@ -8,6 +8,7 @@ export {
   JOB_KEY_KEPT_DAYS,
   jobKeysDatabase,
   queueJobs,
+  replayJobMessages,
   type ConsumeOptions,
   type JobKeysDatabase,
 } from "./adapters/cloudflare-jobs.server";
