@@ -29,7 +29,10 @@ function itemsOf(page: unknown): Json[] {
 
 // The cook's token goes only to the address they gave, over https, and the move-in waits only so long for each answer
 // and reads only so much of it, so a slow or strange server can't hold a run past its time or its memory.
-const REQUEST_MS = 10_000;
+// The answer has to start within HEADERS_MS; its body then has BODY_MS more, so a large photo on a slow home upload
+// still arrives, while a run never waits past its segment.
+const HEADERS_MS = 10_000;
+const BODY_MS = 15_000;
 const JSON_MAX_BYTES = 16 * 1024 * 1024;
 const PHOTO_MAX_BYTES = 20 * 1024 * 1024;
 
@@ -62,9 +65,10 @@ class AnswerError extends Error {
 
 /** The body, up to `maxBytes`; a body cut off partway is an outage, like a server that can't be reached. */
 async function readBody(response: Response, path: string, maxBytes: number): Promise<Uint8Array> {
+  if (!response.body) return new Uint8Array();
   const chunks: Uint8Array[] = [];
   let size = 0;
-  const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+  const reader = response.body.getReader();
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -93,26 +97,45 @@ function client({ address, token, fetch }: MealieApiConnection) {
   const base = baseOf(address).href.replace(/\/$/, "");
   const request = async (path: string, maxBytes: number): Promise<Uint8Array> => {
     let response: Response;
+    const timer = new AbortController();
+    const headers = setTimeout(() => timer.abort(new Error("the server took too long to answer")), HEADERS_MS);
     try {
       response = await fetch(`${base}${path}`, {
         headers: { authorization: `Bearer ${token}`, accept: "application/json" },
         // A redirect could carry the token to another server, so the move-in never follows one.
         redirect: "manual",
-        signal: AbortSignal.timeout(REQUEST_MS),
+        signal: timer.signal,
       });
     } catch (error) {
       throw new SourceUnavailableError(`the recipe server can't be reached: ${messageOf(error)}`);
+    } finally {
+      clearTimeout(headers);
     }
     if (response.status === 401 || response.status === 403) throw new MoveInError("server-token", `${path} answered ${response.status}`);
     if (response.status === 429 || response.status >= 500) throw new SourceUnavailableError(`the recipe server answered ${response.status} for ${path}`);
     if (response.status !== 200) throw new AnswerError(response.status, `the recipe server answered ${response.status} for ${path}`);
-    return readBody(response, path, maxBytes);
+    const body = setTimeout(() => timer.abort(new Error("the answer took too long to arrive")), BODY_MS);
+    try {
+      return await readBody(response, path, maxBytes);
+    } finally {
+      clearTimeout(body);
+    }
   };
   return {
     /** The address with no trailing slash, as the move-in keeps it. */
     base,
     json: async (path: string): Promise<unknown> => JSON.parse(new TextDecoder().decode(await request(path, JSON_MAX_BYTES))),
     bytes: (path: string): Promise<Uint8Array> => request(path, PHOTO_MAX_BYTES),
+    /**
+     * An outage while asking for one recipe or photo is the server's only if the server is down as a whole: when it
+     * still answers, the trouble is that one item's, which counts against it like any failure, so it's passed over.
+     */
+    async itemOutage(error: unknown): Promise<never> {
+      if (!(error instanceof SourceUnavailableError)) throw error;
+      const answers = await request("/api/app/about", JSON_MAX_BYTES).then(() => true, () => false);
+      if (answers) throw new Error(`the recipe server couldn't give this one: ${error.message}`);
+      throw error;
+    },
   };
 }
 
@@ -161,11 +184,12 @@ export async function mealieApiSource(connection: MealieApiConnection): Promise<
         return { photos: listed.filter((recipe) => recipe.hasPhoto).length, tags, categories, tools };
       },
       entry: (index) => ({ sourceKey: listed[index].sourceKey, title: listed[index].title }),
-      draft: async (index) => apiRecipeDraft((await api.json(`/api/recipes/${encodeURIComponent(listed[index].slug)}`)) as Json),
+      draft: async (index) =>
+        apiRecipeDraft((await api.json(`/api/recipes/${encodeURIComponent(listed[index].slug)}`).catch(api.itemOutage)) as Json),
       hasPhoto: (draft: RecipeDraft) => draft.photoPath !== "",
       async readPhoto(draft) {
-        return api.bytes(draft.photoPath).catch((error: unknown) => {
-          if (error instanceof AnswerError && error.status === 404) throw new Error("the server has no photo for this recipe");
+        return api.bytes(draft.photoPath).catch(api.itemOutage).catch((error: unknown) => {
+          if (error instanceof AnswerError && error.status !== 200) throw new Error("the server has no photo for this recipe");
           throw error;
         });
       },
