@@ -240,13 +240,33 @@ export const DATA_REQUEST_RETRY_DELAY_MS = 1_000;
 type DataRoute = Pick<Route, "fetch" | "fulfill" | "abort" | "request">;
 
 /**
+ * How long a form that carries a file waits for its answer. The Worker reads the whole upload before it answers, so a
+ * backup of a few MB on a CI runner can take longer than ROUTED_FETCH_TIMEOUT_MS: in Journeys run 45429963778 the Move
+ * in page's upload got no answer within it and the page saw a reset connection. A journey that uploads waits as long
+ * for what comes next (move-in.ts's dropBackup).
+ */
+export const UPLOAD_FETCH_TIMEOUT_MS = 60_000;
+
+/**
+ * True for a submission whose multipart body carries a file part, or whose body Playwright can't show, as with some
+ * file uploads. A multipart form of plain fields, such as a progress check, is not one and keeps its resend.
+ */
+export function isFileUpload(request: { method(): string; headers(): Record<string, string>; postDataBuffer(): Buffer | null }): boolean {
+  if (SAFE_METHODS.has(request.method()) || !/^multipart\/form-data\b/i.test(request.headers()["content-type"] ?? "")) return false;
+  const body = request.postDataBuffer();
+  return body === null || body.includes('filename="');
+}
+
+/**
  * Answers a data request, sending it once more, a second later, when its connection dropped
  * before any answer, as a person on a flaky connection would submit again. It is sent at most
  * twice. A GET or HEAD with no answer within ROUTED_FETCH_TIMEOUT_MS is sent once more too; a
  * submission with none is not, since the Worker may be applying it. A submission is not always
  * idempotent, but one whose connection dropped before an answer may never have reached the
  * Worker, and a journey checks what the page shows next, so a submission applied twice still
- * fails it. Every answer reaches the page unchanged, redirects included, though whole rather than
+ * fails it. A form with a file (isFileUpload) waits UPLOAD_FETCH_TIMEOUT_MS instead and is never sent again, since a
+ * second copy would make a second recipe, photo or move-in.
+ * Every answer reaches the page unchanged, redirects included, though whole rather than
  * streamed: the app has no deferred loader data, and one that streams would need this revisited.
  * When both tries fail, or the request fails any other way, the page's fetch fails as a lost request ("Failed to
  * fetch" in Chromium, "Load failed" in WebKit, both app/lib/network-failure.ts's), so the app's own
@@ -259,14 +279,16 @@ export async function answerDataRequest(
   wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   onRetry: (method: string, path: string, error: Error) => void = reportDataRequestAgain,
 ): Promise<void> {
-  const options = { maxRedirects: 0, timeout: ROUTED_FETCH_TIMEOUT_MS };
+  const request = route.request();
+  const upload = isFileUpload(request);
+  const options = { maxRedirects: 0, timeout: upload ? UPLOAD_FETCH_TIMEOUT_MS : ROUTED_FETCH_TIMEOUT_MS };
   let response: APIResponse;
   try {
     response = await route.fetch(options);
   } catch (error) {
-    const request = route.request();
     const unanswered = isFetchTimeout(error) && SAFE_METHODS.has(request.method());
-    if (!unanswered && !isFetchTransportFailure(error)) {
+    // An upload is never sent again: a second copy would make a second recipe, photo or move-in.
+    if (upload || (!unanswered && !isFetchTransportFailure(error))) {
       await route.abort("connectionreset").catch(() => undefined);
       return;
     }

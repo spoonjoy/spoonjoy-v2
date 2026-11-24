@@ -14,6 +14,7 @@ import { bytesSource } from "../../../app/domains/move-in/adapters/archive/zip";
 import { openMealieBackup } from "../../../app/domains/move-in/adapters/sources/mealie-backup/backup";
 import { chooseGroup, recipeDrafts } from "../../../app/domains/move-in/adapters/sources/mealie-backup/database";
 import { planOrganizerAssignment } from "../../../app/domains/kitchen/model/organizer";
+import { UPLOAD_FETCH_TIMEOUT_MS } from "./app-ready";
 import { requiredLabel } from "./forms";
 import { chooseMenuItem } from "./menu";
 import { pathUrl, waitForHydration } from "./navigation";
@@ -90,7 +91,8 @@ async function dropBackup(page: Page, version: string) {
   const part = page.waitForRequest(isPart);
   await page.getByRole("button", { name: "Move in", exact: true }).click();
   await part;
-  await expect(page).toHaveURL(/\/move-in\?job=movein_/);
+  // The page moves on once the Worker has read the whole upload, which Journeys gives as long as an upload takes.
+  await expect(page).toHaveURL(/\/move-in\?job=movein_/, { timeout: UPLOAD_FETCH_TIMEOUT_MS });
 }
 
 export type JourneyArgs = Pick<Parameters<Parameters<typeof test>[2]>[0], "page" | "expectAccessible" | "verifyAfterReload">;
