@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { getLocalDb } from "~/lib/db.server";
-import { recipeViewerFor } from "~/lib/recipe-viewer.server";
+import { recipeViewerD1Query, recipeViewerFor, recipeViewerFromD1Rows } from "~/lib/recipe-viewer.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
 import { createTestUser } from "../utils";
@@ -53,5 +53,23 @@ describe("recipeViewerFor", () => {
     expect(await recipeViewerFor(dee, { d1: d1.binding })).toEqual({ id: dee, householdChefIds: new Set() });
     expect(d1.statements.every((statement) => statement.sql.includes("HouseholdMember"))).toBe(true);
     expect(d1.statements).toHaveLength(3);
+  });
+});
+
+describe("recipeViewerFor without a database", () => {
+  it("refuses a signed-in user it has no way to look up", async () => {
+    await expect(recipeViewerFor(ann, {})).rejects.toThrow("recipeViewerFor needs a D1 binding or a Prisma client");
+  });
+});
+
+describe("the reader as one D1 statement", () => {
+  it("reads the same cooks as recipeViewerFor, and nobody for a signed-out visitor", async () => {
+    const [sql, ...params] = recipeViewerD1Query(ann);
+    const rows = await d1.binding.prepare(sql).bind(...params).all();
+    expect(recipeViewerFromD1Rows(ann, rows.results)).toEqual({ id: ann, householdChefIds: new Set([ben, cal]) });
+
+    const [none] = recipeViewerD1Query(null);
+    expect((await d1.binding.prepare(none).all()).results).toEqual([]);
+    expect(recipeViewerFromD1Rows(null, [])).toBeNull();
   });
 });

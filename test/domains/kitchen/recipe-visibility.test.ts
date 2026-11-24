@@ -73,6 +73,7 @@ describe("choosing household", () => {
 describe("a fork's visibility", () => {
   it("keeps the level of a cook's own recipe", () => {
     for (const level of RECIPE_VISIBILITIES) expect(forkedRecipeVisibility({ chefId: "me", visibility: level }, "me", "public")).toBe(level);
+    expect(forkedRecipeVisibility({ chefId: "me", visibility: "bogus" }, "me", "public")).toBe("private");
   });
 
   it("starts a fork of another cook's public recipe at the forking cook's default", () => {
