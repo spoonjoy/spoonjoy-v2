@@ -385,9 +385,10 @@ export default {
   // run unless that setting is exactly "apply" (see app/lib/photo-lifecycle.server.ts). Old job keys
   // are expired alongside it.
   async scheduled(_controller, rawEnv, ctx) {
+    // Each sweep wraps D1 for retries on its own, so one sweep's stalled reads never use up another's re-sends.
+    ctx.waitUntil(runScheduledPhotoSweep(withTransientD1Retry(rawEnv)));
+    ctx.waitUntil(runScheduledMoveInSweep(withTransientD1Retry(rawEnv), new Date()));
     const env = withTransientD1Retry(rawEnv);
-    ctx.waitUntil(runScheduledPhotoSweep(env));
-    ctx.waitUntil(runScheduledMoveInSweep(env, new Date()));
     // Done job keys older than JOB_KEY_KEPT_DAYS are forgotten, so the table doesn't grow without end;
     // a sweep that fails is reported, and the next one catches up.
     const jobKeys = jobKeysDatabase(env.DB);

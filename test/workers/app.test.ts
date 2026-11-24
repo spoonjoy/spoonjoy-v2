@@ -167,8 +167,16 @@ describe("Cloudflare worker app", () => {
     const error = new Error("D1 is down");
     expireDoneJobKeys.mockRejectedValueOnce(error);
     const ctx = context();
-    await worker.scheduled!(cron, versionedEnvironment({ DB: { prepare: vi.fn() } as unknown as D1Database }), ctx);
+    const rawDatabase = { prepare: vi.fn(), batch: vi.fn() } as unknown as D1Database & { prepare: ReturnType<typeof vi.fn> };
+    await worker.scheduled!(cron, versionedEnvironment({ DB: rawDatabase }), ctx);
     expect(expireDoneJobKeys).toHaveBeenCalledTimes(1);
+    // Each sweep gets its own retry-wrapped database, so one sweep's stalled reads never use up another's re-sends.
+    const [jobKeys] = expireDoneJobKeys.mock.calls[0] as unknown as [D1Database];
+    const photoSweepEnv = runScheduledPhotoSweep.mock.calls.at(-1)?.[0] as unknown as { DB: D1Database };
+    expect(jobKeys).not.toBe(rawDatabase);
+    expect(jobKeys).not.toBe(photoSweepEnv.DB);
+    jobKeys.prepare("SELECT 1");
+    expect(rawDatabase.prepare).toHaveBeenCalledWith("SELECT 1");
     await Promise.all(vi.mocked(ctx.waitUntil).mock.calls.map(([promise]) => promise));
     expect(captureException).toHaveBeenCalledWith(expect.anything(), { error, distinctId: "platform-jobs", route: "scheduled", extras: { sweep: "job-keys" } });
   });

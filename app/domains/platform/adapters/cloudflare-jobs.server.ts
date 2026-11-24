@@ -90,11 +90,29 @@ async function reportFailure(options: ConsumeOptions, message: JobMessage, error
 /** A done key is kept this many days, so the same job enqueued again within them does nothing. */
 export const JOB_KEY_KEPT_DAYS = 30;
 
-/** Forgets the keys of jobs done more than JOB_KEY_KEPT_DAYS ago; the scheduled sweep runs it. Resolves to how many. */
-export async function expireDoneJobKeys(db: JobKeysDatabase, now: () => Date = () => new Date()): Promise<number> {
+/**
+ * Forgets the keys of jobs done more than JOB_KEY_KEPT_DAYS ago; the scheduled sweep runs it. It deletes a chunk at
+ * a time, so no one statement runs long, and at most maxChunks a sweep; the next sweep carries on. Resolves to how many.
+ */
+export async function expireDoneJobKeys(
+  db: JobKeysDatabase,
+  now: () => Date = () => new Date(),
+  { chunk = 500, maxChunks = 20 }: { chunk?: number; maxChunks?: number } = {},
+): Promise<number> {
   const before = new Date(now().getTime() - JOB_KEY_KEPT_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const result = await db.prepare(`DELETE FROM "PlatformJobKey" WHERE "status" = 'done' AND "updatedAt" < ?`).bind(before).run();
-  return result.meta.changes ?? 0;
+  let forgotten = 0;
+  for (let round = 0; round < maxChunks; round += 1) {
+    const result = await db
+      .prepare(
+        `DELETE FROM "PlatformJobKey" WHERE "key" IN (SELECT "key" FROM "PlatformJobKey" WHERE "status" = 'done' AND "updatedAt" < ? LIMIT ?)`,
+      )
+      .bind(before, chunk)
+      .run();
+    const changes = result.meta.changes ?? 0;
+    forgotten += changes;
+    if (changes < chunk) break;
+  }
+  return forgotten;
 }
 
 /** A key waiting this long has lost its message (a send that failed after the claim, or a dropped delivery). */
