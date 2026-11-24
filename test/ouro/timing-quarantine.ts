@@ -1,7 +1,7 @@
 // Ouro UI tests that race the clock on a shared CI runner, so they fail pull requests whose change
 // they never read. They run outside the required Ouro UI step, in Storybook's non-blocking
 // "Ouro UI timing tests" step (.github/workflows/storybook.yml), until Ouro UI makes them wait for
-// the browser's own events or bounds them generously. The tests are Ouro UI's, installed with it,
+// the browser's own events or bounds them generously (ourostack/ouro-ui#3518). The tests are Ouro UI's, installed with it,
 // so this list is Spoonjoy's and an Ouro update leaves it alone. Each name is the test's describe
 // and its title, as Vitest joins them.
 export const OURO_TIMING_QUARANTINE = [
