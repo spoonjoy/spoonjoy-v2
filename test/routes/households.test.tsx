@@ -213,6 +213,24 @@ describe("/households/:id", () => {
     expect(payload(await call(householdLoader, `/households/${id}`, "ann", undefined, mail)).household.emailInvites).toEqual([]);
   });
 
+  it("cancels an email invite for its owner, so its link stops working; anyone else is refused with 403", async () => {
+    const sent: Array<{ text: string }> = [];
+    const mail = { ...flagsOn, SPOONJOY_EMAIL_FROM: "hello@spoonjoy.app", EMAIL: { send: async (message: { text: string }) => { sent.push(message); } } };
+    const id = await makeHousehold();
+    await call(joinAction, `/join/${await makeInvite(id)}`, "ben", {});
+    await call(householdAction, `/households/${id}`, "ann", { intent: "email-invite", email: "cal@example.com" }, mail);
+    const token = /\/join\/([A-Za-z0-9_-]+)/.exec(sent[0]!.text)![1]!;
+    const [pending] = payload(await call(householdLoader, `/households/${id}`, "ann", undefined, mail)).household.emailInvites;
+
+    const refused = await call(householdAction, `/households/${id}`, "ben", { intent: "revoke-invite", inviteId: pending.id });
+    expect(statusOf(refused)).toBe(403);
+    expect(statusOf(await call(householdAction, `/households/${id}`, "ann", { intent: "revoke-invite", inviteId: "nope" }))).toBe(400);
+
+    expect(payload(await call(householdAction, `/households/${id}`, "ann", { intent: "revoke-invite", inviteId: pending.id }))).toEqual({ done: "revoked" });
+    expect(payload(await call(householdLoader, `/households/${id}`, "ann", undefined, mail)).household.emailInvites).toEqual([]);
+    expect(statusOf(await call(joinAction, `/join/${token}`, "cal", {}))).toBe(400);
+  });
+
   it("refuses an email invite from a non-owner (403), without an address (400), and where mail can't go (503)", async () => {
     const refusing = { ...flagsOn, SPOONJOY_EMAIL_FROM: "hello@spoonjoy.app", EMAIL: { send: async () => { throw new Error("refused"); } } };
     const id = await makeHousehold();
@@ -519,12 +537,14 @@ describe("/households/:id", () => {
     expect(within(people).getByText("View-only")).toBeTruthy();
     const shared = screen.getByRole("list", { name: "Shared" });
     expect(within(shared).getByRole("link", { name: /Shopping lists/ }).getAttribute("href")).toBe("/households/h1/lists");
-    await userEvent.click(screen.getByRole("button", { name: "Make invite link" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Copy invite link" }));
     expect(await screen.findByDisplayValue("https://spoonjoy.app/join/tok")).toBeTruthy();
-    expect(screen.getByText("Anyone with this link joins as a member. It works once, for 14 days.")).toBeTruthy();
+    expect(await screen.findByText("Link copied. Anyone with it joins as a member. It works once, for 14 days.")).toBeTruthy();
+    expect(await navigator.clipboard.readText()).toBe("https://spoonjoy.app/join/tok");
   });
 
-  it("offers an owner an email invite where mail works, says it went, and lists who hasn't joined yet", async () => {
+  it("invites from one form: copy a link, or send it to an address where mail works", async () => {
     const submitted: Array<Record<string, string>> = [];
     const pageFor = (canEmailInvites: boolean) =>
       createTestRoutesStub([
@@ -538,7 +558,7 @@ describe("/households/:id", () => {
               myRole: "owner",
               canInvite: true,
               canEmailInvites,
-              emailInvites: canEmailInvites ? [{ id: "i1", email: "dee@example.com", roleLabel: "Member" }] : [],
+              emailInvites: [],
               members: [{ userId: "ann", username: "ann_cooks", photoUrl: null, role: "owner", roleLabel: "Owner", me: true }],
             },
           }),
@@ -552,20 +572,61 @@ describe("/households/:id", () => {
     const NoMail = pageFor(false);
     render(<NoMail initialEntries={["/households/h1"]} />);
     await screen.findByRole("heading", { level: 1, name: "Home" });
-    expect(screen.queryByLabelText(/Email address/)).toBeNull();
-    expect(screen.queryByRole("list", { name: "Waiting to join" })).toBeNull();
+    const linkOnly = screen.getByRole("form", { name: "Invite someone" });
+    expect(within(linkOnly).queryByLabelText(/Email address/)).toBeNull();
+    expect(within(linkOnly).queryByRole("button", { name: "Send invite" })).toBeNull();
+    expect(within(linkOnly).getByRole("button", { name: "Copy invite link" })).toBeTruthy();
     cleanup();
 
     const WithMail = pageFor(true);
     render(<WithMail initialEntries={["/households/h1"]} />);
     await screen.findByRole("heading", { level: 1, name: "Home" });
-    expect(within(screen.getByRole("list", { name: "Waiting to join" })).getByText("dee@example.com")).toBeTruthy();
-    const form = screen.getByRole("form", { name: "Invite by email" });
+    const form = screen.getByRole("form", { name: "Invite someone" });
+    expect(within(form).getAllByLabelText("They join as")).toHaveLength(1);
+    const send = within(form).getByRole("button", { name: "Send invite" });
+    expect(send.getAttribute("aria-disabled")).toBe("true");
     await userEvent.type(within(form).getByLabelText(/Email address/), "cal@example.com");
+    expect(send.getAttribute("aria-disabled")).toBeNull();
     await userEvent.selectOptions(within(form).getByLabelText("They join as"), "viewer");
-    await userEvent.click(within(form).getByRole("button", { name: "Send invite" }));
+    await userEvent.click(send);
     expect(await screen.findByText("Invite sent to cal@example.com.")).toBeTruthy();
-    expect(submitted).toEqual([{ intent: "email-invite", email: "cal@example.com", role: "viewer" }]);
+    expect(submitted).toEqual([{ role: "viewer", email: "cal@example.com", intent: "email-invite" }]);
+    expect((within(form).getByLabelText(/Email address/) as HTMLInputElement).value).toBe("");
+  });
+
+  it("lists invites waiting to join under their heading, each with a way to cancel it", async () => {
+    const submitted: Array<Record<string, string>> = [];
+    const Stub = createTestRoutesStub([
+      {
+        path: "/households/:id",
+        Component: HouseholdPage,
+        loader: () => ({
+          household: {
+            id: "h1",
+            name: "Home",
+            myRole: "owner",
+            canInvite: true,
+            canEmailInvites: true,
+            emailInvites: [
+              { id: "i1", email: "dee@example.com", roleLabel: "Member" },
+              { id: "i2", email: "eve@example.com", roleLabel: "View-only" },
+            ],
+            members: [{ userId: "ann", username: "ann_cooks", photoUrl: null, role: "owner", roleLabel: "Owner", me: true }],
+          },
+        }),
+        action: async ({ request }: { request: Request }) => {
+          submitted.push(Object.fromEntries((await request.formData()) as unknown as Iterable<[string, string]>));
+          return { done: "revoked" };
+        },
+      },
+    ]);
+    render(<Stub initialEntries={["/households/h1"]} />);
+    expect(await screen.findByRole("heading", { level: 3, name: "Waiting to join" })).toBeTruthy();
+    const waiting = screen.getByRole("list", { name: "Waiting to join" });
+    expect(within(waiting).getByText("dee@example.com")).toBeTruthy();
+    expect(within(waiting).getByText("View-only")).toBeTruthy();
+    await userEvent.click(within(waiting).getByRole("button", { name: "Cancel invite to eve@example.com" }));
+    await vi.waitFor(() => expect(submitted).toEqual([{ intent: "revoke-invite", inviteId: "i2" }]));
   });
 
   it("hides the invite form from someone who can't invite, and shows an action's error", async () => {
@@ -588,7 +649,7 @@ describe("/households/:id", () => {
     ]);
     render(<Stub initialEntries={["/households/h1"]} />);
     await screen.findByRole("heading", { level: 1, name: "Home" });
-    expect(screen.queryByRole("button", { name: "Make invite link" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy invite link" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Leave household" }));
     expect(await screen.findByText("Make someone else an owner before you leave.")).toBeTruthy();
   });

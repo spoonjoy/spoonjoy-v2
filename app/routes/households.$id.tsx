@@ -1,5 +1,5 @@
 import type { Route } from "./+types/households.$id";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Ellipsis, ListChecks } from "lucide-react";
 import { Form as RouterForm, data, redirect, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { Alert } from "~/components/ouro/alert/alert";
@@ -37,6 +37,7 @@ import {
   leave,
   removeFromHousehold,
   renameHousehold,
+  revokeInvite,
 } from "~/domains/households-and-identity";
 import { OBJECTIONABLE_CONTENT_MESSAGE, containsObjectionableContent } from "~/lib/objectionable-terms";
 import { cloudflarePlatform, type CloudflarePlatformEnv } from "~/domains/platform/index.server";
@@ -120,6 +121,16 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     if (!renamed.ok) return data({ error: renamed.error }, { status: renamed.forbidden ? 403 : 400 });
     return { done: "renamed" as const };
   }
+  if (intent === "revoke-invite") {
+    const revoked = await revokeInvite(store, {
+      householdId: params.id,
+      userId,
+      inviteId: String(form.get("inviteId") ?? ""),
+      now: new Date(),
+    });
+    if (!revoked.ok) return data({ error: revoked.error }, { status: revoked.forbidden ? 403 : 400 });
+    return { done: "revoked" as const };
+  }
   if (intent === "role") {
     const changed = await changeMemberRole(store, {
       householdId: params.id,
@@ -152,6 +163,20 @@ export default function HouseholdPage() {
     ? { inviteUrl: actionData.inviteUrl, invitedAs: actionData.invitedAs, inviteDays: actionData.inviteDays }
     : null;
   const invitedEmail = actionData && "invitedEmail" in actionData ? actionData.invitedEmail : null;
+  // The address typed for an email invite: Send invite needs one, and a sent invite clears it.
+  const [inviteEmail, setInviteEmail] = useState("");
+  useEffect(() => {
+    if (invitedEmail) setInviteEmail("");
+  }, [invitedEmail]);
+  // A new invite link goes straight to the clipboard where the browser allows it; the field below shows it either way.
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
+  useEffect(() => {
+    if (!invite?.inviteUrl) return;
+    navigator.clipboard?.writeText(invite.inviteUrl).then(
+      () => setCopiedLink(invite.inviteUrl),
+      () => setCopiedLink(null),
+    );
+  }, [invite?.inviteUrl]);
   const submit = useSubmit();
   // The person whose role change or removal the server is still deciding. Their row keeps the role it has, with a
   // spinner, until the answer comes back: the new role, or the reason in the alert above and the old role kept.
@@ -258,16 +283,39 @@ export default function HouseholdPage() {
         {household.canInvite ? (
           <section className="mt-10" aria-labelledby="household-invite">
             <SectionHeader id="household-invite" title="Invite someone" />
-            <Form method="post" render={<RouterForm />} className="mt-4 gap-4">
-              <input type="hidden" name="intent" value="invite" />
-              <NativeSelect
-                label="They join as"
-                name="role"
-                defaultValue="member"
-                options={INVITE_ROLE_OPTIONS}
-              />
-              <div className="flex sm:justify-end">
-                <Button type="submit">Make invite link</Button>
+            <Form method="post" render={<RouterForm />} className="mt-4 gap-4" aria-labelledby="household-invite">
+              <NativeSelect label="They join as" name="role" defaultValue="member" options={INVITE_ROLE_OPTIONS} />
+              {household.canEmailInvites ? (
+                <TextField
+                  label="Email address"
+                  name="email"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(event) => setInviteEmail(event.currentTarget.value)}
+                  description="We email them a link that works only for their account. Or copy a link to share yourself."
+                />
+              ) : null}
+              <div className="flex flex-wrap gap-2 sm:justify-end">
+                <Button
+                  type="submit"
+                  name="intent"
+                  value="invite"
+                  formNoValidate
+                  variant={household.canEmailInvites ? "outline" : undefined}
+                  tone={household.canEmailInvites ? "secondary" : undefined}
+                >
+                  Copy invite link
+                </Button>
+                {household.canEmailInvites ? (
+                  <Button
+                    type="submit"
+                    name="intent"
+                    value="email-invite"
+                    disabledReason={inviteEmail.trim() ? undefined : "Enter their email address first."}
+                  >
+                    Send invite
+                  </Button>
+                ) : null}
               </div>
             </Form>
             {invite ? (
@@ -276,38 +324,47 @@ export default function HouseholdPage() {
                   <TextField label="Invite link" value={invite.inviteUrl} readOnly className="grow" />
                   <CopyButton value={invite.inviteUrl} label="Copy link" />
                 </div>
-                <Text tone="muted">
-                  {`Anyone with this link joins ${invite.invitedAs}. It works once, for ${invite.inviteDays} days.`}
+                <Text tone="muted" role="status">
+                  {copiedLink === invite.inviteUrl
+                    ? `Link copied. Anyone with it joins ${invite.invitedAs}. It works once, for ${invite.inviteDays} days.`
+                    : `Anyone with this link joins ${invite.invitedAs}. It works once, for ${invite.inviteDays} days.`}
                 </Text>
               </div>
-            ) : null}
-            {household.canEmailInvites ? (
-              <Form method="post" render={<RouterForm />} className="mt-8 gap-4" aria-label="Invite by email">
-                <input type="hidden" name="intent" value="email-invite" />
-                <TextField
-                  label="Email address"
-                  name="email"
-                  type="email"
-                  required
-                  description="We email them a link that works only for their account."
-                />
-                <NativeSelect label="They join as" name="role" defaultValue="member" options={INVITE_ROLE_OPTIONS} />
-                <div className="flex sm:justify-end">
-                  <Button type="submit" variant="outline" tone="secondary">
-                    Send invite
-                  </Button>
-                </div>
-              </Form>
             ) : null}
             {invitedEmail ? (
               <Text role="status" className="mt-4">{`Invite sent to ${invitedEmail}.`}</Text>
             ) : null}
             {household.emailInvites.length > 0 ? (
-              <ItemGroup aria-label="Waiting to join" variant="divided" className="mt-6">
-                {household.emailInvites.map((pending) => (
-                  <Item key={pending.id} title={pending.email} actions={<Badge tone="secondary" variant="soft">{pending.roleLabel}</Badge>} />
-                ))}
-              </ItemGroup>
+              <div className="mt-8">
+                <SectionHeader
+                  id="household-waiting"
+                  title="Waiting to join"
+                  level={3}
+                  meta={household.emailInvites.length === 1 ? "1 invite" : `${household.emailInvites.length} invites`}
+                />
+                <ItemGroup aria-label="Waiting to join" variant="divided" className="mt-2">
+                  {household.emailInvites.map((pending) => (
+                    <Item
+                      key={pending.id}
+                      title={pending.email}
+                      actions={
+                        <div className="flex items-center gap-2">
+                          <Badge tone="secondary" variant="soft">
+                            {pending.roleLabel}
+                          </Badge>
+                          <RouterForm method="post">
+                            <input type="hidden" name="intent" value="revoke-invite" />
+                            <input type="hidden" name="inviteId" value={pending.id} />
+                            <Button type="submit" variant="outline" tone="secondary" aria-label={`Cancel invite to ${pending.email}`}>
+                              Cancel
+                            </Button>
+                          </RouterForm>
+                        </div>
+                      }
+                    />
+                  ))}
+                </ItemGroup>
+              </div>
             ) : null}
           </section>
         ) : null}

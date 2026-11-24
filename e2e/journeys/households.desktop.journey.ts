@@ -31,6 +31,15 @@ async function attachLocatorScreenshot(testInfo: TestInfo, locator: Locator, nam
   await testInfo.attach(name, { body: await locator.screenshot({ animations: "disabled" }), contentType: "image/png" });
 }
 
+/**
+ * Screenshots one element in the middle of the screen, so the sticky top bar can't cover any of it (a full-page capture
+ * draws that bar wherever the page was scrolled to).
+ */
+async function attachElementScreenshot(testInfo: TestInfo, locator: Locator, name: string) {
+  await locator.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  await testInfo.attach(name, { body: await locator.screenshot({ animations: "disabled" }), contentType: "image/png" });
+}
+
 /** Opens `name` from the Kitchen's Cook together list at the given size, then checks it after a reload. */
 async function openFromKitchen(
   page: Page,
@@ -97,12 +106,12 @@ test.describe("Households", () => {
     });
 
     // An invite link for a member.
-    await page.getByRole("button", { name: "Make invite link", exact: true }).click();
+    await page.getByRole("form", { name: "Invite someone" }).getByRole("button", { name: "Copy invite link", exact: true }).click();
     const linkField = page.getByLabel("Invite link");
     await expect(linkField).toHaveValue(/\/join\/[A-Za-z0-9_-]{43}$/);
     const inviteUrl = await linkField.inputValue();
     await expectAccessible();
-    await attachScreenshot(testInfo, page, "owner-invite-link");
+    await attachElementScreenshot(testInfo, page.getByRole("region", { name: "Invite someone" }), "owner-invite-link");
 
     // The joiner opens the link in their own browser and joins.
     const joinerContext = await browser.newContext({ storageState: scratchDesktopStorageStatePath(SCRATCH_INDEX) });
@@ -122,7 +131,7 @@ test.describe("Households", () => {
       await expect(joinerPage.getByRole("heading", { level: 1, name, exact: true })).toBeVisible();
       await expect(people(joinerPage).getByText(`${joiner.username} (you)`, { exact: true })).toBeVisible();
       await expect(people(joinerPage).getByText(owner.username, { exact: true })).toBeVisible();
-      await expect(joinerPage.getByRole("button", { name: "Make invite link", exact: true })).toHaveCount(0);
+      await expect(joinerPage.getByRole("button", { name: "Copy invite link", exact: true })).toHaveCount(0);
       await attachScreenshot(testInfo, joinerPage, "joiner-household");
 
       // The owner sees them too, after a reload.
@@ -266,7 +275,7 @@ test.describe("Households", () => {
     await attachScreenshot(testInfo, page, "household-from-kitchen-390");
   });
 
-  test("an owner emails an invite, which waits under their household after a reload @mutates", async ({
+  test("an owner emails an invite from the one invite form, sees it wait after a reload, and cancels it @mutates", async ({
     page,
     verifyAfterReload,
     expectAccessible,
@@ -283,20 +292,32 @@ test.describe("Households", () => {
     const householdPath = new URL(page.url()).pathname;
     await waitForHydration(page);
 
-    // The Journeys stack captures mail rather than sending it, so the form is offered as it is in production.
-    const form = page.getByRole("form", { name: "Invite by email" });
+    // One form invites either way. The Journeys stack captures mail rather than sending it, so the email field is
+    // offered as it is in production.
+    const form = page.getByRole("form", { name: "Invite someone" });
+    await expect(form.getByLabel("They join as")).toHaveCount(1);
     await form.getByLabel("Email address").fill(address);
     await form.getByLabel("They join as").selectOption("viewer");
     await Promise.all([saved(page, householdPath), form.getByRole("button", { name: "Send invite", exact: true }).click()]);
     await expect(page.getByRole("status").filter({ hasText: `Invite sent to ${address}.` })).toBeVisible();
+    await expect(form.getByLabel("Email address")).toHaveValue("");
     await expectAccessible();
-    await attachScreenshot(testInfo, page, "owner-email-invite-sent");
+    await attachElementScreenshot(testInfo, form, "owner-invite-form");
 
     const waiting = page.getByRole("list", { name: "Waiting to join" });
     await verifyAfterReload(async () => {
+      await expect(page.getByRole("heading", { level: 3, name: "Waiting to join" })).toBeVisible();
       await expect(waiting.getByText(address, { exact: true })).toBeVisible();
       await expect(waiting.getByText("View-only", { exact: true })).toBeVisible();
     });
-    await attachLocatorScreenshot(testInfo, page.getByRole("region", { name: "Invite someone" }), "owner-email-invite-waiting-after-reload");
+    await attachElementScreenshot(testInfo, page.getByRole("region", { name: "Invite someone" }), "owner-email-invite-waiting-after-reload");
+
+    // Cancelling the invite takes it off the list, and it stays off after a reload.
+    await Promise.all([saved(page, householdPath), waiting.getByRole("button", { name: `Cancel invite to ${address}`, exact: true }).click()]);
+    await verifyAfterReload(async () => {
+      await expect(page.getByRole("list", { name: "Waiting to join" })).toHaveCount(0);
+      await expect(page.getByText(address, { exact: true })).toHaveCount(0);
+    });
+    await attachElementScreenshot(testInfo, page.getByRole("region", { name: "Invite someone" }), "owner-email-invite-cancelled-after-reload");
   });
 });
