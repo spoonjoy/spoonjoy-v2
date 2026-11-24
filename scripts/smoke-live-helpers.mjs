@@ -289,6 +289,52 @@ export async function waitForWorkerVersionReady({
   }
 }
 
+// Sends a request pinned to the candidate Worker and proves the candidate answered it. Even after
+// the candidate has answered steadily, a single pinned request can still be answered by the live
+// Worker: Production Deploy 45371021499's canary got the live version on an MCP initialize after
+// 22 s of steady readiness and eight passing checks. A request that is safe to send again
+// (`repeatable`: a read, or an MCP initialize, tools/list or server/discover) is sent again until
+// the candidate answers it, within the readiness limit; the candidate must still answer it, and
+// its answer is what the caller checks. A request that changes state is never sent again: an
+// answer from another version fails it at once.
+export async function requestFromCandidateWorker({
+  send,
+  workerVersionId,
+  label,
+  repeatable = false,
+  onOtherVersion = () => {},
+  readHeaders = (response) => response.headers(),
+  timeoutMs = WORKER_VERSION_READINESS_TIMEOUT_MS,
+  intervalMs = WORKER_VERSION_READINESS_INTERVAL_MS,
+  now = Date.now,
+  sleep,
+}) {
+  let response = await send();
+  if (workerVersionId === null) return response;
+  const expected = normalizeWorkerVersionId(workerVersionId);
+  const observed = workerVersionResponseId(readHeaders(response));
+  if (repeatable && observed?.toLowerCase() !== expected) {
+    onOtherVersion({ label, observed });
+    try {
+      await waitForWorkerVersionReady({
+        workerVersionId: expected,
+        timeoutMs,
+        intervalMs,
+        now,
+        sleep,
+        probe: async () => {
+          response = await send();
+          return readHeaders(response);
+        },
+      });
+    } catch {
+      // The candidate never answered within the limit; the check below reports what did.
+    }
+  }
+  assertWorkerVersionResponse(readHeaders(response), expected, label);
+  return response;
+}
+
 export async function waitForBrowserWorkerVersionReady({
   workerVersionId,
   navigate,

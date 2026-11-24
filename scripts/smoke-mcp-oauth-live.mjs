@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import {
-  assertWorkerVersionResponse,
+  requestFromCandidateWorker,
   buildBrowserEnvironment,
   buildD1CommandEnvironment,
   buildMcpCanaryCleanupD1Args,
@@ -60,19 +60,30 @@ function mcpResourceForTarget({ baseUrl, targetEnv }) {
   return targetEnv === "production" ? "https://spoonjoy.app/mcp" : new URL("/mcp", baseUrl).toString();
 }
 
+// Answers the live Worker gave to a pinned request that was then sent again (see
+// requestFromCandidateWorker); written into the canary report.
+const otherVersionAnswers = [];
+
+// MCP methods that only read, so a request answered by another Worker version can be sent again.
+const REPEATABLE_MCP_METHODS = new Set(["initialize", "tools/list", "server/discover"]);
+
 async function spoonjoyRequest(request, { baseUrl, workerVersionId, method, url, label, options = {} }) {
-  const response = await request[method](url, {
-    ...options,
-    maxRedirects: 0,
-    headers: buildWorkerVersionRequestHeaders({
-      baseUrl,
-      requestUrl: url,
-      headers: options.headers,
-      workerVersionId,
+  return requestFromCandidateWorker({
+    send: () => request[method](url, {
+      ...options,
+      maxRedirects: 0,
+      headers: buildWorkerVersionRequestHeaders({
+        baseUrl,
+        requestUrl: url,
+        headers: options.headers,
+        workerVersionId,
+      }),
     }),
+    workerVersionId,
+    label,
+    repeatable: method === "get" || REPEATABLE_MCP_METHODS.has(options.data?.method),
+    onOtherVersion: (answer) => otherVersionAnswers.push({ ...answer, at: new Date().toISOString() }),
   });
-  assertWorkerVersionResponse(response.headers(), workerVersionId, label);
-  return response;
 }
 
 async function waitForCandidateWorker(page, mutationPage, request, { baseUrl, workerVersionId }) {
@@ -576,6 +587,7 @@ async function main() {
     checks: [],
     cleanup: null,
     legacyProbe: includeLegacyDbProbe ? null : { skipped: true, reason: "--skip-legacy-db-probe" },
+    otherVersionAnswers,
   };
   let browser;
   let context;
