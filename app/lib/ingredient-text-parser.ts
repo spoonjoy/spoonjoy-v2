@@ -80,7 +80,7 @@ const COUNTED_UNIT_GROUPS: Record<string, string[]> = {
 }
 
 const UNIT_ALIASES = new Map<string, string>([
-  ...[...UNIT_NAMES].map(([name, slug]) => [name, MEASURED_UNIT_WRITTEN[slug] ?? slug] as const),
+  ...[...UNIT_NAMES].map(([name, slug]) => [name, MEASURED_UNIT_WRITTEN[slug]!] as const),
   ...Object.entries(COUNTED_UNIT_GROUPS).flatMap(([canonical, names]) => names.map((name) => [name, canonical] as const)),
 ])
 
