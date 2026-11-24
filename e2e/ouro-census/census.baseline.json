@@ -2371,6 +2371,10 @@
         {
           "identity": "menuitem \"Organize\" [menu/item] in main",
           "count": 1
+        },
+        {
+          "identity": "menuitem \"Plan this meal\" [menu/item] in main",
+          "count": 1
         }
       ],
       "cook-mode": [
@@ -6654,6 +6658,10 @@
         },
         {
           "identity": "menuitem \"Organize\" [menu/item] in main",
+          "count": 1
+        },
+        {
+          "identity": "menuitem \"Plan this meal\" [menu/item] in main",
           "count": 1
         }
       ],
