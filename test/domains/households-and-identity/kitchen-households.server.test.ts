@@ -18,8 +18,8 @@ beforeEach(() => {
 afterEach(() => database.sqlite.close());
 
 describe("kitchenHouseholds", () => {
-  it("lists the cook's households by name while the households flag is on, and an empty list before they have one", async () => {
-    const context = contextWith({ DB: database.binding, SPOONJOY_FLAGS: "households" });
+  it("lists the cook's households by name, and an empty list before they have one", async () => {
+    const context = contextWith({ DB: database.binding });
     expect(await kitchenHouseholds(context, "ann")).toEqual([]);
 
     const store = d1HouseholdStore(database.binding as never);
@@ -28,8 +28,7 @@ describe("kitchenHouseholds", () => {
     expect(await kitchenHouseholds(context, "ann")).toEqual([{ id: made.value.id, name: "The Lee kitchen" }]);
   });
 
-  it("leaves the section out while the households flag is off, or with no D1 binding", async () => {
-    expect(await kitchenHouseholds(contextWith({ DB: database.binding }), "ann")).toBeNull();
-    expect(await kitchenHouseholds(contextWith({ SPOONJOY_FLAGS: "households" }), "ann")).toBeNull();
+  it("leaves the section out with no D1 binding", async () => {
+    expect(await kitchenHouseholds(contextWith({}), "ann")).toBeNull();
   });
 });

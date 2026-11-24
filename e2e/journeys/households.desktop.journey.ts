@@ -5,7 +5,7 @@
 // it and the owner checks it off. The owner then makes the twin view-only and removes them, and each change
 // shows on the twin's next load: view-only, they still read the list but can't change it. Desktop only: the two accounts are the two people, so an iPhone run at the same
 // time would share them. The household's name carries a run tag, so each run's household is its
-// own. The households flag is on in QA.
+// own. Households has no flag: every signed-in cook has it.
 import type { Locator, Page, TestInfo } from "@playwright/test";
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
 import { waitForHydrationOnLoad } from "./support/app-ready";
@@ -87,10 +87,19 @@ test.describe("Households", () => {
     const tag = Date.now().toString(36);
     let name = `The Lee kitchen ${tag}`;
 
-    // The owner makes a household and lands on it.
-    await page.goto("/households");
+    // The owner opens Households from the top bar's icon, beside Account, and makes a household there.
+    await page.goto("/");
+    await waitForHydration(page);
+    const topBar = page.locator('header[data-ouro="navbar"]');
+    const householdsButton = topBar.getByRole("link", { name: "Households", exact: true });
+    await expect(householdsButton).toBeVisible();
+    await attachLocatorScreenshot(testInfo, topBar, "top-bar-households");
+    await householdsButton.click();
+    await expect(page).toHaveURL(pathUrl("/households"));
     await waitForHydration(page);
     await expect(page.getByRole("heading", { level: 1, name: "Cook together", exact: true })).toBeVisible();
+    await expect(page.getByText("Share shopping lists with the people you cook with.", { exact: false })).toBeVisible();
+    await attachScreenshot(testInfo, page, "households-page-desktop");
     await page.getByLabel("Household name").fill(name);
     await page.getByRole("button", { name: "Create household", exact: true }).click();
     await expect(page).toHaveURL(HOUSEHOLD_URL);

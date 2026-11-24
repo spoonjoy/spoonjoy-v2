@@ -13,7 +13,6 @@ import {
   type HouseholdInvite,
   type HouseholdMember,
 } from "~/domains/households-and-identity";
-import { FLAG_NAMES, isFlagOn } from "~/domains/platform";
 
 const owner: HouseholdMember = { householdId: "h1", userId: "ann", role: "owner" };
 const member: HouseholdMember = { householdId: "h1", userId: "ben", role: "member" };
@@ -145,13 +144,5 @@ describe("household invites", () => {
       ok: false,
       error: "That email address doesn't look right.",
     });
-  });
-});
-
-describe("households flag", () => {
-  it("hides households behind households, off in production and on in QA", () => {
-    expect(FLAG_NAMES).toContain("households");
-    expect(isFlagOn("households", {}, "ann")).toBe(false);
-    expect(isFlagOn("households", { SPOONJOY_FLAGS: "all" }, "ann")).toBe(true);
   });
 });

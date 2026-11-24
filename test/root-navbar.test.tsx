@@ -184,8 +184,8 @@ describe("AppNavbar", () => {
     expect(centerLinks.slice(0, 2)).toEqual(["Kitchen", "Recipes"]);
   });
 
-  it("puts Households beside Account, outside the page links, when the households flag is on", () => {
-    renderNavbarWithFlags(["households"], "chef-1", "/households/household-1");
+  it("puts Households beside Account, outside the page links, for every signed-in cook", () => {
+    renderNavbarWithFlags([], "chef-1", "/households/household-1");
 
     const households = screen.getByRole("link", { name: "Households" });
     expect(households).toHaveAttribute("href", "/households");
@@ -202,7 +202,7 @@ describe("AppNavbar", () => {
   });
 
   it("labels the Households icon with a Households tooltip when a pointer rests on it", async () => {
-    renderNavbarWithFlags(["households"], "chef-1", "/");
+    renderNavbarWithFlags([], "chef-1", "/");
     const households = screen.getByRole("link", { name: "Households" });
     fireEvent.pointerEnter(households, { pointerType: "mouse" });
     const tooltip = await waitFor(() => {
@@ -213,13 +213,8 @@ describe("AppNavbar", () => {
     expect(tooltip).toHaveTextContent("Households");
   });
 
-  it("leaves Households out of the bar when the households flag is off", () => {
-    renderNavbarWithFlags([], "chef-1", "/");
-    expect(screen.queryByRole("link", { name: "Households" })).not.toBeInTheDocument();
-  });
-
-  it("leaves Households out of the bar for signed-out visitors even with the flag on", () => {
-    renderNavbarWithFlags(["households"], null, "/");
+  it("leaves Households out of the bar for signed-out visitors", () => {
+    renderNavbarWithFlags([], null, "/");
     expect(screen.queryByRole("link", { name: "Households" })).not.toBeInTheDocument();
   });
 

@@ -10,7 +10,7 @@ import HouseholdPage, { action as householdAction, loader as householdLoader, me
 import JoinPage, { action as joinAction, loader as joinLoader, meta as joinMeta } from "~/routes/join.$token";
 
 let database: MigratedSqlite;
-let flagsOn: Record<string, unknown>;
+let baseEnv: Record<string, unknown>;
 const cookies: Record<string, string> = {};
 
 function addUser(id: string) {
@@ -22,7 +22,7 @@ function addUser(id: string) {
 type RouteArgs = { request: Request; params: Record<string, string>; context: { cloudflare: { env: unknown } } };
 type Answer = { type?: string; data?: unknown; init?: { status?: number } } & Record<string, unknown>;
 
-async function call(fn: (args: never) => Promise<unknown>, path: string, user: string | null, fields?: Record<string, string>, env = flagsOn) {
+async function call(fn: (args: never) => Promise<unknown>, path: string, user: string | null, fields?: Record<string, string>, env = baseEnv) {
   const headers: Record<string, string> = {};
   if (user) headers.Cookie = cookies[user]!;
   const init: Record<string, unknown> = { headers };
@@ -68,7 +68,7 @@ async function makeInvite(id: string, role = "member"): Promise<string> {
 
 beforeEach(async () => {
   database = migratedSqliteD1();
-  flagsOn = { DB: database.binding, SPOONJOY_FLAGS: "households" };
+  baseEnv = { DB: database.binding };
   for (const id of ["ann", "ben", "cal"]) {
     addUser(id);
     cookies[id] = (await createUserSessionCookie(id, { DB: database.binding } as Parameters<typeof createUserSessionCookie>[1])).split(";")[0]!;
@@ -80,15 +80,9 @@ afterEach(() => {
   database.close();
 });
 
-describe("households flag", () => {
-  it("hides every households page while the flag is off", async () => {
-    const off = { DB: database.binding };
-    expect(statusOf(await call(indexLoader, "/households", "ann", undefined, off))).toBe(404);
-    expect(statusOf(await call(indexAction, "/households", "ann", { intent: "create", name: "x" }, off))).toBe(404);
-    expect(statusOf(await call(householdLoader, "/households/h", "ann", undefined, off))).toBe(404);
-    expect(statusOf(await call(householdAction, "/households/h", "ann", { intent: "leave" }, off))).toBe(404);
-    expect(statusOf(await call(joinLoader, "/join/t", "ann", undefined, off))).toBe(404);
-    expect(statusOf(await call(joinAction, "/join/t", "ann", {}, off))).toBe(404);
+describe("households for everyone", () => {
+  it("opens /households for any signed-in cook, with no flag set", async () => {
+    expect(payload(await call(indexLoader, "/households", "ann", undefined, { DB: database.binding }))).toHaveProperty("households");
   });
 
   it("sends a signed-out visitor to sign in, and back to the invite after", async () => {
@@ -103,7 +97,7 @@ describe("/households", () => {
   it("titles the page", () => {
     expect(indexMeta()).toEqual([
       { title: "Households - Spoonjoy" },
-      { name: "description", content: "Share recipes, shopping lists and a meal plan with the people you cook with." },
+      { name: "description", content: "Share shopping lists with the people you cook with." },
     ]);
   });
 
@@ -194,7 +188,7 @@ describe("/households/:id", () => {
 
   it("emails an invite that only the address it went to can use, and lists it until it is used", async () => {
     const sent: Array<{ to: string; from: string; subject: string; text: string }> = [];
-    const mail = { ...flagsOn, SPOONJOY_EMAIL_FROM: "Spoonjoy <hello@spoonjoy.app>", EMAIL: { send: async (message: (typeof sent)[number]) => { sent.push(message); } } };
+    const mail = { ...baseEnv, SPOONJOY_EMAIL_FROM: "Spoonjoy <hello@spoonjoy.app>", EMAIL: { send: async (message: (typeof sent)[number]) => { sent.push(message); } } };
     const id = await makeHousehold();
     expect(payload(await call(householdLoader, `/households/${id}`, "ann", undefined, mail)).household).toMatchObject({ canEmailInvites: true, emailInvites: [] });
     expect(payload(await call(householdLoader, `/households/${id}`, "ann")).household.canEmailInvites).toBe(false);
@@ -215,7 +209,7 @@ describe("/households/:id", () => {
 
   it("cancels an email invite for its owner, so its link stops working; anyone else is refused with 403", async () => {
     const sent: Array<{ text: string }> = [];
-    const mail = { ...flagsOn, SPOONJOY_EMAIL_FROM: "hello@spoonjoy.app", EMAIL: { send: async (message: { text: string }) => { sent.push(message); } } };
+    const mail = { ...baseEnv, SPOONJOY_EMAIL_FROM: "hello@spoonjoy.app", EMAIL: { send: async (message: { text: string }) => { sent.push(message); } } };
     const id = await makeHousehold();
     await call(joinAction, `/join/${await makeInvite(id)}`, "ben", {});
     await call(householdAction, `/households/${id}`, "ann", { intent: "email-invite", email: "cal@example.com" }, mail);
@@ -233,7 +227,7 @@ describe("/households/:id", () => {
   });
 
   it("refuses an email invite from a non-owner (403), without an address (400), and where mail can't go (503)", async () => {
-    const refusing = { ...flagsOn, SPOONJOY_EMAIL_FROM: "hello@spoonjoy.app", EMAIL: { send: async () => { throw new Error("refused"); } } };
+    const refusing = { ...baseEnv, SPOONJOY_EMAIL_FROM: "hello@spoonjoy.app", EMAIL: { send: async () => { throw new Error("refused"); } } };
     const id = await makeHousehold();
     await call(joinAction, `/join/${await makeInvite(id)}`, "ben", {});
     const send = (user: string, fields: Record<string, string>, env: Record<string, unknown>) =>
@@ -243,7 +237,7 @@ describe("/households/:id", () => {
     expect(statusOf(notOwner)).toBe(403);
     expect(payload(notOwner)).toEqual({ error: "Only an owner can invite people." });
     expect(statusOf(await send("ann", {}, refusing))).toBe(400);
-    const noMail = await send("ann", { email: "cal@example.com" }, flagsOn);
+    const noMail = await send("ann", { email: "cal@example.com" }, baseEnv);
     expect(statusOf(noMail)).toBe(503);
     expect(payload(noMail)).toEqual({ error: "Email isn't set up on this Spoonjoy server. Make an invite link and send it to them yourself." });
     const bounced = await send("ann", { email: "cal@example.com" }, refusing);

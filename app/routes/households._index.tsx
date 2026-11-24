@@ -25,7 +25,7 @@ import { OBJECTIONABLE_CONTENT_MESSAGE, containsObjectionableContent } from "~/l
 export function meta() {
   return [
     { title: "Households - Spoonjoy" },
-    { name: "description", content: "Share recipes, shopping lists and a meal plan with the people you cook with." },
+    { name: "description", content: "Share shopping lists with the people you cook with." },
   ];
 }
 
@@ -67,7 +67,7 @@ export default function HouseholdsIndex() {
           title="Cook together"
           size="lg"
           divider
-          description="Share recipes, shopping lists and a meal plan with the people you cook with. Your own kitchen stays yours."
+          description="Share shopping lists with the people you cook with. Your own kitchen stays yours."
         />
 
         {households.length > 0 ? (

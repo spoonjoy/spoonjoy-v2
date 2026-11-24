@@ -205,10 +205,9 @@ describe("recipe create helpers", () => {
       expect(await cookRecipeVisibilityDefault(db, testUserId, null)).toBe("public");
     });
 
-    it("answers a household default only while households is on for the cook too, else public", async () => {
+    it("answers a household default while recipe_visibility is on for the cook", async () => {
       await db.user.update({ where: { id: testUserId }, data: { defaultRecipeVisibility: "household" } });
-      expect(await cookRecipeVisibilityDefault(db, testUserId, { SPOONJOY_FLAGS: "recipe_visibility,households" })).toBe("household");
-      expect(await cookRecipeVisibilityDefault(db, testUserId, { SPOONJOY_FLAGS: "recipe_visibility" })).toBe("public");
+      expect(await cookRecipeVisibilityDefault(db, testUserId, { SPOONJOY_FLAGS: "recipe_visibility" })).toBe("household");
     });
 
     it("creates a recipe at the visibility it is given, on Prisma and D1 alike", async () => {
