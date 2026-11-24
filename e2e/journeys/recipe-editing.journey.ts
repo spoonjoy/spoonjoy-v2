@@ -8,6 +8,7 @@
 // key), except for one deliberate parse on the Add Step page, which must not take the page down.
 import { test as journeyTest, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
+import { waitForHydrationOnLoad } from "./support/app-ready";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { chooseMenuItem } from "./support/menu";
 import { personaStorageStatePath, scratchDesktop, scratchDesktopStorageStatePath, scratchStorageStatePath } from "./support/personas";
@@ -353,6 +354,7 @@ test.describe("Recipe create and edit", () => {
       const other = await browser.newContext({ storageState });
       try {
         const otherPage = await other.newPage();
+        waitForHydrationOnLoad(otherPage);
         const response = await otherPage.goto(recipePath);
         expect(response?.status(), `${who}: recipe page`).toBe(404);
         await testInfo.attach(`private-recipe-${who.replace(" ", "-")}-view`, { body: await otherPage.screenshot(), contentType: "image/png" });
@@ -410,6 +412,7 @@ test.describe("Recipe create and edit", () => {
       const invitePath = new URL(await linkField.inputValue()).pathname;
 
       const memberPage = await member.newPage();
+      waitForHydrationOnLoad(memberPage);
       await memberPage.goto(invitePath);
       await waitForHydration(memberPage);
       await memberPage.getByRole("button", { name: "Join household", exact: true }).click();
@@ -443,6 +446,7 @@ test.describe("Recipe create and edit", () => {
       const stranger = await browser.newContext({ storageState: personaStorageStatePath("friend") });
       try {
         const strangerPage = await stranger.newPage();
+        waitForHydrationOnLoad(strangerPage);
         expect((await strangerPage.goto(recipePath))?.status(), "another cook: recipe page").toBe(404);
         await testInfo.attach("household-recipe-another-cook-view", { body: await strangerPage.screenshot(), contentType: "image/png" });
         expect((await stranger.request.get(`/api/v1/recipes/${recipeId}`)).status(), "another cook: API").toBe(404);
