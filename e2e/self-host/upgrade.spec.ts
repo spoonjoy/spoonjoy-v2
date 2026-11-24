@@ -45,8 +45,7 @@ test.describe("Updating a self-hosted server", () => {
     const step = page.getByRole("article", { name: "Step 1", exact: true });
     await step.getByLabel("Instructions").fill("Simmer the stock until it smells like home");
     await step.getByRole("textbox", { name: "Ingredient text" }).fill("1 quart chicken stock");
-    // The words the parser keeps are its own business; this only needs the ingredient to come through.
-    await expect(step.getByRole("heading", { level: 3, name: "Ingredients (1)" })).toBeVisible();
+    await expect(step.getByRole("button", { name: "Remove chicken stock" })).toBeVisible();
     await page.getByRole("button", { name: "Create recipe", exact: true }).click();
     await expect(page).toHaveURL(/\/recipes\/(?!new$)[^/?#]+$/);
     await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
