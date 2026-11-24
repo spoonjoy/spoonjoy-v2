@@ -209,6 +209,10 @@ describe("Self-host Image workflow", () => {
     expect(order.every((index) => index > -1)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(run).toContain("docker run --rm --network none -v sj-jobs:/data");
+    // The check is a single-quoted node -e script, so a quote inside it would end the script early.
+    const script = run.slice(run.indexOf("node --input-type=module -e '") + "node --input-type=module -e '".length, run.indexOf("' | tee"));
+    expect(script).toContain("PlatformJobKey");
+    expect(script).not.toContain("'");
     expect(stepNamed(image, /Stop the server/).run).toContain("docker stop sj-jobs || true");
     expect(runs(image)).toMatch(/sanitize-journey-traces\.mjs [^\n]*test-results-self-host-move-in/);
     expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["app/routes/move-in.tsx", "app/domains/move-in/adapters/worker/**"]));
