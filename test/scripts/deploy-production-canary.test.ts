@@ -21,6 +21,7 @@ import {
   runProductionRollback,
   runProductionReleaseCli,
   CANDIDATE_PAGE_PATHS,
+  ARCHIVE_UPLOAD_RETRY_DELAYS_MS,
   listClientAssetNames,
   selectArchivableAssets,
   verifyCandidatePages,
@@ -4172,6 +4173,60 @@ describe("production canary release orchestration", () => {
       );
       expect(peak).toBeLessThanOrEqual(8);
       expect(peak).toBeGreaterThan(1);
+    });
+
+    it("tries a failed asset put again after 2 s and 5 s, and goes on when a try succeeds", async () => {
+      const base = successfulRunner({});
+      let failures = 0;
+      const runCommand = vi.fn(async (command: string, args: readonly string[], options: { env: NodeJS.ProcessEnv }) => {
+        if (args.includes("r2") && args.some((arg) => arg.endsWith("/chunk-b.js")) && failures < 2) {
+          failures += 1;
+          throw new Error("Command failed with exit code 1: pnpm exec wrangler r2 object put");
+        }
+        return base(command, args, options);
+      }) as unknown as ReleaseCommandRunner;
+      const deps = releaseDeps(runCommand);
+      deps.listClientAssets.mockResolvedValue(["chunk-a.js", "chunk-b.js"]);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+      try {
+        await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
+      } finally {
+        warn.mockRestore();
+      }
+
+      const puts = (runCommand as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .map(([command, args]) => commandKey(command, args))
+        .filter((key) => key.includes(" r2 object put "));
+      expect(puts.filter((key) => key.includes("/chunk-b.js"))).toHaveLength(3);
+      expect(puts.filter((key) => key.includes("/chunk-a.js"))).toHaveLength(1);
+      expect(deps.sleep).toHaveBeenCalledWith(ARCHIVE_UPLOAD_RETRY_DELAYS_MS[0]);
+      expect(deps.sleep).toHaveBeenCalledWith(ARCHIVE_UPLOAD_RETRY_DELAYS_MS[1]);
+      expect(ARCHIVE_UPLOAD_RETRY_DELAYS_MS).toEqual([2_000, 5_000]);
+    });
+
+    it("stops the release before the version upload when an asset put fails three times", async () => {
+      const base = successfulRunner({});
+      const runCommand = vi.fn(async (command: string, args: readonly string[], options: { env: NodeJS.ProcessEnv }) => {
+        if (args.includes("r2") && args.some((arg) => arg.endsWith("/chunk-b.js"))) {
+          throw new Error("Command failed with exit code 1: pnpm exec wrangler r2 object put");
+        }
+        return base(command, args, options);
+      }) as unknown as ReleaseCommandRunner;
+      const deps = releaseDeps(runCommand);
+      deps.listClientAssets.mockResolvedValue(["chunk-a.js", "chunk-b.js"]);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+      try {
+        await expect(runProductionCanaryRelease(deps)).rejects.toThrow("Command failed with exit code 1");
+      } finally {
+        warn.mockRestore();
+      }
+
+      const keys = (runCommand as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .map(([command, args]) => commandKey(command, args));
+      expect(keys.filter((key) => key.includes("/chunk-b.js"))).toHaveLength(3);
+      expect(keys.some((key) => key.includes("versions upload"))).toBe(false);
     });
 
     it("lists a client asset directory, defaulting to the build output", async () => {
