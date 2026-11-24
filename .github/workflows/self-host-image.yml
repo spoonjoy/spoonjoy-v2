@@ -274,23 +274,27 @@ jobs:
       # here, keeping one, to show the schedule runs. The container's user (node) writes the backup,
       # so the folder is open to it; the backup holds this run's scratch passwords' hashes and isn't
       # uploaded.
+      # Every container here stays off Docker's bridge: the restored server shares the host's network
+      # and the one-off backup, restore and stat containers have none. A container joining the bridge
+      # adds a network interface, and Chrome on the host network drops the page's loads with
+      # ERR_NETWORK_CHANGED when it sees one appear (main's run 45324007523, amd64).
       - name: Back up the kitchen and restore it into a fresh server
         if: success()
         run: |
           docker stop sj
           mkdir -p .self-host/backups
           chmod 777 .self-host/backups
-          docker run --rm -v sj-data:/data -v "$PWD/.self-host/backups:/backups" "$LOCAL_IMAGE" \
+          docker run --rm --network none -v sj-data:/data -v "$PWD/.self-host/backups:/backups" "$LOCAL_IMAGE" \
             node /app/self-host/server.mjs backup /backups/kitchen.tar.gz
           docker volume create sj-restored
           start=$(date +%s%3N)
-          docker run --rm -v sj-restored:/data -v "$PWD/.self-host/backups:/backups:ro" "$LOCAL_IMAGE" \
+          docker run --rm --network none -v sj-restored:/data -v "$PWD/.self-host/backups:/backups:ro" "$LOCAL_IMAGE" \
             node /app/self-host/server.mjs restore /backups/kitchen.tar.gz
           end=$(date +%s%3N)
-          bytes=$(docker run --rm -v "$PWD/.self-host/backups:/backups:ro" "$LOCAL_IMAGE" stat -c %s /backups/kitchen.tar.gz)
+          bytes=$(docker run --rm --network none -v "$PWD/.self-host/backups:/backups:ro" "$LOCAL_IMAGE" stat -c %s /backups/kitchen.tar.gz)
           echo "{\"restoreMs\": $(( end - start )), \"backupBytes\": $bytes}" > "$OUT/restore.json"
           cat "$OUT/restore.json"
-          docker run -d --name sj-restored -p 8080:8080 -v sj-restored:/data \
+          docker run -d --name sj-restored --network host -v sj-restored:/data \
             -e "SPOONJOY_BACKUP_SCHEDULE=* * * * *" -e SPOONJOY_BACKUPS_KEPT=1 "$LOCAL_IMAGE"
           for _ in $(seq 1 600); do
             [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health/ready || true)" = "200" ] && break

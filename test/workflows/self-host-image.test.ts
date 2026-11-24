@@ -168,6 +168,14 @@ describe("Self-host Image workflow", () => {
     );
   });
 
+  it("keeps the restore step's containers off Docker's bridge, so the browser never sees the network change", () => {
+    const run = stepNamed(image, /Back up the kitchen and restore it/).run ?? "";
+    const containers = run.match(/docker run [^\n]*/g) ?? [];
+    expect(containers.length).toBeGreaterThan(0);
+    for (const line of containers) expect(line, line).toMatch(/--network (none|host)/);
+    expect(run).toContain("docker run -d --name sj-restored --network host");
+  });
+
   it("shows a scheduled backup running on the restored server", () => {
     const run = stepNamed(image, /Back up the kitchen and restore it/).run ?? "";
     expect(run).toContain('-e "SPOONJOY_BACKUP_SCHEDULE=* * * * *" -e SPOONJOY_BACKUPS_KEPT=1');
