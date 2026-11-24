@@ -5,7 +5,8 @@ import { captureEvent, resolvePostHogServerConfig, type PostHogServerEnv } from 
 //
 // Delivery modes, chosen per environment:
 // - "send": Cloudflare Email Service through the Worker's `send_email` binding named EMAIL, from
-//   SPOONJOY_EMAIL_FROM. Used when both are configured.
+//   SPOONJOY_EMAIL_FROM. Used when both are configured. A self-hosted server with SMTP settings sends
+//   through the server around the Worker instead (self-host/mail.mjs), over its SELF_HOST binding.
 // - "capture": SPOONJOY_EMAIL_MODE=capture writes each message to the EmailOutbox table instead of
 //   sending it. QA uses this so journeys and proofs can follow links without a mailbox.
 // - "disabled": neither is configured. Features that need mail say so instead of pretending.
@@ -35,6 +36,10 @@ export type TransactionalEmailEnv = PostHogServerEnv & {
   SPOONJOY_EMAIL_FROM?: string;
   SPOONJOY_EMAIL_MODE?: string;
   SPOONJOY_BASE_URL?: string;
+  SPOONJOY_SELF_HOSTED?: string;
+  /** "smtp" on a self-hosted server whose owner set SPOONJOY_SMTP_HOST (self-host/config.mjs). */
+  SPOONJOY_SELF_HOST_MAIL?: string;
+  SELF_HOST?: Pick<Fetcher, "fetch"> | unknown;
 };
 
 // Capture mode stores account mail, including its sign-in links, in a table anyone with database
@@ -71,11 +76,41 @@ function hasSendBinding(value: unknown): value is SendEmailBinding {
   return Boolean(value) && typeof (value as { send?: unknown }).send === "function";
 }
 
+/** Thrown when a self-hosted server's SMTP server refuses a message; its name is the SMTP error's code. */
+class SmtpRefusedError extends Error {
+  constructor(code: string) {
+    super(`The SMTP server refused the message (${code})`);
+    this.name = code;
+  }
+}
+
+// A self-hosted server's SMTP mail, sent by the server around the Worker (POST /mail, self-host/host-api.mjs).
+function selfHostMailBinding(env: TransactionalEmailEnv): SendEmailBinding | null {
+  if (env.SPOONJOY_SELF_HOSTED !== "true" || env.SPOONJOY_SELF_HOST_MAIL !== "smtp") return null;
+  const host = env.SELF_HOST as Partial<Pick<Fetcher, "fetch">> | undefined;
+  if (typeof host?.fetch !== "function") return null;
+  return {
+    async send(message) {
+      const response = await host.fetch!("http://self-host/mail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      });
+      if (!response.ok) throw new SmtpRefusedError(((await response.json()) as { error: string }).error);
+    },
+  };
+}
+
+function mailBinding(env: TransactionalEmailEnv | null | undefined): SendEmailBinding | null {
+  if (!env) return null;
+  return hasSendBinding(env.EMAIL) ? env.EMAIL : selfHostMailBinding(env);
+}
+
 export function resolveEmailDeliveryMode(env?: TransactionalEmailEnv | null): EmailDeliveryMode {
   if (env?.SPOONJOY_EMAIL_MODE?.trim().toLowerCase() === "capture") {
     return isCaptureSite(env.SPOONJOY_BASE_URL) ? "capture" : "disabled";
   }
-  if (hasSendBinding(env?.EMAIL) && env?.SPOONJOY_EMAIL_FROM?.trim()) return "send";
+  if (mailBinding(env) && env?.SPOONJOY_EMAIL_FROM?.trim()) return "send";
   return "disabled";
 }
 
@@ -126,7 +161,7 @@ export async function sendTransactionalEmail(
   }
 
   try {
-    await (env!.EMAIL as SendEmailBinding).send({
+    await mailBinding(env)!.send({
       to: email.to,
       from: env!.SPOONJOY_EMAIL_FROM!.trim(),
       subject: email.subject,

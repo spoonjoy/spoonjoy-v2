@@ -36,7 +36,10 @@ describe("self-host runtime pins", () => {
     expect(selfHostLock.packages["node_modules/workerd"]?.version).toBe(wranglerDependency("workerd"));
   });
 
-  it("depends on nothing but Miniflare", () => {
-    expect(Object.keys(selfHostPackage.dependencies)).toEqual(["miniflare"]);
+  it("depends on nothing but Miniflare and the mail sender, which brings nothing else in", () => {
+    expect(Object.keys(selfHostPackage.dependencies)).toEqual(["miniflare", "nodemailer"]);
+    const mailer = selfHostLock.packages["node_modules/nodemailer"] as { version?: string; dependencies?: Record<string, string> };
+    expect(mailer.version).toBe(selfHostPackage.dependencies.nodemailer);
+    expect(mailer.dependencies ?? {}).toEqual({});
   });
 });

@@ -68,6 +68,11 @@ export function selfHostVars({ built, env, port, sessionSecret, pushKeys }) {
   for (const [key, value] of Object.entries(env)) {
     if (value !== undefined && PASSED_THROUGH.some((pattern) => pattern.test(key))) vars[key] = value;
   }
+  // The server around the Worker sends account mail through the owner's SMTP server (self-host/mail.mjs), so the
+  // SMTP settings, password included, stay out of the Worker; it only learns that mail goes that way.
+  for (const key of Object.keys(vars)) if (key.startsWith("SPOONJOY_SMTP_")) delete vars[key];
+  if (env.SPOONJOY_SMTP_HOST?.trim()) vars.SPOONJOY_SELF_HOST_MAIL = "smtp";
+  else delete vars.SPOONJOY_SELF_HOST_MAIL;
   // This Worker is a self-hosted server: its first account is its admin, who decides who else may
   // sign up (app/lib/server-access.server.ts). Set after the environment, so nothing turns it off.
   vars.SPOONJOY_SELF_HOSTED = "true";
@@ -164,7 +169,7 @@ export function miniflareOptions({ built, env, settings, sessionSecret, pushKeys
     r2Persist: path.join(dataDir, "r2"),
     durableObjectsPersist: path.join(dataDir, "do"),
     cachePersist: path.join(dataDir, "cache"),
-    // The server's backups, for the admin's Server settings (self-host/host-api.mjs).
+    // The server's backups, for the admin's Server settings, and its account mail (self-host/host-api.mjs).
     ...(hostService ? { serviceBindings: { SELF_HOST: hostService } } : {}),
     // The Worker's own fetches (Apple's sign-in keys, AI providers, OAuth) go out through Node,
     // without the CF-Worker header workerd adds to each one: Apple's key server answers a request

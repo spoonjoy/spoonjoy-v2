@@ -36,6 +36,10 @@ on:
       - app/routes/account.server-backups.$name.tsx
       - app/lib/server-ai.server.ts
       - app/lib/self-host-backups.server.ts
+      - app/lib/transactional-email.server.ts
+      - app/lib/password-reset.server.ts
+      - app/routes/forgot-password.tsx
+      - app/routes/reset-password.tsx
       - playwright.journeys.config.ts
       - e2e/journeys/**
       - migrations/**
@@ -442,6 +446,36 @@ jobs:
           docker rm -f sj-lan
           docker network rm sj-lan
 
+      # Account mail through the owner's SMTP server (SPOONJOY_SMTP_*): Mailpit, pinned by digest, takes it on 1025, plain
+      # as from a relay on the same network, and answers its API on 8025. A cook resets a forgotten password from the link
+      # in the caught mail and signs in with the new one.
+      - name: Send account mail through an SMTP server
+        if: success()
+        run: |
+          docker run -d --name mailpit --network host \
+            axllent/mailpit@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
+          docker run -d --name sj-mail --network host -v sj-mail:/data -e PORT=8086 \
+            -e SPOONJOY_BASE_URL=http://localhost:8086 \
+            -e SPOONJOY_SMTP_HOST=127.0.0.1 -e SPOONJOY_SMTP_PORT=1025 -e SPOONJOY_SMTP_SECURITY=none \
+            -e "SPOONJOY_EMAIL_FROM=Spoonjoy <kitchen@example.com>" \
+            "$LOCAL_IMAGE"
+          for _ in $(seq 1 600); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8086/health/ready || true)" = "200" ] \
+              && curl -sf -o /dev/null http://localhost:8025/api/v1/info && break
+            sleep 0.1
+          done
+          curl -sf http://localhost:8086/health/ready
+          curl -sf -o /dev/null http://localhost:8025/api/v1/info
+          docker run --rm --network host --user "$(id -u):$(id -g)" --ipc host \
+            -v "$PWD:/work" -w /work -e HOME=/tmp -e CI=true \
+            -e SPOONJOY_JOURNEYS_BASE_URL=http://localhost:8086 \
+            -e SPOONJOY_SELF_HOST_MAIL=http://localhost:8025 \
+            mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f \
+            node node_modules/@playwright/test/cli.js test -c playwright.self-host-fresh.config.ts e2e/self-host/mail.spec.ts --output test-results-self-host-mail
+          docker logs sj-mail > "$OUT/mail.log" 2>&1
+          grep -q '"event":"mail-sent"' "$OUT/mail.log"
+          docker rm -f sj-mail mailpit
+
       # The Compose file in the guide (self-host/compose.yaml) starts this image and waits for its
       # health check; on 8081, beside the restored server.
       - name: Start it with Docker Compose
@@ -529,6 +563,8 @@ jobs:
           docker logs sj-lan > "$OUT/lan.log" 2>&1 || true
           docker rm -f sj-lan || true
           docker network rm sj-lan || true
+          docker logs sj-mail > "$OUT/mail.log" 2>&1 || true
+          docker rm -f sj-mail mailpit || true
 
       # The server is gone, so its passwords and sessions open nothing; the files go all the same.
       - name: Remove credentials and session files
@@ -537,7 +573,7 @@ jobs:
 
       - name: Strip network logs from traces
         if: always()
-        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report test-results-self-host-fresh test-results-self-host-oidc test-results-self-host-restored test-results-self-host-move-in test-results-self-host-move-in-restart-before test-results-self-host-move-in-restart-after test-results-self-host-upgrade-before test-results-self-host-upgrade-after test-results-self-host-lan
+        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report test-results-self-host-fresh test-results-self-host-oidc test-results-self-host-restored test-results-self-host-move-in test-results-self-host-move-in-restart-before test-results-self-host-move-in-restart-after test-results-self-host-upgrade-before test-results-self-host-upgrade-after test-results-self-host-lan test-results-self-host-mail
 
       - name: Summary
         if: always()
@@ -574,6 +610,7 @@ jobs:
             test-results-self-host-upgrade-before/
             test-results-self-host-upgrade-after/
             test-results-self-host-lan/
+            test-results-self-host-mail/
           retention-days: 30
           include-hidden-files: false
 

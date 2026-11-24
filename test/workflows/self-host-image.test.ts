@@ -311,6 +311,31 @@ describe("Self-host Image workflow", () => {
     expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["e2e/self-host/**", "app/lib/session.server.ts"]));
   });
 
+  it("sends a password reset through an SMTP server that catches it, and the cook signs in with the new password", () => {
+    const step = stepNamed(image, /Send account mail through an SMTP server/);
+    const run = step.run ?? "";
+    expect(step.if).toBe("success()");
+    const order = [
+      "axllent/mailpit@sha256:",
+      "docker run -d --name sj-mail --network host -v sj-mail:/data -e PORT=8086",
+      "-e SPOONJOY_SMTP_HOST=127.0.0.1 -e SPOONJOY_SMTP_PORT=1025 -e SPOONJOY_SMTP_SECURITY=none",
+      "curl -sf http://localhost:8086/health/ready",
+      "-e SPOONJOY_SELF_HOST_MAIL=http://localhost:8025",
+      "e2e/self-host/mail.spec.ts --output test-results-self-host-mail",
+      'docker logs sj-mail > "$OUT/mail.log"',
+      `grep -q '"event":"mail-sent"' "$OUT/mail.log"`,
+      "docker rm -f sj-mail mailpit",
+    ].map((text) => run.indexOf(text));
+    expect(order.every((index) => index > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(run).toMatch(/axllent\/mailpit@sha256:[0-9a-f]{64}/);
+    expect(stepNamed(image, /Stop the server/).run).toContain("docker rm -f sj-mail mailpit || true");
+    expect(runs(image)).toMatch(/sanitize-journey-traces\.mjs [^\n]*test-results-self-host-mail/);
+    const upload = image.steps.find((candidate) => candidate.uses?.startsWith("actions/upload-artifact@"));
+    expect(String(upload?.with?.path)).toContain("test-results-self-host-mail/");
+    expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["app/lib/transactional-email.server.ts", "app/routes/forgot-password.tsx"]));
+  });
+
   it("starts the guide's Compose file with this image and waits for its health check, then takes it down", () => {
     const up = stepNamed(image, /Start it with Docker Compose/);
     expect(up.run).toContain('SPOONJOY_IMAGE="$LOCAL_IMAGE"');

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // @ts-expect-error -- plain ESM module shipped in the image, without types
 import { BusyError, hostApi, oneAtATime } from "../../self-host/host-api.mjs";
 
@@ -115,4 +115,40 @@ describe("hostApi", () => {
     }
     expect(calls).toEqual([]);
   });
+
+  describe("account mail", () => {
+    const message = { to: "cook@example.com", from: "kitchen@example.com", subject: "Reset your password", text: "Hi", html: "<p>Hi</p>" };
+    const post = (handler: (request: Request) => Promise<Response>) =>
+      handler(new Request("http://self-host/mail", { method: "POST", body: JSON.stringify(message) }));
+
+    it("sends a message through the SMTP server", async () => {
+      const sendMail = vi.fn().mockResolvedValue(undefined);
+      const response = await post(hostApiWith({ sendMail }));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ sent: true });
+      expect(sendMail).toHaveBeenCalledWith(message);
+    });
+
+    it("answers with only the SMTP error's code when the server refuses, never its words", async () => {
+      const refused = vi.fn().mockRejectedValue(Object.assign(new Error("550 No such user cook@example.com"), { code: "EENVELOPE" }));
+      const response = await post(hostApiWith({ sendMail: refused }));
+      expect(response.status).toBe(502);
+      expect(await response.json()).toEqual({ error: "EENVELOPE" });
+
+      const codeless = await post(hostApiWith({ sendMail: vi.fn().mockRejectedValue(new TypeError("cook@example.com")) }));
+      expect(await codeless.json()).toEqual({ error: "TypeError" });
+      const thrown = await post(hostApiWith({ sendMail: vi.fn().mockRejectedValue(undefined) }));
+      expect(await thrown.json()).toEqual({ error: "Error" });
+    });
+
+    it("answers 404 on a server with no SMTP settings", async () => {
+      const response = await post(hostApiWith({}));
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: "This server has no SMTP settings." });
+    });
+  });
 });
+
+function hostApiWith(overrides: Record<string, unknown>) {
+  return hostApi({ settings: { schedule: null, keep: 7, dir: backupsDir }, backUp: vi.fn(), restore: vi.fn(), exclusive: oneAtATime(), Response, ...overrides });
+}

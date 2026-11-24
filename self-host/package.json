@@ -4,6 +4,7 @@
   "type": "module",
   "description": "The runtime the self-hosted image installs: Miniflare at the version the app's wrangler uses (test/self-host/pins.test.ts).",
   "dependencies": {
-    "miniflare": "4.20260507.1"
+    "miniflare": "4.20260507.1",
+    "nodemailer": "10.4.1"
   }
 }
