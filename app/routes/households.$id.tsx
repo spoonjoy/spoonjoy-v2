@@ -165,9 +165,11 @@ export default function HouseholdPage() {
   const invitedEmail = actionData && "invitedEmail" in actionData ? actionData.invitedEmail : null;
   // The address typed for an email invite: Send invite needs one, and a sent invite clears it.
   const [inviteEmail, setInviteEmail] = useState("");
-  useEffect(() => {
+  const [clearedFor, setClearedFor] = useState(invitedEmail);
+  if (invitedEmail !== clearedFor) {
+    setClearedFor(invitedEmail);
     if (invitedEmail) setInviteEmail("");
-  }, [invitedEmail]);
+  }
   // A new invite link goes straight to the clipboard where the browser allows it; the field below shows it either way.
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   useEffect(() => {
