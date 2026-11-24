@@ -26,7 +26,15 @@ function backup(json: unknown = tables) {
   ]);
 }
 
-function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: Uint8Array; email?: string | null; write?: MoveInPorts["writeRecipe"] } = {}) {
+type Organized = Parameters<NonNullable<MoveInPorts["organizers"]>["attach"]>[0];
+
+function harness({ zip = backup(), email = "cook@example.com", write, organizers }: {
+  zip?: Uint8Array;
+  email?: string | null;
+  write?: MoveInPorts["writeRecipe"];
+  /** Whether the cook has organizers, and how putting them on a recipe goes; left out, the Worker has no organizers port. */
+  organizers?: { on: boolean; attach?: (input: Organized) => Promise<void> };
+} = {}) {
   const jobs = new Map<string, MoveInJob>([["job-1", {
     id: "job-1", ownerId: "chef-1", kind: "mealie-backup", sourceId: null, status: "queued", phase: "inspect", cursor: null, archiveKey: "uploads/job-1.zip", lastError: null, attempt: 0,
   }]]);
@@ -37,6 +45,7 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
   const written = new Map<string, { recipeId: string; jobId: string }>();
   const photos: Array<{ recipeId: string; bytes: Uint8Array }> = [];
   const discarded: string[] = [];
+  const organized: Organized[] = [];
   let holder: string | null = null;
   let tokens = 0;
   let opens = 0;
@@ -86,6 +95,12 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
     hasMovedInPhoto: async (recipeId) => photos.some((photo) => photo.recipeId === recipeId),
     discardArchive: async (job) => void discarded.push(job.archiveKey as string),
     now: () => new Date("2026-11-23T12:00:00.000Z"),
+    ...(organizers ? {
+      organizers: {
+        on: (ownerId: string) => ownerId === "chef-1" && organizers.on,
+        attach: organizers.attach ?? (async (input: Organized) => void organized.push(input)),
+      },
+    } : {}),
   };
   const job = () => jobs.get("job-1") as MoveInJob;
   /** Runs chunks as the page's polls would: each takes the job (an attempt) and an outage waits for the next. */
@@ -97,7 +112,7 @@ function harness({ zip = backup(), email = "cook@example.com", write }: { zip?: 
     return job();
   };
   return {
-    ports, jobs, job, counts, events, sources, photos, discarded, written, runAll,
+    ports, jobs, job, counts, events, sources, photos, discarded, written, organized, runAll,
     isClaimed: () => holder !== null,
     steal: () => void (holder = "another-run"),
     /** The claim's time runs out, as if a while had passed. */
@@ -477,5 +492,64 @@ describe("runForAWhile", () => {
     expect(h.counts.get("recipes")).toMatchObject({ created: 2, failed: 1 });
     expect(tried.filter((title) => title === "Soup")).toHaveLength(2);
     expect(h.events.find((event) => event.kind === "item-failed")?.detail).toBe("Error: LIKE or GLOB pattern too complex");
+  });
+});
+
+describe("a backup's tags, categories and tools", () => {
+  const pancakes = { ownerId: "chef-1", recipeId: `spoonjoy-${keys.pancakes}`, tags: ["Quick"], categories: ["Dinner"], tools: [] };
+  const soup = { ownerId: "chef-1", recipeId: `spoonjoy-${keys.soup}`, tags: [], categories: [], tools: ["Skillet"] };
+
+  it("go onto their recipes when the cook has organizers, counted as found and with no note that they stayed behind", async () => {
+    const h = harness({ organizers: { on: true } });
+    await h.runAll();
+    expect(h.organized).toEqual([pancakes, soup]);
+    for (const entity of ["tags", "categories", "tools"]) expect(h.counts.get(entity)).toMatchObject({ found: 1, skipped: 0 });
+    expect(h.events.some((event) => event.entity === "tags")).toBe(false);
+  });
+
+  it("go onto a recipe already here or changed in place, and leave a recipe the cook changed or deleted alone", async () => {
+    const already = harness({
+      organizers: { on: true },
+      write: async ({ draft }) => (draft.title === "Pancakes"
+        ? { outcome: "kept", recipeId: `spoonjoy-${draft.sourceKey}`, reason: "You changed this recipe in Spoonjoy, so your version stays." }
+        : { outcome: "unchanged", recipeId: `spoonjoy-${draft.sourceKey}`, jobId: "an-earlier-job" }),
+    });
+    await already.runAll();
+    expect(already.organized).toEqual([soup]);
+
+    const changed = harness({
+      organizers: { on: true },
+      write: async ({ draft }) => (draft.title === "Pancakes"
+        ? { outcome: "updated", recipeId: `spoonjoy-${draft.sourceKey}` }
+        : { outcome: "skipped", recipeId: `spoonjoy-${draft.sourceKey}`, reason: "You deleted this recipe in Spoonjoy after it moved in." }),
+    });
+    await changed.runAll();
+    expect(changed.organized).toEqual([pancakes]);
+  });
+
+  it("leave a recipe moved in without them, with a note, when they can't be put on it", async () => {
+    const tried: string[] = [];
+    const h = harness({ organizers: { on: true, attach: async ({ recipeId }) => {
+      tried.push(recipeId);
+      throw new Error("D1 said no");
+    } } });
+    await h.runAll();
+    expect(tried).toEqual([pancakes.recipeId, soup.recipeId]);
+    expect(h.counts.get("recipes")).toMatchObject({ created: 3, failed: 0 });
+    expect(h.events.find((event) => event.targetId === pancakes.recipeId && event.kind === "item-degraded")).toMatchObject({
+      level: "warn",
+      entity: "recipes",
+      message: "Pancakes moved in without its tags, categories and tools: D1 said no.",
+    });
+  });
+
+  it("stay in the backup, as before, when the cook doesn't have organizers", async () => {
+    const h = harness({ organizers: { on: false } });
+    await h.runAll();
+    expect(h.organized).toEqual([]);
+    expect(h.counts.get("tags")).toMatchObject({ found: 1, skipped: 1 });
+    expect(h.events.find((event) => event.entity === "tags")?.message).toBe(
+      "Spoonjoy doesn't have tags, categories or tools yet, so 1 tag, 1 category, 1 tool stayed in the backup.",
+    );
   });
 });

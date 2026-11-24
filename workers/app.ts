@@ -14,7 +14,7 @@ import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
 import { defaultPhotoCache, deliverPhoto, photoKeyFromPath } from "../app/lib/photo-delivery.server";
 import { isServablePhotoKey, runScheduledPhotoSweep } from "../app/lib/photo-lifecycle.server";
-import { MOVE_IN_JOB, MOVE_IN_WATCH, moveInJobHandler, moveInWatchHandler, runScheduledMoveInSweep, type MoveInEnv } from "../app/domains/move-in";
+import { MOVE_IN_JOB, MOVE_IN_WATCH, moveInEnv, moveInJobHandler, moveInWatchHandler, runScheduledMoveInSweep } from "../app/domains/move-in";
 import { serveReleaseAssetFallback } from "../app/lib/release-assets.server";
 import { generateNonce, withSecurityHeaders } from "../app/lib/security-headers.server";
 import {
@@ -356,8 +356,8 @@ async function handleFetch(request: Request, env: CloudflareEnvironment, ctx: Ex
 // Each context's job kinds register their handlers here, with the bindings they need, for each batch.
 function jobHandlers(env: CloudflareEnvironment, jobs: Jobs) {
   const registry = jobRegistry();
-  if (env.DB && env.PHOTOS) {
-    const moveIn = { DB: env.DB, PHOTOS: env.PHOTOS } as unknown as MoveInEnv;
+  const moveIn = moveInEnv(env);
+  if (moveIn) {
     registry.on(MOVE_IN_JOB, moveInJobHandler(moveIn, jobs));
     registry.on(MOVE_IN_WATCH, moveInWatchHandler(moveIn, jobs));
   }

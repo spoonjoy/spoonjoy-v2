@@ -1,12 +1,23 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { organizersOnRecipe, prismaOrganizerStore } from "~/domains/kitchen";
+import { getDb, getLocalDb } from "~/lib/db.server";
 import { createMoveInJob } from "~/domains/move-in/adapters/storage/job-store.server";
-import { moveInPorts, r2RangeSource } from "~/domains/move-in/adapters/worker/move-in-ports.server";
+import { moveInEnv, moveInPorts, r2RangeSource } from "~/domains/move-in/adapters/worker/move-in-ports.server";
 import { runForAWhile } from "~/domains/move-in/application/run-move-in";
 import { MoveInError } from "~/domains/move-in/model/move-in-error";
 import { migratedSqliteD1, type MigratedSqlite } from "../../helpers/migrated-sqlite";
+import { cleanupDatabase } from "../../helpers/cleanup";
+import { createTestRecipe, createTestUser } from "../../utils";
 import { makeZip } from "./support/make-zip";
 import { mealieDatabase } from "./support/mealie-database";
+
+// Prisma on D1 in the Worker; here, the tests' own SQLite.
+vi.mock("~/lib/db.server", async (original) => {
+  const real = await original<typeof import("~/lib/db.server")>();
+  // db is assigned once the local database opens, so it is read through, not copied.
+  return { ...real, get db() { return real.db; }, getDb: vi.fn(() => real.getLocalDb()) };
+});
 
 let database: MigratedSqlite;
 const now = new Date("2026-11-23T12:00:00.000Z");
@@ -83,5 +94,51 @@ describe("moveInPorts", () => {
     ]);
     // The backup is deleted once it has moved in; the cover photo stays.
     expect(Object.keys(photos.objects)).toEqual([expect.stringMatching(/^covers\/import\/movein-/)]);
+  });
+});
+
+describe("moveInPorts' organizers", () => {
+  afterEach(async () => {
+    await cleanupDatabase();
+  });
+
+  it("are on for a cook with the organizers flag", () => {
+    const ports = (flags: object) => moveInPorts({ DB: database.binding, PHOTOS: memoryBucket(), ...flags } as never, () => now);
+    expect(ports({ SPOONJOY_FLAGS: "organizers" }).organizers?.on("chef-1")).toBe(true);
+    expect(ports({ SPOONJOY_FLAG_USERS: JSON.stringify({ "chef-1": ["organizers"] }) }).organizers?.on("chef-1")).toBe(true);
+    expect(ports({ SPOONJOY_FLAG_USERS: JSON.stringify({ "chef-1": ["organizers"] }) }).organizers?.on("chef-2")).toBe(false);
+    expect(ports({}).organizers?.on("chef-1")).toBe(false);
+  });
+
+  it("go on through Kitchen's organizers in the Worker's database, opened once for the run", async () => {
+    const db = await getLocalDb();
+    await cleanupDatabase();
+    const cook = await db.user.create({ data: createTestUser() });
+    const first = await db.recipe.create({ data: createTestRecipe(cook.id) });
+    const second = await db.recipe.create({ data: createTestRecipe(cook.id) });
+    vi.mocked(getDb).mockClear();
+    const ports = moveInPorts({ DB: database.binding, PHOTOS: memoryBucket(), SPOONJOY_FLAGS: "organizers" } as never, () => now);
+
+    await ports.organizers?.attach({ ownerId: cook.id, recipeId: first.id, tags: ["Quick"], categories: [], tools: [] });
+    await ports.organizers?.attach({ ownerId: cook.id, recipeId: second.id, tags: [], categories: [], tools: ["Skillet"] });
+
+    const store = prismaOrganizerStore(db);
+    expect((await organizersOnRecipe(store, first.id, "tag")).map((tag) => tag.name)).toEqual(["Quick"]);
+    expect((await organizersOnRecipe(store, second.id, "tool")).map((tool) => tool.name)).toEqual(["Skillet"]);
+    expect(getDb).toHaveBeenCalledTimes(1);
+    expect(getDb).toHaveBeenCalledWith({ DB: database.binding });
+  });
+});
+
+describe("moveInEnv", () => {
+  it("takes the database, photo storage and flags a move-in runs with, and nothing without the database or storage", () => {
+    const DB = { prepare: () => null };
+    const PHOTOS = memoryBucket();
+    expect(moveInEnv({ DB, PHOTOS, SPOONJOY_FLAGS: "organizers", SPOONJOY_FLAG_USERS: "{}", JOBS: {} } as never)).toEqual({
+      DB, PHOTOS, SPOONJOY_FLAGS: "organizers", SPOONJOY_FLAG_USERS: "{}",
+    });
+    expect(moveInEnv({ DB } as never)).toBeNull();
+    expect(moveInEnv({ PHOTOS } as never)).toBeNull();
+    expect(moveInEnv(undefined)).toBeNull();
   });
 });
