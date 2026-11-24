@@ -2315,6 +2315,10 @@
         {
           "identity": "menuitem \"Manage covers\" [menu/item] in main",
           "count": 1
+        },
+        {
+          "identity": "menuitem \"Organize\" [menu/item] in main",
+          "count": 1
         }
       ],
       "cook-mode": [
@@ -6894,6 +6898,10 @@
         },
         {
           "identity": "menuitem \"Manage covers\" [menu/item] in main",
+          "count": 1
+        },
+        {
+          "identity": "menuitem \"Organize\" [menu/item] in main",
           "count": 1
         }
       ],
