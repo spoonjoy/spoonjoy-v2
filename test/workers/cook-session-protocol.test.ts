@@ -357,6 +357,33 @@ describe("cook-session protocol v1", () => {
     await expect(send("GET", RECIPE).then(stateOf)).resolves.toEqual(written);
   });
 
+  it("answers a progress write sent again after it landed with the saved state, not a conflict", async () => {
+    // A dropped connection loses the answer, not the write: the same body arrives a second time.
+    const started = await startSession();
+    const body = patchBody(started, { checkedIngredientIds: [RICE], scaleFactor: 2 });
+    const written = await stateOf(await send("PATCH", RECIPE, { body }));
+    expect(written.revision).toBe(1);
+
+    const resent = await send("PATCH", RECIPE, { body });
+    expect(resent.status).toBe(200);
+    await expect(stateOf(resent)).resolves.toEqual(written);
+    await expect(send("GET", RECIPE).then(stateOf)).resolves.toEqual(written);
+  });
+
+  it("still refuses a resend once newer progress has landed, or one that would change the saved state", async () => {
+    const started = await startSession();
+    const first = patchBody(started, { scaleFactor: 2 });
+    const written = await stateOf(await send("PATCH", RECIPE, { body: first }));
+    const newer = await stateOf(await patch(written, { checkedIngredientIds: [STOCK] }));
+
+    const late = await expectError(await send("PATCH", RECIPE, { body: first }), 409, "stale_revision");
+    expect(late.state).toEqual(newer);
+
+    // One revision behind, but asking for something the session does not hold: a real conflict.
+    const different = await expectError(await patch(written, { scaleFactor: 3 }), 409, "stale_revision");
+    expect(different.state).toEqual(newer);
+  });
+
   it("returns not_found for progress written before a session starts", async () => {
     const neverStarted = {
       attemptId: "00000000-0000-4000-8000-000000000000",

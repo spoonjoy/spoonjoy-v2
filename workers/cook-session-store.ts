@@ -153,6 +153,23 @@ export function applyCookProgressChanges(progress: CookProgress, changes: CookPr
   };
 }
 
+/**
+ * Whether `changes`, written over the revision before `current`, would have produced `current`
+ * exactly: true for a write that already landed and is being sent again because its answer was
+ * lost. Every field a write carries is a whole value (an index, an id, a scale, a full id list),
+ * never a delta, so writing it again changes nothing.
+ */
+export function cookProgressAlreadyHolds(current: CookState, expectedRevision: number, changes: CookProgressChanges): boolean {
+  if (current.revision !== expectedRevision + 1) return false;
+  const next = applyCookProgressChanges(current.progress, changes);
+  const held = current.progress;
+  return next.activeStepIndex === held.activeStepIndex &&
+    next.activeStepId === held.activeStepId &&
+    next.scaleFactor === held.scaleFactor &&
+    JSON.stringify(next.checkedIngredientIds) === JSON.stringify(held.checkedIngredientIds) &&
+    JSON.stringify(next.checkedStepOutputIds) === JSON.stringify(held.checkedStepOutputIds);
+}
+
 /** Writes `changes` over `current` as the next revision. The caller has already checked attempt and revision. */
 export async function writeCookProgress(
   storage: CookSessionSqlStorage,

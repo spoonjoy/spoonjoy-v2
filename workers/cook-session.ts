@@ -9,6 +9,7 @@ import {
   parseCookPatchBody,
 } from "./cook-session-protocol";
 import {
+  cookProgressAlreadyHolds,
   expireIdleCookSession,
   readCookSession,
   startCookSession,
@@ -198,6 +199,12 @@ export class CookSession {
     }
     if (current.attemptId !== body.attemptId) {
       return cookErrorResponse(409, "stale_attempt", "Cook session attempt has changed.", { state: current });
+    }
+    // A dropped connection loses the answer, not the write, so the same write can arrive again
+    // one revision late. When the session already holds exactly what it asks for, answer with
+    // the session as it is, the answer the first send would have had. Anything else is a conflict.
+    if (cookProgressAlreadyHolds(current, body.expectedRevision, body.changes)) {
+      return cookJsonResponse({ state: current });
     }
     if (current.revision !== body.expectedRevision) {
       return cookErrorResponse(409, "stale_revision", "Cook session has newer progress.", { state: current });

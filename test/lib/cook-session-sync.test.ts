@@ -518,6 +518,43 @@ describe("CookSessionSync", () => {
     expect(sync.status).toBe("synced");
   });
 
+  it("settles without sending again when a conflict answer already holds the change", async () => {
+    // The first answer was lost and the same write arrived late: the server already holds it.
+    const { client, sync, onProgress } = createSync({ progress: progress({ checkedIngredientIds: ["rice"] }), server: snapshot(1) });
+    client.reads.push({ kind: "state", state: snapshot(1) });
+    client.patches.push({ kind: "conflict", state: snapshot(2, { checkedIngredientIds: ["rice"] }) });
+
+    await sync.sync(true);
+
+    expect(client.patch).toHaveBeenCalledTimes(1);
+    expect(onProgress).not.toHaveBeenCalled();
+    expect(sync.server).toEqual(snapshot(2, { checkedIngredientIds: ["rice"] }));
+    expect(sync.status).toBe("synced");
+  });
+
+  it.each([
+    ["answers it with the saved state", { kind: "state", state: snapshot(2, { scaleFactor: 2 }) }],
+    ["refuses it as stale with the saved state", { kind: "conflict", state: snapshot(2, { scaleFactor: 2 }) }],
+  ] as const)("sends a dropped save again and settles when the server %s", async (_name, answer) => {
+    const { client, sync } = createSync({ progress: progress({ scaleFactor: 2 }), server: snapshot(1) });
+    client.reads.push({ kind: "state", state: snapshot(1) });
+    // The connection dropped: the save ran on the server, but no answer came back.
+    client.patches.push({ kind: "transient" });
+
+    await sync.sync(true);
+    expect(sync.status).toBe("offline");
+
+    client.patches.push(answer);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(client.patchCalls).toEqual([
+      { server: snapshot(1), changes: { scaleFactor: 2 } },
+      { server: snapshot(1), changes: { scaleFactor: 2 } },
+    ]);
+    expect(sync.server).toEqual(snapshot(2, { scaleFactor: 2 }));
+    expect(sync.status).toBe("synced");
+  });
+
   it("keeps a change made while a request was in flight and sends it next", async () => {
     const { client, sync } = createSync({ progress: progress({ scaleFactor: 2 }), server: snapshot(1) });
     client.reads.push({ kind: "state", state: snapshot(1) });
