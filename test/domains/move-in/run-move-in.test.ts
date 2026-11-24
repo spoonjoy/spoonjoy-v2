@@ -76,7 +76,7 @@ function harness({ zip = backup(), email = "cook@example.com", write, organizers
         jobs.set(id, { ...job, ...patch });
         return 1;
       },
-      forgiveAttempt: async (id) => void jobs.set(id, { ...(jobs.get(id) as MoveInJob), attempt: Math.max((jobs.get(id) as MoveInJob).attempt - 1, 0) }),
+      forgiveAttempt: async (id, token) => void (token === holder && jobs.set(id, { ...(jobs.get(id) as MoveInJob), attempt: Math.max((jobs.get(id) as MoveInJob).attempt - 1, 0) })),
       sourceInstanceKey: async () => (sources.at(-1)?.instanceKey as string | undefined) ?? null,
       ensureSource: async (source) => (sources.push(source), "source-1"),
       hasIssues: async () => events.some((event) => event.level !== "info"),
@@ -455,10 +455,25 @@ describe("a source other than a backup", () => {
     const h = harness();
     let down = true;
     changedSource(h, (kitchen) => ({ draft: async (index) => (down && index === 1 ? Promise.reject(new SourceUnavailableError("server down")) : kitchen.draft(index)) }));
-    expect(await h.runAll(1)).toMatchObject({ status: "running", cursor: "1", attempt: 0 });
+    // Each run under its claim, as the queue runs them; the claim counts an attempt.
+    const runClaimed = async () => {
+      for (let i = 0; i < 30 && !["done", "done-with-issues", "failed"].includes(h.job().status); i++) {
+        const token = (await h.ports.store.claim("job-1", new Date())) as string;
+        await runNextChunk("job-1", h.ports, { chunkSize: 1, token }).catch(() => undefined);
+        await h.ports.store.release("job-1", token);
+      }
+      return h.job();
+    };
+    expect(await runClaimed()).toMatchObject({ status: "running", cursor: "1", attempt: 0 });
     expect(h.counts.get("recipes")).toMatchObject({ failed: 0 });
+    // A run that holds no claim counted no attempt, so it takes none back.
+    await expect(runNextChunk("job-1", h.ports)).rejects.toBeInstanceOf(SourceUnavailableError);
+    h.jobs.set("job-1", { ...h.job(), attempt: 2 });
+    await expect(runNextChunk("job-1", h.ports)).rejects.toBeInstanceOf(SourceUnavailableError);
+    expect(h.job().attempt).toBe(2);
+    h.jobs.set("job-1", { ...h.job(), attempt: 0 });
     down = false;
-    expect(await h.runAll(1)).toMatchObject({ status: "done-with-issues" });
+    expect(await runClaimed()).toMatchObject({ status: "done-with-issues" });
     expect(h.counts.get("recipes")).toMatchObject({ failed: 0, created: 3 });
   });
 

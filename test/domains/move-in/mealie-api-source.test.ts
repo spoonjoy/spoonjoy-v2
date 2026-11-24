@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { apiRecipeDraft } from "~/domains/move-in/adapters/sources/mealie-api/recipe";
 import { mealieApiSource } from "~/domains/move-in/adapters/sources/mealie-api/source";
 import { readMealieDatabase, recipeDrafts } from "~/domains/move-in/adapters/sources/mealie-backup/database";
@@ -179,7 +179,8 @@ describe("the other app's server as a move-in source", () => {
     ]);
     expect(await kitchen.count()).toEqual({ photos: 1, tags: 0, categories: 0, tools: 1 });
     const soup = apiRecipeDraft(recipes[1]);
-    await expect(kitchen.readPhoto(soup)).rejects.toBeInstanceOf(SourceUnavailableError);
+    // The server still answers, so the trouble is this photo's.
+    await expect(kitchen.readPhoto(soup)).rejects.toThrow("couldn't give this one");
   });
 
   it("has no kitchen but the token's own", async () => {
@@ -243,14 +244,66 @@ describe("the other app's server as a move-in source", () => {
     await expect(kitchen.readPhoto(apiRecipeDraft({ id: last.id, image: "x" }))).rejects.toThrow("larger than 20 MB");
   });
 
+  it("counts a recipe or photo the server fails on against that one alone, while the server still answers", async () => {
+    const { routes } = kitchenRoutes();
+    const first = (routes["/api/recipes"] as { items: Json[] }).items[3];
+    const photoPath = `/api/media/recipes/${(routes["/api/recipes"] as { items: Json[] }).items[0].id}/images/original.webp`;
+    let down = false;
+    const { fetch: answering } = server(routes, { status: { [`/api/recipes/${first.slug}`]: 500, [photoPath]: 500 } });
+    const fetch: typeof globalThis.fetch = (input, init) => (down ? Promise.reject(new TypeError("fetch failed")) : answering(input, init));
+    const kitchen = await (await mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).openKitchen(KITCHEN);
+    if (!kitchen) throw new Error("expected the kitchen");
+    const failed = await kitchen.draft(3).catch((error: unknown) => error);
+    expect(failed).not.toBeInstanceOf(SourceUnavailableError);
+    expect(String(failed)).toContain("couldn't give this one");
+    const photo = apiRecipeDraft({ id: (routes["/api/recipes"] as { items: Json[] }).items[0].id, image: "x" });
+    await expect(kitchen.readPhoto(photo)).rejects.toThrow("couldn't give this one");
+    // When the server stops answering altogether, it's an outage again.
+    down = true;
+    await expect(kitchen.draft(0)).rejects.toBeInstanceOf(SourceUnavailableError);
+    await expect(kitchen.readPhoto(photo)).rejects.toBeInstanceOf(SourceUnavailableError);
+  });
+
+  it("waits so long for an answer to start, and so long more for its body", async () => {
+    vi.useFakeTimers();
+    try {
+      const { routes } = kitchenRoutes();
+      const hang = (signal: AbortSignal | null | undefined) => new Promise<never>((_, reject) => signal?.addEventListener("abort", () => reject(signal.reason)));
+      let slow: "headers" | "body" | null = null;
+      const fetch: typeof globalThis.fetch = async (input, init) => {
+        if (slow === "headers" && String(input).includes("/api/recipes/")) return hang(init?.signal);
+        if (slow === "body" && String(input).includes("/api/recipes/")) {
+          const body = new ReadableStream({ start: (controller) => void hang(init?.signal).catch((error) => controller.error(error)) });
+          return new Response(body);
+        }
+        return server(routes).fetch(input, init);
+      };
+      const kitchen = await (await mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).openKitchen(KITCHEN);
+      slow = "headers";
+      const waiting = kitchen?.draft(0).catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(String(await waiting)).toContain("took too long to answer");
+      slow = "body";
+      const reading = kitchen?.draft(0).catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(14_000);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(String(await reading)).toContain("took too long to arrive");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("calls an answer cut off partway an outage", async () => {
     const { routes } = kitchenRoutes();
+    let cut = false;
     const fetch: typeof globalThis.fetch = async (input, init) => {
-      if (!String(input).includes("/api/recipes/")) return server(routes).fetch(input, init);
+      if (!cut) return server(routes).fetch(input, init);
       const body = new ReadableStream({ start: (controller) => controller.error(new TypeError("network connection lost")) });
       return new Response(body);
     };
     const kitchen = await (await mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).openKitchen(KITCHEN);
+    cut = true;
+    await expect(kitchen?.draft(0)).rejects.toThrow("stopped answering partway");
     await expect(kitchen?.draft(0)).rejects.toBeInstanceOf(SourceUnavailableError);
   });
 
@@ -282,6 +335,8 @@ describe("the other app's server as a move-in source", () => {
     await expect(mealieApiSource({ address: "http://recipes.example.com", token: "t", fetch: server(kitchenRoutes().routes).fetch })).rejects.toMatchObject({ code: "server-address" });
     // A server that answers, but isn't the recipe app.
     await expect(mealieApiSource({ address: "https://example.com", token: "t", fetch: server({ "/api/app/about": { name: "a blog" } }).fetch })).rejects.toMatchObject({ code: "server-address" });
+    const empty: typeof globalThis.fetch = async () => new Response(null);
+    await expect(mealieApiSource({ address: "https://example.com", token: "t", fetch: empty })).rejects.toMatchObject({ code: "server-address" });
     const page: typeof globalThis.fetch = async () => new Response("<html>a blog</html>");
     await expect(mealieApiSource({ address: "https://example.com", token: "t", fetch: page })).rejects.toMatchObject({ code: "server-address" });
     await expect(mealieApiSource({ address: "https://example.com", token: "t", fetch: server({}).fetch })).rejects.toMatchObject({ code: "server-address" });
