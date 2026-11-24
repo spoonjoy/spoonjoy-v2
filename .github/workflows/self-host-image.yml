@@ -352,7 +352,7 @@ jobs:
               const [type, status] = ["type", "status"].map((column) => keys.columns.indexOf(column));
               const done = keys.rows.filter((row) => row[type] === "move-in.run" && row[status] === "done").length;
               console.log(JSON.stringify({ moveInJobsDone: done, jobKeys: keys.rows.length }));
-              if (!done) throw new Error("No move-in job ran to done on the server's JOBS queue.");
+              if (!done) throw new Error("No move-in job ran to done on the JOBS queue of the server.");
             }
           ' | tee "$OUT/jobs.json"
 
