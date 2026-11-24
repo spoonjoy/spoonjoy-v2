@@ -3,13 +3,14 @@ import { Form as RouterForm, useActionData, useLoaderData } from "react-router";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Button } from "~/components/ouro/button/button";
+import { Combobox } from "~/components/ouro/combobox/combobox";
 import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Text } from "~/components/ouro/text/text";
-import { TextField } from "~/components/ouro/text-field/text-field";
 import { CookbookPage } from "~/components/cookbook/page";
-import { ORGANIZER_KIND_COPY, ORGANIZER_KIND_ORDER, organizerHref, organizerMeta } from "~/components/organizers/organizer-kinds";
+import { ORGANIZER_KIND_COPY, ORGANIZER_KIND_ORDER, organizerAddLabel, organizerHref, organizerMeta } from "~/components/organizers/organizer-kinds";
+import { ORGANIZE_MARKER } from "~/domains/kitchen";
 import { recipeOrganizeAction, recipeOrganizeLoader } from "~/domains/kitchen/index.server";
 
 export function meta({ data }: Route.MetaArgs) {
@@ -36,7 +37,7 @@ export default function RecipeOrganize() {
           title="Organize"
           size="lg"
           divider
-          description="Sort this recipe your way. Separate names with commas."
+          description="Sort this recipe your way. Pick one you already use, or type a new one and press Enter."
         />
         <Form method="post" render={<RouterForm />} className="mt-6 gap-4">
           {actionData && "error" in actionData ? <Alert tone="destructive" title={actionData.error} /> : null}
@@ -45,13 +46,20 @@ export default function RecipeOrganize() {
             const copy = ORGANIZER_KIND_COPY[kind];
             const current = loaded[copy.segment];
             return (
-              <TextField
-                key={`${kind}:${current.map((organizer) => organizer.slug).join(",")}`}
-                label={copy.label}
-                name={copy.segment}
-                defaultValue={current.map((organizer) => organizer.name).join(", ")}
-                placeholder={copy.placeholder}
-              />
+              <div key={`${kind}:${current.map((organizer) => organizer.slug).join(",")}`}>
+                {/* Says the form shows this kind, so removing every chip clears it. */}
+                <input type="hidden" name={ORGANIZE_MARKER} value={copy.segment} />
+                <Combobox
+                  label={copy.label}
+                  name={copy.segment}
+                  multiple
+                  allowCustomValue
+                  items={loaded.choices[copy.segment]}
+                  defaultValue={current.map((organizer) => organizer.name)}
+                  placeholder={copy.placeholder}
+                  customValueLabel={organizerAddLabel}
+                />
+              </div>
             );
           })}
           <div className="flex sm:justify-end">

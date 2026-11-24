@@ -14,6 +14,9 @@ export type OrganizerKind = (typeof ORGANIZER_KINDS)[number];
 /** The longest name an organizer may have, in characters. */
 export const ORGANIZER_NAME_MAX_LENGTH = 60;
 
+/** The hidden field that names each kind the Organize form shows, so a kind with every chip removed still clears. */
+export const ORGANIZE_MARKER = "organize";
+
 export type Organizer = { id: string; ownerId: string; kind: OrganizerKind; name: string; slug: string };
 
 /** A recipe carrying an organizer. */

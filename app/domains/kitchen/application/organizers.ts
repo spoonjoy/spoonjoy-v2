@@ -37,6 +37,11 @@ export async function organizersOnRecipe(store: OrganizerStore, recipeId: string
   return (await store.organizersOnRecipe(recipeId, kind)).sort(byName);
 }
 
+/** The names of the owner's organizers of one kind, in name order: what the Organize page suggests as a cook types. */
+export async function organizerNames(store: OrganizerStore, ownerId: string, kind: OrganizerKind): Promise<string[]> {
+  return (await store.organizersOf(ownerId, kind)).sort(byName).map((organizer) => organizer.name);
+}
+
 /** The owner's organizers of one kind, by name, each with how many live recipes carry it (unused ones show 0). */
 export async function listOrganizers(
   store: OrganizerStore,

@@ -8,13 +8,14 @@ import {
   deleteOrganizer,
   listOrganizers,
   mergeOrganizers,
+  organizerNames,
   organizerPage,
   organizersOnRecipe,
   renameOrganizerById,
   setRecipeOrganizers,
 } from "../application/organizers";
 import { ORGANIZER_KINDS, ORGANIZER_NAME_MAX_LENGTH, normalizeOrganizerName, type Organizer, type OrganizerKind } from "../model/organizer";
-import { organizerNamesFromInput, organizersRequest } from "./organizers-route.server";
+import { organizerNamesFromForm, organizersRequest } from "./organizers-route.server";
 
 type Args = { request: Request; context: AppLoadContext };
 
@@ -101,17 +102,28 @@ export async function recipeOrganizeLoader({ request, context, recipeId }: Args 
   const recipe = await db.recipe.findFirst({ where: { id: recipeId, chefId: userId, deletedAt: null }, select: { id: true, title: true } });
   if (!recipe) notFound();
   const [tags, categories, tools] = await Promise.all(ORGANIZER_KINDS.map((kind) => organizersOnRecipe(store, recipe.id, kind)));
-  return { recipe, tags: named(tags), categories: named(categories), tools: named(tools) };
+  // Every one the cook has of each kind, so typing "weeknight" offers their "Weeknight" instead of starting another.
+  const [tagChoices, categoryChoices, toolChoices] = await Promise.all(
+    ORGANIZER_KINDS.map((kind) => organizerNames(store, userId, kind)),
+  );
+  return {
+    recipe,
+    tags: named(tags),
+    categories: named(categories),
+    tools: named(tools),
+    choices: { tags: tagChoices, categories: categoryChoices, tools: toolChoices },
+  };
 }
 
 export async function recipeOrganizeAction({ request, context, recipeId }: Args & { recipeId: string }) {
   const { userId, store } = await organizersRequest(request, context);
   if ((await store.liveRecipeChefId(recipeId)) !== userId) notFound();
   const form = await request.formData();
-  // A kind the form leaves out stays as it is; an empty field clears it.
-  const names = ORGANIZER_KINDS.filter((kind) => form.has(ORGANIZE_FIELDS[kind])).map(
-    (kind) => [kind, organizerNamesFromInput(form.get(ORGANIZE_FIELDS[kind]))] as const,
-  );
+  // A kind the form leaves out stays as it is; a shown one with no chips (or an empty field) clears it.
+  const names = ORGANIZER_KINDS.flatMap((kind) => {
+    const typed = organizerNamesFromForm(form, ORGANIZE_FIELDS[kind]);
+    return typed ? [[kind, typed] as const] : [];
+  });
   if (names.some(([, typed]) => typed.some((name) => containsObjectionableContent(name)))) {
     return data({ error: OBJECTIONABLE_CONTENT_MESSAGE }, { status: 400 });
   }

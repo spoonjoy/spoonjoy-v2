@@ -81,6 +81,11 @@ export function recipeCountLabel(count: number): string {
   return count === 1 ? "1 recipe" : `${count} recipes`;
 }
 
+/** The row in a token field's phone sheet that adds what the cook typed as a new chip. */
+export function organizerAddLabel(text: string): string {
+  return `Add “${text}”`;
+}
+
 /** A page title for an organizer list, an organizer's page or a recipe's Organize page. */
 export function organizerMeta(title: string) {
   return [{ title: `${title} - Spoonjoy` }, { name: "robots", content: "noindex" }];
