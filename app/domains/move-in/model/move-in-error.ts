@@ -10,7 +10,7 @@ export const MOVE_IN_ERROR_MESSAGES = {
   "no-file": "Choose your backup's .zip file first, then press Move in.",
   "server-address": "That address doesn't answer like a recipe server. Copy the address you open your recipe app at, starting with https://, and paste it here again.",
   "server-token": "Your recipe server didn't accept that token. In your recipe app, make a new API token under your profile, then paste it here again.",
-  "server-unreachable": "Spoonjoy couldn't reach your recipe server. It has to open from anywhere on the internet at an https address. If it only opens at home or on your own network, move in from a backup instead.",
+  "server-unreachable": "Your recipe server didn't answer Spoonjoy. It has to open from anywhere on the internet at an https address. If it only opens at home or on your own network, move in from a backup instead.",
   "server-busy": "Your recipe server kept asking Spoonjoy to wait, for half an hour, so the move-in has stopped. Move in again later to carry on: recipes already in stay, and nothing comes in twice.",
   "no-address": "Paste your recipe server's address first, then press Move in.",
   "no-token": "Paste your recipe app's API token first, then press Move in.",
