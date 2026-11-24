@@ -95,6 +95,14 @@ jobs:
         if: steps.scope.outputs.ouro != 'false'
         run: pnpm run verify:clean:test:ouro
 
+      # Ouro UI's tests that race the clock on a shared runner (test/ouro/timing-quarantine.ts says
+      # which and why) run here instead of in the step above, so they report without failing an
+      # unrelated pull request. A failure here shows on the step and leaves the job green.
+      - name: ⏱️ Ouro UI timing tests (not required)
+        if: ${{ !cancelled() && steps.scope.outputs.ouro != 'false' }}
+        continue-on-error: true
+        run: pnpm run verify:clean:test:ouro:timing
+
       - name: 🎭 Ouro UI specs against the built Storybook
         if: steps.scope.outputs.ouro != 'false'
         run: |
