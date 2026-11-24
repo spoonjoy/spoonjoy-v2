@@ -1,11 +1,15 @@
 // @vitest-environment node
+import { readdirSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectConsoleWarning } from "../warning-policy";
 import {
+  d1RouteLabel,
   d1TransientKind,
   DEFAULT_D1_MAX_READ_REISSUES,
   DEFAULT_D1_READ_REISSUE_MS,
+  DEFAULT_D1_BINDING_RETRY_DELAYS_MS,
   DEFAULT_D1_RETRY_DELAYS_MS,
+  isIdempotentWriteSql,
   isReadOnlySql,
   withD1TransientRetry,
   withTransientD1Retry,
@@ -19,6 +23,7 @@ import type { SlowCallReport } from "~/lib/slow-call.server";
 
 const NETWORK_LOST = new Error("D1_ERROR: Network connection lost.");
 const STARTUP_FAILED = new Error("D1_ERROR: Internal error while starting up D1 DB storage.");
+const INTERNAL = new Error("D1_ERROR: internal error; reference = abc123");
 const UNIQUE = new Error("D1_ERROR: UNIQUE constraint failed: Recipe.id: SQLITE_CONSTRAINT");
 
 /** A fake binding whose calls fail with the queued errors, in order, then succeed. */
@@ -86,6 +91,8 @@ describe("d1TransientKind", () => {
     expect(d1TransientKind(new Error("D1_ERROR: D1 DB reset because its code was updated."))).toBe("code_updated_reset");
     expect(d1TransientKind(new Error("D1_ERROR: Internal error while starting up D1 DB storage"))).toBe("storage_startup_failed");
     expect(d1TransientKind(new Error("D1_ERROR: internal error; reference = abc123"))).toBe("internal_error");
+    expect(d1TransientKind(new Error("D1_ERROR: Replica disconnected from primary."))).toBe("replica_disconnected");
+    expect(d1TransientKind(new Error("D1_ERROR: Cannot resolve D1 DB due to transient issue on remote node."))).toBe("remote_node_unresolved");
     expect(d1TransientKind("D1_ERROR: Network connection lost.")).toBe("network_connection_lost");
     expect(d1TransientKind(UNIQUE)).toBeNull();
     expect(d1TransientKind({ message: "Network connection lost" })).toBeNull();
@@ -109,6 +116,46 @@ describe("isReadOnlySql", () => {
     expect(isReadOnlySql("WITH r AS (SELECT 'update') SELECT * FROM r")).toBe(false);
     expect(isReadOnlySql("PRAGMA foreign_keys = ON")).toBe(false);
     expect(isReadOnlySql("")).toBe(false);
+  });
+});
+
+describe("isIdempotentWriteSql", () => {
+  it("accepts an UPDATE to fixed values whose WHERE names none of the columns it sets", () => {
+    expect(isIdempotentWriteSql("UPDATE Recipe SET title = ? WHERE id = ?")).toBe(true);
+    expect(isIdempotentWriteSql(
+      'UPDATE "main"."Recipe" SET "title" = ?, "updatedAt" = ?, "deletedAt" = NULL WHERE ("main"."Recipe"."id" = ? AND 1=1) RETURNING "id", "title"',
+    )).toBe(true);
+    expect(isIdempotentWriteSql("UPDATE Recipe SET status = 'done', n = -1.5 WHERE id = ?1; ")).toBe(true);
+    expect(isIdempotentWriteSql("UPDATE Recipe SET title = ?")).toBe(true);
+  });
+
+  it("accepts an upsert on a conflict target that sets fixed or excluded values", () => {
+    expect(isIdempotentWriteSql(
+      'INSERT INTO "Pref" ("userId", "value") VALUES (?, ?) ON CONFLICT ("userId") DO UPDATE SET "value" = excluded."value" RETURNING "userId"',
+    )).toBe(true);
+    expect(isIdempotentWriteSql("INSERT INTO Pref (userId, value) VALUES (?, ?) ON CONFLICT(userId) DO UPDATE SET value = ?")).toBe(true);
+  });
+
+  it("rejects an UPDATE whose second run could match other rows or set other values", () => {
+    // A second run would match no rows, so a caller that checks the rows changed sees a conflict.
+    expect(isIdempotentWriteSql("UPDATE Job SET claimedBy = ? WHERE id = ? AND claimedBy IS NULL")).toBe(false);
+    expect(isIdempotentWriteSql('UPDATE "Job" SET "claimedBy" = ? WHERE "Job"."claimedBy" IS NULL')).toBe(false);
+    expect(isIdempotentWriteSql("UPDATE Recipe SET views = views + 1 WHERE id = ?")).toBe(false);
+    expect(isIdempotentWriteSql("UPDATE Recipe SET updatedAt = CURRENT_TIMESTAMP WHERE id = ?")).toBe(false);
+    expect(isIdempotentWriteSql("UPDATE Recipe SET title = ? WHERE id = (SELECT min(id) FROM Recipe)")).toBe(false);
+    expect(isIdempotentWriteSql("UPDATE Recipe SET title = ? WHERE id = ? LIMIT 1")).toBe(false);
+    expect(isIdempotentWriteSql("UPDATE Recipe SET title = ? WHERE id = ?; DELETE FROM Recipe")).toBe(false);
+  });
+
+  it("rejects every other write, whose second run reports different changes or adds rows", () => {
+    expect(isIdempotentWriteSql("DELETE FROM Recipe WHERE id = ?")).toBe(false);
+    expect(isIdempotentWriteSql("INSERT INTO Recipe (id) VALUES (?)")).toBe(false);
+    expect(isIdempotentWriteSql("INSERT OR IGNORE INTO Recipe (id) VALUES (?)")).toBe(false);
+    expect(isIdempotentWriteSql("INSERT INTO Recipe (id) VALUES (?) ON CONFLICT (id) DO NOTHING")).toBe(false);
+    expect(isIdempotentWriteSql("INSERT INTO Pref (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v WHERE v <> excluded.v")).toBe(false);
+    expect(isIdempotentWriteSql("INSERT INTO Pref (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET n = n + 1")).toBe(false);
+    expect(isIdempotentWriteSql("REPLACE INTO Recipe (id) VALUES (?)")).toBe(false);
+    expect(isIdempotentWriteSql("-- only a comment")).toBe(false);
   });
 });
 
@@ -152,6 +199,25 @@ describe("withD1TransientRetry", () => {
     expect(reports).toEqual([
       { event: "d1_transient_error", operation: "write", call: "run", attempt: 1, willRetry: false, kind: "network_connection_lost" },
     ]);
+  });
+
+  it("retries an idempotent write on any transient error, and returns its result", async () => {
+    const { wrapped, calls, reports, sleeps } = harness([INTERNAL, NETWORK_LOST]);
+    await expect(wrapped.prepare("UPDATE Recipe SET title = ? WHERE id = ?").bind("t", "r1").run())
+      .resolves.toEqual({ meta: { changes: 1 } });
+    expect(calls.map((c) => c.values)).toEqual([["t", "r1"], ["t", "r1"], ["t", "r1"]]);
+    expect(sleeps).toEqual([1, 2]);
+    expect(reports.map((r) => [r.operation, r.attempt, r.willRetry, r.kind])).toEqual([
+      ["write", 1, true, "internal_error"],
+      ["write", 2, true, "network_connection_lost"],
+    ]);
+  });
+
+  it("never retries a batch of writes, even when each statement is idempotent", async () => {
+    const { wrapped, calls } = harness([INTERNAL]);
+    const update = wrapped.prepare("UPDATE Recipe SET title = ? WHERE id = ?").bind("t", "r1");
+    await expect(wrapped.batch([update, update])).rejects.toBe(INTERNAL);
+    expect(calls).toHaveLength(1);
   });
 
   it("retries a write when D1 storage failed to start, because the statement never ran", async () => {
@@ -223,12 +289,24 @@ describe("withD1TransientRetry", () => {
     await expect(wrapped.prepare("SELECT 1").all()).resolves.toEqual({ results: [{ ok: 1 }] });
   });
 
+  it("keeps the operation-level backoff and adds more, capped at 3.5 s in all, so a read outlasts a longer outage", () => {
+    expect(DEFAULT_D1_BINDING_RETRY_DELAYS_MS).toEqual([...DEFAULT_D1_RETRY_DELAYS_MS, 1000, 1900]);
+    expect(DEFAULT_D1_BINDING_RETRY_DELAYS_MS.reduce((sum, ms) => sum + ms, 0)).toBe(3500);
+  });
+
+  it("retries a read through every default delay before it gives up", async () => {
+    const failures = DEFAULT_D1_BINDING_RETRY_DELAYS_MS.map(() => INTERNAL);
+    const { wrapped, sleeps } = harness([...failures, INTERNAL], [...DEFAULT_D1_BINDING_RETRY_DELAYS_MS]);
+    await expect(wrapped.prepare("SELECT 1").all()).rejects.toBe(INTERNAL);
+    expect(sleeps).toEqual(DEFAULT_D1_BINDING_RETRY_DELAYS_MS);
+  });
+
   it("waits the default backoff with a real timer when no sleep is given", async () => {
     vi.useFakeTimers();
     try {
       const { db, calls } = fakeD1([NETWORK_LOST]);
       const pending = withD1TransientRetry(db).prepare("SELECT 1").all();
-      await vi.advanceTimersByTimeAsync(DEFAULT_D1_RETRY_DELAYS_MS[0] - 1);
+      await vi.advanceTimersByTimeAsync(DEFAULT_D1_BINDING_RETRY_DELAYS_MS[0] - 1);
       expect(calls).toHaveLength(1);
       await vi.advanceTimersByTimeAsync(1);
       await expect(pending).resolves.toEqual({ results: [{ ok: 1 }] });
@@ -236,6 +314,35 @@ describe("withD1TransientRetry", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+const TRANSIENT_LINE = JSON.stringify({
+    event: "d1_transient_error",
+    operation: "read",
+    call: "all",
+    attempt: 1,
+    willRetry: true,
+    kind: "network_connection_lost",
+  });
+
+describe("d1RouteLabel", () => {
+  it("keeps static segments and a data request's suffix, and hides every slug, id and name", () => {
+    expect(d1RouteLabel("/")).toBe("/");
+    expect(d1RouteLabel("/recipes.data")).toBe("/recipes.data");
+    expect(d1RouteLabel("/recipes/lemon-rice")).toBe("/recipes/:id");
+    expect(d1RouteLabel("/recipes/lemon-rice/edit.data")).toBe("/recipes/:id/edit.data");
+    expect(d1RouteLabel("/api/cook-sessions/lemon-rice")).toBe("/api/cook-sessions/:id");
+    expect(d1RouteLabel("/users/someone/kitchen-visitors")).toBe("/users/:id/kitchen-visitors");
+    expect(d1RouteLabel("/no-such-page")).toBe("/:id");
+  });
+
+  it("knows every static segment of the app's route files", () => {
+    const segments = readdirSync("app/routes")
+      .map((file) => file.replace(/\.(tsx|ts)$/, ""))
+      .flatMap((name) => name.split("."))
+      .filter((part) => part && !/^[$_]|[[\]]/.test(part) && part !== "route");
+    for (const segment of new Set(segments)) expect(d1RouteLabel(`/${segment}`), segment).toBe(`/${segment}`);
   });
 });
 
@@ -252,28 +359,40 @@ describe("withTransientD1Retry", () => {
     const env = { DB: db, OTHER: "x" };
     const wrapped = withTransientD1Retry(env, { delaysMs: [0] });
     expect(wrapped).not.toBe(env);
+    expectConsoleWarning(TRANSIENT_LINE);
     expect(env.DB).toBe(db);
     expect(wrapped.OTHER).toBe("x");
     await expect(wrapped.DB.prepare("SELECT 1").all()).resolves.toEqual({ results: [{ ok: 1 }] });
     expect(calls).toHaveLength(2);
   });
 
-  it("logs each transient failure as one JSON line, with no SQL or values, on a per-run QA Worker only", async () => {
-    // Without the QA switch nothing is logged: the warning policy fails the test on any stray line.
-    const quiet = fakeD1([NETWORK_LOST]);
-    await withTransientD1Retry({ DB: quiet.db }, { delaysMs: [0] }).DB.prepare("SELECT 1").all();
+  it("logs each transient failure as one JSON line, with no SQL or values, on every Worker", async () => {
+    // Production logs it too, so its Workers logs can count transient failures. The warning
+    // policy fails the test on any line not expected here, such as one carrying SQL or values.
+    expectConsoleWarning(TRANSIENT_LINE);
+    const production = fakeD1([NETWORK_LOST]);
+    await withTransientD1Retry({ DB: production.db }, { delaysMs: [0] })
+      .DB.prepare("SELECT secret FROM T WHERE v = ?").bind("value").all();
 
-    expectConsoleWarning(JSON.stringify({
-      event: "d1_transient_error",
-      operation: "read",
-      call: "all",
-      attempt: 1,
-      willRetry: true,
-      kind: "network_connection_lost",
-    }));
+    expectConsoleWarning(TRANSIENT_LINE);
     const qa = fakeD1([NETWORK_LOST]);
     await withTransientD1Retry({ DB: qa.db, SPOONJOY_QA_ERROR_LOGS: "1" }, { delaysMs: [0] })
       .DB.prepare("SELECT secret FROM T WHERE v = ?").bind("value").all();
+  });
+
+  it("names the route in the line, and whether a retry follows", async () => {
+    expectConsoleWarning(JSON.stringify({
+      event: "d1_transient_error",
+      operation: "write",
+      call: "run",
+      attempt: 1,
+      willRetry: false,
+      kind: "internal_error",
+      route: "/recipes/:id.data",
+    }));
+    const { db } = fakeD1([INTERNAL]);
+    const env = withTransientD1Retry({ DB: db }, { delaysMs: [0], route: d1RouteLabel("/recipes/lemon-rice.data") });
+    await expect(env.DB.prepare("INSERT INTO Recipe (id) VALUES (?)").bind("r1").run()).rejects.toBe(INTERNAL);
   });
 });
 
