@@ -162,6 +162,10 @@ describe("Self-host Image workflow", () => {
     expect(restart.run).toContain('= "$push_key" ]');
   });
 
+  it("runs when how the server picks its AI changes", () => {
+    expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["app/lib/server-ai.server.ts", "app/routes/account.server-settings.tsx"]));
+  });
+
   it("runs when the admin's backups screen or its download changes", () => {
     expect(workflow.on.pull_request.paths).toEqual(
       expect.arrayContaining(["app/routes/account.server-settings.tsx", "app/routes/account.server-backups.$name.tsx", "app/lib/self-host-backups.server.ts"]),

@@ -1,5 +1,6 @@
 import { createRequestHandler } from "react-router";
 import * as serverBuild from "virtual:react-router/server-build";
+import { applyServerAi } from "../app/lib/server-ai.server";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
 import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server";
 import { d1Binding } from "../app/lib/d1-read.server";
@@ -376,7 +377,8 @@ export default {
         ctx.waitUntil(isolateColoReport(report.isolate).then((where) => console.log(JSON.stringify(where))));
       }
     }
-    const env = withTransientD1Retry(rawEnv);
+    // A self-hosted server's admin may have picked its AI on Server settings (server-ai.server.ts).
+    const env = withTransientD1Retry(await applyServerAi(rawEnv));
     // A per-run QA Worker logs each write retry for the Journeys tail summary.
     return runWithD1WriteRetryReporter(rawEnv, () => handleFetch(request, env, ctx));
   },
@@ -385,10 +387,11 @@ export default {
   // run unless that setting is exactly "apply" (see app/lib/photo-lifecycle.server.ts). Old job keys
   // are expired alongside it.
   async scheduled(_controller, rawEnv, ctx) {
+    const aiEnv = await applyServerAi(rawEnv);
     // Each sweep wraps D1 for retries on its own, so one sweep's stalled reads never use up another's re-sends.
-    ctx.waitUntil(runScheduledPhotoSweep(withTransientD1Retry(rawEnv)));
-    ctx.waitUntil(runScheduledMoveInSweep(withTransientD1Retry(rawEnv), new Date()));
-    const env = withTransientD1Retry(rawEnv);
+    ctx.waitUntil(runScheduledPhotoSweep(withTransientD1Retry(aiEnv)));
+    ctx.waitUntil(runScheduledMoveInSweep(withTransientD1Retry(aiEnv), new Date()));
+    const env = withTransientD1Retry(aiEnv);
     // Done job keys older than JOB_KEY_KEPT_DAYS are forgotten, so the table doesn't grow without end;
     // a sweep that fails is reported, and the next one catches up.
     const jobKeys = jobKeysDatabase(env.DB);

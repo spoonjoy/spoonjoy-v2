@@ -34,6 +34,7 @@ on:
       - app/routes/signup.tsx
       - app/routes/account.server-settings.tsx
       - app/routes/account.server-backups.$name.tsx
+      - app/lib/server-ai.server.ts
       - app/lib/self-host-backups.server.ts
       - playwright.journeys.config.ts
       - e2e/journeys/**

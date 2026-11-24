@@ -32,7 +32,7 @@ The image runs as the unprivileged `node` user (uid 1000). A named volume needs 
 | `APPLE_NATIVE_CLIENT_IDS` | The app bundle IDs whose Sign in with Apple the server accepts. | `app.spoonjoy,app.spoonjoy.mac` |
 | `PORT` | The port the server listens on inside the container. | `8080` |
 | `SESSION_SECRET` | Signs sign-in cookies. Leave it unset and the server makes one and keeps it in `/data`. | generated |
-| `OPENAI_API_KEY`, `GEMINI_API_KEY` | AI features (ingredient parsing, covers). Without one, ingredient parsing uses the built-in parser. | none |
+| `OPENAI_API_KEY`, `GEMINI_API_KEY` | AI features (ingredient parsing, covers) until the admin picks AI under Server settings. Without one, ingredient parsing uses the built-in parser. | none |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Web push notifications in the browser. Leave the keys unset and the server makes its own pair and keeps it in `/data/push-keys.json`. The subject is your `https://` address, or `mailto:owner@<host>` on plain `http://`. A server restored into a new `/data` makes new keys, so browsers turn notifications on again there. | generated |
 | `SPOONJOY_SIGNUPS` | `open` lets anyone who reaches the server sign up; `invite` lets only people with an invite link. Set, it overrides the switch in Server settings. | the switch, invite-only at first |
 | `SPOONJOY_MODERATOR_USERNAMES` | Comma-separated usernames who may review reports at `/moderation`, besides the server's admin. | none |
@@ -88,6 +88,10 @@ The first account made on a new server is its admin. After that the server is in
 
 If the admin's account is deleted, the oldest remaining account becomes admin.
 
+## AI
+
+AI reads ingredients and imported recipes, and draws recipe covers. Under **Server settings**, the admin picks OpenAI or Gemini and pastes that provider's API key, or picks **No AI**. The pick wins over `OPENAI_API_KEY` and `GEMINI_API_KEY`, and takes effect on the next request. The key is kept in the server's database, so it's in its backups too. With no AI, ingredients are read by the built-in parser and recipes get no drawn covers.
+
 ## Running SQL
 
 `server.mjs sql` runs a SQL file against the database, whole or not at all, after bringing it up to date. Stop the server first:
@@ -135,7 +139,7 @@ The container runs as uid 1000, so a host folder it writes a backup into needs t
 
 ## How it's checked
 
-The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, signs up, adds a passkey and signs back in on the empty server, checks the first account is the admin, that a stranger is refused once sign-ups are off and that an invite link signs up one person and then stops working, checks Sign in with Apple is set up, signs in through a Dex OpenID Connect provider, seeds the QA kitchen through `server.mjs sql` and its sample cover photos through `server.mjs photos`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, checks the kitchen is still there after `docker restart`, and backs it up with `server.mjs backup`, restores the backup into a second, empty volume and checks the restored server shows a recipe and its photo, byte for byte, and makes its own scheduled backup. On the fresh server, the admin backs up from Server settings, downloads the backup, and restores it. Then a fresh server with move-in on moves a small kitchen in, which runs as jobs on the server's own queue, and the server's job records show those jobs done. Then it starts the image with `self-host/compose.yaml` and waits for Compose to report it healthy. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
+The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, signs up, adds a passkey and signs back in on the empty server, checks the first account is the admin, that a stranger is refused once sign-ups are off and that an invite link signs up one person and then stops working, checks Sign in with Apple is set up, signs in through a Dex OpenID Connect provider, seeds the QA kitchen through `server.mjs sql` and its sample cover photos through `server.mjs photos`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, checks the kitchen is still there after `docker restart`, and backs it up with `server.mjs backup`, restores the backup into a second, empty volume and checks the restored server shows a recipe and its photo, byte for byte, and makes its own scheduled backup. On the fresh server, the admin picks Gemini with a made-up key and then turns AI off, and backs up from Server settings, downloads the backup, and restores it. Then a fresh server with move-in on moves a small kitchen in, which runs as jobs on the server's own queue, and the server's job records show those jobs done. Then it starts the image with `self-host/compose.yaml` and waits for Compose to report it healthy. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
 
 After each green run on main, the `Self-host Pull` workflow (`.github/workflows/self-host-pull.yml`) pulls `ghcr.io/spoonjoy/spoonjoy:latest` with no login on amd64 and arm64, boots it on an empty volume and waits for its health check, the way a self-hoster would.
 
