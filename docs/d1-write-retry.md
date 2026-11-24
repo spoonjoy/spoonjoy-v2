@@ -12,7 +12,7 @@ A transient D1 error does not say whether the write ran. There are three outcome
 | `lost-answer` | The try committed, and its answer was lost | Writes a second row, or adds a quantity twice |
 | `late` | The try committed after the caller gave up on it | Same as `lost-answer`, and can also trip a guard the first try already satisfied |
 
-The binding-level wrapper (`withTransientD1Retry`) retries only when storage never started. Everything else is the operation's job, through `retryD1Write`.
+The binding-level wrapper (`withTransientD1Retry`) retries a write only when storage never started, or when the statement is one whose second run changes nothing and answers the same (`isIdempotentWriteSql`: an UPDATE to fixed values whose WHERE names none of the columns it sets, or an upsert to fixed or `excluded` values). Everything else is the operation's job, through `retryD1Write`.
 
 ## How a write is made safe
 

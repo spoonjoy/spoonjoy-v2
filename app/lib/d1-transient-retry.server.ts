@@ -18,6 +18,8 @@ import { consoleSlowCallReporter, firstTable, watchSlowCall, type SlowCallReport
  *
  * - a read-only statement (SELECT, or WITH or VALUES with no write keyword anywhere in it), or a
  *   batch made only of such statements, on any transient error;
+ * - a single write statement whose second run changes nothing and answers the same
+ *   (`isIdempotentWriteSql`), on any transient error;
  * - any statement or batch, write or not, when D1 says its storage failed to start, because then
  *   the statement never ran.
  *
@@ -25,6 +27,10 @@ import { consoleSlowCallReporter, firstTable, watchSlowCall, type SlowCallReport
  * itself can make a second attempt safe. Its error still reaches the caller unchanged, and the
  * operations that know they are safe to run again do so through `retryD1Write`
  * (d1-write-retry.server.ts).
+ *
+ * The backoff spans 3.5 s. A shorter one (50, 150 and 400 ms) ran out in Journeys runs: each
+ * page that answered 500 with "D1_ERROR: internal error" had failed all four of its tries within
+ * about 650 ms (runs 45248636426 and 45311924069).
  *
  * A read can also stall without failing: in Journeys runs on QA, single D1 calls have waited 1 to
  * 5 seconds on no CPU while other D1 calls of the same moment answered in milliseconds (run
@@ -54,6 +60,38 @@ export interface D1TransientErrorReport {
   willRetry: boolean;
   /** Which transient error it was, as a fixed label, never the raw message. */
   kind: D1TransientKind;
+  /** The route that made the call, from `d1RouteLabel`, when the wrapper was given one. */
+  route?: string;
+}
+
+/**
+ * The static path segments of app/routes (and of the cook-session API in workers/app.ts). Any
+ * other segment is a recipe slug, an id or a name, which `d1RouteLabel` never logs.
+ */
+const STATIC_SEGMENTS = new Set([
+  "account", "agent", "api", "apple", "apple-app-site-association", "auth", "authenticate", "authorize",
+  "calendar", "callback", "categories", "chefs", "connect", "cook-sessions", "cookbooks", "cooking-now",
+  "csp-report", "deleted", "developer", "developers", "devtools-well-known", "docs", "edit", "export",
+  "fellow-chefs", "forgot-password", "fork", "github", "google", "health", "households", "join", "json",
+  "kitchen-visitors", "lists", "login", "logout", "mcp", "moderation", "move-in", "my-recipes", "new", "oauth",
+  "oauth-authorization-server", "oauth-protected-resource", "og", "oidc", "openapi", "openapi-json",
+  "openapi-spec", "options", "organize", "pages", "photo-uploads", "photos", "plan", "playground", "png",
+  "preferences", "privacy", "public-key", "push", "ready", "recipes", "redwood-functions-auth-oauth",
+  "register", "reset-password", "revoke", "roadmap", "robots", "saved-recipes", "search", "server-backups",
+  "server-settings", "settings", "shopping-list", "signup", "sitemap", "spoonjoy-release-readiness", "steps",
+  "subscriptions", "support", "tags", "terms", "test-kitchen", "token", "tools", "try", "txt", "users", "v1",
+  "verify", "webauthn", "well-known", "xml",
+]);
+
+/**
+ * A request path as a route, safe to log: each static segment kept, every other one ":id", and a
+ * React Router data request's ".data" kept, so /recipes/lemon-rice.data becomes /recipes/:id.data.
+ */
+export function d1RouteLabel(pathname: string): string {
+  const data = pathname.endsWith(".data");
+  const path = data ? pathname.slice(0, -".data".length) : pathname;
+  const segments = path.split("/").filter(Boolean).map((segment) => (STATIC_SEGMENTS.has(segment) ? segment : ":id"));
+  return `/${segments.join("/")}${data ? ".data" : ""}`;
 }
 
 export type D1TransientKind =
@@ -61,6 +99,8 @@ export type D1TransientKind =
   | "storage_reset"
   | "code_updated_reset"
   | "storage_startup_failed"
+  | "replica_disconnected"
+  | "remote_node_unresolved"
   | "internal_error";
 
 export interface D1TransientRetryOptions {
@@ -90,6 +130,13 @@ export interface D1ReadReissueReport {
 export const DEFAULT_D1_RETRY_DELAYS_MS: readonly number[] = [50, 150, 400];
 
 /**
+ * The binding's own backoff: the operation-level one, then 1 s and 1.9 s more, 3.5 s in all, so a
+ * page waits at most about that much longer on a failing database, well under a journey's 15 s wait
+ * (playwright.journeys.config.ts).
+ */
+export const DEFAULT_D1_BINDING_RETRY_DELAYS_MS: readonly number[] = [...DEFAULT_D1_RETRY_DELAYS_MS, 1000, 1900];
+
+/**
  * Longer than the slow D1 calls that still answer (about 1.0 to 1.2 s in Journeys runs), well
  * under a journey's 15 s wait (playwright.journeys.config.ts).
  */
@@ -108,6 +155,8 @@ const TRANSIENT_KINDS: ReadonlyArray<[RegExp, D1TransientKind]> = [
   [/storage caused object to be reset/i, "storage_reset"],
   [/reset because its code was updated/i, "code_updated_reset"],
   [/Internal error while starting up D1 DB storage/i, "storage_startup_failed"],
+  [/Replica disconnected from primary/i, "replica_disconnected"],
+  [/Cannot resolve D1 DB due to transient issue on remote node/i, "remote_node_unresolved"],
   [/D1_ERROR: internal error\b/i, "internal_error"],
 ];
 
@@ -132,8 +181,77 @@ export function isReadOnlySql(sql: string): boolean {
   return /^(?:WITH|VALUES)\b/i.test(text) && !WRITE_KEYWORD.test(text);
 }
 
-function mayRetry(kind: D1TransientKind, operation: D1TransientOperation): boolean {
-  return operation === "read" || kind === "storage_startup_failed";
+/** A statement with its comments removed and its string literals emptied. */
+function withoutComments(sql: string): string {
+  return sql
+    .replace(/--[^\n]*/g, " ")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/'(?:[^']|'')*'/g, "''")
+    .trim()
+    .replace(/;\s*$/, "");
+}
+
+/** A name, quoted or not. */
+const NAME = String.raw`(?:"(?:[^"]|"")*"|\w+)`;
+
+/** A bound value or a literal: the same on every run. */
+const CONSTANT = String.raw`(?:\?\d*|''|-?\d+(?:\.\d+)?|NULL|TRUE|FALSE)`;
+
+/** Anything whose value can differ between two runs of the same statement. */
+const VARIES = /\b(?:SELECT|RANDOM|RANDOMBLOB|CURRENT_TIMESTAMP|CURRENT_DATE|CURRENT_TIME|DATE|TIME|DATETIME|JULIANDAY|STRFTIME|UNIXEPOCH|CHANGES|TOTAL_CHANGES|LAST_INSERT_ROWID|LIMIT)\b/i;
+
+/** A column name without its table or quotes, in lower case. */
+function columnName(target: string): string {
+  const last = target.trim().replace(new RegExp(`^(?:${NAME}\\.)*`), "");
+  return last.replace(/^"|"$/g, "").replace(/""/g, '"').toLowerCase();
+}
+
+/** The columns a SET list assigns, or null when any value is not a constant (or excluded.<column>). */
+function assignedColumns(list: string, allowExcluded: boolean): string[] | null {
+  const value = allowExcluded ? `(?:${CONSTANT}|excluded\\.${NAME})` : CONSTANT;
+  const assignment = new RegExp(`^\\s*((?:${NAME}\\.)*${NAME})\\s*=\\s*${value}\\s*$`, "i");
+  const columns: string[] = [];
+  for (const part of list.split(",")) {
+    const match = assignment.exec(part);
+    if (!match) return null;
+    columns.push(columnName(match[1]));
+  }
+  return columns;
+}
+
+/**
+ * Whether running this single write statement a second time, after a first run that may have
+ * applied, leaves the same rows and gives the same answer (rows changed, and any RETURNING rows).
+ * Conservative, so anything it does not recognise counts as not idempotent:
+ *
+ * - an UPDATE that sets each column to a bound value or literal, whose WHERE names none of the
+ *   columns it sets (so a second run matches exactly the same rows), with no subquery, LIMIT or
+ *   function whose value can change between runs;
+ * - an INSERT with a conflict target and ON CONFLICT DO UPDATE that sets each column to a bound
+ *   value, a literal or excluded.<column>, with no WHERE (a second run updates the row the first
+ *   inserted to the same values);
+ * - nothing else. A DELETE, an INSERT OR IGNORE or ON CONFLICT DO NOTHING leaves the same rows but
+ *   reports no changes the second time, which a caller can read as "not found".
+ *
+ * The schema's triggers all run AFTER DELETE (migrations/), so none of these fire one.
+ */
+export function isIdempotentWriteSql(sql: string): boolean {
+  const text = withoutComments(sql);
+  const unquoted = text.replace(/"(?:[^"]|"")*"/g, '""');
+  if (!text || unquoted.includes(";") || VARIES.test(unquoted)) return false;
+  const update = /^UPDATE\s+(?:OR\s+(?:ABORT|FAIL|ROLLBACK)\s+)?[\s\S]+?\s+SET\s+([\s\S]+?)(?:\s+WHERE\s+([\s\S]+?))?(?:\s+RETURNING\s+[\s\S]+)?$/i.exec(text);
+  if (update) {
+    const columns = assignedColumns(update[1], false);
+    if (!columns) return false;
+    const whereNames = (update[2]?.match(new RegExp(NAME, "g")) ?? []).map(columnName);
+    return !columns.some((column) => whereNames.includes(column));
+  }
+  const upsert = /^INSERT\s+INTO\s+[\s\S]+?\s+ON\s+CONFLICT\s*\([^)]*\)\s*DO\s+UPDATE\s+SET\s+([\s\S]+?)(?:\s+RETURNING\s+[\s\S]+)?$/i.exec(text);
+  return Boolean(upsert && !/\bWHERE\b/i.test(upsert[1]) && assignedColumns(upsert[1], true));
+}
+
+function mayRetry(kind: D1TransientKind, operation: D1TransientOperation, idempotent: boolean): boolean {
+  return operation === "read" || idempotent || kind === "storage_startup_failed";
 }
 
 const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -198,11 +316,12 @@ async function withRetry<T>(
   options: D1TransientRetryOptions,
   budget: ReissueBudget,
   operation: D1TransientOperation,
+  idempotent: boolean,
   call: string,
   table: string | null,
   run: () => Promise<T>,
 ): Promise<T> {
-  const delays = options.delaysMs ?? DEFAULT_D1_RETRY_DELAYS_MS;
+  const delays = options.delaysMs ?? DEFAULT_D1_BINDING_RETRY_DELAYS_MS;
   const sleep = options.sleep ?? realSleep;
   const reissueMs = options.readReissueMs ?? DEFAULT_D1_READ_REISSUE_MS;
   for (let attempt = 1; ; attempt += 1) {
@@ -220,7 +339,7 @@ async function withRetry<T>(
     } catch (error) {
       const kind = d1TransientKind(error);
       if (!kind) throw error;
-      const willRetry = attempt <= delays.length && mayRetry(kind, operation);
+      const willRetry = attempt <= delays.length && mayRetry(kind, operation, idempotent);
       try {
         options.onTransientError?.({ event: "d1_transient_error", operation, call, attempt, willRetry, kind });
       } catch {
@@ -264,9 +383,10 @@ function wrapStatement(
   budget: ReissueBudget,
 ): WrappedStatement {
   const operation: D1TransientOperation = isReadOnlySql(sql) ? "read" : "write";
+  const idempotent = operation === "write" && isIdempotentWriteSql(sql);
   const table = firstTable(sql);
   const forward = (call: "first" | "all" | "raw" | "run") =>
-    (...args: unknown[]) => withRetry(options, budget, operation, call, table, () => inner[call](...args));
+    (...args: unknown[]) => withRetry(options, budget, operation, idempotent, call, table, () => inner[call](...args));
   return {
     [WRAPPED]: { inner, sql },
     bind: (...values: unknown[]) => wrapStatement(inner.bind(...values), sql, options, budget),
@@ -296,7 +416,7 @@ export function withD1TransientRetry<T>(db: T, options: D1TransientRetryOptions 
           const parts = statements.map(unwrap);
           const readOnly = parts.every((part) => part.sql !== null && isReadOnlySql(part.sql));
           const table = parts[0]?.sql ? firstTable(parts[0].sql) : null;
-          return withRetry(options, budget, readOnly ? "read" : "write", "batch", table, () =>
+          return withRetry(options, budget, readOnly ? "read" : "write", false, "batch", table, () =>
             binding.batch(parts.map((part) => part.inner)));
         };
       }
@@ -308,19 +428,24 @@ export function withD1TransientRetry<T>(db: T, options: D1TransientRetryOptions 
 
 /**
  * The Worker's environment with its D1 binding wrapped, for workers/app.ts to use for the whole
- * request, so every consumer of `env.DB`, React Router's load context included, retries. A
- * per-run QA Worker (SPOONJOY_QA_ERROR_LOGS=1) logs each transient failure, each try that waits
- * over a second and each re-issued read as one JSON line with no SQL and no values, which the
- * Journeys tail summary reads. Elsewhere nothing is logged and the only timer is the re-issue's.
+ * request, so every consumer of `env.DB`, React Router's load context included, retries. Every
+ * Worker logs each transient failure as one JSON line with no SQL and no values, naming the route
+ * and whether a retry follows, so production's Workers logs can count them by route as the Journeys
+ * tail summary does. A per-run QA Worker
+ * (SPOONJOY_QA_ERROR_LOGS=1) also logs each try that waits over a second and each re-issued read;
+ * elsewhere those are not logged and the only timer is the re-issue's.
  */
 export function withTransientD1Retry<E extends { DB?: unknown; SPOONJOY_QA_ERROR_LOGS?: string }>(
   env: E,
-  options: Omit<D1TransientRetryOptions, "onTransientError" | "onSlowCall" | "onReadReissue"> = {},
+  { route, ...options }: Omit<D1TransientRetryOptions, "onTransientError" | "onSlowCall" | "onReadReissue"> & {
+    /** The request's route from `d1RouteLabel`, or what ran ("scheduled", "queue"), for the transient error line. */
+    route?: string;
+  } = {},
 ): E {
   if (!env.DB) return env;
   const qaLogs = qaErrorLogsEnabled(env);
   const log = (report: object) => console.warn(JSON.stringify(report));
-  const onTransientError = qaLogs ? log : undefined;
+  const onTransientError = (report: D1TransientErrorReport) => log(route === undefined ? report : { ...report, route });
   const onSlowCall = qaLogs ? consoleSlowCallReporter() : undefined;
   const onReadReissue = qaLogs ? log : undefined;
   const DB = withD1TransientRetry(env.DB, { ...options, onTransientError, onSlowCall, onReadReissue });

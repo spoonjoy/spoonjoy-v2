@@ -4,7 +4,7 @@ import { applyServerAi } from "../app/lib/server-ai.server";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
 import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server";
 import { d1Binding } from "../app/lib/d1-read.server";
-import { withTransientD1Retry } from "../app/lib/d1-transient-retry.server";
+import { d1RouteLabel, withTransientD1Retry } from "../app/lib/d1-transient-retry.server";
 import { runWithD1WriteRetryReporter } from "../app/lib/d1-write-retry.server";
 import { qaErrorLogsEnabled } from "../app/lib/qa-error-logs.server";
 import { isolateColoReport, isolateRequestReport } from "../app/lib/slow-call.server";
@@ -382,7 +382,7 @@ export default {
       }
     }
     // A self-hosted server's admin may have picked its AI on Server settings (server-ai.server.ts).
-    const env = withTransientD1Retry(await applyServerAi(rawEnv));
+    const env = withTransientD1Retry(await applyServerAi(rawEnv), { route: d1RouteLabel(new URL(request.url).pathname) });
     // A per-run QA Worker logs each write retry for the Journeys tail summary.
     return runWithD1WriteRetryReporter(rawEnv, () => handleFetch(request, env, ctx));
   },
@@ -400,9 +400,10 @@ export default {
     }
     const aiEnv = await applyServerAi(rawEnv);
     // Each sweep wraps D1 for retries on its own, so one sweep's stalled reads never use up another's re-sends.
-    ctx.waitUntil(runScheduledPhotoSweep(withTransientD1Retry(aiEnv)));
-    ctx.waitUntil(runScheduledMoveInSweep(withTransientD1Retry(aiEnv), new Date()));
-    const env = withTransientD1Retry(aiEnv);
+    const scheduled = { route: "scheduled" };
+    ctx.waitUntil(runScheduledPhotoSweep(withTransientD1Retry(aiEnv, scheduled)));
+    ctx.waitUntil(runScheduledMoveInSweep(withTransientD1Retry(aiEnv, scheduled), new Date()));
+    const env = withTransientD1Retry(aiEnv, scheduled);
     // Done job keys older than JOB_KEY_KEPT_DAYS are forgotten, so the table doesn't grow without end;
     // a sweep that fails is reported, and the next one catches up.
     const jobKeys = jobKeysDatabase(env.DB);
@@ -418,7 +419,7 @@ export default {
   // Platform jobs on the JOBS queue (app/domains/platform/ports/jobs.ts); a job that runs out of
   // attempts is reported, and its key freed to be enqueued again.
   async queue(batch: MessageBatch<unknown>, rawEnv: CloudflareEnvironment) {
-    const env = withTransientD1Retry(rawEnv);
+    const env = withTransientD1Retry(rawEnv, { route: "queue" });
     const db = jobKeysDatabase(env.DB);
     if (!db) throw new Error("Platform jobs need the DB binding for their keys.");
     const keys = d1JobKeys(db);
