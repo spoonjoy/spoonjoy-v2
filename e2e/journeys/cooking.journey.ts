@@ -355,27 +355,40 @@ test.describe("Cooking Lemon Herb Rice", () => {
 
     // A phone on kitchen wifi: the save reaches the server, then the connection drops before the
     // answer comes back. The page sends the same save again; the server answers it with the saved
-    // progress instead of a conflict, and the check is still there after a reload.
-    test("a check survives a connection that drops after the save landed @mutates", async ({ page, verifyAfterReload, expectConsoleError }) => {
+    // progress instead of a conflict, and the check is still there after a reload. The drop is made
+    // in the page's fetch: the save goes out and lands, then the page sees the error WebKit gives a
+    // lost connection. (page.route did not see this save on iPhone WebKit, PR #1049's first run.)
+    test("a check survives a connection that drops after the save landed @mutates", async ({ page, verifyAfterReload }) => {
       const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
-      const cookSession = new RegExp(`/api/cook-sessions/${LEMON_RICE_ID}$`);
-      // The browser may log the dropped request; the console gate allows only that one.
-      expectConsoleError(/Failed to load resource/, { url: cookSession, optional: true });
+      const sessionPath = `/api/cook-sessions/${LEMON_RICE_ID}`;
+      const savedStatuses: number[] = [];
+      page.on("response", (response) => {
+        if (response.request().method() === "PATCH" && new URL(response.url()).pathname === sessionPath) savedStatuses.push(response.status());
+      });
 
       await openLemonRiceDirectly(page);
-      let dropped = false;
-      await page.route(cookSession, async (route) => {
-        if (route.request().method() !== "PATCH" || dropped) return route.fallback();
-        dropped = true;
-        await route.fetch();
-        await route.abort("connectionreset");
-      });
-      const saved = cookProgressSaved(page, LEMON_RICE_ID, (progress) => progress.checkedIngredientIds.length === 1);
+      await page.evaluate((path) => {
+        const realFetch = window.fetch.bind(window);
+        const dropped = document.documentElement;
+        window.fetch = async (input, init) => {
+          const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
+          if (!dropped.dataset.journeyDroppedSave && init?.method === "PATCH" && url.pathname === path) {
+            dropped.dataset.journeyDroppedSave = "true";
+            await realFetch(input, init);
+            throw new TypeError("Load failed");
+          }
+          return realFetch(input, init);
+        };
+      }, sessionPath);
       await jasmineRice.click();
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
-      await saved;
-      expect(dropped).toBe(true);
-      await page.unroute(cookSession);
+      await expect(page.locator("html")).toHaveAttribute("data-journey-dropped-save", "true");
+      // The save landed but its answer was lost. The page tries again (reading first, or sending
+      // the same save, which the server answers with the saved progress) and settles; no save is
+      // ever refused as a conflict.
+      await expect(syncStatus(page)).toHaveText("Progress synced", { timeout: 15_000 });
+      expect(savedStatuses[0]).toBe(200);
+      expect(savedStatuses).not.toContain(409);
 
       await verifyAfterReload(async () => {
         await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
