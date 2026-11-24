@@ -253,6 +253,17 @@ export function generateNonce(): string {
   return btoa(binary);
 }
 
+/**
+ * Whether a browser treats the URL's origin as potentially trustworthy (HTTPS, or a loopback
+ * address over http), the origins where it honours the opener policy.
+ */
+export function isPotentiallyTrustworthy(url: string): boolean {
+  const { protocol, hostname } = new URL(url);
+  if (protocol !== "http:") return true;
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  return host === "localhost" || host.endsWith(".localhost") || host === "::1" || /^127\.\d+\.\d+\.\d+$/.test(host);
+}
+
 /** Static, nonce-independent security headers. */
 export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
@@ -285,6 +296,7 @@ export function withSecurityHeaders(
   response: Response,
   nonce?: string,
   env?: ContentSecurityPolicyEnv | null,
+  requestUrl?: string,
 ): Response {
   const headers = new Headers(response.headers);
   const oauthFormActionOrigin = headers.get(OAUTH_FORM_ACTION_ORIGIN_HEADER);
@@ -295,6 +307,9 @@ export function withSecurityHeaders(
     }
     headers.set(name, value);
   }
+  // A browser ignores the opener policy on an origin it doesn't trust, such as a self-hosted server
+  // at a plain http:// network address, and logs an error for every page that sends it.
+  if (requestUrl && !isPotentiallyTrustworthy(requestUrl)) headers.delete("Cross-Origin-Opener-Policy");
   const cspHeaderName = resolveContentSecurityPolicyMode(env) === "enforce"
     ? "Content-Security-Policy"
     : "Content-Security-Policy-Report-Only";

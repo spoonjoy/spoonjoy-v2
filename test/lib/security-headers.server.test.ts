@@ -26,6 +26,16 @@ describe("withSecurityHeaders", () => {
     }
   });
 
+  it("leaves out the opener policy where the browser would ignore it, on a plain http network address", () => {
+    const opener = "Cross-Origin-Opener-Policy";
+    const at = (url?: string) => withSecurityHeaders(new Response("ok"), undefined, undefined, url).headers.get(opener);
+    expect(at("http://192.168.1.20:8080/recipes")).toBeNull();
+    expect(at("http://recipes.home.arpa/")).toBeNull();
+    for (const url of [undefined, "https://spoonjoy.app/", "http://localhost:8080/", "http://app.localhost/", "http://127.0.0.1:8080/", "http://[::1]:8080/"]) {
+      expect(at(url), url).toBe(SECURITY_HEADERS[opener]);
+    }
+  });
+
   it("preserves the original status, body, and existing headers", async () => {
     const original = new Response("hello", {
       status: 201,
