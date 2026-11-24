@@ -2,7 +2,7 @@
 // it begins the upload, sends the parts that haven't arrived a few at a time, trying each again after
 // a dropped connection, and finishes it, which starts the move-in. The upload's id is kept for the
 // file in this browser, so choosing the same file after a reload carries on from the parts that
-// arrived; the server finds the same upload by the file's fingerprint too.
+// arrived; the server finds the same upload by the file's name, size and head too.
 
 /** Parts in flight at once: enough to keep a phone's connection busy, few enough that a drop loses little. */
 export const UPLOAD_CONCURRENCY = 3;
@@ -42,9 +42,21 @@ export function formatBytes(bytes: number): string {
   return `${(Math.floor(bytes / 1e8) / 10).toFixed(1)} GB`;
 }
 
-/** What tells one file from another across a reload: its name, size and last change. */
-export function fileFingerprint(file: File): string {
-  return JSON.stringify([file.name, file.size, file.lastModified]);
+/** The bytes at the start of a file whose digest tells it from another: 1 MiB, read in a moment even on a phone. */
+export const FILE_HEAD_BYTES = 1024 * 1024;
+
+/** The SHA-256 of the file's first MiB, in lowercase hex. */
+export async function fileHead(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.slice(0, FILE_HEAD_BYTES).arrayBuffer());
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * What tells one file from another across a reload: its name, size and head. Not its last change, which iOS's file
+ * picker may report differently each time the same file is chosen (inference: unverified on a device).
+ */
+export function fileFingerprint(file: File, head: string): string {
+  return JSON.stringify([file.name, file.size, head]);
 }
 
 function browserStorage(): KeyValueStore | null {
@@ -99,8 +111,9 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
   const attempts = options.attempts ?? UPLOAD_ATTEMPTS;
   const concurrency = options.concurrency ?? UPLOAD_CONCURRENCY;
   const requestMs = options.requestMs ?? UPLOAD_REQUEST_MS;
-  const fingerprint = fileFingerprint(file);
-  const kept = remembering(options.storage === undefined ? browserStorage() : options.storage, fingerprint);
+  const head = await fileHead(file).catch(() => null);
+  if (head === null) return { ok: false, error: "This browser couldn't read the backup. Choose the file again, then press Move in." };
+  const kept = remembering(options.storage === undefined ? browserStorage() : options.storage, fileFingerprint(file, head));
   /** The parts that have arrived, by number, with their sizes: what the page says has been sent. */
   const arrived = new Map<number, number>();
   const sent = () => [...arrived.values()].reduce((total, size) => total + size, 0);
@@ -145,7 +158,7 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
   }
 
   async function once(resume: string | null): Promise<string> {
-    const begun = await send("/move-in/uploads", json({ app: options.app, name: file.name, size: file.size, fingerprint, resume }));
+    const begun = await send("/move-in/uploads", json({ app: options.app, name: file.name, size: file.size, head, resume }));
     const plan = begun.body as unknown as Plan;
     kept.keep(plan.uploadId);
     arrived.clear();

@@ -97,7 +97,8 @@ function backup() {
   ]);
 }
 
-const file = (bytes: Uint8Array) => ({ app: "mealie", name: "mealie.zip", size: bytes.length, fingerprint: "fp-1" });
+const H = "a".repeat(64);
+const file = (bytes: Uint8Array) => ({ app: "mealie", name: "mealie.zip", size: bytes.length, head: "a".repeat(64) });
 
 async function sendAll(bytes: Uint8Array) {
   const begun = await beginUpload(file(bytes));
@@ -182,17 +183,18 @@ describe("the upload endpoints", () => {
     ["no JSON", undefined, { "Content-Type": "text/plain" }],
     ["JSON that isn't an object", [1], {}],
     ["JSON that doesn't parse", "{", { "Content-Type": "application/json" }],
-    ["no app", { name: "a.zip", size: 1, fingerprint: "f" }, {}],
-    ["no name", { app: "mealie", name: "", size: 1, fingerprint: "f" }, {}],
-    ["a name that isn't text", { app: "mealie", name: 1, size: 1, fingerprint: "f" }, {}],
-    ["a size that isn't a number", { app: "mealie", name: "a.zip", size: "1", fingerprint: "f" }, {}],
-    ["no fingerprint", { app: "mealie", name: "a.zip", size: 1, fingerprint: "" }, {}],
-    ["a fingerprint that isn't text", { app: "mealie", name: "a.zip", size: 1, fingerprint: 1 }, {}],
-    ["a fingerprint too long to be one", { app: "mealie", name: "a.zip", size: 1, fingerprint: "f".repeat(601) }, {}],
-    ["a resume that isn't an id", { app: "mealie", name: "a.zip", size: 1, fingerprint: "f", resume: 1 }, {}],
+    ["no app", { name: "a.zip", size: 1, head: H }, {}],
+    ["no name", { app: "mealie", name: "", size: 1, head: H }, {}],
+    ["a name that isn't text", { app: "mealie", name: 1, size: 1, head: H }, {}],
+    ["a size that isn't a number", { app: "mealie", name: "a.zip", size: "1", head: H }, {}],
+    ["no head", { app: "mealie", name: "a.zip", size: 1 }, {}],
+    ["a head that isn't text", { app: "mealie", name: "a.zip", size: 1, head: 1 }, {}],
+    ["a head that isn't a SHA-256 in hex", { app: "mealie", name: "a.zip", size: 1, head: "A".repeat(64) }, {}],
+    ["a head too short to be one", { app: "mealie", name: "a.zip", size: 1, head: "a".repeat(63) }, {}],
+    ["a resume that isn't an id", { app: "mealie", name: "a.zip", size: 1, head: H, resume: 1 }, {}],
   ])("refuse a begin with %s", async (_name, json, headers) => {
     const call: Call = typeof json === "string" ? { body: json, headers } : json === undefined ? { body: "hi", headers } : { json, headers };
-    expect(await beginUpload(undefined, call)).toEqual({ status: 400, body: { error: "Send the backup's app, name, size and fingerprint as JSON." } });
+    expect(await beginUpload(undefined, call)).toEqual({ status: 400, body: { error: "Send the backup's app, name, size and head as JSON." } });
   });
 
   it("refuse a backup over the largest they take, with the fix-it message", async () => {
