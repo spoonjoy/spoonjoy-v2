@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { test, expect } from "../fixtures";
 import { Secret, fillSecret } from "../journeys/support/secret";
@@ -15,6 +15,9 @@ import { proofFixtures } from "../journeys/support/move-in-fixtures";
 // SPOONJOY_SELF_HOST_MOVE_IN_RESTART picks the half; without it, this is skipped.
 const half = process.env.SPOONJOY_SELF_HOST_MOVE_IN_RESTART;
 const statePath = process.env.SPOONJOY_SELF_HOST_MOVE_IN_RESTART_STATE ?? ".self-host/move-in-restart.json";
+// Files beside the state file, for the workflow to slow the server down just before the cook clicks Move in.
+const slowAsked = `${statePath}.slow-asked`;
+const slowed = `${statePath}.slowed`;
 
 interface State {
   email: string;
@@ -56,10 +59,15 @@ test.describe("A move-in on a self-hosted server that restarts", () => {
     const fromBackup = page.getByRole("main").getByRole("radio", { name: /^From a backup/ });
     if ((await fromBackup.count()) > 0) await fromBackup.check();
     await page.getByLabel(requiredLabel("Backup zip"), { exact: true }).setInputFiles({ name: `kitchen-${source.version}.zip`, mimeType: "application/zip", buffer: backup });
+    // A 500-recipe move-in finishes within a second at full speed, before any kill lands. The workflow caps the
+    // server's CPU now, so the move-in is still running when it kills the server, and lifts the cap before it starts again.
+    mkdirSync(dirname(statePath), { recursive: true });
+    writeFileSync(slowAsked, "");
+    await expect.poll(() => existsSync(slowed), { timeout: 60_000 }).toBe(true);
     await page.getByRole("button", { name: "Move in", exact: true }).click();
     // The move-in is accepted. The cook leaves at once, and the state file tells the workflow to kill the server: 500
     // recipes come in within seconds, so it must land at once. The workflow then checks the move-in was unfinished.
-    await expect(page).toHaveURL(/\/move-in\?job=movein_/);
+    await expect(page).toHaveURL(/\/move-in\?job=movein_/, { timeout: 2 * 60_000 });
     const url = page.url();
     await page.goto("about:blank");
     const recipes = read.kitchens.large.counts.recipes;
