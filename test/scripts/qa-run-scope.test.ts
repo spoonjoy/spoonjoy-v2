@@ -165,11 +165,13 @@ describe("runIdentity", () => {
     expect(second).toEqual({
       workerName: "spoonjoy-v2-qa-run-1001-2-p2",
       databaseName: "spoonjoy-qa-run-1001-2-p2",
+      queueName: "spoonjoy-jobs-qa-run-1001-2-p2",
       baseUrl: "https://spoonjoy-v2-qa-run-1001-2-p2.mendelow-studio.workers.dev",
     });
     // The sweep still finds a later part's stack.
     expect(RUN_WORKER_PATTERN.test(second.workerName)).toBe(true);
     expect(RUN_DATABASE_PATTERN.test(second.databaseName)).toBe(true);
+    expect(RUN_QUEUE_PATTERN.test(second.queueName)).toBe(true);
   });
 
   it("refuses a part that is not a single digit from 1 to 9", () => {
