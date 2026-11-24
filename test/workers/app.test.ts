@@ -23,7 +23,7 @@ const requestHandler = vi.fn(async () => new Response("handled"));
 const mcpPostRoute = vi.fn(async () => Response.json({ ok: true }));
 const captureException = vi.fn(async () => undefined);
 const resolvePostHogServerConfig = vi.fn(() => ({ enabled: false }));
-const serverBuildMarker = { marker: "server-build" };
+const serverBuildMarker = { marker: "server-build", routes: { recipe: { path: "recipes/:slug" } } };
 let configuredServerBuild: unknown;
 let configuredMode: unknown;
 
