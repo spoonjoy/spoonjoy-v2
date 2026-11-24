@@ -14,7 +14,7 @@
 // The password change bumps the account's session version, so after it the stored session this
 // journey started from is dead (this browser gets a fresh cookie and stays signed in). Nothing may
 // use scratch 5's stored sessions after this test; keep it the last test here. Signing back in is
-// one sign-in attempt per device, two per run, against QA's 60/minute cap (see personas.setup.ts).
+// one sign-in attempt per device, two per run, against QA's 100/minute cap (see personas.setup.ts).
 //
 // The new password is made here at run time and typed with fillSecret, never fill(), so it stays
 // out of the report's step titles and the trace's action log (see support/secret.ts).

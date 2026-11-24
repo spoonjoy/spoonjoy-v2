@@ -73,7 +73,7 @@ export function persona(name: PersonaName): Persona {
 // and mutate freely without touching the shared personas or the other scratch indices — see
 // AGENTS.md's Validation section for which journey file owns which index. Using a stored
 // scratch session instead of signing up through /signup keeps journeys off QA's shared
-// 60-per-minute auth rate limit (see personas.setup.ts for the budget accounting).
+// 100-per-minute auth rate limit (see personas.setup.ts for the budget accounting).
 export function scratchStorageStatePath(n: number): string {
   return `e2e/.auth/journeys-scratch-${n}.json`;
 }
