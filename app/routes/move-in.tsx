@@ -32,8 +32,8 @@ import {
   type MoveInEnv,
   type MoveInProgress,
 } from "~/domains/move-in";
-import { isFlagOn, type JobMessage } from "~/domains/platform";
-import { d1JobKeys, queueJobs, type JobKeysDatabase } from "~/domains/platform/index.server";
+import { isFlagOn } from "~/domains/platform";
+import { cloudflarePlatform } from "~/domains/platform/index.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
@@ -56,7 +56,8 @@ async function signedInWithFlag(request: Request, context: Route.LoaderArgs["con
   const userId = await requireUserId(request, "/login", env);
   if (!isFlagOn("move_in", env, userId)) throw new Response("Not found", { status: 404 });
   if (!env?.DB || !env.PHOTOS) throw new Response("Move-in needs its database and photo storage, and this server has neither.", { status: 503 });
-  const jobs = env.JOBS ? queueJobs(env.JOBS as Queue<JobMessage>, d1JobKeys(env.DB as unknown as JobKeysDatabase)) : null;
+  // The jobs port is always there and only refuses on enqueue, so without a queue the page runs the move-in itself.
+  const jobs = env.JOBS ? cloudflarePlatform(env).jobs : null;
   return { userId, env: { DB: env.DB, PHOTOS: env.PHOTOS } as unknown as MoveInEnv, workerEnv: env, jobs };
 }
 
