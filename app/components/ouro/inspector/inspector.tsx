@@ -116,6 +116,15 @@ function shownBox(element: Element): DOMRect | null {
   return new DOMRect(left, top, Math.max(...inside.map((inner) => inner.right)) - left, Math.max(...inside.map((inner) => inner.bottom)) - top);
 }
 
+// A box rounded to whole pixels, so an edge drawn at its crisp `+0.5` offset lands on a device
+// pixel's centre instead of straddling a row or column by whatever fraction the layout left the
+// box at and blurring onto a line of text beside it (ourostack/ouro-ui#3361).
+function pixelSnapped(box: DOMRect): DOMRect {
+  const left = Math.round(box.left);
+  const top = Math.round(box.top);
+  return new DOMRect(left, top, Math.round(box.right) - left, Math.round(box.bottom) - top);
+}
+
 /**
  * Every visible Ouro component root in the page, in document order, but X-ray's own, one behind an
  * open dialog, one no one can see (fully transparent, as an action shown only on hover is until
@@ -547,7 +556,7 @@ function InspectorLayer({
    * then every outline written, so the page lays out once. An outline with nothing showing hides,
    * and so does its tag.
    * @claim "Puts each outline over its component" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > hides the outline and tag of a component scrolled out of view inside a box, and clips one partly out)
-   * @claim "Puts each outline over its component" registry/ouro/components/ouro/inspector/inspector.tsx verify:fileLine(registry/ouro/components/ouro/inspector/inspector.tsx, /const\sboxes\s=\scomponents\.map\(\(component\)\s=>\sshownBox\(component\.element\)\s\?\?\snew\sDOMRect\(\)\)/)
+   * @claim "Puts each outline over its component" registry/ouro/components/ouro/inspector/inspector.tsx verify:fileLine(registry/ouro/components/ouro/inspector/inspector.tsx, /const\sboxes\s=\scomponents\.map\(\(component\)\s=>\spixelSnapped\(shownBox\(component\.element\)\s\?\?\snew\sDOMRect\(\)\)\)/)
    */
   const place = (all: Found[]) => {
     const own = layer.current!;
@@ -555,7 +564,7 @@ function InspectorLayer({
     const components = all.filter((component) => outlines.has(component.key));
     const ancestors = new Map<Element, Ancestor>();
     // A component that stopped showing since it was found (a toast gone) has no box, and hides until the next measure drops it.
-    const boxes = components.map((component) => shownBox(component.element) ?? new DOMRect());
+    const boxes = components.map((component) => pixelSnapped(shownBox(component.element) ?? new DOMRect()));
     const parts = components.map((component, index) => visiblePart(component.element, boxes[index]!, ancestors));
     const shown = parts.map((part) => part.right > part.left && part.bottom > part.top);
     const lines = textLines(own);

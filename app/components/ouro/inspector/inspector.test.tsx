@@ -236,6 +236,20 @@ describe("Inspector geometry", () => {
     expect(path()).toBe(`M0 0.5H40M0 ${height - 0.5}H40M0.5 0V${height}M39.5 0V${height}`);
   });
 
+  it("snaps a box at a fractional pixel to the whole pixel its crisp edges need, so the frame never lands half a device pixel off the grid (ourostack/ouro-ui#3361)", async () => {
+    // A box whose edges fall between two device pixels, as a flex or grid layout often leaves one:
+    // left 80.4, top 150.6, right 280.6, bottom 250.9, each rounding to a different whole pixel.
+    component(80.4, 150.6, 200.2, 100.3);
+    await xray();
+    await drawn(1);
+    expect(outlines()[0]!.style.transform).toBe("translate(80px, 151px)");
+    expect(outlines()[0]!.style.width).toBe("201px");
+    expect(outlines()[0]!.style.height).toBe("100px");
+    // Every edge's crisp 1px line sits at a half-integer in the outline's own pixels, so translated
+    // by the (now whole-pixel) box it lands on a device pixel's exact centre in every engine.
+    expect(path()).toBe("M0 0.5H201M0 99.5H201M0.5 0V100M200.5 0V100");
+  });
+
   /** Where the tag of the first outline sits, from its component's top left corner, and whether inside it or hidden. */
   const spot = () => {
     const tag = tags()[0]!;

@@ -143,8 +143,21 @@ describe("Combobox on a phone", () => {
     await commands.tap('[role="option"]:nth-child(3)');
     await expect.poll(() => host.querySelector(TRIGGER)!.textContent).toContain("Basil, Dill");
     expect(sheet()).not.toBeNull();
-    await userEvent.click(page.getByRole("button", { name: "Fertig" }).first());
+    await userEvent.click(page.getByRole("button", { name: "Fertig" }));
     await expect.poll(sheet).toBeNull();
+  });
+
+  it("names only the footer button Done with multiple, leaving the sheet's own close button a different name", async () => {
+    function Picker() {
+      const [value, setValue] = useState<string[]>(["Basil"]);
+      return <Combobox label="Herbs" multiple items={herbs} value={value} onValueChange={setValue} />;
+    }
+    await render(<Picker />);
+    await commands.tap(TRIGGER);
+    const panel = await opened();
+    const done = page.getByRole("dialog").getByRole("button", { name: "Done" }).element() as HTMLElement;
+    expect(done.getAttribute("data-ouro-part")).toBe("done");
+    expect(panel.querySelector('[data-ouro-part="close"]')!.textContent).toBe("Close");
   });
 
   it("keeps the popup on a landscape phone, past the sm breakpoint", async () => {

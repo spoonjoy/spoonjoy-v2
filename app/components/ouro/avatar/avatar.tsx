@@ -647,7 +647,9 @@ export function Avatar(props: AvatarProps): JSX.Element {
       className={cn(
         "relative box-border inline-flex shrink-0 items-center justify-center align-middle",
         "font-medium leading-none select-none",
-        shape === "circle" ? "rounded-[44%]" : "rounded-[24%]",
+        // The box's own corner is a circle at 0.543 of the surface's squircle radius, the largest circle that encloses it, so a shadow
+        // follows it and the build-time squircle leaves the root unclipped, where the presence dot hangs over its edge.
+        shape === "circle" ? "rounded-[24%] [corner-shape:round]" : "rounded-[13%] [corner-shape:round]",
         shape === "square" && squareEdgeClass,
         !nameLoading && !group && ink,
         presence && biteSizes[size],
@@ -659,11 +661,11 @@ export function Avatar(props: AvatarProps): JSX.Element {
         data-ouro-avatar-surface=""
         data-ouro-bite={presence ? "" : undefined}
         className={cn(
-          "absolute inset-0 rounded-[inherit]",
+          "absolute inset-0",
+          shape === "circle" ? "rounded-[44%]" : "rounded-[24%]",
           // A group's slices: a half each, or a half and two quarters, with a hole between them, clipped to the
           // squircle where corner-shape draws it as where the clip path does. Its own picture fills the one cell.
           group ? "grid grid-rows-2 gap-[max(1px,calc(var(--ouro-edge)*0.6))] overflow-hidden" : "flex items-center justify-center",
-          shape === "circle" ? "[--ouro-sq-r:44%]" : "[--ouro-sq-r:24%]",
           shape === "agent" ? agentTileClass : !nameLoading && !group && fill,
           group && image !== "loaded" && slices.length > 1 && "grid-cols-2",
           image !== "loaded" && iconShown && !nameLoading && !group && "*:size-[55%]",

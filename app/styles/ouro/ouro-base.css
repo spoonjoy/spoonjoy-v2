@@ -108,20 +108,20 @@
      --radius-* steps into an app's theme, and shadcn add never replaces a variable the app has, so
      those names keep shadcn's values there. The --radius-ouro-* names are new, so every add appends
      them. The --radius-sm..4xl lines below give an app without shadcn's steps Ouro's factors for its own rounded-* classes. */
-  --radius-ouro-sm: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 0.6);
-  --radius-ouro-md: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 0.8);
-  --radius-ouro-lg: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1));
-  --radius-ouro-xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 1.4);
-  --radius-ouro-2xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 1.8);
-  --radius-ouro-3xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 2.2);
-  --radius-ouro-4xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 2.6);
-  --radius-sm: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 0.6);
-  --radius-md: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 0.8);
-  --radius-lg: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1));
-  --radius-xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 1.4);
-  --radius-2xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 1.8);
-  --radius-3xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 2.2);
-  --radius-4xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 2.6);
+  --radius-ouro-sm: calc(var(--radius) * var(--ouro-radius-scale, 1) * 0.6);
+  --radius-ouro-md: calc(var(--radius) * var(--ouro-radius-scale, 1) * 0.8);
+  --radius-ouro-lg: calc(var(--radius) * var(--ouro-radius-scale, 1));
+  --radius-ouro-xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 1.4);
+  --radius-ouro-2xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 1.8);
+  --radius-ouro-3xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 2.2);
+  --radius-ouro-4xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 2.6);
+  --radius-sm: calc(var(--radius) * var(--ouro-radius-scale, 1) * 0.6);
+  --radius-md: calc(var(--radius) * var(--ouro-radius-scale, 1) * 0.8);
+  --radius-lg: calc(var(--radius) * var(--ouro-radius-scale, 1));
+  --radius-xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 1.4);
+  --radius-2xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 1.8);
+  --radius-3xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 2.2);
+  --radius-4xl: calc(var(--radius) * var(--ouro-radius-scale, 1) * 2.6);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
@@ -134,13 +134,14 @@
   --radius: 0.9375rem;
   --ouro-corner-shape: squircle;
   --ouro-radius-scale: 1;
-  --ouro-corner-fallback: 1;
   --ouro-message-run-gap: var(--ouro-size-1);
   --destructive-foreground: #ffffff;
   --success: #157d3c;
   --success-foreground: #ffffff;
   --warning: #b05109;
   --warning-foreground: #ffffff;
+  /* Away (out of office), Teams' purple: TimeGrid's away events and marked days. Not success, warning or primary. */
+  --ouro-away: #5b5fc7;
   /* Avatar's initials hues (red, orange, gold, green, teal, blue, purple, magenta), tinted toward the background and foreground. */
   --avatar-1: #c4314b;
   --avatar-2: #ca5010;
@@ -264,6 +265,7 @@
   --success-foreground: #000000;
   --warning: #fbbf24;
   --warning-foreground: #000000;
+  --ouro-away: #a5a8f5;
   --avatar-1: #ee8a99;
   --avatar-2: #f4a46c;
   --avatar-3: #f2c661;
@@ -284,9 +286,6 @@
   [data-ouro][class*="rounded"], [data-ouro] [class*="rounded"] {
     --corner-shape: var(--ouro-corner-shape);
     corner-shape: var(--ouro-corner-shape);
-  }
-  [data-ouro-surface] {
-    display: none;
   }
   /* Body copy in an Ouro component avoids a last line of one word, and its headings balance their lines. In the base layer, so a text-wrap utility on the element, or the app's own rule, wins. */
   [data-ouro] {
@@ -327,107 +326,19 @@
   }
 }
 
-/* Where the engine has no corner-shape, a circular corner at 0.7 of the squircle's radius stays within 6% of it, so box-shadow, outline and the element's own box follow the squircle closely. */
-@supports not (corner-shape: squircle) {
-  :root {
-    --ouro-corner-fallback: 0.7;
-  }
-}
-
-/* The squircle where corner-shape is missing: a control's surface slot (data-ouro-surface) paints the fill, the ring and the state layer through squircle clip paths, so the element keeps its box, its outline and its shadow. */
-@supports not (corner-shape: squircle) {
-  [data-ouro-squircle][class*="bg-(--ouro-bg)"] {
-    background-color: transparent;
-  }
-  [data-ouro-squircle][class*="border-(--ouro-bd)"] {
-    border-color: transparent;
-  }
-  [data-ouro-squircle] {
-    --tw-ring-color: transparent;
-  }
-  [data-ouro-squircle]::before {
-    display: none;
-  }
-  [data-ouro-surface],
-  [data-ouro-avatar-surface] {
-    --ouro-sq-o: 0 calc(var(--ouro-sq-r)*1), calc(var(--ouro-sq-r)*0.0062) calc(var(--ouro-sq-r)*0.6045), calc(var(--ouro-sq-r)*0.0248) calc(var(--ouro-sq-r)*0.4441), calc(var(--ouro-sq-r)*0.0561) calc(var(--ouro-sq-r)*0.3262), calc(var(--ouro-sq-r)*0.1005) calc(var(--ouro-sq-r)*0.2333), calc(var(--ouro-sq-r)*0.1591) calc(var(--ouro-sq-r)*0.1591), calc(var(--ouro-sq-r)*0.2333) calc(var(--ouro-sq-r)*0.1005), calc(var(--ouro-sq-r)*0.3262) calc(var(--ouro-sq-r)*0.0561), calc(var(--ouro-sq-r)*0.4441) calc(var(--ouro-sq-r)*0.0248), calc(var(--ouro-sq-r)*0.6045) calc(var(--ouro-sq-r)*0.0062), calc(var(--ouro-sq-r)*1) 0, calc(100% - var(--ouro-sq-r)*1) 0, calc(100% - var(--ouro-sq-r)*0.6045) calc(var(--ouro-sq-r)*0.0062), calc(100% - var(--ouro-sq-r)*0.4441) calc(var(--ouro-sq-r)*0.0248), calc(100% - var(--ouro-sq-r)*0.3262) calc(var(--ouro-sq-r)*0.0561), calc(100% - var(--ouro-sq-r)*0.2333) calc(var(--ouro-sq-r)*0.1005), calc(100% - var(--ouro-sq-r)*0.1591) calc(var(--ouro-sq-r)*0.1591), calc(100% - var(--ouro-sq-r)*0.1005) calc(var(--ouro-sq-r)*0.2333), calc(100% - var(--ouro-sq-r)*0.0561) calc(var(--ouro-sq-r)*0.3262), calc(100% - var(--ouro-sq-r)*0.0248) calc(var(--ouro-sq-r)*0.4441), calc(100% - var(--ouro-sq-r)*0.0062) calc(var(--ouro-sq-r)*0.6045), 100% calc(var(--ouro-sq-r)*1), 100% calc(100% - var(--ouro-sq-r)*1), calc(100% - var(--ouro-sq-r)*0.0062) calc(100% - var(--ouro-sq-r)*0.6045), calc(100% - var(--ouro-sq-r)*0.0248) calc(100% - var(--ouro-sq-r)*0.4441), calc(100% - var(--ouro-sq-r)*0.0561) calc(100% - var(--ouro-sq-r)*0.3262), calc(100% - var(--ouro-sq-r)*0.1005) calc(100% - var(--ouro-sq-r)*0.2333), calc(100% - var(--ouro-sq-r)*0.1591) calc(100% - var(--ouro-sq-r)*0.1591), calc(100% - var(--ouro-sq-r)*0.2333) calc(100% - var(--ouro-sq-r)*0.1005), calc(100% - var(--ouro-sq-r)*0.3262) calc(100% - var(--ouro-sq-r)*0.0561), calc(100% - var(--ouro-sq-r)*0.4441) calc(100% - var(--ouro-sq-r)*0.0248), calc(100% - var(--ouro-sq-r)*0.6045) calc(100% - var(--ouro-sq-r)*0.0062), calc(100% - var(--ouro-sq-r)*1) 100%, calc(var(--ouro-sq-r)*1) 100%, calc(var(--ouro-sq-r)*0.6045) calc(100% - var(--ouro-sq-r)*0.0062), calc(var(--ouro-sq-r)*0.4441) calc(100% - var(--ouro-sq-r)*0.0248), calc(var(--ouro-sq-r)*0.3262) calc(100% - var(--ouro-sq-r)*0.0561), calc(var(--ouro-sq-r)*0.2333) calc(100% - var(--ouro-sq-r)*0.1005), calc(var(--ouro-sq-r)*0.1591) calc(100% - var(--ouro-sq-r)*0.1591), calc(var(--ouro-sq-r)*0.1005) calc(100% - var(--ouro-sq-r)*0.2333), calc(var(--ouro-sq-r)*0.0561) calc(100% - var(--ouro-sq-r)*0.3262), calc(var(--ouro-sq-r)*0.0248) calc(100% - var(--ouro-sq-r)*0.4441), calc(var(--ouro-sq-r)*0.0062) calc(100% - var(--ouro-sq-r)*0.6045), 0 calc(100% - var(--ouro-sq-r)*1);
-  }
-  [data-ouro-avatar-surface] {
-    clip-path: var(--ouro-sq-path, polygon(var(--ouro-sq-o)));
-  }
-  /* A card's backdrop is its picture alone: the squircle clip is its only edge, with no circular corner or overflow clip under it, which would cut inside the squircle's corners. It covers the box the card's surface paints, so it lines up with the cards beside it. */
-  [data-card-backdrop] {
-    --ouro-card-backdrop-inset: 0;
-    border-radius: 0;
-    overflow: visible;
-  }
-  [data-ouro-surface] {
-    --ouro-sq-m: max(0px, calc(var(--ouro-sq-r) - var(--ouro-sq-w)));
-    display: block;
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    background: var(--ouro-bg, transparent);
-    clip-path: var(--ouro-sq-path, polygon(var(--ouro-sq-o)));
-  }
-  [data-ouro-surface]::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: currentColor;
-    opacity: var(--ouro-state, 0);
-  }
-  /* The ring is a border inside the fill's squircle: its outer edge is the clip's, and a circle at 0.57 of the inner corner size stays within 1.2% of the inner squircle, so no second clip path has to be drawn. */
-  [data-ouro-surface]::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border: var(--ouro-sq-w, 0px) solid var(--ouro-bd, transparent);
-    border-radius: calc(var(--ouro-sq-m) * 0.57 + var(--ouro-sq-w, 0px));
-  }
-}
-
-/* Where the engine draws shape(), the squircle's corners are Bézier curves, within 0.03% of the curve, in place of the polygon: an exact edge that is quicker to draw. The surfaces show only where corner-shape is missing. */
-@supports (clip-path: shape(from 0 0, close)) {
-  [data-ouro-surface],
-  [data-ouro-avatar-surface] {
-    --ouro-sq-cmds: from 0 calc(var(--ouro-sq-r)*1), curve to calc(var(--ouro-sq-r)*.1591) calc(var(--ouro-sq-r)*.1591) with 0 calc(var(--ouro-sq-r)*.613) / calc(var(--ouro-sq-r)*-.0092) calc(var(--ouro-sq-r)*.3274), curve to calc(var(--ouro-sq-r)*1) 0 with calc(var(--ouro-sq-r)*.3274) calc(var(--ouro-sq-r)*-.0092) / calc(var(--ouro-sq-r)*.613) 0, line to calc(100% - var(--ouro-sq-r)*1) 0, curve to calc(100% - var(--ouro-sq-r)*.1591) calc(var(--ouro-sq-r)*.1591) with calc(100% - var(--ouro-sq-r)*.613) 0 / calc(100% - var(--ouro-sq-r)*.3274) calc(var(--ouro-sq-r)*-.0092), curve to 100% calc(var(--ouro-sq-r)*1) with calc(100% + var(--ouro-sq-r)*.0092) calc(var(--ouro-sq-r)*.3274) / 100% calc(var(--ouro-sq-r)*.613), line to 100% calc(100% - var(--ouro-sq-r)*1), curve to calc(100% - var(--ouro-sq-r)*.1591) calc(100% - var(--ouro-sq-r)*.1591) with 100% calc(100% - var(--ouro-sq-r)*.613) / calc(100% + var(--ouro-sq-r)*.0092) calc(100% - var(--ouro-sq-r)*.3274), curve to calc(100% - var(--ouro-sq-r)*1) 100% with calc(100% - var(--ouro-sq-r)*.3274) calc(100% + var(--ouro-sq-r)*.0092) / calc(100% - var(--ouro-sq-r)*.613) 100%, line to calc(var(--ouro-sq-r)*1) 100%, curve to calc(var(--ouro-sq-r)*.1591) calc(100% - var(--ouro-sq-r)*.1591) with calc(var(--ouro-sq-r)*.613) 100% / calc(var(--ouro-sq-r)*.3274) calc(100% + var(--ouro-sq-r)*.0092), curve to 0 calc(100% - var(--ouro-sq-r)*1) with calc(var(--ouro-sq-r)*-.0092) calc(100% - var(--ouro-sq-r)*.3274) / 0 calc(100% - var(--ouro-sq-r)*.613), close;
-    --ouro-sq-path: var(--ouro-sq-capsule-path, shape(var(--ouro-sq-cmds)));
-  }
-/* An avatar's presence notch: a circle round the dot, a second subpath of the surface's own clip path, so the picture behind the avatar shows through the gap. It exists only while a dot is drawn (data-ouro-bite). */
-  [data-ouro-avatar-surface][data-ouro-bite] {
+/* An avatar's presence notch: a circle round the dot, cut out of the surface so the picture behind the avatar shows through the gap. It exists only while a dot is drawn (data-ouro-bite). Where corner-shape is missing the squircleCorners() plugin's clip path carries it as one more subpath (--sq-notch), and where corner-shape draws the corners it is the whole clip path. */
+@layer base {
+  [data-ouro-bite] {
     --ouro-bite-x: calc(100% - var(--ouro-bite-c));
-    clip-path: shape(evenodd var(--ouro-sq-cmds), move to calc(var(--ouro-bite-x) + var(--ouro-bite-r)) calc(100% - var(--ouro-bite-c)), arc to calc(var(--ouro-bite-x) - var(--ouro-bite-r)) calc(100% - var(--ouro-bite-c)) of var(--ouro-bite-r), arc to calc(var(--ouro-bite-x) + var(--ouro-bite-r)) calc(100% - var(--ouro-bite-c)) of var(--ouro-bite-r), close);
+    --sq-notch: move to calc(var(--ouro-bite-x) + var(--ouro-bite-r)) calc(100% - var(--ouro-bite-c)), arc to calc(var(--ouro-bite-x) - var(--ouro-bite-r)) calc(100% - var(--ouro-bite-c)) of var(--ouro-bite-r), arc to calc(var(--ouro-bite-x) + var(--ouro-bite-r)) calc(100% - var(--ouro-bite-c)) of var(--ouro-bite-r), close;
   }
-  [dir="rtl"] [data-ouro-avatar-surface][data-ouro-bite] {
+  [dir="rtl"] [data-ouro-bite] {
     --ouro-bite-x: calc(0% + var(--ouro-bite-c));
   }
 }
-
-/* Where the surface shows (no corner-shape), a control whose corner shape is round, such as a capsule from --ouro-control-radius and --ouro-control-corner-shape or a theme that sets --ouro-corner-shape to round, is clipped and ringed by circular arcs, not the squircle's curve. Elsewhere the surface is hidden and this changes nothing. */
-@container style(--corner-shape: round) {
-  [data-ouro-squircle] > [data-ouro-surface] {
-    clip-path: inset(0 round var(--ouro-sq-r));
-  }
-  [data-ouro-squircle] > [data-ouro-surface]::after {
-    border-radius: var(--ouro-sq-r);
-  }
-}
-
-/* Where the surface shows (no corner-shape), a capsule in Ouro's capsule shape, superellipse(1.05) (Apple's continuous
-   capsule, which a theme gives its controls with --ouro-control-radius: 9999px and --ouro-control-corner-shape:
-   superellipse(1.05)), is clipped to that same superellipse: an exponent of 2^1.05 from the corner's centre, one Bézier
-   curve a corner within 0.06% of the curve (--ouro-sq-capsule-path, which the shape() rule below takes), or a polygon of
-   nine points a corner where the engine draws no shape(). The
-   ring inside it follows the radius's circle, at most 1.2% of the radius inside the curve. */
-@container style(--corner-shape: superellipse(1.05)) {
-  [data-ouro-squircle] > [data-ouro-surface] {
-    --ouro-sq-o: 0 calc(var(--ouro-sq-r)*1), calc(var(--ouro-sq-r)*0.0186) calc(var(--ouro-sq-r)*0.7937), calc(var(--ouro-sq-r)*0.0736) calc(var(--ouro-sq-r)*0.6046), calc(var(--ouro-sq-r)*0.1633) calc(var(--ouro-sq-r)*0.4332), calc(var(--ouro-sq-r)*0.2845) calc(var(--ouro-sq-r)*0.2845), calc(var(--ouro-sq-r)*0.4332) calc(var(--ouro-sq-r)*0.1633), calc(var(--ouro-sq-r)*0.6046) calc(var(--ouro-sq-r)*0.0736), calc(var(--ouro-sq-r)*0.7937) calc(var(--ouro-sq-r)*0.0186), calc(var(--ouro-sq-r)*1) 0, calc(100% - var(--ouro-sq-r)*1) 0, calc(100% - var(--ouro-sq-r)*0.7937) calc(var(--ouro-sq-r)*0.0186), calc(100% - var(--ouro-sq-r)*0.6046) calc(var(--ouro-sq-r)*0.0736), calc(100% - var(--ouro-sq-r)*0.4332) calc(var(--ouro-sq-r)*0.1633), calc(100% - var(--ouro-sq-r)*0.2845) calc(var(--ouro-sq-r)*0.2845), calc(100% - var(--ouro-sq-r)*0.1633) calc(var(--ouro-sq-r)*0.4332), calc(100% - var(--ouro-sq-r)*0.0736) calc(var(--ouro-sq-r)*0.6046), calc(100% - var(--ouro-sq-r)*0.0186) calc(var(--ouro-sq-r)*0.7937), 100% calc(var(--ouro-sq-r)*1), 100% calc(100% - var(--ouro-sq-r)*1), calc(100% - var(--ouro-sq-r)*0.0186) calc(100% - var(--ouro-sq-r)*0.7937), calc(100% - var(--ouro-sq-r)*0.0736) calc(100% - var(--ouro-sq-r)*0.6046), calc(100% - var(--ouro-sq-r)*0.1633) calc(100% - var(--ouro-sq-r)*0.4332), calc(100% - var(--ouro-sq-r)*0.2845) calc(100% - var(--ouro-sq-r)*0.2845), calc(100% - var(--ouro-sq-r)*0.4332) calc(100% - var(--ouro-sq-r)*0.1633), calc(100% - var(--ouro-sq-r)*0.6046) calc(100% - var(--ouro-sq-r)*0.0736), calc(100% - var(--ouro-sq-r)*0.7937) calc(100% - var(--ouro-sq-r)*0.0186), calc(100% - var(--ouro-sq-r)*1) 100%, calc(var(--ouro-sq-r)*1) 100%, calc(var(--ouro-sq-r)*0.7937) calc(100% - var(--ouro-sq-r)*0.0186), calc(var(--ouro-sq-r)*0.6046) calc(100% - var(--ouro-sq-r)*0.0736), calc(var(--ouro-sq-r)*0.4332) calc(100% - var(--ouro-sq-r)*0.1633), calc(var(--ouro-sq-r)*0.2845) calc(100% - var(--ouro-sq-r)*0.2845), calc(var(--ouro-sq-r)*0.1633) calc(100% - var(--ouro-sq-r)*0.4332), calc(var(--ouro-sq-r)*0.0736) calc(100% - var(--ouro-sq-r)*0.6046), calc(var(--ouro-sq-r)*0.0186) calc(100% - var(--ouro-sq-r)*0.7937), 0 calc(100% - var(--ouro-sq-r)*1);
-    --ouro-sq-capsule-path: shape(from 0 var(--ouro-sq-r), curve to var(--ouro-sq-r) 0 with 0 calc(var(--ouro-sq-r)*.4253) / calc(var(--ouro-sq-r)*.4253) 0, line to calc(100% - var(--ouro-sq-r)) 0, curve to 100% var(--ouro-sq-r) with calc(100% - var(--ouro-sq-r)*.4253) 0 / 100% calc(var(--ouro-sq-r)*.4253), line to 100% calc(100% - var(--ouro-sq-r)), curve to calc(100% - var(--ouro-sq-r)) 100% with 100% calc(100% - var(--ouro-sq-r)*.4253) / calc(100% - var(--ouro-sq-r)*.4253) 100%, line to var(--ouro-sq-r) 100%, curve to 0 calc(100% - var(--ouro-sq-r)) with calc(var(--ouro-sq-r)*.4253) 100% / 0 calc(100% - var(--ouro-sq-r)*.4253), close);
-  }
-  [data-ouro-squircle] > [data-ouro-surface]::after {
-    border-radius: var(--ouro-sq-r);
+@supports (corner-shape: squircle) and (clip-path: shape(from 0 0, close)) {
+  [data-ouro-bite] {
+    clip-path: shape(nonzero from 0 0, hline to 100%, vline to 100%, hline to 0, close, var(--sq-notch));
   }
 }
 
@@ -447,14 +358,13 @@
    --ouro-control-radius and --ouro-control-corner-shape (9999px and superellipse(1.05) make capsules), and its checks with
    --ouro-check-radius and --ouro-check-corner-shape. Unset, they are Ouro's lg and md steps (rounded-ouro-lg,
    rounded-ouro-md) and the sm step in the theme's corner shape. --ouro-control-r is the radius, for a part that
-   rounds to match (a stepper inside a field); --ouro-sq-r is the squircle surface's radius where corner-shape is missing.
+   rounds to match (a stepper inside a field); --ouro-sq-r is the same radius under its older name.
    Both stop at half the control's height (--ouro-control-cap, from the height variable the control sets), so a capsule's
-   ends are squircles that meet: corner-shape draws the same at that radius, and where it is missing the surface's clip
-   stops there and the element's own circular corner, which its outline follows, is 0.7 of it, never a half circle. */
+   ends are squircles that meet: corner-shape draws the same at that radius, and where it is missing squircleCorners() draws it. */
 @utility rounded-ouro-control {
   --ouro-control-cap: calc(var(--ouro-control-h, var(--ouro-button-h, var(--ouro-toggle-h, var(--ouro-segmented-h, 19998px)))) / 2);
   --ouro-sq-r: min(calc(var(--ouro-control-radius, var(--radius)) * var(--ouro-radius-scale, 1)), var(--ouro-control-cap));
-  --ouro-control-r: calc(var(--ouro-sq-r) * var(--ouro-corner-fallback, 1));
+  --ouro-control-r: calc(var(--ouro-sq-r));
   --corner-shape: var(--ouro-control-corner-shape, var(--ouro-corner-shape));
   border-radius: var(--ouro-control-r);
   corner-shape: var(--ouro-control-corner-shape, var(--ouro-corner-shape));
@@ -463,7 +373,7 @@
 @utility rounded-ouro-control-md {
   --ouro-control-cap: calc(var(--ouro-control-h, var(--ouro-button-h, var(--ouro-toggle-h, var(--ouro-segmented-h, 19998px)))) / 2);
   --ouro-sq-r: min(calc(var(--ouro-control-radius, var(--radius) * 0.8) * var(--ouro-radius-scale, 1)), var(--ouro-control-cap));
-  --ouro-control-r: calc(var(--ouro-sq-r) * var(--ouro-corner-fallback, 1));
+  --ouro-control-r: calc(var(--ouro-sq-r));
   --corner-shape: var(--ouro-control-corner-shape, var(--ouro-corner-shape));
   border-radius: var(--ouro-control-r);
   corner-shape: var(--ouro-control-corner-shape, var(--ouro-corner-shape));
@@ -478,7 +388,7 @@
 
 @utility rounded-ouro-check {
   --corner-shape: var(--ouro-check-corner-shape, var(--ouro-corner-shape));
-  border-radius: var(--ouro-check-radius, calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) * 0.6));
+  border-radius: var(--ouro-check-radius, calc(var(--radius) * var(--ouro-radius-scale, 1) * 0.6));
   corner-shape: var(--ouro-check-corner-shape, var(--ouro-corner-shape));
 }
 
@@ -492,6 +402,40 @@
 @keyframes ouro-spin {
   to {
     rotate: 1turn;
+  }
+}
+/* Composer's expand and collapse: a clip over the frame opens or closes by --ouro-composer-gap, and the toolbar comes and goes. */
+@keyframes ouro-composer-reveal {
+  from {
+    clip-path: inset(var(--ouro-composer-gap) 0 0 0 round var(--ouro-composer-radius));
+  }
+  to {
+    clip-path: inset(0 0 0 0 round var(--ouro-composer-radius));
+  }
+}
+@keyframes ouro-composer-conceal {
+  from {
+    clip-path: inset(0 0 0 0 round var(--ouro-composer-radius));
+  }
+  to {
+    clip-path: inset(var(--ouro-composer-gap) 0 0 0 round var(--ouro-composer-radius));
+  }
+}
+@keyframes ouro-composer-toolbar-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+}
+@keyframes ouro-composer-toolbar-out {
+  to {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+}
+@keyframes ouro-composer-fade-in {
+  from {
+    opacity: 0;
   }
 }
 @keyframes ouro-pulse {
