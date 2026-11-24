@@ -344,17 +344,21 @@ jobs:
           mkdir -p .self-host/backups && chmod 777 .self-host/backups
           docker run --rm --network none -v sj-jobs:/data -v "$PWD/.self-host/backups:/backups" "$LOCAL_IMAGE" \
             node /app/self-host/server.mjs backup /backups/jobs.tar.gz
-          node --input-type=module -e '
-            import { readTarGz } from "./self-host/backup.mjs";
-            for await (const { name, data } of readTarGz(".self-host/backups/jobs.tar.gz")) {
-              if (name !== "database.json") continue;
-              const keys = JSON.parse(Buffer.from(data).toString("utf8")).tables.find((table) => table.name === "PlatformJobKey");
-              const [type, status] = ["type", "status"].map((column) => keys.columns.indexOf(column));
-              const done = keys.rows.filter((row) => row[type] === "move-in.run" && row[status] === "done").length;
-              console.log(JSON.stringify({ moveInJobsDone: done, jobKeys: keys.rows.length }));
-              if (!done) throw new Error("No move-in job ran to done on the JOBS queue of the server.");
+          # The image reads its own backup: the file belongs to the container's user, not the runner's.
+          # The result is captured first, so a failed check fails the step rather than vanishing in a pipe.
+          jobs=$(docker run --rm --network none -v "$PWD/.self-host/backups:/backups:ro" "$LOCAL_IMAGE" node --input-type=module -e '
+            import { readTarGz } from "/app/self-host/backup.mjs";
+            let keys;
+            for await (const { name, data } of readTarGz("/backups/jobs.tar.gz")) {
+              if (name === "database.json") keys = JSON.parse(Buffer.from(data).toString("utf8")).tables.find((table) => table.name === "PlatformJobKey");
             }
-          ' | tee "$OUT/jobs.json"
+            if (!keys) throw new Error("The backup has no PlatformJobKey rows, so no job ran on the JOBS queue.");
+            const [type, status] = ["type", "status"].map((column) => keys.columns.indexOf(column));
+            const done = keys.rows.filter((row) => row[type] === "move-in.run" && row[status] === "done").length;
+            if (!done) throw new Error("No move-in job ran to done on the JOBS queue of the server.");
+            console.log(JSON.stringify({ moveInJobsDone: done, jobKeys: keys.rows.length }));
+          ')
+          echo "$jobs" | tee "$OUT/jobs.json"
 
       # The Compose file in the guide (self-host/compose.yaml) starts this image and waits for its
       # health check; on 8081, beside the restored server.
