@@ -164,7 +164,12 @@ test.describe("Organizers", () => {
       await expect(onRecipe.getByRole("link")).toHaveCount(3);
     });
     await expectAccessible();
-    await attachScreenshot(page, testInfo, "recipe-organize-after-reload");
+    // The Organize form itself, three tags in it, so nothing floats over it.
+    await attachElementShot(
+      page.locator("form").filter({ has: page.getByRole("button", { name: "Save", exact: true }) }),
+      testInfo,
+      "recipe-organize-form-after-reload",
+    );
 
     // The tag's own page lists the recipe.
     await waitForHydration(page);
