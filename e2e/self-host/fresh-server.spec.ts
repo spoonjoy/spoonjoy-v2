@@ -143,14 +143,16 @@ test.describe("A fresh self-hosted server", () => {
     await ai.getByRole("button", { name: "Save" }).click();
     await expect(ai.getByTestId("server-ai-provider")).toHaveText("Gemini");
     await expect(ai.getByText("With the key you saved here.")).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath("ai-gemini-chosen.png"), fullPage: true });
+    await ai.scrollIntoViewIfNeeded();
+    await ai.screenshot({ path: testInfo.outputPath("ai-gemini-chosen.png") });
 
     await ai.getByRole("radio", { name: "No AI" }).click();
     await ai.getByRole("button", { name: "Save" }).click();
     await expect(ai.getByTestId("server-ai-provider")).toHaveText("No AI");
     await page.reload();
     await expect(page.getByText("You turned AI off.")).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath("ai-off.png"), fullPage: true });
+    await ai.scrollIntoViewIfNeeded();
+    await ai.screenshot({ path: testInfo.outputPath("ai-off.png") });
   });
 
   // Backups on Server settings (self-host/backup.mjs, answered through self-host/host-api.mjs). The
