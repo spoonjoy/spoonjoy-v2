@@ -217,9 +217,11 @@ export function RecipeHeader({
                 <span aria-hidden="true" className="text-[var(--sj-ink-soft)]">·</span>
               </>
             ) : null}
+            {/* Not modal: the cook watches the ingredient amounts change behind it, and can tick them off. */}
             <Popover
               title="Scale the recipe"
               hideTitle
+              modal={false}
               align="start"
               trigger={(
                 <Button variant="soft" tone="secondary" size="sm" endIcon={ChevronDown} data-testid="recipe-serves-trigger">
