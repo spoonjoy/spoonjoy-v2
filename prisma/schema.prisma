@@ -73,6 +73,7 @@ model User {
 
   importSources ImportSource[]
   importJobs    ImportJob[]
+  importUploads ImportUpload[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -1041,6 +1042,39 @@ model ImportJob {
   @@index([ownerId, createdAt])
   @@index([sourceId])
   @@index([status, heartbeatAt])
+}
+
+// A backup sent to storage in parts (migrations/0053_move_in_uploads.sql). Storage can't list an
+// upload's parts to a Worker, so its parts are recorded here as they arrive.
+model ImportUpload {
+  id          String             @id
+  ownerId     String
+  owner       User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // The page's fingerprint of the file (name, size, last modified), so the same file resumes.
+  fingerprint String
+  archiveKey  String
+  // The storage multipart upload's id.
+  uploadId    String
+  name        String
+  size        Int
+  partSize    Int
+  startedAt   DateTime           @default(now())
+  // The move-in it became, once finished.
+  jobId       String?
+  parts       ImportUploadPart[]
+
+  @@index([ownerId, fingerprint])
+  @@index([startedAt])
+}
+
+model ImportUploadPart {
+  uploadId   String
+  upload     ImportUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  partNumber Int
+  etag       String
+  size       Int
+
+  @@id([uploadId, partNumber])
 }
 
 model ImportEntityCount {
