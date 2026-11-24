@@ -135,8 +135,12 @@ describe("uploadBackup", () => {
     const file = backupFile();
     const finishes = [Response.json({ code: "missing-parts", missing: [2] }, { status: 409 }), Response.json({ jobId: "movein_2" })];
     const api = server(file.size, { finish: () => finishes.shift() as Response });
-    expect(await uploadBackup(file, { app: "mealie", fetch: api.fetch, storage: null, sleep: noWait })).toEqual({ ok: true, jobId: "movein_2" });
+    const progress: number[] = [];
+    expect(await uploadBackup(file, { app: "mealie", fetch: api.fetch, storage: null, sleep: noWait, onProgress: (sent) => progress.push(sent) })).toEqual({ ok: true, jobId: "movein_2" });
     expect(api.calls.filter((call) => call.endsWith("/parts/2"))).toHaveLength(2);
+    // A part sent twice counts once, so the page never says more was sent than the file holds.
+    expect(Math.max(...progress)).toBe(35);
+    expect(progress.at(-1)).toBe(35);
   });
 
   it("shows the server's message for a backup it turns away, and forgets the upload", async () => {
@@ -156,7 +160,7 @@ describe("uploadBackup", () => {
     expect(await uploadBackup(file, { app: "mealie", fetch: api.fetch, storage: null, sleep: noWait })).toEqual({ ok: false, error });
   });
 
-  it("starts again from the first part once when the upload is gone, and says so if it goes again", async () => {
+  it("starts again from the first part once when the upload goes while sending, and not when it goes at the finish", async () => {
     const file = backupFile();
     const gone = () => Response.json({ code: "upload-gone", error: "gone" }, { status: 404 });
     const api = server(file.size);
@@ -166,11 +170,42 @@ describe("uploadBackup", () => {
     expect(await uploadBackup(file, { app: "mealie", fetch: api.fetch, storage: store, sleep: noWait, concurrency: 1 })).toEqual({ ok: true, jobId: "movein_1" });
     expect(api.begins.map((body) => body.resume)).toEqual(["upload_old", null]);
 
-    api.next.set("POST /move-in/uploads/upload_1", [gone(), gone()]);
+    // Gone at the finish may be a backup turned away whose answer was lost: it isn't sent again unasked.
+    api.begins.length = 0;
+    api.next.set("POST /move-in/uploads/upload_1", [gone()]);
     expect(await uploadBackup(file, { app: "mealie", fetch: api.fetch, storage: store, sleep: noWait })).toEqual({
       ok: false,
       error: "That upload isn't on the server any more. Press Move in to send the backup again from the start.",
     });
+    expect(api.begins).toHaveLength(1);
+    expect(store.values.size).toBe(0);
+  });
+
+  it("says so when every part arrived but the check kept failing, and keeps the upload to check again", async () => {
+    const file = backupFile();
+    const api = server(file.size, { finish: () => Response.json({ error: "boom" }, { status: 500 }) });
+    const store = memoryStore();
+    expect(await uploadBackup(file, { app: "mealie", fetch: api.fetch, storage: store, sleep: noWait })).toEqual({
+      ok: false,
+      error: "Every part arrived, but checking the backup didn't finish. Press Move in again with the same file to check it again.",
+    });
+    expect(store.values.get(keyFor(file))).toBe("upload_1");
+  });
+
+  it("gives up on a request that stalls, as on a dropped phone connection, and tries it again", async () => {
+    const file = backupFile();
+    const signals: AbortSignal[] = [];
+    const stalled = (_url: string, init: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        signals.push(init.signal as AbortSignal);
+        init.signal!.addEventListener("abort", () => reject(init.signal!.reason));
+      });
+    expect(await uploadBackup(file, { app: "mealie", fetch: stalled, storage: null, sleep: noWait, attempts: 2, requestMs: 5 })).toEqual({
+      ok: false,
+      error: "The connection dropped after 0 MB of 0 MB was sent. Press Move in again with the same file to carry on from there.",
+    });
+    expect(signals).toHaveLength(2);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
   });
 
   it("uploads in a browser that refuses storage", async () => {

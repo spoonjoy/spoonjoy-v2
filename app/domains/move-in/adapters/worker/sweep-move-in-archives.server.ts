@@ -8,7 +8,7 @@ import { MOVE_IN_ARCHIVE_PREFIX } from "~/lib/photo-variants";
 import { FINISHED, type MoveInJob } from "../../application/run-move-in";
 import { MOVE_IN_ERROR_MESSAGES } from "../../model/move-in-error";
 import { moveInJobStore } from "../storage/job-store.server";
-import { abandonedUploads, deleteUpload } from "../storage/upload-store.server";
+import { abandonedUploads, deleteFinishedUploads, deleteUpload } from "../storage/upload-store.server";
 import { MOVE_IN_UPLOAD_KEPT_MS } from "./backup-upload.server";
 
 /** How long an upload may wait for its job row: the upload writes the backup first, then the job. */
@@ -80,7 +80,8 @@ export interface MoveInUploadBucket {
  */
 export async function sweepMoveInUploads({ db, bucket, now }: { db: D1ReadDatabase; bucket: MoveInUploadBucket; now: Date }) {
   let aborted = 0;
-  for (const upload of await abandonedUploads(db, new Date(now.getTime() - MOVE_IN_UPLOAD_KEPT_MS))) {
+  const before = new Date(now.getTime() - MOVE_IN_UPLOAD_KEPT_MS);
+  for (const upload of await abandonedUploads(db, before)) {
     try {
       await bucket.resumeMultipartUpload(upload.archiveKey, upload.uploadId).abort();
     } catch {
@@ -89,6 +90,8 @@ export async function sweepMoveInUploads({ db, bucket, now }: { db: D1ReadDataba
     await deleteUpload(db, upload.id);
     aborted += 1;
   }
+  // An upload that became a move-in is kept a day, for a finish sent again to answer with its job, then forgotten.
+  await deleteFinishedUploads(db, before);
   return { aborted };
 }
 
@@ -100,7 +103,11 @@ export async function runScheduledMoveInSweep(
 ): Promise<{ deleted: number; expired: number; aborted: number } | null> {
   if (!env.DB || !env.PHOTOS) return null;
   const db = env.DB as D1ReadDatabase;
-  const uploads = await sweepMoveInUploads({ db, bucket: env.PHOTOS as MoveInUploadBucket, now });
+  // A failed upload sweep is logged and tried on the next cron, without holding back the backups' sweep.
+  const uploads = await sweepMoveInUploads({ db, bucket: env.PHOTOS as MoveInUploadBucket, now }).catch((error: unknown) => {
+    log(JSON.stringify({ event: "move_in_upload_sweep_failed", message: error instanceof Error ? error.message : String(error) }));
+    return { aborted: 0 };
+  });
   const report = { ...(await sweepMoveInArchives({ db, bucket: env.PHOTOS as MoveInArchiveBucket, now })), ...uploads };
   log(JSON.stringify({ event: "move_in_archive_sweep", ...report }));
   return report;

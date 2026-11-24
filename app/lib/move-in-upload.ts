@@ -8,6 +8,11 @@
 export const UPLOAD_CONCURRENCY = 3;
 /** Tries per request: the first, then four more after 1, 2, 4 and 8 seconds. */
 export const UPLOAD_ATTEMPTS = 5;
+/**
+ * How long one request may take before it counts as dropped: a stalled phone connection often never fails, it just
+ * stops. Two minutes lets a 10 MiB part through at about 85 KB/s, and the finish read the backup's index.
+ */
+export const UPLOAD_REQUEST_MS = 120_000;
 const STORAGE_PREFIX = "spoonjoy:move-in-upload:";
 
 export type UploadOutcome = { ok: true; jobId: string } | { ok: false; error: string };
@@ -27,6 +32,8 @@ export interface UploadOptions {
   sleep?: (ms: number) => Promise<void>;
   concurrency?: number;
   attempts?: number;
+  /** How long one request may take; UPLOAD_REQUEST_MS unless a test shortens it. */
+  requestMs?: number;
 }
 
 /** A size as the page shows it: "84 MB", or "1.2 GB" from a thousand megabytes on, rounded down so it never overstates. */
@@ -67,8 +74,12 @@ function remembering(store: KeyValueStore | null, fingerprint: string) {
 
 /** The connection dropped, or the server kept failing, after every try. */
 class Dropped extends Error {}
-/** The upload is no longer on the server, so it starts again from the first part. */
-class Gone extends Error {}
+/** The upload is no longer on the server. `finishing` says whether every part had arrived. */
+class Gone extends Error {
+  constructor(readonly finishing: boolean) {
+    super("upload-gone");
+  }
+}
 /** The server turned a step away, with its message for the cook. */
 class Refused extends Error {}
 
@@ -87,17 +98,21 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const attempts = options.attempts ?? UPLOAD_ATTEMPTS;
   const concurrency = options.concurrency ?? UPLOAD_CONCURRENCY;
+  const requestMs = options.requestMs ?? UPLOAD_REQUEST_MS;
   const fingerprint = fileFingerprint(file);
   const kept = remembering(options.storage === undefined ? browserStorage() : options.storage, fingerprint);
-  let sent = 0;
+  /** The parts that have arrived, by number, with their sizes: what the page says has been sent. */
+  const arrived = new Map<number, number>();
+  const sent = () => [...arrived.values()].reduce((total, size) => total + size, 0);
+  let finishing = false;
 
   /** Sends a request, trying again after a dropped connection or a server error, and reads its JSON answer. */
   async function send(url: string, init: RequestInit): Promise<{ status: number; body: Record<string, unknown> }> {
     for (let attempt = 1; ; attempt++) {
-      const response = await fetcher(url, { credentials: "same-origin", ...init }).catch(() => null);
+      const response = await fetcher(url, { credentials: "same-origin", signal: AbortSignal.timeout(requestMs), ...init }).catch(() => null);
       if (response && !retriable(response.status)) {
         const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-        if (response.status === 404 && body.code === "upload-gone") throw new Gone();
+        if (response.status === 404 && body.code === "upload-gone") throw new Gone(finishing);
         if (!response.ok && response.status !== 409) throw new Refused(typeof body.error === "string" ? body.error : "Move-in couldn't take that backup. Reload the page and try again.");
         return { status: response.status, body };
       }
@@ -121,8 +136,8 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
           failure ??= error;
           return;
         }
-        sent += blob.size;
-        options.onProgress?.(sent, file.size);
+        arrived.set(n, blob.size);
+        options.onProgress?.(sent(), file.size);
       }
     };
     await Promise.all(Array.from({ length: Math.min(concurrency, parts.length) }, worker));
@@ -133,17 +148,21 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
     const begun = await send("/move-in/uploads", json({ app: options.app, name: file.name, size: file.size, fingerprint, resume }));
     const plan = begun.body as unknown as Plan;
     kept.keep(plan.uploadId);
-    const done = new Set(plan.done);
-    sent = plan.done.reduce((total, n) => total + Math.min(plan.partSize, file.size - (n - 1) * plan.partSize), 0);
-    options.onProgress?.(sent, file.size);
-    await sendParts(plan, Array.from({ length: plan.partCount }, (_, i) => i + 1).filter((n) => !done.has(n)));
+    arrived.clear();
+    for (const n of plan.done) arrived.set(n, Math.min(plan.partSize, file.size - (n - 1) * plan.partSize));
+    options.onProgress?.(sent(), file.size);
+    await sendParts(plan, Array.from({ length: plan.partCount }, (_, i) => i + 1).filter((n) => !arrived.has(n)));
     options.onChecking?.();
+    finishing = true;
     for (;;) {
       const finished = await send(`/move-in/uploads/${encodeURIComponent(plan.uploadId)}`, json({ app: options.app }));
       if (finished.status !== 409) return String(finished.body.jobId);
       // Parts the server lost track of: send them again, then finish again.
       if (finished.body.code !== "missing-parts") throw new Refused(String(finished.body.error));
+      finishing = false;
+      for (const n of finished.body.missing as number[]) arrived.delete(n);
       await sendParts(plan, finished.body.missing as number[]);
+      finishing = true;
     }
   }
 
@@ -152,17 +171,22 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
     try {
       jobId = await once(kept.read());
     } catch (error) {
-      if (!(error instanceof Gone)) throw error;
+      // Gone before every part arrived: the upload was swept or stopped, so send it afresh. Gone at the finish may be a
+      // backup the server turned away whose answer was lost, so that one isn't sent again unasked.
+      if (!(error instanceof Gone) || error.finishing) throw error;
       kept.forget();
       jobId = await once(null);
     }
     kept.forget();
     return { ok: true, jobId };
   } catch (error) {
+    if (error instanceof Dropped && finishing) {
+      return { ok: false, error: "Every part arrived, but checking the backup didn't finish. Press Move in again with the same file to check it again." };
+    }
     if (error instanceof Dropped) {
       return {
         ok: false,
-        error: `The connection dropped after ${formatBytes(sent)} of ${formatBytes(file.size)} was sent. Press Move in again with the same file to carry on from there.`,
+        error: `The connection dropped after ${formatBytes(sent())} of ${formatBytes(file.size)} was sent. Press Move in again with the same file to carry on from there.`,
       };
     }
     // A refused backup was deleted on the server, so the next try starts afresh.
