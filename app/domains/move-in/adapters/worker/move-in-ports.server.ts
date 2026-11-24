@@ -2,7 +2,6 @@
 // kitchen in D1, photos stored next to every other recipe photo, and tags, categories and tools
 // through Kitchen's organizers for a cook who has them.
 import type { PrismaClient } from "@prisma/client";
-import { prismaOrganizerStore } from "~/domains/kitchen";
 import { isFlagOn, type FlagEnv } from "~/domains/platform";
 import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { getDb } from "~/lib/db.server";
@@ -58,8 +57,13 @@ export async function ownerEmail(db: D1ReadDatabase, ownerId: string): Promise<s
 
 export function moveInPorts(env: MoveInEnv, now: () => Date): MoveInPorts {
   const db = env.DB;
-  // Kitchen's organizers are on Prisma; a run opens it the first time a recipe has some.
+  // Kitchen's organizers are on Prisma; a run opens it the first time a recipe has some, and again if that failed.
   let prisma: Promise<PrismaClient> | undefined;
+  const openPrisma = () =>
+    (prisma ??= getDb({ DB: db as unknown as D1Database }).catch((error: unknown) => {
+      prisma = undefined;
+      throw error;
+    }));
   return {
     store: moveInJobStore(db, now),
     openArchive: (job) => r2RangeSource(env.PHOTOS, job.archiveKey as string),
@@ -69,7 +73,7 @@ export function moveInPorts(env: MoveInEnv, now: () => Date): MoveInPorts {
     hasMovedInPhoto: (recipeId) => hasMovedInPhoto(db, recipeId),
     organizers: {
       on: (ownerId) => isFlagOn("organizers", env, ownerId),
-      attach: async (moved) => attachMovedInOrganizers(prismaOrganizerStore(await (prisma ??= getDb({ DB: db as unknown as D1Database }))), moved),
+      attach: async (moved) => attachMovedInOrganizers(await openPrisma(), moved),
     },
     discardArchive: async (job) => env.PHOTOS.delete(job.archiveKey as string),
     now,

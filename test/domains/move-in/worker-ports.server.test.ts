@@ -110,22 +110,27 @@ describe("moveInPorts' organizers", () => {
     expect(ports({}).organizers?.on("chef-1")).toBe(false);
   });
 
-  it("go on through Kitchen's organizers in the Worker's database, opened once for the run", async () => {
+  it("go on through Kitchen's organizers in the Worker's database, opened once for the run, and again after an open that failed", async () => {
     const db = await getLocalDb();
     await cleanupDatabase();
     const cook = await db.user.create({ data: createTestUser() });
     const first = await db.recipe.create({ data: createTestRecipe(cook.id) });
     const second = await db.recipe.create({ data: createTestRecipe(cook.id) });
+    const source = await db.importSource.create({ data: { id: "source-1", ownerId: cook.id, kind: "mealie-backup", instanceKey: "k", label: "Home" } });
+    const at = { ownerId: cook.id, sourceId: source.id, jobId: "job-1" };
     vi.mocked(getDb).mockClear();
+    vi.mocked(getDb).mockRejectedValueOnce(new Error("D1 is down"));
     const ports = moveInPorts({ DB: database.binding, PHOTOS: memoryBucket(), SPOONJOY_FLAGS: "organizers" } as never, () => now);
 
-    await ports.organizers?.attach({ ownerId: cook.id, recipeId: first.id, tags: ["Quick"], categories: [], tools: [] });
-    await ports.organizers?.attach({ ownerId: cook.id, recipeId: second.id, tags: [], categories: [], tools: ["Skillet"] });
+    await expect(ports.organizers?.attach({ ...at, recipeId: first.id, tags: ["Quick"], categories: [], tools: [] })).rejects.toThrow("D1 is down");
+    await ports.organizers?.attach({ ...at, recipeId: first.id, tags: ["Quick"], categories: [], tools: [] });
+    await ports.organizers?.attach({ ...at, recipeId: second.id, tags: [], categories: [], tools: ["Skillet"] });
 
     const store = prismaOrganizerStore(db);
     expect((await organizersOnRecipe(store, first.id, "tag")).map((tag) => tag.name)).toEqual(["Quick"]);
     expect((await organizersOnRecipe(store, second.id, "tool")).map((tool) => tool.name)).toEqual(["Skillet"]);
-    expect(getDb).toHaveBeenCalledTimes(1);
+    // Once for the run, after the open that failed.
+    expect(getDb).toHaveBeenCalledTimes(2);
     expect(getDb).toHaveBeenCalledWith({ DB: database.binding });
   });
 });

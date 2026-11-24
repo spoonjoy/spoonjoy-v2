@@ -25,17 +25,20 @@ import {
   moveInEnv,
   moveInPorts,
   nudgeMoveIn,
+  readMoveInOrganizerCounts,
   readMoveInProgress,
   runForAWhile,
   startMoveIn,
   startMoveInJob,
   timeLeft,
   type MoveInEnv,
+  type MoveInOrganizerCounts,
   type MoveInProgress,
 } from "~/domains/move-in";
 import { isFlagOn } from "~/domains/platform";
 import { cloudflarePlatform } from "~/domains/platform/index.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
+import { getDb } from "~/lib/db.server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { CookbookPage } from "~/components/cookbook/page";
@@ -90,7 +93,7 @@ export interface MoveInView {
   recipes: { found: number; done: number; created: number; already: number; updated: number; unchanged: number; skipped: number; failed: number };
   /** Photos found in the backup, and how many of those are on their recipes now. */
   photos: { found: number; in: number };
-  /** The tags, categories and tools that came over with the recipes: none for a cook without organizers. */
+  /** The tags, categories and tools this move-in put on its recipes, each counted once: none for a cook without organizers. */
   organizers: { tags: number; categories: number; tools: number };
   failure: string | null;
   notes: Array<{ seq: number; level: "info" | "warn" | "error"; message: string }>;
@@ -104,13 +107,9 @@ export interface MoveInView {
   timeLeft: string | null;
 }
 
-/** How many of the backup's tags, categories or tools came over: those found, less those left in the backup. */
-function cameOver(progress: MoveInProgress, entity: "tags" | "categories" | "tools"): number {
-  const counts = progress.counts[entity];
-  return counts ? counts.found - counts.skipped : 0;
-}
+const NO_ORGANIZERS: MoveInOrganizerCounts = { tags: 0, categories: 0, tools: 0 };
 
-function view(progress: MoveInProgress, runsOnServer: boolean, now: Date): MoveInView {
+function view(progress: MoveInProgress, organizers: MoveInOrganizerCounts, runsOnServer: boolean, now: Date): MoveInView {
   const recipes = progress.counts.recipes ?? { found: 0, created: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 };
   const photos = progress.counts.photos ?? { found: 0, created: 0, unchanged: 0 };
   const failure = [...progress.events].reverse().find((event) => event.kind === "job-failed")?.message ?? null;
@@ -135,7 +134,7 @@ function view(progress: MoveInProgress, runsOnServer: boolean, now: Date): MoveI
       failed: recipes.failed,
     },
     photos: { found: photos.found, in: photos.created + photos.unchanged },
-    organizers: { tags: cameOver(progress, "tags"), categories: cameOver(progress, "categories"), tools: cameOver(progress, "tools") },
+    organizers,
     failure,
     notes: progress.events.flatMap((event) =>
       (event.level === "info" && event.kind !== "item-kept") || event.kind === "job-failed" ? [] : [{ seq: event.seq, level: event.level, message: event.message }]),
@@ -153,7 +152,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   if (!jobId) return { move: null, maxBytes };
   const progress = await readMoveInProgress(env.DB, { ownerId: userId, jobId });
   if (!progress) throw new Response("Not found", { status: 404 });
-  return { move: view(progress, jobs !== null, new Date()), maxBytes };
+  // Only a finished move-in shows them: what is on its recipes now, each counted once.
+  const { job } = progress;
+  const organizers =
+    FINISHED.includes(job.status) && job.sourceId
+      ? await readMoveInOrganizerCounts(await getDb({ DB: env.DB as unknown as D1Database }), { ownerId: userId, sourceId: job.sourceId, jobId: job.id })
+      : NO_ORGANIZERS;
+  return { move: view(progress, organizers, jobs !== null, new Date()), maxBytes };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {

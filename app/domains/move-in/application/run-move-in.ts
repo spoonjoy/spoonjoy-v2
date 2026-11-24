@@ -94,6 +94,8 @@ export interface MoveInPorts {
     sourceInstanceKey(sourceId: string): Promise<string | null>;
     /** Whether the job has logged a warning or an error. */
     hasIssues(jobId: string): Promise<boolean>;
+    /** Whether inspect chose to bring the job's tags, categories and tools: it counted some, and left none in the backup. */
+    organizing(jobId: string): Promise<boolean>;
     /**
      * Takes the job for this run, counting an attempt, unless another run has shown signs of life lately: the claim's
      * token, or null.
@@ -114,7 +116,7 @@ export interface MoveInPorts {
    */
   organizers?: {
     on(ownerId: string): boolean;
-    attach(input: { ownerId: string; recipeId: string; tags: string[]; categories: string[]; tools: string[] }): Promise<void>;
+    attach(input: { ownerId: string; recipeId: string; sourceId: string; jobId: string; tags: string[]; categories: string[]; tools: string[] }): Promise<void>;
   };
   /** Deletes the uploaded backup; it holds the other app's accounts, so it is kept no longer than the job needs it. */
   discardArchive(job: MoveInJob): Promise<void>;
@@ -143,11 +145,15 @@ interface Run {
   job: MoveInJob;
   ports: MoveInPorts;
   token: string | undefined;
+  /** Where the recipes' tags, categories and tools go, when inspect chose to bring them. */
+  organizers?: NonNullable<MoveInPorts["organizers"]>;
 }
 
 /** What one run keeps between its chunks, so the backup is read and parsed once. */
 export interface RunCache {
   opened?: Opened;
+  /** Whether inspect chose to bring the tags, categories and tools, asked once a run. */
+  organizing?: boolean;
 }
 
 async function open({ job, ports }: Run, cache: RunCache): Promise<Opened> {
@@ -175,7 +181,7 @@ async function inspect(run: Run, { backup, groupKey, drafts }: Opened) {
   const counted = inspectGroup(backup.database, groupKey);
   const photos = drafts.filter((draft) => backup.hasFile(draft.photoPath)).length;
   // A cook with organizers gets the tags, categories and tools on each recipe as it moves in; for anyone else they are
-  // counted, and left for a later move-in.
+  // counted, and left for a later move-in. The choice is made here, once: the recipes follow what these counts say.
   const organizing = run.ports.organizers?.on(job.ownerId) ?? false;
   const waiting = [["tags", counted.tags, "tag"], ["categories", counted.categories, "category"], ["tools", counted.tools, "tool"]] as const;
   const left = waiting.filter(([, found]) => found).map(([, found, one]) => plural(found, one, one === "category" ? "categories" : `${one}s`));
@@ -211,14 +217,15 @@ async function bringPhoto({ job, ports }: Run, backup: MealieBackup, draft: Reci
   }
 }
 
-/** Puts the recipe's tags, categories and tools on it, for a cook who has organizers; if that fails, the recipe stays and says so. */
-async function bringOrganizers({ job, ports }: Run, draft: RecipeDraft, recipeId: string, report: Report) {
+/** Puts the recipe's tags, categories and tools on it, when inspect chose to bring them; if that fails, the recipe stays and says so. */
+async function bringOrganizers({ job, organizers }: Run, draft: RecipeDraft, recipeId: string, report: Report) {
   const { tags, categories, tools } = draft;
-  if (!ports.organizers?.on(job.ownerId) || !(tags.length || categories.length || tools.length)) return;
+  if (!organizers || !(tags.length || categories.length || tools.length)) return;
   try {
-    await ports.organizers.attach({ ownerId: job.ownerId, recipeId, tags, categories, tools });
+    await organizers.attach({ ownerId: job.ownerId, recipeId, sourceId: job.sourceId as string, jobId: job.id, tags, categories, tools });
   } catch (error) {
-    report.events.push(event("item-degraded", `${draft.title} moved in without its tags, categories and tools: ${(error as Error).message}.`, { entity: "recipes", sourceKey: draft.sourceKey, targetId: recipeId }));
+    const message = `${draft.title} moved in without its tags, categories and tools: ${(error as Error).message}. Moving the same backup in again adds them.`;
+    report.events.push(event("item-degraded", message, { entity: "recipes", sourceKey: draft.sourceKey, targetId: recipeId }));
   }
 }
 
@@ -297,9 +304,10 @@ async function bringOrPassOver(run: Run, backup: MealieBackup, draft: RecipeDraf
   };
 }
 
-async function recipes(run: Run, { backup, drafts }: Opened, chunkSize: number) {
+async function recipes(run: Run, { backup, drafts }: Opened, chunkSize: number, cache: RunCache) {
   const { job, ports } = run;
   const { store } = ports;
+  if (ports.organizers && (cache.organizing ??= await store.organizing(job.id))) run.organizers = ports.organizers;
   let start = Number(job.cursor);
   // The recipe at the cursor has stopped every run since the job last moved, whether it threw or took the Worker down:
   // report it and move past it, so it never holds the rest back.
@@ -360,7 +368,7 @@ export async function runNextChunk(
   try {
     const opened = await open(run, cache);
     if (job.phase === "inspect") await inspect(run, opened);
-    else await recipes(run, opened, chunkSize);
+    else await recipes(run, opened, chunkSize, cache);
   } catch (error) {
     if (!(error instanceof MoveInError)) throw error;
     await fail(run, error.code);

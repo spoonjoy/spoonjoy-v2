@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { bytesSource } from "~/domains/move-in/adapters/archive/zip";
 import {
   LostClaimError,
@@ -75,6 +75,10 @@ function harness({ zip = backup(), email = "cook@example.com", write, organizers
       sourceInstanceKey: async () => (sources.at(-1)?.instanceKey as string | undefined) ?? null,
       ensureSource: async (source) => (sources.push(source), "source-1"),
       hasIssues: async () => events.some((event) => event.level !== "info"),
+      organizing: async () => ["tags", "categories", "tools"].some((entity) => {
+        const count = counts.get(entity);
+        return count !== undefined && count.found > 0 && count.skipped === 0;
+      }),
       claim: async (id) => {
         if (holder) return null;
         const job = jobs.get(id);
@@ -496,8 +500,9 @@ describe("runForAWhile", () => {
 });
 
 describe("a backup's tags, categories and tools", () => {
-  const pancakes = { ownerId: "chef-1", recipeId: `spoonjoy-${keys.pancakes}`, tags: ["Quick"], categories: ["Dinner"], tools: [] };
-  const soup = { ownerId: "chef-1", recipeId: `spoonjoy-${keys.soup}`, tags: [], categories: [], tools: ["Skillet"] };
+  const at = { ownerId: "chef-1", sourceId: "source-1", jobId: "job-1" };
+  const pancakes = { ...at, recipeId: `spoonjoy-${keys.pancakes}`, tags: ["Quick"], categories: ["Dinner"], tools: [] };
+  const soup = { ...at, recipeId: `spoonjoy-${keys.soup}`, tags: [], categories: [], tools: ["Skillet"] };
 
   it("go onto their recipes when the cook has organizers, counted as found and with no note that they stayed behind", async () => {
     const h = harness({ organizers: { on: true } });
@@ -539,8 +544,33 @@ describe("a backup's tags, categories and tools", () => {
     expect(h.events.find((event) => event.targetId === pancakes.recipeId && event.kind === "item-degraded")).toMatchObject({
       level: "warn",
       entity: "recipes",
-      message: "Pancakes moved in without its tags, categories and tools: D1 said no.",
+      message: "Pancakes moved in without its tags, categories and tools: D1 said no. Moving the same backup in again adds them.",
     });
+  });
+
+  it("follow what inspect decided, even when the cook's flag changes during the move-in", async () => {
+    const turnedOff = { on: true };
+    const off = harness({ organizers: turnedOff });
+    await runNextChunk("job-1", off.ports);
+    turnedOff.on = false;
+    await off.runAll();
+    expect(off.organized).toEqual([pancakes, soup]);
+
+    const turnedOn = { on: false };
+    const on = harness({ organizers: turnedOn });
+    await runNextChunk("job-1", on.ports);
+    turnedOn.on = true;
+    await on.runAll();
+    expect(on.organized).toEqual([]);
+    expect(on.counts.get("tags")).toMatchObject({ found: 1, skipped: 1 });
+  });
+
+  it("ask once a run whether inspect chose to bring them", async () => {
+    const h = harness({ organizers: { on: true } });
+    const asked = vi.spyOn(h.ports.store, "organizing");
+    await runNextChunk("job-1", h.ports);
+    await runForAWhile("job-1", h.ports, { budgetMs: 10_000, chunkSize: 1 });
+    expect(asked).toHaveBeenCalledTimes(1);
   });
 
   it("stay in the backup, as before, when the cook doesn't have organizers", async () => {

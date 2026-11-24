@@ -16,6 +16,7 @@ export { UNTITLED_RECIPE, type IngredientDraft, type RecipeDraft, type StepDraft
 export { joinKey, normalizeGuid, tableRowKey } from "./model/source-key";
 export { timeLeft } from "./model/time-left";
 export { createMoveInJob, readMoveInProgress, type MoveInProgress } from "./adapters/storage/job-store.server";
+export { readMoveInOrganizerCounts, type MoveInOrganizerCounts } from "./adapters/storage/organizer-writer.server";
 export { MOVE_IN_ARCHIVE_PREFIX, moveInEnv, moveInPorts, type MoveInEnv } from "./adapters/worker/move-in-ports.server";
 export { MOVE_IN_APPS, MOVE_IN_UPLOAD_MAX_BYTES, startMoveIn, type StartMoveInResult } from "./adapters/worker/start-move-in.server";
 export {
