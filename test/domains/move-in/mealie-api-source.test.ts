@@ -357,6 +357,14 @@ describe("the other app's server as a move-in source", () => {
     await expect(mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).rejects.toThrow("connection reset");
   });
 
+  it("refuses an address with a name or password in it, which would be kept and sent beside the token", async () => {
+    const { fetch, asked } = server(kitchenRoutes().routes);
+    for (const address of ["https://cook:secret@recipes.example.com", "https://cook@recipes.example.com"]) {
+      await expect(mealieApiSource({ address, token: "t", fetch })).rejects.toMatchObject({ code: "server-address" });
+    }
+    expect(asked).toEqual([]);
+  });
+
   it("stops with the fix-it message when the address isn't one it can reach", async () => {
     await expect(mealieApiSource({ address: "not a server", token: "t", fetch: server({}).fetch })).rejects.toMatchObject({ code: "server-address" });
     await expect(mealieApiSource({ address: "ftp://recipes.example.com", token: "t", fetch: server({}).fetch })).rejects.toMatchObject({ code: "server-address" });
