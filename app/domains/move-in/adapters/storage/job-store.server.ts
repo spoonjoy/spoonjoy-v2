@@ -116,8 +116,11 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
       await d1WriteBatch(db, [[`UPDATE "ImportJob" SET "attempt" = MAX("attempt" - 1, 0) WHERE "id" = ? AND "claimToken" = ?`, jobId, token]]);
     },
 
-    async release(jobId, token) {
-      await d1WriteBatch(db, [[`UPDATE "ImportJob" SET "heartbeatAt" = NULL, "claimToken" = NULL WHERE "id" = ? AND "claimToken" = ?`, jobId, token]]);
+    async release(jobId, token, endedWell = false) {
+      await d1WriteBatch(db, [[
+        `UPDATE "ImportJob" SET "heartbeatAt" = NULL, "claimToken" = NULL, "attempt" = CASE WHEN ? THEN 0 ELSE "attempt" END WHERE "id" = ? AND "claimToken" = ?`,
+        endedWell ? 1 : 0, jobId, token,
+      ]]);
     },
 
     async hasIssues(jobId) {

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { writeMovedInRecipe } from "~/domains/move-in/adapters/storage/recipe-writer.server";
+import { writeMovedInRecipe, writeMovedInRecipes } from "~/domains/move-in/adapters/storage/recipe-writer.server";
 import type { IngredientDraft, RecipeDraft } from "~/domains/move-in/model/recipe-draft";
 import { migratedSqliteD1, type MigratedSqlite } from "../../helpers/migrated-sqlite";
 
@@ -397,5 +397,102 @@ describe("writeMovedInRecipe", () => {
       await expect(writeMovedInRecipe({ db: db as never, sourceId: "source-1", jobId: "job-1", chefId: "chef-1", draft: draft(), now }))
         .rejects.toThrow("D1 is down");
     });
+  });
+});
+
+describe("writeMovedInRecipes", () => {
+  /** The binding, counting each round trip to the database, with `beforeWrite` run just before the second one. */
+  function counted(beforeWrite?: () => void) {
+    const binding = database.binding;
+    let trips = 0;
+    const db = {
+      prepare: binding.prepare.bind(binding),
+      batch: async (statements: Parameters<typeof binding.batch>[0]) => {
+        if (++trips === 2) beforeWrite?.();
+        return binding.batch(statements);
+      },
+    };
+    return { db, trips: () => trips };
+  }
+  const chunk = (db: typeof database.binding, recipes: RecipeDraft[], jobId = "job-1") =>
+    writeMovedInRecipes(recipes.map((recipe) => ({ db, sourceId: "source-1", jobId, chefId: "chef-1", draft: recipe, now })));
+  const three = () => [
+    draft(),
+    draft({ sourceKey: "recipe-2", title: "Waffles" }),
+    draft({ sourceKey: "recipe-3", title: "Crepes", steps: [], ingredients: [] }),
+  ];
+
+  it("writes a chunk's new recipes with one read and one write, as writing each alone would", async () => {
+    const { db, trips } = counted();
+    const results = await chunk(db as never, three());
+    expect(trips()).toBe(2);
+    expect(results).toEqual([
+      { outcome: "created", recipeId: expect.any(String), title: "Pancakes", warnings: [] },
+      { outcome: "created", recipeId: expect.any(String), title: "Waffles", warnings: [] },
+      { outcome: "created", recipeId: expect.any(String), title: "Crepes", warnings: [] },
+    ]);
+    const together = {
+      recipes: all(`SELECT "title", "description", "visibility" FROM "Recipe" ORDER BY "title"`),
+      steps: all(`SELECT "stepNum", "description" FROM "RecipeStep" ORDER BY "recipeId", "stepNum"`).length,
+      ingredients: all(`SELECT "id" FROM "Ingredient"`).length,
+      records: all(`SELECT "sourceKey" FROM "SourceRecord" ORDER BY "sourceKey"`),
+    };
+    database.close();
+    database = migratedSqliteD1();
+    database.sqlite.prepare(`INSERT INTO "User" ("id", "email", "username") VALUES ('chef-1', 'chef@example.com', 'chef')`).run();
+    database.sqlite.prepare(`INSERT INTO "ImportSource" ("id", "ownerId", "kind", "instanceKey", "label") VALUES ('source-1', 'chef-1', 'mealie-backup', 'group', 'Home')`).run();
+    for (const recipe of three()) await write(recipe);
+    expect({
+      recipes: all(`SELECT "title", "description", "visibility" FROM "Recipe" ORDER BY "title"`),
+      steps: all(`SELECT "stepNum", "description" FROM "RecipeStep" ORDER BY "recipeId", "stepNum"`).length,
+      ingredients: all(`SELECT "id" FROM "Ingredient"`).length,
+      records: all(`SELECT "sourceKey" FROM "SourceRecord" ORDER BY "sourceKey"`),
+    }).toEqual(together);
+  });
+
+  it("numbers a title the chef uses, and a title an earlier recipe in the chunk took", async () => {
+    database.sqlite.prepare(`INSERT INTO "Recipe" ("id", "title", "chefId") VALUES ('mine', 'Pancakes', 'chef-1')`).run();
+    const results = await chunk(database.binding, [draft(), draft({ sourceKey: "recipe-2" })]);
+    expect(results.map((result) => result && "title" in result && result.title)).toEqual(["Pancakes (2)", "Pancakes (3)"]);
+    expect(results[1]).toMatchObject({ renamedFrom: "Pancakes" });
+  });
+
+  it("leaves a recipe that moved in before, and one that may be from another copy, to be written alone", async () => {
+    await write(draft());
+    database.sqlite.prepare(`INSERT INTO "ImportSource" ("id", "ownerId", "kind", "instanceKey", "label") VALUES ('source-2', 'chef-1', 'mealie-backup', 'other', 'Cabin')`).run();
+    await writeMovedInRecipe({ db: database.binding, sourceId: "source-2", jobId: "job-0", chefId: "chef-1", draft: draft({ sourceKey: "cabin-1", title: "Waffles" }), now });
+    const results = await chunk(database.binding, three(), "job-2");
+    expect(results).toEqual([null, null, { outcome: "created", recipeId: expect.any(String), title: "Crepes", warnings: [] }]);
+    expect(all(`SELECT "title" FROM "Recipe" ORDER BY "title"`)).toEqual([{ title: "Crepes" }, { title: "Pancakes" }, { title: "Waffles" }]);
+  });
+
+  it("writes nothing, and leaves each recipe to be written alone, when another write took a name first", async () => {
+    const { db } = counted(() => {
+      database.sqlite.prepare(`INSERT INTO "Recipe" ("id", "title", "chefId") VALUES ('mine', 'Waffles', 'chef-1')`).run();
+    });
+    expect(await chunk(db as never, three())).toEqual([null, null, null]);
+    expect(all(`SELECT "title" FROM "Recipe"`)).toEqual([{ title: "Waffles" }]);
+    expect(all(`SELECT "id" FROM "SourceRecord"`)).toEqual([]);
+  });
+
+  it("writes nothing when every recipe of the chunk is one to write alone", async () => {
+    await write(draft());
+    const { db, trips } = counted();
+    expect(await chunk(db as never, [draft()], "job-2")).toEqual([null]);
+    expect(trips()).toBe(1);
+  });
+
+  it("passes on an error that isn't a lost race", async () => {
+    const { db } = counted(() => {
+      throw new Error("D1 is down");
+    });
+    await expect(chunk(db as never, three())).rejects.toThrow("D1 is down");
+    expect(all(`SELECT "id" FROM "Recipe"`)).toEqual([]);
+  });
+
+  it("asks the database nothing for an empty chunk", async () => {
+    const { db, trips } = counted();
+    expect(await chunk(db as never, [])).toEqual([]);
+    expect(trips()).toBe(0);
   });
 });

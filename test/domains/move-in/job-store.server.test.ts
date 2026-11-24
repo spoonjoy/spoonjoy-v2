@@ -110,6 +110,21 @@ describe("the move-in job store", () => {
     expect(await store.claim(id, clock)).toEqual(expect.any(String));
   });
 
+  it("clears the attempt as it lets the job go only for a run that ended well, and only while that run holds it", async () => {
+    const store = moveInJobStore(database.binding, () => clock);
+    const id = await create();
+    const attempt = () => (database.sqlite.prepare(`SELECT "attempt" FROM "ImportJob" WHERE "id" = ?`).get(id) as { attempt: number }).attempt;
+    const first = (await store.claim(id, clock)) as string;
+    await store.updateJob(id, { attempt: 1 }, first);
+    await store.release(id, first);
+    expect(attempt()).toBe(1);
+    const second = (await store.claim(id, clock)) as string;
+    await store.release(id, first, true);
+    expect(attempt()).toBe(2);
+    await store.release(id, second, true);
+    expect(attempt()).toBe(0);
+  });
+
   it("takes back the attempt of the run holding the claim, without counting it as progress, and never below none", async () => {
     const store = moveInJobStore(database.binding, () => clock);
     const id = await create();
