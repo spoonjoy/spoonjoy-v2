@@ -166,7 +166,8 @@ def move_in_totals:
       stages: (reduce move_in_stages[] as $stage ({};
         .[$stage] = ([$lines[] | (.stages | objects | .[$stage] | objects) // {}] as $times
           | { calls: ([$times[] | .calls | count_or_null // 0] | add // 0),
-              ms: ([$times[] | .ms | count_or_null // 0] | add // 0) }))) }
+              ms: ([$times[] | .ms | count_or_null // 0] | add // 0),
+              d1: ([$times[] | .d1 | count_or_null // 0] | add // 0) }))) }
   | . + { otherMs: ([.wallMs - ([.stages[].ms] | add // 0), 0] | max) };
 # The segments that did a move-in's work, grouped by the size of its kitchen (recipesFound), biggest
 # first, and how many found another run holding the move-in and did nothing.
