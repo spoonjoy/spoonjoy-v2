@@ -33,7 +33,7 @@ import {
 } from "~/domains/move-in";
 import { getDb } from "~/lib/db.server";
 import { keepRunning, reportMoveIn, signedInWithFlag, startQueuedMoveIn } from "~/lib/move-in-route.server";
-import { formatBytes, uploadBackup } from "~/lib/move-in-upload";
+import { UPLOAD_STOPPED_MESSAGE, formatBytes, uploadBackup } from "~/lib/move-in-upload";
 import { revalidateUnlessNetworkFailure, submitOrReportLostRequest } from "~/lib/network-failure";
 import { CookbookPage } from "~/components/cookbook/page";
 
@@ -179,19 +179,25 @@ function UploadForm({ error, uploadMaxBytes }: { error: string | null; uploadMax
   const navigate = useNavigate();
   const [sending, setSending] = useState<Sending | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [stopped, setStopped] = useState(false);
+  const stopper = useRef<AbortController | null>(null);
   // With JavaScript, the backup goes straight to storage in parts and the page shows how much has been sent;
   // without it, the plain form posts the file, up to the form's own limit.
   const send = async (event: FormEvent<HTMLFormElement>) => {
-    const form = new FormData(event.currentTarget);
-    const file = (event.currentTarget.elements.namedItem("backup") as HTMLInputElement).files?.[0];
+    const element = event.currentTarget;
+    const form = new FormData(element);
+    const file = (element.elements.namedItem("backup") as HTMLInputElement).files?.[0];
     // A page that isn't secure (http on a LAN address while testing) has no crypto.subtle to tell the file apart by,
     // so the plain form sends it instead.
     if (!file?.size || !globalThis.crypto?.subtle) return;
     event.preventDefault();
     setFailure(null);
+    setStopped(false);
     setSending({ sent: 0, total: file.size, checking: false });
+    stopper.current = new AbortController();
     const outcome = await uploadBackup(file, {
       app: String(form.get("app")),
+      signal: stopper.current.signal,
       onProgress: (sent, total) => setSending({ sent, total, checking: false }),
       onChecking: () => setSending((now) => now && { ...now, checking: true }),
     });
@@ -200,13 +206,20 @@ function UploadForm({ error, uploadMaxBytes }: { error: string | null; uploadMax
       return;
     }
     setSending(null);
+    if (outcome.stopped) {
+      // Back to the empty form, saying what happened.
+      element.reset();
+      setStopped(true);
+      return;
+    }
     setFailure(outcome.error);
   };
-  const shown = failure ?? (sending ? null : error);
+  const shown = failure ?? (sending || stopped ? null : error);
   const busy = submitting || sending !== null;
   return (
     <Form method="post" render={<RouterForm encType="multipart/form-data" />} className="gap-6" onSubmit={send}>
       {shown ? <Alert tone="destructive" title="That backup didn't move in" description={shown} /> : null}
+      {stopped ? <Alert title="Upload stopped" description={UPLOAD_STOPPED_MESSAGE} /> : null}
       <ChoiceCard
         legend="Where are you coming from?"
         name="app"
@@ -232,7 +245,12 @@ function UploadForm({ error, uploadMaxBytes }: { error: string | null; uploadMax
           </Text>
         </div>
       ) : null}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-3">
+        {sending && !sending.checking ? (
+          <Button type="button" variant="outline" onClick={() => stopper.current?.abort()}>
+            Stop upload
+          </Button>
+        ) : null}
         <Button type="submit" disabled={busy}>
           {sending && !sending.checking ? "Sending the backup…" : busy ? "Checking the backup…" : "Move in"}
         </Button>
