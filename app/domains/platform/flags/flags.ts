@@ -10,13 +10,13 @@
 //
 // This file does no I/O: callers pass the Worker env and the signed-in user's id, so it runs on server and client alike.
 
+import { collectFlags } from "./collect-flags";
 import type { FlagDeclaration, FlagName } from "./define-flag";
 
-const declared = import.meta.glob<FlagDeclaration<FlagName>>("./flags/*.ts", { eager: true, import: "default" });
-
 /** Every flag, by name, with what it hides. */
-export const FLAGS = Object.fromEntries(
-  Object.values(declared).map(({ name, description }) => [name, { description }]),
+export const FLAGS = collectFlags(
+  () => import.meta.glob<FlagDeclaration<FlagName>>("./flags/*.ts", { eager: true, import: "default" }),
+  import.meta.url,
 ) as Record<FlagName, { description: string }>;
 
 export const FLAG_NAMES = Object.keys(FLAGS).sort() as FlagName[];
