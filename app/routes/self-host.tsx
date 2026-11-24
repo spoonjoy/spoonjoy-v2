@@ -21,8 +21,11 @@ const DESCRIPTION =
 export const IMAGE_PUBLIC = false;
 
 /** self-host/compose.yaml as it stands; test/routes/self-host.test.tsx fails when the two differ. */
-export const COMPOSE = `# Spoonjoy with Docker Compose: \`docker compose up -d\` beside this file, then open http://localhost:8080.
-# Set SPOONJOY_BASE_URL to the address people use (docs/self-hosting.md lists every setting).
+export const COMPOSE = `# Spoonjoy with Docker Compose. Start it
+# beside this file with \`docker compose up -d\`,
+# then open http://localhost:8080.
+# Set SPOONJOY_BASE_URL to the address people
+# use; docs/self-hosting.md lists every setting.
 services:
   spoonjoy:
     image: \${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}
@@ -82,15 +85,17 @@ export default function SelfHost() {
         title="Run Spoonjoy on your own server"
         size="lg"
         divider
+        // The intro runs the page's full width, as the sections under it do.
+        className="[&_[data-slot=description]]:max-w-none"
         description="The same Spoonjoy as spoonjoy.app, in one container on your own box, for amd64 and arm64. Your recipes, photos and accounts stay in one data volume you keep."
       />
 
-      <div className="max-w-3xl">
+      <div>
         <ImageNotice imagePublic={IMAGE_PUBLIC} />
 
         <Section id="self-host-start" title="Start it">
           <Text>Save this as <code>compose.yaml</code>:</Text>
-          <CodeBlock code={COMPOSE} title="compose.yaml" language="yaml" />
+          <CodeBlock code={COMPOSE} title="compose.yaml" language="yaml" wrap />
           <Text>Then start it beside that file:</Text>
           <CodeBlock code={START} language="sh" />
           <Text>
