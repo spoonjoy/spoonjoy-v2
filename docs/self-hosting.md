@@ -18,6 +18,7 @@ With Docker Compose, save [`self-host/compose.yaml`](../self-host/compose.yaml) 
 - **Migrations on start.** Each start brings the database up to date with the image, and records each migration in a `d1_migrations` table as spoonjoy.app does.
 - **Analytics are off.** The image sends nothing anywhere. Set `POSTHOG_KEY` (and `POSTHOG_HOST`) only if you want your own PostHog project.
 - **A health check.** Docker reports the container healthy once `/health/ready` reaches the database and the photo store.
+- **Background jobs** (work that carries on after you close the page) run inside the server, one at a time. They wait in memory: one still waiting when the server stops is dropped, and can be started again a day later.
 - **The scheduled photo cleanup** runs on its spoonjoy.app schedule (every six hours), as a dry run unless you set `PHOTO_SWEEP_MODE=apply`.
 - **Tags.** `latest` follows main; each build also has a version tag, the commit's date and short hash (for example `2026.11.22-1a2b3c4`), for pinning.
 
