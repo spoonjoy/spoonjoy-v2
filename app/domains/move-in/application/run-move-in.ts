@@ -164,11 +164,28 @@ export interface MoveInPorts {
    */
   organizers?: {
     on(ownerId: string): boolean;
-    attach(input: { ownerId: string; recipeId: string; sourceId: string; jobId: string; tags: string[]; categories: string[]; tools: string[] }): Promise<void>;
+    attach(input: OrganizersInput): Promise<void>;
+    /**
+     * Puts a chunk's recipes' tags, categories and tools on them in one go, and answers, for each, null when they are on
+     * it now or the error that kept them off. A failed write is thrown, and each is then put on alone. A Worker without
+     * it puts each recipe's on alone.
+     */
+    attachMany?(inputs: OrganizersInput[]): Promise<Array<Error | null>>;
   };
   /** Deletes the uploaded backup; it holds the other app's accounts, so it is kept no longer than the job needs it. */
   discardArchive(job: MoveInJob): Promise<void>;
   now(): Date;
+}
+
+/** A recipe's tags, categories and tools to put on it. */
+export interface OrganizersInput {
+  ownerId: string;
+  recipeId: string;
+  sourceId: string;
+  jobId: string;
+  tags: string[];
+  categories: string[];
+  tools: string[];
 }
 
 export const DEFAULT_CHUNK_SIZE = 10;
@@ -283,16 +300,56 @@ async function bringPhoto({ job, ports }: Run, kitchen: MoveInKitchen, draft: Re
   }
 }
 
-/** Puts the recipe's tags, categories and tools on it, when inspect chose to bring them; if that fails, the recipe stays and says so. */
-async function bringOrganizers({ job, organizers }: Run, words: SourceWords, draft: RecipeDraft, recipeId: string, report: Report) {
+/** A recipe whose tags, categories and tools a chunk puts on with the others, and the recipe's report. */
+interface PendingOrganizers {
+  draft: RecipeDraft;
+  recipeId: string;
+  report: Report;
+}
+
+/**
+ * Puts the recipe's tags, categories and tools on it, when inspect chose to bring them; if that fails, the recipe stays
+ * and says so. With `pending`, the recipe is added there instead, for the chunk to bring with the others.
+ */
+async function bringOrganizers(run: Run, words: SourceWords, draft: RecipeDraft, recipeId: string, report: Report, pending?: PendingOrganizers[]) {
   const { tags, categories, tools } = draft;
+  const { organizers } = run;
   if (!organizers || !(tags.length || categories.length || tools.length)) return;
-  try {
-    await organizers.attach({ ownerId: job.ownerId, recipeId, sourceId: job.sourceId as string, jobId: job.id, tags, categories, tools });
-  } catch (error) {
-    const message = `${draft.title} moved in without some of its tags, categories and tools. ${words.again} adds them.`;
-    report.events.push(event("item-degraded", message, { entity: "recipes", sourceKey: draft.sourceKey, targetId: recipeId, detail: describeError(error) }));
+  if (pending) {
+    pending.push({ draft, recipeId, report });
+    return;
   }
+  try {
+    await organizers.attach(organizersInput(run, draft, recipeId));
+  } catch (error) {
+    organizersLeftOut(words, draft, recipeId, report, error);
+  }
+}
+
+function organizersInput({ job }: Run, { tags, categories, tools }: RecipeDraft, recipeId: string): OrganizersInput {
+  return { ownerId: job.ownerId, recipeId, sourceId: job.sourceId as string, jobId: job.id, tags, categories, tools };
+}
+
+/** Reports a recipe that moved in without some of its tags, categories and tools. */
+function organizersLeftOut(words: SourceWords, draft: RecipeDraft, recipeId: string, report: Report, error: unknown) {
+  const message = `${draft.title} moved in without some of its tags, categories and tools. ${words.again} adds them.`;
+  report.events.push(event("item-degraded", message, { entity: "recipes", sourceKey: draft.sourceKey, targetId: recipeId, detail: describeError(error) }));
+}
+
+/** Puts a chunk's tags, categories and tools on their recipes in one go, or each alone if that write fails. */
+async function bringOrganizersTogether(run: Run, words: SourceWords, pending: PendingOrganizers[], attachMany: NonNullable<NonNullable<MoveInPorts["organizers"]>["attachMany"]>) {
+  let answers: Array<Error | null>;
+  try {
+    answers = await attachMany(pending.map(({ draft, recipeId }) => organizersInput(run, draft, recipeId)));
+    if (answers.length !== pending.length) throw new Error("the chunk's organizers came back short");
+  } catch {
+    for (const { draft, recipeId, report } of pending) await bringOrganizers(run, words, draft, recipeId, report);
+    return;
+  }
+  pending.forEach(({ draft, recipeId, report }, i) => {
+    const error = answers[i];
+    if (error) organizersLeftOut(words, draft, recipeId, report, error);
+  });
 }
 
 /** Brings one recipe, its photo and its organizers, and returns what to report; writes nothing to the job itself. */
@@ -311,10 +368,10 @@ interface PendingPhoto {
 }
 
 /**
- * Brings a written recipe's photo and organizers, and returns what to report. With `photos`, a photo to bring is added
- * there instead, for the chunk to bring with the others.
+ * Brings a written recipe's photo and organizers, and returns what to report. With `photos` or `organizing`, a photo
+ * or organizers to bring are added there instead, for the chunk to bring with the others.
  */
-async function afterWrite(run: Run, { source, kitchen }: Opened, draft: RecipeDraft, result: RecipeWriteResult, photos?: PendingPhoto[]): Promise<Report> {
+async function afterWrite(run: Run, { source, kitchen }: Opened, draft: RecipeDraft, result: RecipeWriteResult, photos?: PendingPhoto[], organizing?: PendingOrganizers[]): Promise<Report> {
   const { job, ports } = run;
   const report: Report = { counts: [], events: [] };
   const at = { entity: "recipes", sourceKey: draft.sourceKey };
@@ -335,7 +392,7 @@ async function afterWrite(run: Run, { source, kitchen }: Opened, draft: RecipeDr
     const ours = result.outcome === "unchanged" && result.jobId === job.id;
     report.counts.push(["recipes", ours ? { created: 1 } : result.outcome === "updated" ? { updated: 1 } : { unchanged: 1 }]);
     // Adding only, so a recipe already here gets any it lacks and keeps the ones the cook gave it.
-    await bringOrganizers(run, source.words, draft, result.recipeId, report);
+    await bringOrganizers(run, source.words, draft, result.recipeId, report, organizing);
     if (!hasPhoto) return report;
     // A run that stopped between the recipe and its photo left the photo out; bring it now.
     if (await ports.hasMovedInPhoto(result.recipeId)) report.counts.push(["photos", ours ? { created: 1 } : { unchanged: 1 }]);
@@ -348,7 +405,7 @@ async function afterWrite(run: Run, { source, kitchen }: Opened, draft: RecipeDr
     report.events.push(event("item-renamed", `You already had a recipe called "${result.renamedFrom}", so this one is "${result.title}".`, target));
   }
   for (const warning of result.warnings) report.events.push(event("item-degraded", warning, target));
-  await bringOrganizers(run, source.words, draft, result.recipeId, report);
+  await bringOrganizers(run, source.words, draft, result.recipeId, report, organizing);
   if (hasPhoto && photos) photos.push({ draft, recipeId: result.recipeId, report });
   else if (hasPhoto) await bringPhoto(run, kitchen, draft, result.recipeId, report);
   return report;
@@ -407,14 +464,17 @@ async function bringChunk(run: Run, opened: Opened, start: number, end: number, 
     // Each goes on its own instead, so one recipe's error is that recipe's alone.
   }
   const { attachPhotos } = run.ports;
+  const attachOrganizers = run.organizers?.attachMany;
   const photos: PendingPhoto[] | undefined = attachPhotos ? [] : undefined;
+  const organizing: PendingOrganizers[] | undefined = attachOrganizers ? [] : undefined;
   const reports: Report[] = [];
   let next = 0;
   for (let i = start; i < end; i++) {
     const draft = drafts[i - start];
     const result = draft ? (written[next++] ?? null) : null;
-    reports.push(draft && result ? await afterWrite(run, opened, draft, result, photos) : await bringOrPassOver(run, opened, i));
+    reports.push(draft && result ? await afterWrite(run, opened, draft, result, photos, organizing) : await bringOrPassOver(run, opened, i));
   }
+  if (attachOrganizers && organizing?.length) await bringOrganizersTogether(run, opened.source.words, organizing, attachOrganizers);
   if (attachPhotos && photos?.length) await bringPhotos(run, opened.kitchen, photos, attachPhotos);
   return { counts: reports.flatMap((report) => report.counts), events: reports.flatMap((report) => report.events) };
 }

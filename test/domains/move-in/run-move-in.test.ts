@@ -44,8 +44,11 @@ function harness({ zip = backup(), email = "cook@example.com", write, writeMany,
   writeMany?: true | ((inputs: RecipeWriteInput[], one: MoveInPorts["writeRecipe"]) => Promise<Array<RecipeWriteResult | null>>);
   /** A chunk photo writer: true for one that stores every photo; left out, the Worker brings each photo alone. */
   attachMany?: true | ((inputs: PhotosInput[]) => Promise<Array<Error | null>>);
-  /** Whether the cook has organizers, and how putting them on a recipe goes; left out, the Worker has no organizers port. */
-  organizers?: { on: boolean; attach?: (input: Organized) => Promise<void> };
+  /**
+   * Whether the cook has organizers, and how putting them on a recipe goes; left out, the Worker has no organizers port.
+   * `attachMany` is true for a chunk writer that puts every recipe's on; left out, each recipe's go on alone.
+   */
+  organizers?: { on: boolean; attach?: (input: Organized) => Promise<void>; attachMany?: true | ((inputs: Organized[]) => Promise<Array<Error | null>>) };
 } = {}) {
   const jobs = new Map<string, MoveInJob>([["job-1", {
     id: "job-1", ownerId: "chef-1", kind: "mealie-backup", sourceId: null, status: "queued", phase: "inspect", cursor: null, archiveKey: "uploads/job-1.zip", lastError: null, attempt: 0,
@@ -62,6 +65,8 @@ function harness({ zip = backup(), email = "cook@example.com", write, writeMany,
   const chunkWrites: string[][] = [];
   // Each chunk photo write, as the recipes it was given.
   const photoBatches: string[][] = [];
+  // Each chunk's organizers put on together, as the recipes they went on.
+  const organizerBatches: string[][] = [];
   let holder: string | null = null;
   let tokens = 0;
   let opens = 0;
@@ -143,6 +148,15 @@ function harness({ zip = backup(), email = "cook@example.com", write, writeMany,
       organizers: {
         on: (ownerId: string) => ownerId === "chef-1" && organizers.on,
         attach: organizers.attach ?? (async (input: Organized) => void organized.push(input)),
+        ...(organizers.attachMany ? {
+          attachMany: async (inputs: Organized[]) => {
+            organizerBatches.push(inputs.map((input) => input.recipeId));
+            const many = organizers.attachMany as true | ((inputs: Organized[]) => Promise<Array<Error | null>>);
+            const answers = many === true ? inputs.map(() => null) : await many(inputs);
+            inputs.forEach((input, i) => answers[i] === null && organized.push(input));
+            return answers;
+          },
+        } : {}),
       },
     } : {}),
   };
@@ -156,7 +170,7 @@ function harness({ zip = backup(), email = "cook@example.com", write, writeMany,
     return job();
   };
   return {
-    ports, jobs, job, counts, events, sources, photos, discarded, written, organized, chunkWrites, photoBatches, runAll,
+    ports, jobs, job, counts, events, sources, photos, discarded, written, organized, chunkWrites, photoBatches, organizerBatches, runAll,
     isClaimed: () => holder !== null,
     steal: () => void (holder = "another-run"),
     /** The claim's time runs out, as if a while had passed. */
@@ -932,6 +946,37 @@ describe("a backup's tags, categories and tools", () => {
     await runNextChunk("job-1", h.ports);
     await runForAWhile("job-1", h.ports, { budgetMs: 10_000, chunkSize: 1 });
     expect(asked).toHaveBeenCalledTimes(1);
+  });
+
+  it("go onto a chunk's recipes together, counted as they would be alone", async () => {
+    const h = harness({ writeMany: true, organizers: { on: true, attachMany: true } });
+    await runNextChunk("job-1", h.ports);
+    await runNextChunk("job-1", h.ports, { chunkSize: 3 });
+    expect(h.organizerBatches).toEqual([[pancakes.recipeId, soup.recipeId]]);
+    expect(h.organized).toEqual([pancakes, soup]);
+    expect(h.counts.get("recipes")).toMatchObject({ created: 3, failed: 0 });
+    expect(h.events.some((event) => event.message.includes("without some of its tags"))).toBe(false);
+  });
+
+  it("leave out of a chunk only the recipe they couldn't go onto, with a note", async () => {
+    const h = harness({ writeMany: true, organizers: { on: true, attachMany: async (inputs) => inputs.map(({ recipeId }) => (recipeId === soup.recipeId ? new Error("the recipe is no longer in your kitchen") : null)) } });
+    await runNextChunk("job-1", h.ports);
+    await runNextChunk("job-1", h.ports, { chunkSize: 3 });
+    expect(h.organized).toEqual([pancakes]);
+    const notes = h.events.filter((event) => event.message.includes("without some of its tags"));
+    expect(notes).toEqual([expect.objectContaining({ targetId: soup.recipeId, detail: "Error: the recipe is no longer in your kitchen" })]);
+  });
+
+  it.each([
+    ["fails", async () => Promise.reject(new Error("D1 is down"))],
+    ["answers for fewer recipes than it was given", async () => [] as Array<Error | null>],
+  ])("go onto each recipe alone when the chunk's write %s", async (_, attachMany) => {
+    const h = harness({ writeMany: true, organizers: { on: true, attachMany } });
+    await runNextChunk("job-1", h.ports);
+    await runNextChunk("job-1", h.ports, { chunkSize: 3 });
+    expect(h.organizerBatches).toHaveLength(1);
+    expect(h.organized).toEqual([pancakes, soup]);
+    expect(h.events.some((event) => event.message.includes("without some of its tags"))).toBe(false);
   });
 
   it("stay in the backup, as before, when the cook doesn't have organizers", async () => {

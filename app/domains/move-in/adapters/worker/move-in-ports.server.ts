@@ -13,7 +13,7 @@ import { mealieApiSource } from "../sources/mealie-api/source";
 import { openMealieBackup } from "../sources/mealie-backup/backup";
 import { mealieBackupSource } from "../sources/mealie-backup/source";
 import { moveInJobStore } from "../storage/job-store.server";
-import { attachMovedInOrganizers } from "../storage/organizer-writer.server";
+import { attachMovedInOrganizers, attachMovedInOrganizersTogether } from "../storage/organizer-writer.server";
 import { attachMovedInPhoto, attachMovedInPhotos, hasMovedInPhoto } from "../storage/photo-writer.server";
 import { writeMovedInRecipe, writeMovedInRecipes } from "../storage/recipe-writer.server";
 import { readsAServer } from "./apps";
@@ -104,6 +104,7 @@ export function moveInPorts(env: MoveInEnv, now: () => Date): MoveInPorts {
     organizers: {
       on: (ownerId) => isFlagOn("organizers", env, ownerId),
       attach: async (moved) => attachMovedInOrganizers(await openPrisma(), moved),
+      attachMany: (moved) => attachMovedInOrganizersTogether(db, moved, now()),
     },
     discardArchive: async (job) => env.PHOTOS.delete(job.archiveKey as string),
     now,

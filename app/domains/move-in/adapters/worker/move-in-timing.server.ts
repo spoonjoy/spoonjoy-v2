@@ -41,7 +41,11 @@ export function timeMoveInPorts(ports: MoveInPorts, clock: () => number = Date.n
       attachPhoto: timed("photoWrites", ports.attachPhoto),
       attachPhotos: ports.attachPhotos && timed("photoWrites", ports.attachPhotos),
       hasMovedInPhoto: timed("photoChecks", ports.hasMovedInPhoto),
-      organizers: ports.organizers && { on: ports.organizers.on, attach: timed("organizers", ports.organizers.attach) },
+      organizers: ports.organizers && {
+        on: ports.organizers.on,
+        attach: timed("organizers", ports.organizers.attach),
+        ...(ports.organizers.attachMany ? { attachMany: timed("organizers", ports.organizers.attachMany) } : {}),
+      },
     },
   };
 }
