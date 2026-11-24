@@ -30,6 +30,29 @@ export function settingsFromEnv(env) {
   return { port, dataDir: env.DATA_DIR ?? "/data", appDir: env.APP_DIR ?? "/app" };
 }
 
+const DEFAULT_BACKUP_SCHEDULE = "17 3 * * *";
+const DEFAULT_BACKUPS_KEPT = 7;
+
+/**
+ * When the server backs itself up and where to: SPOONJOY_BACKUP_SCHEDULE is a cron expression in
+ * UTC (every day at 03:17 unless set, or "off"), SPOONJOY_BACKUPS_KEPT is how many scheduled backups
+ * stay (7), and SPOONJOY_BACKUP_DIR is the folder (backups in the data folder unless set, so a
+ * second volume can hold them). `checkCron` throws on an expression it can't read.
+ */
+export function backupSettings(env, dataDir, checkCron) {
+  const raw = env.SPOONJOY_BACKUP_SCHEDULE?.trim();
+  const schedule = raw === "off" ? null : raw || DEFAULT_BACKUP_SCHEDULE;
+  if (schedule) checkCron(schedule);
+  let keep = DEFAULT_BACKUPS_KEPT;
+  if (env.SPOONJOY_BACKUPS_KEPT !== undefined) {
+    keep = Number(env.SPOONJOY_BACKUPS_KEPT);
+    if (!Number.isInteger(keep) || keep < 1) {
+      throw new Error(`SPOONJOY_BACKUPS_KEPT must be a whole number of backups, at least 1; got "${env.SPOONJOY_BACKUPS_KEPT}".`);
+    }
+  }
+  return { schedule, keep, dir: env.SPOONJOY_BACKUP_DIR || path.join(dataDir, "backups") };
+}
+
 export function selfHostVars({ built, env, port, sessionSecret }) {
   const vars = {
     ...built.vars,

@@ -138,6 +138,41 @@ describe("Self-host Image workflow", () => {
     expect(stepNamed(image, /restart/i).run).toContain("docker restart");
   });
 
+  it("restores a backup of the seeded kitchen into a fresh server and finds the recipe and its photo", () => {
+    const step = stepNamed(image, /Back up the kitchen and restore it/);
+    const run = step.run ?? "";
+    expect(step.if).toBe("success()");
+    const order = [
+      "server.mjs backup /backups/kitchen.tar.gz",
+      "docker volume create sj-restored",
+      "-v sj-restored:/data -v \"$PWD/.self-host/backups:/backups:ro\"",
+      "server.mjs restore /backups/kitchen.tar.gz",
+      "grep -q \"Saffron Risotto\"",
+      "cmp .self-host/penne-ragu.jpg assets/sample-covers/penne-ragu.jpg",
+      "e2e/self-host/restored.spec.ts --output test-results-self-host-restored",
+    ].map((text) => run.indexOf(text));
+    expect(order.every((index) => index > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(run).toContain("-e SPOONJOY_SELF_HOST_RESTORED=1");
+  });
+
+  it("shows a scheduled backup running on the restored server", () => {
+    const run = stepNamed(image, /Back up the kitchen and restore it/).run ?? "";
+    expect(run).toContain('-e "SPOONJOY_BACKUP_SCHEDULE=* * * * *" -e SPOONJOY_BACKUPS_KEPT=1');
+    expect(run).toMatch(/grep '"event":"backup","kind":"auto"'\n\s*docker exec sj-restored ls \/data\/backups/);
+  });
+
+  it("keeps the restored server's screenshot and log, and stops it", () => {
+    const upload = image.steps.find((step) => step.uses?.startsWith("actions/upload-artifact@"));
+    expect(String(upload?.with?.path)).toContain("test-results-self-host-restored/");
+    expect(runs(image)).toMatch(/sanitize-journey-traces\.mjs [^\n]*test-results-self-host-restored/);
+    const stop = stepNamed(image, /Stop the server/);
+    expect(stop.if).toBe("always()");
+    expect(stop.run).toContain("docker stop sj-restored || true");
+    expect(stop.run).toContain('docker logs sj-restored > "$OUT/restored.log"');
+    expect(runs(image)).toContain('for (const file of ["image", "boot", "restart", "restore"])');
+  });
+
   it("removes credentials and strips traces before uploading screenshots", () => {
     const names = image.steps.map((step) => step.name ?? "");
     const upload = image.steps.findIndex((step) => step.uses?.startsWith("actions/upload-artifact@"));

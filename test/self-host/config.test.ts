@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 // @ts-expect-error -- plain ESM module shipped in the image, without types
-import { miniflareOptions, photoUploads, selfHostRateLimits, selfHostVars, settingsFromEnv, workerModules } from "../../self-host/config.mjs";
+import { backupSettings, miniflareOptions, photoUploads, selfHostRateLimits, selfHostVars, settingsFromEnv, workerModules } from "../../self-host/config.mjs";
 
 const built = {
   compatibility_date: "2024-12-01",
@@ -18,6 +18,33 @@ const built = {
   ],
   triggers: { crons: ["23 */6 * * *"] },
 };
+
+describe("backupSettings", () => {
+  const checked: string[] = [];
+  const check = (cron: string) => {
+    checked.push(cron);
+    if (cron === "every day") throw new Error(`Can't read the cron expression "${cron}"`);
+  };
+
+  it("backs up every day at 03:17 UTC into the data folder, keeping seven, unless told otherwise", () => {
+    expect(backupSettings({}, "/data", check)).toEqual({ schedule: "17 3 * * *", keep: 7, dir: "/data/backups" });
+    expect(backupSettings({ SPOONJOY_BACKUP_SCHEDULE: " 0 */6 * * * ", SPOONJOY_BACKUPS_KEPT: "28", SPOONJOY_BACKUP_DIR: "/backups" }, "/data", check))
+      .toEqual({ schedule: "0 */6 * * *", keep: 28, dir: "/backups" });
+    expect(checked).toEqual(["17 3 * * *", "0 */6 * * *"]);
+  });
+
+  it("turns scheduled backups off, and treats an empty schedule as unset", () => {
+    expect(backupSettings({ SPOONJOY_BACKUP_SCHEDULE: "off" }, "/data", check).schedule).toBeNull();
+    expect(backupSettings({ SPOONJOY_BACKUP_SCHEDULE: "", SPOONJOY_BACKUP_DIR: "" }, "/srv", check)).toEqual({ schedule: "17 3 * * *", keep: 7, dir: "/srv/backups" });
+  });
+
+  it("refuses a schedule it can't read and a number kept that isn't a whole number from 1", () => {
+    expect(() => backupSettings({ SPOONJOY_BACKUP_SCHEDULE: "every day" }, "/data", check)).toThrow("Can't read the cron expression");
+    for (const kept of ["0", "-1", "1.5", "seven"]) {
+      expect(() => backupSettings({ SPOONJOY_BACKUPS_KEPT: kept }, "/data", check)).toThrow(`SPOONJOY_BACKUPS_KEPT must be a whole number of backups, at least 1; got "${kept}".`);
+    }
+  });
+});
 
 describe("settingsFromEnv", () => {
   it("serves on 8080 from /app with data in /data unless told otherwise", () => {

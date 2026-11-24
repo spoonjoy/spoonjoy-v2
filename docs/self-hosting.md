@@ -10,7 +10,8 @@ Then open http://localhost:8080 and sign up.
 
 ## What's in the box
 
-- **One volume, `/data`.** The database, photos, cook sessions and the server's session secret live there. Back it up and you have backed up your kitchen.
+- **One volume, `/data`.** The database, photos, cook sessions and the server's session secret live there.
+- **Backups every day.** The server backs up its database and photos to one file in `/data/backups` every day, and keeps the last seven. See [Backups](#backups).
 - **One port, 8080.** Change it with `PORT`.
 - **Migrations on start.** Each start brings the database up to date with the image, and records each migration in a `d1_migrations` table as spoonjoy.app does.
 - **Analytics are off.** The image sends nothing anywhere. Set `POSTHOG_KEY` (and `POSTHOG_HOST`) only if you want your own PostHog project.
@@ -32,6 +33,9 @@ The image runs as the unprivileged `node` user (uid 1000). A named volume needs 
 | `SPOONJOY_SIGNUPS` | `open` lets anyone who reaches the server sign up; `invite` lets only people with an invite link. Set, it overrides the switch in Server settings. | the switch, invite-only at first |
 | `SPOONJOY_MODERATOR_USERNAMES` | Comma-separated usernames who may review reports at `/moderation`, besides the server's admin. | none |
 | `SPOONJOY_RATE_LIMIT_<NAME>` | Raises one of the per-minute limits (`AUTH_IP_RATE_LIMITER`, `API_IP_RATE_LIMITER`, `API_TOKEN_RATE_LIMITER`, `INGREDIENT_PARSE_RATE_LIMITER`), for a household that all reaches the server from one address. | spoonjoy.app's |
+| `SPOONJOY_BACKUP_SCHEDULE` | When the server backs itself up: a cron expression in UTC, or `off`. | `17 3 * * *` (03:17 every day) |
+| `SPOONJOY_BACKUPS_KEPT` | How many scheduled backups to keep. Older ones are deleted; backups you make yourself are kept. | `7` |
+| `SPOONJOY_BACKUP_DIR` | The folder backups go in. Point it at a second volume to keep them off the data disk. | `/data/backups` |
 | `PHOTO_SWEEP_MODE` | `apply` lets the photo cleanup move unused photos aside; `off` stops it. | dry run |
 | `POSTHOG_KEY`, `POSTHOG_HOST` | Your own PostHog project, if you want analytics. | off |
 
@@ -96,9 +100,36 @@ docker start spoonjoy
 docker run --rm -v spoonjoy-data:/data -v "$PWD/photos:/photos:ro" ghcr.io/spoonjoy/spoonjoy:latest node /app/self-host/server.mjs photos /photos
 ```
 
+## Backups
+
+A backup is one `.tar.gz` file holding the whole database and every photo. It leaves out the search index, which the server rebuilds on the first search after a restore, cook sessions in progress, and the session secret, so a backup can't sign anyone in. Everyone signs in again after a restore onto a new server.
+
+The server makes one on its schedule while it runs (`SPOONJOY_BACKUP_SCHEDULE`), named `spoonjoy-auto-<time>.tar.gz`, and keeps the last `SPOONJOY_BACKUPS_KEPT`. A backup in the data volume is lost with the disk, so copy the backups somewhere else, or mount a second volume and set `SPOONJOY_BACKUP_DIR` to it:
+
+```sh
+docker run -d --name spoonjoy -p 8080:8080 -v spoonjoy-data:/data -v /mnt/nas/spoonjoy:/backups -e SPOONJOY_BACKUP_DIR=/backups ghcr.io/spoonjoy/spoonjoy:latest
+```
+
+To make one now, stop the server and run `server.mjs backup`, which writes `spoonjoy-manual-<time>.tar.gz` in the backups folder, or to the file you name:
+
+```sh
+docker stop spoonjoy
+docker run --rm -v spoonjoy-data:/data -v "$PWD:/out" ghcr.io/spoonjoy/spoonjoy:latest node /app/self-host/server.mjs backup /out/kitchen.tar.gz
+docker start spoonjoy
+```
+
+`server.mjs restore <file>` replaces the kitchen with a backup's, then brings it up to date with the image, so a backup restores into the same version or a newer one. A backup from a newer image is refused until you update. If the server already has accounts, it first saves what's there as `spoonjoy-before-restore-<time>.tar.gz`. Stop the server first. To move a kitchen to a new server:
+
+```sh
+docker run --rm -v spoonjoy-data:/data -v "$PWD:/in:ro" ghcr.io/spoonjoy/spoonjoy:latest node /app/self-host/server.mjs restore /in/kitchen.tar.gz
+docker run -d --name spoonjoy -p 8080:8080 -v spoonjoy-data:/data ghcr.io/spoonjoy/spoonjoy:latest
+```
+
+The container runs as uid 1000, so a host folder it writes a backup into needs to be writable by that user.
+
 ## How it's checked
 
-The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, signs up, adds a passkey and signs back in on the empty server, checks the first account is the admin, that a stranger is refused once sign-ups are off and that an invite link signs up one person and then stops working, checks Sign in with Apple is set up, signs in through a Dex OpenID Connect provider, seeds the QA kitchen through `server.mjs sql` and its sample cover photos through `server.mjs photos`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, and checks the kitchen is still there after `docker restart`. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
+The `Self-host Image` workflow (`.github/workflows/self-host-image.yml`) builds the image on amd64 and arm64 runners, times `docker run` to the first page on an empty volume, waits for the health check, signs up, adds a passkey and signs back in on the empty server, checks the first account is the admin, that a stranger is refused once sign-ups are off and that an invite link signs up one person and then stops working, checks Sign in with Apple is set up, signs in through a Dex OpenID Connect provider, seeds the QA kitchen through `server.mjs sql` and its sample cover photos through `server.mjs photos`, runs the Journeys sign-in and round-trip smoke set against the container with a screenshot of each test, checks the kitchen is still there after `docker restart`, and backs it up with `server.mjs backup`, restores the backup into a second, empty volume and checks the restored server shows a recipe and its photo, byte for byte, and makes its own scheduled backup. Pushes to main publish the image only after both arches pass. Its job summary reports the image size, boot time and memory.
 
 After each green run on main, the `Self-host Pull` workflow (`.github/workflows/self-host-pull.yml`) pulls `ghcr.io/spoonjoy/spoonjoy:latest` with no login on amd64 and arm64, boots it on an empty volume and waits for its health check, the way a self-hoster would.
 
