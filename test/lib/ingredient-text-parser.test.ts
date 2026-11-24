@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { UNIT_NAMES, resolveUnit } from '~/domains/food-knowledge/model/units'
+import { UNIT_NAMES, resolveUnit } from '~/domains/food-knowledge'
 import { MEASURED_UNIT_WRITTEN, parseIngredientLine, parseIngredientText } from '~/lib/ingredient-text-parser'
 
 // The same cases as the native editor's IngredientTextParserTests (spoonjoy-apple), so the web

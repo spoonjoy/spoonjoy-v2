@@ -1,4 +1,4 @@
-import { UNIT_NAMES } from '~/domains/food-knowledge/model/units'
+import { UNIT_NAMES } from '~/domains/food-knowledge'
 import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
 
 // A deterministic, offline ingredient parser: the web editor's fallback when AI parsing is
