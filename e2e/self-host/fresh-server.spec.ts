@@ -165,7 +165,8 @@ test.describe("A fresh self-hosted server", () => {
     await expect(backups.getByRole("status")).toContainText("Backed up");
     const made = backups.getByTestId("server-backup").filter({ hasText: "Made here" });
     await expect(made).toHaveCount(1);
-    await page.screenshot({ path: testInfo.outputPath("backups-made.png"), fullPage: true });
+    await backups.scrollIntoViewIfNeeded();
+    await backups.screenshot({ path: testInfo.outputPath("backups-made.png") });
 
     const [download] = await Promise.all([page.waitForEvent("download"), made.getByRole("link", { name: "Download" }).click()]);
     expect(download.suggestedFilename()).toMatch(/^spoonjoy-manual-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z\.tar\.gz$/);
@@ -177,14 +178,18 @@ test.describe("A fresh self-hosted server", () => {
     await made.getByRole("button", { name: "Restore" }).click();
     const confirm = page.getByRole("alertdialog", { name: "Restore this backup?" });
     await expect(confirm).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath("backups-restore-confirm.png"), fullPage: true });
+    // Shoot the dialog once its opening animation has finished, not mid-fade.
+    await confirm.evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)));
+    await page.screenshot({ path: testInfo.outputPath("backups-restore-confirm.png") });
     await confirm.getByRole("button", { name: "Restore" }).click();
     await expect(backups.getByTestId("server-backup-restored")).toContainText("Restored this backup. What was here before is saved");
 
     await page.reload();
     await expect(page.getByTestId("server-signups-mode")).toHaveText("Invite only");
     await expect(page.getByTestId("server-backup").filter({ hasText: "Saved before a restore" })).toHaveCount(1);
-    await page.screenshot({ path: testInfo.outputPath("backups-restored.png"), fullPage: true });
+    await backups.scrollIntoViewIfNeeded();
+    await backups.screenshot({ path: testInfo.outputPath("backups-restored.png") });
+    await page.getByTestId("server-signups").screenshot({ path: testInfo.outputPath("backups-restored-signups.png") });
   });
 
   test("the Spoonjoy apps' Sign in with Apple is set up, and a token Apple didn't sign is refused", async ({ request }) => {

@@ -5,6 +5,7 @@ import type { Route } from "./+types/account.server-settings";
 import { Button } from "~/components/ouro/button/button";
 import { CopyButton } from "~/components/ouro/copy-button/copy-button";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
+import { Link } from "~/components/ouro/link/link";
 import { LocalDate } from "~/components/ouro/local-date/local-date";
 import { Text } from "~/components/ouro/text/text";
 import { CookbookPage } from "~/components/cookbook/page";
@@ -366,7 +367,12 @@ export default function ServerSettings() {
         title="This server"
         size="lg"
         divider
-        description="You made this server's first account, so you decide who else can join it, which AI it uses, and look after its backups. You can also review reports at /moderation."
+        description={
+          <>
+            You made this server's first account, so you decide who else can join it, which AI it uses, and look after its backups. You can also{" "}
+            <Link href="/moderation">review open reports</Link>.
+          </>
+        }
       />
       <SignupsSwitch signups={signups} />
       <Invites invites={invites} />
