@@ -9,7 +9,10 @@
 // (the kitchen seed's `wrangler d1 execute --file`) before any journey ran, and run 45348033648
 // failed its QA cleanup on another, "[code: 7429]", after every journey had passed. Only those
 // answers, and failed Cloudflare API requests with a 429 or 5xx code, are retried; an SQL error
-// or any other failure fails at once. The command's stderr still reaches the job log as it runs.
+// or any other failure fails at once. R2's API also refuses a request for a moment with "Please
+// enable R2 through the Cloudflare Dashboard" [code: 10042] (scripts/cleanup-local-qa-data.mjs),
+// and a 429 or 5xx answered with a page instead of JSON reaches wrangler as "Received a malformed
+// response from the API" ending "-> 502 Bad Gateway"; both are retried too. The command's stderr still reaches the job log as it runs.
 // Only wrap commands that are safe to run again: wrangler rolls back a failed `d1 execute --file`,
 // and `d1 migrations apply` skips the migrations it already applied.
 import { spawn } from "node:child_process";
@@ -29,7 +32,8 @@ function errorText(error) {
 export function isTransientCloudflareApiError(error) {
   const text = errorText(error);
   return /internal error; reference = [\w-]+/.test(text)
-    || /A request to the Cloudflare API \([^)]*\) failed\.[\s\S]*?\[code: (?:7429|10500|429|5\d\d)\]/.test(text);
+    || /A request to the Cloudflare API \([^)]*\) failed\.[\s\S]*?\[code: (?:7429|10042|10500|429|5\d\d)\]/.test(text)
+    || /Received a malformed response from the API[\s\S]*?-> (?:429|5\d\d)\b/.test(text);
 }
 
 // Runs the command once with its stdout passed straight through and its stderr both passed

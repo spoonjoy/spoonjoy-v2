@@ -38,6 +38,15 @@ describe("reading a bucket's lifecycle rules", () => {
     expect(lifecycle.parseLifecycleRules(`${rule("old-photos", "No", "photos/", "Expire objects after 30 days")}\n`)).toEqual([
       { id: "old-photos", enabled: false, prefix: "photos/", abortDays: null },
     ]);
+    // A rule with several actions, part days, and none.
+    expect(
+      lifecycle.parseLifecycleRules(
+        `${rule("both", "Yes", "pending-uploads/", "Expire objects after 30 days, Abort incomplete multipart uploads after 0.5 days")}\n\n${rule("idle", "Yes", "(all prefixes)", "(none)")}\n`,
+      ),
+    ).toEqual([
+      { id: "both", enabled: true, prefix: "pending-uploads/", abortDays: 0.5 },
+      { id: "idle", enabled: true, prefix: "", abortDays: null },
+    ]);
   });
 
   it("reads a bucket with no rules as none, and fails on output it doesn't recognise", () => {
@@ -124,16 +133,27 @@ describe("ensure-r2-upload-lifecycle", () => {
     const exec = vi.fn(async () => {
       throw refused;
     });
-    await expect(lifecycle.main(["spoonjoy-photos"], { exec, log: vi.fn(), stderr })).rejects.toBe(refused);
+    // One line for the GitHub annotation, naming the cause.
+    await expect(lifecycle.main(["spoonjoy-photos"], { exec, log: vi.fn(), stderr })).rejects.toThrow(
+      /^wrangler r2 bucket lifecycle list failed: Authentication error \[code: 10000\]$/,
+    );
     expect(written.join("")).toContain("Authentication error [code: 10000]");
+    // Wrangler's stdout, which can name the token's accounts, stays out of the log.
+    expect(written.join("")).not.toContain("Listing lifecycle rules");
     expect(isTransientCloudflareApiError(written.join(""))).toBe(false);
 
     const silent = vi.fn(async () => {
       throw new Error("spawn pnpm ENOENT");
     });
     written.length = 0;
-    await expect(lifecycle.main(["spoonjoy-photos"], { exec: silent, log: vi.fn(), stderr })).rejects.toThrow("ENOENT");
+    await expect(lifecycle.main(["spoonjoy-photos"], { exec: silent, log: vi.fn(), stderr })).rejects.toThrow(/^wrangler r2 bucket lifecycle list failed$/);
     expect(written).toEqual([]);
+  });
+
+  it("sums up wrangler's error by its coded line, else its error line, else its first", () => {
+    expect(lifecycle.errorSummary("\u001b[31m✘ [ERROR]\u001b[39m A request failed.\n\n  Bad thing [code: 10006]\n")).toBe("Bad thing [code: 10006]");
+    expect(lifecycle.errorSummary("noise\n✘ [ERROR] Received a malformed response from the API\n")).toBe("✘ [ERROR] Received a malformed response from the API");
+    expect(lifecycle.errorSummary("\nfirst\nsecond")).toBe("first");
   });
 
   it("takes exactly one bucket name, and --check", () => {

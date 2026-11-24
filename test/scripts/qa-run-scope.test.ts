@@ -1848,6 +1848,7 @@ describe("Journeys workflow", () => {
     expect(deploySteps.at(-1)).toMatchObject({
       name: "Abort unfinished move-in uploads in QA after a day",
       if: "steps.tip.outputs.current == 'true'",
+      "continue-on-error": true,
       run: "node scripts/retry-cloudflare.mjs -- node scripts/ensure-r2-upload-lifecycle.mjs spoonjoy-photos-qa",
     });
     expect(deploySteps.filter((candidate) => candidate.env?.CLOUDFLARE_API_TOKEN)).toHaveLength(2);
