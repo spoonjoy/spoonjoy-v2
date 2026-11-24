@@ -8,6 +8,7 @@ import { Text } from "~/components/ouro/text/text";
 import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { SectionHeader } from "~/components/ouro/section-header/section-header";
+import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import {
@@ -38,25 +39,43 @@ async function requireAdmin(request: Request, context: Route.LoaderArgs["context
 
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+type Context = Route.LoaderArgs["context"];
+
+// A backup, restore or listing that failed, to the owner's own PostHog if they set one up (off
+// otherwise). Another backup already running is not a failure.
+function reportBackupFailure(context: Context, request: Request, userId: string, error: unknown, step: string) {
+  if (error instanceof ServerBackupError && error.status === 409) return;
+  // Only a server with the SELF_HOST binding gets here, so its env is there.
+  const capture = captureException(resolvePostHogServerConfig(context.cloudflare!.env!), {
+    error,
+    distinctId: userId,
+    route: new URL(request.url).pathname,
+    method: request.method,
+    extras: { action: `server_backups_${step}` },
+  });
+  context.cloudflare?.ctx?.waitUntil(capture);
+}
+
 // The backups section's data: null where the server has no backups to show (spoonjoy.app), or why
 // the server couldn't list them.
-async function loadBackups(env: Parameters<typeof serverBackups>[0]): Promise<ServerBackups | { error: string } | null> {
-  const host = serverBackups(env);
+async function loadBackups(context: Context, request: Request, userId: string): Promise<ServerBackups | { error: string } | null> {
+  const host = serverBackups(context.cloudflare?.env);
   if (!host) return null;
   try {
     return await host.list();
   } catch (error) {
+    reportBackupFailure(context, request, userId, error, "list");
     return { error: reason(error) };
   }
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const { env, db } = await requireAdmin(request, context);
+  const { env, db, userId } = await requireAdmin(request, context);
   const invites = await listServerInvites(db);
   return {
     signups: await signupMode(db, env),
     invites: invites.map((invite) => ({ id: invite.id, createdAt: invite.createdAt.toISOString(), expiresAt: invite.expiresAt.toISOString() })),
-    backups: await loadBackups(env),
+    backups: await loadBackups(context, request, userId),
   };
 }
 
@@ -93,6 +112,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         if (intent === "backup") return data<ServerSettingsActionData>({ intent, success: true, made: await host.backUpNow() });
         return data<ServerSettingsActionData>({ intent, success: true, restored: await host.restore(String(form.get("name") ?? "")) });
       } catch (error) {
+        reportBackupFailure(context, request, userId, error, intent);
         return fail(reason(error), error instanceof ServerBackupError ? error.status : 500);
       }
     }
