@@ -61,6 +61,10 @@ export const TRANSACTION_ALLOWLIST: Record<string, Allowance> = {
     max: 1,
     reason: `${NO_BINDING_FALLBACK} The steps update plan runs as one guarded batch when the binding is present.`,
   },
+  "app/lib/server-ai.server.ts": {
+    max: 1,
+    reason: `${NO_BINDING_FALLBACK} Server settings passes requestD1(context), so the AI pick and its key go out as one batch.`,
+  },
   "app/lib/shopping-list-mutations.server.ts": {
     max: 2,
     reason: `${NO_BINDING_FALLBACK} The shared shopping-item plan runs as a D1 batch when the binding is present.`,

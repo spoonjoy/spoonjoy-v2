@@ -1,3 +1,4 @@
+import { requestD1 } from "~/lib/d1-read.server";
 import { useState } from "react";
 import { data, useFetcher, useLoaderData } from "react-router";
 import type { Route } from "./+types/account.server-settings";
@@ -112,7 +113,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     case "ai": {
       const provider = String(form.get("provider")) as AiProvider;
       if (!AI_PROVIDERS.includes(provider)) return fail("Choose OpenAI, Gemini or no AI.", 400);
-      const refused = await setServerAi(db, env, { provider, key: String(form.get("key") ?? "") });
+      const refused = await setServerAi(db, env, { provider, key: String(form.get("key") ?? "") }, requestD1(context));
       if (refused) return fail(refused, 400);
       return data<ServerSettingsActionData>({ intent, success: true });
     }
