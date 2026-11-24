@@ -102,6 +102,10 @@ export const BUILT_FILE_404_RETRY_DELAYS_MS: readonly number[] = [250, 1_000, 4_
 // /assets/button-CXqvcQew.js and /assets/last-input-Di7bn0GT.js answered 404 to the first page.
 // A file this run built cannot really be missing, so a 404 for one is asked again like a 502. A 404
 // for any other file is a real missing file and reaches the page at once.
+// It has also answered 500 for a built file verify had seen served (#1031: Journeys run
+// 45441839001's persona setup, /assets/useControlled-C35sufZN.js), so a built file's 500 is asked
+// again on the same schedule. The Worker serves no file under /assets/, so a 500 there is never
+// the app's.
 // The same folder, and the same file names, scripts/qa-run-scope.mjs verify checked were served,
 // found from this file (e2e/journeys/support/), so a suite started from another folder still finds
 // the build.
@@ -140,7 +144,8 @@ type AssetRoute = Pick<Route, "fetch" | "fulfill" | "continue" | "request">;
 
 /**
  * Answers a static file request, asking Cloudflare again, at most twice, while it answers 502, 503
- * or 504, and at most five times, over about 50 s, while it answers 404 for a file this run built.
+ * or 504, and at most five times, over about 50 s, while it answers 404 or 500 for a file this run
+ * built.
  * When the request itself fails, the browser makes it as if nothing were routed.
  */
 export async function answerStaticAsset(
@@ -163,9 +168,9 @@ export async function answerStaticAsset(
     }
     const status = response.status();
     const ray = cfRay(response);
-    const builtFile404 = status === 404 && isBuilt(pathname);
-    const delays = builtFile404 ? BUILT_FILE_404_RETRY_DELAYS_MS : STATIC_ASSET_RETRY_DELAYS_MS;
-    const retryable = RETRYABLE_ASSET_STATUSES.has(status) || builtFile404;
+    const builtFileMissing = (status === 404 || status === 500) && isBuilt(pathname);
+    const delays = builtFileMissing ? BUILT_FILE_404_RETRY_DELAYS_MS : STATIC_ASSET_RETRY_DELAYS_MS;
+    const retryable = RETRYABLE_ASSET_STATUSES.has(status) || builtFileMissing;
     if (!retryable || attempt >= delays.length) {
       if (attempt > 0) onRecovered(pathname, status, attempt + 1, ray, tries);
       // After a long wait the test may have ended and closed the page; the answer then has nowhere to go.

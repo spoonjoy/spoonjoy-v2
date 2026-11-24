@@ -266,7 +266,9 @@ jobs:
 
       # Secrets set, no pending migration, /health up, and every file in build/client/assets served
       # from the run's URL with the right content-type (bounded at 2 minutes), so the suite never
-      # starts against a Worker whose static assets have not all propagated yet.
+      # starts against a Worker whose static assets have not all propagated yet. While Cloudflare
+      # keeps answering a server error for a built file, it deploys the build again under a fresh
+      # Worker name and points SPOONJOY_JOURNEYS_BASE_URL and SPOONJOY_QA_RUN_WORKER at it (#1031).
       - name: Check this run's QA Worker is live
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

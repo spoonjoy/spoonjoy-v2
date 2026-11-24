@@ -17,6 +17,9 @@ import {
   READY_POLL_MS,
   ASSETS_READY_TIMEOUT_MS,
   ASSET_FETCH_CONCURRENCY,
+  ASSET_SERVER_ERROR_GRACE_MS,
+  AssetServerErrors,
+  MAX_ASSET_REDEPLOYS,
   CLIENT_ASSETS_DIR,
   builtAssetPaths,
   waitForBuiltAssets,
@@ -173,6 +176,13 @@ describe("runIdentity", () => {
     expect(RUN_WORKER_PATTERN.test(second.workerName)).toBe(true);
     expect(RUN_DATABASE_PATTERN.test(second.databaseName)).toBe(true);
     expect(RUN_QUEUE_PATTERN.test(second.queueName)).toBe(true);
+  });
+
+  it("lets the sweep find a Worker verify deployed again under a fresh name, and nothing else", () => {
+    for (const name of ["spoonjoy-v2-qa-run-1001-2-r2", "spoonjoy-v2-qa-run-1001-2-p2-r3"]) expect(RUN_WORKER_PATTERN.test(name)).toBe(true);
+    for (const name of ["spoonjoy-v2-qa-run-1001-2-r1", "spoonjoy-v2-qa-run-1001-2-r10", "spoonjoy-v2-qa-run-1001-2-r2-p2"]) {
+      expect(RUN_WORKER_PATTERN.test(name)).toBe(false);
+    }
   });
 
   it("refuses a part that is not a single digit from 1 to 9", () => {
@@ -839,14 +849,14 @@ function verifyExec({ secrets = REQUIRED_RUN_SECRETS, migrations = "✅ No migra
   });
 }
 
-type Route = { status: number; body?: string; type?: string };
+type Route = { status: number; body?: string; type?: string; headers?: Record<string, string> };
 
-function site(routes: Record<string, Route | Error>) {
+function site(routes: Record<string, Route | Error>, baseUrl = IDENTITY.baseUrl) {
   return vi.fn(async (url: string) => {
-    const path = url.slice(IDENTITY.baseUrl.length);
+    const path = url.slice(baseUrl.length);
     const route = routes[path] ?? { status: 404 };
     if (route instanceof Error) throw route;
-    const headers = new Headers(route.type === undefined ? {} : { "content-type": route.type });
+    const headers = new Headers({ ...route.headers, ...(route.type === undefined ? {} : { "content-type": route.type }) });
     return { status: route.status, headers, text: async () => route.body ?? "" };
   });
 }
@@ -1057,6 +1067,201 @@ describe("verify", () => {
     const shared = scopedFiles({ workerName: "spoonjoy-v2-qa" });
     await expect(verify({ env: RUN_ENV, exec: verifyExec().exec, fs: shared.fs, fetchImpl: site(LIVE), log: vi.fn() }))
       .rejects.toThrow(/Refusing to touch spoonjoy-v2-qa/);
+  });
+});
+
+// Cloudflare's own static file serving answered 500 for a few built files of a freshly deployed run
+// Worker, a different few each run, for the whole two-minute window (#1031).
+const CF_500: Route = {
+  status: 500,
+  body: "<html>\n  <title>Worker threw exception</title>  Error 1101\n</html>",
+  headers: { "cf-ray": "8f1e2d3c4b5a6979-IAD", "cf-cache-status": "DYNAMIC" },
+};
+const FRESH = {
+  workerName: `${IDENTITY.workerName}-r2`,
+  baseUrl: `https://${IDENTITY.workerName}-r2.mendelow-studio.workers.dev`,
+};
+
+describe("waitForBuiltAssets and Cloudflare's 500s", () => {
+  it("logs each failing file's first answer once, with its cf-ray, cache status and the start of its body", async () => {
+    let clock = 0;
+    const log = vi.fn();
+    const files = scopedFiles();
+    await expect(waitForBuiltAssets({
+      fs: files.fs,
+      fetchImpl: site({ ...LIVE, "/assets/root-Q1.css": CF_500 }),
+      now: () => clock,
+      sleep: async (ms: number) => {
+        clock += ms;
+      },
+      baseUrl: IDENTITY.baseUrl,
+      log,
+    })).rejects.toThrow(
+      `1 of 3 built assets not live on ${IDENTITY.baseUrl} after ${ASSETS_READY_TIMEOUT_MS / 1000} s: /assets/root-Q1.css returned 500 (cf-ray 8f1e2d3c4b5a6979-IAD).`,
+    );
+    const notes = log.mock.calls.map(([line]) => line).filter((line) => line.includes("root-Q1.css"));
+    expect(notes).toEqual([
+      "/assets/root-Q1.css answered 500 (cf-ray 8f1e2d3c4b5a6979-IAD, cf-cache-status DYNAMIC): <html> <title>Worker threw exception</title> Error 1101 </html>",
+    ]);
+  });
+
+  it("still logs a failing answer whose body cannot be read, and one with no Cloudflare headers", async () => {
+    const log = vi.fn();
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith("root-Q1.css")) return { status: 500, headers: new Headers(), text: async () => Promise.reject(new Error("aborted")) };
+      return site(LIVE)(url);
+    });
+    await expect(waitForBuiltAssets({ fs: scopedFiles().fs, fetchImpl, now: () => 0, sleep: vi.fn(), baseUrl: IDENTITY.baseUrl, log, timeoutMs: 0 }))
+      .rejects.toThrow("/assets/root-Q1.css returned 500.");
+    expect(log).toHaveBeenCalledWith("/assets/root-Q1.css answered 500 (cf-ray none): ");
+  });
+
+  it("gives up early with the 5xx files once the grace window has passed, so verify can deploy again", async () => {
+    let clock = 0;
+    const sleep = vi.fn(async (ms: number) => {
+      clock += ms;
+    });
+    const error = await waitForBuiltAssets({
+      fs: scopedFiles().fs,
+      fetchImpl: site({ ...LIVE, "/assets/root-Q1.css": CF_500 }),
+      now: () => clock,
+      sleep,
+      baseUrl: IDENTITY.baseUrl,
+      log: vi.fn(),
+      serverErrorGraceMs: ASSET_SERVER_ERROR_GRACE_MS,
+    }).catch((caught) => caught);
+    expect(error).toBeInstanceOf(AssetServerErrors);
+    expect(error.message).toBe(
+      `1 of 3 built assets still answered a server error on ${IDENTITY.baseUrl} after ${ASSET_SERVER_ERROR_GRACE_MS / 1000} s: /assets/root-Q1.css returned 500 (cf-ray 8f1e2d3c4b5a6979-IAD).`,
+    );
+    expect(clock).toBe(ASSET_SERVER_ERROR_GRACE_MS);
+  });
+
+  it("keeps waiting the whole window for a 404, which has cleared on its own (#668)", async () => {
+    let clock = 0;
+    const error = await waitForBuiltAssets({
+      fs: scopedFiles().fs,
+      fetchImpl: site({ ...LIVE, "/assets/root-Q1.css": { status: 404 } }),
+      now: () => clock,
+      sleep: async (ms: number) => {
+        clock += ms;
+      },
+      baseUrl: IDENTITY.baseUrl,
+      log: vi.fn(),
+      serverErrorGraceMs: ASSET_SERVER_ERROR_GRACE_MS,
+    }).catch((caught) => caught);
+    expect(error).not.toBeInstanceOf(AssetServerErrors);
+    expect(clock).toBe(ASSETS_READY_TIMEOUT_MS);
+  });
+
+  it("passes when a 500 clears inside the grace window, without deploying again", async () => {
+    let tries = 0;
+    const live = site(LIVE);
+    const broken = site({ ...LIVE, "/assets/root-Q1.css": CF_500 });
+    const fetchImpl = vi.fn(async (url: string) => (url.endsWith("root-Q1.css") && ++tries < 3 ? broken(url) : live(url)));
+    expect(await waitForBuiltAssets({
+      fs: scopedFiles().fs, fetchImpl, now: Date.now, sleep: vi.fn(async () => {}), baseUrl: IDENTITY.baseUrl, log: vi.fn(), serverErrorGraceMs: ASSET_SERVER_ERROR_GRACE_MS,
+    })).toBe(3);
+  });
+});
+
+// The files and answers a verify that deploys again needs: the generated build config and the
+// secrets file prepare wrote, the run's queue with its Worker as consumer, and a fetch that
+// answers 500 for one built file on the old Worker's URL only.
+function redeployFixture({ freshAlsoBroken = 0 } = {}) {
+  const files = scopedFiles();
+  files.store.set(GENERATED_BUILD_CONFIG, JSON.stringify(scopeGeneratedBuildConfig(generatedBuildConfig(), IDENTITY, RUN_DB_ID)));
+  files.store.set(SECRETS_FILE, JSON.stringify({ SESSION_SECRET: "s", VAPID_PUBLIC_KEY: "p", VAPID_PRIVATE_KEY: "k", VAPID_SUBJECT: IDENTITY.baseUrl, POSTHOG_DISABLED: "1" }));
+  const api = fakeApi({
+    listQueues: vi.fn(async () => [{ queue_name: IDENTITY.queueName, queue_id: "run-queue" }]),
+  });
+  const broken = { ...LIVE, "/assets/root-Q1.css": CF_500 };
+  let freshBroken = freshAlsoBroken;
+  const fetchImpl = vi.fn(async (url: string) => {
+    const fresh = url.match(/-r(\d)\.mendelow-studio\.workers\.dev/);
+    if (!fresh) return site(broken)(url);
+    const base = url.slice(0, url.indexOf(".workers.dev") + ".workers.dev".length);
+    return site(freshBroken > 0 ? broken : LIVE, base)(url);
+  });
+  const sleep = vi.fn(async (ms: number) => {
+    clock.at += ms;
+  });
+  const clock = { at: 0 };
+  const exec = vi.fn(async (file: string, args: string[]) => {
+    if (args[2] === "deploy") {
+      freshBroken -= 1;
+      return { stdout: "Deployed", stderr: "" };
+    }
+    return verifyExec().exec(file, args);
+  });
+  return { files, api, fetchImpl, sleep, exec, now: () => clock.at };
+}
+
+describe("verify after Cloudflare keeps answering 500 for a built file", () => {
+  it("deploys the build again under a fresh Worker name, points the run at it, and passes", async () => {
+    const { files, api, fetchImpl, sleep, exec, now } = redeployFixture();
+    const log = vi.fn();
+    const state = await verify({ env: RUN_ENV, exec, fs: files.fs, fetchImpl, now, sleep, log, api });
+
+    expect(state).toMatchObject({ ...FRESH, databaseName: IDENTITY.databaseName, queueName: IDENTITY.queueName, retiredWorkers: [IDENTITY.workerName] });
+    expect(files.json(STATE_FILE)).toMatchObject(FRESH);
+    // The old Worker lets go of the run's queue and is deleted before the fresh one attaches to it.
+    expect(api.deleteQueueConsumer.mock.calls).toEqual([["run-queue", "run-queue-consumer"]]);
+    expect(api.deleteWorker.mock.calls).toEqual([[IDENTITY.workerName]]);
+    const deployCall = exec.mock.calls.findIndex(([, args]) => args[2] === "deploy");
+    expect(api.deleteWorker.mock.invocationCallOrder[0]).toBeLessThan(exec.mock.invocationCallOrder[deployCall]);
+    expect(exec.mock.calls[deployCall][1]).toEqual(["exec", "wrangler", "deploy", "--env", "qa", "--secrets-file", SECRETS_FILE]);
+
+    // Only the Worker's name and URL change, in both configs and the secrets' VAPID subject.
+    const qa = files.json(WRANGLER_CONFIG).env.qa;
+    expect(qa.name).toBe(FRESH.workerName);
+    expect(qa.vars.SPOONJOY_BASE_URL).toBe(FRESH.baseUrl);
+    assertOnlyIdentityChanged(scopeWranglerConfig(REAL_WRANGLER, IDENTITY, RUN_DB_ID).env.qa, qa);
+    expect(qa.d1_databases.find((db: { binding: string }) => db.binding === "DB").database_id).toBe(RUN_DB_ID);
+    const build = files.json(GENERATED_BUILD_CONFIG);
+    expect([build.name, build.vars.SPOONJOY_BASE_URL]).toEqual([FRESH.workerName, FRESH.baseUrl]);
+    expect(files.json(SECRETS_FILE)).toMatchObject({ SESSION_SECRET: "s", VAPID_SUBJECT: FRESH.baseUrl });
+
+    // Later steps (the tail, the seed, the suite) read the fresh Worker from GITHUB_ENV.
+    expect(files.appended).toEqual([[RUN_ENV.GITHUB_ENV, `SPOONJOY_JOURNEYS_BASE_URL=${FRESH.baseUrl}\nSPOONJOY_QA_RUN_WORKER=${FRESH.workerName}\n`]]);
+    expect(fetchImpl.mock.calls.some(([url]) => url === `${FRESH.baseUrl}/assets/root-Q1.css`)).toBe(true);
+    expect(log).toHaveBeenCalledWith(
+      `::warning::Cloudflare kept answering a server error for built files of ${IDENTITY.workerName}: 1 of 3 built assets still answered a server error on ${IDENTITY.baseUrl} after ${ASSET_SERVER_ERROR_GRACE_MS / 1000} s: /assets/root-Q1.css returned 500 (cf-ray 8f1e2d3c4b5a6979-IAD). Deploying this build again as ${FRESH.workerName}, which uploads every file again.`,
+    );
+    expect(log).toHaveBeenLastCalledWith(expect.stringContaining(`${FRESH.baseUrl} serves this build`));
+  });
+
+  it("still finishes when the old Worker cannot be deleted, leaving it for teardown", async () => {
+    const { files, api, fetchImpl, sleep, exec, now } = redeployFixture();
+    api.deleteWorker = vi.fn(async () => {
+      throw new Error("worker 500");
+    });
+    const log = vi.fn();
+    // A local run (and qa-hang-repro) has no GITHUB_ENV to point.
+    const { GITHUB_ENV: _unset, ...env } = RUN_ENV;
+    const state = await verify({ env, exec, fs: files.fs, fetchImpl, now, sleep, log, api });
+    expect(files.appended).toEqual([]);
+    expect(state.workerName).toBe(FRESH.workerName);
+    expect(state.retiredWorkers).toEqual([IDENTITY.workerName]);
+    expect(log).toHaveBeenCalledWith(`::warning::Could not delete ${IDENTITY.workerName} before deploying again (worker 500); teardown deletes it.`);
+  });
+
+  it(`deploys again at most ${MAX_ASSET_REDEPLOYS} times, then fails as a setup error with the files and their cf-ray`, async () => {
+    const { files, api, fetchImpl, sleep, exec, now } = redeployFixture({ freshAlsoBroken: 99 });
+    await expect(verify({ env: RUN_ENV, exec, fs: files.fs, fetchImpl, now, sleep, log: vi.fn(), api })).rejects.toThrow(
+      `Setup error, not a test failure: built files still not served after ${MAX_ASSET_REDEPLOYS} fresh deploys of this build: 1 of 3 built assets not live on https://${IDENTITY.workerName}-r3.mendelow-studio.workers.dev after ${ASSETS_READY_TIMEOUT_MS / 1000} s: /assets/root-Q1.css returned 500 (cf-ray 8f1e2d3c4b5a6979-IAD).`,
+    );
+    expect(exec.mock.calls.filter(([, args]) => args[2] === "deploy")).toHaveLength(MAX_ASSET_REDEPLOYS);
+    expect(api.deleteWorker.mock.calls).toEqual([[IDENTITY.workerName], [`${IDENTITY.workerName}-r2`]]);
+    expect(files.json(STATE_FILE).retiredWorkers).toEqual([IDENTITY.workerName, `${IDENTITY.workerName}-r2`]);
+  });
+
+  it("never deploys again for a 404 or a wrong content-type", async () => {
+    const { files, api, sleep, exec, now } = redeployFixture();
+    const fetchImpl = site({ ...LIVE, "/assets/root-Q1.css": { status: 404 } });
+    await expect(verify({ env: RUN_ENV, exec, fs: files.fs, fetchImpl, now, sleep, log: vi.fn(), api })).rejects.toThrow(/1 of 3 built assets not live .* returned 404\.$/);
+    expect(api.deleteWorker).not.toHaveBeenCalled();
+    expect(exec.mock.calls.some(([, args]) => args.includes("deploy"))).toBe(false);
   });
 });
 
@@ -1453,6 +1658,36 @@ describe("teardown", () => {
     expect(log).toHaveBeenCalledWith(
       "::warning::Could not fully delete this run's QA stack (queues 500; worker 500; d1 500). The scheduled sweep deletes it once it is 3 hours old.",
     );
+  });
+
+  it("deletes the Worker verify deployed again and any it could not delete, never another run's", async () => {
+    const api = fakeApi();
+    const files = scopedFiles({ ...FRESH, retiredWorkers: [IDENTITY.workerName, "spoonjoy-v2-qa-run-9-9", "spoonjoy-v2-qa"] });
+    const log = vi.fn();
+    expect(await teardown({ env: RUN_ENV, fs: files.fs, api, log })).toBe(true);
+    expect(api.deleteWorker.mock.calls).toEqual([[FRESH.workerName], [IDENTITY.workerName]]);
+    expect(log).toHaveBeenCalledWith(`Deleted QA run Worker ${FRESH.workerName}.`);
+
+    // An old Worker verify already deleted is not worth a warning.
+    const gone = notFoundApi();
+    const log2 = vi.fn();
+    const api2 = fakeApi({ deleteWorker: vi.fn(async (name: string) => (name === FRESH.workerName ? { success: true } : gone.deleteWorker(name))) });
+    expect(await teardown({ env: RUN_ENV, fs: scopedFiles({ ...FRESH, retiredWorkers: [IDENTITY.workerName] }).fs, api: api2, log: log2 })).toBe(true);
+    expect(log2.mock.calls.flat().join("\n")).not.toContain(`no Worker named ${IDENTITY.workerName}`);
+
+    // A replaced Worker that can't be deleted is left for the sweep, like any other part.
+    const api3 = fakeApi({ deleteWorker: vi.fn(async (name: string) => {
+      if (name === IDENTITY.workerName) throw new Error("old worker 500");
+      return { success: true };
+    }) });
+    const log3 = vi.fn();
+    expect(await teardown({ env: RUN_ENV, fs: scopedFiles({ ...FRESH, retiredWorkers: [IDENTITY.workerName] }).fs, api: api3, log: log3 })).toBe(false);
+    expect(log3).toHaveBeenCalledWith(expect.stringContaining("Could not fully delete this run's QA stack (old worker 500)"));
+
+    // A state file it can't read leaves the plain name.
+    const api4 = fakeApi({ listDatabases: vi.fn(async () => []) });
+    await teardown({ env: RUN_ENV, fs: fakeFs({ [STATE_FILE]: "{not json" }).fs, api: api4, log: vi.fn() });
+    expect(api4.deleteWorker.mock.calls).toEqual([[IDENTITY.workerName]]);
   });
 
   it("refuses to run outside GitHub Actions", async () => {
