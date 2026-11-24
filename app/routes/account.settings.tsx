@@ -10,7 +10,7 @@ import {
   type AccountSettingsLoaderData,
 } from "~/lib/account-settings.server";
 import { House, LogOut } from "lucide-react";
-import { isFlagOn, useFlag } from "~/domains/platform";
+import { useFlag } from "~/domains/platform";
 import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
