@@ -532,6 +532,7 @@ describe("/households/:id", () => {
     expect(within(people).getByText("View-only")).toBeTruthy();
     const shared = screen.getByRole("list", { name: "Shared" });
     expect(within(shared).getByRole("link", { name: /Shopping lists/ }).getAttribute("href")).toBe("/households/h1/lists");
+    expect(within(shared).getByRole("link", { name: /Meal plan/ }).getAttribute("href")).toBe("/households/h1/plan");
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Copy invite link" }));
     expect(await screen.findByDisplayValue("https://spoonjoy.app/join/tok")).toBeTruthy();
