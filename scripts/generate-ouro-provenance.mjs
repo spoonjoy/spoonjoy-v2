@@ -20,7 +20,7 @@ const OURO_COMPONENTS = "app/components/ouro/";
 const OURO_LIB = "app/lib/ouro/";
 const EXTENSIONS = [".tsx", ".ts", "/index.tsx", "/index.ts"];
 // An import written with its file's extension (`./x.css`), as opposed to a module (`./x.server`).
-const FILE_EXTENSION = /\.(?:tsx?|jsx?|mjs|json|css|svg|png|jpe?g|webp|gif|txt)$/;
+const FILE_EXTENSION = /\.(?:tsx?|jsx?|mjs|json|css|svg|png|jpe?g|webp|gif|txt|ya?ml)$/;
 // A component's own files that are parts of it, not items of their own.
 const PART_SUFFIXES = ["-parts", "-styles", "-context"];
 const USAGE = "Usage: generate-ouro-provenance.mjs [--check]";

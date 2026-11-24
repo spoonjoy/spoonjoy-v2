@@ -8,7 +8,7 @@ import { readableRecipeWhere } from "~/domains/kitchen";
 const INDEXABLE_RECIPE = { deletedAt: null, steps: { some: {} }, ...readableRecipeWhere(null) };
 
 // Public, indexable static pages.
-const STATIC_PATHS = ["/", "/test-kitchen", "/roadmap", "/privacy", "/terms", "/developers", "/api/docs"];
+const STATIC_PATHS = ["/", "/test-kitchen", "/roadmap", "/self-host", "/privacy", "/terms", "/developers", "/api/docs"];
 
 // Cap per entity type. The app is well under this today; if any type ever
 // approaches the 50k sitemap limit, split this into a sitemap index by type.

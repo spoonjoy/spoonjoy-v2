@@ -131,6 +131,7 @@ describe("files and items", () => {
     expect(resolveImport("~/lib/thing.server", "app/routes/home.tsx", exists)).toBe("app/lib/thing.server.ts");
     expect(resolveImport("./home.css", "app/routes/home.tsx", exists)).toBe("app/routes/home.css");
     expect(resolveImport("./home.css?url", "app/routes/home.tsx", exists)).toBe("app/routes/home.css");
+    expect(resolveImport("../../self-host/compose.yaml?raw", "app/routes/home.tsx", (file: string) => file === "self-host/compose.yaml")).toBe("self-host/compose.yaml");
     expect(resolveImport("react", "app/routes/home.tsx", exists)).toBeNull();
     expect(resolveImport("./+types/home", "app/routes/home.tsx", exists)).toBeNull();
   });
