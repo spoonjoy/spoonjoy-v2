@@ -1647,6 +1647,7 @@ describe("Journeys workflow", () => {
       "Put the sample cover images in QA's photo bucket",
       "Start QA Worker tail",
       "Seed the QA kitchen",
+      "Run test suite",
       "Rotate persona passwords",
       "Clean up disposable QA data",
       "Delete this run's QA stack",

@@ -56,8 +56,7 @@ async function queryRunDatabase(sql: string): Promise<string> {
   const { stdout } = await execFileAsync(
     "pnpm",
     ["exec", "wrangler", "d1", "execute", "DB", "--remote", "--env", "qa", "--json", "--command", sql],
-    // Counted with the run's other Cloudflare requests (scripts/count-cloudflare-requests.mjs).
-    { env: { ...process.env, NODE_OPTIONS: process.env.SPOONJOY_CF_REQUEST_COUNTER ?? "" }, maxBuffer: 1024 * 1024 },
+    { maxBuffer: 1024 * 1024 },
   );
   return stdout;
 }
