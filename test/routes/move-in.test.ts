@@ -13,6 +13,12 @@ vi.mock("~/domains/move-in", async (importOriginal) => {
       runFails.with ? Promise.reject(runFails.with) : real.runForAWhile(...args),
   };
 });
+// Prisma on D1 in the Worker; here, the tests' own SQLite, the file the D1 stand-in opens too.
+vi.mock("~/lib/db.server", async (importOriginal) => {
+  const real = await importOriginal<typeof import("~/lib/db.server")>();
+  // db is assigned once the local database opens, so it is read through, not copied.
+  return { ...real, get db() { return real.db; }, getDb: vi.fn(() => real.getLocalDb()) };
+});
 vi.mock("~/lib/analytics-server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("~/lib/analytics-server")>()),
   captureException: async (_config: unknown, input: { error: unknown; distinctId: string; route?: string }) => void captured.push(input),
@@ -81,13 +87,13 @@ async function load(url: string, { as = ownerId, flags }: { as?: string; flags?:
   } as never);
 }
 
-async function post(fields: Record<string, string | UndiciFile>, { as = ownerId, headers = {} }: { as?: string; headers?: Record<string, string> } = {}) {
+async function post(fields: Record<string, string | UndiciFile>, { as = ownerId, headers = {}, flags }: { as?: string; headers?: Record<string, string>; flags?: string } = {}) {
   const body = new UndiciFormData();
   for (const [name, value] of Object.entries(fields)) body.append(name, value);
   return action({
     request: new UndiciRequest("http://localhost/move-in", { method: "POST", headers: { cookie: await cookie(as), ...headers }, body }) as unknown as Request,
     params: {},
-    context: context(),
+    context: context(flags),
   } as never) as Promise<unknown>;
 }
 
@@ -148,6 +154,21 @@ describe("the Move in page", () => {
     expect(await db.recipe.count({ where: { chefId: ownerId } })).toBe(3);
     // Only the moved-in cover is left in storage: the backup is gone.
     expect(Object.keys(photos.objects)).toEqual([expect.stringMatching(/^covers\/import\/movein-/)]);
+  });
+
+  it("puts the backup's tags, categories and tools on the recipes for a cook with organizers, and counts them", async () => {
+    const flags = "move_in,organizers";
+    const location = ((await post({ app: "mealie", backup: backup() }, { flags })) as Response).headers.get("Location") as string;
+    await Promise.all(waiting);
+
+    const { move } = await load(location, { flags });
+    expect(move?.organizers).toEqual({ tags: 1, categories: 1, tools: 1 });
+    expect(move?.notes.some((note) => note.message.includes("stayed in the backup"))).toBe(false);
+    const pancakes = await (db as NonNullable<typeof db>).recipe.findFirstOrThrow({
+      where: { chefId: ownerId, title: "Pancakes" },
+      select: { organizers: { select: { organizer: { select: { kind: true, name: true } } } } },
+    });
+    expect(pancakes.organizers.map(({ organizer }) => `${organizer.kind} ${organizer.name}`).sort()).toEqual(["category Dinner", "tag Quick"]);
   });
 
   it("counts a photo already here as in when the same backup moves in again", async () => {

@@ -22,6 +22,7 @@ import {
   FINISHED,
   MOVE_IN_ERROR_MESSAGES,
   MOVE_IN_UPLOAD_MAX_BYTES,
+  moveInEnv,
   moveInPorts,
   nudgeMoveIn,
   readMoveInProgress,
@@ -55,10 +56,11 @@ async function signedInWithFlag(request: Request, context: Route.LoaderArgs["con
   const env = getCloudflareEnv(context);
   const userId = await requireUserId(request, "/login", env);
   if (!isFlagOn("move_in", env, userId)) throw new Response("Not found", { status: 404 });
-  if (!env?.DB || !env.PHOTOS) throw new Response("Move-in needs its database and photo storage, and this server has neither.", { status: 503 });
+  const moveIn = moveInEnv(env);
+  if (!env || !moveIn) throw new Response("Move-in needs its database and photo storage, and this server has neither.", { status: 503 });
   // The jobs port is always there and only refuses on enqueue, so without a queue the page runs the move-in itself.
   const jobs = env.JOBS ? cloudflarePlatform(env).jobs : null;
-  return { userId, env: { DB: env.DB, PHOTOS: env.PHOTOS } as unknown as MoveInEnv, workerEnv: env, jobs };
+  return { userId, env: moveIn, workerEnv: env, jobs };
 }
 
 /** Reports a move-in the page couldn't run or queue; the next poll tries again. */
@@ -88,6 +90,8 @@ export interface MoveInView {
   recipes: { found: number; done: number; created: number; already: number; updated: number; unchanged: number; skipped: number; failed: number };
   /** Photos found in the backup, and how many of those are on their recipes now. */
   photos: { found: number; in: number };
+  /** The tags, categories and tools that came over with the recipes: none for a cook without organizers. */
+  organizers: { tags: number; categories: number; tools: number };
   failure: string | null;
   notes: Array<{ seq: number; level: "info" | "warn" | "error"; message: string }>;
   /** Recipes that got a number because the cook already had one by that name. */
@@ -98,6 +102,12 @@ export interface MoveInView {
   runsOnServer: boolean;
   /** "About 4 minutes left", from the rate so far; null until there is enough to go on. */
   timeLeft: string | null;
+}
+
+/** How many of the backup's tags, categories or tools came over: those found, less those left in the backup. */
+function cameOver(progress: MoveInProgress, entity: "tags" | "categories" | "tools"): number {
+  const counts = progress.counts[entity];
+  return counts ? counts.found - counts.skipped : 0;
 }
 
 function view(progress: MoveInProgress, runsOnServer: boolean, now: Date): MoveInView {
@@ -125,6 +135,7 @@ function view(progress: MoveInProgress, runsOnServer: boolean, now: Date): MoveI
       failed: recipes.failed,
     },
     photos: { found: photos.found, in: photos.created + photos.unchanged },
+    organizers: { tags: cameOver(progress, "tags"), categories: cameOver(progress, "categories"), tools: cameOver(progress, "tools") },
     failure,
     notes: progress.events.flatMap((event) =>
       (event.level === "info" && event.kind !== "item-kept") || event.kind === "job-failed" ? [] : [{ seq: event.seq, level: event.level, message: event.message }]),
@@ -290,12 +301,15 @@ function Progress({ move }: { move: MoveInView }) {
   );
 }
 
+const ORGANIZER_ROWS = [["Tags", "tags"], ["Categories", "categories"], ["Tools", "tools"]] as const;
+
 function Finished({ move }: { move: MoveInView }) {
   const { created, already, updated } = move.recipes;
   // When nothing moved or changed, counts of 0 recipes and every photo would read as if something had.
   const moved = created > 0 || updated > 0;
   const items = [
     ...(moved ? [{ term: "Recipes moved in", details: String(created) }, { term: "Photos", details: `${move.photos.in} of ${move.photos.found}` }] : []),
+    ...(moved ? ORGANIZER_ROWS.filter(([, kind]) => move.organizers[kind]).map(([term, kind]) => ({ term, details: String(move.organizers[kind]) })) : []),
     ...(move.recipes.skipped ? [{ term: "Left out", details: String(move.recipes.skipped) }] : []),
     ...(move.recipes.failed ? [{ term: "Didn't move in", details: String(move.recipes.failed) }] : []),
   ];
