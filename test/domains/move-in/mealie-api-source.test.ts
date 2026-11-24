@@ -166,7 +166,7 @@ describe("the other app's server as a move-in source", () => {
       "/api/organizers/categories": null,
       "/api/organizers/tools": { items: [null, { name: "Pan" }] },
     }, { status: { "/api/media/recipes/00000000-0000-4000-8000-0000000000c1/images/original.webp": 503 } });
-    const source = await mealieApiSource({ address: "http://recipes.example.com/", token: "t", fetch });
+    const source = await mealieApiSource({ address: "https://recipes.example.com/", token: "t", fetch });
     expect(source.version).toBe("v1.12.0");
     const kitchen = await source.openKitchen(KITCHEN);
     if (!kitchen) throw new Error("expected the kitchen");
@@ -202,9 +202,56 @@ describe("the other app's server as a move-in source", () => {
 
   it("fails a recipe the server no longer has, so the move-in passes it over", async () => {
     const { routes } = kitchenRoutes();
-    const { fetch } = server({ ...routes, [`/api/recipes/${(routes["/api/recipes"] as { items: Json[] }).items[3].slug}`]: undefined });
+    const { fetch } = server({ ...routes, "/api/recipes/no-photo": undefined });
     const kitchen = await (await mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).openKitchen(KITCHEN);
+    expect(kitchen?.entry(3)).toMatchObject({ sourceKey: "elsewhere" });
     await expect(kitchen?.draft(3)).rejects.toThrow("404");
+  });
+
+  it("asks for a new token when the server has no kitchen for it", async () => {
+    const { routes } = kitchenRoutes();
+    const { fetch } = server({ ...routes, "/api/users/self": { id: "user" } });
+    await expect(mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).rejects.toMatchObject({ code: "server-token" });
+  });
+
+  it("calls a sign-in page in front of the server a wrong address, not a wrong token", async () => {
+    const { fetch } = server(kitchenRoutes().routes, { status: { "/api/app/about": 403 } });
+    await expect(mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).rejects.toMatchObject({ code: "server-address" });
+  });
+
+  it("never follows a redirect, which could carry the token elsewhere", async () => {
+    const { routes } = kitchenRoutes();
+    const asked: RequestInit[] = [];
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      asked.push(init as RequestInit);
+      if (String(input).endsWith("/api/recipes/no-photo")) return new Response(null, { status: 302, headers: { location: "https://elsewhere.example.com/" } });
+      return server(routes).fetch(input, init);
+    };
+    const kitchen = await (await mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).openKitchen(KITCHEN);
+    await expect(kitchen?.draft(3)).rejects.toThrow("302");
+    expect(asked.every((init) => init.redirect === "manual" && init.signal instanceof AbortSignal)).toBe(true);
+  });
+
+  it("gives up on an answer too large to be a recipe or its photo", async () => {
+    const { routes } = kitchenRoutes();
+    const huge = new Uint8Array(21 * 1024 * 1024);
+    const { fetch } = server({ ...routes, "/api/recipes/no-photo": huge, [`/api/media/recipes/${(routes["/api/recipes"] as { items: Json[] }).items[0].id}/images/original.webp`]: huge });
+    const kitchen = await (await mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).openKitchen(KITCHEN);
+    if (!kitchen) throw new Error("expected the kitchen");
+    await expect(kitchen.draft(3)).rejects.toThrow("larger than");
+    const last = (routes["/api/recipes"] as { items: Json[] }).items[0];
+    await expect(kitchen.readPhoto(apiRecipeDraft({ id: last.id, image: "x" }))).rejects.toThrow("larger than 20 MB");
+  });
+
+  it("calls an answer cut off partway an outage", async () => {
+    const { routes } = kitchenRoutes();
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (!String(input).includes("/api/recipes/")) return server(routes).fetch(input, init);
+      const body = new ReadableStream({ start: (controller) => controller.error(new TypeError("network connection lost")) });
+      return new Response(body);
+    };
+    const kitchen = await (await mealieApiSource({ address: "https://recipes.example.com", token: "t", fetch })).openKitchen(KITCHEN);
+    await expect(kitchen?.draft(0)).rejects.toBeInstanceOf(SourceUnavailableError);
   });
 
   it("stops the move-in with the fix-it message when the server refuses the token", async () => {
@@ -231,6 +278,8 @@ describe("the other app's server as a move-in source", () => {
   it("stops with the fix-it message when the address isn't one it can reach", async () => {
     await expect(mealieApiSource({ address: "not a server", token: "t", fetch: server({}).fetch })).rejects.toMatchObject({ code: "server-address" });
     await expect(mealieApiSource({ address: "ftp://recipes.example.com", token: "t", fetch: server({}).fetch })).rejects.toMatchObject({ code: "server-address" });
+    // Plain http would carry the token across the internet in the clear.
+    await expect(mealieApiSource({ address: "http://recipes.example.com", token: "t", fetch: server(kitchenRoutes().routes).fetch })).rejects.toMatchObject({ code: "server-address" });
     // A server that answers, but isn't the recipe app.
     await expect(mealieApiSource({ address: "https://example.com", token: "t", fetch: server({ "/api/app/about": { name: "a blog" } }).fetch })).rejects.toMatchObject({ code: "server-address" });
     const page: typeof globalThis.fetch = async () => new Response("<html>a blog</html>");

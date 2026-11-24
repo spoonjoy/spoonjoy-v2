@@ -102,6 +102,11 @@ export interface MoveInPorts {
      * token, or null.
      */
     claim(jobId: string, at: Date): Promise<string | null>;
+    /**
+     * Takes back the attempt this run's claim counted. A run that found the source out of reach did nothing wrong, so
+     * it never brings a recipe nearer to being passed over; a job whose source stays away a day is stopped as expired.
+     */
+    forgiveAttempt(jobId: string): Promise<void>;
     /** Lets the job go, if this run still holds it, so the next run can take it at once. */
     release(jobId: string, token: string): Promise<void>;
   };
@@ -384,6 +389,7 @@ export async function runNextChunk(
     if (job.phase === "inspect") await inspect(run, opened);
     else await recipes(run, opened, chunkSize, cache);
   } catch (error) {
+    if (error instanceof SourceUnavailableError) await store.forgiveAttempt(job.id);
     if (!(error instanceof MoveInError)) throw error;
     await fail(run, error.code);
   }
