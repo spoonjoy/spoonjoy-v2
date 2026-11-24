@@ -213,6 +213,40 @@ test.describe("Households", () => {
       await verifyAfterReload(async () => {
         await expect(page.getByRole("heading", { level: 1, name: "Groceries", exact: true })).toBeVisible();
       });
+
+      // The owner opens the household's meal plan from Shared and plans a night out; the joiner, a member, sees it on
+      // their next load and can plan meals too.
+      await page.goto(householdPath);
+      await waitForHydration(page);
+      await page.getByRole("link", { name: /Meal plan/ }).click();
+      // Wait for the plan's own URL: the household's name is on the household page too.
+      await expect(page).toHaveURL(pathUrl(`${householdPath}/plan`));
+      await expect(page.getByText(name, { exact: true })).toBeVisible();
+      const planPath = `${new URL(page.url()).pathname}?week=2027-03-01`;
+      await page.goto(planPath);
+      await waitForHydration(page);
+      const tuesday = page.getByRole("region", { name: "Tuesday, Mar 2", exact: true });
+      // An empty day is planned from its own button; the header's Add shows once it has meals.
+      await expect(tuesday.getByRole("button", { name: "Add to Tuesday", exact: true })).toHaveCount(0);
+      await tuesday.getByRole("button", { name: "Plan a meal for Tuesday", exact: true }).click();
+      const sheet = page.getByRole("dialog", { name: "Add to Tuesday, Mar 2", exact: true });
+      await sheet.getByRole("radio", { name: "Note", exact: true }).click();
+      await sheet.getByRole("textbox", { name: "Title", exact: true }).fill("Pizza night");
+      await sheet.getByRole("button", { name: "Add note", exact: true }).click();
+      await expect(sheet).toBeHidden();
+      await expect(tuesday.getByText("Pizza night", { exact: true })).toBeVisible();
+      await verifyAfterReload(async () => {
+        await expect(page.getByRole("region", { name: "Tuesday, Mar 2", exact: true }).getByText("Pizza night", { exact: true })).toBeVisible();
+      });
+      await expectAccessible();
+      await attachScreenshot(testInfo, page, "owner-household-plan");
+      await joinerPage.goto(planPath);
+      await waitForHydration(joinerPage);
+      const joinerTuesday = joinerPage.getByRole("region", { name: "Tuesday, Mar 2", exact: true });
+      await expect(joinerTuesday.getByText("Pizza night", { exact: true })).toBeVisible();
+      await expect(joinerTuesday.getByRole("button", { name: "Add to Tuesday", exact: true })).toBeVisible();
+      await attachScreenshot(testInfo, joinerPage, "joiner-household-plan");
+
       await page.goto(householdPath);
       await waitForHydration(page);
       await joinerPage.goto(householdPath);
@@ -240,6 +274,18 @@ test.describe("Households", () => {
       await expect(joinerPage.getByText("You can see this list. An owner can let you add to it.", { exact: true })).toBeVisible();
       await expect(joinerPage.getByRole("button", { name: "Delete list", exact: true })).toHaveCount(0);
       await attachScreenshot(testInfo, joinerPage, "viewer-shared-list");
+
+      // View-only, the joiner reads the household's plan with no Add and no Remove, and can't post a meal to it.
+      await joinerPage.goto(planPath);
+      await waitForHydration(joinerPage);
+      await expect(joinerPage.getByText("View-only: you can read this plan.", { exact: true })).toBeVisible();
+      await expect(joinerTuesday.getByText("Pizza night", { exact: true })).toBeVisible();
+      await expect(joinerPage.getByRole("button", { name: /^Add to / })).toHaveCount(0);
+      await expect(joinerPage.getByRole("button", { name: /^Plan a meal for / })).toHaveCount(0);
+      await expect(joinerPage.getByRole("button", { name: /^Remove / })).toHaveCount(0);
+      await attachScreenshot(testInfo, joinerPage, "viewer-household-plan");
+      const refusedPlan = await joinerPage.request.post(planPath, { form: { intent: "add-note", date: "2027-03-03", mealType: "dinner", title: "Sneaky" } });
+      expect(refusedPlan.status()).toBe(403);
 
       // The owner removes the joiner, after confirming, and the household is gone from the joiner's list.
       await page.getByRole("button", { name: `Actions for ${joiner.username}`, exact: true }).click();

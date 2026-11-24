@@ -1,6 +1,6 @@
 import type { Route } from "./+types/households.$id";
 import { useEffect, useState } from "react";
-import { Ellipsis, ListChecks } from "lucide-react";
+import { CalendarDays, Ellipsis, ListChecks } from "lucide-react";
 import { Form as RouterForm, data, redirect, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Avatar } from "~/components/ouro/avatar/avatar";
@@ -277,6 +277,13 @@ export default function HouseholdPage() {
               title="Shopping lists"
               description="Lists everyone in the household shops from"
               media={<ListChecks aria-hidden="true" />}
+              mediaSize="icon"
+            />
+            <Item
+              href={`/households/${household.id}/plan`}
+              title="Meal plan"
+              description="The week's meals everyone in the household cooks from"
+              media={<CalendarDays aria-hidden="true" />}
               mediaSize="icon"
             />
           </ItemGroup>

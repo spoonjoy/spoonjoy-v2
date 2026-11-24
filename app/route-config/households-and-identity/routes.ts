@@ -7,6 +7,7 @@ export default [
   route("households/:id", "routes/households.$id.tsx"),
   // A household's shared shopping lists (app/domains/pantry-and-shopping).
   route("households/:id/lists", "routes/households.$id.lists._index.tsx"),
+  route("households/:id/plan", "routes/households.$id.plan.tsx"),
   route("households/:id/lists/:listId", "routes/households.$id.lists.$listId.tsx"),
   // Sign-in with a self-hosted server's own OpenID Connect provider.
   route("auth/oidc", "routes/auth.oidc.tsx"),

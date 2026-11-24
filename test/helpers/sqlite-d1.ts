@@ -3,8 +3,8 @@ import { workerDbPath } from "../support/worker-db";
 
 // A fake D1 binding over the real unit-test database (prisma/test.db), so raw D1 read
 // paths run their exact SQL against the real schema without Prisma. It implements the
-// slice of D1 the app uses: prepare/bind, first/all/run, and batch. Every executed
-// statement is recorded so tests can assert round trips and that Prisma was not used.
+// slice of D1 the app uses: prepare/bind, first/all/run/raw, and batch, so Prisma's D1 adapter runs on it too. Every
+// executed statement is recorded so tests can assert round trips and that Prisma was not used.
 
 export interface RecordedStatement {
   sql: string;
@@ -18,6 +18,8 @@ interface FakeStatement {
   first<T>(): Promise<T | null>;
   all<T>(): Promise<{ results: T[]; success: true; meta: Record<string, unknown> }>;
   run(): Promise<{ results: []; success: true; meta: { changes: number } }>;
+  /** Rows as arrays, led by the column names when asked: what Prisma's D1 adapter reads a query's answer with. */
+  raw(options?: { columnNames?: boolean }): Promise<unknown[][]>;
 }
 
 export interface SqliteD1 {
@@ -27,7 +29,7 @@ export interface SqliteD1 {
   };
   /** Every statement run, in order. */
   statements: RecordedStatement[];
-  /** Number of round trips: one per `first`/`all`/`run`, one per `batch`. */
+  /** Number of round trips: one per `first`/`all`/`run`/`raw`, one per `batch`. */
   roundTrips: () => number;
   close(): void;
 }
@@ -70,6 +72,17 @@ export function sqliteD1(source: string | Database.Database = workerDbPath()): S
         const changes = sqlite.prepare(sql).run(...params).changes;
         statements.push({ sql, params });
         return { results: [] as [], success: true as const, meta: { changes } };
+      },
+      raw: async (options?: { columnNames?: boolean }) => {
+        roundTrips += 1;
+        statements.push({ sql, params });
+        const prepared = sqlite.prepare(sql);
+        if (!prepared.reader) {
+          prepared.run(...params);
+          return options?.columnNames ? [[]] : [];
+        }
+        const rows = prepared.raw(true).all(...params) as unknown[][];
+        return options?.columnNames ? [prepared.columns().map((column) => column.name), ...rows] : rows;
       },
     };
     return statement;
