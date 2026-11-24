@@ -25,6 +25,8 @@ test.describe("Account mail from a self-hosted server through its SMTP server", 
     await fillSecret(page.getByLabel("Confirm Password").first(), cook.password);
     await page.getByRole("button", { name: /sign up/i }).first().click();
     await expect(page).toHaveURL("/");
+    // Leave the signed-in page first, so none of its requests go out after the cookies are gone and come back 401.
+    await page.goto("about:blank");
     await page.context().clearCookies();
 
     await page.goto("/forgot-password");
