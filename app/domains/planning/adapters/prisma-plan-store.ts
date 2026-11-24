@@ -1,5 +1,6 @@
 // The PlanStore on Prisma: D1 in the Worker, SQLite in tests. Type-only Prisma import, so this file is safe in any bundle.
 import type { PrismaClient } from "@prisma/client";
+import { readableRecipeWhere } from "~/domains/kitchen";
 import type { PlanStore } from "../application/plan";
 import type { PlanEntry } from "../model/plan-entry";
 import type { MealType } from "../model/meal-type";
@@ -55,9 +56,21 @@ export function prismaPlanStore(db: PlanDb): PlanStore {
       });
       return rows.map(toEntry);
     },
-    async plannableRecipeTitle(_ownerId, recipeId) {
-      const recipe = await db.recipe.findFirst({ where: { id: recipeId, deletedAt: null }, select: { title: true } });
+    async plannableRecipeTitle(ownerId, recipeId) {
+      const recipe = await db.recipe.findFirst({ where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: ownerId }) }, select: { title: true } });
       return recipe?.title ?? null;
+    },
+    async ownAndSavedRecipes(ownerId, limit) {
+      return db.recipe.findMany({
+        where: {
+          deletedAt: null,
+          ...readableRecipeWhere({ id: ownerId }),
+          AND: [{ OR: [{ chefId: ownerId }, { cookbooks: { some: { cookbook: { authorId: ownerId } } } }] }],
+        },
+        select: { id: true, title: true },
+        orderBy: [{ title: "asc" }, { id: "asc" }],
+        take: limit,
+      });
     },
     async findEntry(entryId) {
       const row = await db.planEntry.findUnique({ where: { id: entryId }, select: ENTRY_SELECT });

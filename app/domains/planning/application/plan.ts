@@ -13,8 +13,10 @@ export interface PlanStore {
   planFor(ownerId: string): Promise<PlanSettings>;
   /** The plan's live entries from `from` to `to`, both days included. */
   entriesBetween(planId: string, from: LocalDate, to: LocalDate): Promise<PlanEntry[]>;
-  /** The title of a recipe the cook may plan, or null when there is none. */
+  /** The title of a recipe the cook may plan (one they can read that isn't deleted), or null when there is none. */
   plannableRecipeTitle(ownerId: string, recipeId: string): Promise<string | null>;
+  /** The recipes the cook may plan that are theirs or saved in their cookbooks, by title, at most `limit`. */
+  ownAndSavedRecipes(ownerId: string, limit: number): Promise<PlannableRecipe[]>;
   /** The entry with this id in any plan, removed ones included. */
   findEntry(entryId: string): Promise<StoredEntry | null>;
   insertEntry(planId: string, addedById: string, entry: PlanEntry): Promise<void>;
@@ -25,6 +27,8 @@ export interface PlanStore {
 }
 
 export type EntryPlacement = { id: string; date: LocalDate; mealType: MealType; position: number };
+
+export type PlannableRecipe = { id: string; title: string };
 
 export type PlanWeek = { today: LocalDate; start: LocalDate; firstDayOfWeek: number; timeZone: string; days: PlanDay[] };
 
@@ -92,4 +96,24 @@ export async function moveEntry(
   const placements = ordered.map((entry, position) => ({ id: entry.id, date, mealType, position }));
   await store.placeEntries(plan.id, placements);
   return { ok: true, value: { ...found.entry, date, mealType, position: index } };
+}
+
+/** How many recipes the plan page offers to pick from. */
+export const PLANNABLE_RECIPE_LIMIT = 500;
+
+/**
+ * The recipes the plan page offers: the cook's own and those saved in their cookbooks, by title. A recipe asked for by
+ * link (`?recipe=`) goes first when the cook may plan it, and is ignored when they may not.
+ */
+export async function plannableRecipes(
+  store: PlanStore,
+  ownerId: string,
+  chosenId: string | null,
+): Promise<{ recipes: PlannableRecipe[]; chosenRecipeId: string | null }> {
+  const [listed, chosenTitle] = await Promise.all([
+    store.ownAndSavedRecipes(ownerId, PLANNABLE_RECIPE_LIMIT),
+    chosenId ? store.plannableRecipeTitle(ownerId, chosenId) : null,
+  ]);
+  if (!chosenId || chosenTitle === null) return { recipes: listed, chosenRecipeId: null };
+  return { recipes: [{ id: chosenId, title: chosenTitle }, ...listed.filter((recipe) => recipe.id !== chosenId)], chosenRecipeId: chosenId };
 }

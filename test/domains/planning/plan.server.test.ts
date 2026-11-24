@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { getLocalDb } from "~/lib/db.server";
-import { addEntry, getWeek, moveEntry, prismaPlanStore, removeEntry, todayIn, type PlanStore } from "~/domains/planning";
+import { addEntry, getWeek, moveEntry, plannableRecipes, prismaPlanStore, removeEntry, todayIn, type PlanStore } from "~/domains/planning";
 import { cleanupDatabase } from "../../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../../utils";
 
@@ -84,6 +84,62 @@ describe("planning a week, stored", () => {
     expect(await addEntry(store, chef.id, "e2", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: "missing" })).toEqual({ ok: false, error: "That recipe isn't available to plan." });
     expect(await addEntry(store, chef.id, "e3", { kind: "note", date: "nope", mealType: "dinner", title: "x" })).toEqual({ ok: false, error: "Choose a day for this meal." });
     expect(await db.planEntry.count()).toBe(0);
+  });
+
+  it("refuses another cook's private or household recipe, and plans their public one", async () => {
+    const chef = await cook();
+    const friend = await cook();
+    const hidden = await db.recipe.create({ data: { ...createTestRecipe(friend.id), visibility: "private" } });
+    const shared = await db.recipe.create({ data: { ...createTestRecipe(friend.id), visibility: "household" } });
+    const open = await db.recipe.create({ data: { ...createTestRecipe(friend.id), title: "Open Soup", visibility: "public" } });
+    const refused = { ok: false, error: "That recipe isn't available to plan." };
+    expect(await addEntry(store, chef.id, "e1", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: hidden.id })).toEqual(refused);
+    expect(await addEntry(store, chef.id, "e2", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: shared.id })).toEqual(refused);
+    expect(await addEntry(store, chef.id, "e3", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: open.id })).toMatchObject({ ok: true, value: { recipeTitle: "Open Soup" } });
+    const own = await db.recipe.create({ data: { ...createTestRecipe(chef.id), title: "My Secret Stew", visibility: "private" } });
+    expect(await addEntry(store, chef.id, "e4", { kind: "recipe", date: "2026-11-24", mealType: "dinner", recipeId: own.id })).toMatchObject({ ok: true, value: { recipeTitle: "My Secret Stew" } });
+  });
+
+  describe("the recipes a cook can plan", () => {
+    it("lists their own recipes and the readable ones saved in their cookbooks, by title, once each", async () => {
+      const chef = await cook();
+      const friend = await cook();
+      const mine = await db.recipe.create({ data: { ...createTestRecipe(chef.id), title: "Zucchini Bake", visibility: "private" } });
+      const saved = await db.recipe.create({ data: { ...createTestRecipe(friend.id), title: "Apple Crumble", visibility: "public" } });
+      const hidden = await db.recipe.create({ data: { ...createTestRecipe(friend.id), title: "Hidden Hash", visibility: "private" } });
+      const gone = await db.recipe.create({ data: { ...createTestRecipe(friend.id), title: "Gone Gumbo", visibility: "public", deletedAt: new Date() } });
+      await db.recipe.create({ data: { ...createTestRecipe(friend.id), title: "Not Saved", visibility: "public" } });
+      const books = await Promise.all(["Weeknights", "Sweets"].map((title) => db.cookbook.create({ data: { title, authorId: chef.id } })));
+      const theirs = await db.cookbook.create({ data: { title: "Theirs", authorId: friend.id } });
+      const save = (cookbookId: string, recipeId: string, addedById: string) => db.recipeInCookbook.create({ data: { cookbookId, recipeId, addedById } });
+      await save(books[0]!.id, saved.id, chef.id);
+      await save(books[1]!.id, saved.id, chef.id);
+      await save(books[0]!.id, mine.id, chef.id);
+      await save(books[0]!.id, hidden.id, chef.id);
+      await save(books[0]!.id, gone.id, chef.id);
+      await save(theirs.id, (await db.recipe.create({ data: { ...createTestRecipe(friend.id), title: "Their Pick", visibility: "public" } })).id, friend.id);
+
+      expect(await plannableRecipes(store, chef.id, null)).toEqual({
+        recipes: [{ id: saved.id, title: "Apple Crumble" }, { id: mine.id, title: "Zucchini Bake" }],
+        chosenRecipeId: null,
+      });
+    });
+
+    it("puts a recipe asked for by link first when the cook can read it, and ignores it when they can't", async () => {
+      const chef = await cook();
+      const friend = await cook();
+      const mine = await db.recipe.create({ data: { ...createTestRecipe(chef.id), title: "Bean Stew" } });
+      const open = await db.recipe.create({ data: { ...createTestRecipe(friend.id), title: "Open Soup", visibility: "public" } });
+      const hidden = await db.recipe.create({ data: { ...createTestRecipe(friend.id), title: "Hidden Hash", visibility: "private" } });
+
+      expect(await plannableRecipes(store, chef.id, open.id)).toEqual({
+        recipes: [{ id: open.id, title: "Open Soup" }, { id: mine.id, title: "Bean Stew" }],
+        chosenRecipeId: open.id,
+      });
+      expect(await plannableRecipes(store, chef.id, mine.id)).toEqual({ recipes: [{ id: mine.id, title: "Bean Stew" }], chosenRecipeId: mine.id });
+      expect(await plannableRecipes(store, chef.id, hidden.id)).toEqual({ recipes: [{ id: mine.id, title: "Bean Stew" }], chosenRecipeId: null });
+      expect(await plannableRecipes(store, chef.id, "missing")).toEqual({ recipes: [{ id: mine.id, title: "Bean Stew" }], chosenRecipeId: null });
+    });
   });
 
   it("removes an entry from its own plan only, and a removed entry stays gone", async () => {

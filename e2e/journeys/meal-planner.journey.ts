@@ -8,7 +8,7 @@
 import { test, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
 import { pathUrl, waitForHydration } from "./support/navigation";
-import { scratchStorageStateForProject } from "./support/personas";
+import { personaStorageStatePath, scratchStorageStateForProject } from "./support/personas";
 
 const WEEK = "2027-03-01";
 const SALMON = { id: "qa-kitchen-recipe-salmon", title: "Miso Glazed Salmon" };
@@ -73,6 +73,22 @@ test.describe("Meal planner", () => {
     await verifyAfterReload(async () => {
       await expect(thursday.getByText("Nothing planned yet.", { exact: true })).toBeVisible();
       await expect(salmon).toBeVisible();
+    });
+  });
+
+  test.describe("as the seeded chef", () => {
+    test.use({ storageState: personaStorageStatePath("chef") });
+
+    test("the recipe picker offers the chef's own recipes and the ones saved in their cookbooks", async ({ page, expectAccessible }) => {
+      await page.goto(`/plan?week=${WEEK}`);
+      await waitForHydration(page);
+      const picker = recipeForm(page).getByRole("combobox", { name: "Recipe", exact: true });
+      // Lemon Herb Rice is the chef's own; Saffron Risotto is the friend's, saved in the chef's Weeknight Dinners.
+      await expect(picker.getByRole("option", { name: "Lemon Herb Rice", exact: true })).toBeAttached();
+      await expect(picker.getByRole("option", { name: "Saffron Risotto", exact: true })).toBeAttached();
+      // The friend's salmon is public but not saved, so it is offered only from its own page's link.
+      await expect(picker.getByRole("option", { name: "Miso Glazed Salmon", exact: true })).toHaveCount(0);
+      await expectAccessible();
     });
   });
 });

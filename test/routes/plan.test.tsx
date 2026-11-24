@@ -118,6 +118,19 @@ describe("meal plan route", () => {
       expect((await load("/plan")).chosenRecipeId).toBeNull();
     });
 
+    it("offers recipes the cook saved to a cookbook, and never shows another cook's private recipe asked for by link", async () => {
+      const other = await db.user.create({ data: createTestUser() });
+      await db.recipe.create({ data: { ...createTestRecipe(chefId), title: "Apple pie" } });
+      const saved = await db.recipe.create({ data: { ...createTestRecipe(other.id), title: "Borscht", visibility: "public" } });
+      const hidden = await db.recipe.create({ data: { ...createTestRecipe(other.id), title: "Secret Stew", visibility: "private" } });
+      const book = await db.cookbook.create({ data: { title: "Soups", authorId: chefId } });
+      await db.recipeInCookbook.create({ data: { cookbookId: book.id, recipeId: saved.id, addedById: chefId } });
+
+      const result = await load(`/plan?recipe=${hidden.id}`);
+      expect(result.recipes.map((recipe) => recipe.title)).toEqual(["Apple pie", "Borscht"]);
+      expect(result.chosenRecipeId).toBeNull();
+    });
+
     it("doesn't list a recipe twice when the cook opens the page to plan their own", async () => {
       const pie = await db.recipe.create({ data: { ...createTestRecipe(chefId), title: "Apple pie" } });
       const result = await load(`/plan?recipe=${pie.id}`);
