@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
-import SelfHost, { IMAGE_PUBLIC, START, UPDATE, meta } from "~/routes/self-host";
+import SelfHost, { COMPOSE, IMAGE_PUBLIC, START, UPDATE, meta } from "~/routes/self-host";
 
 async function renderPage() {
   const Stub = createTestRoutesStub([{ path: "/self-host", Component: SelfHost }]);
@@ -22,8 +22,8 @@ describe("/self-host", () => {
     await renderPage();
     const start = screen.getByRole("region", { name: "Start it" });
     expect(within(start).getByText("compose.yaml", { selector: "figcaption *, figcaption" })).toBeInTheDocument();
-    const compose = readFileSync("self-host/compose.yaml", "utf8");
-    expect(start.textContent).toContain(compose.trim().split("\n")[0]);
+    expect(COMPOSE).toBe(readFileSync("self-host/compose.yaml", "utf8"));
+    expect(start.textContent).toContain("image: ${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}");
     expect(start.textContent).toContain("ghcr.io/spoonjoy/spoonjoy");
     expect(within(start).getByText(START)).toBeInTheDocument();
     expect(START).toBe("docker compose up -d");
