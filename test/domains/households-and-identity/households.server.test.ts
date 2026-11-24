@@ -216,7 +216,7 @@ describe("invites by email", () => {
   it("turns the invite off again when the mail can't be sent, and says so", async () => {
     const id = await homeOf("ann");
     const made = await emailInvite(store, mailbox(true).email, { householdId: id, userId: "ann", input: { email: "cal@example.com" }, now, joinUrl });
-    expect(made).toEqual({ ok: false, error: "The invite email couldn't be sent. Make an invite link instead.", unavailable: true });
+    expect(made).toEqual({ ok: false, error: "The mail service turned down the invite to cal@example.com, so it is turned off. Make an invite link and send it to them yourself.", unavailable: true });
     const [invite] = (await getHousehold(store, id, "ann"))!.invites;
     expect(invite?.revokedAt).toEqual(now);
   });

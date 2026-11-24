@@ -226,10 +226,10 @@ describe("/households/:id", () => {
     expect(statusOf(await send("ann", {}, refusing))).toBe(400);
     const noMail = await send("ann", { email: "cal@example.com" }, flagsOn);
     expect(statusOf(noMail)).toBe(503);
-    expect(payload(noMail)).toEqual({ error: "This server can't send email. Make an invite link instead." });
+    expect(payload(noMail)).toEqual({ error: "Email isn't set up on this Spoonjoy server. Make an invite link and send it to them yourself." });
     const bounced = await send("ann", { email: "cal@example.com" }, refusing);
     expect(statusOf(bounced)).toBe(503);
-    expect(payload(bounced)).toEqual({ error: "The invite email couldn't be sent. Make an invite link instead." });
+    expect(payload(bounced)).toEqual({ error: "The mail service turned down the invite to cal@example.com, so it is turned off. Make an invite link and send it to them yourself." });
     expect(payload(await call(householdLoader, `/households/${id}`, "ann", undefined, refusing)).household.emailInvites).toEqual([]);
   });
 

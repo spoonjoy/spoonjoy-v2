@@ -101,7 +101,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
   if (intent === "email-invite") {
     const env = context.cloudflare?.env as CloudflarePlatformEnv | undefined;
     if (!env || !canSendAccountEmail(env)) {
-      return data({ error: "This server can't send email. Make an invite link instead." }, { status: 503 });
+      return data({ error: "Email isn't set up on this Spoonjoy server. Make an invite link and send it to them yourself." }, { status: 503 });
     }
     const sent = await emailInvite(store, cloudflarePlatform(env).email, {
       householdId: params.id,
