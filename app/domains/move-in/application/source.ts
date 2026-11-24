@@ -31,7 +31,23 @@ export interface MoveInKitchen {
   readPhoto(draft: RecipeDraft): Promise<Uint8Array>;
 }
 
+/** How the report names where the kitchen is, so its notes read right for a backup and for a server alike. */
+export interface SourceWords {
+  /** Where things the move-in leaves behind stay: "in the backup". */
+  there: string;
+  /** What the cook does to try again: "Moving the same backup in again". */
+  again: string;
+}
+
 export interface MoveInSource {
+  /**
+   * The app the kitchen lives in, as its Source row records it. A backup of a kitchen and that kitchen's own server
+   * give the same app and the same keys, so moving in from either finds what the other brought.
+   */
+  kind: string;
+  /** The server's address, for a source read from one. */
+  serverUrl: string | null;
+  words: SourceWords;
   /** The other app's version, as the Source row records it. */
   version: string;
   /** The kitchen to bring when the cook hasn't chosen one: the one that's clearly theirs, or null to ask. */

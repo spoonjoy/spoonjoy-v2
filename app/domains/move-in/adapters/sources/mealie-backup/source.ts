@@ -27,8 +27,14 @@ function kitchenOf(backup: MealieBackup, key: string, name: string): MoveInKitch
   };
 }
 
+/** The app a backup's kitchen lives in, as its Source row records it. */
+export const MEALIE_SOURCE_KIND = "mealie-backup";
+
 export function mealieBackupSource(backup: MealieBackup): MoveInSource {
   return {
+    kind: MEALIE_SOURCE_KIND,
+    serverUrl: null,
+    words: { there: "in the backup", again: "Moving the same backup in again" },
     version: backup.database.version.label,
     chooseKitchen: async (email) => chooseGroup(backup.database, email),
     async openKitchen(key) {

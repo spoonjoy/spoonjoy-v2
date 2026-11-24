@@ -1,8 +1,11 @@
-// Starts a move-in from an uploaded backup: checks it is a backup this person can bring, keeps it
-// where it is never served, and queues the job that brings it in.
+// Starts a move-in, from an uploaded backup or from the other app's own server: checks it is a kitchen this person
+// can bring, keeps what the move-in needs to read it where it is never served, and queues the job that brings it in.
+import { SourceUnavailableError } from "../../application/source";
+import { mealieApiSource } from "../sources/mealie-api/source";
 import { openMealieBackup } from "../sources/mealie-backup/backup";
 import { chooseGroup } from "../sources/mealie-backup/database";
 import { MoveInError, type MoveInErrorCode } from "../../model/move-in-error";
+import { MOVE_IN_APPS } from "./apps";
 import { createMoveInJob } from "../storage/job-store.server";
 import { MOVE_IN_ARCHIVE_PREFIX, ownerEmail, r2RangeSource, type MoveInEnv } from "./move-in-ports.server";
 
@@ -12,8 +15,7 @@ import { MOVE_IN_ARCHIVE_PREFIX, ownerEmail, r2RangeSource, type MoveInEnv } fro
  */
 export const MOVE_IN_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
 
-/** The apps the form offers, by the value its choice sends, with the job kind each starts. */
-export const MOVE_IN_APPS = { mealie: { kind: "mealie-backup" } } as const;
+export { MOVE_IN_APPS } from "./apps";
 
 export type StartMoveInResult = { ok: true; jobId: string } | { ok: false; code: MoveInErrorCode };
 
@@ -52,6 +54,55 @@ export async function startMoveIn({ env, ownerId, app, file, now }: {
     return { ok: true, jobId };
   } catch (error) {
     await drop();
+    throw error;
+  }
+}
+
+/** What a move-in from a server keeps in storage while it runs: where the server is, and the cook's token for it. */
+export interface ServerConnection {
+  address: string;
+  token: string;
+}
+
+/**
+ * Starts a move-in from the other app's server: asks it, with the cook's token, for the kitchen it would bring, so a
+ * wrong address or token is answered at once with its fix-it message. The token is kept only in storage that is never
+ * served, and deleted with the job, like a backup.
+ */
+export async function startServerMoveIn({ env, ownerId, app, address, token, fetch, now }: {
+  env: MoveInEnv;
+  ownerId: string;
+  app: string;
+  address: string;
+  token: string;
+  fetch: typeof globalThis.fetch;
+  now: Date;
+}): Promise<StartMoveInResult> {
+  const chosen = MOVE_IN_APPS[app as keyof typeof MOVE_IN_APPS];
+  if (!chosen) return { ok: false, code: "unknown-app" };
+  if (!address.trim()) return { ok: false, code: "server-address" };
+  if (!token.trim()) return { ok: false, code: "no-token" };
+  let connection: ServerConnection;
+  let name: string;
+  try {
+    const source = await mealieApiSource({ address, token: token.trim(), fetch });
+    // A server source always has the token's kitchen; opening it reads its recipe list, as the move-in will.
+    await source.openKitchen((await source.chooseKitchen(null)) as string);
+    connection = { address: source.serverUrl as string, token: token.trim() };
+    name = new URL(connection.address).host;
+  } catch (error) {
+    if (error instanceof MoveInError) return { ok: false, code: error.code };
+    if (error instanceof SourceUnavailableError) return { ok: false, code: "server-unreachable" };
+    // Anything else the server answered, such as an error page where the recipe list should be, isn't a recipe server.
+    return { ok: false, code: "server-address" };
+  }
+  const archiveKey = `${MOVE_IN_ARCHIVE_PREFIX}${ownerId}/${crypto.randomUUID()}.json`;
+  await env.PHOTOS.put(archiveKey, new TextEncoder().encode(JSON.stringify(connection)));
+  try {
+    const jobId = await createMoveInJob(env.DB, { ownerId, kind: chosen.serverKind, archiveKey, archiveName: name, now });
+    return { ok: true, jobId };
+  } catch (error) {
+    await env.PHOTOS.delete(archiveKey).catch(() => undefined);
     throw error;
   }
 }

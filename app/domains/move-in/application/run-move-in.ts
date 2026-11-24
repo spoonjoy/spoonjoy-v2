@@ -8,7 +8,7 @@ import { openMealieBackup } from "../adapters/sources/mealie-backup/backup";
 import { mealieBackupSource } from "../adapters/sources/mealie-backup/source";
 import { MOVE_IN_ERROR_MESSAGES, MoveInError } from "../model/move-in-error";
 import type { RecipeDraft } from "../model/recipe-draft";
-import { SourceUnavailableError, type MoveInKitchen, type MoveInSource } from "./source";
+import { SourceUnavailableError, type MoveInKitchen, type MoveInSource, type SourceWords } from "./source";
 
 export type MoveInStatus = "queued" | "running" | "done" | "done-with-issues" | "failed";
 export type MoveInPhase = "inspect" | "recipes" | "done";
@@ -90,7 +90,7 @@ export interface MoveInPorts {
      * claim holds: LostClaimError otherwise, with nothing written. Resolves to how many jobs it changed (0 or 1).
      */
     updateJob(id: string, patch: Partial<MoveInJob>, token?: string, report?: MoveInReport): Promise<number>;
-    ensureSource(source: { ownerId: string; kind: string; instanceKey: string; label: string; sourceVersion: string }): Promise<string>;
+    ensureSource(source: { ownerId: string; kind: string; instanceKey: string; label: string; serverUrl: string | null; sourceVersion: string }): Promise<string>;
     /** The kitchen's key in the backup, as inspect chose it. */
     sourceInstanceKey(sourceId: string): Promise<string | null>;
     /** Whether the job has logged a warning or an error. */
@@ -182,9 +182,10 @@ async function inspect(run: Run, { source, kitchen }: Opened) {
   const { job, ports: { store } } = run;
   const sourceId = await store.ensureSource({
     ownerId: job.ownerId,
-    kind: job.kind,
+    kind: source.kind,
     instanceKey: kitchen.key,
     label: kitchen.name,
+    serverUrl: source.serverUrl,
     sourceVersion: source.version,
   });
   const counted = await kitchen.count();
@@ -204,7 +205,7 @@ async function inspect(run: Run, { source, kitchen }: Opened) {
     ],
     events: [
       event("phase-done", `Found ${plural(kitchen.size, "recipe")}, ${photos} with a photo, in ${kitchen.name}.`),
-      ...(left.length && !organizing ? [event("item-skipped", `Spoonjoy doesn't have tags, categories or tools yet, so ${left.join(", ")} stayed in the backup.`, { entity: "tags" })] : []),
+      ...(left.length && !organizing ? [event("item-skipped", `Spoonjoy doesn't have tags, categories or tools yet, so ${left.join(", ")} stayed ${source.words.there}.`, { entity: "tags" })] : []),
     ],
   };
   await store.updateJob(job.id, { status: "running", phase: "recipes", cursor: "0", sourceId, attempt: 0 }, run.token, report);
@@ -227,19 +228,19 @@ async function bringPhoto({ job, ports }: Run, kitchen: MoveInKitchen, draft: Re
 }
 
 /** Puts the recipe's tags, categories and tools on it, when inspect chose to bring them; if that fails, the recipe stays and says so. */
-async function bringOrganizers({ job, organizers }: Run, draft: RecipeDraft, recipeId: string, report: Report) {
+async function bringOrganizers({ job, organizers }: Run, words: SourceWords, draft: RecipeDraft, recipeId: string, report: Report) {
   const { tags, categories, tools } = draft;
   if (!organizers || !(tags.length || categories.length || tools.length)) return;
   try {
     await organizers.attach({ ownerId: job.ownerId, recipeId, sourceId: job.sourceId as string, jobId: job.id, tags, categories, tools });
   } catch (error) {
-    const message = `${draft.title} moved in without some of its tags, categories and tools. Moving the same backup in again adds them.`;
+    const message = `${draft.title} moved in without some of its tags, categories and tools. ${words.again} adds them.`;
     report.events.push(event("item-degraded", message, { entity: "recipes", sourceKey: draft.sourceKey, targetId: recipeId, detail: describeError(error) }));
   }
 }
 
 /** Brings one recipe, its photo and its organizers, and returns what to report; writes nothing to the job itself. */
-async function bringRecipe(run: Run, kitchen: MoveInKitchen, draft: RecipeDraft): Promise<Report> {
+async function bringRecipe(run: Run, { source, kitchen }: Opened, draft: RecipeDraft): Promise<Report> {
   const { job, ports } = run;
   const report: Report = { counts: [], events: [] };
   const at = { entity: "recipes", sourceKey: draft.sourceKey };
@@ -262,7 +263,7 @@ async function bringRecipe(run: Run, kitchen: MoveInKitchen, draft: RecipeDraft)
     const ours = result.outcome === "unchanged" && result.jobId === job.id;
     report.counts.push(["recipes", ours ? { created: 1 } : result.outcome === "updated" ? { updated: 1 } : { unchanged: 1 }]);
     // Adding only, so a recipe already here gets any it lacks and keeps the ones the cook gave it.
-    await bringOrganizers(run, draft, result.recipeId, report);
+    await bringOrganizers(run, source.words, draft, result.recipeId, report);
     if (!hasPhoto) return report;
     // A run that stopped between the recipe and its photo left the photo out; bring it now.
     if (await ports.hasMovedInPhoto(result.recipeId)) report.counts.push(["photos", ours ? { created: 1 } : { unchanged: 1 }]);
@@ -274,7 +275,7 @@ async function bringRecipe(run: Run, kitchen: MoveInKitchen, draft: RecipeDraft)
     report.events.push(event("item-renamed", `You already had a recipe called "${result.renamedFrom}", so this one is "${result.title}".`, target));
   }
   for (const warning of result.warnings) report.events.push(event("item-degraded", warning, target));
-  await bringOrganizers(run, draft, result.recipeId, report);
+  await bringOrganizers(run, source.words, draft, result.recipeId, report);
   if (hasPhoto) await bringPhoto(run, kitchen, draft, result.recipeId, report);
   return report;
 }
@@ -300,11 +301,12 @@ function describeError(error: unknown): string {
  * passed over, so one bad recipe never holds the rest back or sends the move-in through the queue's backoff. Only when
  * the database itself can't be reached is the error passed on, for the queue to try the whole segment again later.
  */
-async function bringOrPassOver(run: Run, kitchen: MoveInKitchen, index: number): Promise<Report> {
+async function bringOrPassOver(run: Run, opened: Opened, index: number): Promise<Report> {
+  const { source, kitchen } = opened;
   let failure: unknown;
   for (let tries = 0; tries < 2; tries++) {
     try {
-      return await bringRecipe(run, kitchen, await kitchen.draft(index));
+      return await bringRecipe(run, opened, await kitchen.draft(index));
     } catch (error) {
       if (stopsTheRun(error)) throw error;
       failure = error;
@@ -315,7 +317,7 @@ async function bringOrPassOver(run: Run, kitchen: MoveInKitchen, index: number):
   const entry = kitchen.entry(index);
   return {
     counts: [["recipes", { failed: 1 }]],
-    events: [event("item-failed", `${entry.title} didn't move in this time. Moving the same backup in again tries it once more.`, {
+    events: [event("item-failed", `${entry.title} didn't move in this time. ${source.words.again} tries it once more.`, {
       entity: "recipes",
       sourceKey: entry.sourceKey,
       detail: describeError(failure),
@@ -323,7 +325,8 @@ async function bringOrPassOver(run: Run, kitchen: MoveInKitchen, index: number):
   };
 }
 
-async function recipes(run: Run, { kitchen }: Opened, chunkSize: number, cache: RunCache) {
+async function recipes(run: Run, opened: Opened, chunkSize: number, cache: RunCache) {
+  const { source, kitchen } = opened;
   const { job, ports } = run;
   const { store } = ports;
   if (ports.organizers && (cache.organizing ??= await store.organizing(job.id))) run.organizers = ports.organizers;
@@ -334,7 +337,7 @@ async function recipes(run: Run, { kitchen }: Opened, chunkSize: number, cache: 
     const entry = kitchen.entry(start);
     await store.updateJob(job.id, { cursor: String(++start), attempt: 0 }, run.token, {
       counts: [["recipes", { failed: 1 }]],
-      events: [event("item-failed", `${entry.title} didn't move in this time. Moving the same backup in again tries it once more.`, {
+      events: [event("item-failed", `${entry.title} didn't move in this time. ${source.words.again} tries it once more.`, {
         entity: "recipes",
         sourceKey: entry.sourceKey,
         detail: `It stopped the move-in ${RECIPE_TRIES} times in a row.`,
@@ -344,7 +347,7 @@ async function recipes(run: Run, { kitchen }: Opened, chunkSize: number, cache: 
   }
   const end = Math.min(start + chunkSize, kitchen.size);
   for (let i = start; i < end; i++) {
-    const report = await bringOrPassOver(run, kitchen, i);
+    const report = await bringOrPassOver(run, opened, i);
     await store.updateJob(job.id, { cursor: String(i + 1), attempt: 0 }, run.token, report);
     job.attempt = 0;
   }

@@ -75,6 +75,14 @@ describe("sweepMoveInArchives", () => {
     expect(progress?.events.at(-1)).toMatchObject({ kind: "job-failed", level: "error", message: expect.stringMatching(/^This move-in went a day/) });
   });
 
+  it("ends a server move-in that went a day without moving forward, and deletes its token", async () => {
+    const key = "pending-uploads/move-in/chef-1/server.json";
+    await createMoveInJob(database.binding, { ownerId: "chef-1", kind: "mealie-api", archiveKey: key, archiveName: "recipes.example.com", now: start });
+    const bucket = memoryBucket({ [key]: start });
+    expect(await sweepMoveInArchives({ db: database.binding, bucket, now: at(MOVE_IN_ABANDONED_MS) })).toEqual({ deleted: 1, expired: 1 });
+    expect(bucket.objects).toEqual({});
+  });
+
   it("leaves a quiet job alone while a run has just taken it", async () => {
     const id = await job("pending-uploads/move-in/chef-1/back.zip");
     await moveInJobStore(database.binding, () => start).claim(id, at(MOVE_IN_ABANDONED_MS - 1000));

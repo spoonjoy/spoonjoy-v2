@@ -5,6 +5,7 @@ import { SourceUnavailableError, type KitchenEntry, type MoveInKitchen, type Mov
 import { MoveInError } from "../../../model/move-in-error";
 import { UNTITLED_RECIPE, type RecipeDraft } from "../../../model/recipe-draft";
 import { normalizeGuid } from "../../../model/source-key";
+import { MEALIE_SOURCE_KIND } from "../mealie-backup/source";
 import { apiRecipeDraft, recipeKey, text } from "./recipe";
 
 export interface MealieApiConnection {
@@ -212,6 +213,10 @@ export async function mealieApiSource(connection: MealieApiConnection): Promise<
   }
 
   return {
+    // The same app as its backups, so a kitchen moved in from either brings each recipe once.
+    kind: MEALIE_SOURCE_KIND,
+    serverUrl: api.base,
+    words: { there: "on your recipe server", again: "Moving in from your server again" },
     version,
     chooseKitchen: async () => kitchenKey,
     openKitchen,

@@ -88,12 +88,14 @@ export function moveInJobStore(db: D1ReadDatabase, now: () => Date): MoveInPorts
       return row ? String(row.instanceKey) : null;
     },
 
-    async ensureSource({ ownerId, kind, instanceKey, label, sourceVersion }) {
+    async ensureSource({ ownerId, kind, instanceKey, label, serverUrl, sourceVersion }) {
+      // A backup has no address, so moving one in keeps the address a move-in from the server recorded.
       const [, { rows: [row] }] = await d1WriteBatch(db, [
         [
-          `INSERT INTO "ImportSource" ("id", "ownerId", "kind", "instanceKey", "label", "sourceVersion", "createdAt") VALUES (?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT ("ownerId", "kind", "instanceKey") DO UPDATE SET "label" = excluded."label", "sourceVersion" = excluded."sourceVersion"`,
-          `source_${crypto.randomUUID()}`, ownerId, kind, instanceKey, label, sourceVersion, d1Timestamp(now()),
+          `INSERT INTO "ImportSource" ("id", "ownerId", "kind", "instanceKey", "label", "serverUrl", "sourceVersion", "createdAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT ("ownerId", "kind", "instanceKey") DO UPDATE SET "label" = excluded."label", "sourceVersion" = excluded."sourceVersion",
+             "serverUrl" = COALESCE(excluded."serverUrl", "ImportSource"."serverUrl")`,
+          `source_${crypto.randomUUID()}`, ownerId, kind, instanceKey, label, serverUrl, sourceVersion, d1Timestamp(now()),
         ],
         [`SELECT "id" FROM "ImportSource" WHERE "ownerId" = ? AND "kind" = ? AND "instanceKey" = ?`, ownerId, kind, instanceKey],
       ]);

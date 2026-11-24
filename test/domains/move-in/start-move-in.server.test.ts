@@ -1,9 +1,10 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { MOVE_IN_UPLOAD_MAX_BYTES, startMoveIn } from "~/domains/move-in/adapters/worker/start-move-in.server";
+import { MOVE_IN_UPLOAD_MAX_BYTES, startMoveIn, startServerMoveIn } from "~/domains/move-in/adapters/worker/start-move-in.server";
 import { migratedSqliteD1, type MigratedSqlite } from "../../helpers/migrated-sqlite";
 import { makeZip } from "./support/make-zip";
 import { mealieDatabase } from "./support/mealie-database";
+import { recipeServer, SERVER_TOKEN } from "./support/recipe-server";
 
 let database: MigratedSqlite;
 const now = new Date("2026-11-23T12:00:00.000Z");
@@ -116,5 +117,60 @@ describe("startMoveIn", () => {
   it("refuses an app it can't read yet", async () => {
     const result = await startMoveIn({ env: { DB: database.binding, PHOTOS: memoryBucket() } as never, ownerId: "chef-1", app: "paprika", file: { name: "x.zip", size: 1, data: zip() }, now });
     expect(result).toEqual({ ok: false, code: "unknown-app" });
+  });
+});
+
+describe("startServerMoveIn", () => {
+  const startFrom = (options: { address?: string; token?: string; app?: string; fetch?: typeof globalThis.fetch; bucket?: ReturnType<typeof memoryBucket>; db?: unknown } = {}) =>
+    startServerMoveIn({
+      env: { DB: options.db ?? database.binding, PHOTOS: options.bucket ?? memoryBucket() } as never,
+      ownerId: "chef-1",
+      app: options.app ?? "mealie",
+      address: options.address ?? "https://recipes.example.com/",
+      token: options.token ?? ` ${SERVER_TOKEN} `,
+      fetch: options.fetch ?? recipeServer(),
+      now,
+    });
+
+  it("checks the server and token at once, keeps them where they are never served, and queues the move-in", async () => {
+    const bucket = memoryBucket();
+    expect(await startFrom({ bucket })).toEqual({ ok: true, jobId: expect.stringMatching(/^movein_/) });
+    const [key] = Object.keys(bucket.objects);
+    expect(key).toMatch(/^pending-uploads\/move-in\/chef-1\/[0-9a-f-]{36}\.json$/);
+    expect(JSON.parse(new TextDecoder().decode(bucket.objects[key]))).toEqual({ address: "https://recipes.example.com", token: SERVER_TOKEN });
+    const job = database.sqlite.prepare(`SELECT "kind", "status", "archiveKey", "archiveName" FROM "ImportJob"`).get();
+    expect(job).toEqual({ kind: "mealie-api", status: "queued", archiveKey: key, archiveName: "recipes.example.com" });
+  });
+
+  it.each([
+    ["no address", { address: " " }, "server-address"],
+    ["no token", { token: " " }, "no-token"],
+    ["a token the server refuses", { token: "wrong" }, "server-token"],
+    ["an address that isn't the recipe app", { address: "https://example.com" }, "server-address"],
+    ["a server that doesn't answer", { fetch: recipeServer({ down: true }) }, "server-unreachable"],
+    ["an app it can't read yet", { app: "paprika" }, "unknown-app"],
+  ])("answers %s with its fix-it message, and keeps nothing", async (_name, options, code) => {
+    const bucket = memoryBucket();
+    expect(await startFrom({ ...options, bucket })).toEqual({ ok: false, code });
+    expect(bucket.objects).toEqual({});
+    expect(database.sqlite.prepare(`SELECT COUNT(*) AS n FROM "ImportJob"`).get()).toEqual({ n: 0 });
+  });
+
+  it("passes on a storage failure, and deletes the token again when the job can't be saved", async () => {
+    const garbled: typeof globalThis.fetch = async (input, init) =>
+      String(input).endsWith("/users/self") ? new Response("{") : recipeServer()(input, init);
+    // An answer the server garbles is a wrong address, not a crash.
+    await expect(startFrom({ fetch: garbled })).resolves.toEqual({ ok: false, code: "server-address" });
+    const bucket = memoryBucket();
+    const failing = {
+      prepare: database.binding.prepare,
+      batch: (statements: Array<{ sql: string }>) =>
+        statements.some((statement) => statement.sql.includes(`INSERT INTO "ImportJob"`)) ? Promise.reject(new Error("D1 is down")) : database.binding.batch(statements as never),
+    };
+    await expect(startFrom({ bucket, db: failing })).rejects.toThrow("D1 is down");
+    expect(bucket.objects).toEqual({});
+    // A delete that fails too leaves the token for the sweep, and the cook sees the first failure.
+    const stuck = { ...memoryBucket(), delete: () => Promise.reject(new Error("R2 is down")) };
+    await expect(startFrom({ bucket: stuck as never, db: failing })).rejects.toThrow("D1 is down");
   });
 });

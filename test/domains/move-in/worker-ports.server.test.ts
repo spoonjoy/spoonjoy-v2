@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { organizersOnRecipe, prismaOrganizerStore } from "~/domains/kitchen";
 import { getDb, getLocalDb } from "~/lib/db.server";
 import { createMoveInJob } from "~/domains/move-in/adapters/storage/job-store.server";
-import { moveInEnv, moveInPorts, r2RangeSource } from "~/domains/move-in/adapters/worker/move-in-ports.server";
+import { moveInEnv, moveInPorts, openMoveInSource, r2RangeSource } from "~/domains/move-in/adapters/worker/move-in-ports.server";
 import { runForAWhile } from "~/domains/move-in/application/run-move-in";
 import { MoveInError } from "~/domains/move-in/model/move-in-error";
 import { migratedSqliteD1, type MigratedSqlite } from "../../helpers/migrated-sqlite";
@@ -11,6 +11,7 @@ import { cleanupDatabase } from "../../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../../utils";
 import { makeZip } from "./support/make-zip";
 import { mealieDatabase } from "./support/mealie-database";
+import { recipeServer, SERVER_TOKEN } from "./support/recipe-server";
 
 // Prisma on D1 in the Worker; here, the tests' own SQLite.
 vi.mock("~/lib/db.server", async (original) => {
@@ -30,9 +31,10 @@ function memoryBucket(objects: Record<string, Uint8Array> = {}) {
     objects,
     reads,
     head: async (key: string) => (objects[key] ? { size: objects[key].length } : null),
-    get: async (key: string, options: { range: { offset: number; length: number } }) => {
+    get: async (key: string, options?: { range: { offset: number; length: number } }) => {
       const bytes = objects[key];
       if (!bytes) return null;
+      if (!options) return { arrayBuffer: async () => bytes.slice().buffer };
       reads.push(options.range);
       const { offset, length } = options.range;
       return { arrayBuffer: async () => bytes.slice(offset, offset + length).buffer };
@@ -84,6 +86,8 @@ describe("moveInPorts", () => {
     const ports = moveInPorts({ DB: database.binding, PHOTOS: photos } as never, () => now);
     expect(await ports.ownerEmail("chef-1")).toBe("cook@example.com");
     expect(await ports.ownerEmail("nobody")).toBeNull();
+    expect(await ports.hasMovedInPhoto("no-such-recipe")).toBe(false);
+    expect((await ports.openArchive({ archiveKey } as never)).size).toBe(zip.length);
 
     expect(await runForAWhile(jobId, ports, { budgetMs: 1000 })).toMatchObject({ status: "done-with-issues" });
     const recipes = database.sqlite.prepare(`SELECT "title", "activeCoverId" IS NOT NULL AS "hasCover" FROM "Recipe" ORDER BY "title"`).all();
@@ -94,6 +98,50 @@ describe("moveInPorts", () => {
     ]);
     // The backup is deleted once it has moved in; the cover photo stays.
     expect(Object.keys(photos.objects)).toEqual([expect.stringMatching(/^covers\/import\/movein-/)]);
+  });
+});
+
+describe("moveInPorts from a server", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("moves a kitchen in from the server its start checked, records the address, and deletes the token once done", async () => {
+    vi.stubGlobal("fetch", recipeServer());
+    const archiveKey = "pending-uploads/move-in/chef-1/a.json";
+    const connection = new TextEncoder().encode(JSON.stringify({ address: "https://recipes.example.com", token: SERVER_TOKEN }));
+    const photos = memoryBucket({ [archiveKey]: connection });
+    const jobId = await createMoveInJob(database.binding, { ownerId: "chef-1", kind: "mealie-api", archiveKey, archiveName: "recipes.example.com", now });
+    const ports = moveInPorts({ DB: database.binding, PHOTOS: photos } as never, () => now);
+    expect(await runForAWhile(jobId, ports, { budgetMs: 1000 })).toMatchObject({ status: "done" });
+    expect(database.sqlite.prepare(`SELECT "title" FROM "Recipe" ORDER BY "title"`).all()).toEqual([{ title: "Soup" }, { title: "Toast" }]);
+    // The same app as its backups, so a backup of this kitchen finds these recipes.
+    expect(database.sqlite.prepare(`SELECT "kind", "label", "serverUrl", "sourceVersion" FROM "ImportSource"`).all())
+      .toEqual([{ kind: "mealie-backup", label: "Home", serverUrl: "https://recipes.example.com", sourceVersion: "v3.31.0" }]);
+    expect(photos.objects).toEqual({});
+  });
+
+  it("brings a kitchen moved in from its server once, when it moves in again from its backup, and keeps the address", async () => {
+    const { tables, keys } = mealieDatabase();
+    const backupKey = "pending-uploads/move-in/chef-1/a.zip";
+    const serverKey = "pending-uploads/move-in/chef-1/b.json";
+    const photos = memoryBucket({
+      [backupKey]: makeZip([{ name: "database.json", data: JSON.stringify(tables) }]),
+      [serverKey]: new TextEncoder().encode(JSON.stringify({ address: "https://recipes.example.com", token: SERVER_TOKEN })),
+    });
+    // The backup's recipes by id, with dashes as the server gives them; their content differs, so the backup updates them.
+    const recipes = [["pancakes", "Pancakes"], ["soup", "Soup"]].map(([slug, name]) => ({ id: keys[slug as "soup"], slug, name, image: null, createdAt: "2026-11-23T16:00:00Z" }));
+    vi.stubGlobal("fetch", recipeServer({ kitchen: keys.group, recipes }));
+    const ports = moveInPorts({ DB: database.binding, PHOTOS: photos } as never, () => now);
+    const server = await createMoveInJob(database.binding, { ownerId: "chef-1", kind: "mealie-api", archiveKey: serverKey, archiveName: "recipes.example.com", now });
+    await runForAWhile(server, ports, { budgetMs: 1000 });
+    const backup = await createMoveInJob(database.binding, { ownerId: "chef-1", kind: "mealie-backup", archiveKey: backupKey, archiveName: "backup.zip", now });
+    await runForAWhile(backup, ports, { budgetMs: 1000 });
+    expect(database.sqlite.prepare(`SELECT "title" FROM "Recipe" ORDER BY "title"`).all()).toEqual([{ title: "Pancakes" }, { title: "Soup" }, { title: "Untitled recipe" }]);
+    expect(database.sqlite.prepare(`SELECT "kind", "serverUrl" FROM "ImportSource"`).all()).toEqual([{ kind: "mealie-backup", serverUrl: "https://recipes.example.com" }]);
+  });
+
+  it("stops a server move-in whose token is no longer kept, as expired", async () => {
+    const job = { id: "j", ownerId: "chef-1", kind: "mealie-api", sourceId: null, status: "running", phase: "inspect", cursor: null, archiveKey: "gone.json", lastError: null, attempt: 0 } as const;
+    await expect(openMoveInSource(memoryBucket() as never, job, recipeServer())).rejects.toMatchObject({ code: "expired" });
   });
 });
 
