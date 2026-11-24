@@ -95,9 +95,9 @@ export default function SelfHost() {
 
         <Section id="self-host-start" title="Start it">
           <Text>Save this as <code>compose.yaml</code>:</Text>
-          <CodeBlock code={COMPOSE} title="compose.yaml" language="yaml" wrap />
+          <CodeBlock code={COMPOSE} title="compose.yaml" language="yaml" />
           <Text>Then start it beside that file:</Text>
-          <CodeBlock code={START} language="sh" wrap />
+          <CodeBlock code={START} language="sh" />
           <Text>
             Open <code>http://localhost:8080</code> and sign up. To use another address or port, set <code>SPOONJOY_BASE_URL</code> and{" "}
             <code>SPOONJOY_PORT</code> in a <code>.env</code> file beside it.
@@ -116,7 +116,7 @@ export default function SelfHost() {
 
         <Section id="self-host-update" title="Update it">
           <Text>Your kitchen lives in the data volume, so an update swaps only the image. Beside <code>compose.yaml</code>:</Text>
-          <CodeBlock code={UPDATE} language="sh" wrap />
+          <CodeBlock code={UPDATE} language="sh" />
           <Text>The new image brings the database up to date when it starts. Make a backup first if you might want to go back.</Text>
         </Section>
 
