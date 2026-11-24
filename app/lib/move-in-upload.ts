@@ -112,7 +112,7 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
   const concurrency = options.concurrency ?? UPLOAD_CONCURRENCY;
   const requestMs = options.requestMs ?? UPLOAD_REQUEST_MS;
   const head = await fileHead(file).catch(() => null);
-  if (head === null) return { ok: false, error: "This browser couldn't read the backup. Choose the file again, then press Move in." };
+  if (head === null) return { ok: false, error: "The browser refused to read the backup file, which happens when it was moved or changed after you chose it. Choose it again, then press Move in." };
   const kept = remembering(options.storage === undefined ? browserStorage() : options.storage, fileFingerprint(file, head));
   /** The parts that have arrived, by number, with their sizes: what the page says has been sent. */
   const arrived = new Map<number, number>();

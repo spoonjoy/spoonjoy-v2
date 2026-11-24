@@ -184,7 +184,9 @@ function UploadForm({ error, uploadMaxBytes }: { error: string | null; uploadMax
   const send = async (event: FormEvent<HTMLFormElement>) => {
     const form = new FormData(event.currentTarget);
     const file = (event.currentTarget.elements.namedItem("backup") as HTMLInputElement).files?.[0];
-    if (!file?.size) return;
+    // A page that isn't secure (http on a LAN address while testing) has no crypto.subtle to tell the file apart by,
+    // so the plain form sends it instead.
+    if (!file?.size || !globalThis.crypto?.subtle) return;
     event.preventDefault();
     setFailure(null);
     setSending({ sent: 0, total: file.size, checking: false });

@@ -146,6 +146,16 @@ describe("the Move in page", () => {
     expect(sent.calls).toEqual([]);
   });
 
+  it("leaves the backup to the plain form on a page that isn't secure, where it can't tell files apart", async () => {
+    vi.stubGlobal("crypto", {});
+    const action = vi.fn(() => ({ error: null }));
+    page(null, action);
+    await chooseAndSend(new File([new Uint8Array(8)], "mealie.zip"));
+    await vi.waitFor(() => expect(action).toHaveBeenCalled());
+    expect(sent.calls).toEqual([]);
+    vi.unstubAllGlobals();
+  });
+
   it("offers the form again, with what went wrong, when a move-in failed", async () => {
     page(view({ status: "failed", finished: true, failure: "The backup is damaged." }));
     expect(await screen.findByText("The backup is damaged.")).toBeTruthy();

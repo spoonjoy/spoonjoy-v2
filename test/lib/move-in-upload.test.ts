@@ -131,6 +131,16 @@ describe("uploadBackup", () => {
     expect(progress[0]).toBe(15);
   });
 
+  it("picks up the upload kept for the same file chosen again with another last change", async () => {
+    const api = server(35, { done: [1] });
+    const store = memoryStore();
+    // The key as the page wrote it: name, size and the digest of the file's first MiB (all zeros here).
+    store.setItem(`spoonjoy:move-in-upload:${JSON.stringify(["mealie.zip", 35, sha256(new Uint8Array(35))])}`, "upload_1");
+    const again = new File([new Uint8Array(35)], "mealie.zip", { lastModified: 42 });
+    await uploadBackup(again, { app: "mealie", fetch: api.fetch, storage: store, sleep: noWait });
+    expect(api.begins[0].resume).toBe("upload_1");
+  });
+
   it("tries a request again after a dropped connection or a server error, waiting longer each time", async () => {
     const file = backupFile();
     const api = server(file.size);
@@ -235,7 +245,7 @@ describe("uploadBackup", () => {
     const api = server(file.size);
     expect(await uploadBackup(file, { app: "mealie", fetch: api.fetch, storage: null, sleep: noWait })).toEqual({
       ok: false,
-      error: "This browser couldn't read the backup. Choose the file again, then press Move in.",
+      error: "The browser refused to read the backup file, which happens when it was moved or changed after you chose it. Choose it again, then press Move in.",
     });
     expect(api.calls).toEqual([]);
   });

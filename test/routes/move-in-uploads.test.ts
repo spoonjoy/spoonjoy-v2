@@ -98,7 +98,7 @@ function backup() {
 }
 
 const H = "a".repeat(64);
-const file = (bytes: Uint8Array) => ({ app: "mealie", name: "mealie.zip", size: bytes.length, head: "a".repeat(64) });
+const file = (bytes: Uint8Array) => ({ app: "mealie", name: "mealie.zip", size: bytes.length, head: H });
 
 async function sendAll(bytes: Uint8Array) {
   const begun = await beginUpload(file(bytes));
