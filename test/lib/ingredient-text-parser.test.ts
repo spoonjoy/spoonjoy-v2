@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { parseIngredientLine, parseIngredientText } from '~/lib/ingredient-text-parser'
+import { UNIT_NAMES, resolveUnit } from '~/domains/food-knowledge/model/units'
+import { MEASURED_UNIT_WRITTEN, parseIngredientLine, parseIngredientText } from '~/lib/ingredient-text-parser'
 
 // The same cases as the native editor's IngredientTextParserTests (spoonjoy-apple), so the web
 // fallback and the native parser agree line for line.
@@ -83,5 +84,47 @@ describe('rule-based ingredient text parser', () => {
 
   it('skips lines without an ingredient name', () => {
     for (const line of ['', '   ', '2 cups', '2', '- ']) expect(parsed(line), JSON.stringify(line)).toBeNull()
+  })
+
+  // Every unit the unit table converts is one the parser reads: each name and abbreviation, in a
+  // few real-looking lines, comes out as that unit's written form, which the table reads back.
+  describe('reads every unit in the unit table', () => {
+    const names = [...UNIT_NAMES]
+
+    it('writes each measured unit in a form the unit table reads back as the same unit', () => {
+      const slugs = new Set(UNIT_NAMES.values())
+      expect(Object.keys(MEASURED_UNIT_WRITTEN).sort()).toEqual([...slugs].sort())
+      for (const [slug, written] of Object.entries(MEASURED_UNIT_WRITTEN)) {
+        expect(resolveUnit(written), written).toMatchObject({ slug })
+      }
+    })
+
+    it.each(names)('reads "%s"', (name, slug) => {
+      const unit = MEASURED_UNIT_WRITTEN[slug]
+      expect(parsed(`2 ${name} chicken stock`), name).toEqual({ quantity: 2, unit, ingredientName: 'chicken stock' })
+      expect(parsed(`1 1/2 ${name} of milk`), name).toEqual({ quantity: 1.5, unit, ingredientName: 'milk' })
+      expect(parsed(`½ ${name.toUpperCase()} flour, sifted`), name).toEqual({ quantity: 0.5, unit, ingredientName: 'flour, sifted' })
+      const dotted = name.replace(/(\S+)$/, '$1.')
+      expect(parsed(`- about 3 ${dotted} water`), dotted).toEqual({ quantity: 3, unit, ingredientName: 'water' })
+    })
+
+    it('reads the lines cooks write', () => {
+      const cases: Array<[string, { quantity: number; unit: string; ingredientName: string }]> = [
+        ['1 quart chicken stock', { quantity: 1, unit: 'qt', ingredientName: 'chicken stock' }],
+        ['2 qts stock', { quantity: 2, unit: 'qt', ingredientName: 'stock' }],
+        ['1 tbsp oil', { quantity: 1, unit: 'tbsp', ingredientName: 'oil' }],
+        ['½ cup flour', { quantity: 0.5, unit: 'cup', ingredientName: 'flour' }],
+        ['3 cloves garlic', { quantity: 3, unit: 'clove', ingredientName: 'garlic' }],
+        ['8 fl oz cream', { quantity: 8, unit: 'fl oz', ingredientName: 'cream' }],
+        ['1 pint milk', { quantity: 1, unit: 'pt', ingredientName: 'milk' }],
+        ['1 gallon water', { quantity: 1, unit: 'gal', ingredientName: 'water' }],
+        ['2 dl cream', { quantity: 2, unit: 'dl', ingredientName: 'cream' }],
+        ['1 UK pint ale', { quantity: 1, unit: 'imperial pint', ingredientName: 'ale' }],
+        ['500 mg saffron', { quantity: 500, unit: 'mg', ingredientName: 'saffron' }],
+        ['1 kilo potatoes', { quantity: 1, unit: 'kg', ingredientName: 'potatoes' }],
+        ['2 T butter', { quantity: 2, unit: 'tbsp', ingredientName: 'butter' }],
+      ]
+      for (const [line, expected] of cases) expect(parsed(line), line).toEqual(expected)
+    })
   })
 })
