@@ -417,6 +417,30 @@ jobs:
           restart_half after
           docker logs sj-restart > "$OUT/move-in-restart.log" 2>&1
           docker rm -f sj-restart
+      # A server on a home network: its owner reaches it at a plain http:// address that isn't
+      # localhost and declares that address as SPOONJOY_BASE_URL. The server gets a fixed address on
+      # its own bridge network, made before the browser starts (a new interface under a running
+      # Chrome drops its loads), and the browser signs in there with a password and reloads.
+      - name: Sign in at a plain http network address
+        if: success()
+        run: |
+          docker network create --subnet 172.30.57.0/24 sj-lan
+          docker run -d --name sj-lan --network sj-lan --ip 172.30.57.10 -v sj-lan:/data \
+            -e SPOONJOY_BASE_URL=http://172.30.57.10:8080 "$LOCAL_IMAGE"
+          for _ in $(seq 1 600); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://172.30.57.10:8080/health/ready || true)" = "200" ] && break
+            sleep 0.1
+          done
+          curl -sf http://172.30.57.10:8080/health/ready
+          docker run --rm --network host --user "$(id -u):$(id -g)" --ipc host \
+            -v "$PWD:/work" -w /work -e HOME=/tmp -e CI=true \
+            -e SPOONJOY_JOURNEYS_BASE_URL=http://172.30.57.10:8080 \
+            -e SPOONJOY_SELF_HOST_LAN=1 \
+            mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f \
+            node node_modules/@playwright/test/cli.js test -c playwright.self-host-fresh.config.ts e2e/self-host/lan.spec.ts --output test-results-self-host-lan
+          docker logs sj-lan > "$OUT/lan.log" 2>&1
+          docker rm -f sj-lan
+          docker network rm sj-lan
 
       # The Compose file in the guide (self-host/compose.yaml) starts this image and waits for its
       # health check; on 8081, beside the restored server.
@@ -502,6 +526,9 @@ jobs:
           docker stop dex || true
           docker logs sj-restart > "$OUT/move-in-restart.log" 2>&1 || true
           docker rm -f sj-restart || true
+          docker logs sj-lan > "$OUT/lan.log" 2>&1 || true
+          docker rm -f sj-lan || true
+          docker network rm sj-lan || true
 
       # The server is gone, so its passwords and sessions open nothing; the files go all the same.
       - name: Remove credentials and session files
@@ -510,7 +537,7 @@ jobs:
 
       - name: Strip network logs from traces
         if: always()
-        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report test-results-self-host-fresh test-results-self-host-oidc test-results-self-host-restored test-results-self-host-move-in test-results-self-host-move-in-restart-before test-results-self-host-move-in-restart-after test-results-self-host-upgrade-before test-results-self-host-upgrade-after
+        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report test-results-self-host-fresh test-results-self-host-oidc test-results-self-host-restored test-results-self-host-move-in test-results-self-host-move-in-restart-before test-results-self-host-move-in-restart-after test-results-self-host-upgrade-before test-results-self-host-upgrade-after test-results-self-host-lan
 
       - name: Summary
         if: always()
@@ -546,6 +573,7 @@ jobs:
             test-results-self-host-move-in-restart-after/
             test-results-self-host-upgrade-before/
             test-results-self-host-upgrade-after/
+            test-results-self-host-lan/
           retention-days: 30
           include-hidden-files: false
 

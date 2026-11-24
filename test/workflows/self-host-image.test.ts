@@ -283,6 +283,30 @@ describe("Self-host Image workflow", () => {
     expect(script).not.toContain("'");
     expect(stepNamed(image, /Stop the server/).run).toContain("docker rm -f sj-restart || true");
     expect(runs(image)).toMatch(/sanitize-journey-traces\.mjs [^\n]*test-results-self-host-move-in-restart-after/);
+  it("signs in at a plain http network address the server declares, on its own bridge network made before the browser starts", () => {
+    const step = stepNamed(image, /Sign in at a plain http network address/);
+    const run = step.run ?? "";
+    expect(step.if).toBe("success()");
+    const order = [
+      "docker network create --subnet 172.30.57.0/24 sj-lan",
+      "docker run -d --name sj-lan --network sj-lan --ip 172.30.57.10",
+      "-e SPOONJOY_BASE_URL=http://172.30.57.10:8080",
+      "curl -sf http://172.30.57.10:8080/health/ready",
+      "-e SPOONJOY_JOURNEYS_BASE_URL=http://172.30.57.10:8080",
+      "-e SPOONJOY_SELF_HOST_LAN=1",
+      "e2e/self-host/lan.spec.ts --output test-results-self-host-lan",
+      "docker rm -f sj-lan",
+      "docker network rm sj-lan",
+    ].map((text) => run.indexOf(text));
+    expect(order.every((index) => index > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    // The address is a real network one, not a loopback name that browsers treat as secure.
+    expect(run).not.toMatch(/SPOONJOY_(JOURNEYS_)?BASE_URL=http:\/\/(localhost|127\.0\.0\.1)/);
+    const stop = stepNamed(image, /Stop the server/).run ?? "";
+    expect(stop).toContain("docker rm -f sj-lan || true");
+    expect(stop).toContain("docker network rm sj-lan || true");
+    expect(runs(image)).toMatch(/sanitize-journey-traces\.mjs [^\n]*test-results-self-host-lan/);
+    expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["e2e/self-host/**", "app/lib/session.server.ts"]));
   });
 
   it("starts the guide's Compose file with this image and waits for its health check, then takes it down", () => {
