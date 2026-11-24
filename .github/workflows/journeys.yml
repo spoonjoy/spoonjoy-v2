@@ -61,7 +61,9 @@ jobs:
   # suite. It runs the base branch's copy of the script, so a pull request cannot change the rules
   # for its own run, and it gets no secrets. A skipped suite still reports the required `journeys`
   # check as passed, and the merge queue's run of the same change always runs the full suite
-  # before anything reaches main.
+  # before anything reaches main. A pull request's full suite runs part 1 only, because the merge
+  # queue runs both parts anyway; with the `journeys-full` label (add it, then re-run the run),
+  # it runs both.
   changes:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -74,6 +76,7 @@ jobs:
       mode: ${{ steps.scope.outputs.mode }}
       census: ${{ steps.scope.outputs.census }}
       specs: ${{ steps.scope.outputs.specs }}
+      parts: ${{ steps.scope.outputs.parts }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -134,7 +137,8 @@ jobs:
   # against the 40-minute timeout. Part 1 runs the HX census and the first half of the other
   # journeys; part 2 runs the personas setup and the second half (Playwright's --shard, which runs
   # a shard's dependency projects in that shard). The affected specs of a pull request and the
-  # explore suite still run as one part. The required `journeys` check is the `journeys-result`
+  # explore suite still run as one part. A pull request's full suite runs part 1 only, unless
+  # `changes` says parts=2 (the `journeys-full` label); the merge queue, main and the schedule run both. The required `journeys` check is the `journeys-result`
   # job below, which passes only when every part passed.
   journeys:
     needs: [queue-tested, changes]
@@ -144,7 +148,7 @@ jobs:
       # Each part finishes, pass or fail, so a failed run has both parts' reports.
       fail-fast: false
       matrix:
-        part: ${{ fromJSON(((github.event_name == 'workflow_dispatch' && inputs.suite == 'explore') || (github.event_name == 'pull_request' && needs.changes.outputs.mode == 'affected')) && '[1]' || '[1, 2]') }}
+        part: ${{ fromJSON(((github.event_name == 'workflow_dispatch' && inputs.suite == 'explore') || (github.event_name == 'pull_request' && (needs.changes.outputs.mode == 'affected' || needs.changes.outputs.parts != '2'))) && '[1]' || '[1, 2]') }}
     # Runs in Playwright's image, at the version package.json pins, by digest
     # (test/workflows/playwright-image.test.ts): its browsers and their system packages are in it, so
     # the job installs nothing from Ubuntu's mirror, whose downloads can stall for the whole job. The
@@ -361,7 +365,8 @@ jobs:
           CENSUS: ${{ needs.changes.outputs.census }}
           SPECS: ${{ needs.changes.outputs.specs }}
           PART: ${{ matrix.part }}
-          PARTS: ${{ strategy.job-total }}
+          # The full suite is always split in two, even when a pull request runs only part 1.
+          PARTS: 2
         run: |
           if [ "$SUITE" = "explore" ]; then
             pnpm run explore:qa
