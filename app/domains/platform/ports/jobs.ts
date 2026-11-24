@@ -4,7 +4,9 @@
 // in-process adapter of its own.
 //
 // A job has a kind (defineJob), a payload and a key. Enqueueing a key that is already waiting or done does
-// nothing; a done key is kept for 30 days, so a key is deduplicated for 30 days after its job is done. A delivery leases its key before it runs, so one run of a key goes at a time, and a delivery
+// nothing; a done key is kept for 30 days, so a key is deduplicated for 30 days after its job is done.
+// A job that must run once ever (a welcome, say) keeps its own record of having run, since its key is
+// forgotten after that. A delivery leases its key before it runs, so one run of a key goes at a time, and a delivery
 // whose key is done is skipped; one that finds the key leased comes back when the lease is up. Queues
 // delivers at least once, and a run can die part-way (its lease then runs out and the next delivery
 // starts again; a late duplicate of a job that failed can start it again too), so handlers must be safe

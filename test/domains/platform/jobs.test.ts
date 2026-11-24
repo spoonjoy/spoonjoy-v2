@@ -285,6 +285,34 @@ describe("the D1 job keys", () => {
     expect(await keys.claim("old", "move-in.run")).toBe(true);
   });
 
+  it("forgets old done keys a chunk at a time, up to a limit of chunks a sweep, and the next sweep carries on", async () => {
+    clock = new Date("2026-11-23T12:00:00.000Z");
+    const keys = d1JobKeys(database.binding, () => clock);
+    for (let index = 0; index < 7; index += 1) {
+      await keys.claim(`k${index}`, "move-in.run");
+      await keys.start(`k${index}`, "move-in.run", 60);
+      await keys.markDone(`k${index}`);
+    }
+    later(JOB_KEY_KEPT_DAYS * 24 * 60 * 60 + 1);
+    // Chunks of 2, at most 3 a sweep: 6 this sweep, and the last one next time.
+    expect(await expireDoneJobKeys(database.binding, () => clock, { chunk: 2, maxChunks: 3 })).toBe(6);
+    expect(await expireDoneJobKeys(database.binding, () => clock, { chunk: 2, maxChunks: 3 })).toBe(1);
+    expect(await expireDoneJobKeys(database.binding, () => clock, { chunk: 2, maxChunks: 3 })).toBe(0);
+  });
+
+  it("runs a job again when a delivery reaches its key after the key was forgotten", async () => {
+    // Queues keeps a message for at most 14 days, well inside the 30 a done key is kept, so this needs a
+    // delivery older than any the queue holds; it shows why the keys are kept that long.
+    clock = new Date("2026-11-23T12:00:00.000Z");
+    const keys = d1JobKeys(database.binding, () => clock);
+    await keys.claim("k", "move-in.run");
+    await keys.start("k", "move-in.run", 60);
+    await keys.markDone("k");
+    later(JOB_KEY_KEPT_DAYS * 24 * 60 * 60 + 1);
+    await expireDoneJobKeys(database.binding, () => clock);
+    expect(await keys.start("k", "move-in.run", 60)).toEqual({ state: "started", run: 1 });
+  });
+
   it("takes the job keys' database only from a binding that is one", () => {
     expect(jobKeysDatabase(database.binding)).toBe(database.binding);
     for (const candidate of [undefined, null, {}, { prepare: "no" }]) expect(jobKeysDatabase(candidate)).toBeNull();
