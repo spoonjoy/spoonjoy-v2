@@ -3,7 +3,7 @@
 // says why). Each method picks the tables by the plan's scope, so nothing above this adapter knows there are two.
 import type { PrismaClient } from "@prisma/client";
 import { readableRecipeWhere } from "~/domains/kitchen";
-import type { PlanSettings, PlanStore } from "../application/plan";
+import { actingCookOf, type PlanScope, type PlanSettings, type PlanStore } from "../application/plan";
 import { ENTRY_SELECT, toEntry } from "./plan-entry-row";
 
 type PlanDb = Pick<PrismaClient, "mealPlan" | "planEntry" | "householdPlan" | "householdPlanEntry" | "recipe" | "recipeSpoon">;
@@ -12,6 +12,13 @@ const PLAN_SELECT = { id: true, firstDayOfWeek: true, timeZone: true } as const;
 
 function isHousehold(plan: PlanSettings): boolean {
   return "household" in plan.scope;
+}
+
+/** The acting cook as a recipe reader, and whose recipes the scope offers: theirs and, on a household's plan, its cooks'. */
+function readerOf(scope: PlanScope) {
+  const id = actingCookOf(scope);
+  const householdChefIds = "household" in scope ? (scope.householdChefIds ?? new Set<string>()) : new Set<string>();
+  return { viewer: { id, householdChefIds }, authors: [id, ...householdChefIds] };
 }
 
 export function prismaPlanStore(db: PlanDb): PlanStore {
@@ -29,16 +36,18 @@ export function prismaPlanStore(db: PlanDb): PlanStore {
         : await db.planEntry.findMany({ where: { mealPlanId: plan.id, ...live }, select: ENTRY_SELECT });
       return rows.map(toEntry);
     },
-    async plannableRecipeTitle(cookId, recipeId) {
-      const recipe = await db.recipe.findFirst({ where: { id: recipeId, deletedAt: null, ...readableRecipeWhere({ id: cookId }) }, select: { title: true } });
+    async plannableRecipeTitle(scope, recipeId) {
+      const { viewer } = readerOf(scope);
+      const recipe = await db.recipe.findFirst({ where: { id: recipeId, deletedAt: null, ...readableRecipeWhere(viewer) }, select: { title: true } });
       return recipe?.title ?? null;
     },
-    async ownAndSavedRecipes(cookId, limit) {
+    async listPlannableRecipes(scope, limit) {
+      const { viewer, authors } = readerOf(scope);
       return db.recipe.findMany({
         where: {
           deletedAt: null,
-          ...readableRecipeWhere({ id: cookId }),
-          AND: [{ OR: [{ chefId: cookId }, { cookbooks: { some: { cookbook: { authorId: cookId } } } }] }],
+          ...readableRecipeWhere(viewer),
+          AND: [{ OR: [{ chefId: { in: authors } }, { cookbooks: { some: { cookbook: { authorId: viewer.id } } } }] }],
         },
         select: { id: true, title: true },
         orderBy: [{ title: "asc" }, { id: "asc" }],
