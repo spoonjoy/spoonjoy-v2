@@ -4,8 +4,8 @@
 import type { RangeSource } from "../archive/zip";
 import type { MoveInPorts } from "../../application/run-move-in";
 
-/** The stages a segment's time is split into. Whatever no port accounts for (parsing, mostly) is the rest. */
-export const MOVE_IN_STAGES = ["job", "backupReads", "recipeWrites", "photoWrites", "photoChecks", "organizers"] as const;
+/** The stages a segment's time is split into. Whatever no port accounts for (parsing, mostly, and the claim) is the rest. */
+export const MOVE_IN_STAGES = ["job", "backup", "recipeWrites", "photoWrites", "photoChecks", "organizers"] as const;
 export type MoveInStage = (typeof MOVE_IN_STAGES)[number];
 
 export type MoveInStageTimes = Record<MoveInStage, { calls: number; ms: number }>;
@@ -24,7 +24,7 @@ export function timeMoveInPorts(ports: MoveInPorts, clock: () => number = Date.n
         times[stage].ms += clock() - started;
       }
     };
-  const timedSource = (source: RangeSource): RangeSource => ({ size: source.size, read: timed("backupReads", source.read.bind(source)) });
+  const timedSource = (source: RangeSource): RangeSource => ({ size: source.size, read: timed("backup", source.read.bind(source)) });
   const store = Object.fromEntries(
     Object.entries(ports.store).map(([name, call]) => [name, timed("job", (call as (...args: unknown[]) => unknown).bind(ports.store))]),
   ) as unknown as MoveInPorts["store"];
@@ -33,7 +33,9 @@ export function timeMoveInPorts(ports: MoveInPorts, clock: () => number = Date.n
     ports: {
       ...ports,
       store,
-      openArchive: async (job) => timedSource(await timed("backupReads", ports.openArchive)(job)),
+      openArchive: async (job) => timedSource(await timed("backup", ports.openArchive)(job)),
+      ownerEmail: timed("job", ports.ownerEmail),
+      discardArchive: timed("backup", ports.discardArchive),
       writeRecipe: timed("recipeWrites", ports.writeRecipe),
       attachPhoto: timed("photoWrites", ports.attachPhoto),
       hasMovedInPhoto: timed("photoChecks", ports.hasMovedInPhoto),
@@ -42,7 +44,20 @@ export function timeMoveInPorts(ports: MoveInPorts, clock: () => number = Date.n
   };
 }
 
-/** A segment's log line: how long it ran, and each stage's calls and milliseconds. */
-export function moveInSegmentLine(wallMs: number, times: MoveInStageTimes): string {
-  return JSON.stringify({ event: "move_in_segment", wallMs, stages: times });
+export interface MoveInSegmentTiming {
+  /** How long the segment ran. */
+  wallMs: number;
+  /** How long its message waited between being queued and this delivery, retries included; null when it carried no time. */
+  waitMs: number | null;
+  /** Whether this run held the move-in; false when another run had it, null when the segment stopped on an error. */
+  claimed: boolean | null;
+  /** How many recipes the kitchen has, so a run's big move-in reads apart from its small ones; null before it is counted. */
+  recipesFound: number | null;
+  stages: MoveInStageTimes;
+}
+
+/** A segment's log line: counts and milliseconds under fixed keys, nothing else. */
+export function moveInSegmentLine(timing: MoveInSegmentTiming): string {
+  const { wallMs, waitMs, claimed, recipesFound, stages } = timing;
+  return JSON.stringify({ event: "move_in_segment", wallMs, waitMs, claimed, recipesFound, stages });
 }
