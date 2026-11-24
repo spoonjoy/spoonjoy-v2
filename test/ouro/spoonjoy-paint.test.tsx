@@ -1,7 +1,8 @@
 // What Spoonjoy's released Ouro UI controls paint, read from the browser's computed styles under the
-// app's compiled stylesheet. Where the engine has corner-shape, a control paints its own fill and
-// border; where it does not, Ouro's surface layer paints them, and the layer's ::after draws the
-// border. Each expectation is the token the look is bound to, resolved by the engine itself.
+// app's compiled stylesheet. A control paints its own fill and border in every engine (since Ouro UI
+// v1.3.506 the build's squircleCorners() clips it to a squircle where the engine has no corner-shape),
+// so each is read from the element itself. Each expectation is the token the look is bound to, resolved
+// by the engine itself.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { Button } from "~/components/ouro/button/button";
@@ -29,19 +30,12 @@ function resolved(value: string, property: Property): string {
   return computed;
 }
 
-// The surface layer when it paints the control (no corner-shape), else null: then the control paints itself.
-function surfaceLayer(control: HTMLElement): HTMLElement | null {
-  const layer = control.querySelector<HTMLElement>(":scope > [data-ouro-surface]");
-  return layer && getComputedStyle(layer).display !== "none" ? layer : null;
-}
-
 function fillOf(control: HTMLElement): string {
-  return getComputedStyle(surfaceLayer(control) ?? control).backgroundColor;
+  return getComputedStyle(control).backgroundColor;
 }
 
 function borderOf(control: HTMLElement): string {
-  const layer = surfaceLayer(control);
-  return layer ? getComputedStyle(layer, "::after").backgroundColor : getComputedStyle(control).borderTopColor;
+  return getComputedStyle(control).borderTopColor;
 }
 
 describe("Spoonjoy's released Button paints its action tokens", () => {

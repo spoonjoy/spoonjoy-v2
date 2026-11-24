@@ -1,8 +1,9 @@
 // The kitchen's On the counter card is a squircle in every engine, never a round arc (Ari, 2026-11-20:
 // squircle only). It is Ouro UI's Card with a backdrop: where the engine has corner-shape, the card and its
-// picture draw Ouro's corner shape; where it does not (WebKit), ouro-base clips the picture alone to the
-// squircle at the card's --ouro-sq-r, and nothing clips the card's text or capsules. Read from the engine's
-// computed styles under the app's compiled stylesheet, so each browser project proves its own path.
+// picture draw Ouro's corner shape; where it does not (WebKit), the build's squircleCorners() (postcss.config.js)
+// clips the card to the squircle at its --ouro-sq-r, cutting only the slivers outside the squircle's corners, so
+// the card's text and capsules are never cut. Read from the engine's computed styles under the app's compiled
+// stylesheet, so each browser project proves its own path.
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import { Button } from "~/components/ouro/button/button";
@@ -43,7 +44,7 @@ function squircleRadius(card: HTMLElement): number {
   return width;
 }
 
-/** The rules ouro-base keeps for an engine without corner-shape, applied here unconditionally, as that engine would. */
+/** The rules the build keeps for an engine without corner-shape, applied here unconditionally, as that engine would. */
 function applyFallback(): () => void {
   const rules: string[] = [];
   for (const sheet of document.styleSheets) {
@@ -82,24 +83,27 @@ describe("the On the counter card", () => {
     }
   });
 
-  it("clips only its picture to Ouro's squircle at its own radius where the engine has no corner-shape", () => {
+  it("clips the card to Ouro's squircle at its own radius where the engine has no corner-shape, and nothing inside it", () => {
     const remove = applyFallback();
     try {
-      const { card, backdrop } = renderCard();
-      const clip = getComputedStyle(backdrop).clipPath;
-      // The squircle's outline, not an inset rounded by circular arcs, with no circular corner under it.
-      expect(clip).toMatch(/^(polygon|shape)\(/);
-      expect(clip).not.toMatch(/round|circle|ellipse/);
-      expect(getComputedStyle(backdrop).borderTopLeftRadius).toBe("0px");
-      // Its first point starts the top-left corner, one card radius down the left edge.
-      const start = clip.match(/^(?:polygon|shape)\((?:from )?0px ([\d.]+)px/);
-      expect(start).not.toBeNull();
-      expect(Number(start![1])).toBeCloseTo(squircleRadius(card), 1);
-      // The card, its text and its capsules are never clipped.
-      expect(getComputedStyle(card).clipPath).toBe("none");
-      expect(getComputedStyle(card).overflow).toBe("visible");
+      const { card } = renderCard();
+      const radius = squircleRadius(card);
+      const style = getComputedStyle(card);
+      // squircleCorners() hands the clip path the card's radius, and shrinks the round corner under it to the
+      // circle inside the squircle (0.543 of the radius), so no circular arc shows past the squircle.
+      expect(Number.parseFloat(style.getPropertyValue("--sq-tl"))).toBeCloseTo(radius, 1);
+      expect(Number.parseFloat(style.borderTopLeftRadius)).toBeCloseTo(radius * 0.543, 1);
+      // The squircle's outline: a rectangle far outside the card, the card's box, then the squircle at its radius,
+      // drawn in Bezier curves, not an inset rounded by circular arcs.
+      const clip = style.clipPath;
+      expect(clip).toMatch(/^shape\(from -9999px -9999px/);
+      expect(clip).toContain(`move to 0px ${radius}px`);
+      expect(clip).toContain("curve by");
+      expect(clip).not.toMatch(/round|circle|ellipse|arc /);
+      // Nothing between the card and its capsule clips the capsule or the text; the capsule's own clip only
+      // shapes its own corners.
       const link = card.querySelector("a")!;
-      for (let node: Element | null = link; node && node !== card; node = node.parentElement) {
+      for (let node: Element | null = link.parentElement; node && node !== card; node = node.parentElement) {
         expect(getComputedStyle(node).clipPath).toBe("none");
       }
     } finally {

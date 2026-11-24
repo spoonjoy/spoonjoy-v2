@@ -156,13 +156,14 @@
 }
 
 /* The card's corner is four control radii, the Apple app's 24pt at the theme's 6px radius, so it grows
-   with every other themed corner. It stays a squircle, as the Apple app's continuous corner: Ouro UI's
-   Card takes the corner shape, and its backdrop's squircle clip reads --ouro-sq-r where the engine has
-   no corner-shape. */
+   with every other themed corner. It stays a squircle, as the Apple app's continuous corner: the build's
+   squircleCorners() (postcss.config.js) gives this rule corner-shape: squircle, and a squircle clip-path
+   at the same radius where the engine has no corner-shape. --ouro-sq-r is the radius the card's text
+   and capsules keep clear of. */
 .sj-counter-card {
   --border: var(--sj-on-photo-muted);
   --ouro-sq-r: calc(var(--radius) * var(--ouro-radius-scale, 1) * 4);
-  border-radius: calc(var(--ouro-sq-r) * var(--ouro-corner-fallback, 1));
+  border-radius: var(--ouro-sq-r);
 }
 
 /* Without a photo, Cover sits on the counter card on its own light wash, so its letter takes the page's
@@ -699,7 +700,7 @@ body:has(#cook) .sj-site-footer {
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-ring: var(--ring);
-  --radius-md: calc(var(--radius) * var(--ouro-radius-scale, 1) * var(--ouro-corner-fallback, 1) - 2px);
+  --radius-md: calc(var(--radius) * var(--ouro-radius-scale, 1) - 2px);
   --color-avatar-1: var(--avatar-1);
   --color-avatar-2: var(--avatar-2);
   --color-avatar-3: var(--avatar-3);

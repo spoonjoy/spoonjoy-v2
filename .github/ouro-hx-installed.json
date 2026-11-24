@@ -522,6 +522,7 @@
     "app/lib/ouro/share.ts": "e2abb8f33ec4af83d2b756088258fb1fac3328d188a40bcd9b28fa9fc9e78cf8",
     "app/lib/ouro/spring.test.ts": "27d538ced754bc749c2300838da56806e972cfc8551153fa331f0c9a093f045f",
     "app/lib/ouro/spring.ts": "d5d31abdccd29eb8a63389d513331a404eeafa6821e16e5ce330658443126627",
+    "app/lib/ouro/squircle-corners.ts": "e054bd52cf6e789dea1f2a193264363142f6da57afd3638ee89031db0d956c42",
     "app/lib/ouro/stretched-link.ts": "c4346428583921ffb6671d3e1451c2c0f2309329b4b31ff398e9abf653a510a2",
     "app/lib/ouro/testing/act.ts": "b1f54ca4cad976212cfcf68ae31224768bbcb47c6addfe687b2da5ceea436cfc",
     "app/lib/ouro/testing/announcements.test.tsx": "586c5e4e109a0e77afa427c987b55b174e605521ea0cc6e3d60daa976f1f3ba8",
