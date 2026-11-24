@@ -345,10 +345,10 @@ describe("summarize-worker-tail.jq", () => {
 
   it("adds up where the move-ins' segments spent their time by kitchen size, reading only numbers under fixed keys", () => {
     const segment = (fields: Record<string, unknown>) => JSON.stringify({ event: "move_in_segment", jobId: CANARIES.query, ...fields });
-    const zero = { calls: 0, ms: 0 };
+    const zero = { calls: 0, ms: 0, d1: 0 };
     const { summary, raw } = summarize([
-      { outcome: "ok", logs: [{ level: "log", message: [segment({ wallMs: 20_000, waitMs: 1000, claimed: true, recipesFound: 500, stages: { job: { calls: 30, ms: 6000 }, recipeWrites: { calls: 10, ms: 9000 }, [CANARIES.body]: { calls: 1, ms: 1 } } })] }] },
-      { outcome: "ok", logs: [{ level: "log", message: [{ event: "move_in_segment", wallMs: 4000, waitMs: 9000, claimed: null, recipesFound: 500, stages: { job: { calls: 2, ms: -5 }, photoWrites: { calls: 1, ms: 3000 } } }] }] },
+      { outcome: "ok", logs: [{ level: "log", message: [segment({ wallMs: 20_000, waitMs: 1000, claimed: true, recipesFound: 500, stages: { job: { calls: 30, ms: 6000, d1: 40 }, recipeWrites: { calls: 10, ms: 9000, d1: 20 }, [CANARIES.body]: { calls: 1, ms: 1 } } })] }] },
+      { outcome: "ok", logs: [{ level: "log", message: [{ event: "move_in_segment", wallMs: 4000, waitMs: 9000, claimed: null, recipesFound: 500, stages: { job: { calls: 2, ms: -5, d1: 3 }, photoWrites: { calls: 1, ms: 3000, d1: "many" } } }] }] },
       { outcome: "ok", logs: [{ level: "log", message: [segment({ wallMs: 300, waitMs: "soon", claimed: true, recipesFound: 3, stages: { backup: { calls: 2, ms: 100 } } })] }] },
       // A segment that found another run doing the work is counted apart; one whose wall time isn't a count is left out.
       { outcome: "ok", logs: [{ level: "log", message: [segment({ wallMs: 50, claimed: false }), segment({ wallMs: "slow" }), segment({ wallMs: 100, recipesFound: CANARIES.body, stages: "none" }), "not json"] }] },
@@ -358,8 +358,8 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.moveInSegments).toEqual({
       unclaimed: 1,
       kitchens: [
-        { recipesFound: 500, segments: 2, wallMs: 24_000, waitMs: 10_000, stages: stages({ job: { calls: 32, ms: 6000 }, recipeWrites: { calls: 10, ms: 9000 }, photoWrites: { calls: 1, ms: 3000 } }), otherMs: 6000 },
-        { recipesFound: 3, segments: 1, wallMs: 300, waitMs: 0, stages: stages({ backup: { calls: 2, ms: 100 } }), otherMs: 200 },
+        { recipesFound: 500, segments: 2, wallMs: 24_000, waitMs: 10_000, stages: stages({ job: { calls: 32, ms: 6000, d1: 43 }, recipeWrites: { calls: 10, ms: 9000, d1: 20 }, photoWrites: { calls: 1, ms: 3000, d1: 0 } }), otherMs: 6000 },
+        { recipesFound: 3, segments: 1, wallMs: 300, waitMs: 0, stages: stages({ backup: { calls: 2, ms: 100, d1: 0 } }), otherMs: 200 },
         { recipesFound: null, segments: 1, wallMs: 100, waitMs: 0, stages: stages({}), otherMs: 100 },
       ],
     });

@@ -9,7 +9,7 @@ import { defineJob, type JobHandler, type Jobs } from "~/domains/platform";
 import { FINISHED, runMoveInSegment, type MoveInJob, type MoveInStatus } from "../../application/run-move-in";
 import { readMoveInPosition, readMoveInRecipesFound } from "../storage/job-store.server";
 import { moveInPorts, type MoveInEnv } from "./move-in-ports.server";
-import { moveInSegmentLine, timeMoveInPorts } from "./move-in-timing.server";
+import { meterD1, moveInSegmentLine, timeMoveInPorts } from "./move-in-timing.server";
 
 /** How long one segment runs before it hands over to the next, a stretch the page-driven runs have kept to. */
 export const MOVE_IN_SEGMENT_MS = 20_000;
@@ -102,11 +102,12 @@ export function moveInJobHandler(
   return async (payload) => {
     // A message that names no move-in has nothing to run.
     if (!isPayload(payload)) return;
-    const ports = moveInPorts(env, now);
+    const metered = meterD1(env.DB);
+    const ports = moveInPorts({ ...env, DB: metered.db }, now);
     const before = await ports.store.loadJob(payload.jobId);
     if (!before || FINISHED.includes(before.status)) return;
     // Each segment logs where its time went, whether it ran to its budget, finished the move-in or stopped on an error.
-    const { ports: timed, times } = timeMoveInPorts(ports, clock);
+    const { ports: timed, times } = timeMoveInPorts(ports, clock, metered.meter);
     const started = clock();
     const waitMs = typeof payload.queuedAt === "number" ? Math.max(0, started - payload.queuedAt) : null;
     const logSegment = async (claimed: boolean | null) => {

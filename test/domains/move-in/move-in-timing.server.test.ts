@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { moveInSegmentLine, timeMoveInPorts } from "~/domains/move-in/adapters/worker/move-in-timing.server";
+import { meterD1, moveInSegmentLine, timeMoveInPorts } from "~/domains/move-in/adapters/worker/move-in-timing.server";
 import type { MoveInPorts } from "~/domains/move-in/application/run-move-in";
 
 const job = { id: "movein_1" } as never;
@@ -52,6 +52,45 @@ describe("timeMoveInPorts", () => {
     expect(await ports.attachPhotos?.([])).toEqual([null]);
     expect(times.photoWrites.calls).toBe(1);
     expect(timeMoveInPorts(fakePorts()).ports.attachPhotos).toBeUndefined();
+  });
+
+  it("counts each D1 round trip under the stage whose port call made it, a port called inside another under the outer one", async () => {
+    const ran: unknown[] = [];
+    // Every statement the binding makes, so the test can tell its own from a wrapper.
+    const made: object[] = [];
+    type Statement = { sql: string; bind(...values: unknown[]): Statement; all(): Promise<{ results: [] }> };
+    const statement = (sql: string): Statement => {
+      const one: Statement = { sql, bind: () => statement(sql), all: async () => ({ results: [] }) };
+      made.push(one);
+      return one;
+    };
+    const binding = { prepare: statement, batch: async (statements: unknown[]) => (ran.push(...statements), []) };
+    const { db, meter } = meterD1(binding);
+    const outside = db.prepare("SELECT 0");
+    await outside.all();
+    const { ports, times } = timeMoveInPorts(fakePorts({
+      ownerEmail: async () => {
+        await db.prepare("SELECT 1").bind(1).all();
+        await db.batch([db.prepare("SELECT 2"), binding.prepare("SELECT 3").bind(3)]);
+        return null;
+      },
+      attachPhoto: async () => {
+        await (await ports.openArchive(job)).read(0, 1);
+        await db.prepare("SELECT 4").all();
+      },
+    }), Date.now, meter);
+
+    await ports.ownerEmail("chef-1");
+    await ports.attachPhoto({} as never);
+    await db.prepare("SELECT 5").all();
+
+    expect(times.job.d1).toBe(2);
+    expect(times.photoWrites.d1).toBe(1);
+    expect(times.backup).toMatchObject({ calls: 2, d1: 0 });
+    // D1 is handed its own statements, not the wrappers.
+    expect(ran).toHaveLength(2);
+    for (const one of ran) expect(made.includes(one as object)).toBe(true);
+    expect(db.prepare("SELECT 6").sql).toBe("SELECT 6");
   });
 
   it("leaves a Worker without organizers without them", () => {

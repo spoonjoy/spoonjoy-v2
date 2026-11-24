@@ -166,6 +166,10 @@ describe("the move-in job", () => {
       expect(recipes.waitMs).toBeGreaterThan(0);
       expect(recipes.stages.job.calls).toBeGreaterThan(3);
       expect(recipes.stages.backup.calls).toBeGreaterThan(0);
+      // The D1 round trips each stage made through the Worker's database; reading the backup makes none.
+      expect(recipes.stages.recipeWrites.d1).toBeGreaterThanOrEqual(recipes.stages.recipeWrites.calls);
+      expect(recipes.stages.job.d1).toBeGreaterThan(0);
+      expect(recipes.stages.backup.d1).toBe(0);
       expect(recipes.wallMs).toBeGreaterThan(recipes.stages.job.ms);
       // Nothing that names the job, the cook or a recipe.
       for (const line of lines) expect(line).not.toMatch(new RegExp(`${jobId}|chef|Pancakes|cook@`, "i"));
