@@ -134,8 +134,10 @@ export async function uploadBackup(file: File, options: UploadOptions): Promise<
   /** Waits, unless the cook stops the upload first. */
   const wait = (ms: number) =>
     new Promise<void>((resolve) => {
-      void sleep(ms).then(resolve);
       stop?.addEventListener("abort", () => resolve(), { once: true });
+      void sleep(ms).then(resolve);
+      // A stop that came while the pause was being set up.
+      if (stop?.aborted) resolve();
     });
   /**
    * A part is cut off by a stop as well as by its time running out. Begin and finish are left to answer, so a stop

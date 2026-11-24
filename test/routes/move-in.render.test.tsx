@@ -9,11 +9,11 @@ const UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 // The upload in parts, held at each step the test lets it reach.
 const sent = vi.hoisted(() => ({
   calls: [] as Array<{ file: File; app: string }>,
-  run: null as null | ((options: { onProgress: (sent: number, total: number) => void; onChecking: () => void }) => Promise<unknown>),
+  run: null as null | ((options: { onProgress: (sent: number, total: number) => void; onChecking: () => void; signal: AbortSignal }) => Promise<unknown>),
 }));
 vi.mock("~/lib/move-in-upload", async (original) => ({
   ...(await original<typeof import("~/lib/move-in-upload")>()),
-  uploadBackup: (file: File, options: { app: string; onProgress: (sent: number, total: number) => void; onChecking: () => void }) => {
+  uploadBackup: (file: File, options: { app: string; onProgress: (sent: number, total: number) => void; onChecking: () => void; signal: AbortSignal }) => {
     sent.calls.push({ file, app: options.app });
     return sent.run!(options);
   },
@@ -136,6 +136,41 @@ describe("the Move in page", () => {
     expect(await screen.findByText("The connection dropped after 84 MB of 512 MB was sent.")).toBeTruthy();
     expect(screen.queryByText(/ sent$/)).toBeNull();
     expect((screen.getByRole("button", { name: "Move in" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("stops an upload on the cook's word, and goes back to the empty form saying so", async () => {
+    let signal!: AbortSignal;
+    sent.run = (options) => {
+      signal = options.signal;
+      return new Promise((resolve) =>
+        signal.addEventListener("abort", () => resolve({ ok: false, stopped: true, error: "The upload was stopped, and nothing of it was kept. Choose a backup to start again." })),
+      );
+    };
+    page(null);
+    await chooseAndSend(new File([new Uint8Array(8)], "mealie.zip"));
+    const stop = await screen.findByRole("button", { name: "Stop upload" });
+    expect(signal.aborted).toBe(false);
+    await act(async () => fireEvent.click(stop));
+    expect(signal.aborted).toBe(true);
+    expect(await screen.findByText("Upload stopped")).toBeTruthy();
+    expect(screen.getByText("The upload was stopped, and nothing of it was kept. Choose a backup to start again.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Stop upload" })).toBeNull();
+    expect(screen.queryByText(/ sent$/)).toBeNull();
+    expect(screen.queryByText("That backup didn't move in")).toBeNull();
+    expect((screen.getByRole("button", { name: "Move in" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("hides Stop upload once every part has arrived and the backup is being checked", async () => {
+    let step!: { onChecking: () => void };
+    sent.run = (options) => {
+      step = options;
+      return new Promise(() => undefined);
+    };
+    page(null);
+    await chooseAndSend(new File([new Uint8Array(8)], "mealie.zip"));
+    expect(await screen.findByRole("button", { name: "Stop upload" })).toBeTruthy();
+    act(() => step.onChecking());
+    expect(screen.queryByRole("button", { name: "Stop upload" })).toBeNull();
   });
 
   it("leaves a send with no file to the form, which says to choose one", async () => {
