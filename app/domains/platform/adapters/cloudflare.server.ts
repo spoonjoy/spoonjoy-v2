@@ -6,10 +6,13 @@ import { DEFAULT_GEMINI_TEXT_MODEL, DEFAULT_GEMINI_TEXT_TIMEOUT_MS, geminiGenera
 import { sendTransactionalEmail, type TransactionalEmailEnv } from "~/lib/transactional-email.server";
 import { createOpenAIClient } from "~/lib/openai-client.server";
 import { sendPush } from "~/lib/web-push.server";
+import type { JobMessage } from "../ports/jobs";
 import { PlatformUnavailableError, type GenerateJsonInput, type Platform } from "../ports/ports";
+import { d1JobKeys, queueJobs, type JobKeysDatabase } from "./cloudflare-jobs";
 
 export type CloudflarePlatformEnv = TransactionalEmailEnv & {
   DB?: D1Database;
+  JOBS?: Queue<JobMessage>;
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
@@ -67,6 +70,12 @@ export function cloudflarePlatform(env: CloudflarePlatformEnv): Platform {
       async send(email) {
         if (!env.DB) throw new PlatformUnavailableError("email", "the DB binding");
         await sendTransactionalEmail(await getDb({ DB: env.DB }), env, email);
+      },
+    },
+    jobs: {
+      async enqueue(kind, payload, options) {
+        if (!env.DB) throw new PlatformUnavailableError("jobs", "the DB binding");
+        return queueJobs(env.JOBS, d1JobKeys(env.DB as unknown as JobKeysDatabase)).enqueue(kind, payload, options);
       },
     },
   };

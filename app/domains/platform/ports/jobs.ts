@@ -144,11 +144,3 @@ export async function runJob(registry: JobRegistry, keys: JobKeys, message: JobM
   await keys.markDone(message.key);
   return { status: "done" };
 }
-
-/** The jobs port lacks the binding it runs on here. */
-export class JobsUnavailableError extends Error {
-  constructor(missing: string) {
-    super(`The jobs port is not available here: ${missing} is not configured.`);
-    this.name = "JobsUnavailableError";
-  }
-}

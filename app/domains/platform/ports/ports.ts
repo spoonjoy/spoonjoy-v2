@@ -1,11 +1,12 @@
 // The platform ports: the services where a self-hosted server differs from spoonjoy.app. A self-hosted server runs
 // the same Worker in workerd, so D1, R2, the cook-session Durable Object and waitUntil keep their Cloudflare
-// bindings (app/cloudflare-env.d.ts) and need no port. AI, push and email do differ: a self-hosted server brings its
-// own model address, sends push directly or through a relay, and has its own mail. Cloudflare adapters
+// bindings (app/cloudflare-env.d.ts) and need no port. AI, push, email and jobs do differ: a self-hosted server brings
+// its own model address, sends push directly or through a relay, has its own mail and runs jobs in process (./jobs.ts). Cloudflare adapters
 // (../adapters/cloudflare.server.ts) serve spoonjoy.app; a self-hosted server adds its own behind these interfaces.
 // Application code takes the ports it uses as arguments; it never reads their env or secrets itself.
 import type { NotificationPayload, PushSubscriptionRecord, SendPushResult } from "~/lib/web-push.server";
 import type { TransactionalEmail } from "~/lib/transactional-email.server";
+import type { Jobs } from "./jobs";
 
 /** Notifications to a person's devices: web push on Cloudflare. */
 export interface Push {
@@ -39,6 +40,7 @@ export interface Platform {
   push: Push;
   ai: AI;
   email: Email;
+  jobs: Jobs;
 }
 
 export type PortName = keyof Platform;

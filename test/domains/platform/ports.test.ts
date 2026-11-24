@@ -15,6 +15,7 @@ vi.mock("~/lib/gemini-text.server", async (original) => ({
 vi.mock("~/lib/transactional-email.server", () => ({ sendTransactionalEmail: (...args: unknown[]) => sendTransactionalEmail(...args) }));
 
 const { cloudflarePlatform } = await import("~/domains/platform/index.server");
+const { defineJob } = await import("~/domains/platform");
 
 const unavailable = (port: string) => expect.objectContaining({ name: "PlatformUnavailableError", port });
 
@@ -86,5 +87,17 @@ describe("platform ports on spoonjoy.app", () => {
     expect(typeof client.$disconnect).toBe("function");
     expect([sentEnv, sent]).toEqual([env, email]);
     await expect(cloudflarePlatform({} as never).email.send(email)).rejects.toEqual(unavailable("email"));
+  });
+
+  it("sends jobs on the JOBS queue, keyed in D1", async () => {
+    const send = vi.fn(async () => {});
+    const run = vi.fn(async () => ({ meta: { changes: 1 } }));
+    const DB = { prepare: () => ({ bind: () => ({ run, all: async () => ({ results: [] }) }) }) };
+    const kind = defineJob<{ jobId: string }>("move-in.run");
+    const platform = cloudflarePlatform({ DB, JOBS: { send } } as never);
+    expect(await platform.jobs.enqueue(kind, { jobId: "job-1" }, { key: "move-in:job-1" })).toEqual({ enqueued: true });
+    expect(send).toHaveBeenCalledWith({ type: "move-in.run", key: "move-in:job-1", payload: { jobId: "job-1" } }, {});
+    await expect(cloudflarePlatform({ DB } as never).jobs.enqueue(kind, { jobId: "job-1" }, { key: "k" })).rejects.toEqual(unavailable("jobs"));
+    await expect(cloudflarePlatform({ JOBS: { send } } as never).jobs.enqueue(kind, { jobId: "job-1" }, { key: "k" })).rejects.toEqual(unavailable("jobs"));
   });
 });

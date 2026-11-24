@@ -5,8 +5,8 @@ import {
   d1JobKeys,
   defineJob,
   jobRegistry,
-  JobsUnavailableError,
   memoryJobs,
+  PlatformUnavailableError,
   queueJobs,
   retryDelaySeconds,
   runJob,
@@ -149,7 +149,8 @@ describe("the Cloudflare Queues adapter", () => {
   it("says the jobs port is unavailable without the JOBS queue binding", async () => {
     const jobs = queueJobs(undefined, keysInMemory());
     const refusal = jobs.enqueue(moveIn, { jobId: "job-1" }, { key: "move-in:job-1" });
-    await expect(refusal).rejects.toBeInstanceOf(JobsUnavailableError);
+    await expect(refusal).rejects.toBeInstanceOf(PlatformUnavailableError);
+    await expect(refusal).rejects.toMatchObject({ port: "jobs" });
     await expect(jobs.enqueue(moveIn, { jobId: "job-1" }, { key: "k" })).rejects.toThrow("The jobs port is not available here: the JOBS queue binding is not configured.");
   });
 
