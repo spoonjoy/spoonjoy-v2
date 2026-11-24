@@ -379,8 +379,10 @@ export async function stopAndStartAgain(
   test.setTimeout(Math.max(test.info().timeout, 2 * MOVE_IN_MS));
   const path = await bigBackup(version);
   const main = page.getByRole("main");
-  // Parts cut off by the stop may be logged as failed loads.
-  expectConsoleError(/^Failed to load resource: net::/, { url: PART_URL, optional: true });
+  // Parts cut off by the stops may be logged as failed loads, one line each: as many as go at once, twice.
+  for (let copy = 0; copy < 2 * UPLOAD_CONCURRENCY; copy++) {
+    expectConsoleError(/^Failed to load resource: net::/, { url: PART_URL, optional: true });
+  }
   const isBegin = (request: Request) => request.method() === "POST" && new URL(request.url()).pathname === "/move-in/uploads";
   const isStop = (request: Request) => request.method() === "DELETE" && /^\/move-in\/uploads\/[^/]+$/.test(new URL(request.url()).pathname);
   /** Lets `through` parts reach the server and holds the rest, which the page then cuts off itself. */
