@@ -87,12 +87,18 @@ export function jobRegistry(): JobRegistry {
 }
 
 /** Where job keys are claimed and leased, so a key runs once at a time and finishes once: D1 on spoonjoy.app. */
+/** A job's message as its key keeps it, so it can be sent again if the queue loses it. */
+export interface KeptMessage {
+  payload: unknown;
+  deliverAt: Date;
+}
+
 export interface JobKeys {
   /**
    * True when the key was free (or left waiting for over a day, its message lost) and is now this job's;
    * false when it is already waiting, running or done.
    */
-  claim(key: string, type: string): Promise<boolean>;
+  claim(key: string, type: string, message?: KeptMessage): Promise<boolean>;
   /**
    * Leases the key to this run, and counts it: `run` is 1 on the key's first run. "busy" while another run
    * holds an unexpired lease, with the seconds until it is up; "done" once the job finished.

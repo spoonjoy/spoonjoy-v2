@@ -138,6 +138,11 @@ if (command === "sql") {
 
 // Miniflare doesn't schedule cron triggers, so the photo sweep runs on a timer here.
 const worker = await mf.getWorker();
+// The queue lives in this process, so a restart lost whatever jobs it held: the Worker sends again each job that was
+// still waiting or running (replayJobMessages), before the server says it is ready. The event name matches
+// SELF_HOST_BOOT_EVENT in workers/app.ts.
+const replayed = await worker.scheduled({ cron: "self-host:boot" });
+if (replayed.outcome !== "ok") log("jobs-replay-failed", { outcome: replayed.outcome });
 const stopCron = startCronTimers(built.triggers?.crons ?? [], async (cron) => {
   await worker.scheduled({ cron });
   log("scheduled", { cron });
