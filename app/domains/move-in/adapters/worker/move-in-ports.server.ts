@@ -7,11 +7,16 @@ import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { getDb } from "~/lib/db.server";
 import type { RangeSource } from "../archive/zip";
 import { MoveInError } from "../../model/move-in-error";
-import type { MoveInPorts } from "../../application/run-move-in";
+import type { MoveInJob, MoveInPorts } from "../../application/run-move-in";
+import type { MoveInSource } from "../../application/source";
+import { mealieApiSource } from "../sources/mealie-api/source";
+import { openMealieBackup } from "../sources/mealie-backup/backup";
+import { mealieBackupSource } from "../sources/mealie-backup/source";
 import { moveInJobStore } from "../storage/job-store.server";
 import { attachMovedInOrganizers } from "../storage/organizer-writer.server";
 import { attachMovedInPhoto, hasMovedInPhoto } from "../storage/photo-writer.server";
 import { writeMovedInRecipe } from "../storage/recipe-writer.server";
+import { readsAServer } from "./apps";
 
 /**
  * Where an uploaded backup waits while it moves in. The photo route never serves this prefix and the
@@ -49,6 +54,19 @@ export async function r2RangeSource(bucket: Pick<R2Bucket, "head" | "get">, key:
   };
 }
 
+/**
+ * Where a job's recipes come from: the other app's server, through the address and token its start kept, or the
+ * uploaded backup. Gone from storage means the job went quiet for a day and the sweep deleted it.
+ */
+export async function openMoveInSource(bucket: Pick<R2Bucket, "head" | "get">, job: MoveInJob, fetch: typeof globalThis.fetch): Promise<MoveInSource> {
+  const key = job.archiveKey as string;
+  if (!readsAServer(job.kind)) return mealieBackupSource(await openMealieBackup(await r2RangeSource(bucket, key)));
+  const stored = await bucket.get(key);
+  if (!stored) throw new MoveInError("expired", "the server connection is no longer in storage");
+  const { address, token } = JSON.parse(new TextDecoder().decode(await stored.arrayBuffer())) as { address: string; token: string };
+  return mealieApiSource({ address, token, fetch });
+}
+
 /** The email the person signs in to Spoonjoy with, which picks their kitchen in a backup that holds several. */
 export async function ownerEmail(db: D1ReadDatabase, ownerId: string): Promise<string | null> {
   const [[row]] = await d1ReadBatch(db, [[`SELECT "email" FROM "User" WHERE "id" = ?`, ownerId]]);
@@ -67,6 +85,7 @@ export function moveInPorts(env: MoveInEnv, now: () => Date): MoveInPorts {
   return {
     store: moveInJobStore(db, now),
     openArchive: (job) => r2RangeSource(env.PHOTOS, job.archiveKey as string),
+    openSource: (job) => openMoveInSource(env.PHOTOS, job, (input, init) => fetch(input, init)),
     ownerEmail: (ownerId) => ownerEmail(db, ownerId),
     writeRecipe: (input) => writeMovedInRecipe({ db, ...input, now: now() }),
     attachPhoto: (input) => attachMovedInPhoto({ db, bucket: env.PHOTOS, ...input, now: now() }),

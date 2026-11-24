@@ -135,7 +135,7 @@ describe("runNextChunk", () => {
     const h = harness();
     await runNextChunk("job-1", h.ports);
     expect(h.job()).toMatchObject({ status: "running", phase: "recipes", cursor: "0", sourceId: "source-1" });
-    expect(h.sources).toEqual([{ ownerId: "chef-1", kind: "mealie-backup", instanceKey: keys.group, label: "Home", sourceVersion: "v3.31.0" }]);
+    expect(h.sources).toEqual([{ ownerId: "chef-1", kind: "mealie-backup", instanceKey: keys.group, label: "Home", serverUrl: null, sourceVersion: "v3.31.0" }]);
     expect(h.counts.get("recipes")).toMatchObject({ found: 3, created: 0 });
     expect(h.counts.get("photos")).toMatchObject({ found: 1 });
     expect(h.counts.get("tags")).toMatchObject({ found: 1, skipped: 1 });
@@ -439,6 +439,21 @@ describe("a source other than a backup", () => {
     expect(await h.runAll()).toMatchObject({ status: "done-with-issues", phase: "done" });
     expect(opens).toBeGreaterThan(0);
     expect(h.written.size).toBe(3);
+  });
+
+  it("records the source's app and address, and words its notes for where the kitchen is", async () => {
+    const h = harness({ write: async ({ draft }) => { if (draft.title === "Soup") throw new Error("no"); return { outcome: "created", recipeId: draft.sourceKey, title: draft.title, warnings: [] }; } });
+    const words = { there: "on your recipe server", again: "Moving in from your server again" };
+    const given = h.ports;
+    changedSource(h, () => ({}));
+    const open = given.openSource as NonNullable<MoveInPorts["openSource"]>;
+    h.ports.openSource = async (job) => ({ ...(await open(job)), kind: "the-app", serverUrl: "https://recipes.example.com", words });
+    await h.runAll();
+    expect(h.sources[0]).toMatchObject({ kind: "the-app", serverUrl: "https://recipes.example.com" });
+    expect(h.events.map((event) => event.message)).toEqual(expect.arrayContaining([
+      "Spoonjoy doesn't have tags, categories or tools yet, so 1 tag, 1 category, 1 tool stayed on your recipe server.",
+      "Soup didn't move in this time. Moving in from your server again tries it once more.",
+    ]));
   });
 
   it("passes an outage on, with the recipe still next, rather than counting the recipe as failed", async () => {

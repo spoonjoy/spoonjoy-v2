@@ -52,11 +52,15 @@ describe("the move-in job store", () => {
 
   it("keeps one source per owner, app and kitchen", async () => {
     const store = moveInJobStore(database.binding, () => clock);
-    const source = { ownerId: "chef-1", kind: "mealie-backup", instanceKey: "group-1", label: "Home", sourceVersion: "v2.8.0" };
+    const source = { ownerId: "chef-1", kind: "mealie-backup", instanceKey: "group-1", label: "Home", serverUrl: null, sourceVersion: "v2.8.0" };
     const first = await store.ensureSource(source);
     expect(await store.ensureSource({ ...source, label: "Our home", sourceVersion: "v3.31.0" })).toBe(first);
     expect(await store.ensureSource({ ...source, ownerId: "chef-2" })).not.toBe(first);
     expect(database.sqlite.prepare(`SELECT "label", "sourceVersion" FROM "ImportSource" WHERE "id" = ?`).get(first)).toEqual({ label: "Our home", sourceVersion: "v3.31.0" });
+    // A server's address stays when a backup of the same kitchen moves in later.
+    await store.ensureSource({ ...source, serverUrl: "https://recipes.example.com" });
+    await store.ensureSource({ ...source, serverUrl: null });
+    expect(database.sqlite.prepare(`SELECT "serverUrl" FROM "ImportSource" WHERE "id" = ?`).get(first)).toEqual({ serverUrl: "https://recipes.example.com" });
   });
 
   it("adds to the counts and numbers the report's lines in order", async () => {
@@ -168,7 +172,7 @@ describe("the move-in job store", () => {
     const progress = await readMoveInProgress(database.binding, { ownerId: "chef-1", jobId: id });
     expect(progress?.counts.recipes).toMatchObject({ found: 3 });
     expect(progress?.events.map((event) => event.message)).toEqual(["Found 3 recipes."]);
-    const source = await store.ensureSource({ ownerId: "chef-1", kind: "mealie-backup", instanceKey: "group-1", label: "Home", sourceVersion: "v2.8.0" });
+    const source = await store.ensureSource({ ownerId: "chef-1", kind: "mealie-backup", instanceKey: "group-1", label: "Home", serverUrl: null, sourceVersion: "v2.8.0" });
     expect(await store.sourceInstanceKey(source)).toBe("group-1");
     expect(await store.sourceInstanceKey("nope")).toBeNull();
   });
