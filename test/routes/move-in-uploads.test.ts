@@ -152,7 +152,7 @@ describe("the upload endpoints", () => {
     };
     env.JOBS = jobsQueue;
     const first = await finishUpload(await sendAll(backup()));
-    expect(jobsQueue.sent).toContainEqual({ type: "move-in.run", key: `move-in:${first.body.jobId}:inspect:-`, payload: { jobId: first.body.jobId } });
+    expect(jobsQueue.sent).toContainEqual({ type: "move-in.run", key: `move-in:${first.body.jobId}:inspect:-`, payload: { jobId: first.body.jobId, queuedAt: expect.any(Number) } });
     expect(waiting).toEqual([]);
     jobsQueue.fails = true;
     await removeCook();
