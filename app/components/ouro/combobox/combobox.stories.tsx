@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Combobox, type ComboboxItem } from "~/components/ouro/combobox/combobox";
@@ -89,6 +89,30 @@ export const PhoneTags: Story = {
         placeholder="Add a tag"
       />
     </Surface>
+  ),
+};
+
+/**
+ * On a phone's touch screen, in a theme whose controls are continuous capsules: one chip, and
+ * chips that wrap onto a second row, each starting past the capsule's curved end.
+ */
+export const PhoneCapsules: Story = {
+  globals: { viewport: { value: "mobile2", isRotated: false } },
+  render: () => (
+    <div data-ouro-capsules="" style={{ "--ouro-control-radius": "9999px", "--ouro-control-corner-shape": "superellipse(1.05)" } as CSSProperties}>
+      <Surface>
+        <Combobox label="Category" name="category" multiple items={["Supper", "Lunch", "Breakfast"]} defaultValue={["Supper"]} placeholder="Add a category" />
+        <Combobox
+          label="Tags"
+          name="tags"
+          multiple
+          allowCustomValue
+          items={["Weeknight", "Quick lunch", "Vegan", "One pot", "Make ahead"]}
+          defaultValue={["Weeknight", "Quick lunch", "Vegan", "One pot"]}
+          placeholder="Add a tag"
+        />
+      </Surface>
+    </div>
   ),
 };
 

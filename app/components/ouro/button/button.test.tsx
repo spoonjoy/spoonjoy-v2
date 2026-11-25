@@ -464,7 +464,8 @@ describe("loading", () => {
     const spinning = await render(<Button loading>Save</Button>);
     expect(getComputedStyle(spinner(spinning.host)).animationName).toBe("ouro-spin");
     await commands.emulateMedia({ reducedMotion: "reduce" });
-    expect(getComputedStyle(spinner(spinning.host)).animationName).toBe("ouro-pulse");
+    // WebKit hasn't always applied the emulated media by the next statement (#3518): poll instead of reading once.
+    await expect.poll(() => getComputedStyle(spinner(spinning.host)).animationName).toBe("ouro-pulse");
   });
 });
 

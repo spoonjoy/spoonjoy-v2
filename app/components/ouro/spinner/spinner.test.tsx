@@ -93,7 +93,8 @@ describe("Spinner", () => {
     const icon = (await render(<Spinner />)).querySelector("svg")!;
     expect(getComputedStyle(icon).animationName).toBe("ouro-spin");
     await commands.emulateMedia({ reducedMotion: "reduce" });
-    expect(getComputedStyle(icon).animationName).toBe("ouro-pulse");
+    // WebKit hasn't always applied the emulated media by the next statement (#3518): poll instead of reading once.
+    await expect.poll(() => getComputedStyle(icon).animationName).toBe("ouro-pulse");
   });
 
   it("passes attributes through and keeps layout classes", async () => {

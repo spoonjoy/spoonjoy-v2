@@ -259,7 +259,8 @@ describe("Skeleton", () => {
     // Ends where it starts, so the loop has no seam.
     expect(frames.at(0)!["opacity"]).toBe(frames.at(-1)!["opacity"]);
     await commands.emulateMedia({ reducedMotion: "reduce" });
-    expect(getComputedStyle(skeleton).animationName).toBe("none");
+    // WebKit hasn't always applied the emulated media by the next statement (#3518): poll instead of reading once.
+    await expect.poll(() => getComputedStyle(skeleton).animationName).toBe("none");
     // The media change cancels the animation on its own frame, a frame that can land after this
     // read, as it does elsewhere in the suite: polls past that lag instead of assuming it is done.
     await expect.poll(() => skeleton.getAnimations({ subtree: true }).length).toBe(0);
@@ -279,7 +280,8 @@ describe("Skeleton", () => {
     const again = mounted.at(-2)!.querySelector<HTMLElement>('[data-ouro="skeleton"]')!;
     expect(phaseGap(phase(again), phase(late))).toBeLessThan(phaseGapMs);
     await commands.emulateMedia({ reducedMotion: "reduce" });
-    expect(getComputedStyle(late).animationName).toBe("none");
+    // WebKit hasn't always applied the emulated media by the next statement (#3518): poll instead of reading once.
+    await expect.poll(() => getComputedStyle(late).animationName).toBe("none");
     // See the test above: polls past the cancellation's own frame lag.
     await expect.poll(() => late.getAnimations().length).toBe(0);
   });

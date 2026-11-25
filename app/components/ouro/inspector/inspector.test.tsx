@@ -25,6 +25,7 @@ import { measureTextContrast } from "~/lib/ouro/testing/axe";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
 import { expectMotion, expectNoMotion, parseDuration } from "~/lib/ouro/testing/motion";
+import { isMoving } from "~/lib/ouro/testing/settled";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -118,8 +119,8 @@ const hidden = (target: Element) => {
   return !!tag && getComputedStyle(tag).visibility === "hidden";
 };
 
-/** Waits until nothing on the page is moving. */
-const settled = () => expect.poll(() => document.getAnimations().filter((animation) => animation.playState === "running").length).toBe(0);
+/** Waits until nothing on the page is moving: a transition WebKit still lists as finished counts too (ourostack/ouro-ui#3361). */
+const settled = () => expect.poll(() => document.getAnimations().some(isMoving)).toBe(false);
 
 /** The page's own component roots, in document order, as X-ray should see them. */
 const pageRoots = (host: HTMLElement) => [...host.querySelectorAll('[data-ouro]:not([data-ouro$="-portal"])')];
@@ -611,6 +612,27 @@ describe("Inspector", () => {
     document.documentElement.classList.remove("dark");
     // Every line of text measured twice in each scheme: about 16 s in WebKit on CI, so the budget is twice that.
   }, 60_000);
+
+  it("does not measure contrast while a transition is still listed as finished, as WebKit lists one for a moment after it ends (#3361)", async () => {
+    await render(<Page />);
+    // The page already rests: wait out any real animation the mount left running, so only the
+    // faked entry below decides when settled() resolves.
+    await settled();
+    const real = document.getAnimations.bind(document);
+    const stale = { playState: "finished", effect: { getTiming: () => ({ iterations: 1 }) } } as unknown as Animation;
+    let listed = true;
+    vi.spyOn(document, "getAnimations").mockImplementation(() => (listed ? [...real(), stale] : real()));
+    setTimeout(() => {
+      listed = false;
+    }, 200);
+    const before = performance.now();
+    await settled();
+    // A loaded runner can take longer than 200ms to reach this poll, but never less: settled() must
+    // not resolve the instant nothing is "running", only once the finished entry is gone too, as a
+    // measurement taken in between would read the page before WebKit's paint caught up to it (#3361: a
+    // ratio of 2.49:1 measured against an outline WebKit had not yet finished drawing).
+    expect(performance.now() - before).toBeGreaterThanOrEqual(200);
+  });
 
   it("does not outline itself, an overlay's wrappers, a hidden component or a part apart from its component", async () => {
     const { host } = await render(

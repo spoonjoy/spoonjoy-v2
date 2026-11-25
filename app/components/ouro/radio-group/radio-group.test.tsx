@@ -382,7 +382,8 @@ describe("RadioGroup", () => {
     await expect.poll(() => getComputedStyle(dot(radios[1]!)).opacity).toBe("1");
     await expect.poll(() => Number.parseFloat(getComputedStyle(dot(radios[1]!)).scale) || 1).toBeCloseTo(1, 3);
     await commands.emulateMedia({ reducedMotion: "reduce" });
-    expect(getComputedStyle(dot(radios[0]!)).transitionProperty).toBe("opacity");
+    // WebKit hasn't always applied the emulated media by the next statement (#3518): poll instead of reading once.
+    await expect.poll(() => getComputedStyle(dot(radios[0]!)).transitionProperty).toBe("opacity");
     expect(Number.parseFloat(getComputedStyle(dot(radios[1]!)).scale) || 1).toBeCloseTo(1, 3);
     expect(host.querySelectorAll("[data-ouro-radio-dot]").length).toBe(radios.length);
   });

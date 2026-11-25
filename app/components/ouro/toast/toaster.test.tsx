@@ -1805,7 +1805,8 @@ describe("motion", () => {
     const content = item.firstElementChild!;
     expect(getComputedStyle(content).transitionTimingFunction).toBe("cubic-bezier(0.23, 1, 0.32, 1)");
     await commands.emulateMedia({ reducedMotion: "reduce" });
-    expect(getComputedStyle(item).transitionProperty).toBe("opacity");
+    // WebKit hasn't always applied the emulated media by the next statement (#3518): poll instead of reading once.
+    await expect.poll(() => getComputedStyle(item).transitionProperty).toBe("opacity");
     const fresh = await show("Still", { duration: 0 });
     expect(getComputedStyle(fresh).transitionProperty).toBe("opacity");
   });

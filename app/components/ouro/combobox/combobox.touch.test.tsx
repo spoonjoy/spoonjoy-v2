@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -681,6 +681,43 @@ describe("Combobox multiple on a phone", () => {
     expect(chipsIn(host)).toHaveLength(0);
     expect(host.querySelector(TRIGGER)!.textContent).toContain("Add tags");
     expect(host.querySelector(TRIGGER)!.getBoundingClientRect().height).toBe(44);
+  });
+});
+
+describe("Combobox chips on a phone clear the field's corner", () => {
+  const tags = ["Weeknight dinner", "Quick lunch", "Vegan", "One pot", "Make ahead"];
+  /** Spoonjoy's capsule: Apple's continuous capsule, whose ends are superellipse(1.05). */
+  const continuousCapsule = { "--ouro-control-radius": "9999px", "--ouro-control-corner-shape": "superellipse(1.05)" } as CSSProperties;
+
+  it.each([
+    ["Ouro's corner", {}],
+    ["a continuous capsule", continuousCapsule],
+  ])("starts one chip and wrapped rows of chips past %s, with a gap between the rows", async (_, theme) => {
+    const host = await render(
+      <div style={theme}>
+        <Combobox label="Tags" multiple items={tags} defaultValue={tags} />
+        <Combobox label="Category" multiple items={tags} defaultValue={["Vegan"]} />
+      </div>,
+    );
+    const fields = [...host.querySelectorAll<HTMLElement>("[data-ouro-combobox-field]")];
+    const corner = (field: HTMLElement) => field.querySelector<HTMLElement>(TRIGGER)!;
+    expect(fields).toHaveLength(2);
+    for (const field of fields) {
+      const box = field.getBoundingClientRect();
+      const radius = Number.parseFloat(getComputedStyle(corner(field)).borderTopLeftRadius);
+      expect(radius).toBeGreaterThan(6);
+      const chips = [...field.querySelectorAll("[data-ouro-combobox-chip]")].map((chip) => chip.getBoundingClientRect());
+      expect(chips.length).toBeGreaterThan(0);
+      for (const chip of chips) {
+        // Past the corner's curve, where the top and bottom edges are flat, and clear of them.
+        // Layout rounds to 1/64px.
+        expect(chip.left - box.left).toBeGreaterThanOrEqual(radius - 0.05);
+        expect(chip.top - box.top).toBeGreaterThanOrEqual(6);
+        expect(box.bottom - chip.bottom).toBeGreaterThanOrEqual(6);
+      }
+      const rows = [...new Set(chips.map((chip) => Math.round(chip.top)))].sort((a, b) => a - b);
+      for (let row = 1; row < rows.length; row += 1) expect(rows[row]! - rows[row - 1]! - chips[0]!.height).toBeGreaterThanOrEqual(4);
+    }
   });
 });
 

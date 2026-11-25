@@ -313,12 +313,13 @@ describe("Switch look and motion", () => {
     const rest = place();
     try {
       await commands.emulateMedia({ contrast: "more" });
-      expect(getComputedStyle(track).borderTopWidth).toBe("2px");
+      // WebKit hasn't always applied the emulated media by the next statement (#3518): poll instead of reading once.
+      await expect.poll(() => getComputedStyle(track).borderTopWidth).toBe("2px");
       expect(place()).toEqual(rest);
     } finally {
       await commands.emulateMedia({ contrast: "no-preference" });
     }
-    expect(getComputedStyle(track).borderTopWidth).toBe("1px");
+    await expect.poll(() => getComputedStyle(track).borderTopWidth).toBe("1px");
   });
 
   it("fills the track with the primary color and moves the thumb to the end when on", async () => {
