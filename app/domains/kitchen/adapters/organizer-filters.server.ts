@@ -2,6 +2,7 @@
 // from, both only while the organizers flag is on for them (off, the list ignores the address's filters).
 import type { AppLoadContext } from "react-router";
 import { isFlagOn } from "~/domains/platform";
+import { d1ReadBatch, requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { ORGANIZER_KINDS, type OrganizerKind } from "../model/organizer";
 import { organizerFilterParams, organizerRefValue, parseOrganizerFilters, type OrganizerFilters } from "../model/organizer-filter";
@@ -9,6 +10,22 @@ import { prismaOrganizerStore } from "./prisma-organizer-store";
 
 /** The cook's organizers of each kind, by name, each with the value a filter sends for it ("tag:quick"). */
 export type OrganizerChoices = Record<OrganizerKind, { name: string; value: string }[]>;
+
+type NamedOrganizer = { name: string; slug: string };
+
+// On the Worker the choices come from D1 in one query, so the page builds no Prisma client: on merge-group run
+// 45528383350 a wedged Prisma engine failed every Prisma page in its isolate, /my-recipes among them.
+async function organizersByKindOnD1(d1: D1ReadDatabase, userId: string): Promise<NamedOrganizer[][]> {
+  const [rows] = await d1ReadBatch(d1, [[`SELECT "kind", "name", "slug" FROM "Organizer" WHERE "ownerId" = ?`, userId]]);
+  return ORGANIZER_KINDS.map((kind) => rows!
+    .filter((row) => row.kind === kind)
+    .map((row) => ({ name: String(row.name), slug: String(row.slug) })));
+}
+
+async function organizersByKindOnPrisma(context: AppLoadContext, userId: string): Promise<NamedOrganizer[][]> {
+  const store = prismaOrganizerStore(await getRequestDb(context));
+  return Promise.all(ORGANIZER_KINDS.map((kind) => store.organizersOf(userId, kind)));
+}
 
 export async function organizerFiltersFor(
   request: Request,
@@ -24,8 +41,8 @@ export async function organizerFiltersFor(
   if (!isFlagOn("organizers", context.cloudflare?.env, userId)) {
     return { filters: { with: [], without: [] }, filterParams: [], organizerChoices: null };
   }
-  const store = prismaOrganizerStore(await getRequestDb(context));
-  const byKind = await Promise.all(ORGANIZER_KINDS.map((kind) => store.organizersOf(userId, kind)));
+  const d1 = requestD1(context);
+  const byKind = d1 ? await organizersByKindOnD1(d1, userId) : await organizersByKindOnPrisma(context, userId);
   const organizerChoices = Object.fromEntries(ORGANIZER_KINDS.map((kind, index) => [
     kind,
     byKind[index]!
