@@ -86,8 +86,18 @@ function detail(page: Page, term: string) {
 const PART_URL = /\/move-in\/uploads\/[^/]+\/parts\/\d+$/;
 const isPart = (request: Request) => request.method() === "PUT" && PART_URL.test(new URL(request.url()).pathname);
 
+/**
+ * Picks "From a backup" the way a cook does, by tapping its card. The card's radio is hidden under
+ * its label, which takes the tap, so checking the radio itself waits until the test times out.
+ */
+async function chooseBackup(page: Page) {
+  const main = page.getByRole("main");
+  await main.getByText("From a backup", { exact: true }).click();
+  await expect(main.getByRole("radio", { name: /^From a backup/ })).toBeChecked();
+}
+
 async function dropBackup(page: Page, version: string) {
-  await page.getByRole("main").getByRole("radio", { name: /^From a backup/ }).check();
+  await chooseBackup(page);
   await page.getByLabel(requiredLabel("Backup zip"), { exact: true }).setInputFiles({
     name: `kitchen-${version}.zip`,
     mimeType: "application/zip",
@@ -373,9 +383,8 @@ export async function moveInAfterADrop(version: string, { page, expectConsoleErr
   });
   await page.goto("/move-in");
   await waitForHydration(page);
-  const fromBackup = main.getByRole("radio", { name: /^From a backup/ });
   const field = page.getByLabel(requiredLabel("Backup zip"), { exact: true });
-  await fromBackup.check();
+  await chooseBackup(page);
   await field.setInputFiles(path);
   await page.getByRole("button", { name: "Move in", exact: true }).click();
   await expect(main.getByText(/ of 2\d\d MB sent$/)).toBeVisible();
@@ -389,7 +398,7 @@ export async function moveInAfterADrop(version: string, { page, expectConsoleErr
   await page.unroute(PART_URL);
   await page.reload();
   await waitForHydration(page);
-  await fromBackup.check();
+  await chooseBackup(page);
   await field.setInputFiles(path);
   await page.getByRole("button", { name: "Move in", exact: true }).click();
   await expect(page).toHaveURL(/\/move-in\?job=movein_/, { timeout: MOVE_IN_MS });
