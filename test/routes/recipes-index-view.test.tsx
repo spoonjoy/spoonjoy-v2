@@ -61,16 +61,8 @@ describe("the recipe list view", () => {
     expect(result.view).toBe("list");
   });
 
-  it("offers no view switch while the flag is off, even after list was picked", async () => {
-    const { container } = renderIndex({ flags: [], view: "list" });
-    await screen.findByRole("heading", { name: "All public recipes" });
-    expect(screen.queryByRole("radiogroup", { name: "Recipe view" })).not.toBeInTheDocument();
-    expect(container.querySelector('img[src="https://example.com/tomato.jpg"]')).toBeInTheDocument();
-    expect(screen.getByText("Crisp bread under sweet tomatoes.")).toBeInTheDocument();
-  });
-
   it("shows a compact list, one line per recipe, when the cook picks List, and keeps the pick", async () => {
-    const { container } = renderIndex({ flags: ["organizers"], view: "pictures" });
+    const { container } = renderIndex({ flags: [], view: "pictures" });
     const views = await screen.findByRole("radiogroup", { name: "Recipe view" });
     expect(within(views).getByRole("radio", { name: "Pictures" })).toBeChecked();
     expect(screen.getByText("Crisp bread under sweet tomatoes.")).toBeInTheDocument();
@@ -93,7 +85,7 @@ describe("the recipe list view", () => {
   });
 
   it("opens in the list the cook picked last time", async () => {
-    renderIndex({ flags: ["organizers"], view: "list" });
+    renderIndex({ flags: [], view: "list" });
     expect(await screen.findByRole("radio", { name: "List" })).toBeChecked();
     expect(screen.getByText("By ines")).toBeInTheDocument();
     expect(screen.queryByText("Crisp bread under sweet tomatoes.")).not.toBeInTheDocument();

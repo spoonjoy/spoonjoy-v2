@@ -179,14 +179,6 @@ describe("moveInPorts' organizers", () => {
     await cleanupDatabase();
   });
 
-  it("are on for a cook with the organizers flag", () => {
-    const ports = (flags: object) => moveInPorts({ DB: database.binding, PHOTOS: memoryBucket(), ...flags } as never, () => now);
-    expect(ports({ SPOONJOY_FLAGS: "organizers" }).organizers?.on("chef-1")).toBe(true);
-    expect(ports({ SPOONJOY_FLAG_USERS: JSON.stringify({ "chef-1": ["organizers"] }) }).organizers?.on("chef-1")).toBe(true);
-    expect(ports({ SPOONJOY_FLAG_USERS: JSON.stringify({ "chef-1": ["organizers"] }) }).organizers?.on("chef-2")).toBe(false);
-    expect(ports({}).organizers?.on("chef-1")).toBe(false);
-  });
-
   it("go on through Kitchen's organizers in the Worker's database, opened once for the run, and again after an open that failed", async () => {
     const db = await getLocalDb();
     await cleanupDatabase();
@@ -197,7 +189,7 @@ describe("moveInPorts' organizers", () => {
     const at = { ownerId: cook.id, sourceId: source.id, jobId: "job-1" };
     vi.mocked(getDb).mockClear();
     vi.mocked(getDb).mockRejectedValueOnce(new Error("D1 is down"));
-    const ports = moveInPorts({ DB: database.binding, PHOTOS: memoryBucket(), SPOONJOY_FLAGS: "organizers" } as never, () => now);
+    const ports = moveInPorts({ DB: database.binding, PHOTOS: memoryBucket() } as never, () => now);
 
     await expect(ports.organizers?.attach({ ...at, recipeId: first.id, tags: ["Quick"], categories: [], tools: [] })).rejects.toThrow("D1 is down");
     await ports.organizers?.attach({ ...at, recipeId: first.id, tags: ["Quick"], categories: [], tools: [] });
@@ -215,7 +207,7 @@ describe("moveInPorts' organizers", () => {
     sql.prepare(`INSERT INTO "Recipe" ("id", "title", "chefId") VALUES ('recipe-1', 'Pancakes', 'chef-1')`).run();
     sql.prepare(`INSERT INTO "ImportSource" ("id", "ownerId", "kind", "instanceKey", "label") VALUES ('source-1', 'chef-1', 'mealie-backup', 'k', 'Home')`).run();
     vi.mocked(getDb).mockClear();
-    const ports = moveInPorts({ DB: database.binding, PHOTOS: memoryBucket(), SPOONJOY_FLAGS: "organizers" } as never, () => now);
+    const ports = moveInPorts({ DB: database.binding, PHOTOS: memoryBucket() } as never, () => now);
 
     expect(await ports.organizers?.attachMany?.([{ ownerId: "chef-1", sourceId: "source-1", jobId: "job-1", recipeId: "recipe-1", tags: ["Quick"], categories: [], tools: [] }])).toEqual([null]);
 
@@ -228,8 +220,8 @@ describe("moveInEnv", () => {
   it("takes the database, photo storage and flags a move-in runs with, and nothing without the database or storage", () => {
     const DB = { prepare: () => null };
     const PHOTOS = memoryBucket();
-    expect(moveInEnv({ DB, PHOTOS, SPOONJOY_FLAGS: "organizers", SPOONJOY_FLAG_USERS: "{}", JOBS: {} } as never)).toEqual({
-      DB, PHOTOS, SPOONJOY_FLAGS: "organizers", SPOONJOY_FLAG_USERS: "{}",
+    expect(moveInEnv({ DB, PHOTOS, SPOONJOY_FLAGS: "move_in", SPOONJOY_FLAG_USERS: "{}", JOBS: {} } as never)).toEqual({
+      DB, PHOTOS, SPOONJOY_FLAGS: "move_in", SPOONJOY_FLAG_USERS: "{}",
     });
     expect(moveInEnv({ DB } as never)).toBeNull();
     expect(moveInEnv({ PHOTOS } as never)).toBeNull();

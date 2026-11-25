@@ -53,6 +53,8 @@ describe("My Recipes loader query boundary", () => {
       user: { findUniqueOrThrow: mocks.userFindUniqueOrThrow },
       recipe: { findMany: mocks.recipeFindMany },
       ingredient: { findMany: mocks.ingredientFindMany },
+      // The cook's organizers, for the filter: none here.
+      organizer: { findMany: async () => [] },
     });
   });
 

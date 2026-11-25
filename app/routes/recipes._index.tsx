@@ -29,7 +29,6 @@ import { ShowMore } from "~/components/ouro/collapsible/show-more";
 import { useAppendingList } from "~/hooks/use-appending-list";
 import { listImageProps, type ImageLoadingProps } from "~/lib/image-loading";
 import { RECIPE_VIEWS, parseRecipeView, recipeViewCookie, recipeViewFromCookie, type RecipeView } from "~/domains/kitchen";
-import { useFlag } from "~/domains/platform";
 
 const PUBLIC_RECIPE_LIMIT = 48;
 
@@ -83,7 +82,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     recipes: withoutHidden(hides, page, (recipe) => ({ type: "recipe", id: recipe.id, chefId: recipe.chef.id })),
     after,
     nextCursor: hasMore ? page[page.length - 1]!.id : null,
-    // The view the cook picked last, so the first render already uses it. Only shown while the organizers flag is on.
+    // The view the cook picked last, so the first render already uses it.
     view: recipeViewFromCookie(request.headers.get("Cookie")),
   };
 }
@@ -103,9 +102,7 @@ const loadPublicRecipesPage = (cursor: string) => `/recipes?index&after=${encode
 
 export default function RecipesIndex() {
   const { query, isAuthenticated, recipes: firstPage, after, nextCursor, view: savedView } = useLoaderData<typeof loader>();
-  const canPickView = useFlag("organizers");
-  const [pickedView, setPickedView] = useState<RecipeView>(savedView);
-  const view: RecipeView = canPickView ? pickedView : "pictures";
+  const [view, setPickedView] = useState<RecipeView>(savedView);
   const pickView = (value: string) => {
     const next = parseRecipeView(value);
     setPickedView(next);
@@ -193,7 +190,7 @@ export default function RecipesIndex() {
             </p>
           </div>
 
-          {canPickView && recipes.length > 0 ? (
+          {recipes.length > 0 ? (
             <SegmentedControl label="Recipe view" items={RECIPE_VIEWS} value={view} onValueChange={pickView} className="mb-5" />
           ) : null}
 

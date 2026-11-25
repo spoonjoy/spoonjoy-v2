@@ -152,18 +152,16 @@ describe("the Move in page", () => {
       photos: { found: 1, in: 1 },
       failure: null,
     });
-    expect(move?.notes.map((note) => note.message)).toContain("Spoonjoy doesn't have tags, categories or tools yet, so 1 tag, 1 category, 1 tool stayed in the backup.");
     expect(await db.recipe.count({ where: { chefId: ownerId } })).toBe(3);
     // Only the moved-in cover is left in storage: the backup is gone.
     expect(Object.keys(photos.objects)).toEqual([expect.stringMatching(/^covers\/import\/movein-/)]);
   });
 
-  it("puts the backup's tags, categories and tools on the recipes for a cook with organizers, and counts them", async () => {
-    const flags = "move_in,organizers";
-    const location = ((await post({ app: "mealie", backup: backup() }, { flags })) as Response).headers.get("Location") as string;
+  it("puts the backup's tags, categories and tools on the recipes, and counts them", async () => {
+    const location = ((await post({ app: "mealie", backup: backup() })) as Response).headers.get("Location") as string;
     await Promise.all(waiting);
 
-    const { move } = await load(location, { flags });
+    const { move } = await load(location);
     expect(move?.organizers).toEqual({ tags: 1, categories: 1, tools: 1 });
     expect(move?.notes.some((note) => note.message.includes("stayed in the backup"))).toBe(false);
     const pancakes = await (db as NonNullable<typeof db>).recipe.findFirstOrThrow({

@@ -1,6 +1,5 @@
 // Loaders and the action behind the organizer pages: a cook's list of one kind, one organizer's recipes, and a recipe's
-// Organize page, which sets its tags, categories and tools in one save. Every one is the cook's own and behind the
-// organizers flag (organizersRequest).
+// Organize page, which sets its tags, categories and tools in one save. Every one is the cook's own (organizersRequest).
 import type { AppLoadContext } from "react-router";
 import { data, redirect } from "react-router";
 import { OBJECTIONABLE_CONTENT_MESSAGE, containsObjectionableContent } from "~/lib/objectionable-terms";

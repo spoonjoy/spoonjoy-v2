@@ -52,7 +52,7 @@ describe("My Recipes loader on a D1 binding", () => {
       request: new UndiciRequest("http://localhost:3000/my-recipes?with=tag:quick&without=tool:wok&with=category:theirs", {
         headers: await sessionHeaders(viewer.id),
       }),
-      context: { cloudflare: { env: { SPOONJOY_FLAGS: "organizers", DB: d1.binding } } },
+      context: { cloudflare: { env: { DB: d1.binding } } },
       params: {},
     } as unknown as Parameters<typeof loader>[0]);
 

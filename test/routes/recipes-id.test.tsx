@@ -4393,32 +4393,22 @@ describe("Recipes $id Route", () => {
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "Recipe actions" }));
       const items = await screen.findAllByRole("menuitem");
-      expect(items.map((item) => item.textContent)).toEqual(["Edit", "Manage covers", "Make a variation", "Log cook", "Plan this meal", "Delete"]);
-      expect(items[5]).toHaveAttribute("data-tone", "destructive");
+      expect(items.map((item) => item.textContent)).toEqual(["Edit", "Organize", "Manage covers", "Make a variation", "Log cook", "Plan this meal", "Delete"]);
+      expect(items[6]).toHaveAttribute("data-tone", "destructive");
       // Make a variation opens the same confirmation the page's old button did.
-      await userEvent.click(items[2]!);
+      await userEvent.click(items[3]!);
       expect(await screen.findByRole("dialog", { name: 'Make a variation of "My Recipe"?' })).toBeInTheDocument();
     });
 
-    it("offers its cook an Organize item in the recipe menu while the organizers flag is on", async () => {
+    it("offers its cook an Organize item in the recipe menu", async () => {
       const mockData = {
         recipe: { id: "recipe-1", title: "Tagged Recipe", description: null, servings: null, coverImageUrl: null, chef: { id: "user-1", username: "testchef" }, steps: [] },
         isOwner: true,
       };
-      const On = createTestRoutesStub([
-        { id: "root", path: "/", loader: () => ({ flags: ["organizers"] }), children: [{ path: "recipes/:id", Component: RecipeDetail, loader: () => mockData }] },
-      ]);
-      render(<On initialEntries={["/recipes/recipe-1"]} />);
+      const Stub = createTestRoutesStub([{ path: "/recipes/:id", Component: RecipeDetail, loader: () => mockData }]);
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Tagged Recipe" });
       expect(await recipeMenuItem("Organize")).toHaveAttribute("href", "/recipes/recipe-1/organize");
-      await userEvent.keyboard("{Escape}");
-      cleanup();
-
-      const Off = createTestRoutesStub([{ path: "/recipes/:id", Component: RecipeDetail, loader: () => mockData }]);
-      render(<Off initialEntries={["/recipes/recipe-1"]} />);
-      await screen.findByRole("heading", { name: "Tagged Recipe" });
-      await recipeMenuItem("Edit");
-      expect(screen.queryByRole("menuitem", { name: "Organize" })).not.toBeInTheDocument();
     });
 
     it("renders owner cover history controls and hides them from non-owners", async () => {

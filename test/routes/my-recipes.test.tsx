@@ -232,7 +232,7 @@ describe("My Recipes drawer route", () => {
           page: 1,
           pageSize: 50,
           filterParams: [],
-          organizerChoices: null,
+          organizerChoices: { tag: [], category: [], tool: [] },
           hasPreviousPage: false,
           hasNextPage: false,
           recipes: [
@@ -277,7 +277,7 @@ describe("My Recipes drawer route", () => {
           page: 1,
           pageSize: 50,
           filterParams: [],
-          organizerChoices: null,
+          organizerChoices: { tag: [], category: [], tool: [] },
           hasPreviousPage: false,
           hasNextPage: false,
           recipes: [],
@@ -291,7 +291,7 @@ describe("My Recipes drawer route", () => {
           page: 1,
           pageSize: 50,
           filterParams: [],
-          organizerChoices: null,
+          organizerChoices: { tag: [], category: [], tool: [] },
           hasPreviousPage: false,
           hasNextPage: false,
           recipes: [],
@@ -322,7 +322,7 @@ describe("My Recipes drawer route", () => {
           page: 2,
           pageSize: 50,
           filterParams: [],
-          organizerChoices: null,
+          organizerChoices: { tag: [], category: [], tool: [] },
           hasPreviousPage: true,
           hasNextPage: true,
           recipes: [{
@@ -343,7 +343,7 @@ describe("My Recipes drawer route", () => {
           page: 2,
           pageSize: 50,
           filterParams: [],
-          organizerChoices: null,
+          organizerChoices: { tag: [], category: [], tool: [] },
           hasPreviousPage: true,
           hasNextPage: false,
           recipes: [{
@@ -364,7 +364,7 @@ describe("My Recipes drawer route", () => {
           page: 1,
           pageSize: 50,
           filterParams: [],
-          organizerChoices: null,
+          organizerChoices: { tag: [], category: [], tool: [] },
           hasPreviousPage: false,
           hasNextPage: true,
           recipes: [{
@@ -415,7 +415,7 @@ describe("My Recipes drawer route", () => {
   });
 
   describe("organizer filters", () => {
-    const ON = { cloudflare: { env: { SPOONJOY_FLAGS: "organizers" } } };
+    const ON = { cloudflare: { env: {} } };
 
     async function organizedKitchen() {
       const viewer = await createDrawerUser("my-recipes-filters");
@@ -465,16 +465,6 @@ describe("My Recipes drawer route", () => {
       expect(result.recipes.map((recipe: { title: string }) => recipe.title)).toEqual(["Quick Soup", "Slow Stew"]);
     });
 
-    it("ignore filters and offer no choices while the organizers flag is off", async () => {
-      const viewer = await organizedKitchen();
-
-      const result = await load(viewer.id, "?with=tag:quick", { cloudflare: { env: {} } });
-
-      expect(result.recipes.map((recipe: { title: string }) => recipe.title)).toEqual(["Wok Soup", "Quick Soup", "Slow Stew"]);
-      expect(result.filterParams).toEqual([]);
-      expect(result.organizerChoices).toBeNull();
-    });
-
     const page = (overrides: Record<string, unknown>) => ({
       query: "",
       page: 1,
@@ -483,7 +473,7 @@ describe("My Recipes drawer route", () => {
       hasNextPage: false,
       recipes: [],
       filterParams: [],
-      organizerChoices: null,
+      organizerChoices: { tag: [], category: [], tool: [] },
       ...overrides,
     });
 
@@ -518,10 +508,9 @@ describe("My Recipes drawer route", () => {
       expect(screen.getByRole("heading", { name: "No matching recipes" })).toBeInTheDocument();
     });
 
-    it("link to the cook's tags, categories and tools while the flag is on, even before they have any", async () => {
+    it("link to the cook's tags, categories and tools, even before they have any", async () => {
       const Stub = createTestRoutesStub([
-        { path: "/none", Component: MyRecipes, loader: () => page({ organizerChoices: { tag: [], category: [], tool: [] } }) },
-        { path: "/off", Component: MyRecipes, loader: () => page({}) },
+        { path: "/none", Component: MyRecipes, loader: () => page({}) },
       ]);
 
       render(<Stub initialEntries={["/none"]} />);
@@ -529,23 +518,14 @@ describe("My Recipes drawer route", () => {
       expect(within(browse).getByRole("link", { name: "Tags" })).toHaveAttribute("href", "/tags");
       expect(within(browse).getByRole("link", { name: "Categories" })).toHaveAttribute("href", "/categories");
       expect(within(browse).getByRole("link", { name: "Tools" })).toHaveAttribute("href", "/tools");
-      cleanup();
-      render(<Stub initialEntries={["/off"]} />);
-      expect(await screen.findByRole("heading", { level: 1, name: "My Recipes" })).toBeInTheDocument();
-      expect(screen.queryByRole("navigation", { name: "Browse my recipes by" })).not.toBeInTheDocument();
     });
 
-    it("show no filter when the cook has no organizers or the flag is off", async () => {
+    it("show no filter when the cook has no organizers", async () => {
       const Stub = createTestRoutesStub([
-        { path: "/none", Component: MyRecipes, loader: () => page({ organizerChoices: { tag: [], category: [], tool: [] } }) },
-        { path: "/off", Component: MyRecipes, loader: () => page({}) },
+        { path: "/none", Component: MyRecipes, loader: () => page({}) },
       ]);
 
       render(<Stub initialEntries={["/none"]} />);
-      expect(await screen.findByRole("heading", { level: 1, name: "My Recipes" })).toBeInTheDocument();
-      expect(screen.queryByRole("form", { name: "Filter my recipes" })).not.toBeInTheDocument();
-      cleanup();
-      render(<Stub initialEntries={["/off"]} />);
       expect(await screen.findByRole("heading", { level: 1, name: "My Recipes" })).toBeInTheDocument();
       expect(screen.queryByRole("form", { name: "Filter my recipes" })).not.toBeInTheDocument();
     });

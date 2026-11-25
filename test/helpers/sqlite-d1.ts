@@ -67,6 +67,18 @@ export function sqliteD1(source: string | Database.Database = workerDbPath()): S
         roundTrips += 1;
         return { results: execute(statement) as T[], success: true as const, meta: {} };
       },
+      // What Prisma's D1 adapter reads with: each row as an array, after the column names when asked for them.
+      raw: async ({ columnNames = false }: { columnNames?: boolean } = {}) => {
+        roundTrips += 1;
+        statements.push({ sql, params });
+        const prepared = sqlite.prepare(sql);
+        if (!prepared.reader) {
+          prepared.run(...params);
+          return columnNames ? [[]] : [];
+        }
+        const rows = prepared.raw(true).all(...params) as unknown[][];
+        return columnNames ? [prepared.columns().map((column) => column.name), ...rows] : rows;
+      },
       run: async () => {
         roundTrips += 1;
         const changes = sqlite.prepare(sql).run(...params).changes;

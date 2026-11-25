@@ -1,4 +1,4 @@
-// Organizers on recipes (organizers flag, on in QA), as per-run scratch user 1, whose area is recipe editing: a cook
+// Organizers on recipes, as per-run scratch user 1, whose area is recipe editing: a cook
 // makes a recipe, gives it tags, a category and a tool from Organize in the recipe menu as chips (on a phone, in the
 // field's sheet), removes one tag, adds it back from the suggestions with different case and adds a new one, and finds them on the recipe's
 // Organize page, on a tag's own page, in the list of their tags and in the list of their categories, each after a
