@@ -799,6 +799,8 @@ model PlanEntry {
   title        String    @default("")
   note         String    @default("")
   scaleFactor  Float     @default(1)
+  // The scale already put on a shopping list, so adding the week again adds only what is new (migration 0057).
+  listedScale  Float     @default(0)
   addedById    String?
   addedBy      User?     @relation(fields: [addedById], references: [id], onDelete: SetNull)
   cookedAt     DateTime?
@@ -843,6 +845,7 @@ model HouseholdPlanEntry {
   title           String        @default("")
   note            String        @default("")
   scaleFactor     Float         @default(1)
+  listedScale     Float         @default(0)
   addedById       String?
   addedBy         User?         @relation(fields: [addedById], references: [id], onDelete: SetNull)
   cookedAt        DateTime?

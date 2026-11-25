@@ -1,0 +1,2 @@
+ALTER TABLE "PlanEntry" ADD COLUMN "listedScale" REAL NOT NULL DEFAULT 0;
+ALTER TABLE "HouseholdPlanEntry" ADD COLUMN "listedScale" REAL NOT NULL DEFAULT 0;

@@ -54,7 +54,8 @@ export function d1HouseholdListRecipes(db: D1ReadDatabase, { listId, userId, now
     async addGathered(writeKey: string): Promise<void> {
       if (lines.size === 0) return;
       const texts = [...lines.values()].map(text);
-      const key = await d1WriteOnceKey({ userId, operation: "household_list.add_recipes", token: writeKey, request: { listId } });
+      // The write key names every meal in the write, so it can run long: it goes in the hashed request, not the key itself.
+      const key = await d1WriteOnceKey({ userId, operation: "household_list.add_recipes", token: "plan-meals", request: { listId, writeKey } });
       const at = d1Timestamp(now);
       // A retry builds a new claim; only the try that holds the key adds the lines.
       await retryD1Write({ scope: "household_list.add_recipes" }, () => {

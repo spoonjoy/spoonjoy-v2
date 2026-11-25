@@ -4,7 +4,7 @@ export type PlanActionAnswer =
       intent?: string;
       errors?: { general?: string };
       error?: string;
-      added?: { recipes: number; missing: number };
+      added?: { meals: number; missing: number };
       /** The list the week went on, when it isn't the cook's own shopping list. */
       list?: { name: string; href: string };
     }

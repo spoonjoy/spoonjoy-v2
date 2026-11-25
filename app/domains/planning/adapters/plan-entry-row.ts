@@ -13,12 +13,13 @@ export type EntryRow = {
   title: string;
   note: string;
   scaleFactor: number;
+  listedScale: number;
   deletedAt: Date | null;
 };
 
 export const ENTRY_SELECT = {
   id: true, date: true, mealType: true, position: true, kind: true, recipeId: true,
-  recipeTitle: true, title: true, note: true, scaleFactor: true, deletedAt: true,
+  recipeTitle: true, title: true, note: true, scaleFactor: true, listedScale: true, deletedAt: true,
 } as const;
 
 export function toEntry(row: EntryRow): PlanEntry {
@@ -34,5 +35,6 @@ export function toEntry(row: EntryRow): PlanEntry {
     title: row.title,
     note: row.note,
     scaleFactor: row.scaleFactor,
+    listedScale: row.listedScale,
   };
 }

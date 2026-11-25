@@ -40,6 +40,8 @@ export interface PlanStore {
   removeEntry(plan: PlanSettings, entryId: string): Promise<boolean>;
   /** Sets where each of these entries of this plan sits: its day, meal type and order. */
   placeEntries(plan: PlanSettings, placements: readonly EntryPlacement[]): Promise<void>;
+  /** Records the scale each of these entries of this plan is on a shopping list at. */
+  markListed(plan: PlanSettings, listed: ReadonlyArray<{ id: string; listedScale: number }>): Promise<void>;
   /** When the cook last logged a live cook of each of these recipes; a recipe they never cooked is left out. */
   lastCooked(chefId: string, recipeIds: readonly string[]): Promise<Array<{ recipeId: string; cookedAt: Date }>>;
 }
@@ -90,7 +92,7 @@ export async function addEntry(store: PlanStore, scope: PlanScope, entryId: stri
   const recipeTitle = input.value.recipeId ? await store.plannableRecipeTitle(scope, input.value.recipeId) : null;
   if (input.value.recipeId && recipeTitle === null) return { ok: false, error: "That recipe isn't available to plan." };
   const sameDay = await store.entriesBetween(plan, input.value.date, input.value.date);
-  const entry: PlanEntry = { id: entryId, ...input.value, position: nextPosition(sameDay, input.value), recipeTitle };
+  const entry: PlanEntry = { id: entryId, ...input.value, position: nextPosition(sameDay, input.value), recipeTitle, listedScale: 0 };
   await store.insertEntry(plan, cook, entry);
   return { ok: true, value: entry };
 }

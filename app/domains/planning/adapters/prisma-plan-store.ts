@@ -80,6 +80,13 @@ export function prismaPlanStore(db: PlanDb): PlanStore {
         else await db.planEntry.updateMany({ where: { id, mealPlanId: plan.id }, data });
       }
     },
+    async markListed(plan, listed) {
+      for (const { id, listedScale } of listed) {
+        const data = { listedScale };
+        if (isHousehold(plan)) await db.householdPlanEntry.updateMany({ where: { id, householdPlanId: plan.id }, data });
+        else await db.planEntry.updateMany({ where: { id, mealPlanId: plan.id }, data });
+      }
+    },
 
     async lastCooked(chefId, recipeIds) {
       const groups = await db.recipeSpoon.groupBy({

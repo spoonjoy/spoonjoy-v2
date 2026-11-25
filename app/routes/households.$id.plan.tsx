@@ -18,7 +18,7 @@ import { d1HouseholdListRecipes, d1HouseholdListStore, getHouseholdList, listHou
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
-import { d1UnavailableWebResponse, formWriteToken } from "~/lib/d1-write-retry.server";
+import { d1UnavailableWebResponse } from "~/lib/d1-write-retry.server";
 import { changePlanEntry, planFieldsOf, planRefused } from "~/lib/plan-route.server";
 import { CookbookPage } from "~/components/cookbook/page";
 import { Link } from "~/components/ouro/link/link";
@@ -26,9 +26,8 @@ import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/ouro/button/button";
 import { NativeSelect } from "~/components/ouro/select/native-select";
-import { useWriteToken } from "~/hooks/use-write-token";
-import { WeekLinks, WeekListAnswer, WeekPlan } from "~/components/plan/week-plan";
-import { weekFormKey, weekTitle } from "~/components/plan/week";
+import { AddWeekButton, WeekLinks, WeekListAnswer, WeekPlan } from "~/components/plan/week-plan";
+import { weekTitle, weekToList } from "~/components/plan/week";
 
 export function meta({ data: loaded }: Route.MetaArgs) {
   return [{ title: loaded ? `Meal plan - ${loaded.household.name} - Spoonjoy` : "Meal plan - Spoonjoy" }];
@@ -90,13 +89,10 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       const list = await getHouseholdList(householdLists(context), { householdId: household.id, listId: fields.listId ?? "", userId });
       if (!list) return planRefused(intent, "Choose one of the household's shopping lists.");
       const { start } = await getWeek(plans, scope, day);
-      const listToken = formWriteToken(fields.listToken) ?? crypto.randomUUID();
       const onList = d1HouseholdListRecipes(requestD1(context) as D1ReadDatabase, { listId: list.id, userId, now: new Date() });
       const week = { from: start, to: addDays(start, 6) };
-      const submissionKey = `household-plan-week:${household.id}:${start}:${listToken}`;
-      const added = await addPlannedMealsToList(plans, onList, scope, week, submissionKey);
-      // The week's recipes share the list's lines: chicken stock in two of them is one line.
-      await onList.addGathered(submissionKey);
+      // The list writes the new meals together, so chicken stock in two of them is one line.
+      const added = await addPlannedMealsToList(plans, onList, scope, week);
       return data({ intent, added, list: { name: list.name, href: `/households/${household.id}/lists/${list.id}` } });
     }
     return await changePlanEntry(plans, scope, userId, fields, `/households/${household.id}/plan`);
@@ -111,7 +107,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 export default function HouseholdPlanPage() {
   const { household, canEdit, week, recipes, chosenRecipeId, lists } = useLoaderData<typeof loader>();
   const answer = useActionData<PlanActionAnswer>();
-  const [listToken] = useWriteToken();
+  const { planned, left } = weekToList(week);
   const basePath = `/households/${household.id}/plan`;
   return (
     <CookbookPage>
@@ -119,13 +115,12 @@ export default function HouseholdPlanPage() {
         <div className="mt-4 flex flex-wrap gap-2">
           <WeekLinks basePath={basePath} start={week.start} />
         </div>
-        {canEdit && lists.length > 0 ? (
+        {canEdit && lists.length > 0 && planned > 0 ? (
           <RouterForm method="post" className="mt-4 flex flex-wrap items-end gap-2">
             <input type="hidden" name="intent" value="add-week-to-list" />
             <input type="hidden" name="week" value={week.start} />
-            <input type="hidden" name="listToken" value={`${listToken}-${weekFormKey(week)}`} />
             <NativeSelect label="Shopping list" name="listId" options={lists.map((list) => ({ value: list.id, label: list.name }))} />
-            <Button type="submit" size="sm">Add this week to the list</Button>
+            <AddWeekButton left={left} />
           </RouterForm>
         ) : null}
         {canEdit && lists.length === 0 ? (
