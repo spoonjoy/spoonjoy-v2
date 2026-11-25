@@ -7,3 +7,6 @@ export * from "./model/organizer";
 export * from "./model/organizer-filter";
 export * from "./application/organizers";
 export * from "./adapters/prisma-organizer-store";
+export * from "./model/smart-cookbook";
+export * from "./application/smart-cookbooks";
+export * from "./adapters/prisma-smart-cookbook-store";

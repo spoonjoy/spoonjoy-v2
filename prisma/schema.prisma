@@ -56,6 +56,7 @@ model User {
   plannedEntries           PlanEntry[]
   householdPlannedEntries  HouseholdPlanEntry[]
   organizers               Organizer[]
+  smartCookbooks           SmartCookbook[]
   contentReports           ContentReport[]
   blocksMade               ChefBlock[]               @relation("ChefBlocker")
   blocksReceived           ChefBlock[]               @relation("ChefBlocked")
@@ -651,6 +652,32 @@ model RecipeOrganizer {
   createdAt   DateTime  @default(now())
 
   @@id([recipeId, organizerId])
+  @@index([organizerId])
+}
+
+// A cookbook defined by rules that fills itself (migrations/0056_smart_cookbooks.sql).
+model SmartCookbook {
+  id        String              @id @default(cuid())
+  ownerId   String
+  owner     User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title     String
+  rules     SmartCookbookRule[]
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @default(now()) @updatedAt
+
+  @@unique([ownerId, title])
+}
+
+// One of a smart cookbook's rules. organizerId has no relation on purpose: a deleted organizer's rules stay, so a
+// cookbook that needed it fills with nothing.
+model SmartCookbookRule {
+  cookbookId  String
+  cookbook    SmartCookbook @relation(fields: [cookbookId], references: [id], onDelete: Cascade)
+  side        String
+  organizerId String
+  position    Int
+
+  @@id([cookbookId, side, organizerId])
   @@index([organizerId])
 }
 
