@@ -48,7 +48,7 @@ import {
 import { Button } from "~/components/ouro/button/button";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { useEffect, useRef, useState } from "react";
-import { editorRecipeVisibilities, parseRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
+import { parseRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
 import { recipeVisibilityChoices } from "~/lib/recipe-visibility-choices";
 
 interface ActionData {
@@ -155,11 +155,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const imported = new URL(request.url).searchParams.get("imported") === "1";
 
-  // The visibility choice shows only while it is on for this cook, with household only while households is too.
-  const choices = recipeVisibilityChoices(context.cloudflare?.env, userId);
-  const visibility = choices ? (parseRecipeVisibility(recipe.visibility) ?? "private") : null;
-  // A level the cook cannot choose today still shows, so the editor never misstates who reads the recipe.
-  const visibilityChoices = choices && visibility ? editorRecipeVisibilities(choices, visibility) : null;
+  // The visibility choice shows only while it is on for this cook. It offers every level, so a recipe's own level is
+  // always among them.
+  const visibilityChoices = recipeVisibilityChoices(context.cloudflare?.env, userId);
+  const visibility = visibilityChoices ? (parseRecipeVisibility(recipe.visibility) ?? "private") : null;
 
   return { recipe, coverImageUrl, formattedSteps, imported, visibility, visibilityChoices };
 }
