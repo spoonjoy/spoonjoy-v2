@@ -80,13 +80,18 @@ test.describe("Smart cookbooks", () => {
     await page.getByRole("button", { name: "Create smart cookbook", exact: true }).click();
     await expect(page).toHaveURL(SMART_URL);
 
-    // It fills itself: the salad, and not the cake, which has the mixer.
+    // It fills itself, in the Contents a regular cookbook shows: the salad's card with its cover tile, counted as one
+    // recipe, and not the cake, which has the mixer.
+    const contents = page.getByRole("region", { name: "Contents", exact: true });
     const recipes = page.getByRole("list", { name: `Recipes in ${title}`, exact: true });
     await verifyAfterReload(async () => {
       await expect(page.getByRole("heading", { level: 1, name: title, exact: true })).toBeVisible();
       await expect(page.getByRole("link", { name: `Tag: ${quick}`, exact: true })).toBeVisible();
       await expect(page.getByRole("link", { name: `Tool: ${mixer}`, exact: true })).toBeVisible();
-      await expect(recipes.getByRole("link", { name: new RegExp(salad) })).toBeVisible();
+      await expect(contents.getByText("1 recipe", { exact: true })).toBeVisible();
+      const card = recipes.getByRole("listitem").filter({ hasText: salad });
+      await expect(card.getByRole("link", { name: new RegExp(salad) })).toBeVisible();
+      await expect(card.locator('[data-testid^="cookbook-recipe-cover-placeholder-"], img')).toBeVisible();
       await expect(recipes.getByRole("link", { name: new RegExp(cake) })).toHaveCount(0);
     });
     await expectAccessible();

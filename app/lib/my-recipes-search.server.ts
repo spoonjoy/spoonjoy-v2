@@ -117,10 +117,10 @@ const CARRIES_ORGANIZER_SQL = `SELECT 1
           WHERE recipeOrganizer."recipeId" = recipe."id"
             AND organizer."ownerId" = ? AND organizer."kind" = ? AND organizer."slug" = ?`;
 
-type OrganizerClauses = { sql: string; binds: string[] };
+export type OrganizerClauses = { sql: string; binds: string[] };
 
 /** The conditions organizer filters add after the owner's id, and their binds, in order. */
-function organizerClauses(ownerId: string, filters: OrganizerFilters | undefined): OrganizerClauses {
+export function organizerClauses(ownerId: string, filters: OrganizerFilters | undefined): OrganizerClauses {
   const sides = [
     ...(filters?.with ?? []).map((ref) => ({ ref, test: "EXISTS" })),
     ...(filters?.without ?? []).map((ref) => ({ ref, test: "NOT EXISTS" })),

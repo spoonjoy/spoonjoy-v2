@@ -17,11 +17,9 @@ import {
   type PostHogServerConfig,
   type PostHogServerEnv,
 } from "~/lib/analytics-server";
-import { formatServingsLabel } from "~/domains/food-knowledge";
 import { useEffect, useState } from "react";
 import { absoluteUrlFromRequest, shareImageMeta, shareImageUrl } from "~/lib/og-metadata";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
-import { listImageProps } from "~/lib/image-loading";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -78,8 +76,6 @@ import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { Button } from "~/components/ouro/button/button";
 import { Text } from "~/components/ouro/text/text";
 import { Collapsible } from "~/components/ouro/collapsible/collapsible";
-import { Item } from "~/components/ouro/item/item";
-import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Form } from "~/components/ouro/form/form";
 import { useFormErrors } from "~/hooks/use-form-errors";
 import { Link } from "~/components/ouro/link/link";
@@ -87,11 +83,9 @@ import { NativeSelect } from "~/components/ouro/select/native-select";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { toast } from "~/lib/ouro/toast";
 import { CookbookPage } from "~/components/cookbook/page";
+import { CookbookContents } from "~/components/cookbook/contents";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
-import { SectionHeader } from "~/components/ouro/section-header/section-header";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
-import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
-import { Cover } from "~/components/ouro/cover/cover";
 import { useDockSuppressed } from "~/components/navigation";
 import { ShareButton } from "~/components/ouro/share-button/share-button";
 import {
@@ -510,33 +504,7 @@ export default function CookbookDetail() {
             </Text>
           </>} title="No recipes yet" />
         ) : (
-          // Contents as the Apple app sets them: a section header, then numbered rows (01, the
-          // cover tile, the title and "Serves 4"); the number is the list's own counter.
-          <section aria-label="Contents" className="mt-10">
-            <SectionHeader
-              title="Contents"
-              meta={`${cookbook.recipes.length} ${cookbook.recipes.length === 1 ? "recipe" : "recipes"}`}
-            />
-
-            <div className="[counter-reset:contents] [&_ol>li]:grid [&_ol>li]:grid-cols-[2.25rem_minmax(0,1fr)] [&_ol>li]:items-center [&_ol>li]:[counter-increment:contents] [&_ol>li]:before:font-sj-ui [&_ol>li]:before:text-sm [&_ol>li]:before:font-semibold [&_ol>li]:before:tracking-[0.12em] [&_ol>li]:before:text-[var(--sj-brass)] [&_ol>li]:before:tabular-nums [&_ol>li]:before:content-[counter(contents,decimal-leading-zero)]">
-              <ItemGroup aria-label="Contents" ordered variant="divided" className="@container mt-2 [overflow-wrap:anywhere]">
-                {cookbook.recipes.map((item, index) => (
-                  <Item
-                    key={item.id}
-                    href={`/recipes/${item.recipe.id}`}
-                    title={item.recipe.title}
-                    description={formatServingsLabel(item.recipe.servings) ? <Text size="sm">{formatServingsLabel(item.recipe.servings)}</Text> : undefined}
-                    media={item.recipe.coverImageUrl ? <img src={item.recipe.coverImageUrl} alt="" {...listImageProps(index, { prioritizeFirst: false })} /> : (
-                      // Ouro UI's Cover, square so the media slot's own corner rounds it as it does a photo.
-                      <Cover data-testid={`cookbook-recipe-cover-placeholder-${item.recipe.id}`} title={item.recipe.title} size="fill" shape="square" />
-                    )}
-                    mediaSize="md"
-                    actions={item.recipe.coverProvenanceLabel ? <CoverProvenanceBadge label={item.recipe.coverProvenanceLabel} /> : undefined}
-                  />
-                ))}
-              </ItemGroup>
-            </div>
-          </section>
+          <CookbookContents recipes={cookbook.recipes.map((item) => ({ key: item.id, ...item.recipe }))} />
         )}
 
         {isOwner ? (

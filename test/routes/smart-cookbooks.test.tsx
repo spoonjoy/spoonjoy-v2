@@ -1,14 +1,21 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { db } from "~/lib/db.server";
 import { OBJECTIONABLE_CONTENT_MESSAGE, OBJECTIONABLE_TERMS } from "~/lib/objectionable-terms";
 import NewSmartCookbook, { action as newAction, loader as newLoader, meta as newMeta } from "~/routes/cookbooks.smart.new";
 import SmartCookbookPage, { loader as pageLoader, meta as pageMeta } from "~/routes/cookbooks.smart.$id";
 import CookbooksIndex, { loader as cookbooksLoader } from "~/routes/cookbooks._index";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { sqliteD1 } from "../helpers/sqlite-d1";
 import { createTestRoutesStub } from "../utils";
 import { createDrawerRecipe, createDrawerUser, sessionHeaders } from "./kitchen-drawer-test-utils";
+
+// With a DB binding, Prisma is the tests' own SQLite, so a page reads its recipes from D1 and the rest through Prisma.
+vi.mock("~/lib/db.server", async (original) => {
+  const real = await original<typeof import("~/lib/db.server")>();
+  return { ...real, get db() { return real.db; }, getDb: vi.fn(() => real.getLocalDb()) };
+});
 
 const ON = { cloudflare: { env: { SPOONJOY_FLAGS: "smart-cookbooks" } } };
 const OFF = { cloudflare: { env: {} } };
@@ -82,11 +89,13 @@ describe("smart cookbooks", () => {
     expect(cookbooks.smartCookbooks).toBeNull();
   });
 
-  it("offer every tag, category and tool the cook has, by kind, each submitting its id", async () => {
+  it("offer every tag, category and tool the cook has, by kind and then by name, each submitting its id", async () => {
     const { cook, quick, dinner, pot } = await kitchen();
+    const apple = await db.organizer.create({ data: { ownerId: cook.id, kind: "tag", name: "apple", slug: "apple" } });
     const loaded = await newLoader({ request: await signedIn("/cookbooks/smart/new", cook.id), context: ON, params: {} } as never);
     expect(loaded).toEqual({
       choices: [
+        { value: apple.id, label: "apple", description: "Tag" },
         { value: quick.id, label: "Quick", description: "Tag" },
         { value: dinner.id, label: "Dinner", description: "Category" },
         { value: pot.id, label: "Dutch oven", description: "Tool" },
@@ -113,7 +122,8 @@ describe("smart cookbooks", () => {
       page: 1,
       hasPreviousPage: false,
       hasNextPage: false,
-      recipes: [{ id: salad.id, title: "Quick salad", description: null, servings: null }],
+      total: 1,
+      recipes: [{ id: salad.id, title: "Quick salad", servings: null, coverImageUrl: null, coverProvenanceLabel: null }],
     });
     expect(soup.id).not.toBe(salad.id);
     expect(pageMeta({ data: loaded } as never)).toEqual([{ title: "Quick ones - Spoonjoy" }]);
@@ -124,6 +134,10 @@ describe("smart cookbooks", () => {
     const { cook, quick, pot } = await kitchen();
     await expect(create(cook.id, [["title", " "], ["with", quick.id]])).resolves.toMatchObject({
       data: { error: "Give the cookbook a title of 80 characters or fewer.", values: { title: " ", with: [quick.id], without: [] } },
+      init: { status: 400 },
+    });
+    await expect(create(cook.id, [["with", quick.id]])).resolves.toMatchObject({
+      data: { error: "Give the cookbook a title of 80 characters or fewer.", values: { title: "" } },
       init: { status: 400 },
     });
     await expect(create(cook.id, [["title", "Nothing"]])).resolves.toMatchObject({
@@ -144,6 +158,47 @@ describe("smart cookbooks", () => {
       init: { status: 400 },
     });
     expect(await db.smartCookbook.count()).toBe(1);
+  });
+
+  it("fill with each recipe's active cover and count every match, the same from D1 as from Prisma", async () => {
+    const { cook, soup, salad, quick } = await kitchen();
+    const cover = await db.recipeCover.create({ data: { recipeId: salad.id, imageUrl: "/photos/salad.jpg", sourceType: "chef-upload" } });
+    await db.recipeCover.create({ data: { recipeId: soup.id, imageUrl: "/photos/not-active.jpg", sourceType: "spoon" } });
+    await db.recipe.update({ where: { id: salad.id }, data: { activeCoverId: cover.id, coverMode: "manual" } });
+    const id = redirectedTo(await create(cook.id, [["title", "Quick"], ["with", quick.id]]))!.split("/").pop()!;
+
+    const fromPrisma = await page(cook.id, id);
+    expect(fromPrisma).toMatchObject({
+      total: 2,
+      // Its new cover makes the salad the most recently changed, so it comes first.
+      recipes: [
+        { id: salad.id, title: "Quick salad", coverImageUrl: expect.stringContaining("salad") },
+        { id: soup.id, title: "Quick soup", coverImageUrl: null, coverProvenanceLabel: null },
+      ],
+    });
+    const d1 = sqliteD1();
+    try {
+      expect(await page(cook.id, id, "", { cloudflare: { env: { SPOONJOY_FLAGS: "smart-cookbooks", DB: d1.binding } } })).toEqual(fromPrisma);
+      expect(d1.roundTrips()).toBeGreaterThan(0);
+    } finally {
+      d1.close();
+    }
+  });
+
+  it("list on Cookbooks from D1 on the Worker as they do through Prisma", async () => {
+    const { cook, quick } = await kitchen();
+    await create(cook.id, [["title", "Quick"], ["with", quick.id]]);
+    const load = async (context: object) =>
+      cookbooksLoader({ request: await signedIn("/cookbooks", cook.id), context, params: {} } as never);
+    const d1 = sqliteD1();
+    try {
+      const fromD1 = await load({ cloudflare: { env: { SPOONJOY_FLAGS: "smart-cookbooks", DB: d1.binding } } });
+      expect(fromD1).toEqual(await load(ON));
+      expect(fromD1).toMatchObject({ smartCookbooks: [{ title: "Quick" }] });
+      expect(d1.roundTrips()).toBeGreaterThan(0);
+    } finally {
+      d1.close();
+    }
   });
 
   it("are only their cook's, and say so when a tag they need is deleted", async () => {
@@ -207,5 +262,69 @@ describe("smart cookbooks", () => {
     const smart = await screen.findByRole("list", { name: "Smart cookbooks" });
     expect(within(smart).getByRole("link", { name: /Quick ones/ }).getAttribute("href")).toBe("/cookbooks/smart/full");
     expect(screen.getByRole("link", { name: "New smart cookbook" }).getAttribute("href")).toBe("/cookbooks/smart/new");
+  });
+
+  it("show their recipes in a regular cookbook's Contents, counting every match, and say what to do when none match", async () => {
+    const tag = { side: "with", name: "Quick", kind: "Tag", href: "/tags/quick" };
+    const shown = (id: string, rules: object[], recipes: object[] = [], total = recipes.length) => ({
+      path: `/cookbooks/smart/${id}`,
+      Component: SmartCookbookPage,
+      loader: () => ({ cookbook: { id, title: "Quick ones" }, rules, missing: false, total, page: 1, hasPreviousPage: false, hasNextPage: false, recipes }),
+    });
+    const Stub = createTestRoutesStub([
+      shown("full", [tag], [{ id: "r1", title: "Quick soup", servings: "4", coverImageUrl: null, coverProvenanceLabel: null }], 51),
+      shown("tag", [tag]),
+      shown("category", [{ ...tag, kind: "Category", name: "Dinner" }]),
+      shown("tool", [{ ...tag, kind: "Tool", name: "Dutch oven" }]),
+      shown("without", [{ ...tag, side: "without" }]),
+    ]);
+
+    render(<Stub initialEntries={["/cookbooks/smart/full"]} />);
+    const contents = await screen.findByRole("region", { name: "Contents" });
+    expect(within(contents).getByText("51 recipes")).toBeTruthy();
+    expect(within(contents).getByRole("list", { name: "Recipes in Quick ones" })).toBeTruthy();
+    expect(within(contents).getByRole("link", { name: /Quick soup/ }).getAttribute("href")).toBe("/recipes/r1");
+    expect(screen.getByTestId("cookbook-recipe-cover-placeholder-r1")).toBeTruthy();
+    cleanup();
+
+    for (const [id, hint] of [
+      ["tag", "Tag a recipe Quick to see it here."],
+      ["category", "Put a recipe in Dinner to see it here."],
+      ["tool", "Add Dutch oven to a recipe's tools to see it here."],
+      ["without", "Recipes without these show up here."],
+    ]) {
+      render(<Stub initialEntries={[`/cookbooks/smart/${id}`]} />);
+      expect(await screen.findByText("No recipes match yet")).toBeTruthy();
+      expect(screen.getByText(hint!)).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("show a refused new cookbook's reason, and Cookbooks with none or several", async () => {
+    const rules = [{ side: "with", name: "Quick", kind: "Tag", href: "/tags/quick" }];
+    const Stub = createTestRoutesStub([
+      {
+        path: "/cookbooks/smart/new",
+        Component: NewSmartCookbook,
+        loader: () => ({ choices: [], titleMaxLength: 80 }),
+        action: () => ({ error: "You already have a smart cookbook with this title.", values: { title: "Quick", with: [], without: [] } }),
+      },
+      { path: "/cookbooks/none", Component: CookbooksIndex, loader: () => ({ query: "", cookbooks: [], smartCookbooks: [] }) },
+      { path: "/cookbooks/two", Component: CookbooksIndex, loader: () => ({ query: "", cookbooks: [], smartCookbooks: [{ id: "a", title: "A", rules }, { id: "b", title: "B", rules: [] }] }) },
+    ]);
+
+    render(<Stub initialEntries={["/cookbooks/smart/new"]} />);
+    fireEvent.change(await screen.findByRole("textbox", { name: "Title" }), { target: { value: "Quick" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create smart cookbook" }));
+    expect(await screen.findByText("You already have a smart cookbook with this title.")).toBeTruthy();
+    cleanup();
+
+    render(<Stub initialEntries={["/cookbooks/none"]} />);
+    expect(await screen.findByText("A smart cookbook fills itself with your recipes that match the tags, categories and tools you pick.")).toBeTruthy();
+    cleanup();
+
+    render(<Stub initialEntries={["/cookbooks/two"]} />);
+    expect(await screen.findByText("2 cookbooks")).toBeTruthy();
+    expect(screen.getByText("With Quick")).toBeTruthy();
   });
 });
