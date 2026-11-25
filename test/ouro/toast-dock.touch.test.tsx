@@ -24,12 +24,12 @@ function SuppressedPage({ suppressed }: { suppressed: boolean }) {
 // Regression mutation: missing dock-aware placement overlays the real navigation
 // at 390px and in the library-sm/app-lg mismatch band, intercepting its links.
 const scenarios = [
-  { width: 390, path: "/", authenticated: true, suppressed: false, direction: "ltr", dock: true, links: 5 },
-  { width: 768, path: "/", authenticated: true, suppressed: false, direction: "ltr", dock: true, links: 5 },
-  { width: 1023, path: "/", authenticated: true, suppressed: false, direction: "ltr", dock: true, links: 5 },
+  { width: 390, path: "/", authenticated: true, suppressed: false, direction: "ltr", dock: true, links: 6 },
+  { width: 768, path: "/", authenticated: true, suppressed: false, direction: "ltr", dock: true, links: 6 },
+  { width: 1023, path: "/", authenticated: true, suppressed: false, direction: "ltr", dock: true, links: 6 },
   { width: 1024, path: "/", authenticated: true, suppressed: false, direction: "ltr", dock: false, links: 0 },
-  { width: 390, path: "/", authenticated: true, suppressed: false, direction: "rtl", dock: true, links: 5 },
-  { width: 768, path: "/", authenticated: true, suppressed: false, direction: "rtl", dock: true, links: 5 },
+  { width: 390, path: "/", authenticated: true, suppressed: false, direction: "rtl", dock: true, links: 6 },
+  { width: 768, path: "/", authenticated: true, suppressed: false, direction: "rtl", dock: true, links: 6 },
   { width: 390, path: "/", authenticated: false, suppressed: false, direction: "ltr", dock: true, links: 4 },
   { width: 390, path: "/login", authenticated: false, suppressed: false, direction: "ltr", dock: false, links: 0 },
   { width: 768, path: "/signup", authenticated: false, suppressed: false, direction: "ltr", dock: false, links: 0 },
