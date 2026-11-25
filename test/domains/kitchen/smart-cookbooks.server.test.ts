@@ -6,6 +6,7 @@ import { prismaOrganizerStore } from "~/domains/kitchen/adapters/prisma-organize
 import { prismaSmartCookbookStore } from "~/domains/kitchen/adapters/prisma-smart-cookbook-store";
 import { deleteOrganizer, mergeOrganizers, renameOrganizerById, setRecipeOrganizers, type OrganizerStore } from "~/domains/kitchen/application/organizers";
 import {
+  changeSmartCookbookRules,
   createSmartCookbook,
   deleteSmartCookbook,
   listSmartCookbooks,
@@ -135,6 +136,43 @@ describe("smart cookbooks, stored", () => {
     expect(await renameSmartCookbook(store, chef.id, id, "")).toEqual({ ok: false, reason: "invalid-title" });
     expect(await renameSmartCookbook(store, other.id, id, "Mine")).toEqual({ ok: false, reason: "not-found" });
     expect((await store.find(id))?.title).toBe("Hot soups");
+  });
+
+  it("changes a cook's cookbook's rules in the order asked, refusing none, ones not theirs, and another cook's cookbook", async () => {
+    const { chef, quick, soup, mixer } = await organizedCook();
+    const other = await organizedCook();
+    const made = await createSmartCookbook(store, organizers, chef.id, { title: "Quick", rules: [{ side: "with", organizerId: quick }] });
+    if (!made.ok) throw new Error("not made");
+    const id = made.cookbook.id;
+    const rules = [{ side: "with", organizerId: soup }, { side: "without", organizerId: mixer }, { side: "with", organizerId: soup }];
+
+    expect(await changeSmartCookbookRules(store, organizers, chef.id, id, rules)).toEqual({ ok: true });
+    expect((await store.find(id))?.rules).toEqual([{ side: "with", organizerId: soup }, { side: "without", organizerId: mixer }]);
+
+    expect(await changeSmartCookbookRules(store, organizers, chef.id, id, [])).toEqual({ ok: false, reason: "no-rules" });
+    expect(await changeSmartCookbookRules(store, organizers, chef.id, id, [{ side: "with", organizerId: other.quick }]))
+      .toEqual({ ok: false, reason: "unknown-organizer" });
+    expect(await changeSmartCookbookRules(store, organizers, other.chef.id, id, [{ side: "with", organizerId: other.quick }]))
+      .toEqual({ ok: false, reason: "not-found" });
+    expect((await store.find(id))?.rules).toHaveLength(2);
+  });
+
+  it("puts a cookbook's old rules back when its new ones can't all be stored", async () => {
+    const { chef, quick, soup } = await organizedCook();
+    const made = await createSmartCookbook(store, organizers, chef.id, { title: "Quick", rules: [{ side: "with", organizerId: quick }] });
+    if (!made.ok) throw new Error("not made");
+    const boom = new Error("database is gone");
+    // The first new rule fails; putting the old ones back goes through.
+    let calls = 0;
+    const failing = prismaSmartCookbookStore({
+      smartCookbook: db.smartCookbook,
+      smartCookbookRule: {
+        ...db.smartCookbookRule,
+        create: (args: Parameters<typeof db.smartCookbookRule.create>[0]) => (calls++ === 0 ? Promise.reject(boom) : db.smartCookbookRule.create(args)),
+      },
+    } as unknown as PrismaClient);
+    await expect(failing.replaceRules(made.cookbook.id, [{ side: "with", organizerId: soup }])).rejects.toBe(boom);
+    expect((await store.find(made.cookbook.id))?.rules).toEqual([{ side: "with", organizerId: quick }]);
   });
 
   it("deletes a cook's cookbook and its rules, and only theirs", async () => {

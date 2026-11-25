@@ -62,6 +62,22 @@ export function prismaSmartCookbookStore(db: SmartCookbookDb): SmartCookbookStor
       }
       return { ok: true };
     },
+    async replaceRules(cookbookId, rules) {
+      const before = await db.smartCookbookRule.findMany({ where: { cookbookId }, select: { side: true, organizerId: true }, orderBy: { position: "asc" } });
+      const write = async (list: readonly { side: string; organizerId: string }[]) => {
+        await db.smartCookbookRule.deleteMany({ where: { cookbookId } });
+        for (const [position, rule] of list.entries()) {
+          await db.smartCookbookRule.create({ data: { cookbookId, side: rule.side, organizerId: rule.organizerId, position }, select: { cookbookId: true } });
+        }
+      };
+      try {
+        await write(rules);
+      } catch (error) {
+        // As with a new cookbook: no cook sees half of what they asked for. The rules it had go back.
+        await write(before);
+        throw error;
+      }
+    },
     async delete(cookbookId) {
       // Its rules go with it (ON DELETE CASCADE).
       await db.smartCookbook.deleteMany({ where: { id: cookbookId } });

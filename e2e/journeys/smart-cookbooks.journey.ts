@@ -1,8 +1,8 @@
 // Smart cookbooks (smart-cookbooks flag, on in QA), as per-run scratch user 1, whose area is recipe editing: a cook
 // tags two recipes Quick from their Organize pages and gives one of them a tool, then makes a smart cookbook from
 // Cookbooks with Quick and without the tool. The cookbook's page lists the one Quick recipe without the tool and not
-// the other, after a reload, and Cookbooks lists the cookbook with its rules; then the cook renames it and deletes it
-// from its page, each after a reload, and the salad stays theirs. Both device projects run at the same
+// the other, after a reload, and Cookbooks lists the cookbook with its rules; then the cook renames it, drops the
+// tool from its rules so the cake joins it, and deletes it from its page, each after a reload, and the salad stays theirs. Both device projects run at the same
 // time as the same scratch user, so every recipe, organizer and cookbook carries the project name and a timestamp.
 import type { Page, TestInfo } from "@playwright/test";
 import { test, expect } from "./support/journey";
@@ -11,7 +11,7 @@ import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStatePath } from "./support/personas";
 import { requiredLabel } from "./support/forms";
 import { expectLastRowClearsTabBar } from "./support/tab-bar-clearance";
-import { addNewToken, addSuggestedToken, attachElementShot, pickToken } from "./support/organize-tokens";
+import { addNewToken, addSuggestedToken, attachElementShot, pickToken, removeToken } from "./support/organize-tokens";
 
 const RECIPE_URL = /\/recipes\/(?!new$)[^/?#]+$/;
 const SMART_URL = /\/cookbooks\/smart\/(?!new$)[^/?#]+$/;
@@ -123,6 +123,22 @@ test.describe("Smart cookbooks", () => {
       await expect(page.getByRole("heading", { level: 1, name: renamed, exact: true })).toBeVisible();
       await expect(page.getByRole("list", { name: `Recipes in ${renamed}`, exact: true }).getByRole("link", { name: new RegExp(salad) })).toBeVisible();
     });
+
+    // Change its rules: without the mixer no more, so the cake joins the salad, after a reload too.
+    await waitForHydration(page);
+    // A phone's sheet takes a chip off by picking its row again; a desktop's chip has a Remove button.
+    if (phone) await pickToken(page, "Without", mixer, phone);
+    else await removeToken(page, "Without", mixer, phone);
+    await page.getByRole("form", { name: "Change its rules", exact: true }).getByRole("button", { name: "Save rules", exact: true }).click();
+    const renamedRecipes = page.getByRole("list", { name: `Recipes in ${renamed}`, exact: true });
+    await expect(renamedRecipes.getByRole("link", { name: new RegExp(cake) })).toBeVisible();
+    await verifyAfterReload(async () => {
+      await expect(page.getByRole("link", { name: `Tag: ${quick}`, exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: `Tool: ${mixer}`, exact: true })).toHaveCount(0);
+      await expect(renamedRecipes.getByRole("link", { name: new RegExp(salad) })).toBeVisible();
+      await expect(renamedRecipes.getByRole("link", { name: new RegExp(cake) })).toBeVisible();
+    });
+    await attachScreenshot(page, testInfo, "smart-cookbook-rules-changed-after-reload");
     await attachElementShot(page.getByRole("region", { name: "Change this cookbook", exact: true }), testInfo, "smart-cookbook-change-section");
 
     // Delete it after the dialog asks; Cookbooks no longer lists it, and the salad is still the cook's.

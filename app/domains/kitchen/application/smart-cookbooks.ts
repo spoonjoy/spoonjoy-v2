@@ -23,6 +23,8 @@ export interface SmartCookbookStore {
   create(ownerId: string, title: string, rules: SmartCookbookRule[]): Promise<{ ok: true; cookbook: SmartCookbook } | { ok: false; reason: "taken" }>;
   /** Gives a cookbook a new title; "taken" when its owner already has another with that title. */
   rename(cookbookId: string, title: string): Promise<{ ok: true } | { ok: false; reason: "taken" }>;
+  /** Gives a cookbook these rules, in order, in place of the ones it had; on a failure it keeps the ones it had. */
+  replaceRules(cookbookId: string, rules: SmartCookbookRule[]): Promise<void>;
   /** Deletes a cookbook and its rules. */
   delete(cookbookId: string): Promise<void>;
   /** Moves one rule off an organizer: onto another in the same place, or away. */
@@ -92,6 +94,21 @@ export async function renameSmartCookbook(
   if (!normalized) return { ok: false, reason: "invalid-title" };
   const renamed = await store.rename(cookbookId, normalized);
   return renamed.ok ? { ok: true, title: normalized } : renamed;
+}
+
+/** Gives the owner's cookbook the rules they asked for, checked as a new cookbook's are. */
+export async function changeSmartCookbookRules(
+  store: SmartCookbookStore,
+  organizers: OrganizerStore,
+  ownerId: string,
+  cookbookId: string,
+  rules: readonly { side: unknown; organizerId: unknown }[],
+): Promise<{ ok: true } | { ok: false; reason: "not-found" | Extract<SmartCookbookRulesPlan, { ok: false }>["reason"] }> {
+  if (!(await ownedCookbook(store, ownerId, cookbookId))) return { ok: false, reason: "not-found" };
+  const plan = planSmartCookbookRules(rules, await organizersOf(organizers, ownerId));
+  if (!plan.ok) return plan;
+  await store.replaceRules(cookbookId, plan.rules);
+  return { ok: true };
 }
 
 /** Deletes the owner's cookbook; false when they have none with this id. Its recipes are untouched. */

@@ -11,6 +11,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import type { OrganizerStore } from "../application/organizers";
 import {
+  changeSmartCookbookRules,
   createSmartCookbook,
   deleteSmartCookbook,
   listSmartCookbooks,
@@ -77,12 +78,19 @@ export async function smartCookbookListFor(request: Request, context: AppLoadCon
   return cookbooks.map((cookbook) => ({ id: cookbook.id, title: cookbook.title, rules: ruleViews(cookbook, organizers) }));
 }
 
+function choicesFrom(owned: Organizer[]): SmartCookbookChoice[] {
+  return owned.map((organizer) => ({ value: organizer.id, label: organizer.name, description: KIND_NAME[organizer.kind] }));
+}
+
+/** The organizer ids a rules form sends on each side, as rules in the order sent. */
+function rulesFrom(form: FormData) {
+  return SMART_COOKBOOK_SIDES.flatMap((side) => form.getAll(side).map((organizerId) => ({ side, organizerId: String(organizerId) })));
+}
+
 /** The new smart cookbook form: every organizer the cook has, to pick rules from. */
 export async function newSmartCookbookLoader({ request, context }: Args) {
   const { userId, organizers } = await smartCookbooksRequest(request, context);
-  const choices: SmartCookbookChoice[] = (await ownedOrganizers(organizers, userId))
-    .map((organizer) => ({ value: organizer.id, label: organizer.name, description: KIND_NAME[organizer.kind] }));
-  return { choices, titleMaxLength: SMART_COOKBOOK_TITLE_MAX_LENGTH };
+  return { choices: choicesFrom(await ownedOrganizers(organizers, userId)), titleMaxLength: SMART_COOKBOOK_TITLE_MAX_LENGTH };
 }
 
 const REFUSALS: Record<Exclude<CreateSmartCookbookResult, { ok: true }>["reason"], string> = {
@@ -102,18 +110,23 @@ export async function newSmartCookbookAction({ request, context }: Args) {
   const title = form.get("title");
   const values = { title: typeof title === "string" ? title : "", with: form.getAll("with").map(String), without: form.getAll("without").map(String) };
   if (containsObjectionableContent(values.title)) return data({ error: OBJECTIONABLE_CONTENT_MESSAGE, values }, { status: 400 });
-  const rules = SMART_COOKBOOK_SIDES.flatMap((side) => values[side].map((organizerId) => ({ side, organizerId })));
-  const result = await createSmartCookbook(store, organizers, userId, { title, rules });
+  const result = await createSmartCookbook(store, organizers, userId, { title, rules: rulesFrom(form) });
   if (!result.ok) return data({ error: REFUSALS[result.reason], values }, { status: 400 });
   return redirect(`/cookbooks/smart/${result.cookbook.id}`);
 }
 
-/** A smart cookbook page's own form: rename it, or delete it (its recipes stay). */
+/** A smart cookbook page's own forms: change its rules, rename it, or delete it (its recipes stay). */
 export async function smartCookbookPageAction({ request, context, cookbookId }: Args & { cookbookId: string }) {
-  const { userId, store } = await smartCookbooksRequest(request, context);
+  const { userId, store, organizers } = await smartCookbooksRequest(request, context);
   const form = await request.formData();
   const refuse = (error: string) => data({ error }, { status: 400 });
   switch (form.get("intent")) {
+    case "rules": {
+      const result = await changeSmartCookbookRules(store, organizers, userId, cookbookId, rulesFrom(form));
+      if (result.ok) return { rulesSaved: true };
+      if (result.reason === "not-found") notFound();
+      return refuse(REFUSALS[result.reason]);
+    }
     case "rename": {
       const title = form.get("title");
       if (typeof title === "string" && containsObjectionableContent(title)) return refuse(OBJECTIONABLE_CONTENT_MESSAGE);
@@ -127,7 +140,7 @@ export async function smartCookbookPageAction({ request, context, cookbookId }: 
       await deleteSmartCookbook(store, userId, cookbookId);
       return redirect("/cookbooks");
     default:
-      return refuse("Choose Rename or Delete.");
+      return refuse("Choose Save rules, Rename or Delete.");
   }
 }
 
@@ -136,10 +149,18 @@ export async function smartCookbookPageLoader({ request, context, cookbookId }: 
   const { userId, store, organizers, db } = await smartCookbooksRequest(request, context);
   const fill = await smartCookbookFill(store, organizers, userId, cookbookId);
   if (!fill) notFound();
-  const rules = ruleViews(fill.cookbook, await ownedOrganizers(organizers, userId));
+  const owned = await ownedOrganizers(organizers, userId);
+  const rules = ruleViews(fill.cookbook, owned);
+  // What the rules form offers and starts from: a rule on an organizer that is gone has nothing to pick, so it drops.
+  const ownedIds = new Set(owned.map((organizer) => organizer.id));
+  const chosen = Object.fromEntries(SMART_COOKBOOK_SIDES.map((side) => [
+    side,
+    fill.cookbook.rules.filter((rule) => rule.side === side && ownedIds.has(rule.organizerId)).map((rule) => rule.organizerId),
+  ])) as Record<SmartCookbookSide, string[]>;
+  const ruleForm = { choices: choicesFrom(owned), chosen };
   const cookbook = { id: fill.cookbook.id, title: fill.cookbook.title };
   const page = normalizeMyRecipesPage(new URL(request.url).searchParams.get("page"));
-  if (!fill.filters) return { cookbook, rules, missing: true, total: 0, page: 1, hasPreviousPage: false, hasNextPage: false, recipes: [] };
+  if (!fill.filters) return { cookbook, rules, ruleForm, missing: true, total: 0, page: 1, hasPreviousPage: false, hasNextPage: false, recipes: [] };
   const result = await readSmartCookbookRecipes({ d1: requestD1(context), db }, { ownerId: userId, filters: fill.filters, page });
-  return { cookbook, rules, missing: false, ...result };
+  return { cookbook, rules, ruleForm, missing: false, ...result };
 }
