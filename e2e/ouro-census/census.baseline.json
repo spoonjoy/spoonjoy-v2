@@ -3233,6 +3233,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Plan your week\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
           "identity": "link \"Search recipes\" [link/root] in region \"Shipped\"",
           "count": 1
         },
@@ -3414,6 +3418,10 @@
         },
         {
           "identity": "link \"My Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Plan\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
         {
@@ -7619,6 +7627,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Plan your week\" [link/root] in region \"Shipped\"",
+          "count": 1
+        },
+        {
           "identity": "link \"Search recipes\" [link/root] in region \"Shipped\"",
           "count": 1
         },
@@ -7784,6 +7796,10 @@
         },
         {
           "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Plan\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
