@@ -82,8 +82,10 @@ async function lowestRatio(item: () => ReactElement, items: number, bare: () => 
 }
 
 describe("Avatar's mount time", () => {
+  // In WebKit on a shared CI runner, a passing run takes 10 to 12 s, close to Vitest's 15 s default:
+  // give this test its own budget with real headroom rather than tightening the ratio it checks (#3518).
   it("mounts a group chat avatar, one of 100, in a bounded multiple of the time a bare span takes, one of 5,000", async () => {
     const { ratio, item, bare } = await lowestRatio(() => <Avatar name="Crew" members={crew} />, 100, () => <span>Crew</span>, 5000);
     expect(ratio, `ratio (group ${(item * 1000).toFixed(0)} µs, bare ${(bare * 1000).toFixed(0)} µs)`).toBeLessThan(RATIO);
-  });
+  }, 30_000);
 });

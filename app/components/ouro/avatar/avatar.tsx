@@ -392,6 +392,8 @@ function GroupSlice({ member, tint, quarter }: { member: AvatarMember; tint: Tin
   return (
     <span
       data-ouro-avatar-slice=""
+      data-ouro-allow="near-miss"
+      data-ouro-allow-why="The slices are one avatar cut apart by a hairline hole, so they sit closer than a gap by design."
       data-image={image}
       // Its initial is drawn from this element's own attribute, so an unloaded slice is one element, not two.
       data-ouro-avatar-initials={loaded ? undefined : Array.from(member.initials ?? initialsOf(member.name))[0]}

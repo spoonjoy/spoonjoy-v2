@@ -24,12 +24,14 @@ export {
 
 /**
  * The box with chips (`multiple`): Field's control look, but at least one control tall and
- * growing a row at a time as the chips wrap.
+ * growing a row at a time as the chips wrap. The chips start past its corner's curve: the start
+ * inset is the corner's radius (`--ouro-sq-r`, which its `rounded-ouro-control-md` sets), and at least 6px.
  *
  * @internal
+ * @claim "The chips start past its corner's curve" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox chips clear the field's corner > starts one chip and wrapped rows of chips past %s, with a gap between the rows)
  */
 const chipsGroupClass =
-  "relative m-0 box-border flex w-full min-w-0 flex-wrap items-center gap-1.5 py-1.5 ps-1.5 pe-3 cursor-text " +
+  "relative m-0 box-border flex w-full min-w-0 flex-wrap items-center gap-1.5 py-1.5 ps-[max(calc(var(--spacing)*1.5),var(--ouro-sq-r))] pe-3 cursor-text " +
   "min-h-(--ouro-control-h) [--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] " +
   "rounded-ouro-control-md border border-solid border-input bg-transparent text-base text-foreground sm:pointer-fine:text-sm " +
   "ouro-field-cue outline-ring outline-offset-2 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-solid " +
@@ -152,7 +154,7 @@ const sheetFieldClass = "group/combobox-field relative min-w-0";
  *
  * @internal
  */
-const sheetChipsFieldClass = "group/combobox-field relative grid min-w-0";
+const sheetChipsFieldClass = "group/combobox-field relative grid min-w-0 [--ouro-control-h:calc(var(--spacing)*11)]";
 
 /**
  * The button under a phone's chips: the field's whole box, so a tap anywhere but a remove
@@ -170,12 +172,16 @@ const sheetChipsTriggerClass =
 
 /**
  * A phone's chips, over the button: they wrap, leaving the chevron its room. Only the remove
- * buttons take a tap; the rest goes through to the button.
+ * buttons take a tap; the rest goes through to the button. They start past the button's corner
+ * curve: the start inset is the radius its `rounded-ouro-control-md` gives it (the control radius,
+ * at most half the control's height), and at least 6px.
  *
  * @internal
+ * @claim "They start past the button's corner" registry/ouro/components/ouro/combobox/combobox.touch.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.touch.test.tsx::Combobox chips on a phone clear the field's corner > starts one chip and wrapped rows of chips past %s, with a gap between the rows)
  */
 const sheetChipsClass =
-  "pointer-events-none relative col-start-1 row-start-1 box-border flex min-w-0 flex-wrap items-center gap-1.5 self-center py-1.5 ps-1.5 pe-9 " +
+  "pointer-events-none relative col-start-1 row-start-1 box-border flex min-w-0 flex-wrap items-center gap-1.5 self-center py-1.5 pe-9 " +
+  "ps-[max(calc(var(--spacing)*1.5),min(calc(var(--ouro-control-radius,var(--radius)*0.8)*var(--ouro-radius-scale,1)),calc(var(--ouro-control-h)/2)))] " +
   "empty:hidden [&_button]:pointer-events-auto";
 
 /**

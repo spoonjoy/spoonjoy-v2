@@ -1,6 +1,6 @@
 import { expect } from "vitest";
 
-export { settled };
+export { settled, isMoving };
 
 /**
  * Waits until an element has stopped moving. It waits while the element has a starting or an ending

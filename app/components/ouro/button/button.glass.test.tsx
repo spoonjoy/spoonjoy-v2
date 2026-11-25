@@ -32,6 +32,24 @@ describe("Button glass", () => {
     expect(width).toBe(40);
   });
 
+  it("is 36px tall at size sm, and a 36 circle when it holds only an icon, while the default stays 40", async () => {
+    const icon = await mount(
+      <Button variant="glass" size="sm" aria-label="Back">
+        <svg aria-hidden="true" viewBox="0 0 24 24" />
+      </Button>,
+    );
+    expect(icon.getBoundingClientRect().height).toBe(36);
+    expect(icon.getBoundingClientRect().width).toBe(36);
+    const labelled = await mount(
+      <Button variant="glass" size="sm">
+        Filters
+      </Button>,
+    );
+    expect(labelled.getBoundingClientRect().height).toBe(36);
+    const base = await mount(<Button variant="glass">Filters</Button>);
+    expect(base.getBoundingClientRect().height).toBe(40);
+  });
+
   it("holds its pressed layer while the popup it opened is open", async () => {
     const button = await mount(
       <Button variant="glass" aria-expanded="true">

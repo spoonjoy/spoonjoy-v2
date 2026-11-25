@@ -160,7 +160,8 @@ describe("Collapsible", () => {
     await userEvent.click(r.trigger);
     await expect.poll(() => r.panel.hasAttribute("hidden")).toBe(true);
     await commands.emulateMedia({ reducedMotion: "reduce" });
-    expect(getComputedStyle(r.panel).transitionProperty).not.toMatch(/grid-template-rows/);
+    // WebKit hasn't always applied the emulated media by the next statement (#3518): poll instead of reading once.
+    await expect.poll(() => getComputedStyle(r.panel).transitionProperty).not.toMatch(/grid-template-rows/);
     await userEvent.click(r.trigger);
     await userEvent.click(r.trigger);
     await expect.poll(() => r.panel.hasAttribute("hidden")).toBe(true);

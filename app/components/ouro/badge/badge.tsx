@@ -61,6 +61,20 @@ export interface BadgeBaseProps {
    * @claim "A status dot before the label, in the tone's colour" registry/ouro/components/ouro/badge/badge.test.tsx verify:testExists(registry/ouro/components/ouro/badge/badge.test.tsx::Badge > shows a status dot before its label, in the tone's colour)
    */
   dot?: boolean | undefined;
+  /**
+   * Draws the badge as a count over a toolbar icon: a small round pill in the notification red with white
+   * figures, aligned and tabular, whose numeral is centred on its cap height. It ignores `tone` and `variant`,
+   * and grows with the number it holds. Pass a number or a short string such as `9+`, and name what it counts
+   * in the control's own label.
+   * @default false
+   */
+  count?: boolean | undefined;
+  /**
+   * With `count`, places the pill at the top end corner of its nearest positioned ancestor (the icon button),
+   * at a fixed offset set by `--ouro-count-x` and `--ouro-count-y`, so it works under a notch cut into the glyph.
+   * @default false
+   */
+  overlay?: boolean | undefined;
   /** The label: a short word, or a count. */
   children: ReactNode;
   /** Layout only: margins, grid placement (`ms-2`). Appearance classes warn in development; use `tone` and `variant`. */
@@ -144,6 +158,16 @@ const interactive =
   "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
   "disabled:cursor-not-allowed disabled:opacity-50 data-disabled:cursor-not-allowed data-disabled:opacity-50";
 
+// A toolbar count: a pill whose fill is the theme's --ouro-count, so it stays red in dark where --destructive is pale.
+// text-box trims the line to the cap height so the numeral sits in the middle of the pill. Sized and typeset with the
+// same tokens navigation-rail's own count pill already carries into every page's build (h-ouro-4, min-w-ouro-4,
+// text-[0.625rem], leading-none), so this feature's CSS costs nothing on a page that already renders either pill, and
+// tabular-nums alone already sets font-variant-numeric: a second, bracketed copy of the same property was dead weight.
+const countClass =
+  "h-ouro-4 min-w-ouro-4 justify-center gap-0 rounded-full px-[3px] text-[0.625rem] leading-none font-semibold tabular-nums [text-box:trim-both_cap_alphabetic] " +
+  "[--ouro-bd:transparent] [--ouro-bg:var(--ouro-count,#c50f1f)] text-white contrast-more:[--ouro-bd:currentColor]";
+const countOverlayClass = "absolute end-(--ouro-count-x,-6px) top-(--ouro-count-y,-4px) z-10";
+
 // `soft` text is the tone mixed 20% toward the foreground, as on Button, so it keeps
 // 4.5:1 on the tint under shadcn's stock values too. `secondary` is shadcn's quiet surface.
 const looks = {
@@ -212,6 +236,8 @@ export function Badge(props: BadgeProps): JSX.Element {
     variant: variantProp = "solid",
     icon: Icon,
     dot = false,
+    count = false,
+    overlay,
     onClick,
     children,
     className,
@@ -259,7 +285,7 @@ export function Badge(props: BadgeProps): JSX.Element {
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
 
-  const look = looks[variant][tone];
+  const look = cn(looks[variant][tone], count && countClass, count && overlay && countOverlayClass);
   // The icon and the label go in as siblings of the surface, not in a fragment, which would be a component of its own.
   const icon = Icon && <Icon aria-hidden="true" className="relative -ms-0.5 size-ouro-3_5 shrink-0" />;
   const statusDot = dot && <span data-slot="badge-dot" data-ouro-dot="" aria-hidden="true" className="relative size-ouro-1_5 shrink-0 rounded-full bg-current" />;

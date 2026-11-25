@@ -99,6 +99,24 @@ function FilterChips() {
   );
 }
 
+/** A toolbar count: a small red pill with white figures over an icon button's corner. */
+export const Count: Story = {
+  render: () => (
+    <Surface>
+      <div style={{ ...row, gap: 12 }}>
+        <span style={{ position: "relative", display: "inline-flex", width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
+          <span aria-hidden="true">✉</span>
+          <Badge count overlay>
+            3
+          </Badge>
+        </span>
+        <Badge count>12</Badge>
+        <Badge count>9+</Badge>
+      </div>
+    </Surface>
+  ),
+};
+
 /** Filter chips: Badges with `onClick` are buttons that toggle with `aria-pressed`. */
 export const Filters: Story = {
   parameters: { mode: "button" },

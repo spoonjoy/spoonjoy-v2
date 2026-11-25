@@ -77,7 +77,7 @@ export const Composer: Story = {
   render: () => (
     <Surface>
       <form
-        style={{ display: "flex", alignItems: "end", gap: 8, border: "1px solid var(--input)", borderRadius: "calc(var(--radius) + 4px)", padding: "8px 8px 8px 12px" }}
+        style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid var(--input)", borderRadius: "calc(var(--radius) + 4px)", padding: "8px 8px 8px 12px" }}
         onSubmit={(event) => event.preventDefault()}
       >
         <TextArea label="Message" hideLabel name="message" placeholder="Ask about this recipe" variant="plain" autoGrow rows={1} maxRows={6} className="flex-1" />

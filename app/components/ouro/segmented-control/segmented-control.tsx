@@ -330,6 +330,7 @@ export function SegmentedControl(props: SegmentedControlProps): JSX.Element {
           // It also ends what the person asked for here: a check the app makes after this is its own.
           if (!event.currentTarget.contains(event.relatedTarget)) asked.current.clear();
         }}
+        // Stryker disable next-line ConditionalExpression,LogicalOperator: fullWidth is tested on the plain group
         className={cn(groupClass, fullWidth && "grid w-full")}
       >
         <span aria-hidden="true" data-ouro-segment-thumb="" className={thumbClass} style={thumbStyle} />

@@ -132,7 +132,7 @@ export const KeepClear: Story = {
           </Button>
         </div>
         {join && (
-          <div data-keep-clear="" style={{ position: "fixed", insetInlineEnd: 24, bottom: 24 }}>
+          <div data-keep-clear="" style={{ position: "fixed", insetInlineEnd: 40, bottom: 24 }}>
             <Button tone="success">Join</Button>
           </div>
         )}

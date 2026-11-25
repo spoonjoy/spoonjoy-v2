@@ -974,7 +974,8 @@ describe("Card with href, zoomMedia and revealDescription", () => {
     const reveal = card.querySelector<HTMLElement>('[data-card-reveal="rise"]')!;
     expect(getComputedStyle(reveal).transitionProperty).toContain("grid-template-rows");
     await commands.emulateMedia({ reducedMotion: "reduce" });
-    expect(getComputedStyle(reveal).transitionProperty).toBe("opacity");
+    // WebKit hasn't always applied the emulated media by the next statement (#3518): poll instead of reading once.
+    await expect.poll(() => getComputedStyle(reveal).transitionProperty).toBe("opacity");
   });
 
   it("shows the description on hover or keyboard focus, keeping its room, and names it as the link's description", async () => {

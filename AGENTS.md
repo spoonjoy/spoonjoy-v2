@@ -14,6 +14,15 @@ Follow ourostack's shared [PR merge rule](https://github.com/ourostack/.github/b
 
 **[Interfaces follow Ouro UI](https://github.com/ourostack/.github/blob/main/agents/interfaces-follow-ouro-ui.md).** Build screens from Ouro HX, declare agent doors once with `ouro-actions` and check them with the Ouro AX X-ray in CI, take Ouro from its release tags (never copied by hand; enforced: the design-system hygiene test) and stay within a day of them, and fix what Ouro lacks in Ouro first.
 
+<!-- ouro-ui:bar -->
+**The bar, for people and agents alike** ([design craft](https://ui.ouroboros.bot/docs/design-craft/#the-bar)): would the people who made the Mac and the iPhone ship it? Whenever you scope or design something a person or an agent meets (a screen, a menu, a setting, a command, an action, a tool, a line of output):
+
+1. Start from the jobs people do, in their words. Read a reference product's items, a service's functions or an API's fields as evidence of jobs, never as the list to build.
+2. Make the first cut restraint: for each thing, name the job it serves and ask what breaks if it goes; if nothing does, leave it out and say why. Give each job one way in, not one per item or function, and extend the one that exists before adding another.
+3. Build what is left well, the basics people use daily among it, for the person and for agents, with a result that says what it did.
+4. Write how fresh people or fresh agents doing a real job will prove it, and rerun them after each small change.
+<!-- /ouro-ui:bar -->
+
 ## Backlog
 
 Check [`BACKLOG.md`](BACKLOG.md) for known issues and planned work before making changes.
