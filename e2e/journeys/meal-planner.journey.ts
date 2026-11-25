@@ -19,6 +19,21 @@ function day(page: Page, name: string) {
   return page.getByRole("region", { name, exact: true });
 }
 
+/**
+ * The tops of the day headings, grouped by the grid row their day sits in, so a row's headings can be compared: an
+ * empty day's header, with no Add, must be as tall as one with its Add.
+ */
+async function headingTopsByRow(page: Page) {
+  const tops = await page.getByRole("region", { name: /^\w+day, \w+ \d+$/ }).evaluateAll((regions) =>
+    regions.map((region) => ({
+      row: Math.round(region.getBoundingClientRect().top),
+      heading: (region.querySelector("h2, h3") as HTMLElement).getBoundingClientRect().top,
+    })));
+  const rows = new Map<number, number[]>();
+  for (const { row, heading } of tops) rows.set(row, [...(rows.get(row) ?? []), heading]);
+  return [...rows.values()];
+}
+
 function addSheet(page: Page, name: string) {
   return page.getByRole("dialog", { name: `Add to ${name}`, exact: true });
 }
@@ -89,6 +104,10 @@ test.describe("Meal planner", () => {
       await expect(thursday.getByText("Eat out", { exact: true })).toBeVisible();
     });
     await expectAccessible();
+    // Day headings in one grid row share a top, within 1px, whether or not the day has its Add.
+    const rows = await headingTopsByRow(page);
+    expect(rows.flat()).toHaveLength(7);
+    for (const headings of rows) expect(Math.max(...headings) - Math.min(...headings)).toBeLessThanOrEqual(1);
     await testInfo.attach("meal-planner-week", { body: await page.screenshot({ fullPage: true, animations: "disabled" }), contentType: "image/png" });
 
     // Put the week on the shopping list: the salmon's ingredients, doubled, survive a reload of the list.

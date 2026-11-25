@@ -173,6 +173,11 @@ function entryDescription(entry: PlanEntry, lastMade: string | undefined, today:
   return parts.join(" · ");
 }
 
+// Every day's header is one small button tall, whether or not its Add shows, with the heading centred in it, so the
+// headings and rules of the days in one grid row line up. The height is HX Button's size="sm" height at each width.
+const DAY_HEADER_CLASS =
+  "box-content min-h-[max(calc(var(--spacing)*9),var(--ouro-size-6))] items-center sm:min-h-[max(calc(var(--spacing)*8),var(--ouro-size-6))]";
+
 function RemoveEntry({ entry, weekday }: { entry: PlanEntry; weekday: string }) {
   return (
     <RouterForm method="post">
@@ -191,6 +196,7 @@ function DaySection({ day, today, lastMade, onAdd }: { day: PlanDay; today: stri
   return (
     <section aria-label={heading}>
       <SectionHeader
+        className={DAY_HEADER_CLASS}
         title={heading}
         meta={day.date === today ? "Today" : undefined}
         // An empty day's own button plans it, so the header's Add shows only once the day has meals.
