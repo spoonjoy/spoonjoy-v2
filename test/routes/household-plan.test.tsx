@@ -58,7 +58,7 @@ const run = (sql: string) => database.sqlite.prepare(sql).run();
 const WEEK = "?week=2027-03-01";
 const note = (title: string) => ({ intent: "add-note", date: "2027-03-02", mealType: "dinner", title });
 
-function entries(result: unknown): Array<{ title: string; recipeTitle: string | null }> {
+function entries(result: unknown): Array<{ title: string; recipeTitle: string | null; listedScale: number }> {
   return payload(result).week.days.flatMap((day: { entries: unknown[] }) => day.entries);
 }
 
@@ -163,7 +163,7 @@ describe("a household's meal plan", () => {
 
 describe("a household's week on one of its shopping lists", () => {
   const items = () => database.sqlite.prepare(`SELECT "text", "addedById" FROM "HouseholdListItem" WHERE "listId" = 'l1' ORDER BY "sortIndex"`).all();
-  const shop = (fields: Record<string, string> = {}) => ({ intent: "add-week-to-list", week: "2027-03-01", listId: "l1", listToken: "week-token-1", ...fields });
+  const shop = (fields: Record<string, string> = {}) => ({ intent: "add-week-to-list", week: "2027-03-01", listId: "l1", ...fields });
 
   beforeEach(async () => {
     run(`INSERT INTO "HouseholdList" ("id", "householdId", "name", "createdById") VALUES ('l1', 'h1', 'Groceries', 'ann')`);
@@ -182,19 +182,20 @@ describe("a household's week on one of its shopping lists", () => {
     expect(payload(await call(loader, "cal", { query: WEEK })).lists).toEqual([]);
   });
 
-  it("puts the week's planned recipes, scaled, on the chosen list once, as the cook who sent them", async () => {
+  it("puts the week's planned meals, scaled, on the chosen list once, as the cook who sent them, and then only a meal planned since", async () => {
     const answer = await call(action, "ann", { fields: shop() });
     expect(payload(answer)).toEqual({
       intent: "add-week-to-list",
-      added: { recipes: 1, missing: 0 },
+      added: { meals: 1, missing: 0 },
       list: { name: "Groceries", href: "/households/h1/lists/l1" },
     });
-    await call(action, "ann", { fields: shop() });
+    expect(payload(await call(action, "ann", { fields: shop() })).added).toEqual({ meals: 0, missing: 0 });
     expect(items()).toEqual([{ text: "3 cup beans", addedById: "ann" }]);
-    // A post with no write token still goes on the list, as its own send.
-    const { listToken: _, ...untokened } = shop();
-    expect(payload(await call(action, "ann", { fields: untokened })).added).toEqual({ recipes: 1, missing: 0 });
-    expect(items()).toHaveLength(2);
+    expect(entries(await call(loader, "ben", { query: WEEK })).map((entry) => entry.listedScale)).toEqual([2]);
+
+    await call(action, "ben", { fields: { intent: "add-recipe", date: "2027-03-04", mealType: "dinner", recipeId: "r-ben", scaleFactor: "1" } });
+    expect(payload(await call(action, "ann", { fields: shop() })).added).toEqual({ meals: 1, missing: 0 });
+    expect(items()).toEqual([{ text: "3 cup beans", addedById: "ann" }, { text: "1 ½ cup beans", addedById: "ann" }]);
   });
 
   it("refuses a list from another household, a missing week and a view-only member", async () => {
@@ -217,13 +218,13 @@ describe("a household's week on one of its shopping lists", () => {
         path: "/households/:id/plan",
         Component: PlanPage,
         loader: () => loaded,
-        action: () => ({ intent: "add-week-to-list", added: { recipes: 1, missing: 0 }, list: { name: "Groceries", href: "/households/h1/lists/l1" } }),
+        action: () => ({ intent: "add-week-to-list", added: { meals: 1, missing: 0 }, list: { name: "Groceries", href: "/households/h1/lists/l1" } }),
       },
     ]);
     render(<Stub initialEntries={["/households/h1/plan?week=2027-03-01"]} />);
     expect(await screen.findByRole("combobox", { name: "Shopping list" })).toHaveValue("l1");
-    await userEvent.setup().click(screen.getByRole("button", { name: "Add this week to the list" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Added 1 recipe to Groceries.");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Add 1 meal to the list" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Added 1 meal to Groceries.");
     expect(within(screen.getByRole("status")).getByRole("link", { name: "Open the list" })).toHaveAttribute("href", "/households/h1/lists/l1");
   });
 
@@ -234,7 +235,30 @@ describe("a household's week on one of its shopping lists", () => {
     render(<Stub initialEntries={["/households/h1/plan?week=2027-03-01"]} />);
     expect(await screen.findByText(/Make a shopping list to shop for the week\./)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Shopping lists" })).toHaveAttribute("href", "/households/h1/lists");
-    expect(screen.queryByRole("button", { name: "Add this week to the list" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /to the list/ })).toBeNull();
+  });
+
+  it("offers no add while the week plans no recipe, and says once its meals are all on the list", async () => {
+    const page = async () => {
+      const loaded = payload(await call(loader, "ben", { query: WEEK }));
+      const Stub = createTestRoutesStub([{ path: "/households/:id/plan", Component: PlanPage, loader: () => loaded }]);
+      render(<Stub initialEntries={["/households/h1/plan?week=2027-03-01"]} />);
+      await screen.findByRole("heading", { level: 1 });
+    };
+    await page();
+    expect(screen.getByRole("button", { name: "Add 1 meal to the list" })).toBeInTheDocument();
+    cleanup();
+
+    await call(action, "ann", { fields: shop() });
+    await page();
+    expect(screen.getByRole("button", { name: "This week is on your list" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText(/On your list/)).toBeInTheDocument();
+    cleanup();
+
+    run(`UPDATE "HouseholdPlanEntry" SET "deletedAt" = CURRENT_TIMESTAMP`);
+    await page();
+    expect(screen.queryByRole("combobox", { name: "Shopping list" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /to the list|on your list/ })).toBeNull();
   });
 });
 

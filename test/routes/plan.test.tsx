@@ -174,7 +174,7 @@ describe("meal plan route", () => {
       return items.map((item) => ({ name: item.ingredientRef.name, quantity: item.quantity, unit: item.unit?.name ?? null })).sort((a, b) => a.name.localeCompare(b.name));
     }
 
-    it("puts the week's recipes on the list at their planned servings, merging the same ingredient", async () => {
+    it("puts the week's meals on the list at their planned servings, merging the same ingredient, and records them on the meals", async () => {
       const rice = await recipeWith("Lemon Herb Rice", [[200, "g", "rice"], [1, "whole", "lemon"]]);
       const salmon = await recipeWith("Miso Salmon", [[2, "whole", "lemon"], [300, "g", "salmon"]]);
       await act({ intent: "add-recipe", entryToken: "t-1", date: "2026-11-23", mealType: "dinner", recipeId: rice.id, scaleFactor: "2" });
@@ -182,20 +182,42 @@ describe("meal plan route", () => {
       await act({ intent: "add-recipe", entryToken: "t-3", date: "2026-11-26", mealType: "dinner", recipeId: salmon.id, scaleFactor: "1" });
       await act({ intent: "add-recipe", entryToken: "t-4", date: "2026-11-30", mealType: "dinner", recipeId: salmon.id, scaleFactor: "1" });
 
-      const result = answer(await act({ intent: "add-week-to-list", week: "2026-11-23", listToken: "list-1" }));
+      const result = answer(await act({ intent: "add-week-to-list", week: "2026-11-23" }));
 
-      expect(result.data).toEqual({ intent: "add-week-to-list", added: { recipes: 2, missing: 0 } });
+      expect(result.data).toEqual({ intent: "add-week-to-list", added: { meals: 3, missing: 0 } });
       expect(await listItems()).toEqual([
         { name: "lemon", quantity: 5, unit: "whole" },
         { name: "rice", quantity: 600, unit: "g" },
         { name: "salmon", quantity: 300, unit: "g" },
       ]);
+      const listed = await db.planEntry.findMany({ select: { date: true, listedScale: true }, orderBy: { date: "asc" } });
+      expect(listed).toEqual([
+        { date: "2026-11-23", listedScale: 2 },
+        { date: "2026-11-25", listedScale: 1 },
+        { date: "2026-11-26", listedScale: 1 },
+        { date: "2026-11-30", listedScale: 0 },
+      ]);
+    });
+
+    it("adds nothing more when sent again, and only a meal planned since when sent after it", async () => {
+      const rice = await recipeWith("Lemon Herb Rice", [[200, "g", "rice"]]);
+      const salmon = await recipeWith("Miso Salmon", [[300, "g", "salmon"]]);
+      await act({ intent: "add-recipe", entryToken: "t-1", date: "2026-11-23", mealType: "dinner", recipeId: rice.id, scaleFactor: "1" });
+      await act({ intent: "add-week-to-list", week: "2026-11-23" });
+
+      expect(answer(await act({ intent: "add-week-to-list", week: "2026-11-23" })).data).toEqual({ intent: "add-week-to-list", added: { meals: 0, missing: 0 } });
+      await act({ intent: "add-recipe", entryToken: "t-2", date: "2026-11-24", mealType: "dinner", recipeId: salmon.id, scaleFactor: "1" });
+      expect(answer(await act({ intent: "add-week-to-list", week: "2026-11-23" })).data).toEqual({ intent: "add-week-to-list", added: { meals: 1, missing: 0 } });
+      expect(await listItems()).toEqual([
+        { name: "rice", quantity: 200, unit: "g" },
+        { name: "salmon", quantity: 300, unit: "g" },
+      ]);
     });
 
     it("adds nothing when the week has no recipes, and refuses a week that isn't a day", async () => {
-      expect(answer(await act({ intent: "add-week-to-list", week: "2026-11-23", listToken: "list-2" })).data).toEqual({ intent: "add-week-to-list", added: { recipes: 0, missing: 0 } });
+      expect(answer(await act({ intent: "add-week-to-list", week: "2026-11-23" })).data).toEqual({ intent: "add-week-to-list", added: { meals: 0, missing: 0 } });
       expect(await listItems()).toEqual([]);
-      const refused = answer(await act({ intent: "add-week-to-list", week: "soon", listToken: "list-3" }));
+      const refused = answer(await act({ intent: "add-week-to-list", week: "soon" }));
       expect(refused).toMatchObject({ status: 400, data: { intent: "add-week-to-list", errors: { general: "Choose a week to shop for." } } });
     });
   });
@@ -461,26 +483,45 @@ describe("meal plan route", () => {
       expect(errorsFor({ intent: "add-note", error: D1_WRITE_UNAVAILABLE_MESSAGE }, "add-note")).toEqual({ general: D1_WRITE_UNAVAILABLE_MESSAGE });
     });
 
-    it("offers to add the week shown to the shopping list", async () => {
+    it("offers to add the week's meals not on the list yet, counting them, and says once they all are", async () => {
       await renderPage();
-      const form = screen.getByRole("button", { name: "Add this week to my list" }).closest("form")!;
+      expect(screen.queryByRole("button", { name: /to the list|on your list/ })).toBeNull();
+
+      const rice = await db.recipe.create({ data: { ...createTestRecipe(chefId), title: "Lemon Herb Rice" } });
+      const salmon = await db.recipe.create({ data: { ...createTestRecipe(chefId), title: "Miso Salmon" } });
+      await act({ intent: "add-recipe", entryToken: "t-list-1", date: "2026-11-23", mealType: "dinner", recipeId: rice.id, scaleFactor: "1" });
+      await act({ intent: "add-note", entryToken: "t-list-2", date: "2026-11-24", mealType: "dinner", title: "Eat out" });
+      cleanup();
+      await renderPage();
+      const form = screen.getByRole("button", { name: "Add 1 meal to the list" }).closest("form")!;
       expect(form.querySelector<HTMLInputElement>('input[name="intent"]')!.value).toBe("add-week-to-list");
       expect(form.querySelector<HTMLInputElement>('input[name="week"]')!.value).toBe("2026-11-23");
-      expect(form.querySelector<HTMLInputElement>('input[name="listToken"]')!.value).not.toBe("");
+      expect(screen.queryByText(/On your list/)).toBeNull();
+
+      await act({ intent: "add-week-to-list", week: "2026-11-23" });
+      cleanup();
+      await renderPage();
+      expect(screen.getByRole("button", { name: "This week is on your list" })).toHaveAttribute("aria-disabled", "true");
+      expect(screen.getByText("Dinner · On your list")).toBeInTheDocument();
+
+      await act({ intent: "add-recipe", entryToken: "t-list-3", date: "2026-11-25", mealType: "lunch", recipeId: salmon.id, scaleFactor: "1" });
+      cleanup();
+      await renderPage();
+      expect(screen.getByRole("button", { name: "Add 1 meal to the list" })).not.toHaveAttribute("aria-disabled");
     });
 
     it("says what went on the list, and what couldn't", () => {
       const { rerender } = render(<WeekListAnswer answer={undefined} />);
       expect(screen.queryByRole("status")).toBeNull();
-      rerender(<WeekListAnswer answer={{ intent: "add-week-to-list", added: { recipes: 2, missing: 0 } }} />);
-      expect(screen.getByRole("status").textContent).toBe("Added 2 recipes to your shopping list. Open the list");
+      rerender(<WeekListAnswer answer={{ intent: "add-week-to-list", added: { meals: 2, missing: 0 } }} />);
+      expect(screen.getByRole("status").textContent).toBe("Added 2 meals to your shopping list. Open the list");
       expect(screen.getByRole("link", { name: "Open the list" }).getAttribute("href")).toBe("/shopping-list");
-      rerender(<WeekListAnswer answer={{ intent: "add-week-to-list", added: { recipes: 1, missing: 1 } }} />);
-      expect(screen.getByRole("status").textContent).toBe("Added 1 recipe to your shopping list; 1 recipe is no longer available. Open the list");
-      rerender(<WeekListAnswer answer={{ intent: "add-week-to-list", added: { recipes: 0, missing: 2 } }} />);
-      expect(screen.getByRole("status").textContent).toBe("Added 0 recipes to your shopping list; 2 recipes are no longer available. Open the list");
-      rerender(<WeekListAnswer answer={{ intent: "add-week-to-list", added: { recipes: 0, missing: 0 } }} />);
-      expect(screen.getByRole("status").textContent).toBe("No recipes are planned this week, so nothing went on the list.");
+      rerender(<WeekListAnswer answer={{ intent: "add-week-to-list", added: { meals: 1, missing: 1 } }} />);
+      expect(screen.getByRole("status").textContent).toBe("Added 1 meal to your shopping list; 1 recipe is no longer available. Open the list");
+      rerender(<WeekListAnswer answer={{ intent: "add-week-to-list", added: { meals: 0, missing: 2 } }} />);
+      expect(screen.getByRole("status").textContent).toBe("Added 0 meals to your shopping list; 2 recipes are no longer available. Open the list");
+      rerender(<WeekListAnswer answer={{ intent: "add-week-to-list", added: { meals: 0, missing: 0 } }} />);
+      expect(screen.getByRole("status").textContent).toBe("This week's meals were already on the list, so nothing more went on it.");
       rerender(<WeekListAnswer answer={{ intent: "add-note", errors: { general: "Give the note a title." } }} />);
       expect(screen.queryByRole("status")).toBeNull();
       rerender(<WeekListAnswer answer={{ intent: "add-week-to-list", errors: { general: "Choose a week to shop for." } }} />);

@@ -5,15 +5,13 @@ import { addDays, addPlannedMealsToList, getWeek, parseLocalDate, prismaPlanStor
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { shoppingListRecipeAdder } from "~/lib/shopping-list.server";
-import { d1UnavailableWebResponse, formWriteToken } from "~/lib/d1-write-retry.server";
+import { d1UnavailableWebResponse } from "~/lib/d1-write-retry.server";
 import { changePlanEntry, planFieldsOf, planRefused } from "~/lib/plan-route.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
-import { useWriteToken } from "~/hooks/use-write-token";
 import { CookbookPage } from "~/components/cookbook/page";
-import { Button } from "~/components/ouro/button/button";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
-import { WeekLinks, WeekListAnswer, WeekPlan } from "~/components/plan/week-plan";
-import { weekFormKey, weekTitle } from "~/components/plan/week";
+import { AddWeekButton, WeekLinks, WeekListAnswer, WeekPlan } from "~/components/plan/week-plan";
+import { weekTitle, weekToList } from "~/components/plan/week";
 
 export function meta(_args: Route.MetaArgs) {
   return [
@@ -68,9 +66,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       const day = parseLocalDate(fields.week);
       if (!day) return planRefused(intent, "Choose a week to shop for.");
       const { start } = await getWeek(store, { cook: userId }, day);
-      const listToken = formWriteToken(fields.listToken) ?? crypto.randomUUID();
       const list = await shoppingListRecipeAdder(context, userId);
-      const added = await addPlannedMealsToList(store, list, { cook: userId }, { from: start, to: addDays(start, 6) }, `plan-week:${start}:${listToken}`);
+      const added = await addPlannedMealsToList(store, list, { cook: userId }, { from: start, to: addDays(start, 6) });
       return data({ intent, added });
     }
     return await changePlanEntry(store, { cook: userId }, userId, fields, "/plan");
@@ -85,19 +82,20 @@ export async function action({ request, context }: Route.ActionArgs) {
 export default function PlanPage() {
   const { week, recipes, chosenRecipeId } = useLoaderData<typeof loader>();
   const answer = useActionData<PlanActionAnswer>();
-  const [listToken] = useWriteToken();
+  const { planned, left } = weekToList(week);
 
   return (
     <CookbookPage>
       <PageHeader eyebrow="Meal plan" title={weekTitle(week.start)} size="lg" divider description="Plan the week's meals: a recipe to cook, or a note like eating out.">
         <div className="mt-4 flex flex-wrap gap-2">
           <WeekLinks basePath="/plan" start={week.start} />
-          <RouterForm method="post">
-            <input type="hidden" name="intent" value="add-week-to-list" />
-            <input type="hidden" name="week" value={week.start} />
-            <input type="hidden" name="listToken" value={`${listToken}-${weekFormKey(week)}`} />
-            <Button type="submit" size="sm">Add this week to my list</Button>
-          </RouterForm>
+          {planned > 0 ? (
+            <RouterForm method="post">
+              <input type="hidden" name="intent" value="add-week-to-list" />
+              <input type="hidden" name="week" value={week.start} />
+              <AddWeekButton left={left} />
+            </RouterForm>
+          ) : null}
         </div>
         <WeekListAnswer answer={answer} />
       </PageHeader>

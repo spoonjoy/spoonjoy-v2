@@ -82,7 +82,7 @@ describe("planning a week, stored", () => {
       ok: true,
       value: {
         id: "entry-soup", date: "2026-11-24", mealType: "dinner", position: 0, kind: "recipe",
-        recipeId: recipe.id, recipeTitle: "Lemon Herb Rice", title: "", note: "", scaleFactor: 2,
+        recipeId: recipe.id, recipeTitle: "Lemon Herb Rice", title: "", note: "", scaleFactor: 2, listedScale: 0,
       },
     });
     expect(out.ok && out.value.position).toBe(1);

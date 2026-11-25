@@ -1,8 +1,9 @@
 // A household's meal plan on both devices, as scratch user 15 (AGENTS.md's scratch index table): the cook makes a
-// household and a Groceries list for it, plans two seeded recipes on the household's week, and puts the week on the
-// list. Both recipes use chicken stock by the cup, so the list holds one combined line for it, and it is still there
-// after a reload. Pressing the button again adds nothing. The week is a fixed one far from today, so the run's date
-// never moves the days.
+// household and a Groceries list for it, plans two seeded recipes on the household's week, and adds the two meals to
+// the list. Both recipes use chicken stock by the cup, so the list holds one combined line for it. A third meal
+// planned afterwards makes the button offer that one meal alone, and adding it puts only its lines on the list. After
+// a reload the plan says the week is on the list, and the list holds all three meals. The week is a fixed one far
+// from today, so the run's date never moves the days.
 //
 // The two device projects run at the same time, so each device signs in as its own account: scratch 15's base account
 // on iPhone, its desktop twin on desktop Chrome (support/personas.ts's scratchStorageStateForProject). The household's
@@ -18,8 +19,10 @@ const HOUSEHOLD_URL = /\/households\/[0-9a-f-]{36}$/;
 // Saffron Risotto 4, and each has three other ingredients of its own.
 const LEMON_RICE = { id: "qa-kitchen-recipe-lemon-rice", title: "Lemon Herb Rice" };
 const RISOTTO = { id: "qa-kitchen-recipe-risotto", title: "Saffron Risotto" };
+// Roasted Tomato Soup's three ingredients share none with the other two.
+const TOMATO_SOUP = { id: "qa-kitchen-recipe-tomato-soup", title: "Roasted Tomato Soup" };
 const COMBINED_STOCK = "6 cup chicken stock";
-const LINES_ON_THE_LIST = 7;
+const LINES_FOR_THREE_MEALS = 10;
 
 /** Attaches a screenshot of one element, scrolled into view first, so the phone's tab bar never covers it. */
 async function attachElement(testInfo: TestInfo, name: string, element: Locator) {
@@ -42,7 +45,7 @@ async function planRecipe(page: Page, planPath: string, recipe: { id: string; ti
 test.describe("Household meal plan", () => {
   test.use({ storageState: scratchStorageStateForProject(15) });
 
-  test("a household's planned week goes on its list once, with shared ingredients combined @mutates", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
+  test("a household's planned meals go on its list once each, with shared ingredients combined @mutates", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
     // Some 15 page loads on a shared QA Worker, so it gets more than the 60 s default.
     test.setTimeout(120_000);
     const name = `The Ortiz kitchen ${Date.now().toString(36)}`;
@@ -79,28 +82,38 @@ test.describe("Household meal plan", () => {
     await expectAccessible();
     await attachElement(testInfo, "household-plan-week", page.getByRole("main"));
 
-    // The week goes on Groceries, and the list keeps it after a reload, with the stock on one line.
+    // The two meals go on Groceries, with the stock on one line.
     await expect(page.getByRole("combobox", { name: "Shopping list", exact: true })).toHaveValue(/.+/);
-    const addWeek = page.getByRole("button", { name: "Add this week to the list", exact: true });
-    await addWeek.click();
-    const added = page.getByRole("status").filter({ hasText: "Added 2 recipes to Groceries." });
-    await expect(added).toBeVisible();
+    await page.getByRole("button", { name: "Add 2 meals to the list", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Added 2 meals to Groceries." })).toBeVisible();
+    const done = page.getByRole("button", { name: "This week is on your list", exact: true });
+    await expect(done).toHaveAttribute("aria-disabled", "true");
     await attachElement(testInfo, "household-plan-week-added", page.getByRole("main"));
 
-    // Pressing it again sends the same form, which the list has already taken, so nothing more goes on it.
-    await Promise.all([
-      page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname.startsWith(planPath) &&response.ok()),
-      addWeek.click(),
-    ]);
-    await expect(added).toBeVisible();
-    await added.getByRole("link", { name: "Open the list", exact: true }).click();
-    await expect(page).toHaveURL(pathUrl(listPath));
+    // A third meal planned afterwards is the only one the button offers, and adding it adds only its lines.
+    await planRecipe(page, planPath, TOMATO_SOUP);
+    await page.getByRole("button", { name: "Add 1 meal to the list", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Added 1 meal to Groceries." })).toBeVisible();
+
+    // After a reload the plan still says so, from what each meal recorded. The week's own address, without the
+    // ?recipe= that opens the add sheet.
+    await page.goto(`${planPath}?week=${WEEK}`);
+    await waitForHydration(page);
+    await verifyAfterReload(async () => {
+      await expect(done).toHaveAttribute("aria-disabled", "true");
+      const monday = page.getByRole("region", { name: "Monday, Mar 1", exact: true });
+      await expect(monday.getByText(/On your list/)).toHaveCount(3);
+    });
+    await attachElement(testInfo, "household-plan-week-on-list", page.getByRole("main"));
+
+    await page.goto(listPath);
     await waitForHydration(page);
     await verifyAfterReload(async () => {
       await expect(page.getByRole("heading", { level: 1, name: "Groceries", exact: true })).toBeVisible();
       await expect(page.getByRole("checkbox", { name: COMBINED_STOCK, exact: true })).toHaveCount(1);
       await expect(page.getByRole("checkbox", { name: /chicken stock/ })).toHaveCount(1);
-      await expect(page.getByRole("main").getByRole("checkbox")).toHaveCount(LINES_ON_THE_LIST);
+      await expect(page.getByRole("checkbox", { name: "6 whole tomato", exact: true })).toHaveCount(1);
+      await expect(page.getByRole("main").getByRole("checkbox")).toHaveCount(LINES_FOR_THREE_MEALS);
     });
     await expectAccessible();
     await attachElement(testInfo, "household-list-after-week", page.getByRole("main"));

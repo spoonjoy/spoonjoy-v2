@@ -18,6 +18,8 @@ export type PlanEntry = {
   note: string;
   /** Servings multiplier for this entry only: servings = the recipe's servings x scaleFactor. */
   scaleFactor: number;
+  /** The scale already put on a shopping list: 0 until the meal is on one. It never goes down. */
+  listedScale: number;
 };
 
 export type PlanEntryInput = Pick<PlanEntry, "kind" | "date" | "mealType" | "recipeId" | "title" | "note" | "scaleFactor">;
@@ -73,20 +75,20 @@ export function planWeek(entries: readonly PlanEntry[], start: LocalDate): PlanD
   }));
 }
 
-export type RecipeToShop = { recipeId: string; scaleFactor: number; entryIds: string[] };
+type ListedMeal = Pick<PlanEntry, "kind" | "recipeId" | "scaleFactor" | "listedScale">;
 
-/** The recipes planned among these entries, in the order first planned, each with the servings of every meal it is planned for added up. */
-export function recipesToShop(entries: readonly PlanEntry[]): RecipeToShop[] {
-  const byRecipe = new Map<string, RecipeToShop>();
-  for (const planned of entries) {
-    if (planned.kind !== "recipe" || !planned.recipeId) continue;
-    const found = byRecipe.get(planned.recipeId);
-    if (found) {
-      found.scaleFactor += planned.scaleFactor;
-      found.entryIds.push(planned.id);
-    } else {
-      byRecipe.set(planned.recipeId, { recipeId: planned.recipeId, scaleFactor: planned.scaleFactor, entryIds: [planned.id] });
-    }
-  }
-  return [...byRecipe.values()];
+/**
+ * How much of a planned meal's recipe still has to go on the shopping list: all of its scale until it is on one, then
+ * only what the scale grew by. Nothing once the scale went down (the list keeps what it has), and nothing for a note.
+ */
+export function scaleToList(meal: ListedMeal): number {
+  if (meal.kind !== "recipe" || !meal.recipeId) return 0;
+  // Rounded to thousandths, so 0.3 less 0.1 is 0.2 and not 0.19999999999999998.
+  const left = Math.round((meal.scaleFactor - meal.listedScale) * 1000) / 1000;
+  return Math.max(left, 0);
+}
+
+/** Whether a planned recipe is on the shopping list at its whole scale. A note never is. */
+export function isOnList(meal: ListedMeal): boolean {
+  return meal.kind === "recipe" && meal.listedScale > 0 && scaleToList(meal) === 0;
 }

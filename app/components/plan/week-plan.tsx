@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Form as RouterForm } from "react-router";
-import { MEAL_TYPES, addDays, errorsFor, type PlanActionAnswer, type PlanDay, type PlanEntry, type PlanWeek } from "~/domains/planning";
+import { MEAL_TYPES, addDays, errorsFor, isOnList, type PlanActionAnswer, type PlanDay, type PlanEntry, type PlanWeek } from "~/domains/planning";
 import { weekFormKey } from "./week";
 import { useFormErrors } from "~/hooks/use-form-errors";
 import { useWriteToken } from "~/hooks/use-write-token";
@@ -48,6 +48,7 @@ function entryDescription(entry: PlanEntry, lastMade: string | undefined, today:
   const parts = [MEAL_LABEL.get(entry.mealType)];
   if (entry.kind === "recipe" && entry.scaleFactor !== 1) parts.push(`${entry.scaleFactor}× the recipe`);
   if (lastMade) parts.push(`Last made ${madeOn(lastMade, today)}`);
+  if (isOnList(entry)) parts.push("On your list");
   if (entry.note) parts.push(entry.note);
   return parts.join(" · ");
 }
@@ -184,7 +185,18 @@ function count(n: number, noun: string) {
 }
 
 /**
- * What "Add this week to my list" did: how many recipes went on the list, and any that are gone, or why it couldn't.
+ * The week's add-to-list button, telling how many planned meals are not on the list yet (`left`, from weekToList).
+ * Once every one is, it is off and says so.
+ */
+export function AddWeekButton({ left }: { left: number }) {
+  if (left === 0) {
+    return <Button type="submit" size="sm" disabledReason="Every meal planned this week is on the list.">This week is on your list</Button>;
+  }
+  return <Button type="submit" size="sm">Add {count(left, "meal")} to the list</Button>;
+}
+
+/**
+ * What adding the week did: how many meals went on the list, and any whose recipe is gone, or why it couldn't.
  * The list is the cook's own shopping list unless the answer names another.
  */
 export function WeekListAnswer({ answer }: { answer: PlanActionAnswer }) {
@@ -192,15 +204,15 @@ export function WeekListAnswer({ answer }: { answer: PlanActionAnswer }) {
   if (!answer.added) {
     return answer.errors?.general ? <Text role="alert" tone="destructive" className="mt-3">{answer.errors.general}</Text> : null;
   }
-  const { recipes, missing } = answer.added;
+  const { meals, missing } = answer.added;
   const list = answer.list ?? { name: "your shopping list", href: "/shopping-list" };
-  if (recipes === 0 && missing === 0) {
-    return <Text role="status" tone="muted" className="mt-3">No recipes are planned this week, so nothing went on the list.</Text>;
+  if (meals === 0 && missing === 0) {
+    return <Text role="status" tone="muted" className="mt-3">This week's meals were already on the list, so nothing more went on it.</Text>;
   }
   const gone = missing === 0 ? "" : `; ${count(missing, "recipe")} ${missing === 1 ? "is" : "are"} no longer available`;
   return (
     <Text role="status" className="mt-3">
-      Added {count(recipes, "recipe")} to {list.name}{gone}. <Button href={list.href} variant="plain" size="inline">Open the list</Button>
+      Added {count(meals, "meal")} to {list.name}{gone}. <Button href={list.href} variant="plain" size="inline">Open the list</Button>
     </Text>
   );
 }

@@ -110,9 +110,12 @@ test.describe("Meal planner", () => {
     for (const headings of rows) expect(Math.max(...headings) - Math.min(...headings)).toBeLessThanOrEqual(1);
     await testInfo.attach("meal-planner-week", { body: await page.screenshot({ fullPage: true, animations: "disabled" }), contentType: "image/png" });
 
-    // Put the week on the shopping list: the salmon's ingredients, doubled, survive a reload of the list.
-    await page.getByRole("button", { name: "Add this week to my list", exact: true }).click();
-    await expect(page.getByRole("status").filter({ hasText: "Added 1 recipe to your shopping list." })).toBeVisible();
+    // Put the week on the shopping list: the salmon's ingredients, doubled, survive a reload of the list. The button
+    // counts the one recipe (the note needs nothing), then says the week is on the list and marks the salmon.
+    await page.getByRole("button", { name: "Add 1 meal to the list", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Added 1 meal to your shopping list." })).toBeVisible();
+    await expect(page.getByRole("button", { name: "This week is on your list", exact: true })).toHaveAttribute("aria-disabled", "true");
+    await expect(tuesday.getByText("Dinner · 2× the recipe · On your list", { exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Open the list", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/shopping-list"));
     await waitForHydration(page);
