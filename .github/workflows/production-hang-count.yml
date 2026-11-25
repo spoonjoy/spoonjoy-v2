@@ -1,0 +1,48 @@
+name: Production Hang Count
+
+# Counts the production Worker's requests that the Workers runtime canceled as hung, per route
+# pattern, over the last 24 hours (scripts/production-hang-count.mjs). Counts only: no request
+# body, user, id or query string is printed. Runs daily and on demand, so moving routes off Prisma
+# can be measured against a baseline.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: How many hours back to count (at most 168)
+        required: false
+        default: "24"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-hang-count
+  cancel-in-progress: false
+
+jobs:
+  count:
+    name: count
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Reject non-main workflow code
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Production credentials are restricted to refs/heads/main."
+            exit 1
+          fi
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - name: Count hung requests
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          HANG_COUNT_HOURS: ${{ inputs.hours || '24' }}
+        run: node scripts/production-hang-count.mjs
