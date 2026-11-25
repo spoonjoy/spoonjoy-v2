@@ -10,7 +10,15 @@ import { OBJECTIONABLE_CONTENT_MESSAGE, containsObjectionableContent } from "~/l
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import type { OrganizerStore } from "../application/organizers";
-import { createSmartCookbook, listSmartCookbooks, smartCookbookFill, type CreateSmartCookbookResult, type SmartCookbookStore } from "../application/smart-cookbooks";
+import {
+  createSmartCookbook,
+  deleteSmartCookbook,
+  listSmartCookbooks,
+  renameSmartCookbook,
+  smartCookbookFill,
+  type CreateSmartCookbookResult,
+  type SmartCookbookStore,
+} from "../application/smart-cookbooks";
 import { ORGANIZER_KINDS, type Organizer, type OrganizerKind } from "../model/organizer";
 import { SMART_COOKBOOK_SIDES, SMART_COOKBOOK_TITLE_MAX_LENGTH, type SmartCookbook, type SmartCookbookSide } from "../model/smart-cookbook";
 import { ORGANIZER_FILTER_MAX } from "../model/organizer-filter";
@@ -98,6 +106,29 @@ export async function newSmartCookbookAction({ request, context }: Args) {
   const result = await createSmartCookbook(store, organizers, userId, { title, rules });
   if (!result.ok) return data({ error: REFUSALS[result.reason], values }, { status: 400 });
   return redirect(`/cookbooks/smart/${result.cookbook.id}`);
+}
+
+/** A smart cookbook page's own form: rename it, or delete it (its recipes stay). */
+export async function smartCookbookPageAction({ request, context, cookbookId }: Args & { cookbookId: string }) {
+  const { userId, store } = await smartCookbooksRequest(request, context);
+  const form = await request.formData();
+  const refuse = (error: string) => data({ error }, { status: 400 });
+  switch (form.get("intent")) {
+    case "rename": {
+      const title = form.get("title");
+      if (typeof title === "string" && containsObjectionableContent(title)) return refuse(OBJECTIONABLE_CONTENT_MESSAGE);
+      const result = await renameSmartCookbook(store, userId, cookbookId, title);
+      if (result.ok) return { renamed: result.title };
+      if (result.reason === "not-found") notFound();
+      return refuse(REFUSALS[result.reason]);
+    }
+    case "delete":
+      // Gone already (another tab) ends in the same place.
+      await deleteSmartCookbook(store, userId, cookbookId);
+      return redirect("/cookbooks");
+    default:
+      return refuse("Choose Rename or Delete.");
+  }
 }
 
 /** A smart cookbook's page: its rules, and a page of the cook's recipes that match them (newest first, with covers) and how many match. */

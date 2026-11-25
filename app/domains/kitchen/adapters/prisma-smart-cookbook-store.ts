@@ -53,5 +53,24 @@ export function prismaSmartCookbookStore(db: SmartCookbookDb): SmartCookbookStor
       }
       return { ok: true, cookbook: { id, ownerId, title, rules } };
     },
+    async rename(cookbookId, title) {
+      try {
+        await db.smartCookbook.update({ where: { id: cookbookId }, data: { title }, select: { id: true } });
+      } catch (error) {
+        if (isUniqueViolation(error)) return { ok: false, reason: "taken" };
+        throw error;
+      }
+      return { ok: true };
+    },
+    async delete(cookbookId) {
+      // Its rules go with it (ON DELETE CASCADE).
+      await db.smartCookbook.deleteMany({ where: { id: cookbookId } });
+    },
+    async repoint(cookbookId, { side, from, to }) {
+      const key = { cookbookId, side, organizerId: from };
+      // One statement either way: the rule keeps its place and takes the other organizer, or goes.
+      if (to) await db.smartCookbookRule.updateMany({ where: key, data: { organizerId: to } });
+      else await db.smartCookbookRule.deleteMany({ where: key });
+    },
   };
 }
