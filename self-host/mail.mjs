@@ -50,7 +50,8 @@ export function smtpMailer(settings, createTransport) {
     ignoreTLS: settings.security === "none",
     ...(settings.username ? { auth: { user: settings.username, pass: settings.password } } : {}),
   });
+  // With both text and html, nodemailer sends them as multipart/alternative, and a mail app shows the HTML.
   return async ({ to, from, subject, text, html }) => {
-    await transport.sendMail({ to, from, subject, text, html });
+    await transport.sendMail({ to, from, subject, text, ...(html ? { html } : {}) });
   };
 }
