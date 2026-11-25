@@ -11,7 +11,8 @@
 //   - full: anything else (app-wide files such as app/root.tsx, app/routes.ts and app/styles/,
 //     dependencies, config, migrations, scripts, the journeys harness, any unknown path), the `visual` label, too many affected specs, or any doubt.
 // The full suite runs in two parts. A pull request's full run runs part 1 only (`parts` 1); the
-// merge queue runs both before anything merges. The `journeys-full` label runs both parts here too.
+// merge queue runs both before anything merges. A full run that changes a journey spec, or has the
+// `journeys-full` label, runs both parts here too.
 //
 // Run in the Journeys workflow's `changes` job from the base branch's copy of this file, so a pull
 // request cannot change the rules for its own run. It reads the pull request's files and labels
@@ -88,14 +89,20 @@ export function relatedSpecs(files, specs) {
   return specs.filter((spec) => words(path.posix.basename(spec, ".journey.ts")).some((word) => changedWords.has(word)));
 }
 
-const full = (why, parts = 1) => ({ journeys: true, mode: "full", census: true, specs: [], parts, why });
+const fullSuite = (why, parts = 1) => ({ journeys: true, mode: "full", census: true, specs: [], parts, why });
 
 // Pure decision: { journeys, mode, census, specs, parts, why }. `specs` lists the head commit's journey
 // specs, or is null when they could not be read.
 export function decide({ files, labels, specs = null }) {
   if (labels.includes(BOTH_PARTS_LABEL)) {
-    return full(`The pull request has the \`${BOTH_PARTS_LABEL}\` label, so both parts of the full suite run.`, 2);
+    return fullSuite(`The pull request has the \`${BOTH_PARTS_LABEL}\` label, so both parts of the full suite run.`, 2);
   }
+  // Either part may hold a changed journey spec (Playwright splits the specs by file), so a full run
+  // that changes one runs both parts; otherwise it can first fail in the merge queue (#1058).
+  const changedSpec = files.find((file) => SPEC_FILE.test(file));
+  const full = (why) => changedSpec
+    ? fullSuite(`${why} \`${changedSpec}\` is a changed journey spec, so both parts of the full suite run.`, 2)
+    : fullSuite(why);
   if (labels.includes(FORCE_LABEL)) return full(`The pull request has the \`${FORCE_LABEL}\` label.`);
   if (files.length === 0) return full("GitHub listed no changed files, so the full suite runs.");
   if (files.length >= MAX_LISTED_FILES) {
@@ -217,7 +224,7 @@ export async function runJourneysScope({
       specs: await headJourneySpecs(run, repository, sha),
     });
   } catch (error) {
-    decision = full(`Could not read the pull request's files, labels or journey specs (${error instanceof Error ? error.message : String(error)}), so the full suite runs.`);
+    decision = fullSuite(`Could not read the pull request's files, labels or journey specs (${error instanceof Error ? error.message : String(error)}), so the full suite runs.`);
   }
   appendFile(output, `journeys=${decision.journeys}\n`);
   appendFile(output, `mode=${decision.mode}\n`);

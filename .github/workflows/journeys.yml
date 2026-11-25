@@ -138,7 +138,7 @@ jobs:
   # journeys; part 2 runs the personas setup and the second half (Playwright's --shard, which runs
   # a shard's dependency projects in that shard). The affected specs of a pull request and the
   # explore suite still run as one part. A pull request's full suite runs part 1 only, unless
-  # `changes` says parts=2 (the `journeys-full` label); the merge queue, main and the schedule run both. The required `journeys` check is the `journeys-result`
+  # `changes` says parts=2 (a changed journey spec or the `journeys-full` label); the merge queue, main and the schedule run both. The required `journeys` check is the `journeys-result`
   # job below, which passes only when every part passed.
   journeys:
     needs: [queue-tested, changes]
