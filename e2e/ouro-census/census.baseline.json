@@ -1695,34 +1695,6 @@
           "count": 1
         },
         {
-          "identity": "button \"Add to Friday\" [button/root] in region \"Friday, Mar 5\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Add to Monday\" [button/root] in region \"Monday, Mar 1\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Add to Saturday\" [button/root] in region \"Saturday, Mar 6\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Add to Sunday\" [button/root] in region \"Sunday, Mar 7\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Add to Thursday\" [button/root] in region \"Thursday, Mar 4\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Add to Tuesday\" [button/root] in region \"Tuesday, Mar 2\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Add to Wednesday\" [button/root] in region \"Wednesday, Mar 3\"",
-          "count": 1
-        },
-        {
           "identity": "button \"Plan a meal for Friday\" [button/root] in region \"Friday, Mar 5\"",
           "count": 1
         },
@@ -6086,34 +6058,6 @@
       "default": [
         {
           "identity": "button \"Add this week to my list\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Add to Friday\" [button/root] in region \"Friday, Mar 5\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Add to Monday\" [button/root] in region \"Monday, Mar 1\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Add to Saturday\" [button/root] in region \"Saturday, Mar 6\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Add to Sunday\" [button/root] in region \"Sunday, Mar 7\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Add to Thursday\" [button/root] in region \"Thursday, Mar 4\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Add to Tuesday\" [button/root] in region \"Tuesday, Mar 2\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Add to Wednesday\" [button/root] in region \"Wednesday, Mar 3\"",
           "count": 1
         },
         {
