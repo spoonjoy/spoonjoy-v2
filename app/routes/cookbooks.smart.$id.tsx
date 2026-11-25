@@ -3,6 +3,7 @@ import { Form as RouterForm, useActionData, useLoaderData, useLocation, useSubmi
 import { Alert } from "~/components/ouro/alert/alert";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Button } from "~/components/ouro/button/button";
+import { Combobox } from "~/components/ouro/combobox/combobox";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { SectionHeader } from "~/components/ouro/section-header/section-header";
 import { TextField } from "~/components/ouro/text-field/text-field";
@@ -14,7 +15,12 @@ import { Pagination } from "~/components/ouro/pagination/pagination";
 import { Text } from "~/components/ouro/text/text";
 import { CookbookContents } from "~/components/cookbook/contents";
 import { CookbookPage } from "~/components/cookbook/page";
-import { smartCookbookPageAction, smartCookbookPageLoader, type SmartCookbookRuleView } from "~/domains/kitchen/index.server";
+import {
+  smartCookbookPageAction,
+  smartCookbookPageLoader,
+  type SmartCookbookChoice,
+  type SmartCookbookRuleView,
+} from "~/domains/kitchen/index.server";
 
 export function meta({ data }: Route.MetaArgs) {
   return [{ title: `${data ? data.cookbook.title : "Smart cookbook"} - Spoonjoy` }];
@@ -28,8 +34,10 @@ export function action({ params, ...args }: Route.ActionArgs) {
   return smartCookbookPageAction({ ...args, cookbookId: params.id });
 }
 
-/** Under the recipes: rename the cookbook, or delete it after asking. */
-function ChangeCookbook({ title }: { title: string }) {
+type RuleForm = { choices: SmartCookbookChoice[]; chosen: { with: string[]; without: string[] } };
+
+/** Under the recipes: change the cookbook's rules, rename it, or delete it after asking. */
+function ChangeCookbook({ title, ruleForm }: { title: string; ruleForm: RuleForm }) {
   const answer = useActionData<typeof action>();
   const submit = useSubmit();
   return (
@@ -37,6 +45,15 @@ function ChangeCookbook({ title }: { title: string }) {
       <SectionHeader id="smart-cookbook-change" title="Change this cookbook" />
       {answer && "error" in answer ? <Alert tone="destructive" title={answer.error} className="mt-4" /> : null}
       <div className="mt-4 flex flex-col gap-6">
+        {/* Keyed by the saved rules, so the boxes start from them again after a save. */}
+        <RouterForm key={JSON.stringify(ruleForm.chosen)} method="post" aria-label="Change its rules" className="flex flex-col gap-3">
+          <input type="hidden" name="intent" value="rules" />
+          <Combobox label="With" name="with" multiple items={ruleForm.choices} defaultValue={ruleForm.chosen.with} placeholder="Tags, categories or tools every recipe has" />
+          <Combobox label="Without" name="without" multiple items={ruleForm.choices} defaultValue={ruleForm.chosen.without} placeholder="Tags, categories or tools to leave out" />
+          <div className="flex sm:justify-end">
+            <Button type="submit" variant="outline" tone="secondary">Save rules</Button>
+          </div>
+        </RouterForm>
         {/* Keyed by the title, so the box shows the new one after a rename. */}
         <RouterForm key={title} method="post" aria-label="Rename this cookbook" className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <input type="hidden" name="intent" value="rename" />
@@ -87,7 +104,7 @@ function emptyHint(rules: SmartCookbookRuleView[]): string {
 }
 
 export default function SmartCookbookPage() {
-  const { cookbook, rules, missing, total, recipes, page, hasPreviousPage, hasNextPage } = useLoaderData<typeof loader>();
+  const { cookbook, rules, ruleForm, missing, total, recipes, page, hasPreviousPage, hasNextPage } = useLoaderData<typeof loader>();
   const { pathname } = useLocation();
   return (
     <CookbookPage>
@@ -129,7 +146,7 @@ export default function SmartCookbookPage() {
           nextLabel="Next page"
         />
       ) : null}
-      <ChangeCookbook title={cookbook.title} />
+      <ChangeCookbook title={cookbook.title} ruleForm={ruleForm} />
     </CookbookPage>
   );
 }

@@ -19,6 +19,7 @@ vi.mock("~/lib/db.server", async (original) => {
 
 const ON = { cloudflare: { env: { SPOONJOY_FLAGS: "smart-cookbooks" } } };
 const OFF = { cloudflare: { env: {} } };
+const NO_RULE_FORM = { choices: [], chosen: { with: [], without: [] } };
 
 async function signedIn(path: string, userId: string, init: RequestInit = {}) {
   return new UndiciRequest(`http://localhost:3000${path}`, { ...init, headers: await sessionHeaders(userId) }) as unknown as Request;
@@ -118,6 +119,7 @@ describe("smart cookbooks", () => {
         { side: "with", name: "Quick", kind: "Tag", href: "/tags/quick" },
         { side: "without", name: "Dutch oven", kind: "Tool", href: "/tools/dutch-oven" },
       ],
+      ruleForm: expect.objectContaining({ chosen: { with: [quick.id], without: [pot.id] } }),
       missing: false,
       page: 1,
       hasPreviousPage: false,
@@ -223,7 +225,7 @@ describe("smart cookbooks", () => {
       data: { error: OBJECTIONABLE_CONTENT_MESSAGE },
       init: { status: 400 },
     });
-    await expect(change([["intent", "shout"]])).resolves.toMatchObject({ data: { error: "Choose Rename or Delete." }, init: { status: 400 } });
+    await expect(change([["intent", "shout"]])).resolves.toMatchObject({ data: { error: "Choose Save rules, Rename or Delete." }, init: { status: 400 } });
     expect(await change([["intent", "rename"], ["title", "Mine"]], other.id)).toMatchObject({ status: 404 });
     expect(await change([["intent", "delete"]], cook.id, OFF)).toMatchObject({ status: 404 });
     expect(await db.smartCookbook.findUnique({ where: { id } })).toMatchObject({ title: "Fast ones" });
@@ -234,6 +236,46 @@ describe("smart cookbooks", () => {
     expect(redirectedTo(await change([["intent", "delete"]]))).toBe("/cookbooks");
     expect(await db.smartCookbook.findUnique({ where: { id } })).toBeNull();
     expect(await db.recipe.findUnique({ where: { id: soup.id } })).not.toBeNull();
+  });
+
+  it("change their rules from their page, checked as a new cookbook's are, and offer the cook's organizers to pick from", async () => {
+    const { cook, quick, dinner, pot } = await kitchen();
+    const other = await createDrawerUser("smart-rules-other");
+    const id = redirectedTo(await create(cook.id, [["title", "Quick"], ["with", quick.id], ["without", pot.id]]))!.split("/").pop()!;
+    const change = async (fields: [string, string][], userId = cook.id) =>
+      settle(pageAction({
+        request: await signedIn(`/cookbooks/smart/${id}`, userId, { method: "POST", body: new URLSearchParams([["intent", "rules"], ...fields]) }),
+        context: ON,
+        params: { id },
+      } as never));
+
+    expect(await page(cook.id, id)).toMatchObject({
+      ruleForm: {
+        choices: [
+          { value: quick.id, label: "Quick", description: "Tag" },
+          { value: dinner.id, label: "Dinner", description: "Category" },
+          { value: pot.id, label: "Dutch oven", description: "Tool" },
+        ],
+        chosen: { with: [quick.id], without: [pot.id] },
+      },
+    });
+    expect(await change([["with", dinner.id]])).toEqual({ rulesSaved: true });
+    expect(await page(cook.id, id)).toMatchObject({
+      rules: [{ side: "with", name: "Dinner" }],
+      ruleForm: { chosen: { with: [dinner.id], without: [] } },
+      recipes: [{ title: "Quick soup" }, { title: "Slow stew" }],
+    });
+    await expect(change([])).resolves.toMatchObject({
+      data: { error: "Pick at least one tag, category or tool for the cookbook to fill with or leave out." },
+      init: { status: 400 },
+    });
+    await expect(change([["with", dinner.id], ["without", dinner.id]])).resolves.toMatchObject({ init: { status: 400 } });
+    expect(await change([["with", dinner.id]], other.id)).toMatchObject({ status: 404 });
+
+    // A rule on a deleted tag has nothing to pick, so the form leaves it out.
+    expect(await change([["with", quick.id], ["without", pot.id]])).toEqual({ rulesSaved: true });
+    await db.organizer.delete({ where: { id: pot.id } });
+    expect(await page(cook.id, id)).toMatchObject({ ruleForm: { chosen: { with: [quick.id], without: [] } } });
   });
 
   it("are only their cook's, and say so when a tag they need is deleted", async () => {
@@ -268,8 +310,8 @@ describe("smart cookbooks", () => {
     ];
     const Stub = createTestRoutesStub([
       { path: "/cookbooks/smart/new", Component: NewSmartCookbook, loader: () => ({ choices: [{ value: "t1", label: "Quick", description: "Tag" }], titleMaxLength: 80 }) },
-      { path: "/cookbooks/smart/full", Component: SmartCookbookPage, loader: () => ({ cookbook: { id: "full", title: "Quick ones" }, rules, missing: false, page: 1, hasPreviousPage: false, hasNextPage: true, recipes }) },
-      { path: "/cookbooks/smart/gone", Component: SmartCookbookPage, loader: () => ({ cookbook: { id: "gone", title: "Gone" }, rules: [{ side: "with", gone: true }], missing: true, page: 1, hasPreviousPage: false, hasNextPage: false, recipes: [] }) },
+      { path: "/cookbooks/smart/full", Component: SmartCookbookPage, loader: () => ({ cookbook: { id: "full", title: "Quick ones" }, rules, ruleForm: NO_RULE_FORM, missing: false, page: 1, hasPreviousPage: false, hasNextPage: true, recipes }) },
+      { path: "/cookbooks/smart/gone", Component: SmartCookbookPage, loader: () => ({ cookbook: { id: "gone", title: "Gone" }, rules: [{ side: "with", gone: true }], ruleForm: NO_RULE_FORM, missing: true, page: 1, hasPreviousPage: false, hasNextPage: false, recipes: [] }) },
       { path: "/cookbooks", Component: CookbooksIndex, loader: () => ({ query: "", cookbooks: [], smartCookbooks: [{ id: "full", title: "Quick ones", rules }] }) },
     ]);
 
@@ -304,7 +346,7 @@ describe("smart cookbooks", () => {
     const shown = (id: string, rules: object[], recipes: object[] = [], total = recipes.length) => ({
       path: `/cookbooks/smart/${id}`,
       Component: SmartCookbookPage,
-      loader: () => ({ cookbook: { id, title: "Quick ones" }, rules, missing: false, total, page: 1, hasPreviousPage: false, hasNextPage: false, recipes }),
+      loader: () => ({ cookbook: { id, title: "Quick ones" }, rules, ruleForm: NO_RULE_FORM, missing: false, total, page: 1, hasPreviousPage: false, hasNextPage: false, recipes }),
     });
     const Stub = createTestRoutesStub([
       shown("full", [tag], [{ id: "r1", title: "Quick soup", servings: "4", coverImageUrl: null, coverProvenanceLabel: null }], 51),
@@ -363,21 +405,29 @@ describe("smart cookbooks", () => {
     expect(screen.getByText("With Quick")).toBeTruthy();
   });
 
-  it("rename from the page, show a refusal, and delete only after asking", async () => {
+  it("change the rules and rename from the page, show a refusal, and delete only after asking", async () => {
     const sent: string[] = [];
+    const ruleForm = { choices: [{ value: "t1", label: "Quick", description: "Tag" }, { value: "t2", label: "Mixer", description: "Tool" }], chosen: { with: ["t1"], without: ["t2"] } };
     const Stub = createTestRoutesStub([
       {
         path: "/cookbooks/smart/full",
         Component: SmartCookbookPage,
-        loader: () => ({ cookbook: { id: "full", title: "Quick ones" }, rules: [], missing: false, page: 1, hasPreviousPage: false, hasNextPage: false, recipes: [] }),
+        loader: () => ({ cookbook: { id: "full", title: "Quick ones" }, rules: [], ruleForm, missing: false, page: 1, hasPreviousPage: false, hasNextPage: false, recipes: [] }),
         action: async ({ request }: { request: Request }) => {
           const form = await request.formData();
-          sent.push(`${form.get("intent")}:${form.get("title") ?? ""}`);
-          return { error: "You already have a smart cookbook with this title." };
+          const intent = form.get("intent");
+          sent.push(intent === "rules" ? `rules:${form.getAll("with").join(",")}/${form.getAll("without").join(",")}` : `${intent}:${form.get("title") ?? ""}`);
+          return intent === "rules" ? { rulesSaved: true } : { error: "You already have a smart cookbook with this title." };
         },
       },
     ]);
     render(<Stub initialEntries={["/cookbooks/smart/full"]} />);
+    // The rules form starts from the saved rules, and sends them as they stand.
+    const rulesForm = await screen.findByRole("form", { name: "Change its rules" });
+    expect(within(rulesForm).getAllByRole("combobox").length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(within(rulesForm).getByRole("button", { name: "Save rules" }));
+    await waitFor(() => expect(sent).toEqual(["rules:t1/t2"]));
+    sent.length = 0;
     const rename = await screen.findByRole("form", { name: "Rename this cookbook" });
     expect(within(rename).getByRole("textbox", { name: "Title" })).toHaveValue("Quick ones");
     fireEvent.change(within(rename).getByRole("textbox", { name: "Title" }), { target: { value: "Taken" } });
