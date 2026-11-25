@@ -7,9 +7,14 @@ import { getUserId } from "~/lib/session.server";
 import { hidesChef, loadRequestViewerHides } from "~/lib/moderation.server";
 import {
   listFellowChefs,
+  fellowChefListFromRows,
+  fellowChefListQueries,
   DEFAULT_LIMIT,
+  type FellowChefListResult,
   type FellowChefRow,
+  type ListFellowChefsOptions,
 } from "~/lib/fellow-chefs.server";
+import { d1ReadBatch, requestD1, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
 import { FellowChefList } from "~/components/users/FellowChefList";
 import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
@@ -52,6 +57,43 @@ export function meta({ data }: Route.MetaArgs) {
   ];
 }
 
+type ProfileUser = { id: string; username: string };
+
+interface FellowChefReads {
+  /** The chef the address names, by username and by id; the username wins when both match. */
+  profile(identifier: string): Promise<{ userByUsername: ProfileUser | null; userById: ProfileUser | null }>;
+  fellowChefs(userId: string, opts: ListFellowChefsOptions): Promise<FellowChefListResult>;
+}
+
+function fellowChefReadsOnD1(d1: D1ReadDatabase): FellowChefReads {
+  const user = (row: D1Row | undefined): ProfileUser | null => (row ? { id: String(row.id), username: String(row.username) } : null);
+  return {
+    async profile(identifier) {
+      const [byUsername, byId] = await d1ReadBatch(d1, [
+        [`SELECT "id", "username" FROM "User" WHERE "username" = ?`, identifier],
+        [`SELECT "id", "username" FROM "User" WHERE "id" = ?`, identifier],
+      ]);
+      return { userByUsername: user(byUsername![0]), userById: user(byId![0]) };
+    },
+    async fellowChefs(userId, opts) {
+      const [rows, count] = await d1ReadBatch(d1, fellowChefListQueries("viewer", userId, opts));
+      return fellowChefListFromRows(rows!, count!);
+    },
+  };
+}
+
+function fellowChefReadsOnPrisma(database: Awaited<ReturnType<typeof getRequestDb>>): FellowChefReads {
+  const select = { id: true, username: true } as const;
+  return {
+    async profile(identifier) {
+      const userByUsername = await database.user.findUnique({ where: { username: identifier }, select });
+      const userById = userByUsername ? null : await database.user.findUnique({ where: { id: identifier }, select });
+      return { userByUsername, userById };
+    },
+    fellowChefs: (userId, opts) => listFellowChefs(database, userId, opts),
+  };
+}
+
 export async function loader({
   request,
   context,
@@ -62,20 +104,15 @@ export async function loader({
     throw new Response("User not found", { status: 404 });
   }
 
-  const database = await getRequestDb(context);
+  // On the Worker the page reads from D1, so it builds no Prisma client: on merge-group run 45528383350 a wedged
+  // Prisma engine failed fellow-chefs.data with every other Prisma page in its isolate. Prisma is only the fallback
+  // where there is no binding.
+  const d1 = requestD1(context);
+  const reads = d1 ? fellowChefReadsOnD1(d1) : fellowChefReadsOnPrisma(await getRequestDb(context));
   const currentUserId = await getUserId(request, context.cloudflare?.env);
 
-  const userByUsername = await database.user.findUnique({
-    where: { username: identifier },
-    select: { id: true, username: true },
-  });
-
-  const profileUser =
-    userByUsername ??
-    (await database.user.findUnique({
-      where: { id: identifier },
-      select: { id: true, username: true },
-    }));
+  const { userByUsername, userById } = await reads.profile(identifier);
+  const profileUser = userByUsername ?? userById;
 
   if (!profileUser) {
     throw new Response("User not found", { status: 404 });
@@ -95,10 +132,7 @@ export async function loader({
   const pageSize = DEFAULT_LIMIT;
   const offset = (page - 1) * pageSize;
 
-  const result = await listFellowChefs(database, profileUser.id, {
-    limit: pageSize,
-    offset,
-  });
+  const result = await reads.fellowChefs(profileUser.id, { limit: pageSize, offset });
 
   return {
     profileUsername: profileUser.username,
