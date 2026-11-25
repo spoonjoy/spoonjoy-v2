@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { FLAGS, isFlagOn } from "~/domains/platform";
 import {
   ORGANIZER_KINDS,
   ORGANIZER_NAME_MAX_LENGTH,
@@ -139,13 +138,5 @@ describe("merging organizers", () => {
   it("ignores the kept organizer when it is listed among the merged ones", () => {
     const links = [{ recipeId: "r1", organizerId: "keep" }];
     expect(mergeOrganizerLinks(links, ["keep"], "keep")).toEqual({ remove: [], add: [] });
-  });
-});
-
-describe("organizers flag", () => {
-  it("hides organizers behind organizers, off in production and on in QA", () => {
-    expect(FLAGS.organizers.description).toMatch(/tags, categories and tools/i);
-    expect(isFlagOn("organizers", {}, "chef-1")).toBe(false);
-    expect(isFlagOn("organizers", { SPOONJOY_FLAGS: "all" }, "chef-1")).toBe(true);
   });
 });

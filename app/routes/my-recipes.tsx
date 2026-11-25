@@ -75,7 +75,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const query = normalizeMyRecipesQuery(url.searchParams.get("q"));
   const page = normalizeMyRecipesPage(url.searchParams.get("page"));
-  // While the organizers flag is on, the cook's organizers come first, through Prisma.
+  // The cook's organizers come first: the filters keep only ones the cook still has.
   const { filters, filterParams, organizerChoices } = await organizerFiltersFor(request, context, userId);
   // On the Worker the owner and their recipes come from D1 in one batch; Prisma is only
   // the fallback where there is no binding.
@@ -122,11 +122,9 @@ export default function MyRecipes() {
       />
 
       <DrawerSearch label="Search my recipes" query={query} placeholder="sumac, beans, serves 4" keep={filterParams} />
-      {organizerChoices ? <OrganizerBrowseLinks label="Browse my recipes by" /> : null}
-      {organizerChoices ? (
-        // Keyed by the filters so its boxes, which hold their own state, start over after a move without a reload.
-        <OrganizerFilterForm key={new URLSearchParams(filterParams).toString()} label="Filter my recipes" query={query} filterParams={filterParams} choices={organizerChoices} clearHref={`${pathname}${organizerFilterSearch(query, [], 1)}`} />
-      ) : null}
+      <OrganizerBrowseLinks label="Browse my recipes by" />
+      {/* Keyed by the filters so its boxes, which hold their own state, start over after a move without a reload. */}
+      <OrganizerFilterForm key={new URLSearchParams(filterParams).toString()} label="Filter my recipes" query={query} filterParams={filterParams} choices={organizerChoices} clearHref={`${pathname}${organizerFilterSearch(query, [], 1)}`} />
 
       {recipes.length > 0 ? (
         <ItemGroup aria-label="My recipes" variant="divided" className="mt-6">

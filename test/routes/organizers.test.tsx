@@ -16,8 +16,7 @@ import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRoutesStub } from "../utils";
 import { createDrawerRecipe, createDrawerUser, sessionHeaders } from "./kitchen-drawer-test-utils";
 
-const ON = { cloudflare: { env: { SPOONJOY_FLAGS: "organizers" } } };
-const OFF = { cloudflare: { env: {} } };
+const ON = { cloudflare: { env: {} } };
 
 const KINDS = [
   { kind: "tag", path: "/tags", list: tagsLoader, page: tagLoader, listMeta: tagsMeta, pageMeta: tagMeta, listTitle: "Your tags", fallback: "Tag" },
@@ -88,18 +87,6 @@ describe("organizers on recipes", () => {
     }
     expect(organizeMeta({ data: { recipe: { title: "Soup" } } } as never)).toEqual([{ title: "Organize Soup - Spoonjoy" }, noindex]);
     expect(organizeMeta({ data: undefined } as never)).toEqual([{ title: "Organize - Spoonjoy" }, noindex]);
-  });
-
-  it("are not found while the organizers flag is off", async () => {
-    const chef = await createDrawerUser("organizers-off");
-    const recipe = await createDrawerRecipe({ chefId: chef.id, title: "Flag off soup" });
-    for (const { path, list, page } of KINDS) {
-      expect(await status(list({ request: await signedIn(path, chef.id), context: OFF, params: {} } as never))).toBe(404);
-      expect(await status(page({ request: await signedIn(`${path}/x`, chef.id), context: OFF, params: { slug: "x" } } as never))).toBe(404);
-    }
-    const path = `/recipes/${recipe.id}/organize`;
-    expect(await status(organizeLoader({ request: await signedIn(path, chef.id), context: OFF, params: { id: recipe.id } } as never))).toBe(404);
-    expect(await status(organize(recipe.id, chef.id, { tags: "a" }, OFF))).toBe(404);
   });
 
   it("send a signed-out visitor to sign in", async () => {

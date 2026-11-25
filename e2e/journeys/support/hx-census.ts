@@ -279,7 +279,7 @@ export const census: Journey[] = [
   { id: "move-in", enrolled: true, persona: "chef", path: "/move-in", states: [DEFAULT] },
   { id: "saved-recipes", enrolled: true, persona: "chef", path: "/saved-recipes", states: [DEFAULT] },
 
-  // Organizers (organizers flag, on in QA): chef's seeded tag, category and tool, all on Lemon Herb Rice.
+  // Organizers: chef's seeded tag, category and tool, all on Lemon Herb Rice.
   { id: "tags", enrolled: true, persona: "chef", path: "/tags", states: [DEFAULT] },
   { id: "tags-newbie", enrolled: true, persona: "newbie", path: "/tags", states: [DEFAULT] },
   { id: "tag", enrolled: true, persona: "chef", path: `/tags/${QA_KITCHEN_TAG.slug}`, states: [DEFAULT] },

@@ -1,7 +1,6 @@
 // The organizer filters on a cook's recipe list: what the address asks for and the cook's own organizers to choose
-// from, both only while the organizers flag is on for them (off, the list ignores the address's filters).
+// from.
 import type { AppLoadContext } from "react-router";
-import { isFlagOn } from "~/domains/platform";
 import { d1ReadBatch, requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { ORGANIZER_KINDS, type OrganizerKind } from "../model/organizer";
@@ -36,11 +35,8 @@ export async function organizerFiltersFor(
   filters: OrganizerFilters;
   /** The same filters as search parameters, for the page's form and links. */
   filterParams: [string, string][];
-  organizerChoices: OrganizerChoices | null;
+  organizerChoices: OrganizerChoices;
 }> {
-  if (!isFlagOn("organizers", context.cloudflare?.env, userId)) {
-    return { filters: { with: [], without: [] }, filterParams: [], organizerChoices: null };
-  }
   const d1 = requestD1(context);
   const byKind = d1 ? await organizersByKindOnD1(d1, userId) : await organizersByKindOnPrisma(context, userId);
   const organizerChoices = Object.fromEntries(ORGANIZER_KINDS.map((kind, index) => [

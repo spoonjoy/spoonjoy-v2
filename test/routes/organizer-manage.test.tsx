@@ -11,8 +11,7 @@ import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRoutesStub } from "../utils";
 import { createDrawerRecipe, createDrawerUser, sessionHeaders } from "./kitchen-drawer-test-utils";
 
-const ON = { cloudflare: { env: { SPOONJOY_FLAGS: "organizers" } } };
-const OFF = { cloudflare: { env: {} } };
+const ON = { cloudflare: { env: {} } };
 
 const ACTIONS = { tag: { action: tagAction, path: "/tags" }, category: { action: categoryAction, path: "/categories" }, tool: { action: toolAction, path: "/tools" } } as const;
 type Kind = keyof typeof ACTIONS;
@@ -137,14 +136,13 @@ describe("managing an organizer from its page", () => {
     expect(redirectedTo(await post("category", "nope", cook.id, { intent: "delete" }))).toBeNull();
   });
 
-  it("are not found for another cook, a missing organizer, an unknown intent or while the flag is off", async () => {
+  it("are not found for another cook or a missing organizer, and refuse an unknown intent", async () => {
     const { cook, quick } = await kitchen();
     const stranger = await createDrawerUser("organizer-stranger");
 
     expect((await post("tag", "quick", stranger.id, { intent: "delete" }) as Response).status).toBe(404);
     expect((await post("category", "nope", cook.id, { intent: "delete" }) as Response).status).toBe(404);
     await expect(post("tag", "quick", cook.id, { intent: "shout" })).resolves.toMatchObject({ init: { status: 400 } });
-    expect((await post("tag", "quick", cook.id, { intent: "delete" }, OFF) as Response).status).toBe(404);
     expect(await db.organizer.findUnique({ where: { id: quick.id } })).not.toBeNull();
   });
 

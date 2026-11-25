@@ -47,10 +47,10 @@ function harness({ zip = backup(), email = "cook@example.com", write, writeMany,
   /** A chunk photo writer: true for one that stores every photo; left out, the Worker brings each photo alone. */
   attachMany?: true | ((inputs: PhotosInput[]) => Promise<Array<Error | null>>);
   /**
-   * Whether the cook has organizers, and how putting them on a recipe goes; left out, the Worker has no organizers port.
-   * `attachMany` is true for a chunk writer that puts every recipe's on; left out, each recipe's go on alone.
+   * How putting organizers on a recipe goes; left out, the Worker has no organizers port. `attachMany` is true for a
+   * chunk writer that puts every recipe's on; left out, each recipe's go on alone.
    */
-  organizers?: { on: boolean; attach?: (input: Organized) => Promise<void>; attachMany?: true | ((inputs: Organized[]) => Promise<Array<Error | null>>) };
+  organizers?: { attach?: (input: Organized) => Promise<void>; attachMany?: true | ((inputs: Organized[]) => Promise<Array<Error | null>>) };
 } = {}) {
   const jobs = new Map<string, MoveInJob>([["job-1", {
     id: "job-1", ownerId: "chef-1", kind: "mealie-backup", sourceId: null, status: "queued", phase: "inspect", cursor: null, archiveKey: "uploads/job-1.zip", lastError: null, attempt: 0,
@@ -148,7 +148,6 @@ function harness({ zip = backup(), email = "cook@example.com", write, writeMany,
     now: () => new Date("2026-11-23T12:00:00.000Z"),
     ...(organizers ? {
       organizers: {
-        on: (ownerId: string) => ownerId === "chef-1" && organizers.on,
         attach: organizers.attach ?? (async (input: Organized) => void organized.push(input)),
         ...(organizers.attachMany ? {
           attachMany: async (inputs: Organized[]) => {
@@ -952,8 +951,8 @@ describe("a backup's tags, categories and tools", () => {
   const pancakes = { ...at, recipeId: `spoonjoy-${keys.pancakes}`, tags: ["Quick"], categories: ["Dinner"], tools: [] };
   const soup = { ...at, recipeId: `spoonjoy-${keys.soup}`, tags: [], categories: [], tools: ["Skillet"] };
 
-  it("go onto their recipes when the cook has organizers, counted as found and with no note that they stayed behind", async () => {
-    const h = harness({ organizers: { on: true } });
+  it("go onto their recipes when the Worker has organizers, counted as found and with no note that they stayed behind", async () => {
+    const h = harness({ organizers: {} });
     await h.runAll();
     expect(h.organized).toEqual([pancakes, soup]);
     for (const entity of ["tags", "categories", "tools"]) expect(h.counts.get(entity)).toMatchObject({ found: 1, skipped: 0 });
@@ -962,7 +961,7 @@ describe("a backup's tags, categories and tools", () => {
 
   it("go onto a recipe already here or changed in place, and leave a recipe the cook changed or deleted alone", async () => {
     const already = harness({
-      organizers: { on: true },
+      organizers: {},
       write: async ({ draft }) => (draft.title === "Pancakes"
         ? { outcome: "kept", recipeId: `spoonjoy-${draft.sourceKey}`, reason: "You changed this recipe in Spoonjoy, so your version stays." }
         : { outcome: "unchanged", recipeId: `spoonjoy-${draft.sourceKey}`, jobId: "an-earlier-job" }),
@@ -971,7 +970,7 @@ describe("a backup's tags, categories and tools", () => {
     expect(already.organized).toEqual([soup]);
 
     const changed = harness({
-      organizers: { on: true },
+      organizers: {},
       write: async ({ draft }) => (draft.title === "Pancakes"
         ? { outcome: "updated", recipeId: `spoonjoy-${draft.sourceKey}` }
         : { outcome: "skipped", recipeId: `spoonjoy-${draft.sourceKey}`, reason: "You deleted this recipe in Spoonjoy after it moved in." }),
@@ -982,7 +981,7 @@ describe("a backup's tags, categories and tools", () => {
 
   it("leave a recipe moved in without them, with a note, when they can't be put on it", async () => {
     const tried: string[] = [];
-    const h = harness({ organizers: { on: true, attach: async ({ recipeId }) => {
+    const h = harness({ organizers: { attach: async ({ recipeId }) => {
       tried.push(recipeId);
       throw new Error("D1 said no");
     } } });
@@ -997,25 +996,18 @@ describe("a backup's tags, categories and tools", () => {
     });
   });
 
-  it("follow what inspect decided, even when the cook's flag changes during the move-in", async () => {
-    const turnedOff = { on: true };
-    const off = harness({ organizers: turnedOff });
-    await runNextChunk("job-1", off.ports);
-    turnedOff.on = false;
-    await off.runAll();
-    expect(off.organized).toEqual([pancakes, soup]);
-
-    const turnedOn = { on: false };
-    const on = harness({ organizers: turnedOn });
-    await runNextChunk("job-1", on.ports);
-    turnedOn.on = true;
-    await on.runAll();
-    expect(on.organized).toEqual([]);
-    expect(on.counts.get("tags")).toMatchObject({ found: 1, skipped: 1 });
+  it("follow what inspect decided, even when a newer Worker with organizers runs the rest of the move-in", async () => {
+    const h = harness();
+    const later = harness({ organizers: {} });
+    await runNextChunk("job-1", h.ports);
+    h.ports.organizers = later.ports.organizers;
+    await h.runAll();
+    expect(later.organized).toEqual([]);
+    expect(h.counts.get("tags")).toMatchObject({ found: 1, skipped: 1 });
   });
 
   it("ask once a run whether inspect chose to bring them", async () => {
-    const h = harness({ organizers: { on: true } });
+    const h = harness({ organizers: {} });
     const asked = vi.spyOn(h.ports.store, "organizing");
     await runNextChunk("job-1", h.ports);
     await runForAWhile("job-1", h.ports, { budgetMs: 10_000, chunkSize: 1 });
@@ -1023,7 +1015,7 @@ describe("a backup's tags, categories and tools", () => {
   });
 
   it("go onto a chunk's recipes together, counted as they would be alone", async () => {
-    const h = harness({ writeMany: true, organizers: { on: true, attachMany: true } });
+    const h = harness({ writeMany: true, organizers: { attachMany: true } });
     await runNextChunk("job-1", h.ports);
     await runNextChunk("job-1", h.ports, { chunkSize: 3 });
     expect(h.organizerBatches).toEqual([[pancakes.recipeId, soup.recipeId]]);
@@ -1033,7 +1025,7 @@ describe("a backup's tags, categories and tools", () => {
   });
 
   it("leave out of a chunk only the recipe they couldn't go onto, with a note", async () => {
-    const h = harness({ writeMany: true, organizers: { on: true, attachMany: async (inputs) => inputs.map(({ recipeId }) => (recipeId === soup.recipeId ? new Error("the recipe is no longer in your kitchen") : null)) } });
+    const h = harness({ writeMany: true, organizers: { attachMany: async (inputs) => inputs.map(({ recipeId }) => (recipeId === soup.recipeId ? new Error("the recipe is no longer in your kitchen") : null)) } });
     await runNextChunk("job-1", h.ports);
     await runNextChunk("job-1", h.ports, { chunkSize: 3 });
     expect(h.organized).toEqual([pancakes]);
@@ -1045,7 +1037,7 @@ describe("a backup's tags, categories and tools", () => {
     ["fails", async () => Promise.reject(new Error("D1 is down"))],
     ["answers for fewer recipes than it was given", async () => [] as Array<Error | null>],
   ])("go onto each recipe alone when the chunk's write %s", async (_, attachMany) => {
-    const h = harness({ writeMany: true, organizers: { on: true, attachMany } });
+    const h = harness({ writeMany: true, organizers: { attachMany } });
     await runNextChunk("job-1", h.ports);
     await runNextChunk("job-1", h.ports, { chunkSize: 3 });
     expect(h.organizerBatches).toHaveLength(1);
@@ -1053,8 +1045,8 @@ describe("a backup's tags, categories and tools", () => {
     expect(h.events.some((event) => event.message.includes("without some of its tags"))).toBe(false);
   });
 
-  it("stay in the backup, as before, when the cook doesn't have organizers", async () => {
-    const h = harness({ organizers: { on: false } });
+  it("stay in the backup, as before, on a Worker without organizers", async () => {
+    const h = harness();
     await h.runAll();
     expect(h.organized).toEqual([]);
     expect(h.counts.get("tags")).toMatchObject({ found: 1, skipped: 1 });

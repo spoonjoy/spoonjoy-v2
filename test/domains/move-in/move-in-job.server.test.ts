@@ -161,8 +161,8 @@ describe("the move-in job", () => {
         event: "move_in_segment",
         claimed: true,
         recipesFound: 3,
-        // The chunk's three recipes are written in one go.
-        stages: { recipeWrites: { calls: 1, ms: 1 }, photoWrites: { calls: 1, ms: 1 }, organizers: { calls: 0, ms: 0 } },
+        // The chunk's three recipes are written in one go, and so are their tags, categories and tools.
+        stages: { recipeWrites: { calls: 1, ms: 1 }, photoWrites: { calls: 1, ms: 1 }, organizers: { calls: 1, ms: 1 } },
       });
       // The next segment was stamped when the last one queued it.
       expect(recipes.waitMs).toBeGreaterThan(0);

@@ -168,11 +168,10 @@ export interface MoveInPorts {
   /** Whether the recipe already has a cover that moved in. */
   hasMovedInPhoto(recipeId: string): Promise<boolean>;
   /**
-   * Puts a recipe's tags, categories and tools on it, adding to any it has, for a cook who has organizers. A Worker
-   * without it leaves them in the backup.
+   * Puts a recipe's tags, categories and tools on it, adding to any it has. A Worker without it leaves them in the
+   * backup.
    */
   organizers?: {
-    on(ownerId: string): boolean;
     attach(input: OrganizersInput): Promise<void>;
     /**
      * Puts a chunk's recipes' tags, categories and tools on them in one go, and answers, for each, null when they are on
@@ -273,9 +272,9 @@ async function inspect(run: Run, { source, kitchen }: Opened) {
   });
   const counted = await kitchen.count();
   const { photos } = counted;
-  // A cook with organizers gets the tags, categories and tools on each recipe as it moves in; for anyone else they are
+  // With an organizers port, the tags, categories and tools go on each recipe as it moves in; without one they are
   // counted, and left for a later move-in. The choice is made here, once: the recipes follow what these counts say.
-  const organizing = run.ports.organizers?.on(job.ownerId) ?? false;
+  const organizing = Boolean(run.ports.organizers);
   const waiting = [["tags", counted.tags, "tag"], ["categories", counted.categories, "category"], ["tools", counted.tools, "tool"]] as const;
   const left = waiting.filter(([, found]) => found).map(([, found, one]) => plural(found, one, one === "category" ? "categories" : `${one}s`));
   const report: MoveInReport = {

@@ -222,7 +222,6 @@ function RecipeDetail() {
     ? recipeCoverFields.coverProvenanceLabel
     : null;
   const isAuthenticated = loaderData.isAuthenticated ?? true;
-  const organizersOn = useFlag("organizers");
   const cookSessionUserId = loaderData.cookSessionUserId ?? null;
   const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;
   const savedInCookbookIds = loaderData.savedInCookbookIds ?? EMPTY_SAVED_COOKBOOK_IDS;
@@ -480,7 +479,7 @@ function RecipeDetail() {
           {isOwner ? (
             <MenuItem href={`/recipes/${recipe.id}/edit`}>Edit</MenuItem>
           ) : null}
-          {isOwner && organizersOn ? (
+          {isOwner ? (
             <MenuItem href={`/recipes/${recipe.id}/organize`}>Organize</MenuItem>
           ) : null}
           {isOwner ? <MenuItem onClick={() => setIsCoversDialogOpen(true)}>Manage covers</MenuItem> : null}

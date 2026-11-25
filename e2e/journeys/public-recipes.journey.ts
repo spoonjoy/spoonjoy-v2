@@ -35,7 +35,7 @@ test.describe("Public recipes", () => {
     await expectAccessible();
   });
 
-  // The organizers flag is on in QA, so the view switch shows; the pick is a cookie in this browser (`sj_recipe_view`).
+  // The view switch shows for every signed-in cook; the pick is a cookie in this browser (`sj_recipe_view`).
   test("List shows a compact line per recipe and keeps the pick across a reload", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
     const main = page.getByRole("main");
     const views = main.getByRole("radiogroup", { name: "Recipe view", exact: true });

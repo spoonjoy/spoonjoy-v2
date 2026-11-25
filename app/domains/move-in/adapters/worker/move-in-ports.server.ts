@@ -1,8 +1,8 @@
 // The runner's ports on a Worker: the uploaded backup read from R2 by range, the job and the
 // kitchen in D1, photos stored next to every other recipe photo, and tags, categories and tools
-// through Kitchen's organizers for a cook who has them.
+// through Kitchen's organizers.
 import type { PrismaClient } from "@prisma/client";
-import { isFlagOn, type FlagEnv } from "~/domains/platform";
+import type { FlagEnv } from "~/domains/platform";
 import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { getDb } from "~/lib/db.server";
 import type { RangeSource } from "../archive/zip";
@@ -102,7 +102,6 @@ export function moveInPorts(env: MoveInEnv, now: () => Date): MoveInPorts {
     attachPhotos: (inputs) => attachMovedInPhotos(inputs.map((input) => ({ db, bucket: env.PHOTOS, ...input, now: now() }))),
     hasMovedInPhoto: (recipeId) => hasMovedInPhoto(db, recipeId),
     organizers: {
-      on: (ownerId) => isFlagOn("organizers", env, ownerId),
       attach: async (moved) => attachMovedInOrganizers(await openPrisma(), moved),
       attachMany: (moved) => attachMovedInOrganizersTogether(db, moved, now()),
     },

@@ -97,10 +97,8 @@ describe("timeMoveInPorts", () => {
     expect(timeMoveInPorts(fakePorts()).ports.organizers).toBeUndefined();
   });
 
-  it("times organizers and keeps their switch as it was", async () => {
-    const on = () => true;
-    const { ports, times } = timeMoveInPorts(fakePorts({ organizers: { on, attach: async () => undefined } }));
-    expect(ports.organizers?.on).toBe(on);
+  it("times organizers", async () => {
+    const { ports, times } = timeMoveInPorts(fakePorts({ organizers: { attach: async () => undefined } }));
     await ports.organizers?.attach({} as never);
     expect(times.organizers.calls).toBe(1);
   });
