@@ -196,10 +196,13 @@ function DaySection({ day, today, lastMade, onAdd }: { day: PlanDay; today: stri
       <SectionHeader
         title={heading}
         meta={day.date === today ? "Today" : undefined}
+        // An empty day's own button plans it, so the header's Add shows only once the day has meals.
         actions={
-          <Button variant="plain" size="sm" startIcon={Plus} aria-label={`Add to ${weekday}`} onClick={() => onAdd(day.date)}>
-            Add
-          </Button>
+          day.entries.length > 0 ? (
+            <Button variant="plain" size="sm" startIcon={Plus} aria-label={`Add to ${weekday}`} onClick={() => onAdd(day.date)}>
+              Add
+            </Button>
+          ) : undefined
         }
       />
       <ItemGroup

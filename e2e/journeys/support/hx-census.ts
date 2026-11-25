@@ -363,7 +363,7 @@ export const census: Journey[] = [
       {
         id: "add-sheet",
         action: async (page) => {
-          await openDialog(page.getByRole("button", { name: "Add to Monday", exact: true }), page.getByRole("dialog", { name: "Add to Monday, Mar 1" }));
+          await openDialog(page.getByRole("button", { name: "Plan a meal for Monday", exact: true }), page.getByRole("dialog", { name: "Add to Monday, Mar 1" }));
         },
       },
     ],
