@@ -83,3 +83,23 @@ export function smartCookbookFilters(rules: readonly SmartCookbookRule[], organi
   }
   return filters;
 }
+
+/** One of a cookbook's rules moving off a merged organizer: onto the one it merged into, or dropped (`to` null). */
+export type SmartCookbookRepoint = { side: SmartCookbookSide; from: string; to: string | null };
+
+/**
+ * How a cookbook's rules change when organizers merge into `keepId`: each rule on a merged organizer moves to the kept
+ * one on the same side, unless the cookbook already has the kept one on either side, in which case it is dropped. The
+ * cookbook keeps the rule the cook gave the kept organizer, so one organizer never ends up on both sides.
+ */
+export function smartCookbookRepoints(rules: readonly SmartCookbookRule[], mergedIds: readonly string[], keepId: string): SmartCookbookRepoint[] {
+  const merged = new Set(mergedIds);
+  let keptOn = rules.find((rule) => rule.organizerId === keepId)?.side ?? null;
+  const repoints: SmartCookbookRepoint[] = [];
+  for (const rule of rules) {
+    if (!merged.has(rule.organizerId)) continue;
+    repoints.push({ side: rule.side, from: rule.organizerId, to: keptOn ? null : keepId });
+    keptOn ??= rule.side;
+  }
+  return repoints;
+}

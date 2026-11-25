@@ -4,6 +4,7 @@ import {
   normalizeSmartCookbookTitle,
   planSmartCookbookRules,
   smartCookbookFilters,
+  smartCookbookRepoints,
   SMART_COOKBOOK_TITLE_MAX_LENGTH,
 } from "~/domains/kitchen/model/smart-cookbook";
 import { ORGANIZER_FILTER_MAX } from "~/domains/kitchen/model/organizer-filter";
@@ -94,5 +95,29 @@ describe("what a smart cookbook fills with", () => {
       [{ side: "with", organizerId: "o-soup" }, { side: "without", organizerId: "o-mixer" }],
       [quick, soup],
     )).toEqual({ with: [{ kind: "category", slug: "soup" }], without: [] });
+  });
+});
+
+describe("smart cookbook rules when organizers merge", () => {
+  it("moves a rule on a merged organizer to the one it merged into, on the same side", () => {
+    expect(smartCookbookRepoints([{ side: "with", organizerId: "o-fast" }, { side: "without", organizerId: "o-mixer" }], ["o-fast"], "o-quick"))
+      .toEqual([{ side: "with", from: "o-fast", to: "o-quick" }]);
+  });
+
+  it("drops a merged rule the cookbook already has on either side, and moves only the first of several on one side", () => {
+    expect(smartCookbookRepoints(
+      [{ side: "with", organizerId: "o-quick" }, { side: "with", organizerId: "o-fast" }, { side: "without", organizerId: "o-speedy" }],
+      ["o-fast", "o-speedy"],
+      "o-quick",
+    )).toEqual([{ side: "with", from: "o-fast", to: null }, { side: "without", from: "o-speedy", to: null }]);
+    expect(smartCookbookRepoints(
+      [{ side: "without", organizerId: "o-fast" }, { side: "without", organizerId: "o-speedy" }],
+      ["o-fast", "o-speedy"],
+      "o-quick",
+    )).toEqual([{ side: "without", from: "o-fast", to: "o-quick" }, { side: "without", from: "o-speedy", to: null }]);
+  });
+
+  it("leaves a cookbook with no merged rules as it is", () => {
+    expect(smartCookbookRepoints([{ side: "with", organizerId: "o-soup" }], ["o-fast"], "o-quick")).toEqual([]);
   });
 });

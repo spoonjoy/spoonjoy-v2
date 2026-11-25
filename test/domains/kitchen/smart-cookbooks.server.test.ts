@@ -4,10 +4,13 @@ import type { PrismaClient } from "@prisma/client";
 import { getLocalDb } from "~/lib/db.server";
 import { prismaOrganizerStore } from "~/domains/kitchen/adapters/prisma-organizer-store";
 import { prismaSmartCookbookStore } from "~/domains/kitchen/adapters/prisma-smart-cookbook-store";
-import { deleteOrganizer, renameOrganizerById, setRecipeOrganizers, type OrganizerStore } from "~/domains/kitchen/application/organizers";
+import { deleteOrganizer, mergeOrganizers, renameOrganizerById, setRecipeOrganizers, type OrganizerStore } from "~/domains/kitchen/application/organizers";
 import {
   createSmartCookbook,
+  deleteSmartCookbook,
   listSmartCookbooks,
+  renameSmartCookbook,
+  repointSmartCookbooks,
   smartCookbookFill,
   type SmartCookbookStore,
 } from "~/domains/kitchen/application/smart-cookbooks";
@@ -88,6 +91,12 @@ describe("smart cookbooks, stored", () => {
     } as unknown as PrismaClient);
     await expect(failingRule.create(chef.id, "Quick", [{ side: "with", organizerId: quick }])).rejects.toBe(boom);
     expect(await db.smartCookbook.count()).toBe(0);
+
+    const failingRename = prismaSmartCookbookStore({
+      smartCookbook: { ...db.smartCookbook, update: () => Promise.reject(boom) },
+      smartCookbookRule: db.smartCookbookRule,
+    } as unknown as PrismaClient);
+    await expect(failingRename.rename("any", "Quick")).rejects.toBe(boom);
   });
 
   it("refuses a title the cook already uses, an empty title, and rules that are not the cook's", async () => {
@@ -111,6 +120,59 @@ describe("smart cookbooks, stored", () => {
     if (!made.ok) throw new Error("not made");
     expect(await smartCookbookFill(store, organizers, other.id, made.cookbook.id)).toBeNull();
     expect(await smartCookbookFill(store, organizers, chef.id, "no-such-cookbook")).toBeNull();
+  });
+
+  it("renames a cook's cookbook, refusing a title they already use, an empty one, and another cook's cookbook", async () => {
+    const { chef, quick } = await organizedCook();
+    const other = await cook();
+    const rules = [{ side: "with", organizerId: quick }];
+    const soups = await createSmartCookbook(store, organizers, chef.id, { title: "Soups", rules });
+    await createSmartCookbook(store, organizers, chef.id, { title: "Salads", rules });
+    if (!soups.ok) throw new Error("not made");
+    const id = soups.cookbook.id;
+    expect(await renameSmartCookbook(store, chef.id, id, " Hot  soups ")).toEqual({ ok: true, title: "Hot soups" });
+    expect(await renameSmartCookbook(store, chef.id, id, "Salads")).toEqual({ ok: false, reason: "taken" });
+    expect(await renameSmartCookbook(store, chef.id, id, "")).toEqual({ ok: false, reason: "invalid-title" });
+    expect(await renameSmartCookbook(store, other.id, id, "Mine")).toEqual({ ok: false, reason: "not-found" });
+    expect((await store.find(id))?.title).toBe("Hot soups");
+  });
+
+  it("deletes a cook's cookbook and its rules, and only theirs", async () => {
+    const { chef, quick } = await organizedCook();
+    const other = await cook();
+    const made = await createSmartCookbook(store, organizers, chef.id, { title: "Quick", rules: [{ side: "with", organizerId: quick }] });
+    if (!made.ok) throw new Error("not made");
+    expect(await deleteSmartCookbook(store, other.id, made.cookbook.id)).toBe(false);
+    expect(await deleteSmartCookbook(store, chef.id, made.cookbook.id)).toBe(true);
+    expect(await deleteSmartCookbook(store, chef.id, made.cookbook.id)).toBe(false);
+    expect([await db.smartCookbook.count(), await db.smartCookbookRule.count()]).toEqual([0, 0]);
+  });
+
+  it("moves its rules to the tag another merged into, keeping their place, and drops one it already has", async () => {
+    const { chef, quick, soup, mixer } = await organizedCook();
+    const recipe = await db.recipe.create({ data: createTestRecipe(chef.id) });
+    const fast = await setRecipeOrganizers(organizers, chef.id, recipe.id, "tag", ["Fast", "Speedy"]);
+    if (!fast.ok) throw new Error("organizers not set");
+    const [fastId, speedyId] = fast.organizers.map((organizer) => organizer.id);
+    const moved = await createSmartCookbook(store, organizers, chef.id, {
+      title: "Fast soups",
+      rules: [{ side: "with", organizerId: fastId }, { side: "with", organizerId: soup }, { side: "without", organizerId: mixer }],
+    });
+    const dropped = await createSmartCookbook(store, organizers, chef.id, {
+      title: "Quick but not speedy",
+      rules: [{ side: "with", organizerId: quick }, { side: "without", organizerId: speedyId }],
+    });
+    if (!moved.ok || !dropped.ok) throw new Error("not made");
+
+    await mergeOrganizers(organizers, chef.id, quick, [fastId!, speedyId!]);
+    await repointSmartCookbooks(store, chef.id, [fastId!, speedyId!], quick);
+
+    expect((await store.find(moved.cookbook.id))?.rules).toEqual([
+      { side: "with", organizerId: quick },
+      { side: "with", organizerId: soup },
+      { side: "without", organizerId: mixer },
+    ]);
+    expect((await store.find(dropped.cookbook.id))?.rules).toEqual([{ side: "with", organizerId: quick }]);
   });
 
   it("keeps filling after a tag is renamed, and fills with nothing once a tag it needs is deleted", async () => {

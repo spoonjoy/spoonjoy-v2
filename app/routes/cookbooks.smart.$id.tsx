@@ -1,6 +1,11 @@
 import type { Route } from "./+types/cookbooks.smart.$id";
-import { useLoaderData, useLocation } from "react-router";
+import { Form as RouterForm, useActionData, useLoaderData, useLocation, useSubmit } from "react-router";
+import { Alert } from "~/components/ouro/alert/alert";
 import { Badge } from "~/components/ouro/badge/badge";
+import { Button } from "~/components/ouro/button/button";
+import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
+import { SectionHeader } from "~/components/ouro/section-header/section-header";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { DescriptionList } from "~/components/ouro/description-list/description-list";
 import { Empty } from "~/components/ouro/empty/empty";
 import { Link } from "~/components/ouro/link/link";
@@ -9,7 +14,7 @@ import { Pagination } from "~/components/ouro/pagination/pagination";
 import { Text } from "~/components/ouro/text/text";
 import { CookbookContents } from "~/components/cookbook/contents";
 import { CookbookPage } from "~/components/cookbook/page";
-import { smartCookbookPageLoader, type SmartCookbookRuleView } from "~/domains/kitchen/index.server";
+import { smartCookbookPageAction, smartCookbookPageLoader, type SmartCookbookRuleView } from "~/domains/kitchen/index.server";
 
 export function meta({ data }: Route.MetaArgs) {
   return [{ title: `${data ? data.cookbook.title : "Smart cookbook"} - Spoonjoy` }];
@@ -17,6 +22,41 @@ export function meta({ data }: Route.MetaArgs) {
 
 export function loader({ params, ...args }: Route.LoaderArgs) {
   return smartCookbookPageLoader({ ...args, cookbookId: params.id });
+}
+
+export function action({ params, ...args }: Route.ActionArgs) {
+  return smartCookbookPageAction({ ...args, cookbookId: params.id });
+}
+
+/** Under the recipes: rename the cookbook, or delete it after asking. */
+function ChangeCookbook({ title }: { title: string }) {
+  const answer = useActionData<typeof action>();
+  const submit = useSubmit();
+  return (
+    <section aria-labelledby="smart-cookbook-change" className="mt-10">
+      <SectionHeader id="smart-cookbook-change" title="Change this cookbook" />
+      {answer && "error" in answer ? <Alert tone="destructive" title={answer.error} className="mt-4" /> : null}
+      <div className="mt-4 flex flex-col gap-6">
+        {/* Keyed by the title, so the box shows the new one after a rename. */}
+        <RouterForm key={title} method="post" aria-label="Rename this cookbook" className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <input type="hidden" name="intent" value="rename" />
+          <TextField label="Title" name="title" defaultValue={title} className="flex-1" />
+          <Button type="submit" variant="outline" tone="secondary">Rename</Button>
+        </RouterForm>
+        <div>
+          <ConfirmDialog
+            trigger={<Button variant="outline" tone="destructive">Delete cookbook</Button>}
+            title={`Delete ${title}?`}
+            description="Its recipes stay, and so do their tags, categories and tools."
+            confirmLabel="Delete it"
+            cancelLabel="Keep it"
+            tone="destructive"
+            onConfirm={() => submit({ intent: "delete" }, { method: "post" })}
+          />
+        </div>
+      </div>
+    </section>
+  );
 }
 
 /** One side's rules as badges that link to each organizer's page; a deleted one says so. */
@@ -89,6 +129,7 @@ export default function SmartCookbookPage() {
           nextLabel="Next page"
         />
       ) : null}
+      <ChangeCookbook title={cookbook.title} />
     </CookbookPage>
   );
 }

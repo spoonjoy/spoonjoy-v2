@@ -105,6 +105,17 @@ describe("managing an organizer from its page", () => {
     expect(links.map((link) => link.recipeId).sort()).toEqual([soup.id, stew.id].sort());
   });
 
+  it("move a smart cookbook's rule on the merged tag to the tag it merged into", async () => {
+    const { cook, quick, fast } = await kitchen();
+    const cookbook = await db.smartCookbook.create({ data: { ownerId: cook.id, title: "Quick ones" } });
+    await db.smartCookbookRule.create({ data: { cookbookId: cookbook.id, side: "with", organizerId: quick.id, position: 0 } });
+
+    expect(redirectedTo(await post("tag", "quick", cook.id, { intent: "merge", into: "fast" }))).toBe("/tags/fast");
+
+    const rules = await db.smartCookbookRule.findMany({ where: { cookbookId: cookbook.id }, select: { side: true, organizerId: true } });
+    expect(rules).toEqual([{ side: "with", organizerId: fast.id }]);
+  });
+
   it("refuse to merge into itself, into one of another kind or into one that isn't there", async () => {
     const { cook, quick } = await kitchen();
 

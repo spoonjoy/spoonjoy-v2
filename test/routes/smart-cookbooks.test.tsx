@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { db } from "~/lib/db.server";
 import { OBJECTIONABLE_CONTENT_MESSAGE, OBJECTIONABLE_TERMS } from "~/lib/objectionable-terms";
 import NewSmartCookbook, { action as newAction, loader as newLoader, meta as newMeta } from "~/routes/cookbooks.smart.new";
-import SmartCookbookPage, { loader as pageLoader, meta as pageMeta } from "~/routes/cookbooks.smart.$id";
+import SmartCookbookPage, { action as pageAction, loader as pageLoader, meta as pageMeta } from "~/routes/cookbooks.smart.$id";
 import CookbooksIndex, { loader as cookbooksLoader } from "~/routes/cookbooks._index";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1 } from "../helpers/sqlite-d1";
@@ -201,6 +201,41 @@ describe("smart cookbooks", () => {
     }
   });
 
+  it("rename from their page, refusing a title in use, an empty one or a word that isn't allowed, and delete from it, leaving the recipes", async () => {
+    const { cook, quick, soup } = await kitchen();
+    const other = await createDrawerUser("smart-other");
+    const id = redirectedTo(await create(cook.id, [["title", "Quick"], ["with", quick.id]]))!.split("/").pop()!;
+    await create(cook.id, [["title", "Taken"], ["with", quick.id]]);
+    const change = async (fields: [string, string][], userId = cook.id, context: object = ON) =>
+      settle(pageAction({
+        request: await signedIn(`/cookbooks/smart/${id}`, userId, { method: "POST", body: new URLSearchParams(fields) }),
+        context,
+        params: { id },
+      } as never));
+
+    expect(await change([["intent", "rename"], ["title", "  Fast  ones "]])).toEqual({ renamed: "Fast ones" });
+    await expect(change([["intent", "rename"], ["title", "Taken"]])).resolves.toMatchObject({
+      data: { error: "You already have a smart cookbook with this title." },
+      init: { status: 400 },
+    });
+    await expect(change([["intent", "rename"], ["title", ""]])).resolves.toMatchObject({ init: { status: 400 } });
+    await expect(change([["intent", "rename"], ["title", OBJECTIONABLE_TERMS[0]!]])).resolves.toMatchObject({
+      data: { error: OBJECTIONABLE_CONTENT_MESSAGE },
+      init: { status: 400 },
+    });
+    await expect(change([["intent", "shout"]])).resolves.toMatchObject({ data: { error: "Choose Rename or Delete." }, init: { status: 400 } });
+    expect(await change([["intent", "rename"], ["title", "Mine"]], other.id)).toMatchObject({ status: 404 });
+    expect(await change([["intent", "delete"]], cook.id, OFF)).toMatchObject({ status: 404 });
+    expect(await db.smartCookbook.findUnique({ where: { id } })).toMatchObject({ title: "Fast ones" });
+
+    // Another cook's delete changes nothing; the cook's own goes to Cookbooks.
+    expect(redirectedTo(await change([["intent", "delete"]], other.id))).toBe("/cookbooks");
+    expect(await db.smartCookbook.count()).toBe(2);
+    expect(redirectedTo(await change([["intent", "delete"]]))).toBe("/cookbooks");
+    expect(await db.smartCookbook.findUnique({ where: { id } })).toBeNull();
+    expect(await db.recipe.findUnique({ where: { id: soup.id } })).not.toBeNull();
+  });
+
   it("are only their cook's, and say so when a tag they need is deleted", async () => {
     const { cook, quick } = await kitchen();
     const other = await createDrawerUser("smart-other");
@@ -326,5 +361,33 @@ describe("smart cookbooks", () => {
     render(<Stub initialEntries={["/cookbooks/two"]} />);
     expect(await screen.findByText("2 cookbooks")).toBeTruthy();
     expect(screen.getByText("With Quick")).toBeTruthy();
+  });
+
+  it("rename from the page, show a refusal, and delete only after asking", async () => {
+    const sent: string[] = [];
+    const Stub = createTestRoutesStub([
+      {
+        path: "/cookbooks/smart/full",
+        Component: SmartCookbookPage,
+        loader: () => ({ cookbook: { id: "full", title: "Quick ones" }, rules: [], missing: false, page: 1, hasPreviousPage: false, hasNextPage: false, recipes: [] }),
+        action: async ({ request }: { request: Request }) => {
+          const form = await request.formData();
+          sent.push(`${form.get("intent")}:${form.get("title") ?? ""}`);
+          return { error: "You already have a smart cookbook with this title." };
+        },
+      },
+    ]);
+    render(<Stub initialEntries={["/cookbooks/smart/full"]} />);
+    const rename = await screen.findByRole("form", { name: "Rename this cookbook" });
+    expect(within(rename).getByRole("textbox", { name: "Title" })).toHaveValue("Quick ones");
+    fireEvent.change(within(rename).getByRole("textbox", { name: "Title" }), { target: { value: "Taken" } });
+    fireEvent.click(within(rename).getByRole("button", { name: "Rename" }));
+    expect(await screen.findByText("You already have a smart cookbook with this title.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete cookbook" }));
+    expect(await screen.findByRole("alertdialog", { name: "Delete Quick ones?" })).toBeTruthy();
+    expect(sent).toEqual(["rename:Taken"]);
+    fireEvent.click(screen.getByRole("button", { name: "Delete it" }));
+    await waitFor(() => expect(sent).toEqual(["rename:Taken", "delete:"]));
   });
 });
