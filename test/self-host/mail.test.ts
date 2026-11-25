@@ -80,6 +80,17 @@ describe("smtpMailer", () => {
     expect(plain.createTransport).toHaveBeenCalledWith({ host: "relay", port: 25, secure: false, requireTLS: false, ignoreTLS: true });
   });
 
+  it("sends the HTML part beside the text whenever the message has one, and the text alone otherwise", async () => {
+    const { sendMail, createTransport } = transport();
+    const send = smtpMailer({ host: "relay", port: 25, security: "none", username: null, password: null }, createTransport);
+
+    await send(message);
+    expect(sendMail).toHaveBeenLastCalledWith(expect.objectContaining({ text: "Hi", html: "<p>Hi</p>" }));
+
+    await send({ ...message, html: undefined });
+    expect(sendMail.mock.lastCall?.[0]).toEqual({ to: message.to, from: message.from, subject: message.subject, text: "Hi" });
+  });
+
   it("passes on the SMTP server's refusal", async () => {
     const { sendMail, createTransport } = transport();
     sendMail.mockRejectedValue(Object.assign(new Error("535 Authentication failed"), { code: "EAUTH" }));
