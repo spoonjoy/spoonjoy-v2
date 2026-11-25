@@ -9,6 +9,7 @@ import { chooseMenuItem } from "./support/menu";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStatePath } from "./support/personas";
 import { requiredLabel } from "./support/forms";
+import { expectLastRowClearsTabBar } from "./support/tab-bar-clearance";
 import { addNewToken, addSuggestedToken, attachElementShot, pickToken } from "./support/organize-tokens";
 
 const RECIPE_URL = /\/recipes\/(?!new$)[^/?#]+$/;
@@ -96,6 +97,8 @@ test.describe("Smart cookbooks", () => {
     });
     await expectAccessible();
     await attachScreenshot(page, testInfo, "smart-cookbook-after-reload");
+    // Scrolled to the end, the last recipe clears the phone's tab bar; the shot is the visible screen.
+    await expectLastRowClearsTabBar(page, recipes.getByRole("listitem").last(), testInfo, "smart-cookbook-end-of-page");
 
     // Cookbooks lists it with its rules.
     await page.goto("/cookbooks");
