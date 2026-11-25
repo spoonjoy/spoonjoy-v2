@@ -75,6 +75,17 @@
   --ring: var(--sj-on-photo);
 }
 
+/* Five tabs and Search fit a 320px phone only with tighter edges: HX's 0.75rem gutters and 0.5rem
+   gap leave each tab 43.2px, under the 44px touch target. Below 360px the gutters drop to 0.5rem
+   and the gap to 0.25rem, which leaves each tab 45.6px. */
+@media (width < 360px) {
+  .sj-tab-bar > [data-ouro-part="bar"] {
+    gap: 0.25rem;
+    padding-inline-start: max(0.5rem, env(safe-area-inset-left, 0px));
+    padding-inline-end: max(0.5rem, env(safe-area-inset-right, 0px));
+  }
+}
+
 /* A charcoal panel (the developer playground's Response, the shaded landing hero) under photo-white
    text: HX controls in it take their text, border and focus ring from these tokens, so a plain or
    outline button isn't charcoal on charcoal. A muted surface, such as HX CodeBlock's, is a lighter
