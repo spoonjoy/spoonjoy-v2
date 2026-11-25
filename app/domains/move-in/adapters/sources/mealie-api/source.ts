@@ -180,7 +180,8 @@ export async function mealieApiSource(connection: MealieApiConnection): Promise<
 
   async function openKitchen(key: string): Promise<MoveInKitchen | null> {
     if (key !== kitchenKey) return null;
-    // Oldest first, then by key, so every run counts through the same order and a recipe added meanwhile goes last.
+    // Oldest first, then by key, so every run goes through the same order. A recipe added meanwhile is newer, so it goes
+    // last; one the server dates earlier than the place the move-in has reached would wait for the next move-in.
     const listed: Listed[] = itemsOf(await api.json("/api/recipes?page=1&perPage=-1"))
       .map((item) => ({
         sourceKey: recipeKey(item.id),
