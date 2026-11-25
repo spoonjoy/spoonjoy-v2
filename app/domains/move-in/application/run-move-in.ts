@@ -404,17 +404,31 @@ async function bringOrPassOver(run: Run, opened: Opened, index: number): Promise
   };
 }
 
+/** A cursor that holds a kitchen's mark, not a count: the recipes after that mark are next. */
+const AFTER = "after:";
+
+/** The cursor once the recipe at `index` is done: its mark where the kitchen has marks, else how many are done. */
+function cursorAfter(kitchen: MoveInKitchen, index: number): string {
+  return kitchen.mark ? AFTER + kitchen.mark(index) : String(index + 1);
+}
+
+/** Where this run starts. A count is read as one, so a job saved before its kitchen had marks carries on from it. */
+function startOf(kitchen: MoveInKitchen, cursor: string | null): number {
+  if (cursor?.startsWith(AFTER) && kitchen.indexAfter) return kitchen.indexAfter(cursor.slice(AFTER.length));
+  return Number(cursor);
+}
+
 async function recipes(run: Run, opened: Opened, chunkSize: number, cache: RunCache) {
   const { source, kitchen } = opened;
   const { job, ports } = run;
   const { store } = ports;
   if (ports.organizers && (cache.organizing ??= await store.organizing(job.id))) run.organizers = ports.organizers;
-  let start = Number(job.cursor);
+  let start = startOf(kitchen, job.cursor);
   // The recipe at the cursor has stopped every run since the job last moved, whether it threw or took the Worker down:
   // report it and move past it, so it never holds the rest back.
   if (stops(job, run.token) >= RECIPE_TRIES && start < kitchen.size) {
     const entry = kitchen.entry(start);
-    await store.updateJob(job.id, { cursor: String(++start), attempt: moved(run.token) }, run.token, {
+    await store.updateJob(job.id, { cursor: cursorAfter(kitchen, start++), attempt: moved(run.token) }, run.token, {
       counts: [["recipes", { failed: 1 }]],
       events: [event("item-failed", `${entry.title} didn't move in this time. ${source.words.again} tries it once more.`, {
         entity: "recipes",
@@ -429,12 +443,12 @@ async function recipes(run: Run, opened: Opened, chunkSize: number, cache: RunCa
   // Without a claim, the caller has counted this run in the attempt already.
   if (ports.writeRecipes && stops(job, run.token) <= 1 - moved(run.token) && end - start > 1) {
     const report = await bringChunk(run, opened, start, end, ports.writeRecipes);
-    await store.updateJob(job.id, { cursor: String(end), attempt: moved(run.token) }, run.token, report);
+    await store.updateJob(job.id, { cursor: cursorAfter(kitchen, end - 1), attempt: moved(run.token) }, run.token, report);
     job.attempt = moved(run.token);
   } else {
     for (let i = start; i < end; i++) {
       const report = await bringOrPassOver(run, opened, i);
-      await store.updateJob(job.id, { cursor: String(i + 1), attempt: moved(run.token) }, run.token, report);
+      await store.updateJob(job.id, { cursor: cursorAfter(kitchen, i), attempt: moved(run.token) }, run.token, report);
       job.attempt = moved(run.token);
     }
   }

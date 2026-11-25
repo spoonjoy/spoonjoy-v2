@@ -16,6 +16,7 @@ import {
 } from "~/domains/move-in/application/run-move-in";
 import { openMealieBackup } from "~/domains/move-in/adapters/sources/mealie-backup/backup";
 import { mealieBackupSource } from "~/domains/move-in/adapters/sources/mealie-backup/source";
+import { mealieApiSource } from "~/domains/move-in/adapters/sources/mealie-api/source";
 import { SourceUnavailableError, type MoveInKitchen } from "~/domains/move-in/application/source";
 import { MoveInError } from "~/domains/move-in/model/move-in-error";
 import type { RecipeDraft } from "~/domains/move-in/model/recipe-draft";
@@ -846,5 +847,68 @@ describe("a backup's tags, categories and tools", () => {
     expect(h.events.find((event) => event.entity === "tags")?.message).toBe(
       "Spoonjoy doesn't have tags, categories or tools yet, so 1 tag, 1 category, 1 tool stayed in the backup.",
     );
+  });
+});
+
+describe("a kitchen on its own server, which changes while it moves in", () => {
+  /** The cook's server: its recipe list is `listed`, which the test changes between runs, as the cook would. */
+  function serverKitchen(h: ReturnType<typeof harness>) {
+    const recipe = (n: number) => ({
+      id: `00000000-0000-4000-8000-0000000000${String(n).padStart(2, "0")}`,
+      slug: `recipe-${n}`,
+      name: `Recipe ${n}`,
+      createdAt: `2026-11-20T10:${String(n).padStart(2, "0")}:00Z`,
+      recipeIngredient: [{ note: "salt" }],
+    });
+    const all = Array.from({ length: 7 }, (_, n) => recipe(n));
+    const listed = all.slice(0, 6);
+    const fetch: typeof globalThis.fetch = async (input) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/api/app/about") return Response.json({ version: "v3.31.0" });
+      if (path === "/api/users/self") return Response.json({ group: "Juniper Street", groupId: "092b8ed0-4f72-43b4-9ba2-dffc05dc8d47" });
+      if (path === "/api/recipes") return Response.json({ items: listed.map(({ recipeIngredient: _lines, ...summary }) => summary) });
+      if (path.startsWith("/api/organizers/")) return Response.json({ items: [] });
+      const found = listed.find((one) => path === `/api/recipes/${one.slug}`);
+      return found ? Response.json(found) : new Response("not found", { status: 404 });
+    };
+    h.ports.openSource = () => mealieApiSource({ address: "https://recipes.example.com/", token: "token", fetch });
+    return { all, listed };
+  }
+
+  it("brings every recipe still there when the cook deletes one already moved in, and one added meanwhile, passing none over", async () => {
+    const h = harness();
+    const { all, listed } = serverKitchen(h);
+    await runNextChunk("job-1", h.ports);
+    expect(h.counts.get("recipes")).toMatchObject({ found: 6 });
+    await runNextChunk("job-1", h.ports, { chunkSize: 2 });
+    expect([...h.written.keys()]).toEqual([all[0].id, all[1].id]);
+
+    // A count of 2 would now start at Recipe 3 and pass Recipe 2 over; the cursor holds Recipe 1's place instead.
+    listed.splice(0, 1);
+    listed.push(all[6]);
+    expect(await h.runAll(2)).toMatchObject({ status: "done", phase: "done", cursor: null });
+    expect([...h.written.keys()]).toEqual(all.map((one) => one.id));
+    expect(h.counts.get("recipes")).toMatchObject({ created: 7, failed: 0 });
+  });
+
+  it("carries on after the recipe its cursor names, when the cook deletes that recipe", async () => {
+    const h = harness();
+    const { all, listed } = serverKitchen(h);
+    await runNextChunk("job-1", h.ports);
+    await runNextChunk("job-1", h.ports, { chunkSize: 2 });
+    expect(h.job().cursor).toBe(`after:${Date.parse(all[1].createdAt)}:${all[1].id}`);
+
+    listed.splice(1, 1);
+    await h.runAll(2);
+    expect([...h.written.keys()]).toEqual(all.slice(0, 6).map((one) => one.id));
+  });
+
+  it("carries on from a count saved before the kitchen had places", async () => {
+    const h = harness();
+    const { all } = serverKitchen(h);
+    await runNextChunk("job-1", h.ports);
+    h.jobs.set("job-1", { ...h.job(), cursor: "4" });
+    await h.runAll(2);
+    expect([...h.written.keys()]).toEqual([all[4].id, all[5].id]);
   });
 });

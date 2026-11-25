@@ -26,6 +26,14 @@ export interface MoveInKitchen {
   count(): Promise<KitchenCounts>;
   /** The recipe at `index`, from 0 up to `size`, in the same order on every run. */
   entry(index: number): KitchenEntry;
+  /**
+   * For a kitchen that can change while it moves in, such as one on its own server: the recipe at `index`'s place in
+   * the order, which the job keeps instead of a count, so a recipe deleted or added meanwhile moves no other recipe
+   * past the cursor or back behind it. A backup never changes, so it has none and the cursor counts.
+   */
+  mark?(index: number): string;
+  /** Where the recipes after a `mark` start, whether or not the recipe it was made from is still there. */
+  indexAfter?(mark: string): number;
   draft(index: number): Promise<RecipeDraft>;
   hasPhoto(draft: RecipeDraft): boolean;
   readPhoto(draft: RecipeDraft): Promise<Uint8Array>;
