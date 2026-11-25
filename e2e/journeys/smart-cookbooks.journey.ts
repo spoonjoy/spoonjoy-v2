@@ -1,7 +1,8 @@
 // Smart cookbooks (smart-cookbooks flag, on in QA), as per-run scratch user 1, whose area is recipe editing: a cook
 // tags two recipes Quick from their Organize pages and gives one of them a tool, then makes a smart cookbook from
 // Cookbooks with Quick and without the tool. The cookbook's page lists the one Quick recipe without the tool and not
-// the other, after a reload, and Cookbooks lists the cookbook with its rules. Both device projects run at the same
+// the other, after a reload, and Cookbooks lists the cookbook with its rules; then the cook renames it and deletes it
+// from its page, each after a reload, and the salad stays theirs. Both device projects run at the same
 // time as the same scratch user, so every recipe, organizer and cookbook carries the project name and a timestamp.
 import type { Page, TestInfo } from "@playwright/test";
 import { test, expect } from "./support/journey";
@@ -108,5 +109,34 @@ test.describe("Smart cookbooks", () => {
       await expect(smart.getByRole("listitem").filter({ hasText: title })).toContainText(`With ${quick} · Without ${mixer}`);
     });
     await attachElementShot(page.getByRole("region", { name: "Smart cookbooks", exact: true }), testInfo, "smart-cookbooks-list-after-reload");
+
+    // Rename it from its page; the new title holds after a reload.
+    const renamed = `Speedy, no mixer ${suffix}`;
+    await smart.getByRole("link", { name: new RegExp(title) }).click();
+    await expect(page).toHaveURL(SMART_URL);
+    await waitForHydration(page);
+    const rename = page.getByRole("form", { name: "Rename this cookbook", exact: true });
+    await rename.getByRole("textbox", { name: "Title", exact: true }).fill(renamed);
+    await rename.getByRole("button", { name: "Rename", exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1, name: renamed, exact: true })).toBeVisible();
+    await verifyAfterReload(async () => {
+      await expect(page.getByRole("heading", { level: 1, name: renamed, exact: true })).toBeVisible();
+      await expect(page.getByRole("list", { name: `Recipes in ${renamed}`, exact: true }).getByRole("link", { name: new RegExp(salad) })).toBeVisible();
+    });
+    await attachElementShot(page.getByRole("region", { name: "Change this cookbook", exact: true }), testInfo, "smart-cookbook-change-section");
+
+    // Delete it after the dialog asks; Cookbooks no longer lists it, and the salad is still the cook's.
+    await waitForHydration(page);
+    await page.getByRole("button", { name: "Delete cookbook", exact: true }).click();
+    const ask = page.getByRole("alertdialog", { name: `Delete ${renamed}?`, exact: true });
+    await expect(ask).toBeVisible();
+    await ask.getByRole("button", { name: "Delete it", exact: true }).click();
+    await expect(page).toHaveURL(pathUrl("/cookbooks"));
+    await verifyAfterReload(async () => {
+      await expect(page.getByRole("heading", { level: 1, name: "Cookbooks", exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: new RegExp(renamed) })).toHaveCount(0);
+    });
+    await page.goto("/my-recipes");
+    await expect(page.getByRole("list", { name: "My recipes", exact: true }).getByRole("link", { name: new RegExp(salad) })).toBeVisible();
   });
 });

@@ -7,7 +7,9 @@ import {
   normalizeSmartCookbookTitle,
   planSmartCookbookRules,
   smartCookbookFilters,
+  smartCookbookRepoints,
   type SmartCookbook,
+  type SmartCookbookRepoint,
   type SmartCookbookRule,
   type SmartCookbookRulesPlan,
 } from "../model/smart-cookbook";
@@ -19,6 +21,12 @@ export interface SmartCookbookStore {
   find(cookbookId: string): Promise<SmartCookbook | null>;
   /** Stores a new cookbook with its rules in order; "taken" when the owner already has one with this title. */
   create(ownerId: string, title: string, rules: SmartCookbookRule[]): Promise<{ ok: true; cookbook: SmartCookbook } | { ok: false; reason: "taken" }>;
+  /** Gives a cookbook a new title; "taken" when its owner already has another with that title. */
+  rename(cookbookId: string, title: string): Promise<{ ok: true } | { ok: false; reason: "taken" }>;
+  /** Deletes a cookbook and its rules. */
+  delete(cookbookId: string): Promise<void>;
+  /** Moves one rule off an organizer: onto another in the same place, or away. */
+  repoint(cookbookId: string, repoint: SmartCookbookRepoint): Promise<void>;
 }
 
 export type CreateSmartCookbookResult =
@@ -64,4 +72,41 @@ export async function smartCookbookFill(
   const cookbook = await store.find(cookbookId);
   if (!cookbook || cookbook.ownerId !== ownerId) return null;
   return { cookbook, filters: smartCookbookFilters(cookbook.rules, await organizersOf(organizers, ownerId)) };
+}
+
+/** The owner's cookbook with this id, or null. */
+async function ownedCookbook(store: SmartCookbookStore, ownerId: string, cookbookId: string): Promise<SmartCookbook | null> {
+  const cookbook = await store.find(cookbookId);
+  return cookbook && cookbook.ownerId === ownerId ? cookbook : null;
+}
+
+/** Gives the owner's cookbook a new title, which is trimmed like a new one's. */
+export async function renameSmartCookbook(
+  store: SmartCookbookStore,
+  ownerId: string,
+  cookbookId: string,
+  title: unknown,
+): Promise<{ ok: true; title: string } | { ok: false; reason: "invalid-title" | "taken" | "not-found" }> {
+  if (!(await ownedCookbook(store, ownerId, cookbookId))) return { ok: false, reason: "not-found" };
+  const normalized = normalizeSmartCookbookTitle(title);
+  if (!normalized) return { ok: false, reason: "invalid-title" };
+  const renamed = await store.rename(cookbookId, normalized);
+  return renamed.ok ? { ok: true, title: normalized } : renamed;
+}
+
+/** Deletes the owner's cookbook; false when they have none with this id. Its recipes are untouched. */
+export async function deleteSmartCookbook(store: SmartCookbookStore, ownerId: string, cookbookId: string): Promise<boolean> {
+  if (!(await ownedCookbook(store, ownerId, cookbookId))) return false;
+  await store.delete(cookbookId);
+  return true;
+}
+
+/**
+ * After the owner merges organizers into `keepId`, moves their cookbooks' rules on the merged ones to the kept one, so a
+ * cookbook that filled with a merged tag keeps filling with the tag its recipes now have (smartCookbookRepoints).
+ */
+export async function repointSmartCookbooks(store: SmartCookbookStore, ownerId: string, mergedIds: readonly string[], keepId: string): Promise<void> {
+  for (const cookbook of await store.listOf(ownerId)) {
+    for (const repoint of smartCookbookRepoints(cookbook.rules, mergedIds, keepId)) await store.repoint(cookbook.id, repoint);
+  }
 }

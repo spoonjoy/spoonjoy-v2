@@ -16,6 +16,8 @@ import {
 } from "../application/organizers";
 import { ORGANIZER_KINDS, ORGANIZER_NAME_MAX_LENGTH, normalizeOrganizerName, type Organizer, type OrganizerKind } from "../model/organizer";
 import { organizerNamesFromForm, organizersRequest } from "./organizers-route.server";
+import { repointSmartCookbooks } from "../application/smart-cookbooks";
+import { prismaSmartCookbookStore } from "./prisma-smart-cookbook-store";
 
 type Args = { request: Request; context: AppLoadContext };
 
@@ -56,7 +58,7 @@ const SEGMENT: Record<OrganizerKind, string> = { tag: "tags", category: "categor
 
 /** An organizer page's own form: rename it, merge it into another of its kind, or delete it. */
 export async function organizerPageAction(kind: OrganizerKind, { request, context, slug }: Args & { slug: string }) {
-  const { userId, store } = await organizersRequest(request, context);
+  const { userId, store, db } = await organizersRequest(request, context);
   const page = await organizerPage(store, userId, kind, slug);
   if (!page) notFound();
   const { organizer } = page;
@@ -86,6 +88,8 @@ export async function organizerPageAction(kind: OrganizerKind, { request, contex
       if (!into || !(await mergeOrganizers(store, userId, into.id, [organizer.id])).ok) {
         return refuse(`Choose another ${word} to merge into.`);
       }
+      // Smart cookbooks that used the merged one now use the one it merged into, whether or not their flag is on.
+      await repointSmartCookbooks(prismaSmartCookbookStore(db), userId, [organizer.id], into.id);
       return redirect(`/${SEGMENT[kind]}/${into.slug}`);
     }
     case "delete":
