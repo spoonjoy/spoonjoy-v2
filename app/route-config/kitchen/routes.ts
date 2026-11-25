@@ -13,4 +13,8 @@ export default [
   // Set a recipe's tags, categories and tools. The /recipes layout is a bare Outlet, so this
   // top-level route renders the same as a child of it would.
   route("recipes/:id/organize", "routes/recipes.$id.organize.tsx"),
+  // Smart cookbooks, which fill themselves from a cook's tags, categories and tools. The /cookbooks layout is a bare
+  // Outlet too, and these static segments rank above its /cookbooks/:id.
+  route("cookbooks/smart/new", "routes/cookbooks.smart.new.tsx"),
+  route("cookbooks/smart/:id", "routes/cookbooks.smart.$id.tsx"),
 ] satisfies RouteConfig;

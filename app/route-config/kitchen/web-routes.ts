@@ -11,4 +11,7 @@ export default [
   webRoute("routes/tools._index.tsx", "/tools", "user-product", { universalLink: false }),
   webRoute("routes/tools.$slug.tsx", "/tools/:slug", "user-product", { universalLink: false }),
   webRoute("routes/recipes.$id.organize.tsx", "/recipes/:id/organize", "user-product", { universalLink: false }),
+  // Smart cookbooks are web-only until the apps have them.
+  webRoute("routes/cookbooks.smart.new.tsx", "/cookbooks/smart/new", "user-product", { universalLink: false }),
+  webRoute("routes/cookbooks.smart.$id.tsx", "/cookbooks/smart/:id", "user-product", { universalLink: false }),
 ] as const satisfies readonly WebRouteClassification[];
