@@ -9,6 +9,8 @@ import { Text } from "~/components/ouro/text/text";
 import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import { loadChefsPageFromD1, type ChefsPageData } from "~/lib/chefs-page-d1.server";
 import { listFellowChefs, listKitchenVisitors } from "~/lib/fellow-chefs.server";
 import { chefActivity, chefRef } from "~/lib/chef-activity.server";
 import { requireUserId } from "~/lib/session.server";
@@ -22,20 +24,28 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export async function loader({ request, context }: Route.LoaderArgs) {
-  const userId = await requireUserId(request, "/login", context.cloudflare?.env);
+async function loadChefsPageOnPrisma(context: Route.LoaderArgs["context"], userId: string): Promise<ChefsPageData> {
   const database = await getRequestDb(context);
-  const viewer = await database.user.findUniqueOrThrow({
+  const viewer = chefRef(await database.user.findUniqueOrThrow({
     where: { id: userId },
     select: { id: true, username: true, photoUrl: true },
-  });
-  const viewerRef = chefRef(viewer);
+  }));
   const [fellowChefs, chefsUsingMyRecipes, activity, hides] = await Promise.all([
     listFellowChefs(database, userId),
     listKitchenVisitors(database, userId),
-    chefActivity(database, userId, viewerRef),
+    chefActivity(database, userId, viewer),
     loadViewerHides(database, userId),
   ]);
+  return { viewer, fellowChefs, chefsUsingMyRecipes, activity, hides };
+}
+
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const userId = await requireUserId(request, "/login", context.cloudflare?.env);
+  // On the Worker the whole page comes from D1 in one batch; Prisma is only the fallback where there is no binding.
+  const d1 = requestD1(context);
+  const { viewer: viewerRef, fellowChefs, chefsUsingMyRecipes, activity, hides } = d1
+    ? await loadChefsPageFromD1(d1, userId)
+    : await loadChefsPageOnPrisma(context, userId);
   const visible = <T extends { chefId: string }>(list: { rows: T[]; total: number }) => ({
     ...list,
     rows: list.rows.filter((row) => !hidesChef(hides, row.chefId)),

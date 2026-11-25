@@ -153,7 +153,25 @@ export async function chefActivity(database: PrismaClient, userId: string, viewe
         },
       }),
     ]);
+  return activityFromSources(viewer, { outboundSpoons, inboundSpoons, outboundForks, inboundForks, outboundSaves, inboundSaves });
+}
 
+type ChefFields = { id: string; username: string; photoUrl: string | null };
+type Titled = { id: string; title: string };
+
+/** The six kinds of chef-graph event the feed is built from, as chefActivity reads them through Prisma. */
+export type ChefActivitySources = {
+  outboundSpoons: Array<{ id: string; cookedAt: Date; recipe: Titled & { chef: ChefFields } }>;
+  inboundSpoons: Array<{ id: string; cookedAt: Date; chef: ChefFields; recipe: Titled }>;
+  outboundForks: Array<{ id: string; createdAt: Date; sourceRecipe: (Titled & { chef: ChefFields }) | null }>;
+  inboundForks: Array<{ id: string; createdAt: Date; chef: ChefFields; sourceRecipe: Titled | null }>;
+  outboundSaves: Array<{ id: string; createdAt: Date; cookbook: Titled; recipe: Titled & { chef: ChefFields } }>;
+  inboundSaves: Array<{ id: string; createdAt: Date; addedBy: ChefFields; cookbook: Titled; recipe: Titled }>;
+};
+
+/** The feed's newest 50 rows from its sources, the same for the Prisma and D1 readers. */
+export function activityFromSources(viewer: ChefRef, sources: ChefActivitySources): ChefActivityRow[] {
+  const { outboundSpoons, inboundSpoons, outboundForks, inboundForks, outboundSaves, inboundSaves } = sources;
   const rows: ChefActivityRow[] = [
     ...outboundSpoons.map((spoon) => {
       const otherChef = chefRef(spoon.recipe.chef);
