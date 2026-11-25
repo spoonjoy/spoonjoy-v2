@@ -19,7 +19,7 @@
  * silent pre-load gap closed. No-op when PostHog is unconfigured.
  */
 
-import type { PrismaClient } from "@prisma/client";
+import type { NotificationDb } from "~/lib/notification-db-d1.server";
 import {
   enqueueNotification,
   type NotificationDispatchDeps,
@@ -62,7 +62,7 @@ export interface NotifySpoonOnMyRecipeInput {
 }
 
 export async function notifySpoonOnMyRecipe(
-  db: PrismaClient,
+  db: NotificationDb,
   input: NotifySpoonOnMyRecipeInput,
   deps: NotifySpoonOnMyRecipeDeps,
 ): Promise<void> {
@@ -114,7 +114,7 @@ export interface NotifyForkOfMyRecipeInput {
 }
 
 export async function notifyForkOfMyRecipe(
-  db: PrismaClient,
+  db: NotificationDb,
   input: NotifyForkOfMyRecipeInput,
   deps: NotifyForkOfMyRecipeDeps,
 ): Promise<void> {
@@ -158,7 +158,7 @@ export interface NotifyCookbookSaveOfMineInput {
 }
 
 export async function notifyCookbookSaveOfMine(
-  db: PrismaClient,
+  db: NotificationDb,
   input: NotifyCookbookSaveOfMineInput,
   deps: NotifyCookbookSaveOfMineDeps,
 ): Promise<void> {

@@ -12,6 +12,7 @@ import {
   type ForkedRecipeSummary,
 } from "~/lib/recipe-fork.server";
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
+import { notificationDbOnD1, type NotificationDb } from "~/lib/notification-db-d1.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import {
   captureException,
@@ -153,19 +154,21 @@ async function forkOnD1AndNotify(
 ): Promise<string> {
   const result = await forkRecipeOnD1(d1, { sourceRecipeId, viewerId, recipeId, visibilityChoices: forkVisibilityChoices(context, viewerId) });
   // A fork made by an earlier submission already notified the source chef.
-  if (!result.replayed) await notifySourceChef(context, viewerId, result, () => getRequestDb(context));
+  // The notification reads and writes on D1 too, so no Prisma client is built after the answer
+  // (see notification-db-d1.server.ts).
+  if (!result.replayed) await notifySourceChef(context, viewerId, result, async () => notificationDbOnD1(d1));
   return result.recipeId;
 }
 
 /**
- * Fire-and-forget: notify the source chef when someone else forked. The notification reads
- * through Prisma, so the client is built inside the background task, after the response.
+ * Fire-and-forget: notify the source chef when someone else forked. The database is opened inside
+ * the background task, after the response.
  */
 async function notifySourceChef(
   context: AppLoadContext,
   viewerId: string,
   fork: Pick<ForkedRecipeSummary, "recipeId" | "attribution" | "appliedTitle">,
-  getDb: () => Promise<Awaited<ReturnType<typeof getRequestDb>>>,
+  getDb: () => Promise<NotificationDb>,
 ): Promise<void> {
   try {
     const { vapidEnv, postHogConfig, waitUntil } = getCloudflareCtx(context);
