@@ -15,6 +15,7 @@ import { test, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
 import { openDisclosure, pathUrl, seededRecipeLink, waitForHydration } from "./support/navigation";
 import { scratchStorageStatePath } from "./support/personas";
+import { expectLastRowClearsTabBar } from "./support/tab-bar-clearance";
 
 const SALMON = "/recipes/qa-kitchen-recipe-salmon";
 const SALMON_TITLE = "Miso Glazed Salmon";
@@ -273,7 +274,7 @@ test.describe("Cookbooks", () => {
     });
   });
 
-  test("a recipe the user forks is added to a cookbook from the cookbook page and stays listed @mutates", async ({ page, isMobile, verifyAfterReload, expectAccessible }) => {
+  test("a recipe the user forks is added to a cookbook from the cookbook page and stays listed @mutates", async ({ page, isMobile, verifyAfterReload, expectAccessible }, testInfo) => {
     const source = isMobile ? RISOTTO : TOMATO_SOUP;
     const title = `Fork shelf ${uniqueSuffix()}`;
     const main = page.getByRole("main");
@@ -316,6 +317,8 @@ test.describe("Cookbooks", () => {
       await expect(cookbookHeading(page, title)).toBeVisible();
       await expect(forkLink).toBeVisible();
     });
+    // Scrolled to the end, the last recipe in its Contents clears the phone's tab bar; the shot is the visible screen.
+    await expectLastRowClearsTabBar(page, page.getByRole("list", { name: "Contents", exact: true }).getByRole("listitem").last(), testInfo, "cookbook-end-of-page");
 
     // The list counts it too.
     await page.goto("/cookbooks");
