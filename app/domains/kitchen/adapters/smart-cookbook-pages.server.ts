@@ -5,7 +5,7 @@ import { data, redirect } from "react-router";
 import type { PrismaClient } from "@prisma/client";
 import { isFlagOn } from "~/domains/platform";
 import { requestD1 } from "~/lib/d1-read.server";
-import { normalizeMyRecipesPage, searchMyRecipes, searchMyRecipesFromD1 } from "~/lib/my-recipes-search.server";
+import { normalizeMyRecipesPage } from "~/lib/my-recipes-search.server";
 import { OBJECTIONABLE_CONTENT_MESSAGE, containsObjectionableContent } from "~/lib/objectionable-terms";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
@@ -16,6 +16,7 @@ import { SMART_COOKBOOK_SIDES, SMART_COOKBOOK_TITLE_MAX_LENGTH, type SmartCookbo
 import { ORGANIZER_FILTER_MAX } from "../model/organizer-filter";
 import { prismaOrganizerStore } from "./prisma-organizer-store";
 import { prismaSmartCookbookStore } from "./prisma-smart-cookbook-store";
+import { readSmartCookbookRecipes } from "./smart-cookbook-recipes.server";
 
 type Args = { request: Request; context: AppLoadContext };
 
@@ -99,7 +100,7 @@ export async function newSmartCookbookAction({ request, context }: Args) {
   return redirect(`/cookbooks/smart/${result.cookbook.id}`);
 }
 
-/** A smart cookbook's page: its rules and a page of the cook's recipes that match them, newest first. */
+/** A smart cookbook's page: its rules, and a page of the cook's recipes that match them (newest first, with covers) and how many match. */
 export async function smartCookbookPageLoader({ request, context, cookbookId }: Args & { cookbookId: string }) {
   const { userId, store, organizers, db } = await smartCookbooksRequest(request, context);
   const fill = await smartCookbookFill(store, organizers, userId, cookbookId);
@@ -107,23 +108,7 @@ export async function smartCookbookPageLoader({ request, context, cookbookId }: 
   const rules = ruleViews(fill.cookbook, await ownedOrganizers(organizers, userId));
   const cookbook = { id: fill.cookbook.id, title: fill.cookbook.title };
   const page = normalizeMyRecipesPage(new URL(request.url).searchParams.get("page"));
-  if (!fill.filters) return { cookbook, rules, missing: true, page: 1, hasPreviousPage: false, hasNextPage: false, recipes: [] };
-  const d1 = requestD1(context);
-  const result = d1
-    ? await searchMyRecipesFromD1(d1, { ownerId: userId, page, organizers: fill.filters })
-    : await searchMyRecipes(db, {
-      ownerId: userId,
-      ownerUsername: (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { username: true } })).username,
-      page,
-      organizers: fill.filters,
-    });
-  return {
-    cookbook,
-    rules,
-    missing: false,
-    page: result.page,
-    hasPreviousPage: result.hasPreviousPage,
-    hasNextPage: result.hasNextPage,
-    recipes: result.recipes.map((recipe) => ({ id: recipe.id, title: recipe.title, description: recipe.description, servings: recipe.servings })),
-  };
+  if (!fill.filters) return { cookbook, rules, missing: true, total: 0, page: 1, hasPreviousPage: false, hasNextPage: false, recipes: [] };
+  const result = await readSmartCookbookRecipes({ d1: requestD1(context), db }, { ownerId: userId, filters: fill.filters, page });
+  return { cookbook, rules, missing: false, ...result };
 }

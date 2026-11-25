@@ -3,12 +3,11 @@ import { useLoaderData, useLocation } from "react-router";
 import { Badge } from "~/components/ouro/badge/badge";
 import { DescriptionList } from "~/components/ouro/description-list/description-list";
 import { Empty } from "~/components/ouro/empty/empty";
-import { Item } from "~/components/ouro/item/item";
-import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Link } from "~/components/ouro/link/link";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Pagination } from "~/components/ouro/pagination/pagination";
 import { Text } from "~/components/ouro/text/text";
+import { CookbookContents } from "~/components/cookbook/contents";
 import { CookbookPage } from "~/components/cookbook/page";
 import { smartCookbookPageLoader, type SmartCookbookRuleView } from "~/domains/kitchen/index.server";
 
@@ -38,8 +37,17 @@ function RuleBadges({ rules }: { rules: SmartCookbookRuleView[] }) {
   );
 }
 
+/** What to do so a recipe shows up here, from the cookbook's first "with" rule. */
+function emptyHint(rules: SmartCookbookRuleView[]): string {
+  const first = rules.find((rule): rule is Extract<SmartCookbookRuleView, { name: string }> => rule.side === "with" && !("gone" in rule));
+  if (!first) return "Recipes without these show up here.";
+  if (first.kind === "Category") return `Put a recipe in ${first.name} to see it here.`;
+  if (first.kind === "Tool") return `Add ${first.name} to a recipe's tools to see it here.`;
+  return `Tag a recipe ${first.name} to see it here.`;
+}
+
 export default function SmartCookbookPage() {
-  const { cookbook, rules, missing, recipes, page, hasPreviousPage, hasNextPage } = useLoaderData<typeof loader>();
+  const { cookbook, rules, missing, total, recipes, page, hasPreviousPage, hasNextPage } = useLoaderData<typeof loader>();
   const { pathname } = useLocation();
   return (
     <CookbookPage>
@@ -58,26 +66,16 @@ export default function SmartCookbookPage() {
           { term: "Without", details: <RuleBadges rules={rules.filter((rule) => rule.side === "without")} /> },
         ]}
       />
+      {/* The same Contents a regular cookbook shows, counting every match, not just this page's. */}
       {recipes.length > 0 ? (
-        <ItemGroup aria-label={`Recipes in ${cookbook.title}`} variant="divided" className="mt-6">
-          {recipes.map((recipe) => (
-            <Item
-              key={recipe.id}
-              href={`/recipes/${recipe.id}`}
-              title={recipe.title}
-              description={recipe.description ?? undefined}
-              actions={recipe.servings ? <Text size="sm" tone="muted">{recipe.servings}</Text> : undefined}
-            />
-          ))}
-        </ItemGroup>
+        <CookbookContents recipes={recipes.map((recipe) => ({ key: recipe.id, ...recipe }))} count={total} listLabel={`Recipes in ${cookbook.title}`} />
       ) : (
         <Empty
           headingLevel={2}
           align="start"
-          title="No matching recipes yet"
-          description={missing
-            ? "A tag, category or tool this cookbook needs was deleted, so nothing can match."
-            : "Recipes you organize to match these rules show up here."}
+          className="mt-10"
+          title="No recipes match yet"
+          description={missing ? "A tag, category or tool this cookbook needs was deleted, so nothing can match." : emptyHint(rules)}
         />
       )}
       {(hasPreviousPage || hasNextPage) ? (
