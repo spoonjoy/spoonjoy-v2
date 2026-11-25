@@ -208,13 +208,23 @@ describe("logging a cook on a D1 binding", () => {
     expect(await db.recipeCover.count({ where: { recipeId, sourceType: "spoon" } })).toBe(1);
   });
 
-  it("notifies the owner of another chef's cook, and fans out the owner's first cook, through Prisma", async () => {
+  it("notifies the owner of another chef's cook on D1, and fans out the owner's first cook through Prisma", async () => {
     platform.getRequestDb.mockResolvedValue(db);
     expect(await post(cookId, { note: "Lovely" }, { waitUntil: false, env: VAPID })).toMatchObject({ isOriginCook: false });
-    expect(platform.getRequestDb).toHaveBeenCalledTimes(1);
-    // The owner's first cook runs its notification and its fan-out on one client.
+    expect(await db.notificationEvent.count({ where: { recipientId: ownerId, kind: "spoon_on_my_recipe" } })).toBe(1);
+    expect(platform.getRequestDb).not.toHaveBeenCalled();
+    // The owner's first cook fans out to fellow chefs, which still reads through Prisma.
     expect(await post(ownerId, { note: "Mine" }, { waitUntil: false, env: VAPID })).toMatchObject({ isOriginCook: true });
-    expect(platform.getRequestDb).toHaveBeenCalledTimes(2);
+    expect(platform.getRequestDb).toHaveBeenCalledTimes(1);
+  });
+
+  // Merge-group run 45528383350: a cook's notification built a Prisma client after the answer,
+  // was canceled as hung, and the isolate's Prisma pages hung after it.
+  it("finishes another chef's cook notification after the answer while Prisma never answers", async () => {
+    expect(await post(cookId, { note: "Lovely" }, { env: VAPID })).toMatchObject({ isOriginCook: false });
+    await Promise.all(background);
+    expect(await db.notificationEvent.count({ where: { recipientId: ownerId, kind: "spoon_on_my_recipe" } })).toBe(1);
+    expect(platform.getRequestDb).not.toHaveBeenCalled();
   });
 
   it("counts an owner's cook as the first only while they have no other live cook of the recipe", async () => {

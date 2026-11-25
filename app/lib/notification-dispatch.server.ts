@@ -20,7 +20,7 @@
  * injected so this module is testable in plain Node.
  */
 
-import type { PrismaClient } from "@prisma/client";
+import type { NotificationDb } from "~/lib/notification-db-d1.server";
 import {
   sendPush as realSendPush,
   type PushSubscriptionRecord,
@@ -171,7 +171,7 @@ function scheduleCapture(
 }
 
 export async function enqueueNotification(
-  db: PrismaClient,
+  db: NotificationDb,
   input: EnqueueNotificationInput,
   deps: NotificationDispatchDeps,
 ): Promise<EnqueueNotificationResult> {

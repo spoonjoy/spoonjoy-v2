@@ -50,6 +50,7 @@ import { scheduleAiPlaceholderCover, type SchedulePlaceholderInput } from "~/lib
 import { getUserId, requireUserId } from "~/lib/session.server";
 import { hidesContent, withoutHidden } from "~/lib/moderation.server";
 import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
+import { notificationDbOnD1 } from "~/lib/notification-db-d1.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { absoluteUrlFromRequest, isRasterImageUrl, shareImageUrl } from "~/lib/og-metadata";
@@ -454,8 +455,9 @@ function backgroundWithRequestDb(
 }
 
 // Logging a cook on D1: the spoon (and a cover from its photo) is written without Prisma. The
-// notifications and the cover's stylization run after the answer, each building the request's
-// Prisma client only when it starts; without waitUntil (tests) they run before the answer.
+// cook's notification runs after the answer, on D1 too. The fellow-chef fan-out and the cover's
+// stylization run after the answer, each building the request's Prisma client only when it
+// starts. Without waitUntil (tests) they all run before the answer.
 async function handleCreateSpoonOnD1(
   d1: D1ReadDatabase,
   userId: string,
@@ -483,7 +485,11 @@ async function handleCreateSpoonOnD1(
 
   try {
     const vapid = getVapidConfig(vapidEnv);
-    await later((database) => notifySpoonOnMyRecipe(database, { recipeId, spoonerId: userId }, { vapid, waitUntil, postHogConfig }));
+    // The cook's notification reads and writes on D1, so it builds no Prisma client after the
+    // answer (see notification-db-d1.server.ts).
+    const notify = () => notifySpoonOnMyRecipe(notificationDbOnD1(d1), { recipeId, spoonerId: userId }, { vapid, waitUntil, postHogConfig });
+    if (waitUntil) waitUntil(deferBackgroundTask(notify));
+    else await notify();
   } catch {
     // VAPID not configured locally — skip silently.
   }

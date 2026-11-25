@@ -11,8 +11,8 @@ import { flakyD1 } from "../helpers/flaky-d1";
 import { D1_WRITE_UNAVAILABLE_MESSAGE, idForWriteToken } from "~/lib/d1-write-retry.server";
 import { forkRecipeOnD1 } from "~/lib/recipe-fork.server";
 
-// The request's Prisma client, counted: with a D1 binding the fork must not build one until the
-// background notification runs.
+// The request's Prisma client, counted: with a D1 binding neither the fork nor its background
+// notification builds one.
 const platform = vi.hoisted(() => ({ getRequestDb: vi.fn() }));
 vi.mock("~/lib/route-platform.server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("~/lib/route-platform.server")>()),
@@ -96,8 +96,12 @@ describe("recipes.$id.fork action on a D1 binding", () => {
     await fork(forkerId, { scheduled });
     const titles = (await db.recipe.findMany({ where: { chefId: forkerId }, select: { title: true } })).map((r) => r.title).sort();
     expect(titles).toEqual(["Bread", "Bread (variation 2)"]);
-    // Only the background notifications asked for a client.
-    expect(platform.getRequestDb).toHaveBeenCalledTimes(2);
+    // The background notifications run on D1 too: with Prisma stuck they still finish, and log
+    // one event per fork for the source chef. Nothing asked for a Prisma client, before or
+    // after the answer, so a wedged Prisma engine (merge-group run 45528383350) cannot hang them.
+    await Promise.all(scheduled);
+    expect(await db.notificationEvent.count({ where: { recipientId: ownerId, kind: "fork_of_my_recipe" } })).toBe(2);
+    expect(platform.getRequestDb).not.toHaveBeenCalled();
   });
 
   it("notifies the source chef from the background task", async () => {
