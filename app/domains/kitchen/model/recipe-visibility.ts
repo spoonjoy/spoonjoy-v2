@@ -77,12 +77,3 @@ export function forkedRecipeVisibility(
   if (source.chefId === viewerId) return parseRecipeVisibility(source.visibility) ?? "private";
   return source.visibility === "public" ? cookDefault : "private";
 }
-
-/**
- * The levels to offer on a recipe's editor: the cook's choices, plus the recipe's own level when it is not one of them
- * (a Household recipe while households is off), so the editor always shows who can read it now.
- */
-export function editorRecipeVisibilities(choices: readonly RecipeVisibility[], stored: RecipeVisibility): readonly RecipeVisibility[] {
-  if (choices.includes(stored)) return choices;
-  return SELECTABLE_WITH_HOUSEHOLD.filter((level) => level === stored || choices.includes(level));
-}
