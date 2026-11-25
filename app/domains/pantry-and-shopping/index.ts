@@ -4,3 +4,4 @@ export * from "./model/household-list";
 export * from "./application/household-list-store";
 export * from "./application/household-lists.server";
 export { d1HouseholdListStore } from "./adapters/d1-household-list-store.server";
+export { d1HouseholdListRecipes } from "./adapters/d1-household-list-recipes.server";

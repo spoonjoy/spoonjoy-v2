@@ -183,17 +183,24 @@ function count(n: number, noun: string) {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
-/** What "Add this week to my list" did: how many recipes went on the list, and any that are gone. */
+/**
+ * What "Add this week to my list" did: how many recipes went on the list, and any that are gone, or why it couldn't.
+ * The list is the cook's own shopping list unless the answer names another.
+ */
 export function WeekListAnswer({ answer }: { answer: PlanActionAnswer }) {
-  if (answer?.intent !== "add-week-to-list" || !answer.added) return null;
+  if (answer?.intent !== "add-week-to-list") return null;
+  if (!answer.added) {
+    return answer.errors?.general ? <Text role="alert" tone="destructive" className="mt-3">{answer.errors.general}</Text> : null;
+  }
   const { recipes, missing } = answer.added;
+  const list = answer.list ?? { name: "your shopping list", href: "/shopping-list" };
   if (recipes === 0 && missing === 0) {
     return <Text role="status" tone="muted" className="mt-3">No recipes are planned this week, so nothing went on the list.</Text>;
   }
   const gone = missing === 0 ? "" : `; ${count(missing, "recipe")} ${missing === 1 ? "is" : "are"} no longer available`;
   return (
     <Text role="status" className="mt-3">
-      Added {count(recipes, "recipe")} to your shopping list{gone}. <Button href="/shopping-list" variant="plain" size="inline">Open the list</Button>
+      Added {count(recipes, "recipe")} to {list.name}{gone}. <Button href={list.href} variant="plain" size="inline">Open the list</Button>
     </Text>
   );
 }

@@ -487,6 +487,11 @@ describe("meal plan route", () => {
       expect(screen.getByRole("status").textContent).toBe("No recipes are planned this week, so nothing went on the list.");
       rerender(<WeekListAnswer answer={{ intent: "add-note", errors: { general: "Give the note a title." } }} />);
       expect(screen.queryByRole("status")).toBeNull();
+      rerender(<WeekListAnswer answer={{ intent: "add-week-to-list", errors: { general: "Choose a week to shop for." } }} />);
+      expect(screen.getByRole("alert")).toHaveTextContent("Choose a week to shop for.");
+      rerender(<WeekListAnswer answer={{ intent: "add-week-to-list", error: "busy" }} />);
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByRole("status")).toBeNull();
     });
 
     it("marks today when it falls in the week shown", async () => {
