@@ -3,3 +3,4 @@
 export * from "./adapters/organizers-route.server";
 export * from "./adapters/organizer-pages.server";
 export * from "./adapters/organizer-filters.server";
+export * from "./adapters/smart-cookbook-pages.server";

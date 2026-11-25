@@ -295,6 +295,8 @@ export const census: Journey[] = [
   { id: "cookbooks", enrolled: true, persona: "chef", path: "/cookbooks", states: [DEFAULT] },
   { id: "cookbooks-newbie", enrolled: true, persona: "newbie", path: "/cookbooks", states: [DEFAULT] },
   { id: "cookbook-new", enrolled: true, persona: "chef", path: "/cookbooks/new", states: [DEFAULT] },
+  // A smart cookbook's form, picking from the chef's QA kitchen tags, categories and tools.
+  { id: "smart-cookbook-new", enrolled: true, persona: "chef", path: "/cookbooks/smart/new", states: [DEFAULT] },
   {
     id: "cookbook",
     enrolled: true,
