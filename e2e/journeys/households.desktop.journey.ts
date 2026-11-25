@@ -240,6 +240,11 @@ test.describe("Households", () => {
       });
       await expectAccessible();
       await attachScreenshot(testInfo, page, "owner-household-plan");
+      // The owner shops the week onto the household's Groceries list; a note alone puts nothing on it.
+      await expect(page.getByRole("combobox", { name: "Shopping list", exact: true })).toHaveValue(/.+/);
+      await page.getByRole("button", { name: "Add this week to the list", exact: true }).click();
+      await expect(page.getByRole("status").filter({ hasText: "No recipes are planned this week, so nothing went on the list." })).toBeVisible();
+      await attachScreenshot(testInfo, page, "owner-household-plan-week-to-list");
       await joinerPage.goto(planPath);
       await waitForHydration(joinerPage);
       const joinerTuesday = joinerPage.getByRole("region", { name: "Tuesday, Mar 2", exact: true });

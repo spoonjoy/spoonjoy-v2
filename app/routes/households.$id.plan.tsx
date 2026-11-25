@@ -2,19 +2,33 @@
 // remove meals, acting as themselves; view-only members read it. Its recipes are the acting cook's, the ones saved in
 // their cookbooks and their household's (householdChefIds), so a household recipe is plannable by everyone in it.
 import type { Route } from "./+types/households.$id.plan";
-import { useActionData, useLoaderData } from "react-router";
+import { data, Form as RouterForm, useActionData, useLoaderData } from "react-router";
 import { can, getHousehold, householdChefIdsFor, householdsRequest } from "~/domains/households-and-identity";
-import { getWeek, parseLocalDate, plannableRecipes, prismaPlanStore, type PlanActionAnswer, type PlanScope } from "~/domains/planning";
+import {
+  addDays,
+  addPlannedMealsToList,
+  getWeek,
+  parseLocalDate,
+  plannableRecipes,
+  prismaPlanStore,
+  type PlanActionAnswer,
+  type PlanScope,
+} from "~/domains/planning";
+import { d1HouseholdListRecipes, d1HouseholdListStore, getHouseholdList, listHouseholdLists } from "~/domains/pantry-and-shopping";
+import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
-import { d1UnavailableWebResponse } from "~/lib/d1-write-retry.server";
+import { d1UnavailableWebResponse, formWriteToken } from "~/lib/d1-write-retry.server";
 import { changePlanEntry, planFieldsOf, planRefused } from "~/lib/plan-route.server";
 import { CookbookPage } from "~/components/cookbook/page";
 import { Link } from "~/components/ouro/link/link";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Text } from "~/components/ouro/text/text";
-import { WeekLinks, WeekPlan } from "~/components/plan/week-plan";
-import { weekTitle } from "~/components/plan/week";
+import { Button } from "~/components/ouro/button/button";
+import { NativeSelect } from "~/components/ouro/select/native-select";
+import { useWriteToken } from "~/hooks/use-write-token";
+import { WeekLinks, WeekListAnswer, WeekPlan } from "~/components/plan/week-plan";
+import { weekFormKey, weekTitle } from "~/components/plan/week";
 
 export function meta({ data: loaded }: Route.MetaArgs) {
   return [{ title: loaded ? `Meal plan - ${loaded.household.name} - Spoonjoy` : "Meal plan - Spoonjoy" }];
@@ -29,14 +43,22 @@ async function householdPlan(request: Request, context: Route.LoaderArgs["contex
   return { userId, household, scope, plans: prismaPlanStore(await getRequestDb(context)) };
 }
 
+function householdLists(context: Route.LoaderArgs["context"]) {
+  return d1HouseholdListStore(requestD1(context) as D1ReadDatabase);
+}
+
 export async function loader({ request, context, params }: Route.LoaderArgs) {
   const { household, scope, plans } = await householdPlan(request, context, params.id);
   const search = new URL(request.url).searchParams;
-  const [week, { recipes, chosenRecipeId }] = await Promise.all([
+  const canEdit = can(household.me, "edit-shared");
+  const [week, { recipes, chosenRecipeId }, shared] = await Promise.all([
     getWeek(plans, scope, parseLocalDate(search.get("week"))),
     plannableRecipes(plans, scope, search.get("recipe")),
+    // Only someone who can change the lists is offered one to shop the week onto.
+    canEdit ? listHouseholdLists(householdLists(context), { householdId: household.id, userId: household.me.userId }) : null,
   ]);
-  return { household: { id: household.id, name: household.name }, canEdit: can(household.me, "edit-shared"), week, recipes, chosenRecipeId };
+  const lists = shared?.lists.map(({ id, name }) => ({ id, name })) ?? [];
+  return { household: { id: household.id, name: household.name }, canEdit, week, recipes, chosenRecipeId, lists };
 }
 
 /** Reports a failure the plan can't answer to PostHog, without holding up the response. */
@@ -62,6 +84,21 @@ export async function action({ request, context, params }: Route.ActionArgs) {
   const intent = fields.intent ?? "";
   if (!can(household.me, "edit-shared")) return planRefused(intent, "View-only members read the household's plan but can't change it.", 403);
   try {
+    if (intent === "add-week-to-list") {
+      const day = parseLocalDate(fields.week);
+      if (!day) return planRefused(intent, "Choose a week to shop for.");
+      const list = await getHouseholdList(householdLists(context), { householdId: household.id, listId: fields.listId ?? "", userId });
+      if (!list) return planRefused(intent, "Choose one of the household's shopping lists.");
+      const { start } = await getWeek(plans, scope, day);
+      const listToken = formWriteToken(fields.listToken) ?? crypto.randomUUID();
+      const onList = d1HouseholdListRecipes(requestD1(context) as D1ReadDatabase, { listId: list.id, userId, now: new Date() });
+      const week = { from: start, to: addDays(start, 6) };
+      const submissionKey = `household-plan-week:${household.id}:${start}:${listToken}`;
+      const added = await addPlannedMealsToList(plans, onList, scope, week, submissionKey);
+      // The week's recipes share the list's lines: chicken stock in two of them is one line.
+      await onList.addGathered(submissionKey);
+      return data({ intent, added, list: { name: list.name, href: `/households/${household.id}/lists/${list.id}` } });
+    }
     return await changePlanEntry(plans, scope, userId, fields, `/households/${household.id}/plan`);
   } catch (error) {
     const unavailable = d1UnavailableWebResponse(error, intent);
@@ -72,8 +109,9 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 }
 
 export default function HouseholdPlanPage() {
-  const { household, canEdit, week, recipes, chosenRecipeId } = useLoaderData<typeof loader>();
+  const { household, canEdit, week, recipes, chosenRecipeId, lists } = useLoaderData<typeof loader>();
   const answer = useActionData<PlanActionAnswer>();
+  const [listToken] = useWriteToken();
   const basePath = `/households/${household.id}/plan`;
   return (
     <CookbookPage>
@@ -81,6 +119,21 @@ export default function HouseholdPlanPage() {
         <div className="mt-4 flex flex-wrap gap-2">
           <WeekLinks basePath={basePath} start={week.start} />
         </div>
+        {canEdit && lists.length > 0 ? (
+          <RouterForm method="post" className="mt-4 flex flex-wrap items-end gap-2">
+            <input type="hidden" name="intent" value="add-week-to-list" />
+            <input type="hidden" name="week" value={week.start} />
+            <input type="hidden" name="listToken" value={`${listToken}-${weekFormKey(week)}`} />
+            <NativeSelect label="Shopping list" name="listId" options={lists.map((list) => ({ value: list.id, label: list.name }))} />
+            <Button type="submit" size="sm">Add this week to the list</Button>
+          </RouterForm>
+        ) : null}
+        {canEdit && lists.length === 0 ? (
+          <Text tone="muted" className="mt-3">
+            Make a shopping list to shop for the week. <Button href={`/households/${household.id}/lists`} variant="plain" size="inline">Shopping lists</Button>
+          </Text>
+        ) : null}
+        <WeekListAnswer answer={answer} />
         {canEdit ? null : <Text tone="muted" className="mt-3">View-only: you can read this plan.</Text>}
       </PageHeader>
       <WeekPlan week={week} recipes={recipes} chosenRecipeId={chosenRecipeId} answer={answer} canEdit={canEdit} />
