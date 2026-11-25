@@ -181,6 +181,13 @@ describe("the other app's server as a move-in source", () => {
     const soup = apiRecipeDraft(recipes[1]);
     // The server still answers, so the trouble is this photo's.
     await expect(kitchen.readPhoto(soup)).rejects.toThrow("couldn't give this one");
+
+    // Each recipe's place holds without it: the next of two with the same date goes by key, and none follows the last.
+    const marks = [0, 1, 2].map((index) => kitchen.mark?.(index) as string);
+    expect(marks[1]).toBe(`${Date.parse("2026-11-23T16:00:00Z")}:00000000-0000-4000-8000-0000000000c1`);
+    recipes.splice(1, 1);
+    const changed = await source.openKitchen(KITCHEN);
+    expect(marks.map((mark) => changed?.indexAfter?.(mark))).toEqual([1, 1, 2]);
   });
 
   it("has no kitchen but the token's own", async () => {

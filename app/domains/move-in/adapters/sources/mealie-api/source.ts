@@ -200,6 +200,16 @@ export async function mealieApiSource(connection: MealieApiConnection): Promise<
         return { photos: listed.filter((recipe) => recipe.hasPhoto).length, tags, categories, tools };
       },
       entry: (index) => ({ sourceKey: listed[index].sourceKey, title: listed[index].title }),
+      // The cook can delete or add recipes while the move-in runs, so the job keeps the last recipe's place in the order
+      // rather than a count, which a recipe deleted before it would push one recipe past.
+      mark: (index) => `${listed[index].createdAt}:${listed[index].sourceKey}`,
+      indexAfter(mark) {
+        const split = mark.indexOf(":");
+        const createdAt = Number(mark.slice(0, split));
+        const sourceKey = mark.slice(split + 1);
+        const next = listed.findIndex((recipe) => recipe.createdAt > createdAt || (recipe.createdAt === createdAt && recipe.sourceKey.localeCompare(sourceKey) > 0));
+        return next === -1 ? listed.length : next;
+      },
       draft: async (index) =>
         apiRecipeDraft((await api.json(`/api/recipes/${encodeURIComponent(listed[index].slug)}`).catch(api.itemOutage)) as Json),
       hasPhoto: (draft: RecipeDraft) => draft.photoPath !== "",
