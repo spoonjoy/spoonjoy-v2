@@ -875,8 +875,8 @@ describe("a kitchen on its own server, which changes while it moves in", () => {
     return { all, listed };
   }
 
-  it("brings every recipe still there when the cook deletes one already moved in, and one added meanwhile, passing none over", async () => {
-    const h = harness();
+  it.each([["one at a time", false], ["a chunk together", true]] as const)("brings every recipe still there when the cook deletes one already moved in, and one added meanwhile, passing none over, writing %s", async (_way, together) => {
+    const h = harness(together ? { writeMany: true } : {});
     const { all, listed } = serverKitchen(h);
     await runNextChunk("job-1", h.ports);
     expect(h.counts.get("recipes")).toMatchObject({ found: 6 });
@@ -903,12 +903,36 @@ describe("a kitchen on its own server, which changes while it moves in", () => {
     expect([...h.written.keys()]).toEqual(all.slice(0, 6).map((one) => one.id));
   });
 
-  it("carries on from a count saved before the kitchen had places", async () => {
+  it("carries on from a count saved before the kitchen had places, and keeps its place from then on", async () => {
+    const h = harness();
+    const { all, listed } = serverKitchen(h);
+    await runNextChunk("job-1", h.ports);
+    h.jobs.set("job-1", { ...h.job(), cursor: "3" });
+    await runNextChunk("job-1", h.ports, { chunkSize: 1 });
+    // From here the cursor holds a place, so a recipe deleted before it passes none over.
+    expect(h.job().cursor).toBe(`after:${Date.parse(all[3].createdAt)}:${all[3].id}`);
+    listed.splice(0, 1);
+    await h.runAll(2);
+    expect([...h.written.keys()]).toEqual([all[3].id, all[4].id, all[5].id]);
+  });
+
+  it("passes over by its place a recipe that keeps stopping the move-in, and goes on with the next", async () => {
     const h = harness();
     const { all } = serverKitchen(h);
     await runNextChunk("job-1", h.ports);
-    h.jobs.set("job-1", { ...h.job(), cursor: "4" });
-    await h.runAll(2);
-    expect([...h.written.keys()]).toEqual([all[4].id, all[5].id]);
+    await runNextChunk("job-1", h.ports, { chunkSize: 2 });
+    h.jobs.set("job-1", { ...h.job(), attempt: RECIPE_TRIES + 1 });
+    await runNextChunk("job-1", h.ports, { chunkSize: 1 });
+    expect(h.events.find((event) => event.kind === "item-failed")?.sourceKey).toBe(all[2].id);
+    expect(h.job().cursor).toBe(`after:${Date.parse(all[3].createdAt)}:${all[3].id}`);
+    expect([...h.written.keys()]).toEqual([all[0].id, all[1].id, all[3].id]);
+  });
+
+  it("stops rather than ending as done when the cursor holds a place the kitchen can't read", async () => {
+    const h = harness();
+    await runNextChunk("job-1", h.ports);
+    h.jobs.set("job-1", { ...h.job(), cursor: "after:0:somewhere" });
+    await expect(runNextChunk("job-1", h.ports)).rejects.toThrow("the move-in's place, after:0:somewhere, isn't one this kitchen can read");
+    expect(h.job()).toMatchObject({ status: "running", phase: "recipes" });
   });
 });

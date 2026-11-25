@@ -415,7 +415,10 @@ function cursorAfter(kitchen: MoveInKitchen, index: number): string {
 /** Where this run starts. A count is read as one, so a job saved before its kitchen had marks carries on from it. */
 function startOf(kitchen: MoveInKitchen, cursor: string | null): number {
   if (cursor?.startsWith(AFTER) && kitchen.indexAfter) return kitchen.indexAfter(cursor.slice(AFTER.length));
-  return Number(cursor);
+  const start = Number(cursor);
+  // A place this kitchen can't read would otherwise end the move-in as done with the rest never brought.
+  if (!Number.isInteger(start)) throw new Error(`the move-in's place, ${cursor}, isn't one this kitchen can read`);
+  return start;
 }
 
 async function recipes(run: Run, opened: Opened, chunkSize: number, cache: RunCache) {
