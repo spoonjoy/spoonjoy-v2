@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildContentSecurityPolicy } from "../../app/lib/security-headers.server";
+import { expectConsoleWarning } from "../warning-policy";
 import {
   createPostHogBuildContract,
   createPostHogBuildMetadata,
@@ -4187,13 +4188,10 @@ describe("production canary release orchestration", () => {
       }) as unknown as ReleaseCommandRunner;
       const deps = releaseDeps(runCommand);
       deps.listClientAssets.mockResolvedValue(["chunk-a.js", "chunk-b.js"]);
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      expectConsoleWarning("Archiving release asset chunk-b.js failed; trying again (2 of 3).");
+      expectConsoleWarning("Archiving release asset chunk-b.js failed; trying again (3 of 3).");
 
-      try {
-        await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
-      } finally {
-        warn.mockRestore();
-      }
+      await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
 
       const puts = (runCommand as unknown as ReturnType<typeof vi.fn>).mock.calls
         .map(([command, args]) => commandKey(command, args))
@@ -4215,13 +4213,10 @@ describe("production canary release orchestration", () => {
       }) as unknown as ReleaseCommandRunner;
       const deps = releaseDeps(runCommand);
       deps.listClientAssets.mockResolvedValue(["chunk-a.js", "chunk-b.js"]);
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      expectConsoleWarning("Archiving release asset chunk-b.js failed; trying again (2 of 3).");
+      expectConsoleWarning("Archiving release asset chunk-b.js failed; trying again (3 of 3).");
 
-      try {
-        await expect(runProductionCanaryRelease(deps)).rejects.toThrow("Command failed with exit code 1");
-      } finally {
-        warn.mockRestore();
-      }
+      await expect(runProductionCanaryRelease(deps)).rejects.toThrow("Command failed with exit code 1");
 
       const keys = (runCommand as unknown as ReturnType<typeof vi.fn>).mock.calls
         .map(([command, args]) => commandKey(command, args));
