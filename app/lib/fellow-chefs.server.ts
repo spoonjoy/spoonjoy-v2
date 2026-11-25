@@ -65,7 +65,8 @@ function normalizeOffset(input: number | undefined): number {
   return input ?? 0;
 }
 
-type Side = "viewer" | "chef";
+export type ChefGraphSide = "viewer" | "chef";
+type Side = ChefGraphSide;
 
 function interactionsCte(side: Side, focal = "?"): string {
   // For `viewer` side (Fellow Chefs): focal user is the actor —
@@ -120,12 +121,15 @@ interface RawCountRow {
   total: bigint;
 }
 
-async function runList(
-  db: PrismaClient,
+/**
+ * The list and count statements for one side of the chef graph, as [sql, ...values], so a D1 reader can run them in
+ * its own batch and pass the rows to fellowChefListFromRows. The Prisma path runs the same statements.
+ */
+export function fellowChefListQueries(
   side: Side,
   focalUserId: string,
-  opts: ListFellowChefsOptions,
-): Promise<FellowChefListResult> {
+  opts: ListFellowChefsOptions = {},
+): [list: [string, ...unknown[]], count: [string, ...unknown[]]] {
   const limit = normalizeLimit(opts.limit);
   const offset = normalizeOffset(opts.offset);
   const cte = interactionsCte(side);
@@ -166,11 +170,32 @@ async function runList(
     focalUserId,
   ];
 
-  const [rawRows, rawCount] = await Promise.all([
-    db.$queryRawUnsafe<RawAggregateRow[]>(listSql, ...bind, limit, offset),
-    db.$queryRawUnsafe<RawCountRow[]>(countSql, ...bind),
-  ]);
+  return [[listSql, ...bind, limit, offset], [countSql, ...bind]];
+}
 
+/** The rows of fellowChefListQueries' two statements as a list result. */
+export function fellowChefListFromRows(
+  rawRows: ReadonlyArray<Record<string, unknown>>,
+  rawCount: ReadonlyArray<Record<string, unknown>>,
+): FellowChefListResult {
+  return listResult(rawRows as unknown as RawAggregateRow[], rawCount as unknown as RawCountRow[]);
+}
+
+async function runList(
+  db: PrismaClient,
+  side: Side,
+  focalUserId: string,
+  opts: ListFellowChefsOptions,
+): Promise<FellowChefListResult> {
+  const [[listSql, ...listValues], [countSql, ...countValues]] = fellowChefListQueries(side, focalUserId, opts);
+  const [rawRows, rawCount] = await Promise.all([
+    db.$queryRawUnsafe<RawAggregateRow[]>(listSql, ...listValues),
+    db.$queryRawUnsafe<RawCountRow[]>(countSql, ...countValues),
+  ]);
+  return listResult(rawRows, rawCount);
+}
+
+function listResult(rawRows: RawAggregateRow[], rawCount: RawCountRow[]): FellowChefListResult {
   const rows: FellowChefRow[] = rawRows.map((row) => ({
     chefId: row.otherChefId,
     username: row.username,
