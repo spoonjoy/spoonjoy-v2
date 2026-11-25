@@ -541,6 +541,10 @@
           "count": 1
         },
         {
+          "identity": "link \"New smart cookbook\" [button/root] in region \"Smart cookbooks\"",
+          "count": 1
+        },
+        {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
           "count": 1
         },
@@ -570,6 +574,10 @@
         },
         {
           "identity": "link \"New cookbook\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"New smart cookbook\" [button/root] in region \"Smart cookbooks\"",
           "count": 1
         },
         {
@@ -3788,6 +3796,34 @@
         }
       ]
     },
+    "smart-cookbook-new": {
+      "default": [
+        {
+          "identity": "button \"Create smart cookbook\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "combobox \"With\" [combobox/input] in main",
+          "count": 1
+        },
+        {
+          "identity": "combobox \"Without\" [combobox/input] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Cookbooks\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Title\" [text-field/input] in main",
+          "count": 1
+        }
+      ]
+    },
     "step-edit": {
       "add-ingredient-open": [
         {
@@ -4931,6 +4967,10 @@
           "count": 1
         },
         {
+          "identity": "link \"New smart cookbook\" [button/root] in region \"Smart cookbooks\"",
+          "count": 1
+        },
+        {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
           "count": 1
         },
@@ -4960,6 +5000,10 @@
         },
         {
           "identity": "link \"New cookbook\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"New smart cookbook\" [button/root] in region \"Smart cookbooks\"",
           "count": 1
         },
         {
@@ -8146,6 +8190,34 @@
         },
         {
           "identity": "textbox \"Username\" [text-field/input] in main",
+          "count": 1
+        }
+      ]
+    },
+    "smart-cookbook-new": {
+      "default": [
+        {
+          "identity": "button \"Create smart cookbook\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"With\" [combobox/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Without\" [combobox/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Cookbooks\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Title\" [text-field/input] in main",
           "count": 1
         }
       ]
