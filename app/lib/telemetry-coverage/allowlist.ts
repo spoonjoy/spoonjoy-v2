@@ -115,6 +115,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
 
   // --- pure rethrow / race recovery (surfaced to instrumented callers) ---
   {
+    file: "app/lib/notification-db-d1.server.ts",
+    category: "rethrow",
+    reason:
+      "The one catch turns D1's unique-constraint failure on a notification event's id into Prisma's P2002 code and re-throws everything else unchanged; the notification dispatcher (notification-dispatch.server.ts) reads P2002 as an already-sent event and captures the other failures.",
+  },
+  {
     file: "app/lib/api-idempotency.server.ts",
     category: "rethrow",
     reason:
