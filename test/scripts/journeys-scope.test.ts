@@ -215,6 +215,18 @@ describe("decide", () => {
     expect(decide({ files: ["docs/a.md"], labels: [], specs: SPECS }).parts).toBe(1);
   });
 
+  // #1058 changed households.desktop.journey.ts and workers code: its full run ran part 1 only, the
+  // households journey was in part 2, and it failed first in the merge queue.
+  it("runs both parts of a pull request's full suite when it changes a journey spec, which either part may hold", () => {
+    const decision = decide({ files: ["workers/app.ts", "e2e/journeys/households.desktop.journey.ts"], labels: [], specs: SPECS });
+    expect(decision).toMatchObject({ mode: "full", parts: 2 });
+    expect(decision.why).toContain("`e2e/journeys/households.desktop.journey.ts` is a changed journey spec, so both parts of the full suite run.");
+    expect(decide({ files: ["app/root.tsx", "e2e/journeys/households.desktop.journey.ts"], labels: [], specs: SPECS }).parts).toBe(2);
+    // The census and the harness are not specs either part runs as its share.
+    expect(decide({ files: ["workers/app.ts", "e2e/journeys/hx-census.journey.ts"], labels: [], specs: SPECS }).parts).toBe(1);
+    expect(decide({ files: ["e2e/journeys/support/journey.ts"], labels: [], specs: SPECS }).parts).toBe(1);
+  });
+
   it("runs both parts of the full suite for the journeys-full label, whatever changed", () => {
     for (const files of [["docs/a.md"], ["app/routes/shopping-list.tsx"], ["workers/app.ts"]]) {
       expect(decide({ files, labels: [FORCE_LABEL, BOTH_PARTS_LABEL], specs: SPECS })).toEqual({
