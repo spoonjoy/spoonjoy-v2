@@ -428,7 +428,8 @@ export async function stopAndStartAgain(
   await waitForHydration(page);
   await field.setInputFiles(path);
   const again = page.waitForResponse((response) => isBegin(response.request()));
-  const firstPart = page.waitForRequest(isPart);
+  // Parts go up several at a time, so part 2 can leave before part 1: wait for part 1 itself.
+  const firstPart = page.waitForRequest((request) => isPart(request) && /\/parts\/1$/.test(new URL(request.url()).pathname));
   await holdParts(0);
   await page.getByRole("button", { name: "Move in", exact: true }).click();
   const answer = await again;
@@ -437,7 +438,7 @@ export async function stopAndStartAgain(
   const plan = (await answer.json()) as { uploadId: string; done: number[] };
   expect(plan.uploadId).not.toBe(uploadId);
   expect(plan.done).toEqual([]);
-  expect(new URL((await firstPart).url()).pathname).toMatch(/\/parts\/1$/);
+  expect(new URL((await firstPart).url()).pathname).toContain(`/uploads/${plan.uploadId}/`);
   await stopNow();
   // After a reload the page holds no upload: the empty form, ready for a backup.
   return async () => {
