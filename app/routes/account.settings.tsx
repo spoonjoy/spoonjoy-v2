@@ -14,7 +14,8 @@ import { useFlag } from "~/domains/platform";
 import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
-import { isServerAdmin } from "~/lib/server-access.server";
+import { isSelfHosted, isServerAdmin } from "~/lib/server-access.server";
+import { d1ReadBatch, requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
@@ -45,26 +46,53 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
+type BlockedChefsAndDefault = { blockedChefs: BlockedChefRow[]; storedVisibilityDefault: string | null | undefined };
+
+async function blockedChefsAndDefaultFromD1(d1: D1ReadDatabase, userId: string): Promise<BlockedChefsAndDefault> {
+  const [blocked, users] = await d1ReadBatch(d1, [
+    [`SELECT u."id", u."username" FROM "ChefBlock" b JOIN "User" u ON u."id" = b."blockedId"
+      WHERE b."blockerId" = ? ORDER BY b."createdAt" DESC`, userId],
+    [`SELECT "defaultRecipeVisibility" FROM "User" WHERE "id" = ?`, userId],
+  ]);
+  return {
+    blockedChefs: blocked!.map((row) => ({ id: String(row.id), username: String(row.username) })),
+    storedVisibilityDefault: users![0]?.defaultRecipeVisibility as string | null | undefined,
+  };
+}
+
+async function blockedChefsAndDefaultOnPrisma(db: Awaited<ReturnType<typeof getRequestDb>>, userId: string): Promise<BlockedChefsAndDefault> {
+  const [blocked, user] = await Promise.all([
+    listBlockedChefs(db, userId),
+    db.user.findUnique({ where: { id: userId }, select: { defaultRecipeVisibility: true } }),
+  ]);
+  return {
+    blockedChefs: blocked.map(({ chef }) => ({ id: chef.id, username: chef.username })),
+    storedVisibilityDefault: user?.defaultRecipeVisibility,
+  };
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const settings = await loadAccountSettings({ request, context });
-  const db = await getRequestDb(context);
-  const blocked = await listBlockedChefs(db, settings.user.id);
+  const env = context.cloudflare?.env;
+  // On the Worker the blocked chefs and the recipe default come from D1 too, so the page builds no Prisma client
+  // unless it is a self-hosted server asking who its admin is. On merge-group run 45528383350 a wedged Prisma engine
+  // failed /account/settings with every other Prisma page in its isolate.
+  const d1 = requestD1(context);
+  const { blockedChefs, storedVisibilityDefault } = d1
+    ? await blockedChefsAndDefaultFromD1(d1, settings.user.id)
+    : await blockedChefsAndDefaultOnPrisma(await getRequestDb(context), settings.user.id);
   // The cook's default for new recipes and the levels they can choose, while the choice is on.
-  const recipeVisibilityChoices = visibilityChoicesFor(context.cloudflare?.env, settings.user.id);
+  const recipeVisibilityChoices = visibilityChoicesFor(env, settings.user.id);
   const recipeVisibilityDefault = recipeVisibilityChoices
-    ? newRecipeVisibility(
-      null,
-      (await db.user.findUnique({ where: { id: settings.user.id }, select: { defaultRecipeVisibility: true } }))?.defaultRecipeVisibility,
-      recipeVisibilityChoices,
-    )
+    ? newRecipeVisibility(null, storedVisibilityDefault, recipeVisibilityChoices)
     : null;
   return {
     ...settings,
-    blockedChefs: blocked.map(({ chef }) => ({ id: chef.id, username: chef.username })),
+    blockedChefs,
     recipeVisibilityDefault,
     recipeVisibilityChoices,
     // A self-hosted server's admin gets a way to its settings (app/routes/account.server-settings.tsx).
-    serverAdmin: await isServerAdmin(db, context.cloudflare?.env, settings.user.id),
+    serverAdmin: isSelfHosted(env) && (await isServerAdmin(await getRequestDb(context), env, settings.user.id)),
   };
 }
 
