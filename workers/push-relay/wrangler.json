@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler",
+  "name": "spoonjoy-push-relay",
+  "main": "./index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "routes": [{ "pattern": "push.spoonjoy.app", "custom_domain": true }],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "APNS_TOPIC": "app.spoonjoy",
+    "APNS_TEAM_ID": "743GT2AJ24",
+    "REVOKED_SERVER_IDS": ""
+  },
+  "ratelimits": [
+    { "name": "REGISTER_LIMITER", "namespace_id": "4101", "simple": { "limit": 5, "period": 60 } },
+    { "name": "SEND_KEY_LIMITER", "namespace_id": "4102", "simple": { "limit": 600, "period": 60 } },
+    { "name": "SEND_TOKEN_LIMITER", "namespace_id": "4103", "simple": { "limit": 30, "period": 60 } }
+  ]
+}
