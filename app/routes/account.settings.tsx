@@ -138,7 +138,7 @@ const TOKEN_PURPOSES = [
   {
     value: "program",
     label: "A program or agent using my kitchen",
-    description: "Reads your recipes and cookbooks, and can change your shopping list, account and tokens. Works for 90 days.",
+    description: "Reads your recipes and cookbooks, and can change your shopping list, account and tokens, but not your recipes. Works for 90 days.",
   },
 ];
 
@@ -157,7 +157,8 @@ export default function AccountSettings() {
   const userInfoAnswer = useIntentAnswer(actionData, USER_INFO_INTENTS);
   const passwordFetcher = useFetcher<AccountSettingsActionResult>();
   const tokenFetcher = useFetcher<AccountSettingsActionResult>();
-  const tokenAnswer = tokenFetcher.data;
+  // Without JavaScript the form posts as a page, so its answer arrives as the page's action data.
+  const tokenAnswer = tokenFetcher.data ?? (actionData?.intent === "createApiToken" ? actionData : undefined);
   const [passwordBaseline, setPasswordBaseline] = useState(initialActionData);
   const passwordAnswer = passwordFetcher.data;
   const passwordData = passwordAnswer ?? passwordBaseline;
@@ -191,6 +192,11 @@ export default function AccountSettings() {
   );
   const [isConfirmingSignOutEverywhere, setIsConfirmingSignOutEverywhere] = useState(false);
   const apiCredentials = user.apiCredentials ?? [];
+  // A new token's secret shows only while the token still works: revoking it, or signing out
+  // everywhere, takes it off the list and so off the screen.
+  const newToken = tokenAnswer?.token && apiCredentials.some((credential) => credential.id === tokenAnswer.token!.id)
+    ? tokenAnswer.token
+    : undefined;
   const oauthConnections = user.oauthConnections ?? [];
 
   // Restore form state when there are field errors (e.g., after form submission fails), and
@@ -267,7 +273,7 @@ export default function AccountSettings() {
 
       {/* Success/Error Messages (only show global banner when there are no field-level errors; a
           photo upload's error shows next to the photo instead) */}
-      {actionData?.message && !actionData?.fieldErrors && actionData.intent !== "uploadPhoto" && actionData.intent !== "deleteAccount" && (
+      {actionData?.message && !actionData?.fieldErrors && actionData.intent !== "uploadPhoto" && actionData.intent !== "deleteAccount" && actionData.intent !== "createApiToken" && (
         <div
           role={actionData.success ? "status" : "alert"}
           className={`mt-4 border-y py-4 ${
@@ -463,7 +469,8 @@ export default function AccountSettings() {
           without exposing token secrets.
         </Text>
 
-        <tokenFetcher.Form method="post" className="mt-5 space-y-4" data-testid="make-api-token">
+        {/* Keyed on the token it made, so the form starts empty again after each one. */}
+        <tokenFetcher.Form key={newToken?.id ?? "new"} method="post" className="mt-5 space-y-4" data-testid="make-api-token">
           <input type="hidden" name="intent" value="createApiToken" />
           <RadioGroup legend="What it's for" name="purpose" options={TOKEN_PURPOSES} defaultValue="move" />
           <TextField label="Name" name="name" description="So you can tell your tokens apart. Optional." autoComplete="off" />
@@ -475,13 +482,19 @@ export default function AccountSettings() {
             Make token
           </Button>
         </tokenFetcher.Form>
-        {tokenAnswer?.token ? (
+        {newToken ? (
           <div className="mt-4 space-y-3">
-            <Alert tone="success" title={`${tokenAnswer.token.name} is ready`} description="Copy it now: Spoonjoy won't show it again." />
-            <CodeBlock code={tokenAnswer.token.secret} title="Your new token" copyLabel="Copy token" wrap />
+            <Alert tone="success" title={`${newToken.name} is ready`} description="Copy it now: Spoonjoy won't show it again." />
+            <CodeBlock code={newToken.secret} title="Your new token" copyLabel="Copy token" wrap />
           </div>
         ) : tokenAnswer?.success === false ? (
-          <Alert tone="destructive" className="mt-4" title="No token made" description={tokenAnswer.message} />
+          <Alert
+            tone="destructive"
+            className="mt-4"
+            title="No token made"
+            description={tokenAnswer.message}
+            action={tokenAnswer.error === "signed_out" ? <Link href="/login?redirectTo=%2Faccount%2Fsettings">Sign in again</Link> : undefined}
+          />
         ) : null}
 
         <div className="mt-5 space-y-6">

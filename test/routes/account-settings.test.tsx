@@ -1892,43 +1892,76 @@ describe("Account Settings Route", () => {
   });
 
   describe("component - API and app access", () => {
-    function tokenPage(answer: () => unknown) {
+    const MOVE_TOKEN = {
+      id: "cred_move",
+      name: "Moving my kitchen",
+      tokenPrefix: "sj_secret_on",
+      scopes: ["account:read", "kitchen:read"],
+      createdAt: "2026-06-01T00:00:00.000Z",
+      lastUsedAt: null,
+      expiresAt: "2026-06-08T00:00:00.000Z",
+    };
+
+    // The page as the real action leaves it: making a token adds it to the list, revoking takes it off.
+    function tokenPage(answer: () => unknown, options: { hydrated?: unknown } = {}) {
       const submitted: FormData[] = [];
+      const credentials: (typeof MOVE_TOKEN)[] = options.hydrated ? [MOVE_TOKEN] : [];
+      const loaderData = () => ({
+        user: {
+          id: testUserId,
+          email: testUserEmail.toLowerCase(),
+          username: testUsername,
+          hasPassword: true,
+          oauthAccounts: [],
+          photoUrl: null,
+          passkeys: [],
+          apiCredentials: [...credentials],
+        },
+        notifications: { pushSubscribed: false },
+      });
       const Stub = createTestRoutesStub([
         {
+          id: "account-settings",
           path: "/account/settings",
           Component: AccountSettings,
-          loader: () => ({
-            user: {
-              id: testUserId,
-              email: testUserEmail.toLowerCase(),
-              username: testUsername,
-              hasPassword: true,
-              oauthAccounts: [],
-              photoUrl: null,
-              passkeys: [],
-            },
-            notifications: { pushSubscribed: false },
-          }),
+          loader: loaderData,
           action: async ({ request }: { request: Request }) => {
-            submitted.push(await request.formData());
-            return answer();
+            const form = await request.formData();
+            submitted.push(form);
+            if (form.get("intent") === "revokeApiCredential") {
+              credentials.splice(0, credentials.length);
+              return { success: true, message: "API credential revoked" };
+            }
+            const result = answer() as { token?: unknown };
+            if (result.token) credentials.push(MOVE_TOKEN);
+            return result;
           },
         },
       ]);
-      render(<Stub initialEntries={["/account/settings"]} />);
+      render(
+        <Stub
+          initialEntries={["/account/settings"]}
+          hydrationData={options.hydrated
+            ? { loaderData: { "account-settings": loaderData() }, actionData: { "account-settings": options.hydrated } }
+            : undefined}
+        />,
+      );
       return submitted;
     }
 
-    it("makes a moving token by default, and shows its secret once with a way to copy it", async () => {
+    const MADE = {
+      success: true,
+      intent: "createApiToken",
+      message: "Moving my kitchen is ready. Copy it now: Spoonjoy won't show it again.",
+      token: { id: "cred_move", name: "Moving my kitchen", secret: "sj_secret_once" },
+    };
+
+    it("makes a moving token by default, shows its secret once with a way to copy it, and empties the form", async () => {
       const user = userEvent.setup();
-      const submitted = tokenPage(() => ({
-        success: true,
-        intent: "createApiToken",
-        token: { name: "Moving my kitchen", secret: "sj_secret_once" },
-      }));
+      const submitted = tokenPage(() => MADE);
       const form = await screen.findByTestId("make-api-token");
       expect(within(form).getByRole("radio", { name: /Moving my kitchen to another Spoonjoy/ })).toBeChecked();
+      await user.type(within(form).getByRole("textbox", { name: /Name/ }), "Moving my kitchen");
 
       await user.click(within(form).getByRole("button", { name: "Make token" }));
 
@@ -1936,13 +1969,37 @@ describe("Account Settings Route", () => {
       expect(screen.getByText("Copy it now: Spoonjoy won't show it again.")).toBeInTheDocument();
       expect(screen.getByText("sj_secret_once")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Copy token" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Revoke Moving my kitchen" })).toBeInTheDocument();
+      expect(within(screen.getByTestId("make-api-token")).getByRole("textbox", { name: /Name/ })).toHaveValue("");
+      // The answer shows by the form, not again in the page's banner.
+      expect(screen.queryByText("Moving my kitchen is ready. Copy it now: Spoonjoy won't show it again.")).not.toBeInTheDocument();
       expect(submitted).toHaveLength(1);
       expect(submitted[0].get("intent")).toBe("createApiToken");
       expect(submitted[0].get("purpose")).toBe("move");
       expect(within(form).getByRole("button", { name: "Make token" })).toHaveAttribute("data-ax-action", "create-api-token");
     });
 
-    it("sends a program token's name, and says why when no token was made", async () => {
+    it("takes a new token's secret off the screen once the token is revoked", async () => {
+      const user = userEvent.setup();
+      tokenPage(() => MADE);
+      await user.click(within(await screen.findByTestId("make-api-token")).getByRole("button", { name: "Make token" }));
+      expect(await screen.findByText("sj_secret_once")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Revoke Moving my kitchen" }));
+
+      expect(await screen.findByText("No active bearer credentials.")).toBeInTheDocument();
+      expect(screen.queryByText("sj_secret_once")).not.toBeInTheDocument();
+      expect(screen.queryByText("Moving my kitchen is ready")).not.toBeInTheDocument();
+    });
+
+    it("shows the secret of a token made without JavaScript, from the page's own answer", async () => {
+      tokenPage(() => MADE, { hydrated: MADE });
+
+      expect(await screen.findByText("sj_secret_once")).toBeInTheDocument();
+      expect(screen.getByText("Moving my kitchen is ready")).toBeInTheDocument();
+    });
+
+    it("sends a program token's name, and says why when no token was made, with a way to sign in again", async () => {
       const user = userEvent.setup();
       const submitted = tokenPage(() => ({
         success: false,
@@ -1958,8 +2015,19 @@ describe("Account Settings Route", () => {
 
       expect(await screen.findByText("No token made")).toBeInTheDocument();
       expect(screen.getByText("Your session was signed out. Sign in again to create a token.")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/login?redirectTo=%2Faccount%2Fsettings");
       expect(submitted[0].get("purpose")).toBe("program");
       expect(submitted[0].get("name")).toBe("Kitchen display");
+    });
+
+    it("says why no token was made when the database was busy, with no sign-in link", async () => {
+      const user = userEvent.setup();
+      tokenPage(() => ({ success: false, error: "d1_unavailable", message: "Spoonjoy's database is busy. Try again in a moment." }));
+
+      await user.click(within(await screen.findByTestId("make-api-token")).getByRole("button", { name: "Make token" }));
+
+      expect(await screen.findByText("No token made")).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Sign in again" })).not.toBeInTheDocument();
     });
 
     it("renders bearer credentials and OAuth app connections with fallback labels", async () => {
