@@ -46,7 +46,7 @@ describe("smart cookbooks on a D1 binding", () => {
     platform.getRequestDb.mockReset();
     platform.getRequestDb.mockImplementation(() => new Promise(() => {}));
     d1 = sqliteD1();
-    context = { cloudflare: { env: { SPOONJOY_FLAGS: "smart-cookbooks", DB: d1.binding } } };
+    context = { cloudflare: { env: { DB: d1.binding } } };
   });
 
   afterEach(async () => {
