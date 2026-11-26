@@ -227,7 +227,7 @@ describe("Account settings - Your data section", () => {
       expect(password).toHaveAccessibleDescription("That password isn't right.");
       const userEventDriver = userEvent.setup();
       await userEventDriver.click(within(screen.getByTestId("user-info-section")).getByRole("button", { name: "Edit" }));
-      await userEventDriver.click(screen.getByRole("button", { name: "Save", exact: true }));
+      await userEventDriver.click(within(screen.getByTestId("user-info-section")).getByRole("button", { name: "Save", exact: true }));
       expect(await screen.findByText("Profile saved")).toBeInTheDocument();
       expect(password).toHaveAccessibleDescription("That password isn't right.");
       expect(password).not.toHaveFocus();

@@ -51,15 +51,14 @@ describe("account settings loader on a D1 binding", () => {
     await db.chefBlock.create({ data: { blockerId: viewer.id, blockedId: older.id, createdAt: new Date("2026-05-01T10:00:00Z") } });
     await db.chefBlock.create({ data: { blockerId: viewer.id, blockedId: newer.id, createdAt: new Date("2026-05-02T10:00:00Z") } });
     await db.chefBlock.create({ data: { blockerId: newer.id, blockedId: viewer.id } });
-    const flags = { SPOONJOY_FLAGS: "recipe_visibility" };
 
     platform.getRequestDb.mockImplementation(async () => db);
-    const onPrisma = await load(viewer.id, flags);
+    const onPrisma = await load(viewer.id, {});
     expect(platform.getRequestDb).toHaveBeenCalled();
 
     platform.getRequestDb.mockReset();
     platform.getRequestDb.mockImplementation(() => new Promise(() => {}));
-    const onD1 = await load(viewer.id, { ...flags, DB: d1.binding });
+    const onD1 = await load(viewer.id, { DB: d1.binding });
 
     expect(platform.getRequestDb).not.toHaveBeenCalled();
     expect(onD1).toEqual(onPrisma);
@@ -74,7 +73,7 @@ describe("account settings loader on a D1 binding", () => {
     const page = await load(viewer.id, { DB: d1.binding, SPOONJOY_SELF_HOSTED: "true" });
     expect(page.serverAdmin).toBe(true);
     expect(page.blockedChefs).toEqual([]);
-    expect(page.recipeVisibilityDefault).toBeNull();
+    expect(page.recipeVisibilityDefault).toBe("public");
     expect(platform.getRequestDb).toHaveBeenCalledTimes(1);
   });
 });

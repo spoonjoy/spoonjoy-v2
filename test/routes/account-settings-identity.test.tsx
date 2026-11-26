@@ -365,7 +365,7 @@ describe("Account settings - identity", () => {
       const usernameField = screen.getByLabelText("Username");
       await userEvents.clear(usernameField);
       await userEvents.type(usernameField, "chef_renamed");
-      await userEvents.click(screen.getByRole("button", { name: "Save" }));
+      await userEvents.click(within(screen.getByTestId("user-info-section")).getByRole("button", { name: "Save" }));
 
       await waitFor(() => expect(pageStatuses()).toHaveLength(1));
       expect(pageStatuses()[0]).toHaveTextContent("Account details saved.");
@@ -384,7 +384,7 @@ describe("Account settings - identity", () => {
       }));
 
       await userEvents.click(await screen.findByRole("button", { name: "Edit" }));
-      await userEvents.click(screen.getByRole("button", { name: "Save" }));
+      await userEvents.click(within(screen.getByTestId("user-info-section")).getByRole("button", { name: "Save" }));
 
       expect(await findShownAlert()).toHaveTextContent("This username is already taken");
       expect(screen.getByLabelText("Username")).toBeInTheDocument();

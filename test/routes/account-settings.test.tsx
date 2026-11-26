@@ -464,21 +464,17 @@ describe("Account Settings Route", () => {
     });
   });
 
-  it("shows the default for new recipes while the visibility choice is on, and leaves it out while it is off", async () => {
-    const mockData = (recipeVisibilityDefault: "private" | null) => ({
+  it("shows the cook's default for new recipes, offering public, household and only me", async () => {
+    const mockData = () => ({
       user: { id: testUserId, email: testUserEmail.toLowerCase(), username: testUsername, hasPassword: true, oauthAccounts: [], passkeys: [] },
       notifications: { pushSubscribed: false },
-      recipeVisibilityDefault,
+      recipeVisibilityDefault: "private",
     });
-    const Stub = createTestRoutesStub([{ path: "/account/settings", Component: AccountSettings, loader: () => mockData("private") }]);
+    const Stub = createTestRoutesStub([{ path: "/account/settings", Component: AccountSettings, loader: mockData }]);
     render(<Stub initialEntries={["/account/settings"]} />);
     const section = await screen.findByTestId("recipe-visibility-section");
     expect(within(section).getByRole("radio", { name: /^Only me/ })).toBeChecked();
-    cleanup();
-    const Plain = createTestRoutesStub([{ path: "/account/settings", Component: AccountSettings, loader: () => mockData(null) }]);
-    render(<Plain initialEntries={["/account/settings"]} />);
-    await screen.findByRole("heading", { name: /account settings/i });
-    expect(screen.queryByTestId("recipe-visibility-section")).not.toBeInTheDocument();
+    expect(within(section).getByRole("radio", { name: /^Household/ })).toBeInTheDocument();
   });
 
   describe("component", () => {
@@ -992,7 +988,7 @@ describe("Account Settings Route", () => {
       // Edit form should now be visible with input fields
       expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /save/i })).toBeInTheDocument();
+      expect(within(screen.getByTestId("user-info-section")).getByRole("button", { name: /save/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
     });
 
@@ -1065,7 +1061,7 @@ describe("Account Settings Route", () => {
 
       // Should be back to view mode - edit button visible again
       expect(screen.getByRole("button", { name: /edit/i })).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
+      expect(within(screen.getByTestId("user-info-section")).queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
     });
   });
 
@@ -5382,7 +5378,7 @@ describe("Account Settings Route", () => {
         await user.click(editButton);
 
         // Submit the form to trigger validation error
-        const saveButton = screen.getByRole("button", { name: /save/i });
+        const saveButton = within(screen.getByTestId("user-info-section")).getByRole("button", { name: /save/i });
         await user.click(saveButton);
 
         // Error should be displayed inline for email field
@@ -5433,7 +5429,7 @@ describe("Account Settings Route", () => {
         await user.click(editButton);
 
         // Submit the form to trigger validation error
-        const saveButton = screen.getByRole("button", { name: /save/i });
+        const saveButton = within(screen.getByTestId("user-info-section")).getByRole("button", { name: /save/i });
         await user.click(saveButton);
 
         // Error should be displayed inline for username field
@@ -5947,7 +5943,7 @@ describe("Account Settings Route", () => {
         const input = screen.getByLabelText(/passkey name/i);
         await user.clear(input);
         await user.type(input, "Kitchen iPad");
-        await user.click(screen.getByRole("button", { name: /^save$/i }));
+        await user.click(within(screen.getByTestId("passkeys-section")).getByRole("button", { name: /^save$/i }));
 
         await screen.findByText(/passkey renamed successfully/i);
         expect(submitted).toContainEqual(

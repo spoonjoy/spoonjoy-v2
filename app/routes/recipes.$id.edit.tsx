@@ -49,7 +49,6 @@ import { Button } from "~/components/ouro/button/button";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { useEffect, useRef, useState } from "react";
 import { parseRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
-import { recipeVisibilityChoices } from "~/lib/recipe-visibility-choices";
 
 interface ActionData {
   errors?: {
@@ -155,12 +154,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const imported = new URL(request.url).searchParams.get("imported") === "1";
 
-  // The visibility choice shows only while it is on for this cook. It offers every level, so a recipe's own level is
-  // always among them.
-  const visibilityChoices = recipeVisibilityChoices(context.cloudflare?.env, userId);
-  const visibility = visibilityChoices ? (parseRecipeVisibility(recipe.visibility) ?? "private") : null;
+  // A stored level the editor can't name shows as the most closed one.
+  const visibility = parseRecipeVisibility(recipe.visibility) ?? "private";
 
-  return { recipe, coverImageUrl, formattedSteps, imported, visibility, visibilityChoices };
+  return { recipe, coverImageUrl, formattedSteps, imported, visibility };
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
@@ -378,16 +375,13 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   const cloudflareEnv = getCloudflareEnv(context);
   const photosBucket = cloudflareEnv?.PHOTOS;
-  // A visibility the cook cannot choose today (or a save while the choice is off) keeps the stored one.
-  const visibilityChoices = recipeVisibilityChoices(cloudflareEnv, userId);
-  const chosenVisibility = visibilityChoices ? parseRecipeVisibility(formData.get("visibility")) : null;
+  // A save without a visibility level keeps the stored one.
+  const chosenVisibility = parseRecipeVisibility(formData.get("visibility"));
   const updateData: { title: string; description: string | null; servings: string | null; visibility?: RecipeVisibility } = {
     title: title.trim(),
     description: description.trim() || null,
     servings: servings.trim() || null,
-    ...(chosenVisibility && visibilityChoices?.includes(chosenVisibility)
-      ? { visibility: chosenVisibility }
-      : {}),
+    ...(chosenVisibility ? { visibility: chosenVisibility } : {}),
   };
   let uploadedImageUrl: string | null = null;
 
@@ -571,7 +565,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function EditRecipe() {
-  const { recipe, coverImageUrl, formattedSteps, imported, visibility, visibilityChoices } = useLoaderData<typeof loader>();
+  const { recipe, coverImageUrl, formattedSteps, imported, visibility } = useLoaderData<typeof loader>();
   const actionData = useActionData<ActionData>();
   const [initialActionData] = useState(actionData);
   const saveFetcher = useFetcher<ActionData>();
@@ -667,8 +661,7 @@ export default function EditRecipe() {
           answer={saveAnswer}
           loading={isLoading}
           showSteps={false}
-          visibility={visibility ?? undefined}
-          visibilityChoices={visibilityChoices ?? undefined}
+          visibility={visibility}
         />
 
         <section aria-label="Recipe steps" className="mt-10">
