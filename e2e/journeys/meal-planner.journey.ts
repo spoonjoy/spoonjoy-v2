@@ -185,30 +185,33 @@ test.describe("Meal planner", () => {
 
     // A calendar app has no session: the link alone gets the plan, with the salmon on it.
     const calendarApp = await playwright.request.newContext();
-    const feed = await calendarApp.get(feedUrl);
-    expect(feed.status(), "the feed at the new link").toBe(200);
-    expect(feed.headers()["content-type"]).toBe("text/calendar; charset=utf-8");
-    expect(await feed.text()).toContain(`SUMMARY:Dinner: ${SALMON.title}`);
+    try {
+      const feed = await calendarApp.get(feedUrl);
+      expect(feed.status(), "the feed at the new link").toBe(200);
+      expect(feed.headers()["content-type"]).toBe("text/calendar; charset=utf-8");
+      expect(await feed.text()).toContain(`SUMMARY:Dinner: ${SALMON.title}`);
 
-    // The link is shown once: after a reload the sheet says when it was made, and offers a new link instead.
-    await verifyAfterReload(async () => {
-      await addToCalendar.click();
-      await expect(sheet.getByText(/^You made your link on /)).toBeVisible();
-      await expect(linkField).toHaveCount(0);
-      await expect(sheet.getByRole("button", { name: "Make a new link", exact: true })).toBeVisible();
-    });
-    await attachElement(testInfo, "meal-planner-calendar-link-existing", sheet);
+      // The link is shown once: after a reload the sheet says when it was made, and offers a new link instead.
+      await verifyAfterReload(async () => {
+        await addToCalendar.click();
+        await expect(sheet.getByText(/^You made your link on /)).toBeVisible();
+        await expect(linkField).toHaveCount(0);
+        await expect(sheet.getByRole("button", { name: "Make a new link", exact: true })).toBeVisible();
+      });
+      await attachElement(testInfo, "meal-planner-calendar-link-existing", sheet);
 
-    await sheet.getByRole("button", { name: "Turn off link", exact: true }).click();
-    await expect(sheet.getByRole("status")).toHaveText("Turned off your calendar link. Calendars subscribed to it stop getting your plan.");
-    await expect(sheet.getByRole("button", { name: "Make a calendar link", exact: true })).toBeVisible();
-    expect((await calendarApp.get(feedUrl)).status(), "the feed at the turned-off link").toBe(404);
-    await verifyAfterReload(async () => {
-      await addToCalendar.click();
+      await sheet.getByRole("button", { name: "Turn off link", exact: true }).click();
+      await expect(sheet.getByRole("status")).toHaveText("Turned off your calendar link. Calendars subscribed to it stop getting your plan.");
       await expect(sheet.getByRole("button", { name: "Make a calendar link", exact: true })).toBeVisible();
-      await expect(sheet.getByRole("button", { name: "Turn off link", exact: true })).toHaveCount(0);
-    });
-    await calendarApp.dispose();
+      expect((await calendarApp.get(feedUrl)).status(), "the feed at the turned-off link").toBe(404);
+      await verifyAfterReload(async () => {
+        await addToCalendar.click();
+        await expect(sheet.getByRole("button", { name: "Make a calendar link", exact: true })).toBeVisible();
+        await expect(sheet.getByRole("button", { name: "Turn off link", exact: true })).toHaveCount(0);
+      });
+    } finally {
+      await calendarApp.dispose();
+    }
   });
 
   test.describe("as the seeded chef", () => {
