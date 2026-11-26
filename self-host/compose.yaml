@@ -5,7 +5,15 @@
 # use; docs/self-hosting.md lists every setting.
 services:
   spoonjoy:
-    image: ${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}
+    # Built from Spoonjoy's public source on the
+    # first start, which takes a few minutes, until
+    # the published image opens to everyone. Then
+    # this line takes over from the two below it:
+    # image: ${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}
+    image: ${SPOONJOY_IMAGE:-spoonjoy-source}
+    build:
+      context: https://github.com/spoonjoy/spoonjoy-v2.git#main
+      dockerfile: self-host/Dockerfile.source
     restart: unless-stopped
     ports:
       - "${SPOONJOY_PORT:-8080}:8080"
