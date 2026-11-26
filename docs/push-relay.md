@@ -6,7 +6,9 @@ The code is [`workers/push-relay/index.ts`](../workers/push-relay/index.ts), a C
 
 ## What it sees and keeps
 
-For each notification the relay sees the server's relay key, the device token and the notification itself (its title and text, and the page it opens). It passes them to Apple and keeps none of them. Its rate limits count by relay key, by a SHA-256 hash of the device token and by IP address, for a minute. Its log lines name the server's id, the environment and Apple's answer; they never hold a token or a payload. When a server registers, the log records the server's id and the origin of the address it gave.
+For each notification the relay sees the server's relay key, the device token and the notification itself (its title and text, and the page it opens). It passes them to Apple and keeps none of them. Its rate limits count by relay key, by a SHA-256 hash of the device token and by IP address, for a minute. Its log lines name the server's id, the environment and Apple's answer; they never hold a token or a payload, and the Worker keeps no invocation logs, which would hold request headers. When a server registers, the log records the server's id and the origin of the address it gave.
+
+Anyone can register, and a relay key can send to any device token its server has. A server only learns a token when someone signs in to it from the Spoonjoy app, so the tokens a server holds are its own users' devices; the relay doesn't check that, and the per-device limit is what stops one server flooding a device.
 
 ## Endpoints
 
@@ -49,7 +51,7 @@ With `Authorization: Bearer <relay key>`:
 { "status": 410, "reason": "Unregistered", "apnsId": "…", "revoke": true }
 ```
 
-`revoke: true` means the token will never work again (Apple's 410, or 400 `BadDeviceToken` or `DeviceTokenNotForTopic`), so the server stops sending to that device.
+`revoke: true` means the token will never work for the app again (Apple's 410 `Unregistered`, or 400 `DeviceTokenNotForTopic`), so the server stops sending to that device. A 400 `BadDeviceToken` doesn't revoke: Apple gives it for a good token sent to the other environment too.
 
 The relay's own refusals:
 
@@ -58,9 +60,10 @@ The relay's own refusals:
 | 400 | `invalid_request` | The body isn't one of the shapes above; `message` says which field. |
 | 401 | `unauthorized` | No relay key, or one the relay didn't issue. |
 | 403 | `revoked` | The server's id is in `REVOKED_SERVER_IDS`. |
-| 429 | `rate_limited` | More than 600 sends a minute for one relay key, 30 a minute to one device, or 5 registrations a minute from one address. |
+| 429 | `rate_limited` | More than 600 sends a minute for one relay key, 30 a minute to one device, or 5 registrations a minute from one address. Cloudflare counts these at each of its locations separately, so they are limits per location, not exact totals. |
 | 502 | `apns_unreachable` | Apple didn't answer within 10 seconds. |
 | 503 | `not_configured` | The relay has no Apple key yet (sending), or no key secret (registering). |
+| 503 | `misconfigured` | The relay's Apple key is set but can't be read as a P-256 key. |
 
 ## Settings
 
@@ -73,11 +76,11 @@ The relay's own refusals:
 | `RELAY_KEY_SECRET` | secret | Signs relay keys. The deploy workflow makes it once; changing it voids every relay key. |
 | `REVOKED_SERVER_IDS` | var | Server ids, separated by commas, whose keys are refused. |
 
-The relay signs Apple's provider token (ES256) with WebCrypto and reuses it for 50 minutes, inside Apple's window of 20 to 60 minutes. A Worker's `fetch` reaches Apple's HTTP/2-only hosts: a probe Worker's request to both hosts with a made-up provider token got Apple's own `403 {"reason":"InvalidProviderToken"}` with an `apns-id` header ([run 45869319846](https://github.com/spoonjoy/spoonjoy-v2/actions/runs/45869319846)).
+The relay signs Apple's provider token (ES256) with WebCrypto. Apple refuses a token older than an hour, and a key's tokens renewed more often than every 20 minutes, so every instance of the relay dates its token to the start of the same 30-minute window and reuses it until the window ends. A refusal of the relay's own token (`InvalidProviderToken`, `ExpiredProviderToken`, `TooManyProviderTokenUpdates`) is logged as `provider-token-refused`. A Worker's `fetch` reaches Apple's HTTP/2-only hosts: a probe Worker's request to both hosts with a made-up provider token got Apple's own `403 {"reason":"InvalidProviderToken"}` with an `apns-id` header ([run 45869319846](https://github.com/spoonjoy/spoonjoy-v2/actions/runs/45869319846)).
 
 ## Setting Apple's key
 
-Store the key as GitHub production environment secrets, then run the deploy workflow, which copies them into the relay and checks that Apple takes the key (a send to a made-up token must come back `400 BadDeviceToken` from the sandbox):
+Store the key as GitHub production environment secrets, then run the deploy workflow, which copies them into the relay and checks that Apple takes the key (a send to a made-up token must come back `400 BadDeviceToken` from both of Apple's hosts):
 
 ```sh
 gh secret set APNS_KEY_P8 --env production --repo spoonjoy/spoonjoy-v2 < AuthKey_XXXXXXXXXX.p8
