@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler",
+  "name": "spoonjoy-v2-qa-run-stand-in",
+  "main": "./index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "durable_objects": {
+    "bindings": [{ "name": "KITCHENS", "class_name": "StandInKitchen" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["StandInKitchen"] }]
+}
