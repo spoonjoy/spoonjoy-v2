@@ -49,6 +49,14 @@ export interface RelayDeps {
   log: (line: string) => void;
 }
 
+/**
+ * Where servers reach the relay. To move it to https://push.spoonjoy.app once the spoonjoy.app zone
+ * is in this Cloudflare account, change this and the route in wrangler.json together (the tests pin
+ * every copy of the address to this one). Relay keys are signed with the Worker's own secret, so keys
+ * servers hold keep working at the new address.
+ */
+export const RELAY_URL = "https://spoonjoy-push-relay.mendelow-studio.workers.dev";
+
 export const APNS_HOSTS = {
   production: "https://api.push.apple.com",
   development: "https://api.sandbox.push.apple.com",
