@@ -102,11 +102,19 @@ describe("the meal plan's calendar link", () => {
   });
 
   describe("page", () => {
+    // How many times the page's loader has answered: once to open the page, and again after each action.
+    let loads = 0;
+
     function renderLive() {
+      loads = 0;
       const Stub = createTestRoutesStub([{
         path: "/plan",
         Component: PlanPage,
-        loader: () => load(),
+        loader: async () => {
+          const page = await load();
+          loads += 1;
+          return page;
+        },
         action: async ({ request }: { request: Request }) => (await act(Object.fromEntries(await request.formData()) as Record<string, string>)).data,
       }]);
       render(<Stub initialEntries={["/plan"]} />);
@@ -127,6 +135,9 @@ describe("the meal plan's calendar link", () => {
       await user.click(within(await sheet()).getByRole("button", { name: "Make a calendar link" }));
 
       const field = (await within(await sheet()).findByRole("textbox", { name: "Calendar link" })) as HTMLInputElement;
+      // The link can show before the page's reload after the action lands; waiting for it keeps that update inside
+      // the test's act(), instead of during the database read below (#1091).
+      await waitFor(() => expect(loads).toBe(2));
       expect(within(await sheet()).getByRole("status")).toHaveTextContent("Made your calendar link. Copy it now: Spoonjoy shows it only this once.");
       // The button that made it is gone, so the link takes the focus.
       expect(field).toHaveFocus();
