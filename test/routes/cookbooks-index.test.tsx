@@ -195,6 +195,7 @@ describe("Cookbooks drawer route", () => {
         Component: CookbooksIndexRedirect,
         loader: () => ({
           query: "",
+          smartCookbooks: [],
           cookbooks: [
             {
               id: "cookbook-1",
@@ -223,7 +224,7 @@ describe("Cookbooks drawer route", () => {
     ]);
 
     render(<Stub initialEntries={["/cookbooks"]} />);
-    expect(await screen.findByRole("heading", { name: /cookbooks/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Cookbooks" })).toBeInTheDocument();
     const shelf = screen.getByRole("list", { name: "Cookbooks" });
     const [photo, drawn] = within(shelf).getAllByRole("listitem");
     expect(within(photo).getByRole("link", { name: /^Grandma Weeknight Book/ })).toHaveAttribute("href", "/cookbooks/cookbook-1");
@@ -244,6 +245,7 @@ describe("Cookbooks drawer route", () => {
         Component: CookbooksIndexRedirect,
         loader: () => ({
           query: "",
+          smartCookbooks: [],
           cookbooks: [
             { id: "cookbook-1", title: "Only Book", _count: { recipes: 0 }, searchableRecipeTitles: [], recipes: [] },
           ],
@@ -262,6 +264,7 @@ describe("Cookbooks drawer route", () => {
         Component: CookbooksIndexRedirect,
         loader: () => ({
           query: "",
+          smartCookbooks: [],
           cookbooks: [],
         }),
       },
@@ -270,6 +273,7 @@ describe("Cookbooks drawer route", () => {
         Component: CookbooksIndexRedirect,
         loader: () => ({
           query: "barley",
+          smartCookbooks: [],
           cookbooks: [],
         }),
       },
