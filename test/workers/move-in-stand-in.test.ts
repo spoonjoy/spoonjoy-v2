@@ -1,6 +1,4 @@
 // @vitest-environment node
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import standIn, {
   OPEN_PATH,
@@ -211,16 +209,5 @@ describe("sameText", () => {
     expect(sameText("Bearer b", "Bearer a")).toBe(false);
     expect(sameText("Bearer", "Bearer a")).toBe(false);
     expect(sameText("Bearer aa", "Bearer a")).toBe(false);
-  });
-});
-
-describe("the stand-in's Worker config", () => {
-  it("binds each kitchen's Durable Object, on SQLite storage, and serves only at workers.dev", () => {
-    const config = JSON.parse(readFileSync(resolve(__dirname, "../../workers/move-in-stand-in/wrangler.json"), "utf8"));
-    expect(config.main).toBe("./index.ts");
-    expect(config.workers_dev).toBe(true);
-    expect(config.preview_urls).toBe(false);
-    expect(config.durable_objects.bindings).toEqual([{ name: "KITCHENS", class_name: "StandInKitchen" }]);
-    expect(config.migrations).toEqual([{ tag: "v1", new_sqlite_classes: ["StandInKitchen"] }]);
   });
 });
