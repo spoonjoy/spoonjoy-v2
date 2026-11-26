@@ -3,7 +3,8 @@ import { data, redirect } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { readAccountSettingsFromD1, readAccountSettingsWithPrisma } from "~/lib/account-settings-reads.server";
-import { createUserSessionCookie, destroyUserSession, getSessionAuthenticatedAt, getSessionSignIn, requireUserId } from "~/lib/session.server";
+import { createUserSessionCookie, destroyUserSession, getSessionAuthenticatedAt, getSessionIdentity, getSessionSignIn, requireUserId } from "~/lib/session.server";
+import { ApiAuthError, createApiCredentialForPrincipal, resolvePersonalTokenExpiry } from "~/lib/api-auth.server";
 import { isRecentSignIn, verifyAccountOwnerProof } from "~/lib/account-reauthentication.server";
 import { AccountDeletionError, deleteAccount } from "~/lib/account-deletion.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
@@ -121,6 +122,7 @@ export type AccountSettingsFormIntent =
   | "removePassword"
   | "uploadPhoto"
   | "setRecipeVisibilityDefault"
+  | "createApiToken"
   | "deleteAccount";
 
 /** Where "Sign in again" sends a passwordless chef, so they come back to finish deleting. */
@@ -172,6 +174,7 @@ export interface AccountSettingsActionResult {
     | "apple_account_mismatch"
     | "rate_limited"
     | "invalid_visibility"
+    | "signed_out"
     | typeof D1_WRITE_UNAVAILABLE_CODE;
   message?: string;
   fieldErrors?: {
@@ -182,7 +185,19 @@ export interface AccountSettingsActionResult {
     currentPassword?: string;
   };
   photoUrl?: string;
+  /** A token made by `createApiToken`, shown once: only its hash is stored. */
+  token?: { name: string; secret: string };
 }
+
+/**
+ * What a token made on this page is for, in the cook's words, and what each one may do. A program
+ * gets the personal-token default; a move to another Spoonjoy only reads the kitchen, for a week.
+ */
+export const API_TOKEN_PURPOSES = {
+  program: { name: "Spoonjoy API token", scopes: undefined, expiresInDays: undefined },
+  move: { name: "Moving my kitchen", scopes: "account:read kitchen:read", expiresInDays: 7 },
+} as const;
+export type ApiTokenPurpose = keyof typeof API_TOKEN_PURPOSES;
 
 // Password changes and "Sign out everywhere" bump the user's session version,
 // which revokes every existing browser session. Their result carries a fresh
@@ -707,6 +722,32 @@ async function handleAccountSettingsIntent({
       success: true,
       message: "API credential revoked",
     };
+  }
+
+  if (intent === "createApiToken") {
+    const purposeValue = formData.get("purpose")?.toString();
+    const purpose: ApiTokenPurpose = purposeValue === "move" ? "move" : "program";
+    const made = API_TOKEN_PURPOSES[purpose];
+    const name = (formData.get("name")?.toString().trim() || made.name).slice(0, 100);
+    const identity = await getSessionIdentity(request, getCloudflareEnv(context));
+    try {
+      // Fenced on this session's version, like the API's own token call: sign out everywhere wins.
+      const created = await createApiCredentialForPrincipal(
+        database,
+        { id: userId, sessionVersion: (identity as { sessionVersion: number }).sessionVersion },
+        name,
+        { scopes: made.scopes, expiresAt: resolvePersonalTokenExpiry(made.expiresInDays), d1 },
+      );
+      return {
+        success: true,
+        intent,
+        message: `${created.credential.name} is ready. Copy it now: Spoonjoy won't show it again.`,
+        token: { name: created.credential.name, secret: created.token },
+      };
+    } catch (error) {
+      if (!(error instanceof ApiAuthError)) throw error;
+      return { success: false, intent, error: "signed_out", message: error.message };
+    }
   }
 
   if (intent === "disconnectOAuthClient") {
