@@ -148,18 +148,20 @@ export function serverApiClient({ address, token, fetch }: ServerApiConnection, 
      * still answers, the trouble is that one item's, which counts against it like any failure, so it's passed over.
      * The check asks for `probePath`, which needs the server's database as recipes do: an about page answers even
      * while its database is down.
+     *
+     * It isn't async: an async handler that rethrows makes a second rejected promise, which the chain only takes up a
+     * turn later, and the Workers runtime reports that one as unhandled.
      */
-    async itemOutage(error: unknown): Promise<never> {
+    itemOutage(error: unknown): Promise<never> {
       if (!(error instanceof SourceUnavailableError) || error instanceof RateLimitedError) throw error;
-      const answers = await request(probePath, JSON_MAX_BYTES).then(
-        () => true,
+      return request(probePath, JSON_MAX_BYTES).then(
+        () => {
+          throw new Error(`the recipe server couldn't give this one: ${error.message}`);
+        },
         (probe: unknown) => {
-          if (probe instanceof MoveInError) throw probe;
-          return false;
+          throw probe instanceof MoveInError ? probe : error;
         },
       );
-      if (answers) throw new Error(`the recipe server couldn't give this one: ${error.message}`);
-      throw error;
     },
   };
 }
