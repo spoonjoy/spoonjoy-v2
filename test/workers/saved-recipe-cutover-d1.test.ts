@@ -28,6 +28,7 @@ import "./helpers/transient-write-retry-d1-suite";
 import "./helpers/token-write-retry-d1-suite";
 import "./helpers/api-shopping-add-retry-d1-suite";
 import "./helpers/pending-apple-link-d1-suite";
+import "./helpers/move-in-spoonjoy-source-d1-suite";
 import { applyRepositoryMigrations } from "./helpers/repository-migrations";
 
 interface TestD1Statement {
