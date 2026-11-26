@@ -15,6 +15,7 @@ export const MOVE_IN_ERROR_MESSAGES = {
   "no-address": "Paste your recipe server's address first, then press Move in.",
   "no-token": "Paste your recipe app's API token first, then press Move in.",
   "too-many-tries": "That's a lot of tries in a row. Wait a minute, then press Move in again.",
+  "same-kitchen": "That's this Spoonjoy, and your own kitchen is already here. Give the address of the other Spoonjoy you're moving from, and a token you made there.",
   "unknown-app": "Move-in works only with the apps in the list so far. Pick one of those to carry on.",
 } as const;
 

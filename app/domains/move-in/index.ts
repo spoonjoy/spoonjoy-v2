@@ -18,7 +18,7 @@ export { timeLeft } from "./model/time-left";
 export { createMoveInJob, readMoveInProgress, type MoveInProgress } from "./adapters/storage/job-store.server";
 export { readMoveInOrganizerCounts, type MoveInOrganizerCounts } from "./adapters/storage/organizer-writer.server";
 export { MOVE_IN_ARCHIVE_PREFIX, moveInEnv, moveInPorts, type MoveInEnv } from "./adapters/worker/move-in-ports.server";
-export { readsAServer } from "./adapters/worker/apps";
+export { moveInAppOf, readsAServer } from "./adapters/worker/apps";
 export { MOVE_IN_APPS, MOVE_IN_UPLOAD_MAX_BYTES, startMoveIn, startServerMoveIn, type StartMoveInResult } from "./adapters/worker/start-move-in.server";
 export {
   FINISHED,

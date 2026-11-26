@@ -2,11 +2,13 @@
 // can bring, keeps what the move-in needs to read it where it is never served, and queues the job that brings it in.
 // The plain form and the upload in parts (backup-upload.server.ts) share the backup's check.
 import { SourceUnavailableError } from "../../application/source";
-import { mealieApiSource } from "../sources/mealie-api/source";
 import { openMealieBackup } from "../sources/mealie-backup/backup";
 import { chooseGroup } from "../sources/mealie-backup/database";
 import { MoveInError, type MoveInErrorCode } from "../../model/move-in-error";
 import { MOVE_IN_APPS } from "./apps";
+import { openServerSource } from "./server-sources";
+import { sameAddress } from "../sources/spoonjoy-api/recipe";
+import { SPOONJOY_SOURCE_KIND } from "../sources/spoonjoy-api/source";
 import { createMoveInJob } from "../storage/job-store.server";
 import { MOVE_IN_ARCHIVE_PREFIX, ownerEmail, r2RangeSource, type MoveInEnv } from "./move-in-ports.server";
 import { sealServerConnection, serverConnectionSecret, type ServerConnection } from "./server-connection.server";
@@ -22,7 +24,7 @@ export { MOVE_IN_APPS } from "./apps";
 
 export type StartMoveInResult = { ok: true; jobId: string } | { ok: false; code: MoveInErrorCode };
 
-/** The job kind a move-in from `app` starts, or null for an app the form doesn't offer. */
+/** The job kind a move-in of a backup from `app` starts, or null for an app the form doesn't offer one for. */
 export function moveInKind(app: string): string | null {
   return Object.hasOwn(MOVE_IN_APPS, app) ? MOVE_IN_APPS[app as keyof typeof MOVE_IN_APPS].kind : null;
 }
@@ -103,16 +105,21 @@ export async function startServerMoveIn({ env, ownerId, app, address, token, fet
   fetch: typeof globalThis.fetch;
   now: Date;
 }): Promise<StartMoveInResult> {
+  if (!Object.hasOwn(MOVE_IN_APPS, app)) return { ok: false, code: "unknown-app" };
   const chosen = MOVE_IN_APPS[app as keyof typeof MOVE_IN_APPS];
-  if (!chosen) return { ok: false, code: "unknown-app" };
   if (!address.trim()) return { ok: false, code: "no-address" };
   if (!token.trim()) return { ok: false, code: "no-token" };
   let connection: ServerConnection;
   let name: string;
   try {
-    const source = await mealieApiSource({ address, token: token.trim(), fetch });
+    const source = await openServerSource(chosen.serverKind, { address, token: token.trim(), fetch });
     // A server source always has the token's kitchen; opening it reads its recipe list, as the move-in will.
-    await source.openKitchen((await source.chooseKitchen(null)) as string);
+    const kitchen = (await source.chooseKitchen(null)) as string;
+    // This Spoonjoy itself, by its own address or another of its names, would bring each of the cook's recipes again.
+    if (source.kind === SPOONJOY_SOURCE_KIND && (kitchen === ownerId || (env.SPOONJOY_BASE_URL && sameAddress(source.serverUrl as string, env.SPOONJOY_BASE_URL)))) {
+      throw new MoveInError("same-kitchen");
+    }
+    await source.openKitchen(kitchen);
     connection = { address: source.serverUrl as string, token: token.trim() };
     name = new URL(connection.address).host;
   } catch (error) {

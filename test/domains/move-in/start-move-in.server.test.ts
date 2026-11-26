@@ -139,9 +139,9 @@ describe("admitStoredBackup", () => {
 });
 
 describe("startServerMoveIn", () => {
-  const startFrom = (options: { address?: string; token?: string; app?: string; fetch?: typeof globalThis.fetch; bucket?: ReturnType<typeof memoryBucket>; db?: unknown } = {}) =>
+  const startFrom = (options: { address?: string; token?: string; app?: string; fetch?: typeof globalThis.fetch; bucket?: ReturnType<typeof memoryBucket>; db?: unknown; home?: string } = {}) =>
     startServerMoveIn({
-      env: { DB: options.db ?? database.binding, PHOTOS: options.bucket ?? memoryBucket(), SESSION_SECRET: SECRET } as never,
+      env: { DB: options.db ?? database.binding, PHOTOS: options.bucket ?? memoryBucket(), SESSION_SECRET: SECRET, SPOONJOY_BASE_URL: options.home } as never,
       ownerId: "chef-1",
       app: options.app ?? "mealie",
       address: options.address ?? "https://recipes.example.com/",
@@ -178,11 +178,44 @@ describe("startServerMoveIn", () => {
     ["an address that isn't the recipe app", { address: "https://example.com" }, "server-address"],
     ["a server that doesn't answer", { fetch: recipeServer({ down: true }) }, "server-unreachable"],
     ["an app it can't read yet", { app: "paprika" }, "unknown-app"],
+    ["an app name that is only a property of every object", { app: "toString" }, "unknown-app"],
   ])("answers %s with its fix-it message, and keeps nothing", async (_name, options, code) => {
     const bucket = memoryBucket();
     expect(await startFrom({ ...options, bucket })).toEqual({ ok: false, code });
     expect(bucket.objects).toEqual({});
     expect(database.sqlite.prepare(`SELECT COUNT(*) AS n FROM "ImportJob"`).get()).toEqual({ n: 0 });
+  });
+
+  /** Another Spoonjoy whose token is for the account `account`. */
+  const otherSpoonjoy = (asked: string[] = [], account = "cm_ada"): typeof globalThis.fetch => async (input) => {
+    const path = new URL(String(input)).pathname;
+    asked.push(path);
+    if (path === "/api/v1/health") return Response.json({ ok: true, data: { version: "v1" } });
+    if (path === "/api/v1/me/export") return Response.json({ ok: true, data: { format: "spoonjoy.account-export.v1", account: { id: account, username: "ada" }, recipes: [] } });
+    return new Response("not found", { status: 404 });
+  };
+
+  it("won't move a cook's kitchen in from this Spoonjoy itself, by its own address or by their own account", async () => {
+    expect(await startFrom({ app: "spoonjoy", address: "https://spoonjoy.app/", home: "https://spoonjoy.app", fetch: otherSpoonjoy() })).toEqual({ ok: false, code: "same-kitchen" });
+    expect(await startFrom({ app: "spoonjoy", address: "https://spoonjoy.workers.dev", home: "https://spoonjoy.app", fetch: otherSpoonjoy([], "chef-1") })).toEqual({ ok: false, code: "same-kitchen" });
+    expect(database.sqlite.prepare(`SELECT COUNT(*) AS "jobs" FROM "ImportJob"`).get()).toEqual({ jobs: 0 });
+  });
+
+  it("starts a move-in from another Spoonjoy, reading its account export with the cook's token", async () => {
+    const asked: string[] = [];
+    const spoonjoy: typeof globalThis.fetch = async (input) => {
+      const path = new URL(String(input)).pathname;
+      asked.push(path);
+      if (path === "/api/v1/health") return Response.json({ ok: true, data: { version: "v1" } });
+      if (path === "/api/v1/me/export") return Response.json({ ok: true, data: { format: "spoonjoy.account-export.v1", account: { id: "cm_ada", username: "ada" }, recipes: [] } });
+      return new Response("not found", { status: 404 });
+    };
+    const bucket = memoryBucket();
+    expect(await startFrom({ app: "spoonjoy", address: "https://spoonjoy.app", fetch: spoonjoy, bucket })).toEqual({ ok: true, jobId: expect.stringMatching(/^movein_/) });
+    expect(asked).toEqual(["/api/v1/health", "/api/v1/me/export"]);
+    expect(database.sqlite.prepare(`SELECT "kind", "archiveName" FROM "ImportJob"`).get()).toEqual({ kind: "spoonjoy-api", archiveName: "spoonjoy.app" });
+    // Another Spoonjoy has no backup a cook can drop.
+    expect(moveInKind("spoonjoy")).toBeNull();
   });
 
   it("passes on a storage failure, and deletes the token again when the job can't be saved", async () => {

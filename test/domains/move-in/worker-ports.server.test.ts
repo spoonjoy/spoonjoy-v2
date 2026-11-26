@@ -92,7 +92,7 @@ describe("moveInPorts", () => {
     expect(await ports.hasMovedInPhoto("no-such-recipe")).toBe(false);
     expect((await ports.openArchive({ archiveKey } as never)).size).toBe(zip.length);
     // A chunk brings its photos together; a recipe written alone brings its own.
-    await expect(ports.attachPhoto({ ownerId: "chef-1", recipeId: "no-such-recipe", bytes: new Uint8Array([1]) })).rejects.toThrow("it isn't a WebP image");
+    await expect(ports.attachPhoto({ ownerId: "chef-1", recipeId: "no-such-recipe", bytes: new Uint8Array([1]) })).rejects.toThrow("it isn't a WebP, JPEG or PNG image");
 
     expect(await runForAWhile(jobId, ports, { budgetMs: 1000 })).toMatchObject({ status: "done-with-issues" });
     const recipes = database.sqlite.prepare(`SELECT "title", "activeCoverId" IS NOT NULL AS "hasCover" FROM "Recipe" ORDER BY "title"`).all();
@@ -220,8 +220,8 @@ describe("moveInEnv", () => {
   it("takes the database, photo storage and flags a move-in runs with, and nothing without the database or storage", () => {
     const DB = { prepare: () => null };
     const PHOTOS = memoryBucket();
-    expect(moveInEnv({ DB, PHOTOS, SPOONJOY_FLAGS: "move_in", SPOONJOY_FLAG_USERS: "{}", JOBS: {} } as never)).toEqual({
-      DB, PHOTOS, SPOONJOY_FLAGS: "move_in", SPOONJOY_FLAG_USERS: "{}",
+    expect(moveInEnv({ DB, PHOTOS, SPOONJOY_FLAGS: "move_in", SPOONJOY_FLAG_USERS: "{}", SPOONJOY_BASE_URL: "https://spoonjoy.app", JOBS: {} } as never)).toEqual({
+      DB, PHOTOS, SPOONJOY_FLAGS: "move_in", SPOONJOY_FLAG_USERS: "{}", SPOONJOY_BASE_URL: "https://spoonjoy.app",
     });
     expect(moveInEnv({ DB } as never)).toBeNull();
     expect(moveInEnv({ PHOTOS } as never)).toBeNull();
