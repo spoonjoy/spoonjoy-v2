@@ -5,17 +5,17 @@
 import { d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { mapAtMost } from "~/lib/map-at-most";
+import { detectImageMimeType, type DetectedImageMimeType } from "~/lib/image-storage.server";
 import { putWithTransientRetry } from "~/lib/r2-transient-retry.server";
 
 /** The same ceiling as a photo brought from a recipe link. */
 export const MOVED_IN_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 
-const RIFF = [82, 73, 70, 70];
-const WEBP = [87, 69, 66, 80];
-
-function isWebp(bytes: Uint8Array): boolean {
-  return RIFF.every((byte, i) => bytes[i] === byte) && WEBP.every((byte, i) => bytes[8 + i] === byte);
-}
+/**
+ * The photo formats a moved-in recipe keeps, with the extension each is stored under. Mealie keeps WebP; another
+ * Spoonjoy keeps the JPEG, PNG or WebP the cook uploaded.
+ */
+const PHOTO_EXTENSIONS: Partial<Record<DetectedImageMimeType, string>> = { "image/webp": "webp", "image/jpeg": "jpg", "image/png": "png" };
 
 export interface AttachMovedInPhotoInput {
   db: D1ReadDatabase;
@@ -28,11 +28,13 @@ export interface AttachMovedInPhotoInput {
 
 /** Checks the photo and stores it under a new key; the key, for its cover row. */
 async function storePhoto(bucket: Pick<R2Bucket, "put">, bytes: Uint8Array, now: Date): Promise<string> {
-  if (!isWebp(bytes)) throw new Error("it isn't a WebP image");
+  const type = detectImageMimeType(bytes);
+  const extension = type && PHOTO_EXTENSIONS[type];
+  if (!type || !extension) throw new Error("it isn't a WebP, JPEG or PNG image");
   if (bytes.length > MOVED_IN_PHOTO_MAX_BYTES) throw new Error("it is larger than 10 MB");
   // A new key every time, so there is nothing to look for before the put.
-  const key = `covers/import/movein-${now.getTime()}-${crypto.randomUUID()}.webp`;
-  await putWithTransientRetry(bucket, key, bytes, { httpMetadata: { contentType: "image/webp" } });
+  const key = `covers/import/movein-${now.getTime()}-${crypto.randomUUID()}.${extension}`;
+  await putWithTransientRetry(bucket, key, bytes, { httpMetadata: { contentType: type } });
   return key;
 }
 
