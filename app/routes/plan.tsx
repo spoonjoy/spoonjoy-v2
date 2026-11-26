@@ -47,11 +47,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const asked = parseLocalDate(params.get("week"));
   // ?recipe=<id> opens the page to plan that recipe, any chef's the cook may read, so a recipe's page can link here.
   const store = prismaPlanStore(db);
-  const [week, { recipes, chosenRecipeId }, feedMadeAt] = await Promise.all([
+  const [week, { recipes, chosenRecipeId }] = await Promise.all([
     getWeek(store, { cook: userId }, asked),
     plannableRecipes(store, { cook: userId }, params.get("recipe")),
-    feedLinkMadeAt(store, prismaFeedLinkStore(db), userId),
   ]);
+  // After the week, which makes a new cook's plan, so two lookups never both try to make it.
+  const feedMadeAt = await feedLinkMadeAt(store, prismaFeedLinkStore(db), userId);
   return { week, recipes, chosenRecipeId, feedMadeAt: feedMadeAt?.toISOString() ?? null };
 }
 
