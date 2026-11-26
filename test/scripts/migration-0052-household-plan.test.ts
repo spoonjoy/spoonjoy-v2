@@ -11,11 +11,12 @@ const ROOT_MIGRATION = resolve(MIGRATIONS_DIR, MIGRATION);
 const PRISMA_MIGRATION = resolve(__dirname, "../../prisma/migrations/20261124100000_household_plan/migration.sql");
 const AT = "2026-11-24T12:00:00.000Z";
 
-/** A database with every root D1 migration applied in order, optionally without one. */
-function migratedDatabase(without?: string) {
+/** A database with every root D1 migration applied in order, optionally without one, and optionally none after `through`. */
+function migratedDatabase(without?: string, through?: string) {
   const db = new DatabaseSync(":memory:");
   db.pragma("foreign_keys = ON");
   for (const file of readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith(".sql")).sort()) {
+    if (through && file > through) break;
     if (file === without) continue;
     db.exec(readFileSync(resolve(MIGRATIONS_DIR, file), "utf8"));
   }
@@ -50,9 +51,10 @@ describe("migration 0052 - household plan", () => {
   });
 
   it("rolls back with the DROP TABLEs its header names, leaving the schema as it was", () => {
-    const db = migratedDatabase();
+    // Later migrations change its tables (0057 adds listedScale), so the rollback is checked at its own place in the order.
+    const db = migratedDatabase(undefined, MIGRATION);
     db.exec(`DROP TABLE "HouseholdPlanEntry"; DROP TABLE "HouseholdPlan";`);
-    expect(schema(db)).toEqual(schema(migratedDatabase(MIGRATION)));
+    expect(schema(db)).toEqual(schema(migratedDatabase(MIGRATION, MIGRATION)));
   });
 
   it("gives a household one plan, with an entry shaped like a cook's", () => {
