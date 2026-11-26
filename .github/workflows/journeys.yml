@@ -160,7 +160,9 @@ jobs:
     container:
       image: mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f # v1.64.0-noble
       options: --user 1001 -v /usr/bin/zstd:/usr/bin/zstd:ro
-    timeout-minutes: 40
+    # The daily and hand-started runs also time a 500-recipe move-in (see "Run test suite"), which
+    # can add 47 minutes to part 2 and 15 to its cleanup.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 40 }}
     env:
       SPOONJOY_QA_RUN_PART: ${{ matrix.part }}
     steps:
@@ -381,6 +383,9 @@ jobs:
           PART: ${{ matrix.part }}
           # The full suite is always split in two, even when a pull request runs only part 1.
           PARTS: 2
+          # Only the daily and hand-started runs time the 500-recipe move-in (tag @move-in-timed): its
+          # 461 photos take the cleanup about 15 minutes to delete, too long for every pull request.
+          TIME_LARGE_MOVE_IN: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         run: |
           if [ "$SUITE" = "explore" ]; then
             pnpm run explore:qa
@@ -399,9 +404,10 @@ jobs:
               pnpm run test:journeys:census || census=$?
               deps=(--no-deps)
             fi
+            # Only pull requests run the affected specs, so the timed 500-recipe move-in stays out here.
             # shellcheck disable=SC2086 # SPECS is a checked, space-separated list of paths.
             node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts "${deps[@]}" \
-              --project iphone-webkit --project desktop-chrome --grep-invert @ouro-census $SPECS
+              --project iphone-webkit --project desktop-chrome --grep-invert "@ouro-census|@move-in-timed" $SPECS
             exit "$census"
           elif [ "$PART" = "1" ]; then
             echo "census_ran=true" >> "$GITHUB_OUTPUT"
@@ -418,7 +424,9 @@ jobs:
             node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts --project personas
             move_in_pid=""
             if [ "$PART" = "2" ]; then
-              pnpm run test:journeys:move-in > >(sed -u 's/^/[move-in] /') 2>&1 &
+              timed=(--grep-invert @move-in-timed)
+              [ "$TIME_LARGE_MOVE_IN" = true ] && timed=()
+              pnpm run test:journeys:move-in "${timed[@]}" > >(sed -u 's/^/[move-in] /') 2>&1 &
               move_in_pid=$!
             fi
             rest=0
@@ -599,7 +607,8 @@ jobs:
       - name: Clean up disposable QA data
         id: cleanup-qa-data
         if: always() && steps.qa-run.outcome == 'success'
-        timeout-minutes: 5
+        # A run that timed the 500-recipe move-in has its 461 photos to delete as well.
+        timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 25 || 5 }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
