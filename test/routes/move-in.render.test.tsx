@@ -38,6 +38,7 @@ function view(fields: Partial<MoveInView> = {}): MoveInView {
     finished: false,
     archiveName: "mealie.zip",
     fromServer: false,
+    app: "mealie",
     recipes: { found: 0, done: 0, created: 0, already: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 },
     photos: { found: 0, in: 0 },
     organizers: { tags: 0, categories: 0, tools: 0 },
@@ -87,6 +88,34 @@ describe("the Move in page", () => {
     expect(screen.queryByRole("textbox", { name: /^Server address/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Move in" })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("brings another Spoonjoy only from its server, and says where to make its token", async () => {
+    page(null);
+    expect(await screen.findByRole("heading", { level: 1, name: "Bring your kitchen with you." })).toBeTruthy();
+    expect(screen.getByText(/The address you open Mealie at/)).toBeTruthy();
+    await act(async () => screen.getByRole("radio", { name: /^From a backup/ }).click());
+    await act(async () => screen.getByRole("radio", { name: /^Another Spoonjoy/ }).click());
+    // No backup choice: the form sends the server's address and token, whichever way the cook had picked for Mealie.
+    expect(screen.queryByRole("radio", { name: /^From a backup/ })).toBeNull();
+    expect(screen.queryByLabelText(/^Backup zip/)).toBeNull();
+    const address = screen.getByRole("textbox", { name: /^Server address/ });
+    expect(address.getAttribute("placeholder")).toBe("https://spoonjoy.app");
+    expect(screen.getByText(/https:\/\/spoonjoy.app, or your own server's/)).toBeTruthy();
+    expect(screen.getByText(/open \/api\/playground, and send POST \/api\/v1\/tokens with a name and the scopes account:read and kitchen:read/)).toBeTruthy();
+    const form = address.closest("form") as HTMLFormElement;
+    expect(new FormData(form).get("from")).toBe("server");
+    expect(new FormData(form).get("app")).toBe("spoonjoy");
+    // Back on Mealie, the way the cook last picked comes back.
+    await act(async () => screen.getByRole("radio", { name: /^Mealie/ }).click());
+    expect(screen.getByLabelText(/^Backup zip/)).toBeTruthy();
+  });
+
+  it("offers a failed move-in from another Spoonjoy again with Spoonjoy chosen", async () => {
+    page(view({ status: "failed", finished: true, fromServer: true, app: "spoonjoy", failure: "Your recipe server didn't answer." }));
+    expect(await screen.findByText("Your recipe server didn't answer.")).toBeTruthy();
+    expect((screen.getByRole("radio", { name: /^Another Spoonjoy/ }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("textbox", { name: /^Server address/ }).getAttribute("placeholder")).toBe("https://spoonjoy.app");
   });
 
   it("says it is checking a server on its way, and why the kitchen didn't move in", async () => {
