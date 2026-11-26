@@ -369,6 +369,13 @@ export const census: Journey[] = [
           await openDialog(page.getByRole("button", { name: "Plan a meal for Monday", exact: true }), page.getByRole("dialog", { name: "Add to Monday, Mar 1" }));
         },
       },
+      // The chef has no calendar link, so the sheet offers to make one.
+      {
+        id: "calendar-sheet",
+        action: async (page) => {
+          await openDialog(page.getByRole("button", { name: "Add to calendar", exact: true }), page.getByRole("dialog", { name: "Add your meal plan to a calendar" }));
+        },
+      },
     ],
   },
 
