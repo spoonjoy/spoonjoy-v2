@@ -300,7 +300,7 @@ test.describe("Recipe create and edit", () => {
     await expect(page).toHaveURL(pathUrl("/recipes"));
   });
 
-  // QA has recipe_visibility on (wrangler.json's env.qa SPOONJOY_FLAGS "all"). A recipe the cook
+  // Every cook chooses who can see each recipe. A recipe the cook
   // keeps to Only me stays theirs after a reload, while a signed-out visitor and another cook get
   // a 404 for its page and its API record, and find it in neither search nor the sitemap.
   test("a recipe kept to Only me is missing for everyone else, on every surface @mutates", async ({
