@@ -17,8 +17,7 @@ vi.mock("~/lib/db.server", async (original) => {
   return { ...real, get db() { return real.db; }, getDb: vi.fn(() => real.getLocalDb()) };
 });
 
-const ON = { cloudflare: { env: { SPOONJOY_FLAGS: "smart-cookbooks" } } };
-const OFF = { cloudflare: { env: {} } };
+const CONTEXT = { cloudflare: { env: {} } };
 const NO_RULE_FORM = { choices: [], chosen: { with: [], without: [] } };
 
 async function signedIn(path: string, userId: string, init: RequestInit = {}) {
@@ -38,12 +37,12 @@ function redirectedTo(result: unknown): string | null {
   return result instanceof Response && result.status >= 300 && result.status < 400 ? result.headers.get("Location") : null;
 }
 
-async function create(userId: string, fields: [string, string][], context: object = ON) {
+async function create(userId: string, fields: [string, string][], context: object = CONTEXT) {
   const request = await signedIn("/cookbooks/smart/new", userId, { method: "POST", body: new URLSearchParams(fields) });
   return settle(newAction({ request, context, params: {} } as never));
 }
 
-async function page(userId: string, id: string, query = "", context: object = ON) {
+async function page(userId: string, id: string, query = "", context: object = CONTEXT) {
   return settle(pageLoader({ request: await signedIn(`/cookbooks/smart/${id}${query}`, userId), context, params: { id } } as never));
 }
 
@@ -80,20 +79,10 @@ describe("smart cookbooks", () => {
     await cleanupDatabase();
   });
 
-  it("are not found while the smart-cookbooks flag is off, and leave the Cookbooks page as it was", async () => {
-    const { cook } = await kitchen();
-    const newRequest = await signedIn("/cookbooks/smart/new", cook.id);
-    expect(await settle(newLoader({ request: newRequest, context: OFF, params: {} } as never))).toMatchObject({ status: 404 });
-    expect(await create(cook.id, [["title", "Quick"]], OFF)).toMatchObject({ status: 404 });
-    expect(await page(cook.id, "anything", "", OFF)).toMatchObject({ status: 404 });
-    const cookbooks = await cookbooksLoader({ request: await signedIn("/cookbooks", cook.id), context: OFF, params: {} } as never);
-    expect(cookbooks.smartCookbooks).toBeNull();
-  });
-
   it("offer every tag, category and tool the cook has, by kind and then by name, each submitting its id", async () => {
     const { cook, quick, dinner, pot } = await kitchen();
     const apple = await db.organizer.create({ data: { ownerId: cook.id, kind: "tag", name: "apple", slug: "apple" } });
-    const loaded = await newLoader({ request: await signedIn("/cookbooks/smart/new", cook.id), context: ON, params: {} } as never);
+    const loaded = await newLoader({ request: await signedIn("/cookbooks/smart/new", cook.id), context: CONTEXT, params: {} } as never);
     expect(loaded).toEqual({
       choices: [
         { value: apple.id, label: "apple", description: "Tag" },
@@ -180,7 +169,7 @@ describe("smart cookbooks", () => {
     });
     const d1 = sqliteD1();
     try {
-      expect(await page(cook.id, id, "", { cloudflare: { env: { SPOONJOY_FLAGS: "smart-cookbooks", DB: d1.binding } } })).toEqual(fromPrisma);
+      expect(await page(cook.id, id, "", { cloudflare: { env: { DB: d1.binding } } })).toEqual(fromPrisma);
       expect(d1.roundTrips()).toBeGreaterThan(0);
     } finally {
       d1.close();
@@ -194,8 +183,8 @@ describe("smart cookbooks", () => {
       cookbooksLoader({ request: await signedIn("/cookbooks", cook.id), context, params: {} } as never);
     const d1 = sqliteD1();
     try {
-      const fromD1 = await load({ cloudflare: { env: { SPOONJOY_FLAGS: "smart-cookbooks", DB: d1.binding } } });
-      expect(fromD1).toEqual(await load(ON));
+      const fromD1 = await load({ cloudflare: { env: { DB: d1.binding } } });
+      expect(fromD1).toEqual(await load(CONTEXT));
       expect(fromD1).toMatchObject({ smartCookbooks: [{ title: "Quick" }] });
       expect(d1.roundTrips()).toBeGreaterThan(0);
     } finally {
@@ -208,7 +197,7 @@ describe("smart cookbooks", () => {
     const other = await createDrawerUser("smart-other");
     const id = redirectedTo(await create(cook.id, [["title", "Quick"], ["with", quick.id]]))!.split("/").pop()!;
     await create(cook.id, [["title", "Taken"], ["with", quick.id]]);
-    const change = async (fields: [string, string][], userId = cook.id, context: object = ON) =>
+    const change = async (fields: [string, string][], userId = cook.id, context: object = CONTEXT) =>
       settle(pageAction({
         request: await signedIn(`/cookbooks/smart/${id}`, userId, { method: "POST", body: new URLSearchParams(fields) }),
         context,
@@ -227,7 +216,6 @@ describe("smart cookbooks", () => {
     });
     await expect(change([["intent", "shout"]])).resolves.toMatchObject({ data: { error: "Choose Save rules, Rename or Delete." }, init: { status: 400 } });
     expect(await change([["intent", "rename"], ["title", "Mine"]], other.id)).toMatchObject({ status: 404 });
-    expect(await change([["intent", "delete"]], cook.id, OFF)).toMatchObject({ status: 404 });
     expect(await db.smartCookbook.findUnique({ where: { id } })).toMatchObject({ title: "Fast ones" });
 
     // Another cook's delete changes nothing; the cook's own goes to Cookbooks.
@@ -245,7 +233,7 @@ describe("smart cookbooks", () => {
     const change = async (fields: [string, string][], userId = cook.id) =>
       settle(pageAction({
         request: await signedIn(`/cookbooks/smart/${id}`, userId, { method: "POST", body: new URLSearchParams([["intent", "rules"], ...fields]) }),
-        context: ON,
+        context: CONTEXT,
         params: { id },
       } as never));
 
@@ -290,7 +278,7 @@ describe("smart cookbooks", () => {
   it("list on the Cookbooks page with their rules", async () => {
     const { cook, quick, pot } = await kitchen();
     await create(cook.id, [["title", "Quick"], ["with", quick.id], ["without", pot.id]]);
-    const loaded = await cookbooksLoader({ request: await signedIn("/cookbooks", cook.id), context: ON, params: {} } as never);
+    const loaded = await cookbooksLoader({ request: await signedIn("/cookbooks", cook.id), context: CONTEXT, params: {} } as never);
     expect(loaded.smartCookbooks).toEqual([
       expect.objectContaining({
         title: "Quick",
