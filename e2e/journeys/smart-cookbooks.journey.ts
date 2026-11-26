@@ -1,4 +1,4 @@
-// Smart cookbooks (smart-cookbooks flag, on in QA), as per-run scratch user 1, whose area is recipe editing: a cook
+// Smart cookbooks, as per-run scratch user 1, whose area is recipe editing: a cook
 // tags two recipes Quick from their Organize pages and gives one of them a tool, then makes a smart cookbook from
 // Cookbooks with Quick and without the tool. The cookbook's page lists the one Quick recipe without the tool and not
 // the other, after a reload, and Cookbooks lists the cookbook with its rules; then the cook renames it, drops the
