@@ -125,8 +125,6 @@ describe("recipes.$id.fork action", () => {
     expect(forkRecipeMock).toHaveBeenCalledWith(mockDb, {
       sourceRecipeId: "abc",
       viewerId: "viewer-1",
-      // No flags in the context, so the fork does not start at the cook's default.
-      visibilityChoices: null,
     });
   });
 

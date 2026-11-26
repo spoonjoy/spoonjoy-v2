@@ -12,8 +12,8 @@ import {
   validateDescription,
   validateServings,
 } from "~/lib/validation";
-import { createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.server";
-import { requestD1 } from "~/lib/d1-read.server";
+import { cookRecipeVisibilityDefault, createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.server";
+import { d1ReadBatch, requestD1 } from "~/lib/d1-read.server";
 import {
   D1_WRITE_UNAVAILABLE_CODE,
   D1_WRITE_UNAVAILABLE_MESSAGE,
@@ -46,7 +46,6 @@ import { useEffect, useRef, useState } from "react";
 import { importRecipeForSession, parseSessionImportForm } from "~/lib/recipe-import-session.server";
 import { RecipeImportPanel, type RecipeImportActionData } from "~/components/recipe/RecipeImportPanel";
 import { newRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
-import { recipeVisibilityChoices } from "~/lib/recipe-visibility-choices";
 
 interface ActionData {
   parsedIngredients?: ParsedIngredient[];
@@ -72,22 +71,19 @@ export function meta({}: Route.MetaArgs) {
 // An ingredient parse changes no data; don't reload the page after one.
 export const shouldRevalidate = revalidateUnlessIngredientParse;
 
-// The levels the cook can choose and their default for new recipes, which the create form starts at; nulls while the
-// choice is off.
-async function cookVisibility(
-  context: Route.LoaderArgs["context"],
-  userId: string,
-): Promise<{ visibilityDefault: RecipeVisibility | null; visibilityChoices: readonly RecipeVisibility[] | null }> {
-  const choices = recipeVisibilityChoices(context.cloudflare?.env, userId);
-  if (!choices) return { visibilityDefault: null, visibilityChoices: null };
-  const database = await getRequestDb(context);
-  const cook = await database.user.findUnique({ where: { id: userId }, select: { defaultRecipeVisibility: true } });
-  return { visibilityDefault: newRecipeVisibility(null, cook?.defaultRecipeVisibility, choices), visibilityChoices: choices };
+// The cook's default for new recipes, which the create form starts at. On the Worker it is read from D1, so the page
+// builds no Prisma client.
+async function cookVisibilityDefault(context: Route.LoaderArgs["context"], userId: string): Promise<RecipeVisibility> {
+  const d1 = requestD1(context);
+  if (!d1) return cookRecipeVisibilityDefault(await getRequestDb(context), userId);
+  // MAX answers one row, with null, even for a cook whose row went away after sign-in.
+  const [[cook]] = await d1ReadBatch(d1, [[`SELECT MAX("defaultRecipeVisibility") AS "visibility" FROM "User" WHERE "id" = ?`, userId]]);
+  return newRecipeVisibility(null, cook!.visibility);
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
-  return await cookVisibility(context, userId);
+  return { visibilityDefault: await cookVisibilityDefault(context, userId) };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -213,7 +209,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     chefId: userId,
     title,
   });
-  const { visibilityDefault, visibilityChoices } = await cookVisibility(context, userId);
+  const visibilityDefault = await cookRecipeVisibilityDefault(database, userId);
   if (!titleUniquenessResult.valid) {
     return data({ errors: { title: titleUniquenessResult.error } }, { status: 400 });
   }
@@ -249,9 +245,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       description: trimmedDescription,
       servings: servings.trim() || null,
       chefId: userId,
-      ...(visibilityDefault && visibilityChoices
-        ? { visibility: newRecipeVisibility(formData.get("visibility"), visibilityDefault, visibilityChoices) }
-        : {}),
+      visibility: newRecipeVisibility(formData.get("visibility"), visibilityDefault),
       steps: recipeSteps,
       cover: uploadedImageUrl
         ? {
@@ -472,8 +466,7 @@ export default function NewRecipe({ loaderData }: Route.ComponentProps) {
           errors={saveData?.errors}
           answer={saveAnswer}
           loading={isLoading}
-          visibility={loaderData?.visibilityDefault ?? undefined}
-          visibilityChoices={loaderData?.visibilityChoices ?? undefined}
+          visibility={loaderData?.visibilityDefault}
         />
       </div>
     </CookbookPage>

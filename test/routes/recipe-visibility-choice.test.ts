@@ -8,10 +8,10 @@ import { action as editAction, loader as editLoader } from "~/routes/recipes.$id
 import { action as settingsAction, loader as settingsLoader } from "~/routes/account.settings";
 import { cleanupDatabase } from "../helpers/cleanup";
 
-// While recipe_visibility is on, the create and edit forms carry who can see the recipe (public, household or only me),
-// and a new recipe starts at the cook's default. While it is off they ignore it, as before.
+// The create and edit forms carry who can see the recipe (public, household or only me), and a new recipe starts at
+// the cook's default.
 
-const FLAG_ON = { SPOONJOY_FLAGS: "recipe_visibility" };
+const ENV = {};
 
 let cookId: string;
 
@@ -49,26 +49,18 @@ describe("choosing who can see a recipe", () => {
     await cleanupDatabase();
   });
 
-  it("starts the create form at the cook's default, and hides the choice while it is off", async () => {
+  it("starts the create form at the cook's default", async () => {
     type LoaderArgs = Parameters<typeof createLoader>[0];
-    expect(await createLoader(args<LoaderArgs>(await get("http://localhost/recipes/new"), FLAG_ON)))
-      .toEqual({ visibilityDefault: "private", visibilityChoices: ["public", "household", "private"] });
-    expect(await createLoader(args<LoaderArgs>(await get("http://localhost/recipes/new"), null)))
-      .toEqual({ visibilityDefault: null, visibilityChoices: null });
+    expect(await createLoader(args<LoaderArgs>(await get("http://localhost/recipes/new"), ENV)))
+      .toEqual({ visibilityDefault: "private" });
   });
 
   it("creates the recipe at the level chosen, or the cook's default when none is sent", async () => {
     type ActionArgs = Parameters<typeof createAction>[0];
-    await createAction(args<ActionArgs>(await post("http://localhost/recipes/new", { title: "Chosen Public", steps: "[]", visibility: "public" }), FLAG_ON));
-    await createAction(args<ActionArgs>(await post("http://localhost/recipes/new", { title: "Default Private", steps: "[]" }), FLAG_ON));
+    await createAction(args<ActionArgs>(await post("http://localhost/recipes/new", { title: "Chosen Public", steps: "[]", visibility: "public" }), ENV));
+    await createAction(args<ActionArgs>(await post("http://localhost/recipes/new", { title: "Default Private", steps: "[]" }), ENV));
     expect((await created("Chosen Public")).visibility).toBe("public");
     expect((await created("Default Private")).visibility).toBe("private");
-  });
-
-  it("ignores the choice while it is off, so the recipe is public as before", async () => {
-    type ActionArgs = Parameters<typeof createAction>[0];
-    await createAction(args<ActionArgs>(await post("http://localhost/recipes/new", { title: "Flag Off", steps: "[]", visibility: "private" }), null));
-    expect((await created("Flag Off")).visibility).toBe("public");
   });
 
   it("shows the recipe's level in the editor and saves a new one, keeping it when none is sent", async () => {
@@ -78,36 +70,31 @@ describe("choosing who can see a recipe", () => {
     const url = `http://localhost/recipes/${recipe.id}/edit`;
     const params = { id: recipe.id };
 
-    expect((await editLoader(args<EditLoaderArgs>(await get(url), FLAG_ON, params))).visibility).toBe("public");
-    expect((await editLoader(args<EditLoaderArgs>(await get(url), null, params))).visibility).toBeNull();
+    expect((await editLoader(args<EditLoaderArgs>(await get(url), ENV, params))).visibility).toBe("public");
     // A stored level the editor can't name shows as the most closed one.
     await db.recipe.update({ where: { id: recipe.id }, data: { visibility: "unknown" } });
-    expect((await editLoader(args<EditLoaderArgs>(await get(url), FLAG_ON, params))).visibility).toBe("private");
+    expect((await editLoader(args<EditLoaderArgs>(await get(url), ENV, params))).visibility).toBe("private");
     await db.recipe.update({ where: { id: recipe.id }, data: { visibility: "public" } });
 
-    await editAction(args<EditActionArgs>(await post(url, { title: "Edit Me", visibility: "private" }), FLAG_ON, params));
+    await editAction(args<EditActionArgs>(await post(url, { title: "Edit Me", visibility: "private" }), ENV, params));
     expect((await created("Edit Me")).visibility).toBe("private");
-    await editAction(args<EditActionArgs>(await post(url, { title: "Edit Me" }), FLAG_ON, params));
-    await editAction(args<EditActionArgs>(await post(url, { title: "Edit Me", visibility: "public" }), null, params));
+    await editAction(args<EditActionArgs>(await post(url, { title: "Edit Me" }), ENV, params));
     expect((await created("Edit Me")).visibility).toBe("private");
   });
 
-  it("sets the cook's default for new recipes in account settings, only while the choice is on", async () => {
+  it("sets the cook's default for new recipes in account settings, refusing a level that isn't one", async () => {
     type SettingsActionArgs = Parameters<typeof settingsAction>[0];
     type SettingsLoaderArgs = Parameters<typeof settingsLoader>[0];
     const url = "http://localhost/account/settings";
     const stored = async () => (await db.user.findUniqueOrThrow({ where: { id: cookId }, select: { defaultRecipeVisibility: true } })).defaultRecipeVisibility;
 
-    expect((await settingsLoader(args<SettingsLoaderArgs>(await get(url), FLAG_ON))).recipeVisibilityDefault).toBe("private");
-    expect((await settingsLoader(args<SettingsLoaderArgs>(await get(url), null))).recipeVisibilityDefault).toBeNull();
+    expect((await settingsLoader(args<SettingsLoaderArgs>(await get(url), ENV))).recipeVisibilityDefault).toBe("private");
 
-    expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "public" }), FLAG_ON)))
+    expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "public" }), ENV)))
       .toMatchObject({ success: true, intent: "setRecipeVisibilityDefault" });
     expect(await stored()).toBe("public");
-    for (const [visibility, env] of [["friends", FLAG_ON], ["private", null]] as const) {
-      expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility }), env)))
-        .toMatchObject({ success: false, error: "invalid_visibility" });
-    }
+    expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "friends" }), ENV)))
+      .toMatchObject({ success: false, error: "invalid_visibility" });
     expect(await stored()).toBe("public");
   });
 
@@ -115,17 +102,17 @@ describe("choosing who can see a recipe", () => {
     type ActionArgs = Parameters<typeof createAction>[0];
     type EditLoaderArgs = Parameters<typeof editLoader>[0];
     type EditActionArgs = Parameters<typeof editAction>[0];
-    await createAction(args<ActionArgs>(await post("http://localhost/recipes/new", { title: "Shared Stew", steps: "[]", visibility: "household" }), FLAG_ON));
+    await createAction(args<ActionArgs>(await post("http://localhost/recipes/new", { title: "Shared Stew", steps: "[]", visibility: "household" }), ENV));
     expect((await created("Shared Stew")).visibility).toBe("household");
 
     const recipe = await db.recipe.create({ data: { title: "Edit Household", chefId: cookId } });
     const url = `http://localhost/recipes/${recipe.id}/edit`;
     const params = { id: recipe.id };
-    expect(await editLoader(args<EditLoaderArgs>(await get(url), FLAG_ON, params)))
-      .toMatchObject({ visibility: "public", visibilityChoices: ["public", "household", "private"] });
-    await editAction(args<EditActionArgs>(await post(url, { title: "Edit Household", visibility: "household" }), FLAG_ON, params));
+    expect(await editLoader(args<EditLoaderArgs>(await get(url), ENV, params)))
+      .toMatchObject({ visibility: "public" });
+    await editAction(args<EditActionArgs>(await post(url, { title: "Edit Household", visibility: "household" }), ENV, params));
     expect((await created("Edit Household")).visibility).toBe("household");
-    expect((await editLoader(args<EditLoaderArgs>(await get(url), FLAG_ON, params))).visibility).toBe("household");
+    expect((await editLoader(args<EditLoaderArgs>(await get(url), ENV, params))).visibility).toBe("household");
   });
 
   it("offers Household as the default for new recipes", async () => {
@@ -135,13 +122,13 @@ describe("choosing who can see a recipe", () => {
     const url = "http://localhost/account/settings";
     const stored = async () => (await db.user.findUniqueOrThrow({ where: { id: cookId }, select: { defaultRecipeVisibility: true } })).defaultRecipeVisibility;
 
-    expect(await settingsLoader(args<SettingsLoaderArgs>(await get(url), FLAG_ON)))
-      .toMatchObject({ recipeVisibilityDefault: "private", recipeVisibilityChoices: ["public", "household", "private"] });
-    expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "household" }), FLAG_ON)))
+    expect(await settingsLoader(args<SettingsLoaderArgs>(await get(url), ENV)))
+      .toMatchObject({ recipeVisibilityDefault: "private" });
+    expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "household" }), ENV)))
       .toMatchObject({ success: true, intent: "setRecipeVisibilityDefault" });
     expect(await stored()).toBe("household");
-    expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "friends" }), FLAG_ON)))
+    expect(await settingsAction(args<SettingsActionArgs>(await post(url, { intent: "setRecipeVisibilityDefault", visibility: "friends" }), ENV)))
       .toMatchObject({ success: false, error: "invalid_visibility", message: "Choose public, household or only me." });
-    expect((await createLoader(args<LoaderArgs>(await get("http://localhost/recipes/new"), FLAG_ON))).visibilityDefault).toBe("household");
+    expect((await createLoader(args<LoaderArgs>(await get("http://localhost/recipes/new"), ENV))).visibilityDefault).toBe("household");
   });
 });

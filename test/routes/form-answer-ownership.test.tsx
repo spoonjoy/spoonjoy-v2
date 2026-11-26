@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Form as RouterForm, useActionData } from "react-router";
 import { describe, expect, it } from "vitest";
@@ -40,7 +40,7 @@ describe("form-local accepted Router answers", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Edit", exact: true }));
     const email = screen.getByRole("textbox", { name: "Email", exact: true });
-    await user.click(screen.getByRole("button", { name: "Save", exact: true }));
+    await user.click(within(screen.getByTestId("user-info-section")).getByRole("button", { name: "Save", exact: true }));
     await waitFor(() => expect(email).toHaveFocus());
     expect(email).toHaveAccessibleDescription("Taken");
     await user.type(email, ".changed");

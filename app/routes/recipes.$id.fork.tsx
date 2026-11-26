@@ -1,5 +1,3 @@
-import type { RecipeVisibility } from "~/domains/kitchen";
-import { recipeVisibilityChoices } from "~/lib/recipe-visibility-choices";
 import { redirect, type ActionFunctionArgs, type AppLoadContext } from "react-router";
 import { requireUserId } from "~/lib/session.server";
 import { getRequestDb } from "~/lib/route-platform.server";
@@ -122,11 +120,6 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
   }
 }
 
-// While the cook can choose a visibility, a fork of another cook's recipe starts at their default.
-function forkVisibilityChoices(context: AppLoadContext, viewerId: string): readonly RecipeVisibility[] | null {
-  return recipeVisibilityChoices(context.cloudflare?.env, viewerId);
-}
-
 /** Forks the recipe through Prisma, notifies the source chef, and answers the fork's id. */
 async function forkAndNotify(
   db: Awaited<ReturnType<typeof getRequestDb>>,
@@ -135,7 +128,7 @@ async function forkAndNotify(
   sourceRecipeId: string,
   recipeId: string | undefined,
 ): Promise<string> {
-  const result = await forkRecipe(db, { sourceRecipeId, viewerId, recipeId, visibilityChoices: forkVisibilityChoices(context, viewerId) });
+  const result = await forkRecipe(db, { sourceRecipeId, viewerId, recipeId });
   await notifySourceChef(context, viewerId, {
     recipeId: result.recipe.id,
     attribution: result.attribution,
@@ -152,7 +145,7 @@ async function forkOnD1AndNotify(
   sourceRecipeId: string,
   recipeId: string | undefined,
 ): Promise<string> {
-  const result = await forkRecipeOnD1(d1, { sourceRecipeId, viewerId, recipeId, visibilityChoices: forkVisibilityChoices(context, viewerId) });
+  const result = await forkRecipeOnD1(d1, { sourceRecipeId, viewerId, recipeId });
   // A fork made by an earlier submission already notified the source chef.
   // The notification reads and writes on D1 too, so no Prisma client is built after the answer
   // (see notification-db-d1.server.ts).

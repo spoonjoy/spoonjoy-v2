@@ -114,7 +114,7 @@ describe("Recipes New Route", () => {
       });
     });
 
-    it("should return no visibility choice when logged in with the choice off", async () => {
+    it("should offer the visibility choice at the cook's default when logged in", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", testUserId);
       const setCookieHeader = await sessionStorage.commitSession(session);
@@ -131,7 +131,7 @@ describe("Recipes New Route", () => {
         params: {},
       } as any);
 
-      expect(result).toEqual({ visibilityDefault: null, visibilityChoices: null });
+      expect(result).toEqual({ visibilityDefault: "public" });
     });
   });
 
