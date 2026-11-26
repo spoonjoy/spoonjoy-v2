@@ -1,7 +1,7 @@
 // Loaders and the action behind the smart cookbook pages: the form that makes one, the page of recipes it fills with,
-// and the cook's list of them on Cookbooks. Every one is the cook's own. On the
-// Worker they read and write D1 directly and build no Prisma client (d1-smart-cookbook-store.ts says why); Prisma is
-// the path where there is no binding (unit tests, scripts).
+// and the cook's list of them on Cookbooks. Every one is the cook's own. On the Worker they read and write D1 directly
+// and build no Prisma client (d1-smart-cookbook-store.ts says why); Prisma is the path where there is no binding (unit
+// tests, scripts).
 import type { AppLoadContext } from "react-router";
 import { data, redirect } from "react-router";
 import type { PrismaClient } from "@prisma/client";
