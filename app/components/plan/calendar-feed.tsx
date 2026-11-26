@@ -24,20 +24,14 @@ function FeedForm({ intent, children }: { intent: string; children: ReactNode })
   );
 }
 
-/** What the last make or turn-off did, or why it couldn't. */
-function FeedAnswer({ answer, freshUrl }: { answer: PlanActionAnswer; freshUrl: string | null }) {
-  const error = errorsFor(answer, MAKE)?.general ?? errorsFor(answer, REVOKE)?.general;
-  if (error) return <Text role="alert" tone="destructive">{error}</Text>;
+/** What the last make or turn-off did, or "" when there is nothing to say. */
+function feedResult(answer: PlanActionAnswer, freshUrl: string | null) {
   if (freshUrl) {
     const made = answer?.replaced ? "Made a new calendar link; the old one no longer works." : "Made your calendar link.";
-    return <Text role="status">{made} Copy it now: Spoonjoy shows it only this once.</Text>;
+    return `${made} Copy it now: Spoonjoy shows it only this once.`;
   }
-  if (answer?.intent !== REVOKE) return null;
-  return (
-    <Text role="status">
-      {answer.revoked ? "Turned off your calendar link. Calendars subscribed to it stop getting your plan." : "There was no calendar link to turn off."}
-    </Text>
-  );
+  if (answer?.intent !== REVOKE || answer.revoked === undefined) return "";
+  return answer.revoked ? "Turned off your calendar link. Calendars subscribed to it stop getting your plan." : "There was no calendar link to turn off.";
 }
 
 export type CalendarFeedProps = {
@@ -56,6 +50,8 @@ export function CalendarFeed({ madeAt, answer }: CalendarFeedProps) {
   const busy = navigation.formData?.get("intent");
   const madeNow = answer?.intent === MAKE && answer.feedUrl ? answer.feedUrl : null;
   const freshUrl = madeNow !== dismissed ? madeNow : null;
+  const error = errorsFor(answer, MAKE)?.general ?? errorsFor(answer, REVOKE)?.general;
+  const turnedOff = answer?.intent === REVOKE && answer.revoked !== undefined;
 
   // Only the button opens the sheet, so the sheet's own change is always a close.
   function close() {
@@ -75,15 +71,20 @@ export function CalendarFeed({ madeAt, answer }: CalendarFeedProps) {
         description="A private link lets your calendar app show the meals you plan, from four weeks back to thirteen weeks ahead. Anyone with the link can see your plan, so give it only to your calendar."
         className="mx-auto max-w-lg"
       >
-        <div className="grid gap-4">
-          <FeedAnswer answer={answer} freshUrl={freshUrl} />
+        {/* The link is a secret: analytics never records a click or an address inside this sheet. */}
+        <div className="ph-no-capture grid gap-4">
+          {/* One status line, there from the sheet's start, so a screen reader hears each change to it. */}
+          <Text role="status">{feedResult(answer, freshUrl)}</Text>
+          {error ? <Text role="alert" tone="destructive">{error}</Text> : null}
           {freshUrl ? (
             <>
-              <TextField label="Calendar link" value={freshUrl} readOnly />
+              {/* The new link takes the focus from the button that made it, which is gone. */}
+              <TextField label="Calendar link" value={freshUrl} readOnly autoFocus />
               <div className="flex flex-wrap gap-2">
                 <Button href={webcalUrl(freshUrl)} size="sm">Open in calendar app</Button>
                 <CopyButton value={freshUrl} label="Copy link" />
               </div>
+              <Text size="sm" tone="muted">Using Google Calendar? Copy the link, then add it under Other calendars, From URL.</Text>
             </>
           ) : madeAt ? (
             <Text tone="muted">
@@ -94,7 +95,8 @@ export function CalendarFeed({ madeAt, answer }: CalendarFeedProps) {
           <div className="flex flex-wrap gap-2">
             {freshUrl ? null : (
               <FeedForm intent={MAKE}>
-                <Button type="submit" size="sm" loading={busy === MAKE} loadingLabel="Making a calendar link">
+                {/* After a turn-off, whose button is gone, the focus lands here. */}
+                <Button type="submit" size="sm" loading={busy === MAKE} loadingLabel="Making a calendar link" autoFocus={turnedOff}>
                   {madeAt ? "Make a new link" : "Make a calendar link"}
                 </Button>
               </FeedForm>
