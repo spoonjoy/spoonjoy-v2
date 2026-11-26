@@ -157,6 +157,17 @@ docker run -d --name spoonjoy -p 8080:8080 -v spoonjoy-data:/data ghcr.io/spoonj
 
 The container runs as uid 1000, so a host folder it writes a backup into needs to be writable by that user.
 
+## Moving your kitchen
+
+A cook moves their recipes between spoonjoy.app and a self-hosted Spoonjoy, either way, on the Move in page (`/move-in`) of the Spoonjoy they're moving to. Each recipe comes over with its steps, ingredients, step times, which steps use another's output, tags, categories, tools and cover photo, and lands private. Nothing changes on the Spoonjoy they're leaving. Cookbooks, the shopping list and cooks stay behind.
+
+1. On the Spoonjoy you're leaving, sign in, open `/api/playground`, and send `POST /api/v1/tokens` with a body like `{ "name": "Move my kitchen", "scopes": ["account:read", "kitchen:read"] }`. Copy the `sj_...` token it returns.
+2. On the Spoonjoy you're moving to, open `/move-in`, pick **Another Spoonjoy**, and paste the other Spoonjoy's address (`https://spoonjoy.app`, or your server's) and the token.
+
+The move-in reads the other Spoonjoy's account export (`GET /api/v1/me/export`) and each recipe's photo, so that Spoonjoy has to open at an `https://` address from anywhere on the internet: a server that only opens at home can't be read from spoonjoy.app. Moving the same kitchen in again from the same Spoonjoy brings only what's new or changed there, since each recipe is known by its id on that Spoonjoy. A kitchen can also move back: each Spoonjoy's export says where its recipes moved in from, so a recipe that started on the Spoonjoy you're moving back to comes back as the recipe it started as, not a second copy. Its name, description, steps and ingredients change to the other Spoonjoy's version if you changed them only there, and stay as they are if you changed them on both; it keeps the cover photo it has here, and gains any tags, categories or tools it got there, losing none. A Spoonjoy knows itself by its `SPOONJOY_BASE_URL`, so on your own server set that to the address you gave the other Spoonjoy. Giving a Spoonjoy its own address, or a token for your own account on it, is refused, since your kitchen is already there. Delete the token on the old Spoonjoy once the move is done.
+
+The Move in page is behind the `move_in` flag. On your own server, start it with `SPOONJOY_FLAGS=move_in` (or add `move_in` to the flags you already set). On spoonjoy.app it is not on for everyone yet.
+
 ## Updating
 
 Your kitchen lives in the data volume, so updating swaps only the image. With Docker Compose, beside your `compose.yaml`, build it again from the newest source and start it:
