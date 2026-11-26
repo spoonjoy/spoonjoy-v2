@@ -5,14 +5,16 @@
  *   GET  /health       whether the relay is up, and whether its Apple key and relay keys are set.
  *   POST /v1/servers   a server registers its address and gets a relay key, limited per IP address.
  *   POST /v1/send      with that key as a bearer token: one notification to one device. The relay
- *                      signs Apple's provider token (ES256, cached for 50 minutes), sends to
+ *                      signs Apple's provider token (ES256, one per 30-minute window), sends to
  *                      api.push.apple.com or api.sandbox.push.apple.com and answers with Apple's
  *                      status. `revoke: true` means Apple says the token is dead, so the server
  *                      stops sending to that device.
  *
  * It keeps nothing: a relay key is the server's id signed with RELAY_KEY_SECRET (HMAC-SHA256), so
  * checking one needs no storage, and the rate limits count by key, by a hash of the device token
- * and by IP address. Payloads and tokens pass through and are never logged. A server id listed in
+ * and by IP address, each per Cloudflare location. Payloads and tokens pass through and are never
+ * logged, and the Worker records no invocation logs (wrangler.json), so request headers aren't kept
+ * either. A server id listed in
  * REVOKED_SERVER_IDS is refused. Until APNS_KEY_P8 and APNS_KEY_ID are set (APNS_TEAM_ID is a var),
  * sending answers 503 not_configured; until RELAY_KEY_SECRET is set, so does registering.
  */
@@ -53,21 +55,33 @@ export const APNS_HOSTS = {
 } as const;
 export type ApnsEnvironment = keyof typeof APNS_HOSTS;
 
-/** Apple wants a provider token refreshed between 20 and 60 minutes after it was made. */
-export const PROVIDER_TOKEN_TTL_MS = 50 * 60_000;
+/**
+ * Apple refuses a provider token older than an hour, and one team key's tokens renewed more often
+ * than every 20 minutes. Every instance of the relay dates its token to the start of the same
+ * 30-minute window, so across all of them Apple sees one new token every 30 minutes, each at most
+ * 30 minutes old when used.
+ */
+export const PROVIDER_TOKEN_WINDOW_MS = 30 * 60_000;
 export const APNS_TIMEOUT_MS = 10_000;
 /** Apple's limit on an alert's payload. */
 export const MAX_PAYLOAD_BYTES = 4096;
 export const MAX_BASE_URL_LENGTH = 2048;
 const MAX_BODY_BYTES = 16_384;
 const MAX_COLLAPSE_ID_BYTES = 64;
+/** Printable ASCII, since it goes in a header. */
+const COLLAPSE_ID = /^[\x20-\x7e]{1,64}$/;
 /** Device tokens are 32 bytes (64 hex digits) today; Apple says they may grow. */
 const DEVICE_TOKEN = /^[0-9a-f]{64,200}$/i;
 const KEY_PREFIX = "sjr1";
 // Changing this label makes every relay key issued under the old one fail.
 const KEY_LABEL = "spoonjoy push relay key v1";
-/** Apple's reasons that mean the token will never work again for this app. */
-const DEAD_TOKEN_REASONS = new Set(["BadDeviceToken", "DeviceTokenNotForTopic", "Unregistered"]);
+/**
+ * Apple's reasons that mean the token will never work for this app. Not BadDeviceToken: Apple
+ * also gives it for a good token sent to the other environment's host.
+ */
+const DEAD_TOKEN_REASONS = new Set(["DeviceTokenNotForTopic", "Unregistered"]);
+/** Apple's reasons that mean the relay's own key or token is at fault. */
+const PROVIDER_TOKEN_REASONS = new Set(["ExpiredProviderToken", "InvalidProviderToken", "MissingProviderToken", "TooManyProviderTokenUpdates"]);
 
 const encoder = new TextEncoder();
 
@@ -130,10 +144,10 @@ function revokedServers(env: RelayEnv): Set<string> {
 
 // ---- Apple's provider token --------------------------------------------------------------------
 
-type CachedProviderToken = { token: string; madeAt: number; identity: string };
+type CachedProviderToken = { token: string; window: number; identity: string };
 let cachedProviderToken: CachedProviderToken | null = null;
 
-/** Forget the cached provider token (tests, and after Apple refuses one). */
+/** Forget the cached provider token (tests). */
 export function resetProviderTokenCache(): void {
   cachedProviderToken = null;
 }
@@ -144,32 +158,34 @@ async function importApnsKey(p8: string): Promise<CryptoKey> {
 }
 
 /**
- * Apple's provider token: a JWT signed with the team's APNs key (ES256), made at most once every
- * 50 minutes, since Apple refuses tokens made more often than every 20 minutes or older than an hour.
+ * Apple's provider token: a JWT signed with the team's APNs key (ES256), issued at the start of the
+ * current 30-minute window (PROVIDER_TOKEN_WINDOW_MS) and reused until the window ends.
  */
 export async function providerToken(env: RelayEnv, now: number): Promise<string> {
   const teamId = present(env.APNS_TEAM_ID)!;
   const keyId = present(env.APNS_KEY_ID)!;
   const p8 = present(env.APNS_KEY_P8)!;
-  const identity = `${teamId}.${keyId}.${p8.length}`;
-  if (cachedProviderToken && cachedProviderToken.identity === identity && now - cachedProviderToken.madeAt < PROVIDER_TOKEN_TTL_MS) {
+  const identity = `${teamId}.${keyId}.${p8}`;
+  const window = Math.floor(now / PROVIDER_TOKEN_WINDOW_MS) * PROVIDER_TOKEN_WINDOW_MS;
+  if (cachedProviderToken && cachedProviderToken.identity === identity && cachedProviderToken.window === window) {
     return cachedProviderToken.token;
   }
   const header = base64url(encoder.encode(JSON.stringify({ alg: "ES256", kid: keyId })));
-  const claims = base64url(encoder.encode(JSON.stringify({ iss: teamId, iat: Math.floor(now / 1000) })));
+  const claims = base64url(encoder.encode(JSON.stringify({ iss: teamId, iat: window / 1000 })));
   const signingInput = `${header}.${claims}`;
   // WebCrypto's ECDSA signature is r || s, which is JWS's ES256 form already.
   const signature = new Uint8Array(
     await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, await importApnsKey(p8), encoder.encode(signingInput)),
   );
   const token = `${signingInput}.${base64url(signature)}`;
-  cachedProviderToken = { token, madeAt: now, identity };
+  cachedProviderToken = { token, window, identity };
   return token;
 }
 
 // ---- Requests ----------------------------------------------------------------------------------
 
 async function readJson(request: Request): Promise<Record<string, unknown> | null> {
+  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) return null;
   const text = await request.text();
   if (encoder.encode(text).length > MAX_BODY_BYTES) return null;
   try {
@@ -234,8 +250,8 @@ function parseSend(body: Record<string, unknown> | null): SendRequest | string {
   const payloadText = JSON.stringify(payload);
   if (encoder.encode(payloadText).length > MAX_PAYLOAD_BYTES) return `payload must be at most ${MAX_PAYLOAD_BYTES} bytes.`;
   if (pushType !== "alert" && pushType !== "background") return "pushType must be alert or background.";
-  if (collapseId !== undefined && (typeof collapseId !== "string" || collapseId === "" || encoder.encode(collapseId).length > MAX_COLLAPSE_ID_BYTES)) {
-    return `collapseId must be a string of at most ${MAX_COLLAPSE_ID_BYTES} bytes.`;
+  if (collapseId !== undefined && (typeof collapseId !== "string" || !COLLAPSE_ID.test(collapseId))) {
+    return `collapseId must be at most ${MAX_COLLAPSE_ID_BYTES} printable ASCII characters.`;
   }
   if (expiration !== undefined && (typeof expiration !== "number" || !Number.isInteger(expiration) || expiration < 0)) {
     return "expiration must be a whole number of seconds since 1970.";
@@ -251,9 +267,9 @@ function parseSend(body: Record<string, unknown> | null): SendRequest | string {
   };
 }
 
-async function postToApple(env: RelayEnv, send: SendRequest, deps: RelayDeps): Promise<Response> {
+async function postToApple(env: RelayEnv, send: SendRequest, token: string, deps: RelayDeps): Promise<Response> {
   const headers: Record<string, string> = {
-    authorization: `bearer ${await providerToken(env, deps.now())}`,
+    authorization: `bearer ${token}`,
     "apns-topic": env.APNS_TOPIC,
     "apns-push-type": send.pushType,
     // Apple requires priority 5 for background pushes; alerts go at once.
@@ -297,25 +313,25 @@ async function send(request: Request, env: RelayEnv, deps: RelayDeps): Promise<R
   }
   if (!apnsConfigured(env)) return refuse(503, "not_configured", "This relay has no Apple push key yet.");
 
+  let token: string;
+  try {
+    token = await providerToken(env, deps.now());
+  } catch (error) {
+    deps.log(JSON.stringify({ event: "apns-key-unreadable", error: error instanceof Error ? error.name : "Error" }));
+    return refuse(503, "misconfigured", "This relay's Apple push key can't be read.");
+  }
   let response: Response;
   try {
-    response = await postToApple(env, parsed, deps);
-    // A provider token Apple calls expired is made again once, in case the cache outlived it. An
-    // invalid one isn't: a new token from the same key would be refused too, and Apple refuses
-    // tokens made more often than every 20 minutes.
-    if (response.status === 403) {
-      if ((await appleReason(response.clone())) === "ExpiredProviderToken") {
-        resetProviderTokenCache();
-        response = await postToApple(env, parsed, deps);
-      }
-    }
+    response = await postToApple(env, parsed, token, deps);
   } catch (error) {
     deps.log(JSON.stringify({ event: "apns-unreachable", serverId, error: error instanceof Error ? error.name : "Error" }));
     return refuse(502, "apns_unreachable", "Apple's push service didn't answer.");
   }
   const reason = response.ok ? null : await appleReason(response);
-  const revoke = response.status === 410 || (response.status === 400 && reason !== null && DEAD_TOKEN_REASONS.has(reason));
-  deps.log(JSON.stringify({ event: "sent", serverId, environment: parsed.environment, status: response.status, reason }));
+  const revoke = response.status === 410 || (reason !== null && DEAD_TOKEN_REASONS.has(reason));
+  // Apple refusing the relay's own token fails every send, so it gets its own event to alert on.
+  const event = reason !== null && PROVIDER_TOKEN_REASONS.has(reason) ? "provider-token-refused" : "sent";
+  deps.log(JSON.stringify({ event, serverId, environment: parsed.environment, status: response.status, reason }));
   return json({ status: response.status, reason, apnsId: response.headers.get("apns-id"), revoke });
 }
 
