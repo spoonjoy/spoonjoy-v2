@@ -28,7 +28,15 @@ export const COMPOSE = `# Spoonjoy with Docker Compose. Start it
 # use; docs/self-hosting.md lists every setting.
 services:
   spoonjoy:
-    image: \${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}
+    # Built from Spoonjoy's public source on the
+    # first start, which takes a few minutes, until
+    # the published image opens to everyone. Then
+    # this line takes over from the two below it:
+    # image: \${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}
+    image: \${SPOONJOY_IMAGE:-spoonjoy-source}
+    build:
+      context: https://github.com/spoonjoy/spoonjoy-v2.git#main
+      dockerfile: self-host/Dockerfile.source
     restart: unless-stopped
     ports:
       - "\${SPOONJOY_PORT:-8080}:8080"
@@ -42,7 +50,8 @@ volumes:
 `;
 
 export const START = "docker compose up -d";
-export const UPDATE = "docker compose pull && docker compose up -d";
+/** Until the image is public, Compose builds from the repository's main branch, so updating is building it again. */
+export const UPDATE = "docker compose build && docker compose up -d";
 
 export function meta(_args: Route.MetaArgs) {
   return [
@@ -64,15 +73,15 @@ function Section({ id, title, children }: { id: string; title: string; children:
   );
 }
 
-/** Says the image isn't out yet, until it is public. */
+/** Says the Compose file builds from source, until the image is public. */
 export function ImageNotice({ imagePublic }: { imagePublic: boolean }) {
   if (imagePublic) return null;
   return (
     <Alert
       className="mt-8"
       tone="primary"
-      title="Image coming soon"
-      description="The image is built and checked on every change, and opens to everyone soon. Until then these steps are here to read ahead."
+      title="Built from source for now"
+      description="The published image opens to everyone soon. Until then, this Compose file builds Spoonjoy from its public source the first time it starts, which takes a few minutes."
     />
   );
 }
@@ -115,7 +124,7 @@ export default function SelfHost() {
         </Section>
 
         <Section id="self-host-update" title="Update it">
-          <Text>Your kitchen lives in the data volume, so an update swaps only the image. Beside <code>compose.yaml</code>:</Text>
+          <Text>Your kitchen lives in the data volume, so an update swaps only the server. Beside <code>compose.yaml</code>:</Text>
           <CodeBlock code={UPDATE} language="sh" />
           <Text>The new image brings the database up to date when it starts. Make a backup first if you might want to go back.</Text>
         </Section>
