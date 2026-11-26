@@ -73,8 +73,8 @@ export function CalendarFeed({ madeAt, answer }: CalendarFeedProps) {
       >
         {/* The link is a secret: analytics never records a click or an address inside this sheet. */}
         <div className="ph-no-capture grid gap-4">
-          {/* One status line, there from the sheet's start, so a screen reader hears each change to it. */}
-          <Text role="status">{feedResult(answer, freshUrl)}</Text>
+          {/* One status line, there from the sheet's start, so a screen reader hears each change to it; empty, it takes no room. */}
+          <Text role="status" className="empty:-mb-4">{feedResult(answer, freshUrl)}</Text>
           {error ? <Text role="alert" tone="destructive">{error}</Text> : null}
           {freshUrl ? (
             <>
