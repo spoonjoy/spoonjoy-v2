@@ -473,7 +473,8 @@ describe("the Worker", () => {
   });
 
   it("is the address the deploy workflow checks and the docs give", () => {
-    expect(readFileSync(".github/workflows/push-relay-deploy.yml", "utf8")).toContain(`  RELAY_URL: ${RELAY_URL}\n`);
+    const workflow = readFileSync(".github/workflows/push-relay-deploy.yml", "utf8");
+    expect(workflow.match(/^  RELAY_URL: .*$/gm)).toEqual([`  RELAY_URL: ${RELAY_URL}`]);
     const docs = readFileSync("docs/push-relay.md", "utf8");
     expect(docs).toContain(`\`${RELAY_URL}\``);
     expect(docs).toContain(`curl -s ${RELAY_URL}/health`);
