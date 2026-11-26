@@ -8,6 +8,7 @@ import {
   FORCE_LABEL,
   MAX_AFFECTED_SPECS,
   MAX_LISTED_FILES,
+  MOVE_IN_ONLY_PATHS,
   NEVER_SKIP,
   SKIPPABLE_PATHS,
   SMOKE_SPECS,
@@ -225,6 +226,18 @@ describe("decide", () => {
     // The census and the harness are not specs either part runs as its share.
     expect(decide({ files: ["workers/app.ts", "e2e/journeys/hx-census.journey.ts"], labels: [], specs: SPECS }).parts).toBe(1);
     expect(decide({ files: ["e2e/journeys/support/journey.ts"], labels: [], specs: SPECS }).parts).toBe(1);
+  });
+
+  // Only part 2 runs the Move in journeys, so a change to the stand-in server they read (#1080) or their helpers runs it.
+  it("runs both parts of a pull request's full suite when it changes what only the Move in journeys use", () => {
+    for (const file of ["workers/move-in-stand-in/index.ts", "e2e/journeys/support/recipe-server.ts", "e2e/journeys/support/move-in.ts", "e2e/journeys/support/move-in-fixtures.ts"]) {
+      const decision = decide({ files: [file], labels: [], specs: SPECS });
+      expect(decision, file).toMatchObject({ mode: "full", parts: 2 });
+      expect(decision.why).toContain(`\`${file}\` is used only by the Move in journeys, which part 2 runs, so both parts of the full suite run.`);
+      expect(MOVE_IN_ONLY_PATHS.some((pattern) => pattern.test(file))).toBe(true);
+    }
+    expect(decide({ files: ["workers/push-relay/index.ts"], labels: [], specs: SPECS }).parts).toBe(1);
+    expect(decide({ files: ["e2e/journeys/support/moved.ts"], labels: [], specs: SPECS }).parts).toBe(1);
   });
 
   it("runs both parts of the full suite for the journeys-full label, whatever changed", () => {
