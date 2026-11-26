@@ -10,6 +10,8 @@ Then open http://localhost:8080 and sign up.
 
 With Docker Compose, save [`self-host/compose.yaml`](../self-host/compose.yaml) and run `docker compose up -d` beside it. It keeps the data in a named volume, restarts the server unless you stop it, and reads `SPOONJOY_BASE_URL` and `SPOONJOY_PORT` from your shell or a `.env` file beside it.
 
+**For now, Compose builds Spoonjoy from source.** The published image isn't open to everyone yet: pulling `ghcr.io/spoonjoy/spoonjoy` without signing in to GitHub is refused, so the `docker run` line above works only for people who can sign in to the package. Until it opens, `self-host/compose.yaml` builds the image from Spoonjoy's public repository (the `main` branch, through [`self-host/Dockerfile.source`](../self-host/Dockerfile.source)) the first time it starts. That needs no sign-in, takes a few minutes and a few GB of disk while it builds, and then starts as fast as the published image. The published image's line is in the file, commented out, ready to take over.
+
 ## What's in the box
 
 - **One volume, `/data`.** The database, photos, cook sessions and the server's session secret live there.
@@ -155,11 +157,13 @@ The container runs as uid 1000, so a host folder it writes a backup into needs t
 
 ## Updating
 
-Your kitchen lives in the data volume, so updating swaps only the image. With Docker Compose, beside your `compose.yaml`:
+Your kitchen lives in the data volume, so updating swaps only the image. With Docker Compose, beside your `compose.yaml`, build it again from the newest source and start it:
 
 ```sh
-docker compose pull && docker compose up -d
+docker compose build && docker compose up -d
 ```
+
+Once the Compose file uses the published image again, updating is `docker compose pull && docker compose up -d`.
 
 With `docker run`, pull the new image, then remove the container and start it again on the same volume:
 
