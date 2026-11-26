@@ -89,6 +89,10 @@ export function relatedSpecs(files, specs) {
   return specs.filter((spec) => words(path.posix.basename(spec, ".journey.ts")).some((word) => changedWords.has(word)));
 }
 
+// Only part 2 runs the Move in journeys, so a full run that changes what only they use runs both parts; otherwise
+// a broken stand-in server (workers/move-in-stand-in) or Move in helper first fails in the merge queue (#1058).
+export const MOVE_IN_ONLY_PATHS = Object.freeze([/^workers\/move-in-stand-in\//, /^e2e\/journeys\/support\/(?:recipe-server|move-in[a-z-]*)\.ts$/]);
+
 const fullSuite = (why, parts = 1) => ({ journeys: true, mode: "full", census: true, specs: [], parts, why });
 
 // Pure decision: { journeys, mode, census, specs, parts, why }. `specs` lists the head commit's journey
@@ -100,9 +104,12 @@ export function decide({ files, labels, specs = null }) {
   // Either part may hold a changed journey spec (Playwright splits the specs by file), so a full run
   // that changes one runs both parts; otherwise it can first fail in the merge queue (#1058).
   const changedSpec = files.find((file) => SPEC_FILE.test(file));
+  const changedMoveIn = files.find((file) => MOVE_IN_ONLY_PATHS.some((pattern) => pattern.test(file)));
   const full = (why) => changedSpec
     ? fullSuite(`${why} \`${changedSpec}\` is a changed journey spec, so both parts of the full suite run.`, 2)
-    : fullSuite(why);
+    : changedMoveIn
+      ? fullSuite(`${why} \`${changedMoveIn}\` is used only by the Move in journeys, which part 2 runs, so both parts of the full suite run.`, 2)
+      : fullSuite(why);
   if (labels.includes(FORCE_LABEL)) return full(`The pull request has the \`${FORCE_LABEL}\` label.`);
   if (files.length === 0) return full("GitHub listed no changed files, so the full suite runs.");
   if (files.length >= MAX_LISTED_FILES) {
