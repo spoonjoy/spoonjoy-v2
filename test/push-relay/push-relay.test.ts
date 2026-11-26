@@ -6,7 +6,7 @@ import relay, {
   APNS_TIMEOUT_MS,
   MAX_BASE_URL_LENGTH,
   MAX_PAYLOAD_BYTES,
-  PROVIDER_TOKEN_TTL_MS,
+  PROVIDER_TOKEN_WINDOW_MS,
   handle,
   issueRelayKey,
   providerToken,
@@ -210,13 +210,14 @@ describe("relay keys", () => {
 });
 
 describe("Apple's provider token", () => {
-  it("is an ES256 JWT for the team and key, signed with the APNs key, reused for 50 minutes", async () => {
+  it("is an ES256 JWT for the team and key, signed with the APNs key, dated to its 30-minute window and reused through it", async () => {
     const env = relayEnv();
-    const now = 1_800_000_000_000;
+    const windowStart = 1_800_000_000_000 - (1_800_000_000_000 % PROVIDER_TOKEN_WINDOW_MS);
+    const now = windowStart + 7 * 60_000;
     const token = await providerToken(env, now);
     const [header, claims, signature] = token.split(".");
     expect(decodePart(header)).toEqual({ alg: "ES256", kid: "KEY1234567" });
-    expect(decodePart(claims)).toEqual({ iss: "TEAM123456", iat: now / 1000 });
+    expect(decodePart(claims)).toEqual({ iss: "TEAM123456", iat: windowStart / 1000 });
     const valid = await crypto.subtle.verify(
       { name: "ECDSA", hash: "SHA-256" },
       publicKey,
@@ -225,13 +226,16 @@ describe("Apple's provider token", () => {
     );
     expect(valid).toBe(true);
 
-    expect(await providerToken(env, now + PROVIDER_TOKEN_TTL_MS - 1)).toBe(token);
-    const renewed = await providerToken(env, now + PROVIDER_TOKEN_TTL_MS);
+    expect(await providerToken(env, windowStart + PROVIDER_TOKEN_WINDOW_MS - 1)).toBe(token);
+    const renewed = await providerToken(env, windowStart + PROVIDER_TOKEN_WINDOW_MS);
     expect(renewed).not.toBe(token);
-    expect(decodePart(renewed.split(".")[1]).iat).toBe((now + PROVIDER_TOKEN_TTL_MS) / 1000);
-    // A new key id makes a new token at once.
-    const rotated = await providerToken({ ...env, APNS_KEY_ID: "KEY7654321" }, now + PROVIDER_TOKEN_TTL_MS + 1);
+    expect(decodePart(renewed.split(".")[1]).iat).toBe((windowStart + PROVIDER_TOKEN_WINDOW_MS) / 1000);
+    // A new key id, or a new key under the same id, makes a new token at once.
+    const rotated = await providerToken({ ...env, APNS_KEY_ID: "KEY7654321" }, windowStart + PROVIDER_TOKEN_WINDOW_MS);
     expect(decodePart(rotated.split(".")[0]).kid).toBe("KEY7654321");
+    const other = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+    const rekeyed = await providerToken({ ...env, APNS_KEY_ID: "KEY7654321", APNS_KEY_P8: pem(await crypto.subtle.exportKey("pkcs8", other.privateKey)) }, windowStart + PROVIDER_TOKEN_WINDOW_MS);
+    expect(rekeyed).not.toBe(rotated);
   });
 });
 
@@ -285,7 +289,8 @@ describe("sending a notification", () => {
 
   it.each([
     [410, "Unregistered", true],
-    [400, "BadDeviceToken", true],
+    // Apple also says BadDeviceToken for a good token sent to the other environment's host.
+    [400, "BadDeviceToken", false],
     [400, "DeviceTokenNotForTopic", true],
     [400, "PayloadTooLarge", false],
     [429, "TooManyRequests", false],
@@ -305,24 +310,40 @@ describe("sending a notification", () => {
     }
   });
 
-  it("makes a new provider token and tries once more when Apple calls the cached one expired", async () => {
-    const env = relayEnv();
-    let now = 1_800_000_000_000;
-    const { calls, fetch: fetchImpl } = apple(appleRefusal(403, "ExpiredProviderToken"));
-    const deps = { ...relayDeps(fetchImpl), now: () => (now += 1_000) };
-    const response = await handle(sendRequest(await relayKey(), { token: TOKEN, environment: "production", payload: ALERT }), env, deps);
-    expect(await response.json()).toMatchObject({ status: 200 });
-    expect(calls).toHaveLength(2);
-    expect(calls[1].headers.authorization).not.toBe(calls[0].headers.authorization);
+  it.each([
+    [403, "InvalidProviderToken", "provider-token-refused"],
+    [403, "ExpiredProviderToken", "provider-token-refused"],
+    [429, "TooManyProviderTokenUpdates", "provider-token-refused"],
+    [403, "Forbidden", "sent"],
+  ])("passes on Apple's %i %s once, without trying again, logged as %s", async (status, reason, event) => {
+    const { calls, fetch: fetchImpl } = apple(appleRefusal(status, reason));
+    const deps = relayDeps(fetchImpl);
+    const response = await handle(sendRequest(await relayKey(), { token: TOKEN, environment: "production", payload: ALERT }), relayEnv(), deps);
+    expect(await response.json()).toEqual({ status, reason, apnsId: "APNS-ID", revoke: false });
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(deps.lines[0])).toMatchObject({ event, status, reason });
   });
 
-  it("does not try again when Apple calls the provider token invalid or forbids it otherwise", async () => {
-    for (const reason of ["InvalidProviderToken", "Forbidden"]) {
-      const { calls, fetch: fetchImpl } = apple(appleRefusal(403, reason));
-      const response = await handle(sendRequest(await relayKey(), { token: TOKEN, environment: "production", payload: ALERT }), relayEnv(), relayDeps(fetchImpl));
-      expect(await response.json()).toEqual({ status: 403, reason, apnsId: "APNS-ID", revoke: false });
-      expect(calls).toHaveLength(1);
-    }
+  it("answers 503 misconfigured, without calling Apple, when the Apple key can't be read", async () => {
+    const { calls, fetch: fetchImpl } = apple();
+    const deps = relayDeps(fetchImpl);
+    const response = await handle(
+      sendRequest(await relayKey(), { token: TOKEN, environment: "production", payload: ALERT }),
+      relayEnv({ APNS_KEY_P8: "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----" }),
+      deps,
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: "misconfigured" });
+    expect(calls).toHaveLength(0);
+    expect(JSON.parse(deps.lines[0])).toMatchObject({ event: "apns-key-unreadable" });
+
+    const odd = relayDeps(apple().fetch);
+    const importKey = crypto.subtle.importKey.bind(crypto.subtle);
+    vi.spyOn(crypto.subtle, "importKey").mockImplementation(((format: string, ...rest: unknown[]) =>
+      format === "pkcs8" ? Promise.reject("plain") : (importKey as (...args: unknown[]) => Promise<CryptoKey>)(format, ...rest)) as typeof crypto.subtle.importKey);
+    const second = await handle(sendRequest(await relayKey(), { token: TOKEN, environment: "production", payload: ALERT }), relayEnv(), odd);
+    expect(second.status).toBe(503);
+    expect(JSON.parse(odd.lines[0])).toEqual({ event: "apns-key-unreadable", error: "Error" });
   });
 
   it("answers 502 when Apple can't be reached, naming only the error's kind", async () => {
@@ -365,6 +386,18 @@ describe("sending a notification", () => {
     expect((await handle(sendRequest(key, body), relayEnv({ REVOKED_SERVER_IDS: undefined }), deps)).status).toBe(200);
   });
 
+  it("refuses a body that says it's too big before reading it", async () => {
+    const request = new Request("https://push.spoonjoy.app/v1/send", {
+      method: "POST",
+      headers: { authorization: `Bearer ${await relayKey()}`, "content-length": "20000" },
+      body: "{}",
+    });
+    const text = vi.spyOn(request, "text");
+    const response = await handle(request, relayEnv(), relayDeps(apple().fetch));
+    expect(response.status).toBe(400);
+    expect(text).not.toHaveBeenCalled();
+  });
+
   it("is rate limited per server key and per device token, counting a token by its hash", async () => {
     const body = { token: TOKEN, environment: "production", payload: ALERT };
     const { serverId, relayKey: key } = await issueRelayKey(SECRET);
@@ -396,9 +429,10 @@ describe("sending a notification", () => {
       `payload must be at most ${MAX_PAYLOAD_BYTES} bytes.`,
     ],
     ["another push type", { token: TOKEN, environment: "production", payload: ALERT, pushType: "voip" }, "pushType must be alert or background."],
-    ["an empty collapse id", { token: TOKEN, environment: "production", payload: ALERT, collapseId: "" }, "collapseId must be a string of at most 64 bytes."],
-    ["a long collapse id", { token: TOKEN, environment: "production", payload: ALERT, collapseId: "c".repeat(65) }, "collapseId must be a string of at most 64 bytes."],
-    ["a collapse id that isn't text", { token: TOKEN, environment: "production", payload: ALERT, collapseId: 3 }, "collapseId must be a string of at most 64 bytes."],
+    ["an empty collapse id", { token: TOKEN, environment: "production", payload: ALERT, collapseId: "" }, "collapseId must be at most 64 printable ASCII characters."],
+    ["a long collapse id", { token: TOKEN, environment: "production", payload: ALERT, collapseId: "c".repeat(65) }, "collapseId must be at most 64 printable ASCII characters."],
+    ["a collapse id with a line break", { token: TOKEN, environment: "production", payload: ALERT, collapseId: "a\r\nb" }, "collapseId must be at most 64 printable ASCII characters."],
+    ["a collapse id that isn't text", { token: TOKEN, environment: "production", payload: ALERT, collapseId: 3 }, "collapseId must be at most 64 printable ASCII characters."],
     ["a fractional expiration", { token: TOKEN, environment: "production", payload: ALERT, expiration: 1.5 }, "expiration must be a whole number of seconds since 1970."],
     ["a negative expiration", { token: TOKEN, environment: "production", payload: ALERT, expiration: -1 }, "expiration must be a whole number of seconds since 1970."],
     ["an expiration that isn't a number", { token: TOKEN, environment: "production", payload: ALERT, expiration: "soon" }, "expiration must be a whole number of seconds since 1970."],
@@ -429,6 +463,8 @@ describe("the Worker", () => {
     };
     expect(config.name).toBe("spoonjoy-push-relay");
     expect(config.routes).toEqual([{ pattern: "push.spoonjoy.app", custom_domain: true }]);
+    // One documented address, and no invocation logs, which would keep request headers (relay keys).
+    expect(config).toMatchObject({ workers_dev: false, observability: { logs: { invocation_logs: false } } });
     expect(config.vars.APNS_TOPIC).toBe("app.spoonjoy");
     expect(config.ratelimits.map((rule) => rule.name).sort()).toEqual(["REGISTER_LIMITER", "SEND_KEY_LIMITER", "SEND_TOKEN_LIMITER"]);
   });
