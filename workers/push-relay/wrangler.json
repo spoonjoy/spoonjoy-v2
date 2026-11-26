@@ -3,11 +3,12 @@
   "name": "spoonjoy-push-relay",
   "main": "./index.ts",
   "compatibility_date": "2026-10-01",
-  "workers_dev": true,
+  "workers_dev": false,
   "routes": [{ "pattern": "push.spoonjoy.app", "custom_domain": true }],
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1
+    "head_sampling_rate": 1,
+    "logs": { "invocation_logs": false }
   },
   "vars": {
     "APNS_TOPIC": "app.spoonjoy",
