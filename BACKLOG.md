@@ -1225,5 +1225,4 @@ Acceptance criteria:
 These are intentionally lower-certainty until product direction is clarified:
 
 - **Native mobile app packaging.** Deferred 2026-05-27 per Ari: "let things stabilize before native mobile."
-- **Public/private recipe visibility model beyond basic profile/kitchen routes.** Skipped 2026-05-27 per Ari: "all recipes are currently public — we're good." Revisit if granular sharing rules become desired.
 - **Dedicated admin/moderation tools.** No signal needed yet.
