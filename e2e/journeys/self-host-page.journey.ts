@@ -12,7 +12,7 @@ async function expectSelfHostPage(page: Page): Promise<void> {
   for (const section of ["Start it", "What the first account gets", "Update it"]) {
     await expect(page.getByRole("heading", { level: 2, name: section, exact: true })).toBeVisible();
   }
-  await expect(page.getByRole("region", { name: "Start it", exact: true })).toContainText("image: ${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}");
+  await expect(page.getByRole("region", { name: "Start it", exact: true })).toContainText("context: https://github.com/spoonjoy/spoonjoy-v2.git#main");
 }
 
 /**

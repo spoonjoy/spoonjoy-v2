@@ -23,12 +23,12 @@ describe("/self-host", () => {
     const start = screen.getByRole("region", { name: "Start it" });
     expect(within(start).getByText("compose.yaml", { selector: "figcaption *, figcaption" })).toBeInTheDocument();
     expect(COMPOSE).toBe(readFileSync("self-host/compose.yaml", "utf8"));
-    expect(start.textContent).toContain("image: ${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}");
-    expect(start.textContent).toContain("ghcr.io/spoonjoy/spoonjoy");
+    expect(start.textContent).toContain("# image: ${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}");
+    expect(start.textContent).toContain("context: https://github.com/spoonjoy/spoonjoy-v2.git#main");
     expect(within(start).getByText(START)).toBeInTheDocument();
     expect(START).toBe("docker compose up -d");
     expect(within(screen.getByRole("region", { name: "Update it" })).getByText(UPDATE)).toBeInTheDocument();
-    expect(UPDATE).toBe("docker compose pull && docker compose up -d");
+    expect(UPDATE).toBe("docker compose build && docker compose up -d");
   });
 
   it("keeps the Compose file's notes in short lines and never wraps a code line, so what a phone shows is what to type", async () => {
@@ -51,10 +51,11 @@ describe("/self-host", () => {
     expect(first).toHaveTextContent("backs itself up every day and keeps the last 7");
   });
 
-  it("says the image is coming soon until it is public", async () => {
+  it("says the Compose file builds from source until the image is public", async () => {
     expect(IMAGE_PUBLIC).toBe(false);
     await renderPage();
-    expect(screen.getByRole("status")).toHaveTextContent("Image coming soon");
+    expect(screen.getByRole("status")).toHaveTextContent("Built from source for now");
+    expect(screen.getByRole("status")).toHaveTextContent("takes a few minutes");
   });
 
   it("drops the notice once the image is public", () => {
