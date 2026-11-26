@@ -1,6 +1,6 @@
-// Move in: bring a kitchen over from another recipe app. The person picks the app, then gives its
-// server's address and an API token, or drops its backup zip, watches it come in, and lands on what
-// arrived and what didn't. Behind the move_in
+// Move in: bring a kitchen over from another recipe app, or from another Spoonjoy (spoonjoy.app, or a
+// cook's own server). The person picks the app, then gives its server's address and an API token, or
+// drops its backup zip, watches it come in, and lands on what arrived and what didn't. Behind the move_in
 // flag until moved-in recipes can be kept private. Where the Worker has a jobs queue, the move-in
 // runs there and the page only shows how far it has got; elsewhere each poll keeps it running.
 import { Utensils } from "lucide-react";
@@ -28,6 +28,7 @@ import {
   nudgeMoveIn,
   readMoveInOrganizerCounts,
   readMoveInProgress,
+  moveInAppOf,
   readsAServer,
   startMoveIn,
   startServerMoveIn,
@@ -61,6 +62,8 @@ export interface MoveInView {
   archiveName: string | null;
   /** It reads the other app's server rather than a backup. */
   fromServer: boolean;
+  /** The app it moves in from, as the form's choice names it. */
+  app: string;
   recipes: { found: number; done: number; created: number; already: number; updated: number; unchanged: number; skipped: number; failed: number };
   /** Photos found in the backup, and how many of those are on their recipes now. */
   photos: { found: number; in: number };
@@ -96,6 +99,7 @@ function view(progress: MoveInProgress, organizers: MoveInOrganizerCounts, runsO
     finished: FINISHED.includes(progress.job.status),
     archiveName: progress.job.archiveName,
     fromServer: readsAServer(progress.job.kind),
+    app: moveInAppOf(progress.job.kind),
     recipes: {
       found: recipes.found,
       done,
@@ -207,6 +211,11 @@ function plural(n: number, one: string, many = `${one}s`) {
 /** How far the page's upload has got: bytes sent of the file's size, then the check once every part is in. */
 type Sending = { sent: number; total: number; checking: boolean };
 
+const APPS = [
+  { value: "mealie", label: "Mealie" },
+  { value: "spoonjoy", label: "Another Spoonjoy", description: "spoonjoy.app, or a Spoonjoy on your own server." },
+] as const;
+
 const FROM = [
   {
     value: "server",
@@ -216,10 +225,30 @@ const FROM = [
   { value: "backup", label: "From a backup", description: "In Mealie, open Settings, then Backups, make a backup and download it." },
 ] as const;
 
-function UploadForm({ error, uploadMaxBytes, from: failedFrom }: { error: string | null; uploadMaxBytes: number; from: "server" | "backup" }) {
+/** What the server fields say for each app: where its address is, and where the cook makes its token. */
+const SERVER_WORDS = {
+  mealie: {
+    placeholder: "https://recipes.example.com",
+    address: "The address you open Mealie at. It has to open from anywhere on the internet, not only at home.",
+    token: "Spoonjoy only reads your recipes with it, and forgets it once they're in. You can delete the token in Mealie then.",
+  },
+  spoonjoy: {
+    placeholder: "https://spoonjoy.app",
+    address: "The address you open that Spoonjoy at: https://spoonjoy.app, or your own server's. It has to open from anywhere on the internet.",
+    token:
+      "Make one on that Spoonjoy: sign in there, open /api/playground, and send POST /api/v1/tokens with a name and the scopes account:read and kitchen:read. Spoonjoy only reads your recipes with it, and forgets it once they're in.",
+  },
+} as const;
+
+function UploadForm({ error, uploadMaxBytes, from: failedFrom, app: failedApp }: { error: string | null; uploadMaxBytes: number; from: "server" | "backup"; app: string }) {
   const submitting = useNavigation().state === "submitting";
-  const [from, setFrom] = useState<string>(failedFrom);
+  const [app, setApp] = useState<string>(failedApp);
+  const [chosenFrom, setFrom] = useState<string>(failedFrom);
+  // Another Spoonjoy moves in only from its server.
+  const fromSpoonjoy = app === "spoonjoy";
+  const from = fromSpoonjoy ? "server" : chosenFrom;
   const server = from === "server";
+  const words = SERVER_WORDS[fromSpoonjoy ? "spoonjoy" : "mealie"];
   const navigate = useNavigate();
   const [sending, setSending] = useState<Sending | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -271,8 +300,12 @@ function UploadForm({ error, uploadMaxBytes, from: failedFrom }: { error: string
     <Form method="post" render={<RouterForm encType="multipart/form-data" />} className="gap-6" onSubmit={send}>
       {shown ? <Alert tone="destructive" title={server ? "Your kitchen didn't move in" : "That backup didn't move in"} description={shown} /> : null}
       {stopped ? <Alert ref={stoppedAlert} tabIndex={-1} title="Upload stopped" description={UPLOAD_STOPPED_MESSAGE} /> : null}
-      <ChoiceCard legend="Where are you coming from?" name="app" defaultValue="mealie" required items={[{ value: "mealie", label: "Mealie" }]} />
-      <ChoiceCard legend="How do you want to bring it?" name="from" value={from} onValueChange={setFrom} required items={FROM} />
+      <ChoiceCard legend="Where are you coming from?" name="app" value={app} onValueChange={setApp} required items={APPS} />
+      {fromSpoonjoy ? (
+        <input type="hidden" name="from" value="server" />
+      ) : (
+        <ChoiceCard legend="How do you want to bring it?" name="from" value={from} onValueChange={setFrom} required items={FROM} />
+      )}
       {server ? (
         <>
           <TextField
@@ -281,8 +314,8 @@ function UploadForm({ error, uploadMaxBytes, from: failedFrom }: { error: string
             type="url"
             required
             autoComplete="url"
-            placeholder="https://recipes.example.com"
-            description="The address you open Mealie at. It has to open from anywhere on the internet, not only at home."
+            placeholder={words.placeholder}
+            description={words.address}
           />
           <TextField
             label="API token"
@@ -294,7 +327,7 @@ function UploadForm({ error, uploadMaxBytes, from: failedFrom }: { error: string
             data-1p-ignore=""
             data-lpignore="true"
             data-bwignore=""
-            description="Spoonjoy only reads your recipes with it, and forgets it once they're in. You can delete the token in Mealie then."
+            description={words.token}
           />
         </>
       ) : (
@@ -489,7 +522,12 @@ export default function MoveIn() {
           divider
         />
         {!move || move.status === "failed" ? (
-          <UploadForm error={actionData?.error ?? move?.failure ?? null} uploadMaxBytes={uploadMaxBytes} from={move && !move.fromServer ? "backup" : "server"} />
+          <UploadForm
+            error={actionData?.error ?? move?.failure ?? null}
+            uploadMaxBytes={uploadMaxBytes}
+            from={move && !move.fromServer ? "backup" : "server"}
+            app={move?.app ?? "mealie"}
+          />
         ) : move.finished ? (
           <Finished move={move} />
         ) : (
