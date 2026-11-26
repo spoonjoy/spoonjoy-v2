@@ -13,6 +13,10 @@ import { House, LogOut } from "lucide-react";
 import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
+import { Alert } from "~/components/ouro/alert/alert";
+import { CodeBlock } from "~/components/ouro/code-block/code-block";
+import { RadioGroup } from "~/components/ouro/radio-group/radio-group";
+import { controls } from "../../actions/generated/web";
 import { isSelfHosted, isServerAdmin } from "~/lib/server-access.server";
 import { d1ReadBatch, requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
@@ -124,6 +128,20 @@ const USER_INFO_INTENTS = ["updateUserInfo"] as const;
 const DELETE_INTENTS = ["deleteAccount"] as const;
 const REMOVE_PASSWORD_FIELDS = ["currentPassword"] as const;
 
+// What a token made here is for, in the cook's words. The action gives each its scopes and expiry.
+const TOKEN_PURPOSES = [
+  {
+    value: "move",
+    label: "Moving my kitchen to another Spoonjoy",
+    description: "Reads your account and your whole kitchen, and changes nothing. Works for 7 days.",
+  },
+  {
+    value: "program",
+    label: "A program or agent using my kitchen",
+    description: "Reads your recipes and cookbooks, and can change your shopping list, account and tokens. Works for 90 days.",
+  },
+];
+
 export default function AccountSettings() {
   const { user, oauthError, notifications, blockedChefs = [], serverAdmin = false, recipeVisibilityDefault = null, recipeVisibilityChoices = null } = useLoaderData<
     AccountSettingsLoaderData & {
@@ -138,6 +156,8 @@ export default function AccountSettings() {
   const [initialActionData] = useState(actionData);
   const userInfoAnswer = useIntentAnswer(actionData, USER_INFO_INTENTS);
   const passwordFetcher = useFetcher<AccountSettingsActionResult>();
+  const tokenFetcher = useFetcher<AccountSettingsActionResult>();
+  const tokenAnswer = tokenFetcher.data;
   const [passwordBaseline, setPasswordBaseline] = useState(initialActionData);
   const passwordAnswer = passwordFetcher.data;
   const passwordData = passwordAnswer ?? passwordBaseline;
@@ -439,8 +459,30 @@ export default function AccountSettings() {
 
       <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="api-access-section" title="API and app access">
         <Text tone="muted" className="mt-1">
-          Revoke personal, delegated, and OAuth app access without exposing token secrets.
+          Make a token for a program or another Spoonjoy, and revoke personal, delegated, and OAuth app access
+          without exposing token secrets.
         </Text>
+
+        <tokenFetcher.Form method="post" className="mt-5 space-y-4" data-testid="make-api-token">
+          <input type="hidden" name="intent" value="createApiToken" />
+          <RadioGroup legend="What it's for" name="purpose" options={TOKEN_PURPOSES} defaultValue="move" />
+          <TextField label="Name" name="name" description="So you can tell your tokens apart. Optional." autoComplete="off" />
+          <Button
+            type="submit"
+            {...controls["create-api-token"].props}
+            disabled={tokenFetcher.state !== "idle"}
+          >
+            Make token
+          </Button>
+        </tokenFetcher.Form>
+        {tokenAnswer?.token ? (
+          <div className="mt-4 space-y-3">
+            <Alert tone="success" title={`${tokenAnswer.token.name} is ready`} description="Copy it now: Spoonjoy won't show it again." />
+            <CodeBlock code={tokenAnswer.token.secret} title="Your new token" copyLabel="Copy token" wrap />
+          </div>
+        ) : tokenAnswer?.success === false ? (
+          <Alert tone="destructive" className="mt-4" title="No token made" description={tokenAnswer.message} />
+        ) : null}
 
         <div className="mt-5 space-y-6">
           <div>

@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
-import { createApiCredential } from "~/lib/api-auth.server";
+import { createApiCredential, hashApiToken } from "~/lib/api-auth.server";
 import { issueConnectorTokens } from "~/lib/oauth-server.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -1551,6 +1551,79 @@ describe("Account Settings Route", () => {
         .resolves.toMatchObject({ revokedAt: expect.any(Date) });
     });
 
+    it("makes a read-only token for moving the kitchen, for a week, and answers its secret once", async () => {
+      const formData = new FormData();
+      formData.append("intent", "createApiToken");
+      formData.append("purpose", "move");
+      const before = Date.now();
+
+      const result = (await authenticatedPost(formData)) as { token: { secret: string } };
+
+      expect(result).toMatchObject({
+        success: true,
+        intent: "createApiToken",
+        message: "Moving my kitchen is ready. Copy it now: Spoonjoy won't show it again.",
+        token: { name: "Moving my kitchen", secret: expect.stringMatching(/^sj_/) },
+      });
+      const stored = await db.apiCredential.findFirstOrThrow({ where: { userId: testUserId } });
+      expect(stored).toMatchObject({ name: "Moving my kitchen", scopes: "account:read kitchen:read", revokedAt: null });
+      expect(stored.tokenHash).toBe(await hashApiToken(result.token.secret));
+      const days = (stored.expiresAt!.getTime() - before) / 86_400_000;
+      expect(days).toBeGreaterThan(6.99);
+      expect(days).toBeLessThan(7.01);
+    });
+
+    it("makes a program token with the personal default scopes for 90 days, named as the cook asks", async () => {
+      const formData = new FormData();
+      formData.append("intent", "createApiToken");
+      formData.append("purpose", "anything else");
+      formData.append("name", `  ${"Kitchen display ".repeat(10)}  `);
+
+      const result = (await authenticatedPost(formData)) as { token: { secret: string } };
+
+      const name = "Kitchen display ".repeat(10).trim().slice(0, 100);
+      expect(result).toMatchObject({ success: true, token: { name } });
+      const stored = await db.apiCredential.findFirstOrThrow({ where: { userId: testUserId } });
+      expect(stored.name).toBe(name);
+      expect(stored.scopes.split(" ")).toEqual(expect.arrayContaining(["recipes:read", "shopping_list:write"]));
+      expect(stored.scopes).not.toContain("kitchen:read");
+      const days = (stored.expiresAt!.getTime() - Date.now()) / 86_400_000;
+      expect(days).toBeGreaterThan(89.99);
+      expect(days).toBeLessThan(90.01);
+    });
+
+    it("makes no token when the cook signs out everywhere while it is being made", async () => {
+      // Signed out everywhere after the page checked the session but before the insert: the
+      // insert is fenced on the session's version, so it writes nothing and says why.
+      const insert = db.$executeRawUnsafe.bind(db);
+      const spy = vi.spyOn(db, "$executeRawUnsafe").mockImplementationOnce(async (sql: string, ...values: unknown[]) => {
+        await db.user.update({ where: { id: testUserId }, data: { sessionVersion: { increment: 1 } } });
+        return insert(sql, ...values);
+      });
+      const formData = new FormData();
+      formData.append("intent", "createApiToken");
+
+      const answer = await authenticatedPost(formData);
+
+      spy.mockRestore();
+      expect(answer).toMatchObject({
+        success: false,
+        intent: "createApiToken",
+        error: "signed_out",
+        message: "Your session was signed out. Sign in again to create a token.",
+      });
+      await expect(db.apiCredential.count({ where: { userId: testUserId } })).resolves.toBe(0);
+    });
+
+    it("lets an unexpected failure making a token reach the error page", async () => {
+      const spy = vi.spyOn(db, "$executeRawUnsafe").mockRejectedValueOnce(new Error("disk on fire"));
+      const formData = new FormData();
+      formData.append("intent", "createApiToken");
+
+      await expect(authenticatedPost(formData)).rejects.toThrow("disk on fire");
+      spy.mockRestore();
+    });
+
     it("rejects missing, unknown, or already revoked API credential revocations", async () => {
       const created = await createApiCredential(db, testUserId, "Already revoked script", {
         scopes: ["recipes:read"],
@@ -1819,6 +1892,76 @@ describe("Account Settings Route", () => {
   });
 
   describe("component - API and app access", () => {
+    function tokenPage(answer: () => unknown) {
+      const submitted: FormData[] = [];
+      const Stub = createTestRoutesStub([
+        {
+          path: "/account/settings",
+          Component: AccountSettings,
+          loader: () => ({
+            user: {
+              id: testUserId,
+              email: testUserEmail.toLowerCase(),
+              username: testUsername,
+              hasPassword: true,
+              oauthAccounts: [],
+              photoUrl: null,
+              passkeys: [],
+            },
+            notifications: { pushSubscribed: false },
+          }),
+          action: async ({ request }: { request: Request }) => {
+            submitted.push(await request.formData());
+            return answer();
+          },
+        },
+      ]);
+      render(<Stub initialEntries={["/account/settings"]} />);
+      return submitted;
+    }
+
+    it("makes a moving token by default, and shows its secret once with a way to copy it", async () => {
+      const user = userEvent.setup();
+      const submitted = tokenPage(() => ({
+        success: true,
+        intent: "createApiToken",
+        token: { name: "Moving my kitchen", secret: "sj_secret_once" },
+      }));
+      const form = await screen.findByTestId("make-api-token");
+      expect(within(form).getByRole("radio", { name: /Moving my kitchen to another Spoonjoy/ })).toBeChecked();
+
+      await user.click(within(form).getByRole("button", { name: "Make token" }));
+
+      expect(await screen.findByText("Moving my kitchen is ready")).toBeInTheDocument();
+      expect(screen.getByText("Copy it now: Spoonjoy won't show it again.")).toBeInTheDocument();
+      expect(screen.getByText("sj_secret_once")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Copy token" })).toBeInTheDocument();
+      expect(submitted).toHaveLength(1);
+      expect(submitted[0].get("intent")).toBe("createApiToken");
+      expect(submitted[0].get("purpose")).toBe("move");
+      expect(within(form).getByRole("button", { name: "Make token" })).toHaveAttribute("data-ax-action", "create-api-token");
+    });
+
+    it("sends a program token's name, and says why when no token was made", async () => {
+      const user = userEvent.setup();
+      const submitted = tokenPage(() => ({
+        success: false,
+        intent: "createApiToken",
+        error: "signed_out",
+        message: "Your session was signed out. Sign in again to create a token.",
+      }));
+      const form = await screen.findByTestId("make-api-token");
+
+      await user.click(within(form).getByRole("radio", { name: /A program or agent using my kitchen/ }));
+      await user.type(within(form).getByRole("textbox", { name: /Name/ }), "Kitchen display");
+      await user.click(within(form).getByRole("button", { name: "Make token" }));
+
+      expect(await screen.findByText("No token made")).toBeInTheDocument();
+      expect(screen.getByText("Your session was signed out. Sign in again to create a token.")).toBeInTheDocument();
+      expect(submitted[0].get("purpose")).toBe("program");
+      expect(submitted[0].get("name")).toBe("Kitchen display");
+    });
+
     it("renders bearer credentials and OAuth app connections with fallback labels", async () => {
       const mockData: AccountSettingsLoaderData = {
         user: {
