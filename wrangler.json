@@ -88,6 +88,7 @@
 
   "env": {
     "qa": {
+      "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
       "durable_objects": {
         "bindings": [
           {
