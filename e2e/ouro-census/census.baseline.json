@@ -1691,10 +1691,6 @@
       ],
       "default": [
         {
-          "identity": "button \"Add this week to my list\" [button/root] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"Plan a meal for Friday\" [button/root] in region \"Friday, Mar 5\"",
           "count": 1
         },
@@ -6084,10 +6080,6 @@
         }
       ],
       "default": [
-        {
-          "identity": "button \"Add this week to my list\" [button/root] in main",
-          "count": 1
-        },
         {
           "identity": "button \"Plan a meal for Friday\" [button/root] in region \"Friday, Mar 5\"",
           "count": 1

@@ -78,7 +78,7 @@ beforeEach(async () => {
   });
   restoreInfo = () => spy.mockRestore();
   database = migratedSqliteD1();
-  env = { DB: database.binding, SPOONJOY_FLAGS: "households" };
+  env = { DB: database.binding };
   for (const id of ["ann", "ben", "cal", "dee"]) {
     run(`INSERT INTO "User" ("id", "email", "username") VALUES ('${id}', '${id}@example.com', '${id}_cooks')`);
     cookies[id] = (await createUserSessionCookie(id, { DB: database.binding } as Parameters<typeof createUserSessionCookie>[1])).split(";")[0]!;
