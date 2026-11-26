@@ -50,8 +50,8 @@ async function fillKitchen(cook: APIRequestContext) {
  * The journey test with `otherSpoonjoy`: scratch index 16's base account, with FOCACCIA in its kitchen and a move-in
  * token, reached through the pass-through. It closes in the test's teardown, which runs even when the test times out.
  */
-// Setting up fills a kitchen and opens a quick tunnel, which may take three 45 s tries, so the fixture has its own
-// time rather than the test's 60 s (a run on 45882180916 ran out of the test's time here).
+// Setting up fills a kitchen, reads it back and loads it into the stand-in, each with a few tries, so the fixture has
+// its own time rather than the test's 60 s.
 const SETUP_MS = 4 * 60_000;
 
 export const spoonjoyTest = test.extend<{ otherSpoonjoy: SpoonjoyServer }>({
