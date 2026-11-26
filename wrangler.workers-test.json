@@ -33,6 +33,12 @@
       "database_id": "00000000-0000-0000-0000-000000000001"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "MOVE_IN_TEST_PHOTOS",
+      "bucket_name": "spoonjoy-workers-test-move-in-photos"
+    }
+  ],
   "ratelimits": [
     {
       "name": "AUTH_IP_RATE_LIMITER",
