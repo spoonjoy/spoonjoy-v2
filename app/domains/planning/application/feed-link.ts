@@ -57,6 +57,16 @@ export async function feedLinkMadeAt(plans: PlanStore, links: FeedLinkStore, own
   return links.linkMadeAt(plan.id);
 }
 
+/** The address a calendar app subscribes to for a token, on the site at `origin`. */
+export function feedLinkUrl(origin: string, token: string): string {
+  return `${origin}/calendar/${token}.ics`;
+}
+
+/** The same feed at webcal://, which opens the device's calendar app to subscribe to it. */
+export function webcalUrl(feedUrl: string): string {
+  return feedUrl.replace(/^https?:/, "webcal:");
+}
+
 /** The plan behind a feed token, or null. A token that can't be one of ours is turned away before any lookup. */
 export async function planForFeedToken(links: FeedLinkStore, token: string): Promise<FeedLinkOwner | null> {
   if (!TOKEN_SHAPE.test(token)) return null;
