@@ -10,7 +10,9 @@ Then open http://localhost:8080 and sign up.
 
 With Docker Compose, save [`self-host/compose.yaml`](../self-host/compose.yaml) and run `docker compose up -d` beside it. It keeps the data in a named volume, restarts the server unless you stop it, and reads `SPOONJOY_BASE_URL` and `SPOONJOY_PORT` from your shell or a `.env` file beside it.
 
-**For now, Compose builds Spoonjoy from source.** The published image isn't open to everyone yet: pulling `ghcr.io/spoonjoy/spoonjoy` without signing in to GitHub is refused, so the `docker run` line above works only for people who can sign in to the package. Until it opens, `self-host/compose.yaml` builds the image from Spoonjoy's public repository (the `main` branch, through [`self-host/Dockerfile.source`](../self-host/Dockerfile.source)) the first time it starts. That needs no sign-in, takes a few minutes and a few GB of disk while it builds, and then starts as fast as the published image. The published image's line is in the file, commented out, ready to take over.
+**For now, Compose builds Spoonjoy from source.** The published image isn't open to everyone yet: pulling `ghcr.io/spoonjoy/spoonjoy` without signing in to GitHub is refused, so the `docker run` line above works only for people who can sign in to the package. Until it opens, `self-host/compose.yaml` builds the image from Spoonjoy's public repository (the `main` branch, through [`self-host/Dockerfile.source`](../self-host/Dockerfile.source)) the first time it starts. That needs no sign-in and takes a few minutes; the `build from source` job in the Self-host Image workflow builds it on every change and reports its time and the memory it takes. Then it starts as fast as the published image. The published image's line is in the file, commented out, ready to take over from the `image:` line and the `build:` block below it.
+
+While Compose builds from source, the `docker run` commands in this guide (running SQL, adding photos, backing up and restoring) need the image Compose built: type `spoonjoy-source` where they say `ghcr.io/spoonjoy/spoonjoy:latest`.
 
 ## What's in the box
 
