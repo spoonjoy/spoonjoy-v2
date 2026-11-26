@@ -463,6 +463,7 @@ export async function stopAndStartAgain(
 
   await page.goto("/move-in");
   await waitForHydration(page);
+  await chooseBackup(page);
   const field = page.getByLabel(requiredLabel("Backup zip"), { exact: true });
   await field.setInputFiles(path);
   const first = await holdParts(2);
@@ -477,6 +478,7 @@ export async function stopAndStartAgain(
 
   await page.reload();
   await waitForHydration(page);
+  await chooseBackup(page);
   await field.setInputFiles(path);
   const again = page.waitForResponse((response) => isBegin(response.request()));
   // Parts go up several at a time, so part 2 can leave before part 1: wait for part 1 itself.
