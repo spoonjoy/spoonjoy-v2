@@ -67,10 +67,24 @@ describe("attachMovedInPhoto", () => {
     expect(database.sqlite.prepare(`SELECT COUNT(*) AS n FROM "RecipeCover"`).get()).toEqual({ n: 1 });
   });
 
-  it("refuses a file that isn't a WebP image, and stores nothing", async () => {
+  it("keeps a JPEG or PNG as it is, as another Spoonjoy stores a cook's upload", async () => {
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16]);
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]);
     const photos = bucket();
-    await expect(attachMovedInPhoto({ db: database.binding, bucket: photos, ownerId: "chef-1", recipeId: "recipe-1", bytes: new Uint8Array([1, 2, 3]), now }))
-      .rejects.toThrow("it isn't a WebP image");
+    await attachMovedInPhoto({ db: database.binding, bucket: photos, ownerId: "chef-1", recipeId: "recipe-1", bytes: jpeg, now });
+    await attachMovedInPhoto({ db: database.binding, bucket: photos, ownerId: "chef-1", recipeId: "recipe-1", bytes: png, now });
+    expect(photos.puts).toEqual([
+      { key: expect.stringMatching(/^covers\/import\/movein-\d+-[0-9a-f-]{36}\.jpg$/), bytes: jpeg, contentType: "image/jpeg" },
+      { key: expect.stringMatching(/^covers\/import\/movein-\d+-[0-9a-f-]{36}\.png$/), bytes: png, contentType: "image/png" },
+    ]);
+  });
+
+  it("refuses a file that isn't a WebP, JPEG or PNG image, a GIF included, and stores nothing", async () => {
+    const photos = bucket();
+    for (const bytes of [new Uint8Array([1, 2, 3]), new TextEncoder().encode("GIF89a...")]) {
+      await expect(attachMovedInPhoto({ db: database.binding, bucket: photos, ownerId: "chef-1", recipeId: "recipe-1", bytes, now }))
+        .rejects.toThrow("it isn't a WebP, JPEG or PNG image");
+    }
     expect(photos.puts).toEqual([]);
   });
 
@@ -138,7 +152,7 @@ describe("attachMovedInPhotos", () => {
     const refused = new Uint8Array([...webp, 9]);
     const photos = slowBucket((bytes) => bytes === refused);
     const answers = await attachMovedInPhotos(inputs(database.binding, photos, [webp, new Uint8Array([1, 2, 3]), refused, new Error("the photo in the backup is damaged")]));
-    expect(answers.map((answer) => answer?.message ?? null)).toEqual([null, "it isn't a WebP image", "R2 refused it", "the photo in the backup is damaged"]);
+    expect(answers.map((answer) => answer?.message ?? null)).toEqual([null, "it isn't a WebP, JPEG or PNG image", "R2 refused it", "the photo in the backup is damaged"]);
     expect(database.sqlite.prepare(`SELECT "recipeId" FROM "RecipeCover"`).all()).toEqual([{ recipeId: "recipe-1" }]);
   });
 
