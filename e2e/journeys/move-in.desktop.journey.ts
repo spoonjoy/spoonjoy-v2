@@ -8,6 +8,7 @@
 // support/move-in.ts.
 import { test } from "./support/journey";
 import { inTheKitchen, moveIn, moveInAfterADrop, moveInAgain, stopAndStartAgain } from "./support/move-in";
+import { timeLargeMoveIn } from "./support/move-in-timing";
 import { scratchDesktopStorageStatePath } from "./support/personas";
 
 test.describe("Move in, a v1.12.0 kitchen", { tag: "@move-in" }, () => {
@@ -25,6 +26,13 @@ test.describe("Move in, a v2.8.0 kitchen", { tag: "@move-in" }, () => {
   test("moves in with every recipe and photo @mutates", async ({ page, expectAccessible, verifyAfterReload }) => {
     await verifyAfterReload(await moveIn("v2.8.0", { page, expectAccessible }));
     await inTheKitchen("v2.8.0", { page, verifyAfterReload });
+  });
+
+  // Then a big kitchen, timed: the proof's 500-recipe v3.31.0 kitchen, with its own ids, moves into the same account,
+  // and the time it takes goes in the run's summary. It shares this account so the run signs in no more accounts.
+  // Only the daily and hand-started Journeys runs include it (tag @move-in-timed; see journeys.yml).
+  test("then moves a 500-recipe kitchen in, and reports how long it took @mutates", { tag: "@move-in-timed" }, async ({ page, verifyAfterReload }) => {
+    await verifyAfterReload(await timeLargeMoveIn("v3.31.0", { page }));
   });
 });
 

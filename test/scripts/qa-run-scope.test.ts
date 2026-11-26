@@ -2110,14 +2110,14 @@ describe("Journeys workflow", () => {
   describe("a later part of the full suite", () => {
     // Runs the step's script with stand-ins for node and pnpm that log their arguments and exit
     // with the code set for that command.
-    const runPart = (part: string, codes: { personas?: number; shard?: number; moveIn?: number } = {}) => {
+    const runPart = (part: string, codes: { personas?: number; shard?: number; moveIn?: number } = {}, timeLargeMoveIn = "false") => {
       const bin = mkdtempSync(join(tmpdir(), "journeys-part-"));
       const log = join(bin, "calls.log");
       writeFileSync(join(bin, "node"), `#!/bin/bash\necho "node $*" >> "${log}"\ncase "$*" in *"--project personas"*) exit ${codes.personas ?? 0};; *--shard*) sleep 0.2; exit ${codes.shard ?? 0};; esac\n`, { mode: 0o755 });
       // The Move in journeys outlive the shard, so the step must wait for them.
       writeFileSync(join(bin, "pnpm"), `#!/bin/bash\nsleep 0.5\necho "pnpm $*" >> "${log}"\necho "moved in"\nexit ${codes.moveIn ?? 0}\n`, { mode: 0o755 });
       const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", step("Run test suite").run as string], {
-        env: { PATH: `${bin}:${process.env.PATH}`, MODE: "full", SUITE: "", PART: part, PARTS: "2", GITHUB_OUTPUT: join(bin, "output") },
+        env: { PATH: `${bin}:${process.env.PATH}`, MODE: "full", SUITE: "", PART: part, PARTS: "2", GITHUB_OUTPUT: join(bin, "output"), TIME_LARGE_MOVE_IN: timeLargeMoveIn },
         encoding: "utf8",
       });
       const calls = readFileSync(log, "utf8").trim().split("\n");
@@ -2131,9 +2131,33 @@ describe("Journeys workflow", () => {
       expect(calls[0]).toBe("node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts --project personas");
       expect(calls.slice(1).sort()).toEqual([
         'node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts --no-deps --project iphone-webkit --project desktop-chrome --grep-invert @ouro-census|@move-in --shard=2/2',
-        "pnpm run test:journeys:move-in",
+        "pnpm run test:journeys:move-in --grep-invert @move-in-timed",
       ]);
       expect(stdout).toBe("[move-in] moved in\n");
+    });
+
+    it("times the 500-recipe move-in only on the daily and hand-started runs", () => {
+      expect(step("Run test suite").env?.TIME_LARGE_MOVE_IN).toBe("${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}");
+      const { status, calls } = runPart("2", {}, "true");
+      expect(status).toBe(0);
+      expect(calls).toContain("pnpm run test:journeys:move-in");
+      expect(journeys["timeout-minutes"]).toBe("${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 40 }}");
+    });
+
+    it("leaves the timed move-in out of a pull request's affected specs", () => {
+      const bin = mkdtempSync(join(tmpdir(), "journeys-affected-"));
+      const log = join(bin, "calls.log");
+      writeFileSync(join(bin, "node"), `#!/bin/bash\necho "node $*" >> "${log}"\n`, { mode: 0o755 });
+      const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", step("Run test suite").run as string], {
+        env: { PATH: `${bin}:${process.env.PATH}`, MODE: "affected", SUITE: "", CENSUS: "false", SPECS: "e2e/journeys/move-in.desktop.journey.ts", GITHUB_OUTPUT: join(bin, "output") },
+        encoding: "utf8",
+      });
+      const calls = readFileSync(log, "utf8").trim().split("\n");
+      rmSync(bin, { recursive: true, force: true });
+      expect(result.status).toBe(0);
+      expect(calls).toEqual([
+        "node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts e2e/journeys/personas.setup.ts e2e/journeys/scratch/ --project iphone-webkit --project desktop-chrome --grep-invert @ouro-census|@move-in-timed e2e/journeys/move-in.desktop.journey.ts",
+      ]);
     });
 
     it("gives the Move in journeys one worker, no setup and their own report and results folders", () => {
@@ -2182,9 +2206,11 @@ describe("Journeys workflow", () => {
     });
     expect(step("Delete this run's QA stack").if).toBe("always()");
     // Bounded, so a hung teardown cannot hold a cancelled run for the whole job timeout.
-    for (const name of ["Rotate persona passwords", "Clean up disposable QA data", "Delete this run's QA stack"]) {
+    for (const name of ["Rotate persona passwords", "Delete this run's QA stack"]) {
       expect([name, step(name)["timeout-minutes"]]).toEqual([name, 5]);
     }
+    // The cleanup gets longer only on the daily and hand-started runs, which delete the timed move-in's photos too.
+    expect(step("Clean up disposable QA data")["timeout-minutes"]).toBe("${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 25 || 5 }}");
   });
 
   it("skips main's journeys only when the merge queue's Journeys run of the same commit passed", () => {
