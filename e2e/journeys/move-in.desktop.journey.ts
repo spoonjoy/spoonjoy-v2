@@ -45,7 +45,7 @@ test.describe("Move in, the same v3.31.0 kitchen from its server and then its ba
     const server = await recipeServer("v3.31.0");
     await verifyAfterReload(await moveIn("v3.31.0", { page, expectAccessible }, { from: server }));
     // The recipes came from the server, asked for one at a time.
-    expect([...server.asked.keys()].filter((path) => path.startsWith("/api/recipes/")).length).toBeGreaterThan(0);
+    expect([...(await server.asked()).keys()].filter((path) => path.startsWith("/api/recipes/")).length).toBeGreaterThan(0);
     await verifyAfterReload(await moveInAgain("v3.31.0", { page }));
     await inTheKitchen("v3.31.0", { page, verifyAfterReload });
   });
