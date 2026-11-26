@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 type Compose = {
-  services: Record<string, { image: string; restart: string; ports: string[]; volumes: string[]; environment: Record<string, string> }>;
+  services: Record<string, { image: string; build: { context: string; dockerfile: string }; restart: string; ports: string[]; volumes: string[]; environment: Record<string, string> }>;
   volumes: Record<string, unknown>;
 };
 
@@ -11,8 +11,13 @@ const compose = parse(readFileSync("self-host/compose.yaml", "utf8")) as Compose
 const spoonjoy = compose.services.spoonjoy!;
 
 describe("self-host/compose.yaml", () => {
-  it("runs the published image with its data in a named volume, restarting unless stopped", () => {
-    expect(spoonjoy.image).toBe("${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}");
+  it("builds from the public repository's main branch until the published image is public, keeping its line beside", () => {
+    expect(spoonjoy.build).toEqual({ context: "https://github.com/spoonjoy/spoonjoy-v2.git#main", dockerfile: "self-host/Dockerfile.source" });
+    expect(spoonjoy.image).toBe("${SPOONJOY_IMAGE:-spoonjoy-source}");
+    expect(readFileSync("self-host/compose.yaml", "utf8")).toContain("    # image: ${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}\n");
+  });
+
+  it("keeps its data in a named volume, restarting unless stopped", () => {
     expect(spoonjoy.restart).toBe("unless-stopped");
     expect(spoonjoy.volumes).toEqual(["spoonjoy-data:/data"]);
     expect(compose.volumes).toHaveProperty("spoonjoy-data");
