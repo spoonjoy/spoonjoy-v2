@@ -63,7 +63,7 @@ function shown(row: RecipeRow, covers: Parameters<typeof getRecipeCoverDisplay>[
 
 /** One page of the cook's recipes that the filters keep, with their covers, and how many they keep in all. */
 export async function readSmartCookbookRecipes(
-  source: { d1: D1ReadDatabase | null; db: PrismaClient },
+  source: { d1: D1ReadDatabase } | { d1: null; db: PrismaClient },
   { ownerId, filters, page }: { ownerId: string; filters: OrganizerFilters; page: number },
 ): Promise<SmartCookbookRecipesPage> {
   const clauses = organizerClauses(ownerId, filters);

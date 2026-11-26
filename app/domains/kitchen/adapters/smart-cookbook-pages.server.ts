@@ -1,15 +1,16 @@
 // Loaders and the action behind the smart cookbook pages: the form that makes one, the page of recipes it fills with,
-// and the cook's list of them on Cookbooks. Every one is the cook's own and behind the smart-cookbooks flag.
+// and the cook's list of them on Cookbooks. Every one is the cook's own and behind the smart-cookbooks flag. On the
+// Worker they read and write D1 directly and build no Prisma client (d1-smart-cookbook-store.ts says why); Prisma is
+// the path where there is no binding (unit tests, scripts).
 import type { AppLoadContext } from "react-router";
 import { data, redirect } from "react-router";
 import type { PrismaClient } from "@prisma/client";
 import { isFlagOn } from "~/domains/platform";
-import { requestD1 } from "~/lib/d1-read.server";
+import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { normalizeMyRecipesPage } from "~/lib/my-recipes-search.server";
 import { OBJECTIONABLE_CONTENT_MESSAGE, containsObjectionableContent } from "~/lib/objectionable-terms";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
-import type { OrganizerStore } from "../application/organizers";
 import {
   changeSmartCookbookRules,
   createSmartCookbook,
@@ -18,11 +19,13 @@ import {
   renameSmartCookbook,
   smartCookbookFill,
   type CreateSmartCookbookResult,
+  type OrganizerReader,
   type SmartCookbookStore,
 } from "../application/smart-cookbooks";
 import { ORGANIZER_KINDS, type Organizer, type OrganizerKind } from "../model/organizer";
 import { SMART_COOKBOOK_SIDES, SMART_COOKBOOK_TITLE_MAX_LENGTH, type SmartCookbook, type SmartCookbookSide } from "../model/smart-cookbook";
 import { ORGANIZER_FILTER_MAX } from "../model/organizer-filter";
+import { d1OrganizerReader, d1SmartCookbookStore } from "./d1-smart-cookbook-store";
 import { prismaOrganizerStore } from "./prisma-organizer-store";
 import { prismaSmartCookbookStore } from "./prisma-smart-cookbook-store";
 import { readSmartCookbookRecipes } from "./smart-cookbook-recipes.server";
@@ -33,16 +36,22 @@ function notFound(): never {
   throw new Response("Not Found", { status: 404 });
 }
 
+type Stores = { store: SmartCookbookStore; organizers: OrganizerReader; source: { d1: D1ReadDatabase } | { d1: null; db: PrismaClient } };
+
+/** The stores on the request's D1 binding, or on Prisma where there is none. */
+async function storesFor(context: AppLoadContext): Promise<Stores> {
+  const d1 = requestD1(context);
+  if (d1) return { store: d1SmartCookbookStore(d1), organizers: d1OrganizerReader(d1), source: { d1 } };
+  const db = await getRequestDb(context);
+  return { store: prismaSmartCookbookStore(db), organizers: prismaOrganizerStore(db), source: { d1: null, db } };
+}
+
 /** The signed-in cook and the stores, or a 404 while smart cookbooks are off for them. */
-async function smartCookbooksRequest(
-  request: Request,
-  context: AppLoadContext,
-): Promise<{ userId: string; store: SmartCookbookStore; organizers: OrganizerStore; db: PrismaClient }> {
+async function smartCookbooksRequest(request: Request, context: AppLoadContext): Promise<Stores & { userId: string }> {
   const env = context.cloudflare?.env;
   const userId = await requireUserId(request, "/login", env);
   if (!isFlagOn("smart-cookbooks", env, userId)) notFound();
-  const db = await getRequestDb(context);
-  return { userId, store: prismaSmartCookbookStore(db), organizers: prismaOrganizerStore(db), db };
+  return { userId, ...(await storesFor(context)) };
 }
 
 /** What each kind is called on a rule's row and chip. */
@@ -52,7 +61,7 @@ const SEGMENT: Record<OrganizerKind, string> = { tag: "tags", category: "categor
 /** One organizer a rule can name: its id submits, its name shows, and its kind is the second line. */
 export type SmartCookbookChoice = { value: string; label: string; description: string };
 
-async function ownedOrganizers(organizers: OrganizerStore, userId: string): Promise<Organizer[]> {
+async function ownedOrganizers(organizers: OrganizerReader, userId: string): Promise<Organizer[]> {
   const byKind = await Promise.all(ORGANIZER_KINDS.map((kind) => organizers.organizersOf(userId, kind)));
   return byKind.flatMap((list) => list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })));
 }
@@ -72,9 +81,9 @@ function ruleViews(cookbook: SmartCookbook, organizers: Organizer[]): SmartCookb
 /** The cook's smart cookbooks for the Cookbooks page, each with its rules, or null while the flag is off for them. */
 export async function smartCookbookListFor(request: Request, context: AppLoadContext, userId: string) {
   if (!isFlagOn("smart-cookbooks", context.cloudflare?.env, userId)) return null;
-  const db = await getRequestDb(context);
-  const organizers = await ownedOrganizers(prismaOrganizerStore(db), userId);
-  const cookbooks = await listSmartCookbooks(prismaSmartCookbookStore(db), userId);
+  const { store, organizers: reader } = await storesFor(context);
+  const organizers = await ownedOrganizers(reader, userId);
+  const cookbooks = await listSmartCookbooks(store, userId);
   return cookbooks.map((cookbook) => ({ id: cookbook.id, title: cookbook.title, rules: ruleViews(cookbook, organizers) }));
 }
 
@@ -146,7 +155,7 @@ export async function smartCookbookPageAction({ request, context, cookbookId }: 
 
 /** A smart cookbook's page: its rules, and a page of the cook's recipes that match them (newest first, with covers) and how many match. */
 export async function smartCookbookPageLoader({ request, context, cookbookId }: Args & { cookbookId: string }) {
-  const { userId, store, organizers, db } = await smartCookbooksRequest(request, context);
+  const { userId, store, organizers, source } = await smartCookbooksRequest(request, context);
   const fill = await smartCookbookFill(store, organizers, userId, cookbookId);
   if (!fill) notFound();
   const owned = await ownedOrganizers(organizers, userId);
@@ -161,6 +170,6 @@ export async function smartCookbookPageLoader({ request, context, cookbookId }: 
   const cookbook = { id: fill.cookbook.id, title: fill.cookbook.title };
   const page = normalizeMyRecipesPage(new URL(request.url).searchParams.get("page"));
   if (!fill.filters) return { cookbook, rules, ruleForm, missing: true, total: 0, page: 1, hasPreviousPage: false, hasNextPage: false, recipes: [] };
-  const result = await readSmartCookbookRecipes({ d1: requestD1(context), db }, { ownerId: userId, filters: fill.filters, page });
+  const result = await readSmartCookbookRecipes(source, { ownerId: userId, filters: fill.filters, page });
   return { cookbook, rules, ruleForm, missing: false, ...result };
 }
