@@ -1,16 +1,31 @@
 // The meal plan: a week of recipes and notes, day by day.
 import { data, Form as RouterForm, useActionData, useLoaderData } from "react-router";
 import type { Route } from "./+types/plan";
-import { addDays, addPlannedMealsToList, getWeek, parseLocalDate, prismaPlanStore, type PlanActionAnswer, plannableRecipes } from "~/domains/planning";
+import {
+  addDays,
+  addPlannedMealsToList,
+  feedLinkMadeAt,
+  feedLinkUrl,
+  getWeek,
+  makeFeedLink,
+  parseLocalDate,
+  prismaFeedLinkStore,
+  prismaPlanStore,
+  type PlanActionAnswer,
+  plannableRecipes,
+  revokeFeedLink,
+} from "~/domains/planning";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { shoppingListRecipeAdder } from "~/lib/shopping-list.server";
-import { d1UnavailableWebResponse } from "~/lib/d1-write-retry.server";
+import { d1UnavailableWebResponse, retryD1Write } from "~/lib/d1-write-retry.server";
+import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { changePlanEntry, planFieldsOf, planRefused } from "~/lib/plan-route.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { AddWeekButton, WeekLinks, WeekListAnswer, WeekPlan } from "~/components/plan/week-plan";
+import { CalendarFeed } from "~/components/plan/calendar-feed";
 import { weekTitle, weekToList } from "~/components/plan/week";
 
 export function meta(_args: Route.MetaArgs) {
@@ -32,11 +47,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const asked = parseLocalDate(params.get("week"));
   // ?recipe=<id> opens the page to plan that recipe, any chef's the cook may read, so a recipe's page can link here.
   const store = prismaPlanStore(db);
-  const [week, { recipes, chosenRecipeId }] = await Promise.all([
+  const [week, { recipes, chosenRecipeId }, feedMadeAt] = await Promise.all([
     getWeek(store, { cook: userId }, asked),
     plannableRecipes(store, { cook: userId }, params.get("recipe")),
+    feedLinkMadeAt(store, prismaFeedLinkStore(db), userId),
   ]);
-  return { week, recipes, chosenRecipeId };
+  return { week, recipes, chosenRecipeId, feedMadeAt: feedMadeAt?.toISOString() ?? null };
 }
 
 /** Reports a failure the plan can't answer to PostHog, without holding up the response. */
@@ -60,8 +76,21 @@ export async function action({ request, context }: Route.ActionArgs) {
   const userId = await plannerUser(request, context);
   const fields = planFieldsOf(await request.formData());
   const intent = fields.intent ?? "";
-  const store = prismaPlanStore(await getRequestDb(context));
+  const db = await getRequestDb(context);
+  const store = prismaPlanStore(db);
   try {
+    if (intent === "make-feed-link") {
+      const links = prismaFeedLinkStore(db);
+      const replaced = (await feedLinkMadeAt(store, links, userId)) !== null;
+      // Each try makes a fresh token and replaces the stored hash, so the token returned is the one that works.
+      const token = await retryD1Write({ scope: "calendar_feed.make" }, () => makeFeedLink(store, links, userId));
+      const origin = resolveIssuerOrigin(request.url, getCloudflareEnv(context)?.SPOONJOY_BASE_URL);
+      return data({ intent, feedUrl: feedLinkUrl(origin, token), replaced });
+    }
+    if (intent === "revoke-feed-link") {
+      const revoked = await retryD1Write({ scope: "calendar_feed.revoke" }, () => revokeFeedLink(store, prismaFeedLinkStore(db), userId));
+      return data({ intent, revoked });
+    }
     if (intent === "add-week-to-list") {
       const day = parseLocalDate(fields.week);
       if (!day) return planRefused(intent, "Choose a week to shop for.");
@@ -80,7 +109,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function PlanPage() {
-  const { week, recipes, chosenRecipeId } = useLoaderData<typeof loader>();
+  const { week, recipes, chosenRecipeId, feedMadeAt } = useLoaderData<typeof loader>();
   const answer = useActionData<PlanActionAnswer>();
   const { planned, left } = weekToList(week);
 
@@ -96,6 +125,7 @@ export default function PlanPage() {
               <AddWeekButton left={left} />
             </RouterForm>
           ) : null}
+          <CalendarFeed madeAt={feedMadeAt} answer={answer} />
         </div>
         <WeekListAnswer answer={answer} />
       </PageHeader>
