@@ -1,0 +1,9 @@
+# The source build needs the whole repository, less what installing and building make again.
+.git
+**/node_modules
+build
+.wrangler
+.react-router
+test-results*
+playwright-report*
+coverage
