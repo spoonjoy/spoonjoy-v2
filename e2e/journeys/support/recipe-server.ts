@@ -17,7 +17,7 @@ const RECIPE_MAX_BYTES = 1024 * 1024;
 const BACKUP_MAX_BYTES = 50 * 1024 * 1024;
 // Loading a kitchen is one request to the stand-in; a blip on the runner's network gets a few more tries.
 const LOAD_TRIES = 4;
-const ASK_MS = 15_000;
+export const ASK_MS = 15_000;
 
 export interface RecipeServer {
   /** The https address the QA Worker reaches the stand-in at. */
@@ -61,7 +61,7 @@ async function kitchenRoutes(bundle: ZipArchive, version: string) {
 }
 
 /** The stand-in's address and the secret that opens its loading routes, which the Journeys workflow exports. */
-function standIn(): { origin: string; secret: string } {
+export function standIn(): { origin: string; secret: string } {
   const origin = process.env.SPOONJOY_MOVE_IN_STAND_IN_URL ?? "";
   const secret = process.env.SPOONJOY_MOVE_IN_STAND_IN_SECRET ?? "";
   if (!origin || !secret) {
@@ -71,7 +71,7 @@ function standIn(): { origin: string; secret: string } {
 }
 
 /** One request to the stand-in, tried again after a network failure or a server error. */
-async function ask(url: string, init: RequestInit, what: string): Promise<Response> {
+export async function ask(url: string, init: RequestInit, what: string): Promise<Response> {
   let failure = "";
   for (let attempt = 1; attempt <= LOAD_TRIES; attempt += 1) {
     if (attempt > 1) await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));

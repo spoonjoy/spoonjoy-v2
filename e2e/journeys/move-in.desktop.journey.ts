@@ -5,10 +5,13 @@
 // already here, and still says so after a reload, and the kitchen holds one copy of its recipe, not two.
 // A backup of over 200 MB whose connection drops partway carries on after a reload, in the index 11
 // account after its kitchen moved in, and one stopped with Stop upload starts over from its first
-// part. The base accounts of the same indices run move-in.mobile.journey.ts. Helpers:
-// support/move-in.ts.
+// part. The base accounts of the same indices run move-in.mobile.journey.ts. Then scratch index 16's
+// desktop twin moves a kitchen in from another Spoonjoy, scratch 16's base account on this run's QA
+// Worker, read with an API token, and moving in again from it adds nothing. Helpers:
+// support/move-in.ts and support/move-in-spoonjoy.ts.
 import { expect, test } from "./support/journey";
 import { inTheKitchen, moveIn, moveInAfterADrop, moveInAgain, serverTest, stopAndStartAgain } from "./support/move-in";
+import { focacciaInTheKitchen, moveInFromSpoonjoy, moveInFromSpoonjoyAgain, spoonjoyTest } from "./support/move-in-spoonjoy";
 import { timeLargeMoveIn } from "./support/move-in-timing";
 import { scratchDesktopStorageStatePath } from "./support/personas";
 
@@ -60,5 +63,15 @@ test.describe("Move in, a big v1.12.0 backup over a connection that drops", { ta
 
   test("stops on the cook's word, and the same file then starts over from its first part @mutates", async ({ page, expectAccessible, expectConsoleError, verifyAfterReload }) => {
     await verifyAfterReload(await stopAndStartAgain("v1.12.0", { page, expectAccessible, expectConsoleError }));
+  });
+});
+
+test.describe("Move in, a kitchen from another Spoonjoy", { tag: "@move-in" }, () => {
+  test.use({ storageState: scratchDesktopStorageStatePath(16) });
+
+  spoonjoyTest("brings its recipe and photo, and moving in again adds nothing, even after a reload @mutates", async ({ page, verifyAfterReload, otherSpoonjoy }) => {
+    await verifyAfterReload(await moveInFromSpoonjoy(page, otherSpoonjoy));
+    await verifyAfterReload(await moveInFromSpoonjoyAgain(page, otherSpoonjoy));
+    await focacciaInTheKitchen(page, verifyAfterReload);
   });
 });
