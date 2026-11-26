@@ -40,28 +40,12 @@ export function canRead(viewer: RecipeViewer, recipe: RecipeAccess): boolean {
   return recipe.visibility === "household" && (viewer?.householdChefIds?.has(recipe.chefId) ?? false);
 }
 
-/** The levels every cook who can choose a visibility has. Household joins for a cook who can use households. */
-export const SELECTABLE_RECIPE_VISIBILITIES = ["public", "private"] as const satisfies readonly RecipeVisibility[];
+/** The levels every cook chooses from, on a recipe or as their default for new ones, most open first. */
+export const RECIPE_VISIBILITY_CHOICES = ["public", "household", "private"] as const satisfies readonly RecipeVisibility[];
 
-const SELECTABLE_WITH_HOUSEHOLD = ["public", "household", "private"] as const satisfies readonly RecipeVisibility[];
-
-/** The levels a cook can choose, most open first: household only when they can use households. */
-export function selectableRecipeVisibilities(withHousehold: boolean): readonly RecipeVisibility[] {
-  return withHousehold ? SELECTABLE_WITH_HOUSEHOLD : SELECTABLE_RECIPE_VISIBILITIES;
-}
-
-function selectable(value: unknown, levels: readonly RecipeVisibility[]): RecipeVisibility | null {
-  const level = parseRecipeVisibility(value);
-  return level && levels.includes(level) ? level : null;
-}
-
-/** A new recipe's visibility: the cook's choice, else their default for new recipes, else public, from the levels they can choose. */
-export function newRecipeVisibility(
-  requested: unknown,
-  cookDefault: unknown,
-  levels: readonly RecipeVisibility[] = SELECTABLE_RECIPE_VISIBILITIES,
-): RecipeVisibility {
-  return selectable(requested, levels) ?? selectable(cookDefault, levels) ?? DEFAULT_RECIPE_VISIBILITY;
+/** A new recipe's visibility: the cook's choice, else their default for new recipes, else public. */
+export function newRecipeVisibility(requested: unknown, cookDefault: unknown): RecipeVisibility {
+  return parseRecipeVisibility(requested) ?? parseRecipeVisibility(cookDefault) ?? DEFAULT_RECIPE_VISIBILITY;
 }
 
 /**

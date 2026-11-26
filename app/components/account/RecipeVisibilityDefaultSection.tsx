@@ -9,12 +9,10 @@ import type { RecipeVisibility } from '~/domains/kitchen'
 export interface RecipeVisibilityDefaultSectionProps {
   /** The cook's default for new recipes. */
   value: RecipeVisibility
-  /** The levels the cook can choose, most open first; Public and Only me when left out. */
-  choices?: readonly RecipeVisibility[]
 }
 
 /** Account settings: who can see the cook's new recipes, unless they choose otherwise on the recipe. */
-export function RecipeVisibilityDefaultSection({ value, choices }: RecipeVisibilityDefaultSectionProps) {
+export function RecipeVisibilityDefaultSection({ value }: RecipeVisibilityDefaultSectionProps) {
   const fetcher = useFetcher<{ success: boolean; intent?: string; message?: string }>()
   const [visibility, setVisibility] = useState<RecipeVisibility>(value)
   const saving = fetcher.state !== 'idle'
@@ -28,7 +26,6 @@ export function RecipeVisibilityDefaultSection({ value, choices }: RecipeVisibil
           legend="Who can see your new recipes"
           value={visibility}
           onChange={setVisibility}
-          choices={choices}
           disabled={saving}
         />
         <Text tone="muted">You can still change it on each recipe.</Text>

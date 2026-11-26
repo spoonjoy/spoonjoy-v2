@@ -4,8 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_RECIPE_VISIBILITY,
   RECIPE_VISIBILITIES,
-  SELECTABLE_RECIPE_VISIBILITIES,
-  selectableRecipeVisibilities,
+  RECIPE_VISIBILITY_CHOICES,
   canRead,
   forkedRecipeVisibility,
   newRecipeVisibility,
@@ -39,8 +38,8 @@ describe("recipe visibility", () => {
 });
 
 describe("a new recipe's visibility", () => {
-  it("offers public and private to every cook who can choose", () => {
-    expect(SELECTABLE_RECIPE_VISIBILITIES).toEqual(["public", "private"]);
+  it("offers every cook public, household and only me, most open first", () => {
+    expect(RECIPE_VISIBILITY_CHOICES).toEqual(["public", "household", "private"]);
   });
 
   it("takes the cook's choice, then their default, then public", () => {
@@ -50,23 +49,9 @@ describe("a new recipe's visibility", () => {
     expect(newRecipeVisibility("friends", "nonsense")).toBe("public");
   });
 
-  it("does not take household while it cannot be chosen", () => {
-    expect(newRecipeVisibility("household", "private")).toBe("private");
-    expect(newRecipeVisibility(undefined, "household")).toBe("public");
-  });
-});
-
-describe("choosing household", () => {
-  it("offers household, between public and only me, to a cook who can use households", () => {
-    expect(selectableRecipeVisibilities(true)).toEqual(["public", "household", "private"]);
-    expect(selectableRecipeVisibilities(false)).toEqual(SELECTABLE_RECIPE_VISIBILITIES);
-  });
-
-  it("takes household as the choice or the default only while it is offered", () => {
-    const withHousehold = selectableRecipeVisibilities(true);
-    expect(newRecipeVisibility("household", "private", withHousehold)).toBe("household");
-    expect(newRecipeVisibility(undefined, "household", withHousehold)).toBe("household");
-    expect(newRecipeVisibility("household", "private", selectableRecipeVisibilities(false))).toBe("private");
+  it("takes household as the choice or the default", () => {
+    expect(newRecipeVisibility("household", "private")).toBe("household");
+    expect(newRecipeVisibility(undefined, "household")).toBe("household");
   });
 });
 

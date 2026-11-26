@@ -5,12 +5,12 @@ import { createRoutesStub } from "react-router";
 import { RecipeVisibilityDefaultSection } from "~/components/account/RecipeVisibilityDefaultSection";
 
 describe("RecipeVisibilityDefaultSection", () => {
-  function setup(answer: { success: boolean; intent: string; message?: string }, choices?: Array<"public" | "household" | "private">) {
+  function setup(answer: { success: boolean; intent: string; message?: string }) {
     const posted: Array<Record<string, string>> = [];
     const Stub = createRoutesStub([
       {
         path: "/account/settings",
-        Component: () => <RecipeVisibilityDefaultSection value="public" choices={choices} />,
+        Component: () => <RecipeVisibilityDefaultSection value="public" />,
         action: async ({ request }) => {
           posted.push(Object.fromEntries((await request.formData()).entries()) as Record<string, string>);
           return answer;
@@ -36,16 +36,16 @@ describe("RecipeVisibilityDefaultSection", () => {
 
   it("shows why a save was refused", async () => {
     const user = userEvent.setup();
-    setup({ success: false, intent: "setRecipeVisibilityDefault", message: "Choose public or only me." });
+    setup({ success: false, intent: "setRecipeVisibilityDefault", message: "Choose public, household or only me." });
 
     await user.click(await screen.findByRole("button", { name: "Save" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Choose public or only me.");
+    expect(await screen.findByRole("status")).toHaveTextContent("Choose public, household or only me.");
   });
 
-  it("offers Household as the default only when it is a choice", async () => {
+  it("offers Household as the default", async () => {
     const user = userEvent.setup();
-    const posted = setup({ success: true, intent: "setRecipeVisibilityDefault" }, ["public", "household", "private"]);
+    const posted = setup({ success: true, intent: "setRecipeVisibilityDefault" });
 
     const group = await screen.findByRole("radiogroup", { name: "Who can see your new recipes" });
     await user.click(within(group).getByRole("radio", { name: /Household/ }));
@@ -53,11 +53,5 @@ describe("RecipeVisibilityDefaultSection", () => {
 
     expect(await screen.findByRole("status")).toHaveTextContent("Saved.");
     expect(posted).toEqual([{ intent: "setRecipeVisibilityDefault", visibility: "household" }]);
-  });
-
-  it("leaves Household out when it is not a choice", async () => {
-    setup({ success: true, intent: "setRecipeVisibilityDefault" });
-    const group = await screen.findByRole("radiogroup", { name: "Who can see your new recipes" });
-    expect(within(group).queryByRole("radio", { name: /Household/ })).toBeNull();
   });
 });
