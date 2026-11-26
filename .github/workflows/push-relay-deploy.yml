@@ -2,7 +2,7 @@ name: Push Relay Deploy
 
 # Deploys the spoonjoy-push-relay Worker (workers/push-relay, docs/push-relay.md) at its workers.dev
 # address (RELAY_URL in workers/push-relay/index.ts), in production's Cloudflare account. It moves to
-# push.spoonjoy.app once the spoonjoy.app zone is in that account.
+# push.spoonjoy.app once the spoonjoy.app zone is in that account (docs/push-relay.md has the steps).
 #
 # Its secrets: RELAY_KEY_SECRET signs relay keys and is made here once, on the first deploy, and
 # never printed. APNS_KEY_P8 and APNS_KEY_ID are Apple's push key; they are copied in from the
@@ -126,9 +126,9 @@ jobs:
           APNS_STORED: ${{ steps.apns.outputs.stored }}
         run: |
           set -euo pipefail
-          # A new address can take a moment to answer, and a version made by a secret change takes a
-          # moment to reach every location, so wait for the answer this run
-          # set up: registration open, and Apple's key configured when this run stored it.
+          # A new address can take a moment to answer, and a version made by a secret change takes
+          # a moment to reach every location. So wait for the answer this run set up: registration
+          # open, and Apple's key configured when this run stored it.
           want='.ok == true and .service == "spoonjoy-push-relay" and .registration == "open"'
           if [ "${APNS_STORED:-}" = "true" ]; then want="$want and .apns == \"configured\""; fi
           for attempt in $(seq 1 40); do
