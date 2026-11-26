@@ -186,7 +186,7 @@ export interface AccountSettingsActionResult {
   };
   photoUrl?: string;
   /** A token made by `createApiToken`, shown once: only its hash is stored. */
-  token?: { name: string; secret: string };
+  token?: { id: string; name: string; secret: string };
 }
 
 /**
@@ -730,11 +730,13 @@ async function handleAccountSettingsIntent({
     const made = API_TOKEN_PURPOSES[purpose];
     const name = (formData.get("name")?.toString().trim() || made.name).slice(0, 100);
     const identity = await getSessionIdentity(request, getCloudflareEnv(context));
+    /* istanbul ignore if -- @preserve requireUserId read this same cookie a moment ago. */
+    if (!identity) throw new Error("The session that requireUserId accepted has no identity");
     try {
       // Fenced on this session's version, like the API's own token call: sign out everywhere wins.
       const created = await createApiCredentialForPrincipal(
         database,
-        { id: userId, sessionVersion: (identity as { sessionVersion: number }).sessionVersion },
+        { id: userId, sessionVersion: identity.sessionVersion },
         name,
         { scopes: made.scopes, expiresAt: resolvePersonalTokenExpiry(made.expiresInDays), d1 },
       );
@@ -742,7 +744,7 @@ async function handleAccountSettingsIntent({
         success: true,
         intent,
         message: `${created.credential.name} is ready. Copy it now: Spoonjoy won't show it again.`,
-        token: { name: created.credential.name, secret: created.token },
+        token: { id: created.credential.id, name: created.credential.name, secret: created.token },
       };
     } catch (error) {
       if (!(error instanceof ApiAuthError)) throw error;
