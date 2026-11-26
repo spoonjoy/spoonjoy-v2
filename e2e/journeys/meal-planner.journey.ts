@@ -1,7 +1,8 @@
 // Meal planner on both devices, as scratch user 9 (AGENTS.md's scratch index table): open the week from the page a
 // recipe links to, plan that chef's seeded recipe at twice its size by pressing an empty day, add a note from another
 // day's Add, put the week on the shopping list (the salmon's ingredients at twice their amounts), and remove the note;
-// each change survives a reload. The week is a fixed one far from today, so the run's date never moves the days.
+// each change survives a reload. The week is a fixed one far from today, so the run's date never moves the days. Then
+// make the plan's calendar link, fetch the calendar at it with no session, and turn it off, so the link is refused.
 //
 // A cook has one plan, and the two device projects run at the same time, so each device signs in as its own account:
 // scratch 9's base account on iPhone, its desktop twin on desktop Chrome (support/personas.ts's
@@ -156,6 +157,58 @@ test.describe("Meal planner", () => {
     await expect(page.getByRole("heading", { level: 1, name: /^Week of / })).toBeVisible();
     await expect(bar.getByRole("link", { name: "Plan", exact: true })).toHaveAttribute("aria-current", "page");
     await testInfo.attach(shot, { body: await bar.screenshot({ animations: "disabled" }), contentType: "image/png" });
+  });
+
+  test("a calendar link serves the plan's meals to any calendar app until the cook turns it off @mutates", async ({ page, playwright, verifyAfterReload, expectAccessible }, testInfo) => {
+    // This week, opened to plan the salmon, so the meal lands today: inside the feed's four weeks back to thirteen ahead.
+    await page.goto(`/plan?recipe=${SALMON.id}`);
+    await waitForHydration(page);
+    const todaySheet = page.getByRole("dialog", { name: /^Add to / });
+    await expect(todaySheet.getByRole("combobox", { name: "Recipe", exact: true })).toHaveValue(SALMON.id);
+    await todaySheet.getByRole("button", { name: "Add to plan", exact: true }).click();
+    await expect(todaySheet).toBeHidden();
+    await expect(page).toHaveURL(/\/plan\?week=\d{4}-\d{2}-\d{2}$/);
+
+    const addToCalendar = page.getByRole("button", { name: "Add to calendar", exact: true });
+    const sheet = page.getByRole("dialog", { name: "Add your meal plan to a calendar", exact: true });
+    const linkField = sheet.getByRole("textbox", { name: "Calendar link", exact: true });
+    await addToCalendar.click();
+    await expect(sheet.getByText(/Anyone with the link can see your plan/)).toBeVisible();
+    await sheet.getByRole("button", { name: "Make a calendar link", exact: true }).click();
+    await expect(sheet.getByRole("status")).toHaveText("Made your calendar link. Copy it now: Spoonjoy shows it only this once.");
+    await expect(linkField).toHaveValue(/^https?:\/\/[^/]+\/calendar\/[A-Za-z0-9_-]{43}\.ics$/);
+    const feedUrl = await linkField.inputValue();
+    await expect(sheet.getByRole("link", { name: "Open in calendar app", exact: true })).toHaveAttribute("href", feedUrl.replace(/^https?:/, "webcal:"));
+    await expect(sheet.getByRole("button", { name: "Copy link", exact: true })).toBeVisible();
+    await expectAccessible();
+    await attachElement(testInfo, "meal-planner-calendar-link-made", sheet);
+
+    // A calendar app has no session: the link alone gets the plan, with the salmon on it.
+    const calendarApp = await playwright.request.newContext();
+    const feed = await calendarApp.get(feedUrl);
+    expect(feed.status(), "the feed at the new link").toBe(200);
+    expect(feed.headers()["content-type"]).toBe("text/calendar; charset=utf-8");
+    expect(await feed.text()).toContain(`SUMMARY:Dinner: ${SALMON.title}`);
+
+    // The link is shown once: after a reload the sheet says when it was made, and offers a new link instead.
+    await verifyAfterReload(async () => {
+      await addToCalendar.click();
+      await expect(sheet.getByText(/^You made your link on /)).toBeVisible();
+      await expect(linkField).toHaveCount(0);
+      await expect(sheet.getByRole("button", { name: "Make a new link", exact: true })).toBeVisible();
+    });
+    await attachElement(testInfo, "meal-planner-calendar-link-existing", sheet);
+
+    await sheet.getByRole("button", { name: "Turn off link", exact: true }).click();
+    await expect(sheet.getByRole("status")).toHaveText("Turned off your calendar link. Calendars subscribed to it stop getting your plan.");
+    await expect(sheet.getByRole("button", { name: "Make a calendar link", exact: true })).toBeVisible();
+    expect((await calendarApp.get(feedUrl)).status(), "the feed at the turned-off link").toBe(404);
+    await verifyAfterReload(async () => {
+      await addToCalendar.click();
+      await expect(sheet.getByRole("button", { name: "Make a calendar link", exact: true })).toBeVisible();
+      await expect(sheet.getByRole("button", { name: "Turn off link", exact: true })).toHaveCount(0);
+    });
+    await calendarApp.dispose();
   });
 
   test.describe("as the seeded chef", () => {
