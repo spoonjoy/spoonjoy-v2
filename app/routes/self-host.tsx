@@ -31,12 +31,15 @@ services:
     # Built from Spoonjoy's public source on the
     # first start, which takes a few minutes, until
     # the published image opens to everyone. Then
-    # this line takes over from the two below it:
+    # this line takes over from the image: line
+    # and the build: block below it:
     # image: \${SPOONJOY_IMAGE:-ghcr.io/spoonjoy/spoonjoy:latest}
     image: \${SPOONJOY_IMAGE:-spoonjoy-source}
     build:
       context: https://github.com/spoonjoy/spoonjoy-v2.git#main
       dockerfile: self-host/Dockerfile.source
+      args:
+        BUILDKIT_CONTEXT_KEEP_GIT_DIR: "1"
     restart: unless-stopped
     ports:
       - "\${SPOONJOY_PORT:-8080}:8080"
