@@ -126,9 +126,13 @@ describe("the meal plan's calendar link", () => {
       expect(within(await sheet()).queryByRole("button", { name: "Turn off link" })).toBeNull();
       await user.click(within(await sheet()).getByRole("button", { name: "Make a calendar link" }));
 
-      const made = await within(await sheet()).findByRole("status");
-      expect(made).toHaveTextContent("Made your calendar link. Copy it now: Spoonjoy shows it only this once.");
-      const field = within(await sheet()).getByRole("textbox", { name: "Calendar link" }) as HTMLInputElement;
+      const field = (await within(await sheet()).findByRole("textbox", { name: "Calendar link" })) as HTMLInputElement;
+      expect(within(await sheet()).getByRole("status")).toHaveTextContent("Made your calendar link. Copy it now: Spoonjoy shows it only this once.");
+      // The button that made it is gone, so the link takes the focus.
+      expect(field).toHaveFocus();
+      expect(within(await sheet()).getByText(/Using Google Calendar\?/)).toBeTruthy();
+      // The link is a secret, so analytics records nothing inside the sheet.
+      expect((await sheet()).querySelector(".ph-no-capture")).toBeTruthy();
       expect(field.readOnly).toBe(true);
       expect(await planForFeedToken(prismaFeedLinkStore(db), tokenOf(field.value))).toMatchObject({ ownerId: chefId });
       expect(within(await sheet()).getByRole("link", { name: "Open in calendar app" })).toHaveAttribute("href", webcalUrl(field.value));
@@ -150,11 +154,12 @@ describe("the meal plan's calendar link", () => {
       expect(within(await sheet()).queryByRole("textbox", { name: "Calendar link" })).toBeNull();
       expect(await within(await sheet()).findByText(/You made your link on/)).toHaveTextContent("Dec 16, 2026");
       await user.click(within(await sheet()).getByRole("button", { name: "Make a new link" }));
-      expect(await within(await sheet()).findByRole("status")).toHaveTextContent("Made a new calendar link; the old one no longer works.");
+      await waitFor(async () => expect(within(await sheet()).getByRole("status")).toHaveTextContent("Made a new calendar link; the old one no longer works."));
 
       await user.click(within(await sheet()).getByRole("button", { name: "Turn off link" }));
       await waitFor(async () => expect(within(await sheet()).getByRole("status")).toHaveTextContent("Turned off your calendar link. Calendars subscribed to it stop getting your plan."));
-      expect(await within(await sheet()).findByRole("button", { name: "Make a calendar link" })).toBeTruthy();
+      // The turn-off button is gone, so the focus lands on the button that makes a new link.
+      expect(await within(await sheet()).findByRole("button", { name: "Make a calendar link" })).toHaveFocus();
       expect(within(await sheet()).queryByRole("textbox", { name: "Calendar link" })).toBeNull();
       expect(await db.calendarFeed.count()).toBe(0);
     });
@@ -175,8 +180,11 @@ describe("the meal plan's calendar link", () => {
       await user.click(await show({ intent: "revoke-feed-link", errors: { general: "Try again." } }, null));
       expect(within(await sheet()).getByRole("alert")).toHaveTextContent("Try again.");
       await user.click(await show({ intent: "add-note" }, null));
-      expect(within(await sheet()).queryByRole("status")).toBeNull();
+      expect(within(await sheet()).getByRole("status")).toBeEmptyDOMElement();
       expect(within(await sheet()).queryByRole("alert")).toBeNull();
+      await user.click(await show({ intent: "revoke-feed-link", error: D1_WRITE_UNAVAILABLE_MESSAGE }, null));
+      expect(within(await sheet()).getByRole("status")).toBeEmptyDOMElement();
+      expect(within(await sheet()).getByRole("button", { name: "Make a calendar link" })).not.toHaveFocus();
     });
 
     it("opens the link in a calendar app at webcal://", () => {
