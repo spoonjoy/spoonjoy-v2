@@ -383,7 +383,17 @@ describe("Self-host Image workflow", () => {
 
   it("gives the package write permission only to the jobs that push", () => {
     expect(image.permissions).toEqual({ contents: "read", packages: "write" });
-    expect(Object.keys(workflow.jobs).sort()).toEqual(["image", "publish"]);
+    expect(Object.keys(workflow.jobs).sort()).toEqual(["image", "publish", "source"]);
+    expect(workflow.jobs.source!.permissions).toBeUndefined();
+  });
+
+  it("builds this commit from source as Compose does, with its .git, and boots it healthy, knowing its commit", () => {
+    const source = workflow.jobs.source!;
+    const build = runs(source);
+    expect(build).toContain("docker build -f self-host/Dockerfile.source --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -t spoonjoy-source .");
+    expect(build).toContain("host memory used at most");
+    expect(build).toContain("curl -sf http://localhost:8080/health/ready");
+    expect(build).toContain(`[ "$sha" = "$(git rev-parse HEAD)" ]`);
   });
 });
 
