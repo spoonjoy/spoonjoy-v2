@@ -142,6 +142,15 @@ export const ROADMAP: readonly RoadmapItem[] = [
     shipped: "2026-11-24",
     link: { href: "/plan", label: "Plan your week" },
   },
+  {
+    id: "smart-cookbooks",
+    title: "Smart cookbooks",
+    benefit: "Cookbooks that fill themselves from your tags, categories and tools, like every quick dinner that needs no mixer.",
+    status: "shipped",
+    area: "Recipes",
+    shipped: "2026-11-26",
+    link: { href: "/cookbooks/smart/new", label: "Make a smart cookbook" },
+  },
 
   // Building now.
   {
@@ -178,13 +187,6 @@ export const ROADMAP: readonly RoadmapItem[] = [
     id: "organizers",
     title: "Tags, categories and tools",
     benefit: "Sort recipes your way, and filter out what you can't eat or don't own the gear for.",
-    status: "building",
-    area: "Recipes",
-  },
-  {
-    id: "smart-cookbooks",
-    title: "Smart cookbooks",
-    benefit: "Cookbooks that fill themselves from a rule, like every vegetarian dinner under 30 minutes.",
     status: "building",
     area: "Recipes",
   },
