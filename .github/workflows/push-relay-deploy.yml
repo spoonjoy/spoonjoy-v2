@@ -1,7 +1,8 @@
 name: Push Relay Deploy
 
-# Deploys the spoonjoy-push-relay Worker (workers/push-relay, docs/push-relay.md) to
-# push.spoonjoy.app, in production's Cloudflare account, which holds the spoonjoy.app zone.
+# Deploys the spoonjoy-push-relay Worker (workers/push-relay, docs/push-relay.md) at its workers.dev
+# address (RELAY_URL in workers/push-relay/index.ts), in production's Cloudflare account. It moves to
+# push.spoonjoy.app once the spoonjoy.app zone is in that account.
 #
 # Its secrets: RELAY_KEY_SECRET signs relay keys and is made here once, on the first deploy, and
 # never printed. APNS_KEY_P8 and APNS_KEY_ID are Apple's push key; they are copied in from the
@@ -31,7 +32,7 @@ env:
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
-  RELAY_URL: https://push.spoonjoy.app
+  RELAY_URL: https://spoonjoy-push-relay.mendelow-studio.workers.dev
 
 jobs:
   guard:
@@ -119,14 +120,14 @@ jobs:
           echo "Stored APNS_KEY_P8 and APNS_KEY_ID."
           echo "stored=true" >> "$GITHUB_OUTPUT"
 
-      - name: Confirm the relay answers at push.spoonjoy.app
+      - name: Confirm the relay answers at its address
         id: health
         env:
           APNS_STORED: ${{ steps.apns.outputs.stored }}
         run: |
           set -euo pipefail
-          # A new custom domain can take a few minutes to get its certificate, and a version made by
-          # a secret change takes a moment to reach every location, so wait for the answer this run
+          # A new address can take a moment to answer, and a version made by a secret change takes a
+          # moment to reach every location, so wait for the answer this run
           # set up: registration open, and Apple's key configured when this run stored it.
           want='.ok == true and .service == "spoonjoy-push-relay" and .registration == "open"'
           if [ "${APNS_STORED:-}" = "true" ]; then want="$want and .apns == \"configured\""; fi
