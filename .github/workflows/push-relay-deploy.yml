@@ -7,8 +7,11 @@ name: Push Relay Deploy
 # never printed. APNS_KEY_P8 and APNS_KEY_ID are Apple's push key; they are copied in from the
 # GitHub production environment secrets of the same names whenever both are set there, and the
 # relay answers sends with "not configured" until they are. Once they are, the last step proves
-# Apple takes the key: a send to a made-up device token must come back BadDeviceToken from Apple's
-# sandbox (a bad key comes back InvalidProviderToken).
+# Apple takes the key: a send to a made-up device token must come back BadDeviceToken from both of
+# Apple's hosts (a bad key comes back InvalidProviderToken).
+#
+# It deploys whatever main holds, like the uptime monitor's deploy: main only takes changes that
+# passed the merge queue, whose coverage job runs the relay's tests (test/push-relay).
 on:
   workflow_dispatch:
   push:
@@ -100,6 +103,7 @@ jobs:
           fi
 
       - name: Copy Apple's push key in
+        id: apns
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -113,16 +117,31 @@ jobs:
           fi
           jq -n '{APNS_KEY_P8: env.APNS_KEY_P8, APNS_KEY_ID: env.APNS_KEY_ID}' | pnpm exec wrangler secret bulk -c workers/push-relay/wrangler.json
           echo "Stored APNS_KEY_P8 and APNS_KEY_ID."
+          echo "stored=true" >> "$GITHUB_OUTPUT"
 
       - name: Confirm the relay answers at push.spoonjoy.app
         id: health
+        env:
+          APNS_STORED: ${{ steps.apns.outputs.stored }}
         run: |
           set -euo pipefail
-          # A new custom domain can take a few minutes to get its certificate.
-          health="$(curl -fsS --retry 30 --retry-delay 10 --retry-all-errors --max-time 15 "$RELAY_URL/health")"
-          echo "$health"
-          jq -e '.ok == true and .service == "spoonjoy-push-relay" and .registration == "open"' <<<"$health" >/dev/null
-          echo "apns=$(jq -r .apns <<<"$health")" >> "$GITHUB_OUTPUT"
+          # A new custom domain can take a few minutes to get its certificate, and a version made by
+          # a secret change takes a moment to reach every location, so wait for the answer this run
+          # set up: registration open, and Apple's key configured when this run stored it.
+          want='.ok == true and .service == "spoonjoy-push-relay" and .registration == "open"'
+          if [ "${APNS_STORED:-}" = "true" ]; then want="$want and .apns == \"configured\""; fi
+          for attempt in $(seq 1 40); do
+            health="$(curl -fsS --max-time 15 "$RELAY_URL/health" || true)"
+            if [ -n "$health" ] && jq -e "$want" <<<"$health" >/dev/null 2>&1; then
+              echo "$health"
+              echo "apns=$(jq -r .apns <<<"$health")" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Not ready yet ($attempt/40): ${health:-no answer}"
+            sleep 10
+          done
+          echo "::error::$RELAY_URL/health never answered as expected."
+          exit 1
 
       - name: Prove Apple takes the key
         if: steps.health.outputs.apns == 'configured'
@@ -130,10 +149,13 @@ jobs:
           set -euo pipefail
           key="$(curl -fsS -X POST "$RELAY_URL/v1/servers" -H 'content-type: application/json' --data '{"baseUrl":"https://github.com/spoonjoy/spoonjoy-v2/actions"}' | jq -r .relayKey)"
           echo "::add-mask::$key"
-          answer="$(curl -fsS -X POST "$RELAY_URL/v1/send" -H "authorization: Bearer $key" -H 'content-type: application/json' \
-            --data "{\"token\":\"$(printf '0%.0s' $(seq 64))\",\"environment\":\"development\",\"payload\":{\"aps\":{\"alert\":\"Push relay check\"}}}")"
-          echo "$answer"
-          jq -e '.status == 400 and .reason == "BadDeviceToken"' <<<"$answer" >/dev/null || {
-            echo "::error::Apple did not take the relay's key: expected 400 BadDeviceToken for a made-up token."
-            exit 1
-          }
+          token="$(printf '0%.0s' $(seq 64))"
+          for environment in development production; do
+            answer="$(curl -fsS -X POST "$RELAY_URL/v1/send" -H "authorization: Bearer $key" -H 'content-type: application/json' \
+              --data "{\"token\":\"$token\",\"environment\":\"$environment\",\"payload\":{\"aps\":{\"alert\":\"Push relay check\"}}}")"
+            echo "$environment: $answer"
+            jq -e '.status == 400 and .reason == "BadDeviceToken"' <<<"$answer" >/dev/null || {
+              echo "::error::Apple's $environment host did not take the relay's key: expected 400 BadDeviceToken for a made-up token."
+              exit 1
+            }
+          done
