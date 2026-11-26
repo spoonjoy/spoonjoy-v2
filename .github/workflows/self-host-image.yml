@@ -61,6 +61,50 @@ env:
   OUT: self-host-out
 
 jobs:
+  # The image self-host/compose.yaml builds while the published one isn't public: this commit's
+  # source through self-host/Dockerfile.source, as Compose builds it from the repository (with its
+  # .git, so the server reports the commit it was built from), booted on an empty volume to healthy.
+  # Its summary reports the build's time, the host memory it took at most, and the image's size.
+  source:
+    name: build from source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Build it from source
+        run: |
+          baseline=$(free -m | awk '/^Mem:/ {print $3}')
+          ( peak=0; while sleep 2; do used=$(free -m | awk '/^Mem:/ {print $3}'); [ "$used" -gt "$peak" ] && peak=$used && echo "$peak" > /tmp/peak-mem; done ) &
+          sampler=$!
+          start=$(date +%s)
+          docker build -f self-host/Dockerfile.source --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -t spoonjoy-source .
+          end=$(date +%s)
+          kill "$sampler"
+          peak=$(cat /tmp/peak-mem)
+          size=$(docker image inspect spoonjoy-source --format '{{.Size}}')
+          {
+            echo "### Built from source"
+            echo "Build: $(( end - start )) s; host memory used at most $(( peak - baseline )) MiB above the $baseline MiB in use before; image $(( size / 1048576 )) MiB."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Start it and check it is healthy and knows its commit
+        run: |
+          docker run -d --name sj-source -p 8080:8080 spoonjoy-source
+          healthy=
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:8080/health/ready > /dev/null; then healthy=1; break; fi
+            sleep 1
+          done
+          docker logs sj-source
+          [ -n "$healthy" ]
+          curl -sf http://localhost:8080/ -o /dev/null
+          sha=$(curl -sf http://localhost:8080/api/v1/health | jq -r '.data.sourceSha')
+          echo "sourceSha $sha, checkout $(git rev-parse HEAD)"
+          [ "$sha" = "$(git rev-parse HEAD)" ]
+
   image:
     name: image ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
@@ -491,8 +535,8 @@ jobs:
 
       # Updating a server, as docs/self-hosting.md tells an owner to: the guide's Compose file runs the
       # last published image (latest), its owner signs up, adds a recipe and opens sign-ups, then the
-      # same Compose project moves to this commit's image (what `docker compose build && docker compose
-      # up -d` does) on the same data volume. The new image migrates the database on start, and the
+      # same Compose project moves to this commit's image (what updating does once it is the published
+      # image again; the source job above checks the build `docker compose build` makes) on the same data volume. The new image migrates the database on start, and the
       # owner signs back in to the same recipe and setting after a reload. On 8083.
       - name: Update a server from the last published image
         if: success()
