@@ -2,7 +2,7 @@
 
 Notifications on iPhone, iPad and Mac go through Apple's push service (APNs), and only the holder of Apple's push key for the Spoonjoy app can send them. The push relay, `spoonjoy-push-relay` at `https://spoonjoy-push-relay.mendelow-studio.workers.dev`, holds that key, so any Spoonjoy server can notify the Spoonjoy app without holding it: spoonjoy.app uses the relay too, so there is one way notifications reach Apple.
 
-It moves to `https://push.spoonjoy.app` once the spoonjoy.app zone is in production's Cloudflare account: change `RELAY_URL` in [`workers/push-relay/index.ts`](../workers/push-relay/index.ts) and add the route in its `wrangler.json`. Relay keys are signed with the relay's own secret, so servers keep the keys they have.
+It moves to `https://push.spoonjoy.app` once the spoonjoy.app zone is in production's Cloudflare account: change `RELAY_URL` in [`workers/push-relay/index.ts`](../workers/push-relay/index.ts), add the custom domain route in its `wrangler.json` and keep `workers_dev: true` there (servers set up earlier keep reaching the relay at the old address), then fix the copies of the address the relay's tests point to (the deploy workflow's `RELAY_URL` and this page). Relay keys are signed with the relay's own secret, so servers keep the keys they have.
 
 The code is [`workers/push-relay/index.ts`](../workers/push-relay/index.ts), a Cloudflare Worker, deployed by the [Push Relay Deploy](../.github/workflows/push-relay-deploy.yml) workflow on each change to it on main.
 
