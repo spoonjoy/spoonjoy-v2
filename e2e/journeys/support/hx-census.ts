@@ -369,7 +369,8 @@ export const census: Journey[] = [
           await openDialog(page.getByRole("button", { name: "Plan a meal for Monday", exact: true }), page.getByRole("dialog", { name: "Add to Monday, Mar 1" }));
         },
       },
-      // The chef has no calendar link, so the sheet offers to make one.
+      // The chef has no calendar link, so the sheet offers to make one. Making one changes data, so the sheet with a new
+      // link is checked by meal-planner.journey.ts, not here.
       {
         id: "calendar-sheet",
         action: async (page) => {
