@@ -73,13 +73,13 @@ export const BUSY_MIN_MS = 1_000;
 export const BUSY_MAX_MS = 5 * 60_000;
 export const BUSY_DEFAULT_MS = 30_000;
 
-/** A Retry-After header, in seconds or as a date, as milliseconds from `now`, kept between BUSY_MIN_MS and BUSY_MAX_MS. */
 /**
  * A 429: the server, or a proxy in front of it, is limiting how fast the move-in asks. Unlike a 503 that says when to
  * come back, it is never one recipe's trouble, so the move-in waits rather than asking whether the server is up.
  */
 class RateLimitedError extends SourceBusyError {}
 
+/** A Retry-After header, in seconds or as a date, as milliseconds from `now`, kept between BUSY_MIN_MS and BUSY_MAX_MS. */
 export function retryAfterMs(header: string | null, now: number): number {
   const value = header?.trim() ?? "";
   let ms = BUSY_DEFAULT_MS;
