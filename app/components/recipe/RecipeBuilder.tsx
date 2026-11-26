@@ -62,8 +62,6 @@ export interface RecipeBuilderProps {
   saveRequestSignal?: number
   /** Shows the visibility choice, starting at this level; leave it out to hide the choice. */
   visibility?: RecipeVisibility
-  /** The levels the choice offers, most open first; Public and Only me when left out. */
-  visibilityChoices?: readonly RecipeVisibility[]
   /** The actual response accepted by this builder's own save form; absent for SSR display. */
   answer?: object
   errors?: {
@@ -101,7 +99,6 @@ export function RecipeBuilder({
   answer,
   showSteps = true,
   visibility: initialVisibility,
-  visibilityChoices,
 }: RecipeBuilderProps) {
   const detailErrors = useFormErrors(errors, DETAIL_FIELDS, answer)
 
@@ -251,7 +248,7 @@ export function RecipeBuilder({
             error={errors?.image}
           />
           {visibility ? (
-            <RecipeVisibilityField value={visibility} onChange={setVisibility} choices={visibilityChoices} disabled={isDisabled} />
+            <RecipeVisibilityField value={visibility} onChange={setVisibility} disabled={isDisabled} />
           ) : null}
           {loading ? (
             <p role="status" className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">

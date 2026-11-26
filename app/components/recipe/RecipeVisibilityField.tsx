@@ -1,5 +1,5 @@
 import { RadioGroup, type RadioGroupOption } from '~/components/ouro/radio-group/radio-group'
-import { SELECTABLE_RECIPE_VISIBILITIES, type RecipeVisibility } from '~/domains/kitchen'
+import { RECIPE_VISIBILITY_CHOICES, type RecipeVisibility } from '~/domains/kitchen'
 
 const OPTIONS: Record<RecipeVisibility, RadioGroupOption> = {
   public: { value: 'public', label: 'Public', description: 'Anyone can find it, cook it and save it.' },
@@ -8,11 +8,9 @@ const OPTIONS: Record<RecipeVisibility, RadioGroupOption> = {
 }
 
 export interface RecipeVisibilityFieldProps {
-  /** The level shown picked; a level that is not one of `choices` (household without households) shows as Only me. */
+  /** The level shown picked. */
   value: RecipeVisibility
   onChange: (value: RecipeVisibility) => void
-  /** The levels the cook can choose, most open first. Public and Only me unless the page gives more. */
-  choices?: readonly RecipeVisibility[]
   /** Names the field for a form post; the recipe builder reads `value` instead. */
   name?: string
   legend?: string
@@ -23,19 +21,17 @@ export interface RecipeVisibilityFieldProps {
 export function RecipeVisibilityField({
   value,
   onChange,
-  choices = SELECTABLE_RECIPE_VISIBILITIES,
   name = 'visibility',
   legend = 'Who can see this recipe',
   disabled = false,
 }: RecipeVisibilityFieldProps) {
-  const chosen = (next: string): RecipeVisibility => choices.find((level) => level === next) ?? 'private'
   return (
     <RadioGroup
       legend={legend}
       name={name}
-      options={choices.map((level) => OPTIONS[level])}
-      value={chosen(value)}
-      onValueChange={(next) => onChange(chosen(next))}
+      options={RECIPE_VISIBILITY_CHOICES.map((level) => OPTIONS[level])}
+      value={value}
+      onValueChange={(next) => onChange(next as RecipeVisibility)}
       disabled={disabled}
     />
   )

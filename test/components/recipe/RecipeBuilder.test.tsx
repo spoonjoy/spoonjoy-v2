@@ -189,10 +189,10 @@ describe("RecipeBuilder", () => {
       expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ title: "Secret Soup", visibility: "private" }));
     });
 
-    it("offers Household only when the page gives it as a choice, and saves it", async () => {
+    it("offers Household, and saves it", async () => {
       const user = userEvent.setup();
       const onSave = vi.fn();
-      const Wrapper = createTestWrapper({ onSave, visibility: "public", visibilityChoices: ["public", "household", "private"] });
+      const Wrapper = createTestWrapper({ onSave, visibility: "public" });
       render(<Wrapper initialEntries={["/recipes/new"]} />);
 
       const group = await screen.findByRole("radiogroup", { name: "Who can see this recipe" });
@@ -203,15 +203,6 @@ describe("RecipeBuilder", () => {
       await user.click(screen.getByRole("button", { name: "Create recipe" }));
 
       expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ title: "Family Soup", visibility: "household" }));
-    });
-
-    it("leaves Household out without that choice, showing a household recipe as Only me", async () => {
-      const Wrapper = createTestWrapper({ visibility: "household" });
-      render(<Wrapper initialEntries={["/recipes/new"]} />);
-
-      const group = await screen.findByRole("radiogroup", { name: "Who can see this recipe" });
-      expect(within(group).queryByRole("radio", { name: /Household/ })).toBeNull();
-      expect(within(group).getByRole("radio", { name: /Only me/ })).toBeChecked();
     });
   });
 
