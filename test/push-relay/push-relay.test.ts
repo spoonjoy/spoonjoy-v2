@@ -10,6 +10,7 @@ import relay, {
   handle,
   issueRelayKey,
   providerToken,
+  RELAY_URL,
   resetProviderTokenCache,
   verifyRelayKey,
   type RateLimiter,
@@ -454,18 +455,27 @@ describe("the Worker", () => {
     expect(log).toHaveBeenCalledOnce();
   });
 
-  it("is deployed as spoonjoy-push-relay at push.spoonjoy.app for the app's bundle id", () => {
+  it("is deployed as spoonjoy-push-relay at its workers.dev address for the app's bundle id", () => {
     const config = JSON.parse(readFileSync("workers/push-relay/wrangler.json", "utf8")) as {
       name: string;
-      routes: Array<{ pattern: string; custom_domain: boolean }>;
+      routes?: unknown;
       vars: Record<string, string>;
       ratelimits: Array<{ name: string }>;
     };
     expect(config.name).toBe("spoonjoy-push-relay");
-    expect(config.routes).toEqual([{ pattern: "push.spoonjoy.app", custom_domain: true }]);
-    // One documented address, and no invocation logs, which would keep request headers (relay keys).
-    expect(config).toMatchObject({ workers_dev: false, observability: { logs: { invocation_logs: false } } });
+    // One address, RELAY_URL, until the spoonjoy.app zone is in this account and it moves to
+    // push.spoonjoy.app; and no invocation logs, which would keep request headers (relay keys).
+    expect(RELAY_URL).toBe(`https://${config.name}.mendelow-studio.workers.dev`);
+    expect(config.routes).toBeUndefined();
+    expect(config).toMatchObject({ workers_dev: true, preview_urls: false, observability: { logs: { invocation_logs: false } } });
     expect(config.vars.APNS_TOPIC).toBe("app.spoonjoy");
     expect(config.ratelimits.map((rule) => rule.name).sort()).toEqual(["REGISTER_LIMITER", "SEND_KEY_LIMITER", "SEND_TOKEN_LIMITER"]);
+  });
+
+  it("is the address the deploy workflow checks and the docs give", () => {
+    expect(readFileSync(".github/workflows/push-relay-deploy.yml", "utf8")).toContain(`  RELAY_URL: ${RELAY_URL}\n`);
+    const docs = readFileSync("docs/push-relay.md", "utf8");
+    expect(docs).toContain(`\`${RELAY_URL}\``);
+    expect(docs).toContain(`curl -s ${RELAY_URL}/health`);
   });
 });
