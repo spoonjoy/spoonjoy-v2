@@ -7,12 +7,12 @@ A person can download everything they put into Spoonjoy, and can permanently del
 `GET /api/v1/me/export`, and Download my data in account settings (`/account/export`), return one JSON document, format `spoonjoy.account-export.v1`:
 
 - the account: id, username, email, profile photo URL, creation time and sign-in methods;
-- every recipe the person owns, including deleted ones, with steps, ingredients, which steps use another step's output, and every cover (active or archived);
+- every recipe the person owns, including deleted ones, with steps, ingredients, which steps use another step's output, its tags, categories and tools by name, where it moved in from (the app, that app's server address, its id there and a fingerprint of it as it came in), and every cover (active or archived);
 - their cookbooks and the recipes saved in each;
 - their shopping list;
 - their cooks (spoons), with notes and photos.
 
-Photos are listed as absolute `https://spoonjoy.app/photos/...` URLs. Password hashes, tokens and passkey keys are never included.
+Photos are listed as absolute `https://spoonjoy.app/photos/...` URLs. Password hashes, tokens and passkey keys are never included. Another Spoonjoy's Move in page reads this export to move a kitchen over (docs/self-hosting.md, Moving your kitchen).
 
 ## Who can delete
 
