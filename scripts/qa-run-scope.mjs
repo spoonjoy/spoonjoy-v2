@@ -47,10 +47,14 @@
 //             several times in a row on new connections. While Cloudflare keeps answering a
 //             server error for a built file, it deploys the build again under a fresh Worker name
 //             (`-r<n>`) and points the rest of the run at it.
-//   teardown  delete this run's jobs queue, Worker and D1 (always; a failure only warns, and a
-//             later sweep deletes anything older than STALE_AFTER_MS).
-//   sweep     delete run stacks older than STALE_AFTER_MS; run on a schedule as well as by each
-//             prepare, and fails when more than MAX_RUN_WORKERS run Workers remain.
+//   stand-in  deploy the Move in journeys' stand-in for the other recipe app's server
+//             (workers/move-in-stand-in) as `<this stack's Worker>-stand-in`, with a secret of its
+//             own, wait until it answers, and export its URL and secret.
+//   teardown  delete this run's jobs queue, Worker, stand-in and D1 (always; a failure only warns,
+//             and a later sweep deletes anything older than STALE_AFTER_MS).
+//   sweep     delete run stacks, stand-ins included, older than STALE_AFTER_MS; run on a schedule
+//             as well as by each prepare, and fails when more than MAX_RUN_WORKERS run Workers
+//             remain.
 //   shared-queue  create shared QA's jobs queue if it is missing; main runs it before deploying
 //             shared QA, since a deploy cannot bind a queue that does not exist.
 //
@@ -97,12 +101,18 @@ export const JOBS_BINDING = "JOBS";
 export const SHARED_QA_QUEUE = "spoonjoy-jobs-qa";
 export const RUN_QUEUE_PREFIX = "spoonjoy-jobs-qa-run-";
 export const RUN_QUEUE_PATTERN = /^spoonjoy-jobs-qa-run-\d+-\d+(?:-p[2-9])?$/;
+// The Move in journeys' stand-in for the other recipe app's server (workers/move-in-stand-in), one per
+// stack that runs them: the stack's Worker name with STAND_IN_SUFFIX.
+export const STAND_IN_SUFFIX = "-stand-in";
+export const STAND_IN_WORKER_PATTERN = /^spoonjoy-v2-qa-run-\d+-\d+(?:-p[2-9])?-stand-in$/;
+export const STAND_IN_CONFIG = "workers/move-in-stand-in/wrangler.json";
 // The journeys job times out after 40 minutes, so a run stack older than this belongs to a run
 // that ended without its teardown (cancelled, or the runner died).
 export const STALE_AFTER_MS = 3 * 60 * 60_000;
 export const STATE_DIR = ".qa-run";
 export const STATE_FILE = join(STATE_DIR, "scope.json");
 export const SECRETS_FILE = join(STATE_DIR, "secrets.json");
+export const STAND_IN_SECRETS_FILE = join(STATE_DIR, "stand-in-secrets.json");
 export const WRANGLER_CONFIG = "wrangler.json";
 export const GENERATED_BUILD_CONFIG = join("build", "server", "wrangler.json");
 export const REQUIRED_RUN_SECRETS = ["SESSION_SECRET", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT"];
@@ -212,6 +222,13 @@ export function runIdentity(env) {
     baseUrl: `https://${workerName}${WORKERS_DEV_SUFFIX}`,
     queueName: `${RUN_QUEUE_PREFIX}${suffix}`,
   };
+}
+
+// The stand-in's name and workers.dev URL. It goes by the stack's own name, never a fresh-name (`-r<n>`) one, so
+// teardown finds it whatever verify did.
+export function standInIdentity(env) {
+  const workerName = `${runIdentity(env).workerName}${STAND_IN_SUFFIX}`;
+  return { workerName, baseUrl: `https://${workerName}${WORKERS_DEV_SUFFIX}` };
 }
 
 // A developer can run the per-run commands on purpose, from a throwaway checkout, by setting
@@ -516,7 +533,7 @@ export async function sweepStaleRunStacks({ api, now, log }) {
   for (const queue of staleQueues) await detachQueueConsumers(api, queue.queue_id);
   let remaining = 0;
   for (const worker of await api.listWorkers()) {
-    if (!RUN_WORKER_PATTERN.test(worker.id ?? "")) continue;
+    if (!RUN_WORKER_PATTERN.test(worker.id ?? "") && !STAND_IN_WORKER_PATTERN.test(worker.id ?? "")) continue;
     if (!isStale(worker.created_on)) {
       remaining += 1;
       continue;
@@ -684,7 +701,11 @@ export async function deploy({ env, exec, fs, sleep, log }) {
   requireGitHubActions(env);
   const state = readState(fs);
   assertWranglerIsRunScoped(fs, state);
-  const args = ["exec", "wrangler", "deploy", "--env", "qa", "--secrets-file", SECRETS_FILE];
+  return deployWithRetries({ exec, sleep, log, workerName: state.workerName, args: ["exec", "wrangler", "deploy", "--env", "qa", "--secrets-file", SECRETS_FILE] });
+}
+
+// Runs one `wrangler deploy`, deploying again after the failures DEPLOY_RETRY_DELAYS_MS lists.
+async function deployWithRetries({ exec, sleep, log, workerName, args }) {
   let scriptMayExist = false;
   for (let attempt = 0; ; attempt += 1) {
     try {
@@ -696,25 +717,25 @@ export async function deploy({ env, exec, fs, sleep, log }) {
       log(output);
       const serverErrorPage = API_SERVER_ERROR_PAGE_PATTERN.exec(output);
       const reason = SCRIPT_NOT_FOUND_PATTERN.test(output)
-        ? `Cloudflare did not yet know ${state.workerName} (code 10007)`
+        ? `Cloudflare did not yet know ${workerName} (code 10007)`
         : INTERNAL_AUTH_SERVER_ERROR_PATTERN.test(output)
-          ? `Cloudflare reported an internal authentication server error (code 10500) while deploying ${state.workerName}`
+          ? `Cloudflare reported an internal authentication server error (code 10500) while deploying ${workerName}`
           : SUBDOMAIN_UNKNOWN_ERROR_PATTERN.test(output)
-            ? `Cloudflare answered an unknown error (code 10013) while enabling ${state.workerName}'s workers.dev subdomain`
+            ? `Cloudflare answered an unknown error (code 10013) while enabling ${workerName}'s workers.dev subdomain`
           : QUEUE_CONSUMER_UNKNOWN_ERROR_PATTERN.test(output)
-            ? `Cloudflare answered an unknown error (code 10013) while attaching ${state.workerName} to its queue`
+            ? `Cloudflare answered an unknown error (code 10013) while attaching ${workerName} to its queue`
           : QUEUE_LOOKUP_UNKNOWN_ERROR_PATTERN.test(output)
-            ? `Cloudflare answered an unknown error (code 10013) while looking up ${state.workerName}'s queue`
+            ? `Cloudflare answered an unknown error (code 10013) while looking up ${workerName}'s queue`
           : SCRIPT_UPLOAD_UNKNOWN_ERROR_PATTERN.test(output)
-            ? `Cloudflare answered an unknown error (code 10002) while uploading ${state.workerName}`
+            ? `Cloudflare answered an unknown error (code 10002) while uploading ${workerName}`
           : scriptMayExist && MIGRATION_TAG_LAG_PATTERN.test(output)
-            ? `Cloudflare had not yet caught up with ${state.workerName}'s Durable Object migrations (code 10079)`
+            ? `Cloudflare had not yet caught up with ${workerName}'s Durable Object migrations (code 10079)`
           : scriptMayExist && MIGRATION_TAG_READ_FAILURE_PATTERN.test(output)
-            ? `Wrangler could not read ${state.workerName}'s Durable Object migration tag while Cloudflare catches up`
+            ? `Wrangler could not read ${workerName}'s Durable Object migration tag while Cloudflare catches up`
             : serverErrorPage
-              ? `Cloudflare's API answered ${serverErrorPage[1]} while deploying ${state.workerName}`
+              ? `Cloudflare's API answered ${serverErrorPage[1]} while deploying ${workerName}`
               : API_CONNECTION_FAILURE_PATTERN.test(output)
-                ? `The connection to Cloudflare's API failed while deploying ${state.workerName}`
+                ? `The connection to Cloudflare's API failed while deploying ${workerName}`
                 : undefined;
       if (SCRIPT_NOT_FOUND_PATTERN.test(output) || SUBDOMAIN_UNKNOWN_ERROR_PATTERN.test(output) || QUEUE_CONSUMER_UNKNOWN_ERROR_PATTERN.test(output) || QUEUE_LOOKUP_UNKNOWN_ERROR_PATTERN.test(output) || SCRIPT_UPLOAD_UNKNOWN_ERROR_PATTERN.test(output) || serverErrorPage || API_CONNECTION_FAILURE_PATTERN.test(output)) scriptMayExist = true;
       if (!reason || attempt >= DEPLOY_RETRY_DELAYS_MS.length) throw error;
@@ -1084,6 +1105,13 @@ export async function teardown({ env, fs, api, log }) {
       failures.push(error.message);
     }
   }
+  // The stand-in, which only a stack that ran the Move in journeys has: none is nothing to warn about.
+  const standIn = standInIdentity(env).workerName;
+  try {
+    if (await deleteTolerating404(() => api.deleteWorker(standIn))) log(`Deleted the Move in stand-in Worker ${standIn}.`);
+  } catch (error) {
+    failures.push(error.message);
+  }
   for (const queue of queues) {
     try {
       if (await deleteTolerating404(() => api.deleteQueue(queue.queue_id))) log(`Deleted QA run jobs queue ${identity.queueName}.`);
@@ -1116,6 +1144,59 @@ export async function teardown({ env, fs, api, log }) {
     return false;
   }
   return true;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The Move in stand-in
+
+// Asks for the stand-in's /health until it answers "ok" APP_ANSWERS_IN_A_ROW times in a row, each on a new connection;
+// any other answer, such as Cloudflare's workers.dev placeholder, starts the count again.
+export async function waitForStandIn({ fetchImpl, now, sleep, baseUrl, timeoutMs = READY_TIMEOUT_MS }) {
+  const started = now();
+  let inARow = 0;
+  for (;;) {
+    let problem = null;
+    try {
+      const response = await fetchImpl(`${baseUrl}/health`, { redirect: "manual", headers: { connection: "close" } });
+      const body = await response.text();
+      if (response.status !== 200 || body !== "ok") problem = `/health returned ${response.status}${body.includes(WORKERS_DEV_PLACEHOLDER) ? ", Cloudflare's workers.dev placeholder" : ""}`;
+    } catch (error) {
+      problem = `/health failed: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    inARow = problem ? 0 : inARow + 1;
+    if (inARow === APP_ANSWERS_IN_A_ROW) return;
+    if (problem && now() - started >= timeoutMs) {
+      throw new Error(
+        `Setup error, not a test failure: the Move in stand-in at ${baseUrl} did not answer ${APP_ANSWERS_IN_A_ROW} times in a row within ${Math.round(timeoutMs / 1000)} s: ${problem}.`,
+      );
+    }
+    await sleep(APP_ANSWER_GAP_MS);
+  }
+}
+
+// Deploys the Move in journeys' stand-in for the other recipe app's server as this stack's own Worker, with a secret
+// made for this run that opens its loading routes, waits until it answers, and exports its address and secret for the
+// journeys (e2e/journeys/support/recipe-server.ts). Teardown and the sweep delete it with the stack.
+export async function deployStandIn({ env, exec, fs, fetchImpl, now, sleep, log, secret = () => randomBytes(32).toString("hex") }) {
+  requireGitHubActions(env);
+  const standIn = standInIdentity(env);
+  const value = secret();
+  log(`::add-mask::${value}`);
+  fs.mkdir(STATE_DIR, { recursive: true });
+  writeJson(fs, STAND_IN_SECRETS_FILE, { STAND_IN_SECRET: value }, 0o600);
+  await deployWithRetries({
+    exec,
+    sleep,
+    log,
+    workerName: standIn.workerName,
+    args: ["exec", "wrangler", "deploy", "-c", STAND_IN_CONFIG, "--name", standIn.workerName, "--secrets-file", STAND_IN_SECRETS_FILE],
+  });
+  await waitForStandIn({ fetchImpl, now, sleep, baseUrl: standIn.baseUrl });
+  if (env.GITHUB_ENV) {
+    fs.appendFile(env.GITHUB_ENV, `SPOONJOY_MOVE_IN_STAND_IN_URL=${standIn.baseUrl}\nSPOONJOY_MOVE_IN_STAND_IN_SECRET=${value}\n`);
+  }
+  log(`The Move in stand-in answers at ${standIn.baseUrl}.`);
+  return standIn;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1153,10 +1234,11 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   if (command === "prepare") return prepare({ env, fs, api: api(), now, log, secrets });
   if (command === "deploy") return deploy({ env, exec, fs, sleep, log });
   if (command === "verify") return verify({ env, exec, fs, fetchImpl, now, sleep, log, api: api() });
+  if (command === "stand-in") return deployStandIn({ env, exec, fs, fetchImpl, now, sleep, log });
   if (command === "teardown") return teardown({ env, fs, api: api(), log });
   if (command === "sweep") return sweep({ api: api(), now, log });
   if (command === "shared-queue") return ensureSharedQueue({ env, api: api(), log });
-  throw new Error("Usage: qa-run-scope.mjs <prepare|deploy|verify|teardown|sweep|shared-queue>");
+  throw new Error("Usage: qa-run-scope.mjs <prepare|deploy|verify|stand-in|teardown|sweep|shared-queue>");
 }
 
 export function isCliEntry(moduleUrl, argv1 = process.argv[1]) {
