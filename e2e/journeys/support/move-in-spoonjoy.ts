@@ -139,8 +139,14 @@ export async function focacciaInTheKitchen(page: Page, verifyAfterReload: (check
     const photo = main.getByRole("img", { name: `Photo of ${FOCACCIA.title}`, exact: true });
     await expect(photo).toBeVisible();
     await expect.poll(() => photo.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
-    await expect(main.getByRole("article", { name: "Step 1", exact: true })).toContainText(FOCACCIA.steps[0].description);
-    await expect(main.getByRole("article", { name: "Step 2", exact: true })).toContainText(FOCACCIA.steps[1].description);
-    await expect(main.getByRole("article", { name: "Step 1", exact: true })).toContainText("bread flour");
+    // A step is named by its title, and an untitled one by its number, so the first step keeps its title "Dough".
+    const dough = main.getByRole("article", { name: "Dough", exact: true });
+    await expect(dough).toContainText("Step 1");
+    await expect(dough).toContainText(FOCACCIA.steps[0].description);
+    await expect(dough).toContainText("bread flour");
+    await expect(dough).toContainText("10 min");
+    const bake = main.getByRole("article", { name: "Step 2", exact: true });
+    await expect(bake).toContainText(FOCACCIA.steps[1].description);
+    await expect(bake).toContainText("25 min");
   });
 }
