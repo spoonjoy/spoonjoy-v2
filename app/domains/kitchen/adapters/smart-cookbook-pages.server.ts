@@ -1,11 +1,10 @@
 // Loaders and the action behind the smart cookbook pages: the form that makes one, the page of recipes it fills with,
-// and the cook's list of them on Cookbooks. Every one is the cook's own and behind the smart-cookbooks flag. On the
+// and the cook's list of them on Cookbooks. Every one is the cook's own. On the
 // Worker they read and write D1 directly and build no Prisma client (d1-smart-cookbook-store.ts says why); Prisma is
 // the path where there is no binding (unit tests, scripts).
 import type { AppLoadContext } from "react-router";
 import { data, redirect } from "react-router";
 import type { PrismaClient } from "@prisma/client";
-import { isFlagOn } from "~/domains/platform";
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { normalizeMyRecipesPage } from "~/lib/my-recipes-search.server";
 import { OBJECTIONABLE_CONTENT_MESSAGE, containsObjectionableContent } from "~/lib/objectionable-terms";
@@ -46,11 +45,9 @@ async function storesFor(context: AppLoadContext): Promise<Stores> {
   return { store: prismaSmartCookbookStore(db), organizers: prismaOrganizerStore(db), source: { d1: null, db } };
 }
 
-/** The signed-in cook and the stores, or a 404 while smart cookbooks are off for them. */
+/** The signed-in cook and the stores. */
 async function smartCookbooksRequest(request: Request, context: AppLoadContext): Promise<Stores & { userId: string }> {
-  const env = context.cloudflare?.env;
-  const userId = await requireUserId(request, "/login", env);
-  if (!isFlagOn("smart-cookbooks", env, userId)) notFound();
+  const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   return { userId, ...(await storesFor(context)) };
 }
 
@@ -78,9 +75,8 @@ function ruleViews(cookbook: SmartCookbook, organizers: Organizer[]): SmartCookb
   });
 }
 
-/** The cook's smart cookbooks for the Cookbooks page, each with its rules, or null while the flag is off for them. */
-export async function smartCookbookListFor(request: Request, context: AppLoadContext, userId: string) {
-  if (!isFlagOn("smart-cookbooks", context.cloudflare?.env, userId)) return null;
+/** The cook's smart cookbooks for the Cookbooks page, each with its rules. */
+export async function smartCookbookListFor(context: AppLoadContext, userId: string) {
   const { store, organizers: reader } = await storesFor(context);
   const organizers = await ownedOrganizers(reader, userId);
   const cookbooks = await listSmartCookbooks(store, userId);
