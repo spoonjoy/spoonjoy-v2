@@ -1,6 +1,8 @@
 # Push relay
 
-Notifications on iPhone, iPad and Mac go through Apple's push service (APNs), and only the holder of Apple's push key for the Spoonjoy app can send them. The push relay, `spoonjoy-push-relay` at `https://push.spoonjoy.app`, holds that key, so any Spoonjoy server can notify the Spoonjoy app without holding it: spoonjoy.app uses the relay too, so there is one way notifications reach Apple.
+Notifications on iPhone, iPad and Mac go through Apple's push service (APNs), and only the holder of Apple's push key for the Spoonjoy app can send them. The push relay, `spoonjoy-push-relay` at `https://spoonjoy-push-relay.mendelow-studio.workers.dev`, holds that key, so any Spoonjoy server can notify the Spoonjoy app without holding it: spoonjoy.app uses the relay too, so there is one way notifications reach Apple.
+
+It moves to `https://push.spoonjoy.app` once the spoonjoy.app zone is in production's Cloudflare account: change `RELAY_URL` in [`workers/push-relay/index.ts`](../workers/push-relay/index.ts) and add the route in its `wrangler.json`. Relay keys are signed with the relay's own secret, so servers keep the keys they have.
 
 The code is [`workers/push-relay/index.ts`](../workers/push-relay/index.ts), a Cloudflare Worker, deployed by the [Push Relay Deploy](../.github/workflows/push-relay-deploy.yml) workflow on each change to it on main.
 
@@ -86,7 +88,7 @@ Store the key as GitHub production environment secrets, then run the deploy work
 gh secret set APNS_KEY_P8 --env production --repo spoonjoy/spoonjoy-v2 < AuthKey_XXXXXXXXXX.p8
 gh secret set APNS_KEY_ID --env production --repo spoonjoy/spoonjoy-v2 --body XXXXXXXXXX
 gh workflow run push-relay-deploy.yml --repo spoonjoy/spoonjoy-v2 --ref main
-curl -s https://push.spoonjoy.app/health   # "apns": "configured"
+curl -s https://spoonjoy-push-relay.mendelow-studio.workers.dev/health   # "apns": "configured"
 ```
 
 To revoke a server's key, add its id (from the relay's registration log) to `REVOKED_SERVER_IDS` in [`workers/push-relay/wrangler.json`](../workers/push-relay/wrangler.json) and merge.
