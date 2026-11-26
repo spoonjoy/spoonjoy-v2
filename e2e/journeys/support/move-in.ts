@@ -90,7 +90,7 @@ const isPart = (request: Request) => request.method() === "PUT" && PART_URL.test
  * Picks "From a backup" the way a cook does, by tapping its card. The card's radio is hidden under
  * its label, which takes the tap, so checking the radio itself waits until the test times out.
  */
-async function chooseBackup(page: Page) {
+export async function chooseBackup(page: Page) {
   const main = page.getByRole("main");
   await main.getByText("From a backup", { exact: true }).click();
   await expect(main.getByRole("radio", { name: /^From a backup/ })).toBeChecked();

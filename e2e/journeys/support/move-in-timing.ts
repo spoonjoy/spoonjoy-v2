@@ -4,7 +4,9 @@
 import { appendFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./journey";
+import { chooseBackup } from "./move-in";
 import { proofFixtures } from "./move-in-fixtures";
+import { waitForHydration } from "./navigation";
 
 // A 500-recipe kitchen on a busy QA Worker; the time it actually takes is what the journey reports. It wasn't in after
 // 18 minutes on its first run (Journeys run 45390496178), so this waits 45. The timed runs give part 2 90 minutes:
@@ -44,9 +46,8 @@ export async function timeLargeMoveIn(version: string, { page }: { page: Page })
 
   await page.goto("/move-in");
   await expect(main.getByRole("heading", { level: 1, name: "Bring your kitchen with you." })).toBeVisible();
-  const from = main.getByRole("radio", { name: /^From a backup/ });
-  // The page asks for a server or a backup once moving in from a server lands; until then it only takes a backup.
-  if (await from.count()) await from.check();
+  await waitForHydration(page);
+  await chooseBackup(page);
   await page.getByLabel("Backup zip", { exact: true }).setInputFiles({ name: `kitchen-${version}-large.zip`, mimeType: "application/zip", buffer: backup });
   const started = Date.now();
   await main.getByRole("button", { name: "Move in", exact: true }).click();
