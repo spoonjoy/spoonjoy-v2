@@ -22,6 +22,10 @@ export interface StepDraft {
   text: string;
   /** The ingredients the source links to this step, by their source keys. */
   ingredientKeys: string[];
+  /** How many minutes the step takes, for a source that keeps it. */
+  duration?: number | null;
+  /** The earlier steps whose output this step uses, by their number in the draft's steps (from 1). */
+  usesOutputOf?: number[];
 }
 
 export interface RecipeDraft {
@@ -44,6 +48,12 @@ export interface RecipeDraft {
   tools: string[];
   /** Plain-language notes for the move-in report about what could not come across as it was. */
   warnings: string[];
+  /**
+   * The recipe in this kitchen the draft started as, when it moved out of this Spoonjoy to another and is now moving
+   * back: its id here, and the fingerprint of it as it left (null when that wasn't kept). The writer takes that
+   * recipe as already here, as if this kitchen had moved it in before, rather than adding a second one.
+   */
+  home?: { recipeId: string; contentHash: string | null } | null;
 }
 
 export const UNTITLED_RECIPE = "Untitled recipe";
