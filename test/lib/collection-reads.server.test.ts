@@ -402,5 +402,6 @@ describe("list loaders on a D1 binding", () => {
       expect(fromD1, path).toEqual(await pages[name].loader(args(path, null)));
     }
     expect(getRequestDb).not.toHaveBeenCalled();
-  });
+    // It imports four route modules twice and loads seven pages each way, Cookbooks' smart list included.
+  }, 30_000);
 });
