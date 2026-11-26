@@ -7,6 +7,12 @@ export type PlanActionAnswer =
       added?: { meals: number; missing: number };
       /** The list the week went on, when it isn't the cook's own shopping list. */
       list?: { name: string; href: string };
+      /** A calendar link just made: shown this once, since only its hash is kept. */
+      feedUrl?: string;
+      /** Whether making that link replaced one the cook had. */
+      replaced?: boolean;
+      /** Whether turning the link off found one to turn off. */
+      revoked?: boolean;
     }
   | undefined;
 
