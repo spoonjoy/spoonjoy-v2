@@ -66,8 +66,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return {
     query,
     cookbooks: cookbooks.filter((cookbook) => matchesCookbookQuery(cookbook, query)),
-    // Null while the smart-cookbooks flag is off for this cook, which leaves the page as it was.
-    smartCookbooks: await smartCookbookListFor(request, context, userId),
+    smartCookbooks: await smartCookbookListFor(context, userId),
   };
 }
 
@@ -135,29 +134,27 @@ export default function CookbooksIndexRedirect() {
           action={<Button href="/cookbooks/new">Create cookbook</Button>} />
       )}
 
-      {smartCookbooks ? (
-        <section aria-labelledby="smart-cookbooks-heading" className="mt-10">
-          <SectionHeader
-            title={<span id="smart-cookbooks-heading">Smart cookbooks</span>}
-            meta={`${smartCookbooks.length} ${smartCookbooks.length === 1 ? "cookbook" : "cookbooks"}`}
-            actions={(
-              <Button href="/cookbooks/smart/new" variant="outline" tone="secondary">
-                <Plus data-slot="icon" className="size-4" />
-                New smart cookbook
-              </Button>
-            )}
-          />
-          {smartCookbooks.length > 0 ? (
-            <ItemGroup aria-label="Smart cookbooks" variant="divided" className="mt-4">
-              {smartCookbooks.map((cookbook) => (
-                <Item key={cookbook.id} href={`/cookbooks/smart/${cookbook.id}`} title={cookbook.title} description={rulesLine(cookbook.rules)} />
-              ))}
-            </ItemGroup>
-          ) : (
-            <Text tone="muted" className="mt-4">A smart cookbook fills itself with your recipes that match the tags, categories and tools you pick.</Text>
+      <section aria-labelledby="smart-cookbooks-heading" className="mt-10">
+        <SectionHeader
+          title={<span id="smart-cookbooks-heading">Smart cookbooks</span>}
+          meta={`${smartCookbooks.length} ${smartCookbooks.length === 1 ? "cookbook" : "cookbooks"}`}
+          actions={(
+            <Button href="/cookbooks/smart/new" variant="outline" tone="secondary">
+              <Plus data-slot="icon" className="size-4" />
+              New smart cookbook
+            </Button>
           )}
-        </section>
-      ) : null}
+        />
+        {smartCookbooks.length > 0 ? (
+          <ItemGroup aria-label="Smart cookbooks" variant="divided" className="mt-4">
+            {smartCookbooks.map((cookbook) => (
+              <Item key={cookbook.id} href={`/cookbooks/smart/${cookbook.id}`} title={cookbook.title} description={rulesLine(cookbook.rules)} />
+            ))}
+          </ItemGroup>
+        ) : (
+          <Text tone="muted" className="mt-4">A smart cookbook fills itself with your recipes that match the tags, categories and tools you pick.</Text>
+        )}
+      </section>
     </CookbookPage>
   );
 }
