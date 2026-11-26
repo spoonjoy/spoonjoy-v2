@@ -1,5 +1,5 @@
-# The source build needs the whole repository, less what installing and building make again.
-.git
+# The source build needs the whole repository, its .git included so the build knows its commit, less what
+# installing and building make again.
 **/node_modules
 build
 .wrangler
