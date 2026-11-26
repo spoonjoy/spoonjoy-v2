@@ -9,7 +9,6 @@ import type { RangeSource } from "../archive/zip";
 import { MoveInError } from "../../model/move-in-error";
 import type { MoveInJob, MoveInPorts } from "../../application/run-move-in";
 import type { MoveInSource } from "../../application/source";
-import { mealieApiSource } from "../sources/mealie-api/source";
 import { openMealieBackup } from "../sources/mealie-backup/backup";
 import { mealieBackupSource } from "../sources/mealie-backup/source";
 import { moveInJobStore } from "../storage/job-store.server";
@@ -18,6 +17,7 @@ import { attachMovedInPhoto, attachMovedInPhotos, hasMovedInPhoto } from "../sto
 import { writeMovedInRecipe, writeMovedInRecipes } from "../storage/recipe-writer.server";
 import { readsAServer } from "./apps";
 import { openServerConnection, serverConnectionSecret } from "./server-connection.server";
+import { openServerSource } from "./server-sources";
 
 /**
  * Where an uploaded backup waits while it moves in. The photo route never serves this prefix and the
@@ -34,15 +34,17 @@ export interface MoveInEnv extends NonNullable<FlagEnv> {
   /** Seals a server move-in's address and token in storage (server-connection.server.ts); required in production. */
   SESSION_SECRET?: string;
   NODE_ENV?: string;
+  /** This Spoonjoy's own address, by which a kitchen moving back from another Spoonjoy finds its recipes again. */
+  SPOONJOY_BASE_URL?: string;
 }
 
-type WorkerEnv = FlagEnv & { DB?: unknown; PHOTOS?: unknown; SESSION_SECRET?: string; NODE_ENV?: string };
+type WorkerEnv = FlagEnv & { DB?: unknown; PHOTOS?: unknown; SESSION_SECRET?: string; NODE_ENV?: string; SPOONJOY_BASE_URL?: string };
 
 /** The database, photo storage, flags and sealing secret a move-in runs with, out of the Worker's environment; null without the first two. */
 export function moveInEnv(env: WorkerEnv | undefined): MoveInEnv | null {
   if (!env?.DB || !env.PHOTOS) return null;
-  const { DB, PHOTOS, SPOONJOY_FLAGS, SPOONJOY_FLAG_USERS, SESSION_SECRET, NODE_ENV } = env;
-  return { DB: DB as D1ReadDatabase, PHOTOS: PHOTOS as ArchiveBucket, SPOONJOY_FLAGS, SPOONJOY_FLAG_USERS, SESSION_SECRET, NODE_ENV };
+  const { DB, PHOTOS, SPOONJOY_FLAGS, SPOONJOY_FLAG_USERS, SESSION_SECRET, NODE_ENV, SPOONJOY_BASE_URL } = env;
+  return { DB: DB as D1ReadDatabase, PHOTOS: PHOTOS as ArchiveBucket, SPOONJOY_FLAGS, SPOONJOY_FLAG_USERS, SESSION_SECRET, NODE_ENV, SPOONJOY_BASE_URL };
 }
 
 const gone = () => new MoveInError("broken-zip", "the uploaded backup is no longer in storage");
@@ -66,14 +68,20 @@ export async function r2RangeSource(bucket: Pick<R2Bucket, "head" | "get">, key:
  * `secret` (read only for a server), or the uploaded backup. Gone from storage means the job went quiet for a day and the sweep deleted it; a
  * connection that won't open under `secret` can't be read either, so it stops the same way.
  */
-export async function openMoveInSource(bucket: Pick<R2Bucket, "head" | "get">, job: MoveInJob, fetch: typeof globalThis.fetch, secret: () => string): Promise<MoveInSource> {
+export async function openMoveInSource(
+  bucket: Pick<R2Bucket, "head" | "get">,
+  job: MoveInJob,
+  fetch: typeof globalThis.fetch,
+  secret: () => string,
+  home: string | null = null,
+): Promise<MoveInSource> {
   const key = job.archiveKey as string;
   if (!readsAServer(job.kind)) return mealieBackupSource(await openMealieBackup(await r2RangeSource(bucket, key)));
   const stored = await bucket.get(key);
   if (!stored) throw new MoveInError("expired", "the server connection is no longer in storage");
   const connection = await openServerConnection(secret(), key, new Uint8Array(await stored.arrayBuffer()));
   if (!connection) throw new MoveInError("expired", "the server connection in storage doesn't open");
-  return mealieApiSource({ ...connection, fetch });
+  return openServerSource(job.kind, { ...connection, fetch }, home);
 }
 
 /** The email the person signs in to Spoonjoy with, which picks their kitchen in a backup that holds several. */
@@ -94,7 +102,7 @@ export function moveInPorts(env: MoveInEnv, now: () => Date): MoveInPorts {
   return {
     store: moveInJobStore(db, now),
     openArchive: (job) => r2RangeSource(env.PHOTOS, job.archiveKey as string),
-    openSource: (job) => openMoveInSource(env.PHOTOS, job, (input, init) => fetch(input, init), () => serverConnectionSecret(env)),
+    openSource: (job) => openMoveInSource(env.PHOTOS, job, (input, init) => fetch(input, init), () => serverConnectionSecret(env), env.SPOONJOY_BASE_URL ?? null),
     ownerEmail: (ownerId) => ownerEmail(db, ownerId),
     writeRecipe: (input) => writeMovedInRecipe({ db, ...input, now: now() }),
     writeRecipes: (inputs) => writeMovedInRecipes(inputs.map((input) => ({ db, ...input, now: now() }))),
