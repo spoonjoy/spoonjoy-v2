@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import type { APIRequestContext, Page } from "@playwright/test";
 import { test, expect } from "./journey";
 import { requiredLabel } from "./forms";
+import { waitForHydration } from "./app-ready";
 import { scratchStorageStatePath } from "./personas";
 import { deleteMoveToken, makeMoveToken, startSpoonjoyServer, type SpoonjoyServer } from "./spoonjoy-server";
 
@@ -126,10 +127,13 @@ export async function focacciaInTheKitchen(page: Page, verifyAfterReload: (check
   await page.goto(`/my-recipes?q=${encodeURIComponent(FOCACCIA.title)}`);
   const copies = main.locator(`a[href^="/recipes/"]`).filter({ hasText: FOCACCIA.title });
   await expect(copies).toHaveCount(1);
-  // Opened by its address: a click on the list can land before the page hydrates and go nowhere (run 45889138153).
   const href = await copies.first().getAttribute("href");
   expect(href, "the recipe's link in the kitchen").toMatch(/^\/recipes\/[^/?#]+$/);
-  await page.goto(href as string);
+  // A click before hydration can go nowhere (run 45889138153), so the cook's click comes once the page is live.
+  await waitForHydration(page);
+  await copies.first().click();
+  await expect(page).toHaveURL(new RegExp(`${href}$`));
+  await expect(main.getByRole("heading", { level: 1, name: FOCACCIA.title, exact: true })).toBeVisible();
   await verifyAfterReload(async () => {
     await expect(main.getByRole("heading", { level: 1, name: FOCACCIA.title, exact: true })).toBeVisible();
     const photo = main.getByRole("img", { name: `Photo of ${FOCACCIA.title}`, exact: true });
