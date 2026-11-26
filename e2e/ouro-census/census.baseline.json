@@ -1697,7 +1697,21 @@
           "count": 1
         }
       ],
+      "calendar-sheet": [
+        {
+          "identity": "button \"Close\" [sheet/close] in dialog \"Add your meal plan to a calendar\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Make a calendar link\" [button/root] in dialog \"Add your meal plan to a calendar\"",
+          "count": 1
+        }
+      ],
       "default": [
+        {
+          "identity": "button \"Add to calendar\" [button/root] in main",
+          "count": 1
+        },
         {
           "identity": "button \"Plan a meal for Friday\" [button/root] in region \"Friday, Mar 5\"",
           "count": 1
@@ -6139,7 +6153,21 @@
           "count": 1
         }
       ],
+      "calendar-sheet": [
+        {
+          "identity": "button \"Close\" [sheet/close] in dialog \"Add your meal plan to a calendar\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Make a calendar link\" [button/root] in dialog \"Add your meal plan to a calendar\"",
+          "count": 1
+        }
+      ],
       "default": [
+        {
+          "identity": "button \"Add to calendar\" [button/root] in main",
+          "count": 1
+        },
         {
           "identity": "button \"Plan a meal for Friday\" [button/root] in region \"Friday, Mar 5\"",
           "count": 1
