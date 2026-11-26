@@ -1,0 +1,89 @@
+# Push relay
+
+Notifications on iPhone, iPad and Mac go through Apple's push service (APNs), and only the holder of Apple's push key for the Spoonjoy app can send them. The push relay, `spoonjoy-push-relay` at `https://push.spoonjoy.app`, holds that key, so any Spoonjoy server can notify the Spoonjoy app without holding it: spoonjoy.app uses the relay too, so there is one way notifications reach Apple.
+
+The code is [`workers/push-relay/index.ts`](../workers/push-relay/index.ts), a Cloudflare Worker, deployed by the [Push Relay Deploy](../.github/workflows/push-relay-deploy.yml) workflow on each change to it on main.
+
+## What it sees and keeps
+
+For each notification the relay sees the server's relay key, the device token and the notification itself (its title and text, and the page it opens). It passes them to Apple and keeps none of them. Its rate limits count by relay key, by a SHA-256 hash of the device token and by IP address, for a minute. Its log lines name the server's id, the environment and Apple's answer; they never hold a token or a payload. When a server registers, the log records the server's id and the origin of the address it gave.
+
+## Endpoints
+
+### `GET /health`
+
+```json
+{ "ok": true, "service": "spoonjoy-push-relay", "apns": "configured", "registration": "open" }
+```
+
+`apns` is `not configured` until Apple's key is set; `registration` is `not configured` until the relay's own key secret is.
+
+### `POST /v1/servers`
+
+A server registers once and keeps the key it gets back.
+
+```json
+{ "baseUrl": "https://recipes.example.com" }
+```
+
+answers `201` with `{ "serverId": "…", "relayKey": "sjr1.…" }`. Five registrations a minute per IP address. A relay key is the server's id signed with the relay's secret, so the relay stores nothing to check it.
+
+### `POST /v1/send`
+
+With `Authorization: Bearer <relay key>`:
+
+```json
+{
+  "token": "<device token, hex>",
+  "environment": "production",
+  "payload": { "aps": { "alert": { "title": "Spoonjoy", "body": "@ada cooked your soup" } }, "url": "/recipes/abc" },
+  "collapseId": "<at most 64 bytes, optional>",
+  "pushType": "alert",
+  "expiration": 1800000000
+}
+```
+
+`environment` is `development` (Apple's sandbox, for apps built from Xcode) or `production` (TestFlight and the App Store). `pushType` is `alert` (the default) or `background`. The payload is at most 4096 bytes, Apple's limit. When Apple answers, the relay answers `200` with Apple's status:
+
+```json
+{ "status": 410, "reason": "Unregistered", "apnsId": "…", "revoke": true }
+```
+
+`revoke: true` means the token will never work again (Apple's 410, or 400 `BadDeviceToken` or `DeviceTokenNotForTopic`), so the server stops sending to that device.
+
+The relay's own refusals:
+
+| Status | `error` | Why |
+| --- | --- | --- |
+| 400 | `invalid_request` | The body isn't one of the shapes above; `message` says which field. |
+| 401 | `unauthorized` | No relay key, or one the relay didn't issue. |
+| 403 | `revoked` | The server's id is in `REVOKED_SERVER_IDS`. |
+| 429 | `rate_limited` | More than 600 sends a minute for one relay key, 30 a minute to one device, or 5 registrations a minute from one address. |
+| 502 | `apns_unreachable` | Apple didn't answer within 10 seconds. |
+| 503 | `not_configured` | The relay has no Apple key yet (sending), or no key secret (registering). |
+
+## Settings
+
+| Name | Kind | What it is |
+| --- | --- | --- |
+| `APNS_TOPIC` | var | The app's bundle id, `app.spoonjoy` (the iPhone, iPad and Mac app share it). |
+| `APNS_TEAM_ID` | var | Apple developer team `743GT2AJ24`. |
+| `APNS_KEY_P8` | secret | Apple's APNs auth key, the `.p8` file's text. |
+| `APNS_KEY_ID` | secret | That key's id. |
+| `RELAY_KEY_SECRET` | secret | Signs relay keys. The deploy workflow makes it once; changing it voids every relay key. |
+| `REVOKED_SERVER_IDS` | var | Server ids, separated by commas, whose keys are refused. |
+
+The relay signs Apple's provider token (ES256) with WebCrypto and reuses it for 50 minutes, inside Apple's window of 20 to 60 minutes. A Worker's `fetch` reaches Apple's HTTP/2-only hosts: a probe Worker's request to both hosts with a made-up provider token got Apple's own `403 {"reason":"InvalidProviderToken"}` with an `apns-id` header ([run 45869319846](https://github.com/spoonjoy/spoonjoy-v2/actions/runs/45869319846)).
+
+## Setting Apple's key
+
+Store the key as GitHub production environment secrets, then run the deploy workflow, which copies them into the relay and checks that Apple takes the key (a send to a made-up token must come back `400 BadDeviceToken` from the sandbox):
+
+```sh
+gh secret set APNS_KEY_P8 --env production --repo spoonjoy/spoonjoy-v2 < AuthKey_XXXXXXXXXX.p8
+gh secret set APNS_KEY_ID --env production --repo spoonjoy/spoonjoy-v2 --body XXXXXXXXXX
+gh workflow run push-relay-deploy.yml --repo spoonjoy/spoonjoy-v2 --ref main
+curl -s https://push.spoonjoy.app/health   # "apns": "configured"
+```
+
+To revoke a server's key, add its id (from the relay's registration log) to `REVOKED_SERVER_IDS` in [`workers/push-relay/wrangler.json`](../workers/push-relay/wrangler.json) and merge.
