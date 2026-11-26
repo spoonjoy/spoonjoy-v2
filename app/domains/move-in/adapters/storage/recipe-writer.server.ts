@@ -7,6 +7,11 @@
 // or, from another copy of the kitchen whose ids differ, by its name and content. The SourceRecord
 // keeps a hash of what Spoonjoy wrote, so a recipe the backup changed is changed in place unless
 // the cook changed it here too, when their version stays. A recipe the cook deleted stays deleted.
+//
+// A recipe that moved out of this Spoonjoy to another and is now moving back (the draft's `home`) is the recipe it
+// started as here: the writer records it as this kitchen's row with the fingerprint it left with, then treats it like
+// any recipe moving in again, so it is already here, or changed to the other Spoonjoy's version when only that one
+// changed, or kept as it is when the cook changed it here too.
 import { d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Guard, d1WriteBatch, isD1GuardFailure, retryOnD1GuardFailure } from "~/lib/d1-write.server";
 import { parseIngredientLine, WHOLE_UNIT } from "~/lib/ingredient-text-parser";
@@ -20,6 +25,7 @@ import {
   recipeStepsReplaceStatements,
   recipeUpdateStatement,
   stepInsertStatement,
+  stepOutputUseInsertStatement,
 } from "~/lib/recipe-d1-writes.server";
 import { stepForIngredient } from "~/lib/recipe-import.server";
 import type { IngredientDraft, RecipeDraft } from "../../model/recipe-draft";
@@ -28,6 +34,8 @@ import type { RecipeVisibility } from "~/domains/kitchen";
 const MOVED_IN_VISIBILITY: RecipeVisibility = "private";
 
 export const RECIPE_TABLE = "recipes";
+/** The job a recipe's row names when it started in this kitchen rather than moving in by a job. */
+export const HOME_JOB = "home";
 const GATHER_STEP = "Gather the ingredients.";
 
 export interface WriteMovedInRecipeInput {
@@ -37,6 +45,8 @@ export interface WriteMovedInRecipeInput {
   chefId: string;
   draft: RecipeDraft;
   now: Date;
+  /** Where the recipe came from, as the source says it ("on your other Spoonjoy"); a backup when not given. */
+  there?: string;
 }
 
 export type WriteMovedInRecipeResult =
@@ -86,7 +96,7 @@ interface WrittenForm {
   sourceUrl: string | null;
   steps: Array<{ title: string | null; text: string; duration: number | null }>;
   ingredients: Array<SpoonjoyIngredient & { stepNum: number }>;
-  /** Steps that use another step's output, as [output step, step using it]. Only a cook adds these. */
+  /** Steps that use another step's output, as [output step, step using it], in that order. */
   links: Array<[number, number]>;
   /** When the recipe was last written, for a recipe read from Spoonjoy; a write checks it is still the same. */
   updatedAt?: string;
@@ -114,7 +124,7 @@ function writtenForm(draft: RecipeDraft): { form: WrittenForm; warnings: string[
   const warnings = [...draft.warnings];
   const stepTexts = draft.steps.map((step) => step.text);
   const steps = draft.steps.length || !draft.ingredients.length
-    ? draft.steps.map((step) => ({ title: step.title, text: step.text, duration: null }))
+    ? draft.steps.map((step) => ({ title: step.title, text: step.text, duration: step.duration ?? null }))
     : [{ title: null, text: GATHER_STEP, duration: null }];
   const ingredients = draft.ingredients.flatMap((line) => {
     const written = spoonjoyIngredient(line);
@@ -126,7 +136,11 @@ function writtenForm(draft: RecipeDraft): { form: WrittenForm; warnings: string[
     const stepNum = linked >= 0 ? linked + 1 : stepForIngredient(written.ingredientName, stepTexts);
     return [{ ...written, stepNum }];
   });
-  const form = { title: draft.title, description: description(draft), servings: draft.servings, sourceUrl: draft.sourceUrl, steps, ingredients, links: [] };
+  // Only an earlier step's output can go into a step, as Spoonjoy's own editor keeps it.
+  const links = draft.steps
+    .flatMap((step, index) => [...new Set(step.usesOutputOf ?? [])].filter((used) => used >= 1 && used <= index).map((used): [number, number] => [used, index + 1]))
+    .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const form = { title: draft.title, description: description(draft), servings: draft.servings, sourceUrl: draft.sourceUrl, steps, ingredients, links };
   return { form, warnings };
 }
 
@@ -307,12 +321,14 @@ async function update(input: WriteMovedInRecipeInput, found: Found, current: Wri
       form.steps.map((step, index) => ({
         title: step.title,
         description: step.text,
+        duration: step.duration,
         ingredients: form.ingredients
           .filter((line) => line.stepNum === index + 1)
           .map((line) => ({ name: line.ingredientName, quantity: line.quantity, unit: line.unitName })),
       })),
       now,
     ),
+    ...form.links.map(([output, input]) => stepOutputUseInsertStatement(found.recipeId, input, output, now)),
     cookbooksForRecipeTouchStatement(found.recipeId, now),
     [`UPDATE "SourceRecord" SET "contentHash" = ?, "sourceUpdatedAt" = ? WHERE "id" = ?`, hash, draft.sourceUpdatedAt, found.recordId],
   ]);
@@ -320,7 +336,10 @@ async function update(input: WriteMovedInRecipeInput, found: Found, current: Wri
 
 /** What to do with a recipe this kitchen brought in before. */
 async function again(input: WriteMovedInRecipeInput, found: Found, form: WrittenForm, hash: string): Promise<WriteMovedInRecipeResult> {
-  if (!found.live) return { outcome: "skipped", recipeId: found.recipeId, reason: "You deleted this recipe in Spoonjoy after it moved in." };
+  if (!found.live) {
+    const reason = found.jobId === HOME_JOB ? "You deleted this recipe here after it moved to your other Spoonjoy." : "You deleted this recipe in Spoonjoy after it moved in.";
+    return { outcome: "skipped", recipeId: found.recipeId, reason };
+  }
   const unchanged = { outcome: "unchanged", recipeId: found.recipeId, jobId: found.jobId } as const;
   // A record from before hashes were kept can't show whether the cook changed the recipe, so it is left as it is.
   if (found.contentHash === null || found.contentHash === hash) return unchanged;
@@ -328,10 +347,37 @@ async function again(input: WriteMovedInRecipeInput, found: Found, form: Written
   const now = await contentHash(current);
   if (now === hash) return unchanged;
   if (now !== found.contentHash) {
-    return { outcome: "kept", recipeId: found.recipeId, reason: `${baseTitle(current.title)} changed in the backup, but you've changed it in Spoonjoy too, so your version stays.` };
+    const there = input.there ?? "in the backup";
+    return { outcome: "kept", recipeId: found.recipeId, reason: `${baseTitle(current.title)} changed ${there}, but you've changed it in Spoonjoy too, so your version stays.` };
   }
   await update(input, found, current, form, hash);
   return { outcome: "updated", recipeId: found.recipeId };
+}
+
+/**
+ * Records the draft's home recipe as this kitchen's row for it, with the fingerprint it left with, when the cook owns
+ * it and no other row of this kitchen has claimed it. False when there's none to claim, so the recipe moves in anew.
+ */
+async function claimHome(input: WriteMovedInRecipeInput): Promise<boolean> {
+  const { db, sourceId, chefId, draft } = input;
+  if (!draft.home) return false;
+  const { recipeId, contentHash } = draft.home;
+  const [[claimable]] = await d1ReadBatch(db, [[
+    `SELECT 1 AS "ok" FROM "Recipe" WHERE "id" = ? AND "chefId" = ?
+       AND NOT EXISTS (SELECT 1 FROM "SourceRecord" WHERE "sourceId" = ? AND "targetType" = 'Recipe' AND "targetId" = ?)`,
+    recipeId, chefId, sourceId, recipeId,
+  ]]);
+  if (!claimable) return false;
+  await d1WriteBatch(db, [
+    sourceRecordFreeGuard(input),
+    d1Guard(`NOT EXISTS (SELECT 1 FROM "SourceRecord" WHERE "sourceId" = ? AND "targetType" = 'Recipe' AND "targetId" = ?)`, sourceId, recipeId),
+    [
+      `INSERT INTO "SourceRecord" ("id", "sourceId", "sourceTable", "sourceKey", "targetType", "targetId", "sourceUpdatedAt", "contentHash", "lastJobId")
+       VALUES (?, ?, ?, ?, 'Recipe', ?, NULL, ?, ?)`,
+      crypto.randomUUID(), sourceId, RECIPE_TABLE, draft.sourceKey, recipeId, contentHash, HOME_JOB,
+    ],
+  ]);
+  return true;
 }
 
 /** The statements that add a new recipe under `title`, and what to answer once they have run. */
@@ -345,9 +391,10 @@ function creation(input: WriteMovedInRecipeInput, form: WrittenForm, warnings: s
     // A kitchen moves in private, whatever the cook's default: they choose what to share once it is here.
     [`UPDATE "Recipe" SET "visibility" = ? WHERE "id" = ?`, MOVED_IN_VISIBILITY, recipeId],
     ...form.steps.map((step, index) =>
-      stepInsertStatement({ recipeId, stepNum: index + 1, stepTitle: step.title, description: step.text, duration: null, now })),
+      stepInsertStatement({ recipeId, stepNum: index + 1, stepTitle: step.title, description: step.text, duration: step.duration, now })),
     ...nameUpsertStatements(form.ingredients, now),
     ...form.ingredients.map((ingredient) => namedIngredientInsertStatement({ recipeId, now, ...ingredient })),
+    ...form.links.map(([output, input]) => stepOutputUseInsertStatement(recipeId, input, output, now)),
     sourceRecordInsert(input, recipeId, hash, jobId),
   ];
   const result: WriteMovedInRecipeResult = { outcome: "created", recipeId, title, ...(title !== draft.title ? { renamedFrom: draft.title } : {}), warnings };
@@ -362,6 +409,7 @@ export async function writeMovedInRecipe(input: WriteMovedInRecipeInput): Promis
       const hash = await contentHash(form);
       const found = await recorded(db, sourceId, draft.sourceKey);
       if (found) return again(input, found, form, hash);
+      if (await claimHome(input)) return again(input, (await recorded(db, sourceId, draft.sourceKey)) as Found, form, hash);
 
       const copy = await sameRecipeFromACopy(db, { sourceId, chefId, title: draft.title, hash });
       if (copy) {
@@ -410,7 +458,8 @@ export async function writeMovedInRecipes(inputs: WriteMovedInRecipeInput[]): Pr
   for (let i = 0; i < inputs.length; i++) for (const row of reads[i * 3 + 2]) taken.add(String(row.title));
   const statements: D1Query[] = [];
   const answers = written.map(({ input, form, warnings, hash }, i) => {
-    if (reads[i * 3].length || reads[i * 3 + 1].length) return null;
+    // A recipe moving back to its home here is left to writeMovedInRecipe, which finds it.
+    if (reads[i * 3].length || reads[i * 3 + 1].length || input.draft.home) return null;
     // A name this chunk gives one recipe is taken for the next.
     const title = firstFreeTitle(input.draft.title, taken);
     taken.add(title);

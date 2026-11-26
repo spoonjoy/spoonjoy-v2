@@ -84,6 +84,39 @@ describe("writeMovedInRecipe", () => {
     ]);
   });
 
+  it("keeps each step's time, for a source that has one, and finds the recipe again by it", async () => {
+    const timed = draft({ steps: [{ sourceKey: "step-1", title: null, text: "Rest the batter.", ingredientKeys: [], duration: 20 }] });
+    const first = await write(timed);
+    expect(all(`SELECT "duration" FROM "RecipeStep"`)).toEqual([{ duration: 20 }]);
+    expect(await write(timed, "job-2")).toEqual({ outcome: "unchanged", recipeId: first.recipeId, jobId: "job-1" });
+  });
+
+  it("leaves a recipe moving back to its home here to the one-at-a-time writer, and claims a home only once", async () => {
+    const first = await write(draft());
+    database.sqlite.prepare(`INSERT INTO "ImportSource" ("id", "ownerId", "kind", "instanceKey", "label") VALUES ('source-2', 'chef-1', 'spoonjoy', 'there', 'There')`).run();
+    const back = (key: string) => ({ db: database.binding, sourceId: "source-2", jobId: "job-2", chefId: "chef-1", now, draft: draft({ sourceKey: key, home: { recipeId: first.recipeId, contentHash: null } }) });
+    expect(await writeMovedInRecipes([back("there-1")])).toEqual([null]);
+    expect(await writeMovedInRecipe(back("there-1"))).toEqual({ outcome: "unchanged", recipeId: first.recipeId, jobId: "home" });
+    // A second recipe there naming the same home can't share it: it comes in as a recipe of its own.
+    expect(await writeMovedInRecipe(back("there-2"))).toMatchObject({ outcome: "created" });
+  });
+
+  it("links a step to the earlier steps whose output it uses, once each, and to no later or missing step", async () => {
+    const linked = draft({ steps: [
+      { sourceKey: "step-1", title: null, text: "Make the batter.", ingredientKeys: [], usesOutputOf: [2] },
+      { sourceKey: "step-2", title: null, text: "Cook it.", ingredientKeys: [], usesOutputOf: [0, 1, 1, 2, 5] },
+      { sourceKey: "step-3", title: null, text: "Serve both.", ingredientKeys: [], usesOutputOf: [2, 1] },
+    ] });
+    const first = await write(linked);
+    expect(all(`SELECT "outputStepNum", "inputStepNum" FROM "StepOutputUse" ORDER BY "outputStepNum", "inputStepNum"`)).toEqual([
+      { outputStepNum: 1, inputStepNum: 2 },
+      { outputStepNum: 1, inputStepNum: 3 },
+      { outputStepNum: 2, inputStepNum: 3 },
+    ]);
+    // The links are part of the recipe, so the same one moving in again is found unchanged.
+    expect(await write(linked, "job-2")).toEqual({ outcome: "unchanged", recipeId: first.recipeId, jobId: "job-1" });
+  });
+
   it("keeps a moved-in recipe private, for its cook to share when ready", async () => {
     const result = await write(draft());
     expect(all(`SELECT "visibility" FROM "Recipe" WHERE "id" = '${result.recipeId}'`)).toEqual([{ visibility: "private" }]);
