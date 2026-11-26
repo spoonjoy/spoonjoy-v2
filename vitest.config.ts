@@ -67,6 +67,7 @@ const coverageInclude = [
   "scripts/workflow-security.mjs",
   "workers/app.ts",
   "workers/push-relay/index.ts",
+  "workers/move-in-stand-in/index.ts",
 ] as const;
 
 // Ouro UI, installed from its shadcn registry: its components, helpers and the tests that ship with
