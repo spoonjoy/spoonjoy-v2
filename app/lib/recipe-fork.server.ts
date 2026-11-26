@@ -26,7 +26,7 @@ import {
   type RecipeCoverStatus,
   type RecipeCoverVariant,
 } from "~/lib/recipe-cover.server";
-import { DEFAULT_RECIPE_VISIBILITY, canRead, forkedRecipeVisibility, newRecipeVisibility, type RecipeViewer, type RecipeVisibility } from "~/domains/kitchen";
+import { canRead, forkedRecipeVisibility, newRecipeVisibility, type RecipeViewer, type RecipeVisibility } from "~/domains/kitchen";
 import { recipeViewerD1Query, recipeViewerFor, recipeViewerFromD1Rows } from "~/lib/recipe-viewer.server";
 
 export class ForkSourceNotFoundError extends Error {
@@ -55,11 +55,6 @@ export interface ForkRecipeInput {
   viewerId: string;
   titleOverride?: string | null;
   recipeId?: string;
-  /**
-   * The levels the forking cook can choose (recipeVisibilityChoices): a fork of another cook's recipe starts at their
-   * default when it is one of these. Null or absent while they cannot choose, so the fork starts public.
-   */
-  visibilityChoices?: readonly RecipeVisibility[] | null;
 }
 
 const sourceInclude = {
@@ -332,13 +327,13 @@ async function writeForkWithPrisma(
   return created.id;
 }
 
-// Kitchen's forkedRecipeVisibility decides; the cook's default counts while they can choose it (forkCookDefault).
+// Kitchen's forkedRecipeVisibility decides, from the forking cook's default for new recipes (forkCookDefault).
 function forkVisibility(source: { chefId: string; visibility: string }, viewerId: string, cookDefault: RecipeVisibility): string {
   return forkedRecipeVisibility(source, viewerId, cookDefault);
 }
 
-function forkCookDefault(input: Pick<ForkRecipeInput, "visibilityChoices">, stored: unknown): RecipeVisibility {
-  return input.visibilityChoices ? newRecipeVisibility(null, stored, input.visibilityChoices) : DEFAULT_RECIPE_VISIBILITY;
+function forkCookDefault(stored: unknown): RecipeVisibility {
+  return newRecipeVisibility(null, stored);
 }
 
 /**
@@ -359,17 +354,18 @@ export async function forkRecipe(
     throw new ForkSourceNotFoundError(input.sourceRecipeId);
   }
 
-  const stepOutputUses = await db.stepOutputUse.findMany({
-    where: { recipeId: source.id },
-    select: { outputStepNum: true, inputStepNum: true },
-  });
+  const [stepOutputUses, cook] = await Promise.all([
+    db.stepOutputUse.findMany({
+      where: { recipeId: source.id },
+      select: { outputStepNum: true, inputStepNum: true },
+    }),
+    db.user.findUnique({ where: { id: input.viewerId }, select: { defaultRecipeVisibility: true } }),
+  ]);
 
   const override = input.titleOverride?.trim();
   const baseTitle = override && override.length > 0 ? override : source.title;
 
-  const cookDefault = forkCookDefault(input, input.visibilityChoices
-    ? (await db.user.findUnique({ where: { id: input.viewerId }, select: { defaultRecipeVisibility: true } }))?.defaultRecipeVisibility
-    : null);
+  const cookDefault = forkCookDefault(cook?.defaultRecipeVisibility);
   const createdId = d1
     ? (await writeForkOnD1(d1, source, stepOutputUses, input, baseTitle, async () => (
       (await resolveTitle(db, input.viewerId, baseTitle)).title
@@ -437,14 +433,15 @@ function titleSet(rows: ReadonlyArray<Record<string, unknown>>): Set<string> {
 
 /**
  * The source recipe as `forkRecipe` reads it through Prisma (its chef, active cover, steps and
- * their ingredients), its step output uses, and the chef's taken titles, in one D1 batch.
+ * their ingredients), its step output uses, the chef's taken titles and the forking cook's default
+ * for new recipes, in one D1 batch.
  */
 export async function readForkSourceFromD1(
   d1: D1ReadDatabase,
   input: Pick<ForkRecipeInput, "sourceRecipeId" | "viewerId" | "titleOverride">,
-): Promise<{ source: ForkSource; stepOutputUses: ForkStepOutputUse[]; takenTitles: Set<string>; viewer: RecipeViewer } | null> {
+): Promise<{ source: ForkSource; stepOutputUses: ForkStepOutputUse[]; takenTitles: Set<string>; viewer: RecipeViewer; cookDefault: RecipeVisibility } | null> {
   const override = input.titleOverride?.trim() || null;
-  const [[recipeRow], stepRows, ingredientRows, useRows, titleRows, householdRows] = await d1ReadBatch(d1, [
+  const [[recipeRow], stepRows, ingredientRows, useRows, titleRows, householdRows, [viewerRow]] = await d1ReadBatch(d1, [
     [
       `SELECT ${selectColumns(RECIPE_COLUMNS, "r")}, u."id" AS "chef_id", u."username" AS "chef_username",
          ${selectColumns(RECIPE_COVER_COLUMNS, "c", "cover_")}
@@ -459,6 +456,7 @@ export async function readForkSourceFromD1(
     [`SELECT "outputStepNum", "inputStepNum" FROM "StepOutputUse" WHERE "recipeId" = ? ORDER BY "rowid"`, input.sourceRecipeId],
     takenTitlesQuery(input.viewerId, override, input.sourceRecipeId),
     recipeViewerD1Query(input.viewerId),
+    [`SELECT "defaultRecipeVisibility" FROM "User" WHERE "id" = ?`, input.viewerId],
   ]);
   if (!recipeRow) return null;
 
@@ -479,7 +477,13 @@ export async function readForkSourceFromD1(
     outputStepNum: row.outputStepNum as number,
     inputStepNum: row.inputStepNum as number,
   }));
-  return { source, stepOutputUses, takenTitles: titleSet(titleRows), viewer: recipeViewerFromD1Rows(input.viewerId, householdRows!) };
+  return {
+    source,
+    stepOutputUses,
+    takenTitles: titleSet(titleRows),
+    viewer: recipeViewerFromD1Rows(input.viewerId, householdRows!),
+    cookDefault: forkCookDefault(viewerRow?.defaultRecipeVisibility),
+  };
 }
 
 /**
@@ -492,13 +496,10 @@ export async function forkRecipeOnD1(d1: D1ReadDatabase, input: ForkRecipeInput)
   if (!read || read.source.deletedAt || !canRead(read.viewer, read.source)) {
     throw new ForkSourceNotFoundError(input.sourceRecipeId);
   }
-  const { source, stepOutputUses } = read;
+  const { source, stepOutputUses, cookDefault } = read;
   const override = input.titleOverride?.trim();
   const baseTitle = override && override.length > 0 ? override : source.title;
 
-  const cookDefault = forkCookDefault(input, input.visibilityChoices
-    ? (await d1ReadBatch(d1, [[`SELECT "defaultRecipeVisibility" FROM "User" WHERE "id" = ?`, input.viewerId]]))[0][0]?.defaultRecipeVisibility
-    : null);
   const { recipeId, title, replayed } = await writeForkOnD1(d1, source, stepOutputUses, input, baseTitle, async (attempt) => {
     if (attempt === 1) return firstFreeTitle(baseTitle, read.takenTitles);
     const [rows] = await d1ReadBatch(d1, [takenTitlesQuery(input.viewerId, baseTitle, source.id)]);

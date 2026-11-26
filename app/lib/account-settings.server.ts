@@ -45,7 +45,6 @@ import {
   validateConnectorGrantConnectionKeys,
 } from "~/lib/oauth-server.server";
 import { parseRecipeVisibility } from "~/domains/kitchen";
-import { recipeVisibilityChoices } from "~/lib/recipe-visibility-choices";
 
 
 // Signing out everywhere keeps the ways the chef signs in. Say so, so a chef recovering from a
@@ -627,12 +626,10 @@ async function handleAccountSettingsIntent({
   }
 
   if (intent === "setRecipeVisibilityDefault") {
-    // Who can see the cook's new recipes, while the choice is on; household only while households is on for them too.
+    // Who can see the cook's new recipes.
     const visibility = parseRecipeVisibility(formData.get("visibility"));
-    const choices = recipeVisibilityChoices(getCloudflareEnv(context), userId);
-    if (!choices || !visibility || !choices.includes(visibility)) {
-      const message = choices?.includes("household") ? "Choose public, household or only me." : "Choose public or only me.";
-      return { success: false, intent: "setRecipeVisibilityDefault", error: "invalid_visibility", message };
+    if (!visibility) {
+      return { success: false, intent: "setRecipeVisibilityDefault", error: "invalid_visibility", message: "Choose public, household or only me." };
     }
     await retryD1Write({ scope: "account.recipe_visibility_default" }, () => database.user.update({
       where: { id: userId },

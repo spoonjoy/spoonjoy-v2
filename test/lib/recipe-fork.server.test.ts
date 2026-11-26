@@ -400,13 +400,13 @@ describe.each<ForkPath>(["prisma", "d1"])("recipe-fork.server (%s)", (path) => {
     });
   });
 
-  it("starts a fork at the forking cook's default for new recipes when asked to", async () => {
+  it("starts a fork at the forking cook's default for new recipes", async () => {
     const chefA = await makeUser();
     const chefB = await makeUser();
     await db.user.update({ where: { id: chefB.id }, data: { defaultRecipeVisibility: "private" } });
     const open = await seedSourceRecipe(chefA.id, { title: "Open Soup" });
 
-    const forked = await fork({ sourceRecipeId: open.id, viewerId: chefB.id, visibilityChoices: ["public", "private"] });
+    const forked = await fork({ sourceRecipeId: open.id, viewerId: chefB.id });
     expect(await db.recipe.findUnique({ where: { id: forked.recipe.id }, select: { visibility: true } })).toEqual({ visibility: "private" });
   });
 
@@ -730,7 +730,10 @@ describe("forkRecipeOnD1", () => {
     expect(sorted(read!.source)).toEqual(sorted(viaPrisma));
     expect(read!.stepOutputUses).toEqual(expect.arrayContaining(prismaUses));
     expect(read!.stepOutputUses).toHaveLength(prismaUses.length);
+    expect(read!.cookDefault).toBe("public");
     await expect(readForkSourceFromD1(binding.binding, { sourceRecipeId: "missing", viewerId: chefB.id })).resolves.toBeNull();
+    // A viewer with no stored default (no row at all) forks at public.
+    expect((await readForkSourceFromD1(binding.binding, { sourceRecipeId: source.id, viewerId: "no-such-cook" }))!.cookDefault).toBe("public");
   });
 
   it("forks in two round trips however many variations the chef already has", async () => {
@@ -798,13 +801,13 @@ describe("forkRecipeOnD1", () => {
       .resolves.toMatchObject({ appliedTitle: "Ribs", titleWasSuffixed: false });
   });
 
-  it("starts a fork at the forking cook's default for new recipes when asked to", async () => {
+  it("starts a fork at the forking cook's default for new recipes", async () => {
     const chefA = await makeUser();
     const chefB = await makeUser();
     await db.user.update({ where: { id: chefB.id }, data: { defaultRecipeVisibility: "private" } });
     const source = await richSource(chefA.id, "Ribs");
 
-    const { recipeId } = await forkRecipeOnD1(binding.binding, { sourceRecipeId: source.id, viewerId: chefB.id, visibilityChoices: ["public", "private"] });
+    const { recipeId } = await forkRecipeOnD1(binding.binding, { sourceRecipeId: source.id, viewerId: chefB.id });
     expect(await db.recipe.findUnique({ where: { id: recipeId }, select: { visibility: true } })).toEqual({ visibility: "private" });
   });
 

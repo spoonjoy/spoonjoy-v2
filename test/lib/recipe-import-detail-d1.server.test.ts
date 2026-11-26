@@ -37,12 +37,12 @@ function isRecipeBatch(statements: unknown): boolean {
   return (statements as Array<{ sql: string }>)[0]!.sql.startsWith("SELECT json(");
 }
 
-async function importRecipe(name: string, sourceUrl: string, DB?: D1ReadDatabase, flags?: string) {
+async function importRecipe(name: string, sourceUrl: string, DB?: D1ReadDatabase) {
   return importRecipeFromSource(
     { chefId, source: { type: "json-ld", jsonLd: jsonLd(name), sourceUrl } },
     {
       db,
-      env: { ...(DB ? { DB } : {}), ...(flags ? { SPOONJOY_FLAGS: flags } : {}) },
+      env: DB ? { DB } : {},
       ingredientParser: async (text) => [{ quantity: 1, unit: "whole", ingredientName: text }],
     },
   );
@@ -102,13 +102,12 @@ describe("recipe import and recipe page writes on a D1 binding", () => {
       });
     });
 
-    it("imports at the cook's default visibility while recipe_visibility is on, on Prisma and D1 alike, and public while it is off", async () => {
+    it("imports at the cook's default visibility, on Prisma and D1 alike", async () => {
       await db.user.update({ where: { id: chefId }, data: { defaultRecipeVisibility: "private" } });
-      const viaPrisma = await importRecipe("Quiet Rice", "https://example.com/q", undefined, "recipe_visibility");
-      const viaD1 = await importRecipe("Quiet Rice D1", "https://example.com/r", d1.binding, "recipe_visibility");
-      const flagOff = await importRecipe("Loud Rice", "https://example.com/s", d1.binding);
+      const viaPrisma = await importRecipe("Quiet Rice", "https://example.com/q");
+      const viaD1 = await importRecipe("Quiet Rice D1", "https://example.com/r", d1.binding);
       const visibility = async (recipeId: string | undefined) => (await db.recipe.findUniqueOrThrow({ where: { id: recipeId! }, select: { visibility: true } })).visibility;
-      expect([await visibility(viaPrisma.recipeId), await visibility(viaD1.recipeId), await visibility(flagOff.recipeId)]).toEqual(["private", "private", "public"]);
+      expect([await visibility(viaPrisma.recipeId), await visibility(viaD1.recipeId)]).toEqual(["private", "private"]);
     });
 
     it("takes the next title when another recipe takes it before the write", async () => {

@@ -32,7 +32,6 @@ import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.s
 import { canRead, readableRecipeWhere, type RecipeViewer } from "~/domains/kitchen";
 import { likeContainsSearch, type FlagEnv } from "~/domains/platform";
 import { addEntry, getWeek, parseLocalDate, prismaPlanStore, removeEntry, type PlanEntry } from "~/domains/planning";
-import { recipeVisibilityChoices } from "~/lib/recipe-visibility-choices";
 import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 import { cookRecipeVisibilityDefault } from "~/lib/recipe-create.server";
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
@@ -2376,7 +2375,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
         title,
       });
       if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
-      const visibility = await cookRecipeVisibilityDefault(context.db, owner.id, context.env);
+      const visibility = await cookRecipeVisibilityDefault(context.db, owner.id);
       if (imageUrl) {
         await validateRecipeCoverImageSource({
           imageUrl,
@@ -3793,7 +3792,6 @@ async function forkAndNotify(
     sourceRecipeId,
     viewerId,
     titleOverride,
-    visibilityChoices: recipeVisibilityChoices(context.env, viewerId),
   }, d1Binding(context.env?.DB));
 
   // Fire-and-forget: notify the source chef when someone else forked.
