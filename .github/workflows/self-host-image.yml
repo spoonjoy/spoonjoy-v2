@@ -491,7 +491,7 @@ jobs:
 
       # Updating a server, as docs/self-hosting.md tells an owner to: the guide's Compose file runs the
       # last published image (latest), its owner signs up, adds a recipe and opens sign-ups, then the
-      # same Compose project moves to this commit's image (what `docker compose pull && docker compose
+      # same Compose project moves to this commit's image (what `docker compose build && docker compose
       # up -d` does) on the same data volume. The new image migrates the database on start, and the
       # owner signs back in to the same recipe and setting after a reload. On 8083.
       - name: Update a server from the last published image
