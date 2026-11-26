@@ -52,6 +52,10 @@ async function arrange() {
   });
   await db.recipeCover.create({ data: { recipeId: bread.id, imageUrl: "/photos/recipes/old.jpg", sourceType: "upload", status: "archived" } });
   await db.recipe.update({ where: { id: bread.id }, data: { activeCoverId: cover.id } });
+  for (const [kind, name, slug] of [["tag", "Weeknight", "weeknight"], ["tag", "Baking", "baking"], ["category", "Breads", "breads"], ["tool", "Dutch oven", "dutch-oven"]]) {
+    const organizer = await db.organizer.create({ data: { ownerId: ada.id, kind, name, slug } });
+    await db.recipeOrganizer.create({ data: { recipeId: bread.id, organizerId: organizer.id } });
+  }
 
   const graceDish = await db.recipe.create({ data: { title: "Soup", chefId: grace.id } });
   await db.recipe.create({ data: { title: "Not mine", chefId: grace.id } });
@@ -79,6 +83,14 @@ async function arrange() {
   });
   await db.recipeSpoon.create({ data: { chefId: ada.id, recipeId: graceDish.id, deletedAt: NOW } });
   await db.recipeSpoon.create({ data: { chefId: grace.id, recipeId: bread.id } });
+  // Bread moved in twice for ada, from another Spoonjoy and from a Mealie backup; grace's own move-in record naming
+  // ada's recipe is grace's, not ada's.
+  const fromSpoonjoy = await db.importSource.create({ data: { id: "src-sj", ownerId: ada.id, kind: "spoonjoy", instanceKey: "cm_ada_there", label: "ada", serverUrl: "https://home.example" } });
+  const fromMealie = await db.importSource.create({ data: { id: "src-mealie", ownerId: ada.id, kind: "mealie", instanceKey: "group", label: "Home" } });
+  const graces = await db.importSource.create({ data: { id: "src-grace", ownerId: grace.id, kind: "spoonjoy", instanceKey: "cm_grace", label: "grace", serverUrl: "https://elsewhere.example" } });
+  for (const [id, sourceId, sourceKey, contentHash] of [["rec-1", fromSpoonjoy.id, "bread-there", "print-1"], ["rec-2", fromMealie.id, "bread-guid", null], ["rec-3", graces.id, "not-hers", "print-3"]] as const) {
+    await db.sourceRecord.create({ data: { id, sourceId, sourceTable: "recipes", sourceKey, targetType: "Recipe", targetId: bread.id, contentHash, lastJobId: "job" } });
+  }
   return { ada, bread, cover, graceDish };
 }
 
@@ -112,6 +124,15 @@ describe("buildAccountExport", () => {
       steps: [
         { stepNum: 1, title: "Mix", description: "Mix flour", durationMinutes: 5, usesOutputOfSteps: [], ingredients: [{ quantity: 2, unit: "export-cup", name: "export-flour" }] },
         { stepNum: 2, title: null, description: "Bake", durationMinutes: null, usesOutputOfSteps: [1], ingredients: [] },
+      ],
+      // Each kind's names in name order, so another Spoonjoy moving this kitchen in brings them as they are.
+      tags: ["Baking", "Weeknight"],
+      categories: ["Breads"],
+      tools: ["Dutch oven"],
+      // Where it moved in from, so a Spoonjoy moving it back finds its own recipe again.
+      movedInFrom: [
+        { kind: "spoonjoy", serverUrl: "https://home.example", sourceKey: "bread-there", contentHash: "print-1" },
+        { kind: "mealie", serverUrl: null, sourceKey: "bread-guid", contentHash: null },
       ],
     });
     expect(exported!.recipes[0].covers).toEqual([

@@ -4,12 +4,13 @@ import type { PrismaClient } from "@prisma/client";
 
 // A copy of everything a person put into Spoonjoy, as one JSON document they can download from
 // account settings or GET /api/v1/me/export: their profile, recipes (with steps, ingredients and
-// covers), cookbooks, shopping list and cooks (spoons). Stored photos are listed as absolute URLs.
+// covers, tags, categories and tools, and where each one moved in from), cookbooks, shopping list and cooks (spoons). Stored
+// photos are listed as absolute URLs.
 // Secrets (password hashes, tokens, passkey keys) are never included.
 
 export const ACCOUNT_EXPORT_FORMAT = "spoonjoy.account-export.v1";
 
-type ExportDb = Pick<PrismaClient, "user" | "recipe" | "cookbook" | "shoppingList" | "recipeSpoon" | "householdMember">;
+type ExportDb = Pick<PrismaClient, "user" | "recipe" | "cookbook" | "shoppingList" | "recipeSpoon" | "householdMember" | "sourceRecord">;
 
 function iso(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null;
@@ -51,6 +52,16 @@ export interface AccountExport {
       usesOutputOfSteps: number[];
       ingredients: Array<{ quantity: number; unit: string; name: string }>;
     }>;
+    /** The names of the recipe's tags, categories and tools, each in name order. */
+    tags: string[];
+    categories: string[];
+    tools: string[];
+    /**
+     * Where the recipe moved in from, once for each move-in that brought it: the app (`kind`, such as "mealie" or
+     * "spoonjoy"), that app's server address when it came from one, the recipe's id there, and a fingerprint of the
+     * recipe as it moved in. A Spoonjoy moving the recipe back reads these to find its own recipe again.
+     */
+    movedInFrom: Array<{ kind: string; serverUrl: string | null; sourceKey: string; contentHash: string | null }>;
     covers: Array<{
       id: string;
       active: boolean;
@@ -86,6 +97,12 @@ export interface AccountExport {
   }>;
 }
 
+/** A recipe's tags, categories and tools by name, each list in name order. */
+function organizerNames(links: Array<{ organizer: { kind: string; name: string } }>) {
+  const named = (kind: string) => links.flatMap(({ organizer }) => (organizer.kind === kind ? [organizer.name] : [])).sort();
+  return { tags: named("tag"), categories: named("category"), tools: named("tool") };
+}
+
 /** What a cook's export calls another cook's recipe that is private now. */
 export const PRIVATE_RECIPE_TITLE = "A private recipe";
 
@@ -112,7 +129,7 @@ export async function buildAccountExport(
   });
   if (!user) return null;
 
-  const [recipes, cookbooks, shoppingList, spoons] = await Promise.all([
+  const [recipes, cookbooks, shoppingList, spoons, movedIn] = await Promise.all([
     db.recipe.findMany({
       where: { chefId: userId },
       orderBy: { createdAt: "asc" },
@@ -125,6 +142,7 @@ export async function buildAccountExport(
           },
         },
         covers: { orderBy: { createdAt: "asc" } },
+        organizers: { select: { organizer: { select: { kind: true, name: true } } } },
       },
     }),
     db.cookbook.findMany({
@@ -154,7 +172,19 @@ export async function buildAccountExport(
       orderBy: { cookedAt: "asc" },
       include: { recipe: { select: { title: true, chefId: true, visibility: true } } },
     }),
+    // The move-ins that brought this person's recipes, from their own move-in sources only.
+    db.sourceRecord.findMany({
+      where: { targetType: "Recipe", source: { ownerId: userId } },
+      orderBy: { id: "asc" },
+      select: { targetId: true, sourceKey: true, contentHash: true, source: { select: { kind: true, serverUrl: true } } },
+    }),
   ]);
+  const origins = new Map<string, AccountExport["recipes"][number]["movedInFrom"]>();
+  for (const record of movedIn) {
+    const list = origins.get(record.targetId) ?? [];
+    list.push({ kind: record.source.kind, serverUrl: record.source.serverUrl, sourceKey: record.sourceKey, contentHash: record.contentHash });
+    origins.set(record.targetId, list);
+  }
 
   const signInMethods = [
     ...(user.hashedPassword ? ["password"] : []),
@@ -196,6 +226,8 @@ export async function buildAccountExport(
           name: ingredient.ingredientRef.name,
         })),
       })),
+      ...organizerNames(recipe.organizers),
+      movedInFrom: origins.get(recipe.id) ?? [],
       covers: recipe.covers.map((cover) => ({
         id: cover.id,
         active: cover.id === recipe.activeCoverId,
