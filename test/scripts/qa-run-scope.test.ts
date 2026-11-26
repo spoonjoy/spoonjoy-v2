@@ -60,6 +60,12 @@ import {
   QA_ERROR_LOGS_VAR,
   RUN_QUEUE_PATTERN,
   SHARED_QA_QUEUE,
+  STAND_IN_CONFIG,
+  STAND_IN_SECRETS_FILE,
+  STAND_IN_WORKER_PATTERN,
+  deployStandIn,
+  standInIdentity,
+  waitForStandIn,
   ensureSharedQueue,
 } from "../../scripts/qa-run-scope.mjs";
 import { QA_BASE_URL, QA_D1_DATABASE_ID } from "../../scripts/script-environment.mjs";
@@ -82,6 +88,8 @@ const IDENTITY = {
   queueName: "spoonjoy-jobs-qa-run-1001-2",
 };
 const RUN_DB_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const STAND_IN_NAME = `${IDENTITY.workerName}-stand-in`;
+const STAND_IN_URL = `https://${STAND_IN_NAME}.mendelow-studio.workers.dev`;
 
 // The generated build config as the Cloudflare Vite plugin writes it for CLOUDFLARE_ENV=qa: the
 // QA section flattened, named spoonjoy-v2-qa.
@@ -1693,6 +1701,132 @@ describe("ensureSharedQueue", () => {
   });
 });
 
+describe("the Move in stand-in", () => {
+  const ok = { status: 200, body: "ok" };
+  const placeholder = { status: 404, body: `<h1>${WORKERS_DEV_PLACEHOLDER}</h1>` };
+
+  function answers(...replies: Array<Route | Error | string>) {
+    return vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
+      expect(url).toBe(`${STAND_IN_URL}/health`);
+      expect(init?.headers?.connection).toBe("close");
+      const reply = replies.length > 1 ? replies.shift()! : replies[0]!;
+      if (reply instanceof Error || typeof reply === "string") throw reply;
+      return { status: reply.status, headers: new Headers(), text: async () => reply.body ?? "" };
+    });
+  }
+
+  it("is named after the stack's own Worker, part by part, so teardown and the sweep find it", () => {
+    expect(standInIdentity(RUN_ENV)).toEqual({ workerName: STAND_IN_NAME, baseUrl: STAND_IN_URL });
+    expect(standInIdentity({ ...RUN_ENV, SPOONJOY_QA_RUN_PART: "2" }).workerName).toBe("spoonjoy-v2-qa-run-1001-2-p2-stand-in");
+    expect(STAND_IN_WORKER_PATTERN.test(STAND_IN_NAME)).toBe(true);
+    expect(STAND_IN_WORKER_PATTERN.test("spoonjoy-v2-qa-run-1001-2-p2-stand-in")).toBe(true);
+    for (const name of [IDENTITY.workerName, "spoonjoy-v2-qa-stand-in", "spoonjoy-v2-qa-run-1001-2-r2-stand-in", `${STAND_IN_NAME}-x`]) {
+      expect(STAND_IN_WORKER_PATTERN.test(name)).toBe(false);
+    }
+    // A stand-in is never taken for a stack's Worker.
+    expect(RUN_WORKER_PATTERN.test(STAND_IN_NAME)).toBe(false);
+  });
+
+  it("deploys the stand-in with a secret of its own, waits until it answers, and exports its address and secret", async () => {
+    const files = fakeFs();
+    const { exec, calls } = fakeExec();
+    const log = vi.fn();
+    const standIn = await deployStandIn({
+      env: RUN_ENV,
+      exec,
+      fs: files.fs,
+      fetchImpl: answers(ok),
+      now: () => 0,
+      sleep: vi.fn(async () => {}),
+      log,
+      secret: () => "stand-in-secret",
+    });
+    expect(standIn).toEqual({ workerName: STAND_IN_NAME, baseUrl: STAND_IN_URL });
+    expect(calls).toEqual([["pnpm", "exec", "wrangler", "deploy", "-c", STAND_IN_CONFIG, "--name", STAND_IN_NAME, "--secrets-file", STAND_IN_SECRETS_FILE]]);
+    expect(files.json(STAND_IN_SECRETS_FILE)).toEqual({ STAND_IN_SECRET: "stand-in-secret" });
+    expect(files.modes.get(STAND_IN_SECRETS_FILE)).toBe(0o600);
+    expect(log.mock.calls[0]).toEqual(["::add-mask::stand-in-secret"]);
+    expect(files.appended).toEqual([[RUN_ENV.GITHUB_ENV, `SPOONJOY_MOVE_IN_STAND_IN_URL=${STAND_IN_URL}\nSPOONJOY_MOVE_IN_STAND_IN_SECRET=stand-in-secret\n`]]);
+    expect(log).toHaveBeenLastCalledWith(`The Move in stand-in answers at ${STAND_IN_URL}.`);
+  });
+
+  it("deploys again after the failures the stack's own deploy retries, and exports nothing on a local run", async () => {
+    const notKnown = Object.assign(new Error("Command failed"), { stdout: "", stderr: "This Worker does not exist on your account. [code: 10007]\n" });
+    const exec = vi.fn().mockRejectedValueOnce(notKnown).mockResolvedValueOnce({ stdout: "Deployed\n", stderr: "" });
+    const files = fakeFs();
+    const log = vi.fn();
+    const { GITHUB_ENV: _unused, ...local } = RUN_ENV;
+    await deployStandIn({ env: local, exec, fs: files.fs, fetchImpl: answers(ok), now: () => 0, sleep: vi.fn(async () => {}), log });
+    expect(exec).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledWith(`::warning::Cloudflare did not yet know ${STAND_IN_NAME} (code 10007); deploying again in 5 s.`);
+    expect(files.appended).toEqual([]);
+    // Without a secret given, each run makes a fresh one.
+    expect(files.json(STAND_IN_SECRETS_FILE).STAND_IN_SECRET).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("refuses to run outside GitHub Actions", async () => {
+    await expect(
+      deployStandIn({ env: { ...RUN_ENV, GITHUB_ACTIONS: "false" }, exec: vi.fn(), fs: fakeFs().fs, fetchImpl: vi.fn(), now: () => 0, sleep: vi.fn(), log: vi.fn() }),
+    ).rejects.toThrow(/GitHub Actions/);
+  });
+
+  it("waits for five answers in a row, starting again after the placeholder, an error or a wrong answer", async () => {
+    const sleep = vi.fn(async () => {});
+    const fetchImpl = answers(ok, placeholder, ok, new Error("reset"), { status: 200, body: "nope" }, ok);
+    await waitForStandIn({ fetchImpl, now: () => 0, sleep, baseUrl: STAND_IN_URL });
+    expect(fetchImpl).toHaveBeenCalledTimes(10);
+    expect(sleep.mock.calls.every(([ms]) => ms === APP_ANSWER_GAP_MS)).toBe(true);
+  });
+
+  it("fails as a setup error, naming the last answer, once the stand-in hasn't answered in time", async () => {
+    let clock = 0;
+    const now = () => clock;
+    const sleep = vi.fn(async () => {
+      clock += READY_TIMEOUT_MS;
+    });
+    await expect(waitForStandIn({ fetchImpl: answers(placeholder), now, sleep, baseUrl: STAND_IN_URL })).rejects.toThrow(
+      `Setup error, not a test failure: the Move in stand-in at ${STAND_IN_URL} did not answer 5 times in a row within 180 s: /health returned 404, Cloudflare's workers.dev placeholder.`,
+    );
+    clock = 0;
+    await expect(waitForStandIn({ fetchImpl: answers(new Error("reset")), now, sleep, baseUrl: STAND_IN_URL })).rejects.toThrow("/health failed: reset.");
+    clock = 0;
+    await expect(waitForStandIn({ fetchImpl: answers({ status: 500 }), now, sleep, baseUrl: STAND_IN_URL })).rejects.toThrow("/health returned 500.");
+    clock = 0;
+    await expect(waitForStandIn({ fetchImpl: answers("down"), now, sleep, baseUrl: STAND_IN_URL })).rejects.toThrow("/health failed: down.");
+  });
+
+  it("is deleted with the stack, with no warning when the stack never had one, and a failure left for the sweep", async () => {
+    const gone = notFoundApi();
+    const api = fakeApi({ deleteWorker: vi.fn(async (name: string) => (name === STAND_IN_NAME ? gone.deleteWorker(name) : { success: true })) });
+    const log = vi.fn();
+    expect(await teardown({ env: RUN_ENV, fs: scopedFiles().fs, api, log })).toBe(true);
+    expect(log.mock.calls.flat().join("\n")).not.toContain("stand-in");
+
+    const failing = fakeApi({ deleteWorker: vi.fn(async (name: string) => {
+      if (name === STAND_IN_NAME) throw new Error("stand-in 500");
+      return { success: true };
+    }) });
+    const log2 = vi.fn();
+    expect(await teardown({ env: RUN_ENV, fs: scopedFiles().fs, api: failing, log: log2 })).toBe(false);
+    expect(log2).toHaveBeenCalledWith(expect.stringContaining("Could not fully delete this run's QA stack (stand-in 500)"));
+  });
+
+  it("is swept with stale stacks, counting toward the run Workers in use", async () => {
+    const now = () => Date.parse("2026-10-09T12:00:00Z");
+    const old = new Date(now() - STALE_AFTER_MS - 1).toISOString();
+    const fresh = new Date(now() - 60_000).toISOString();
+    const api = fakeApi({
+      listWorkers: vi.fn(async () => [
+        { id: "spoonjoy-v2-qa-run-1-1-stand-in", created_on: old },
+        { id: "spoonjoy-v2-qa-run-2-1-p2-stand-in", created_on: fresh },
+        { id: "spoonjoy-v2-qa-stand-in", created_on: old },
+      ]),
+    });
+    expect(await sweepStaleRunStacks({ api, now, log: vi.fn() })).toEqual({ swept: 1, remainingRunWorkers: 1 });
+    expect(api.deleteWorker.mock.calls).toEqual([["spoonjoy-v2-qa-run-1-1-stand-in"]]);
+  });
+});
+
 describe("teardown", () => {
   it("deletes this run's jobs queue, then its Worker and the database prepare recorded, by id, and its local state", async () => {
     const api = fakeApi({
@@ -1705,7 +1839,9 @@ describe("teardown", () => {
     const log = vi.fn();
 
     expect(await teardown({ env: RUN_ENV, fs: files.fs, api, log })).toBe(true);
-    expect(api.deleteWorker.mock.calls).toEqual([[IDENTITY.workerName]]);
+    // The Move in stand-in goes with the stack's Worker.
+    expect(api.deleteWorker.mock.calls).toEqual([[IDENTITY.workerName], [STAND_IN_NAME]]);
+    expect(log).toHaveBeenCalledWith(`Deleted the Move in stand-in Worker ${STAND_IN_NAME}.`);
     expect(api.deleteDatabase.mock.calls).toEqual([[RUN_DB_ID]]);
     expect(api.deleteQueue.mock.calls).toEqual([["run-queue"]]);
     expect(api.deleteQueueConsumer.mock.calls).toEqual([["run-queue", "run-queue-consumer"]]);
@@ -1788,7 +1924,7 @@ describe("teardown", () => {
     const log = vi.fn();
     expect(await teardown({ env: RUN_ENV, fs: fakeFs().fs, api, log })).toBe(false);
     expect(log).toHaveBeenCalledWith(
-      "::warning::Could not fully delete this run's QA stack (queues 500; worker 500; d1 500). The scheduled sweep deletes it once it is 3 hours old.",
+      "::warning::Could not fully delete this run's QA stack (queues 500; worker 500; worker 500; d1 500). The scheduled sweep deletes it once it is 3 hours old.",
     );
   });
 
@@ -1797,7 +1933,7 @@ describe("teardown", () => {
     const files = scopedFiles({ ...FRESH, retiredWorkers: [IDENTITY.workerName, "spoonjoy-v2-qa-run-9-9", "spoonjoy-v2-qa"] });
     const log = vi.fn();
     expect(await teardown({ env: RUN_ENV, fs: files.fs, api, log })).toBe(true);
-    expect(api.deleteWorker.mock.calls).toEqual([[FRESH.workerName], [IDENTITY.workerName]]);
+    expect(api.deleteWorker.mock.calls).toEqual([[FRESH.workerName], [IDENTITY.workerName], [STAND_IN_NAME]]);
     expect(log).toHaveBeenCalledWith(`Deleted QA run Worker ${FRESH.workerName}.`);
 
     // An old Worker verify already deleted is not worth a warning.
@@ -1819,7 +1955,7 @@ describe("teardown", () => {
     // A state file it can't read leaves the plain name.
     const api4 = fakeApi({ listDatabases: vi.fn(async () => []) });
     await teardown({ env: RUN_ENV, fs: fakeFs({ [STATE_FILE]: "{not json" }).fs, api: api4, log: vi.fn() });
-    expect(api4.deleteWorker.mock.calls).toEqual([[IDENTITY.workerName]]);
+    expect(api4.deleteWorker.mock.calls).toEqual([[IDENTITY.workerName], [STAND_IN_NAME]]);
   });
 
   it("refuses to run outside GitHub Actions", async () => {
@@ -1878,6 +2014,7 @@ describe("main and the CLI guard", () => {
     expect(await main(["deploy"], { env: RUN_ENV, exec: vi.fn(async () => ({ stdout: "", stderr: "" })), fs: files.fs, log })).toBe(1);
     files.store.set(`${CLIENT_ASSETS_DIR}/entry.client-AbC_1.js`, "");
     await main(["verify"], { env: RUN_ENV, exec: verifyExec().exec, fs: files.fs, fetchImpl: site(LIVE), log, sleep: vi.fn(async () => {}) });
+    expect(await main(["stand-in"], { env: RUN_ENV, exec: vi.fn(async () => ({ stdout: "", stderr: "" })), fs: files.fs, fetchImpl: vi.fn(async () => ({ status: 200, text: async () => "ok" })), log, sleep: vi.fn(async () => {}), now: () => 0 })).toEqual({ workerName: STAND_IN_NAME, baseUrl: STAND_IN_URL });
     expect(await main(["teardown"], { env: RUN_ENV, fs: files.fs, api, log })).toBe(true);
     expect(await main(["sweep"], { env: RUN_ENV, api, log })).toEqual({ swept: 0, remainingRunWorkers: 0 });
     expect(await main(["shared-queue"], { env: RUN_ENV, api, log })).toBe(true);
@@ -1972,6 +2109,7 @@ describe("Journeys workflow", () => {
       "Put the sample cover images in QA's photo bucket",
       "Start QA Worker tail",
       "Seed the QA kitchen",
+      "Deploy the Move in stand-in server",
       "Run test suite",
     ].map(index);
     expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -1981,6 +2119,14 @@ describe("Journeys workflow", () => {
     expect(step("Deploy this build to this run's QA Worker").run).toBe("node scripts/qa-run-scope.mjs deploy");
     expect(step("Check this run's QA Worker is live").run).toBe("node scripts/qa-run-scope.mjs verify");
     expect(step("Start QA Worker tail").run).toContain('wrangler tail "$SPOONJOY_QA_RUN_WORKER"');
+  });
+
+  it("deploys the Move in stand-in for the stacks that run the Move in journeys, and never opens a quick tunnel", () => {
+    const standIn = step("Deploy the Move in stand-in server");
+    expect(standIn.run).toBe("node scripts/qa-run-scope.mjs stand-in");
+    // Part 2 runs the Move in journeys; a pull request's affected run runs its move-in specs in part 1.
+    expect(standIn.if).toBe("env.SUITE == 'journeys' && (matrix.part == 2 || contains(needs.changes.outputs.specs, 'move-in'))");
+    expect(readFileSync(resolve(ROOT, ".github/workflows/journeys.yml"), "utf8")).not.toMatch(/cloudflared|trycloudflare/);
   });
 
   it("touches the run's stack after a failure only if it was created, and always deletes it, then reports API use", () => {
@@ -2015,6 +2161,7 @@ describe("Journeys workflow", () => {
       "Show how QA's photo bucket aborts unfinished uploads",
       "Start QA Worker tail",
       "Seed the QA kitchen",
+      "Deploy the Move in stand-in server",
       "Run test suite",
       "Rotate persona passwords",
       "Clean up disposable QA data",
