@@ -6,6 +6,7 @@ import {
   addEntry,
   feedForToken,
   feedLinkMadeAt,
+  feedLinkUrl,
   hashFeedToken,
   makeFeedLink,
   planForFeedToken,
@@ -29,6 +30,10 @@ async function cook() {
 describe("a calendar feed token", () => {
   it("hashes to the hex SHA-256 of the token", async () => {
     expect(await hashFeedToken("abc")).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  });
+
+  it("is served at /calendar/<token>.ics on the site's origin", () => {
+    expect(feedLinkUrl("https://spoonjoy.app", "abc")).toBe("https://spoonjoy.app/calendar/abc.ics");
   });
 });
 
