@@ -126,7 +126,10 @@ export async function focacciaInTheKitchen(page: Page, verifyAfterReload: (check
   await page.goto(`/my-recipes?q=${encodeURIComponent(FOCACCIA.title)}`);
   const copies = main.locator(`a[href^="/recipes/"]`).filter({ hasText: FOCACCIA.title });
   await expect(copies).toHaveCount(1);
-  await copies.first().click();
+  // Opened by its address: a click on the list can land before the page hydrates and go nowhere (run 45889138153).
+  const href = await copies.first().getAttribute("href");
+  expect(href, "the recipe's link in the kitchen").toMatch(/^\/recipes\/[^/?#]+$/);
+  await page.goto(href as string);
   await verifyAfterReload(async () => {
     await expect(main.getByRole("heading", { level: 1, name: FOCACCIA.title, exact: true })).toBeVisible();
     const photo = main.getByRole("img", { name: `Photo of ${FOCACCIA.title}`, exact: true });
