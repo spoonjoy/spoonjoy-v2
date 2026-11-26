@@ -81,41 +81,28 @@ describe("private recipes over MCP", () => {
     expect(listed.cookbooks.map((cookbook) => cookbook.recipeCount)).toEqual([0]);
   });
 
-  it("create_recipe makes the recipe at the cook's default while recipe_visibility is on, so it stays theirs", async () => {
+  it("create_recipe makes the recipe at the cook's default, so it stays theirs", async () => {
     await db.user.update({ where: { id: cook.user.id }, data: { defaultRecipeVisibility: "private" } });
-    const flagged = { ...cook.context, env: { SPOONJOY_FLAGS: "recipe_visibility" } };
-    const made = await callSpoonjoyApiOperation("create_recipe", { title: "Quiet Pear Crumble", steps: [{ description: "Bake" }] }, flagged) as { recipe: { id: string } };
+    const made = await callSpoonjoyApiOperation("create_recipe", { title: "Quiet Pear Crumble", steps: [{ description: "Bake" }] }, cook.context) as { recipe: { id: string } };
     expect((await db.recipe.findUniqueOrThrow({ where: { id: made.recipe.id }, select: { visibility: true } })).visibility).toBe("private");
     expect(await callSpoonjoyApiOperation("get_recipe", { id: made.recipe.id }, stranger.context)).toEqual({ recipe: null });
   });
 
-  it("create_recipe ignores a stored default while recipe_visibility is off, since the cook cannot see it", async () => {
-    await db.user.update({ where: { id: cook.user.id }, data: { defaultRecipeVisibility: "private" } });
-    const made = await callSpoonjoyApiOperation("create_recipe", { title: "Loud Pear Crumble", steps: [{ description: "Bake" }] }, cook.context) as { recipe: { id: string } };
-    expect((await db.recipe.findUniqueOrThrow({ where: { id: made.recipe.id }, select: { visibility: true } })).visibility).toBe("public");
-  });
-
-  it("fork_recipe starts a fork of another cook's recipe at the forking cook's default while recipe_visibility is on", async () => {
+  it("fork_recipe starts a fork of another cook's recipe at the forking cook's default", async () => {
     const open = await db.recipe.create({ data: { title: "Open Quince Paste", chefId: stranger.user.id } });
     await db.user.update({ where: { id: cook.user.id }, data: { defaultRecipeVisibility: "private" } });
     const visibilityOf = async (context: SpoonjoyApiContext, titleOverride: string) => {
       const forked = await callSpoonjoyApiOperation("fork_recipe", { sourceRecipeId: open.id, title: titleOverride }, context) as { recipe: { id: string } };
       return (await db.recipe.findUniqueOrThrow({ where: { id: forked.recipe.id }, select: { visibility: true } })).visibility;
     };
-    expect(await visibilityOf({ ...cook.context, env: { SPOONJOY_FLAGS: "recipe_visibility" } }, "Quiet Quince")).toBe("private");
-    expect(await visibilityOf(cook.context, "Loud Quince")).toBe("public");
+    expect(await visibilityOf(cook.context, "Quiet Quince")).toBe("private");
   });
 
-  it("fork_recipe starts a fork at a household default while recipe_visibility is on for the forking cook, else public", async () => {
+  it("fork_recipe starts a fork at a household default", async () => {
     const open = await db.recipe.create({ data: { title: "Open Medlar Jelly", chefId: stranger.user.id } });
     await db.user.update({ where: { id: cook.user.id }, data: { defaultRecipeVisibility: "household" } });
-    const visibilityOf = async (flags: string, titleOverride: string) => {
-      const context = { ...cook.context, env: { SPOONJOY_FLAGS: flags } };
-      const forked = await callSpoonjoyApiOperation("fork_recipe", { sourceRecipeId: open.id, title: titleOverride }, context) as { recipe: { id: string } };
-      return (await db.recipe.findUniqueOrThrow({ where: { id: forked.recipe.id }, select: { visibility: true } })).visibility;
-    };
-    expect(await visibilityOf("recipe_visibility", "Shared Medlar")).toBe("household");
-    expect(await visibilityOf("", "Open Medlar")).toBe("public");
+    const forked = await callSpoonjoyApiOperation("fork_recipe", { sourceRecipeId: open.id, title: "Shared Medlar" }, cook.context) as { recipe: { id: string } };
+    expect((await db.recipe.findUniqueOrThrow({ where: { id: forked.recipe.id }, select: { visibility: true } })).visibility).toBe("household");
   });
 
   it("reads it for its cook on a local stdio server, which runs as its owner with no principal", async () => {
@@ -153,13 +140,10 @@ describe("household recipes over MCP", () => {
 
   it("fork_recipe keeps a housemate's fork of it to the housemate, so forking never opens it to anyone else", async () => {
     await db.user.update({ where: { id: housemate.user.id }, data: { defaultRecipeVisibility: "public" } });
-    for (const flags of ["recipe_visibility", ""]) {
-      const context = { ...housemate.context, env: { SPOONJOY_FLAGS: flags } };
-      const forked = await callSpoonjoyApiOperation("fork_recipe", { sourceRecipeId: keptId, title: `Pear Tart ${flags || "none"}` }, context) as { recipe: { id: string } };
-      const { visibility } = await db.recipe.findUniqueOrThrow({ where: { id: forked.recipe.id }, select: { visibility: true } });
-      expect(visibility, flags || "no flags").toBe("private");
-      expect(await callSpoonjoyApiOperation("get_recipe", { id: forked.recipe.id }, stranger.context)).toEqual({ recipe: null });
-    }
+    const forked = await callSpoonjoyApiOperation("fork_recipe", { sourceRecipeId: keptId, title: "Pear Tart Fork" }, housemate.context) as { recipe: { id: string } };
+    const { visibility } = await db.recipe.findUniqueOrThrow({ where: { id: forked.recipe.id }, select: { visibility: true } });
+    expect(visibility).toBe("private");
+    expect(await callSpoonjoyApiOperation("get_recipe", { id: forked.recipe.id }, stranger.context)).toEqual({ recipe: null });
   });
 
   it("get_recipe, search_recipes, list_spoons_for_recipe and get_cookbook read it for its cook's household and no one else", async () => {

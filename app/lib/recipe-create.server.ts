@@ -22,8 +22,7 @@ import {
   validateStepTitle,
   validateUnitName,
 } from "~/lib/validation";
-import { DEFAULT_RECIPE_VISIBILITY, newRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
-import { recipeVisibilityChoices } from "~/lib/recipe-visibility-choices";
+import { newRecipeVisibility, type RecipeVisibility } from "~/domains/kitchen";
 
 type TransactionClient = Prisma.TransactionClient;
 type Database = PrismaClientType | TransactionClient;
@@ -333,15 +332,10 @@ async function createRecipeDraftOnD1(d1: D1ReadDatabase, input: CreateRecipeDraf
   return { id: input.id };
 }
 
-/**
- * Who can see a cook's new recipe when they don't choose: their own default while they can choose it (recipe_visibility
- * on, and households too for a household default), else public. A default they could not see or change never applies.
- */
-export async function cookRecipeVisibilityDefault(db: PrismaClientType, chefId: string, env: object | null | undefined): Promise<RecipeVisibility> {
-  const choices = recipeVisibilityChoices(env, chefId);
-  if (!choices) return DEFAULT_RECIPE_VISIBILITY;
+/** Who can see a cook's new recipe when they don't choose: their own default for new recipes, else public. */
+export async function cookRecipeVisibilityDefault(db: PrismaClientType, chefId: string): Promise<RecipeVisibility> {
   const cook = await db.user.findUnique({ where: { id: chefId }, select: { defaultRecipeVisibility: true } });
-  return newRecipeVisibility(null, cook?.defaultRecipeVisibility, choices);
+  return newRecipeVisibility(null, cook?.defaultRecipeVisibility);
 }
 
 /**
