@@ -218,6 +218,24 @@ describe("runNextChunk", () => {
     expect(await h.runAll()).toMatchObject({ status: "done" });
   });
 
+  it("keeps the photo a recipe moving back to where it started already has, and tells the writer where it came from", async () => {
+    const theres: Array<string | undefined> = [];
+    const h = harness({
+      write: async ({ draft, there }) => {
+        theres.push(there);
+        // Stands in for a source whose drafts name their home here (another Spoonjoy's export): the recipe it started as.
+        draft.home = { recipeId: `home-${draft.sourceKey}`, contentHash: null };
+        return { outcome: "unchanged", recipeId: `home-${draft.sourceKey}`, jobId: "home" };
+      },
+    });
+    // This Worker has no organizers port, so the backup's organizers stay behind: the one issue.
+    expect(await h.runAll()).toMatchObject({ status: "done-with-issues" });
+    expect(h.counts.get("recipes")).toMatchObject({ found: 3, created: 0, unchanged: 3 });
+    expect(h.counts.get("photos")).toMatchObject({ found: 1, created: 0, unchanged: 1 });
+    expect(h.photos).toHaveLength(0);
+    expect(new Set(theres)).toEqual(new Set(["in the backup"]));
+  });
+
   it("adds nothing when the same backup moves in again", async () => {
     const h = harness();
     await h.runAll();

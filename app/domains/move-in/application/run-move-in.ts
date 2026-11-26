@@ -97,6 +97,8 @@ export interface RecipeWriteInput {
   jobId: string;
   chefId: string;
   draft: RecipeDraft;
+  /** Where the recipe came from, as the source says it, for what the writer tells the cook. */
+  there?: string;
 }
 
 /** Counts to add and report lines to log, saved with the job in one write. */
@@ -364,7 +366,7 @@ async function bringOrganizersTogether(run: Run, words: SourceWords, pending: Pe
 async function bringRecipe(run: Run, opened: Opened, draft: RecipeDraft): Promise<Report> {
   const { job, ports } = run;
   // An error here is passed on, for bringOrPassOver to try the recipe again or pass it over.
-  const result = await ports.writeRecipe({ sourceId: job.sourceId as string, jobId: job.id, chefId: job.ownerId, draft });
+  const result = await ports.writeRecipe({ sourceId: job.sourceId as string, jobId: job.id, chefId: job.ownerId, draft, there: opened.source.words.there });
   return afterWrite(run, opened, draft, result);
 }
 
@@ -402,6 +404,11 @@ async function afterWrite(run: Run, { source, kitchen }: Opened, draft: RecipeDr
     // Adding only, so a recipe already here gets any it lacks and keeps the ones the cook gave it.
     await bringOrganizers(run, source.words, draft, result.recipeId, report, organizing);
     if (!hasPhoto) return report;
+    // A recipe that moved back to where it started has its own photo here already.
+    if (draft.home?.recipeId === result.recipeId) {
+      report.counts.push(["photos", { unchanged: 1 }]);
+      return report;
+    }
     // A run that stopped between the recipe and its photo left the photo out; bring it now.
     if (await ports.hasMovedInPhoto(result.recipeId)) report.counts.push(["photos", ours ? { created: 1 } : { unchanged: 1 }]);
     else if (photos) photos.push({ draft, recipeId: result.recipeId, report });
