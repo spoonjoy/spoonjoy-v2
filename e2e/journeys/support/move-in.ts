@@ -121,8 +121,9 @@ async function giveServer(page: Page, server: RecipeServer) {
 }
 
 /**
- * The journey test with `recipeServer`, which starts a stand-in for a version's kitchen on its own server, reached over
- * a quick tunnel. Each one closes in the test's teardown, which runs even when the test times out.
+ * The journey test with `recipeServer`, which loads a version's kitchen into the run's stand-in server, a Worker of its
+ * own the QA Worker reaches over the network. Each one closes in the test's teardown, which runs even when the test
+ * times out.
  */
 export const serverTest = test.extend<{ recipeServer: (version: string) => Promise<RecipeServer> }>({
   // eslint-disable-next-line no-empty-pattern -- Playwright requires an object pattern for a fixture's fixtures.

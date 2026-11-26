@@ -361,12 +361,18 @@ jobs:
             echo "::add-mask::$password"
           done < <(jq -r '(.scratch[]?, .scratchDesktop[]?) | .password' "$SPOONJOY_QA_CREDENTIALS")
 
-      # Part 2's Move in journeys move one kitchen in from a stand-in of the other app's server
-      # (e2e/journeys/support/recipe-server.ts), which the QA Worker reaches over a Cloudflare quick
-      # tunnel; cloudflared opens it, pinned and checked as install-jq.mjs does jq.
-      - name: Install cloudflared for the Move in journeys
-        if: matrix.part == 2
-        run: node scripts/install-cloudflared.mjs
+      # The Move in journeys (part 2's, or a pull request's affected move-in specs) move one kitchen
+      # in from a stand-in of the other app's server (e2e/journeys/support/recipe-server.ts): this
+      # stack's own Worker, workers/move-in-stand-in, at its own workers.dev address, which the QA
+      # Worker reaches over the network. It replaced a Cloudflare quick tunnel to the runner, whose
+      # address often never answered (#1080). Teardown and the QA Run Sweep delete it with the stack.
+      - name: Deploy the Move in stand-in server
+        if: env.SUITE == 'journeys' && (matrix.part == 2 || contains(needs.changes.outputs.specs, 'move-in'))
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
+        run: node scripts/qa-run-scope.mjs stand-in
 
       # The HX census (e2e/journeys/hx-census.journey.ts) reads the seeded kitchen before any other
       # journey changes QA data, so it runs alone first; the other journeys run whether or not it
