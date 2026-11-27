@@ -1,16 +1,16 @@
 // Moving a kitchen in from another Spoonjoy, for move-in.desktop.journey.ts. Scratch index 16's base account is the
 // cook on the other Spoonjoy: through the API, as that cook, the journey puts one recipe in its kitchen, with two
-// timed steps, their ingredients and a cover photo, and makes the API token docs/self-hosting.md (Moving your
-// kitchen) tells a cook to make. Its desktop twin is the cook moving in: on /move-in it picks Another Spoonjoy, gives
+// timed steps, their ingredients and a cover photo. Then, as that cook, it makes the API token docs/self-hosting.md
+// (Moving your kitchen) tells a cook to make, on Account settings with Make token. Its desktop twin is the cook moving in: on /move-in it picks Another Spoonjoy, gives
 // the other Spoonjoy's address (support/spoonjoy-server.ts) and the token, and finds the recipe, photo and steps in
 // its own kitchen after a reload. Moving in again from the same Spoonjoy adds nothing.
 import { readFile } from "node:fs/promises";
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, Browser, Page } from "@playwright/test";
 import { test, expect } from "./journey";
 import { requiredLabel } from "./forms";
 import { waitForHydration } from "./app-ready";
 import { scratchStorageStatePath } from "./personas";
-import { deleteMoveToken, makeMoveToken, startSpoonjoyServer, type SpoonjoyServer } from "./spoonjoy-server";
+import { deleteMoveToken, startSpoonjoyServer, type SpoonjoyServer } from "./spoonjoy-server";
 
 const MOVE_IN_MS = 150_000;
 const PHOTO = "e2e/fixtures/spoon-test-photo.png";
@@ -47,26 +47,55 @@ async function fillKitchen(cook: APIRequestContext) {
 }
 
 /**
+ * Makes a move-in token on Account settings, as the cook on the other Spoonjoy does: Make token, for moving a kitchen,
+ * under a name of its own. The token is shown once; after a reload it is listed by name and its secret is gone. It is
+ * deleted when the test ends, before the run's report is uploaded, and the run's Worker and database go with the run.
+ */
+async function makeMoveToken(browser: Browser, baseURL: string | undefined): Promise<{ token: string; name: string }> {
+  const name = `Moving my kitchen ${Date.now()}`;
+  const context = await browser.newContext({ baseURL, storageState: scratchStorageStatePath(16) });
+  try {
+    const page = await context.newPage();
+    await page.goto("/account/settings");
+    await waitForHydration(page);
+    const form = page.getByTestId("make-api-token");
+    await expect(form.getByRole("radio", { name: "Moving my kitchen to another Spoonjoy" })).toBeChecked();
+    await form.getByRole("textbox", { name: "Name" }).fill(name);
+    await form.getByRole("button", { name: "Make token" }).click();
+    const section = page.getByTestId("api-access-section");
+    await expect(section.getByText(`${name} is ready`)).toBeVisible();
+    const token = ((await section.locator("pre").textContent()) ?? "").trim();
+    expect(token.startsWith("sj_"), "the token Make token showed").toBe(true);
+    await page.reload();
+    await expect(section.getByRole("button", { name: `Revoke ${name}`, exact: true })).toBeVisible();
+    await expect(section.locator("pre"), "the secret, shown only once").toHaveCount(0);
+    return { token, name };
+  } finally {
+    await context.close();
+  }
+}
+
+/**
  * The journey test with `otherSpoonjoy`: scratch index 16's base account, with FOCACCIA in its kitchen and a move-in
- * token, reached through the pass-through. It closes in the test's teardown, which runs even when the test times out.
+ * token made on Account settings, reached through the run's Move in stand-in. It closes in the test's teardown, which runs even when the test times out.
  */
 // Setting up fills a kitchen, reads it back and loads it into the stand-in, each with a few tries, so the fixture has
 // its own time rather than the test's 60 s.
 const SETUP_MS = 4 * 60_000;
 
 export const spoonjoyTest = test.extend<{ otherSpoonjoy: SpoonjoyServer }>({
-  otherSpoonjoy: [async ({ playwright, baseURL }, use) => {
+  otherSpoonjoy: [async ({ playwright, browser, baseURL }, use) => {
     const cook = await playwright.request.newContext({ baseURL, storageState: scratchStorageStatePath(16) });
     let server: SpoonjoyServer | null = null;
-    let made: { token: string; credentialId: string } | null = null;
+    let made: { token: string; name: string } | null = null;
     try {
       await fillKitchen(cook);
-      made = await makeMoveToken(cook);
+      made = await makeMoveToken(browser, baseURL);
       server = await startSpoonjoyServer(made.token);
       await use(server);
     } finally {
       await server?.close();
-      if (made) await deleteMoveToken(cook, made.credentialId);
+      if (made) await deleteMoveToken(cook, made.name);
       await cook.dispose();
     }
   }, { timeout: SETUP_MS }],
