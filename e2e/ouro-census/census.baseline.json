@@ -73,6 +73,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Make token\" [button/root] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Save\" [button/root] in main",
           "count": 1
         },
@@ -97,7 +101,15 @@
           "count": 1
         },
         {
+          "identity": "radio \"A program or agent using my kitchen\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
           "identity": "radio \"Household\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Moving my kitchen to another Spoonjoy\" [radio-group/circle] in main",
           "count": 1
         },
         {
@@ -126,6 +138,10 @@
         },
         {
           "identity": "textbox \"Name (optional)\" [text-field/input] in main",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Name\" [text-field/input] in main",
           "count": 1
         }
       ],
@@ -167,6 +183,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Make token\" [button/root] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Save\" [button/root] in main",
           "count": 1
         },
@@ -195,7 +215,15 @@
           "count": 1
         },
         {
+          "identity": "radio \"A program or agent using my kitchen\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
           "identity": "radio \"Household\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Moving my kitchen to another Spoonjoy\" [radio-group/circle] in main",
           "count": 1
         },
         {
@@ -228,6 +256,10 @@
         },
         {
           "identity": "textbox \"Name (optional)\" [text-field/input] in main",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Name\" [text-field/input] in main",
           "count": 1
         },
         {
@@ -4573,6 +4605,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Make token\" [button/root] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Save\" [button/root] in main",
           "count": 1
         },
@@ -4601,7 +4637,15 @@
           "count": 1
         },
         {
+          "identity": "radio \"A program or agent using my kitchen\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
           "identity": "radio \"Household\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Moving my kitchen to another Spoonjoy\" [radio-group/circle] in main",
           "count": 1
         },
         {
@@ -4610,6 +4654,10 @@
         },
         {
           "identity": "radio \"Public\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Name\" [text-field/input] in main",
           "count": 1
         }
       ],
@@ -4647,6 +4695,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Make token\" [button/root] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Save\" [button/root] in main",
           "count": 1
         },
@@ -4679,7 +4731,15 @@
           "count": 1
         },
         {
+          "identity": "radio \"A program or agent using my kitchen\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
           "identity": "radio \"Household\" [radio-group/circle] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Moving my kitchen to another Spoonjoy\" [radio-group/circle] in main",
           "count": 1
         },
         {
@@ -4692,6 +4752,10 @@
         },
         {
           "identity": "textbox \"Current password\" [text-field/input] in main",
+          "count": 1
+        },
+        {
+          "identity": "textbox \"Name\" [text-field/input] in main",
           "count": 1
         },
         {
