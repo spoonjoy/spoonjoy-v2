@@ -6780,8 +6780,9 @@ async function notifyNativeRecipeFork(
   },
 ) {
   try {
-    const vapid = getVapidConfig((args.context.cloudflare?.env ?? {}) as VapidEnv);
-    const nativePush = getNativePushConfig((args.context.cloudflare?.env ?? {}) as NativePushEnv);
+    const env = args.context.cloudflare?.env ?? {};
+    const vapid = getVapidConfig(env as VapidEnv);
+    const nativePush = getNativePushConfig(env as NativePushEnv);
     const waitUntil = apiV1WaitUntilFor(args);
     const notifyTask = notifyForkOfMyRecipe(
       db,
