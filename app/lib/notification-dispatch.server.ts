@@ -384,7 +384,8 @@ export async function enqueueNotification(
         );
         // A token sealed under another secret (SESSION_SECRET changed, or a restore onto a server with
         // a new one) can never be read again: drop it, so it isn't loaded for each notification, and
-        // count it. The device gets notifications again when the app registers it again.
+        // count it. The device gets notifications again once they are turned on again in the app's
+        // Settings, which registers it again.
         if (token === null) {
           await retryD1Write({ scope: "native_push_device.drop_unreadable" }, () =>
             db.nativePushDevice.updateMany({ where: { id: device.id, revokedAt: null, sealedToken: device.sealedToken }, data: { sealedToken: null } }),
@@ -398,8 +399,8 @@ export async function enqueueNotification(
           );
           return;
         }
-        // The event id names the notification, so a send repeated after a lost answer replaces the
-        // first on the device instead of showing twice.
+        // The event id names the notification, so if Apple ever gets it twice the second replaces the
+        // first on the device instead of showing beside it.
         const result = await sendNative(config, { token, environment: device.environment }, content, { collapseId: event.id });
         if (result.status === "delivered") {
           await markDelivered();
