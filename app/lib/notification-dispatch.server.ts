@@ -1,14 +1,17 @@
 /**
  * Notification dispatcher.
  *
- * Single entry point for firing in-app + web-push notifications:
+ * Single entry point for firing in-app, web-push and native (Apple) notifications:
  *   1. Self-suppression (actorId === recipientId).
  *   2. Always writes a NotificationEvent row (durable log).
  *   3. Resolves recipient's NotificationPreference (defaults true).
- *   4. Loads all PushSubscription rows for the recipient.
- *   5. Schedules one sendPush per subscription via ctx.waitUntil.
- *   6. On 'expired' (404 / 410), prunes the subscription row.
- *   7. On first 2xx, marks NotificationEvent.pushDeliveredAt.
+ *   4. Loads all PushSubscription rows for the recipient, and, when the server has a push relay
+ *      key, their live Apple devices (NativePushDevice rows with a sealed token).
+ *   5. Schedules one sendPush per subscription, and one sendNativePush per device through the
+ *      push relay (native-push.server.ts), via ctx.waitUntil.
+ *   6. On 'expired' (web push's 404 / 410), prunes the subscription row; on 'expired' from Apple
+ *      (the token is dead), revokes the device.
+ *   7. On first delivery, marks NotificationEvent.pushDeliveredAt.
  *
  * Telemetry: silent failure modes (push 'failed' incl. 100%-VAPID-fail,
  * non-P2025 prune errors, swallowed send-task throws, and real D1 failures on
@@ -20,13 +23,20 @@
  * injected so this module is testable in plain Node.
  */
 
-import type { NotificationDb } from "~/lib/notification-db-d1.server";
+import type { NativePushDeviceRow, NotificationDb } from "~/lib/notification-db-d1.server";
 import {
   sendPush as realSendPush,
   type PushSubscriptionRecord,
   type SendPushResult,
 } from "~/lib/web-push.server";
 import type { VapidConfig } from "~/lib/env.server";
+import {
+  sendNativePush as realSendNativePush,
+  type NativePushConfig,
+  type NativePushResult,
+  type NativePushTarget,
+} from "~/lib/native-push.server";
+import { openNativePushToken } from "~/lib/native-push-token.server";
 import {
   captureEvent,
   captureException,
@@ -78,6 +88,14 @@ export interface NotificationDispatchDeps {
     payload: { title: string; body: string; url: string; icon?: string },
     vapid: VapidConfig,
   ) => Promise<SendPushResult>;
+  /** The server's push relay settings (getNativePushConfig); without them no Apple device is sent to. */
+  nativePush?: NativePushConfig | null;
+  sendNativePush?: (
+    config: NativePushConfig,
+    target: NativePushTarget,
+    payload: { title: string; body: string; url: string },
+    options: { collapseId?: string },
+  ) => Promise<NativePushResult>;
   /**
    * Optional PostHog config used to capture otherwise-silent push, prune, and
    * durable-write failures. When omitted (or disabled), capture is a no-op.
@@ -197,6 +215,7 @@ export async function enqueueNotification(
     p256dh: string;
     authSecret: string;
   }>;
+  let devices: NativePushDeviceRow[] = [];
   try {
     // 1b. A recipient who blocked the actor hears nothing from them (moderation.server.ts).
     const blocked = await db.chefBlock.findUnique({
@@ -235,6 +254,12 @@ export async function enqueueNotification(
     subscriptions = await db.pushSubscription.findMany({
       where: { userId: input.recipientId },
     });
+    if (deps.nativePush) {
+      devices = await db.nativePushDevice.findMany({
+        where: { userId: input.recipientId, revokedAt: null, sealedToken: { not: null } },
+        select: { id: true, deviceId: true, platform: true, environment: true, sealedToken: true },
+      });
+    }
   } catch (error) {
     scheduleCapture(deps, (config) =>
       captureException(config, {
@@ -250,7 +275,7 @@ export async function enqueueNotification(
     return { eventId: event.id, queuedSends: 0 };
   }
 
-  if (subscriptions.length === 0) {
+  if (subscriptions.length === 0 && devices.length === 0) {
     return { eventId: event.id, queuedSends: 0 };
   }
 
@@ -346,5 +371,81 @@ export async function enqueueNotification(
     }
   }
 
-  return { eventId: event.id, queuedSends: subscriptions.length };
+  const nativePush = deps.nativePush;
+  const sendNative = deps.sendNativePush ?? realSendNativePush;
+  // Devices are loaded only when the server has a push relay key, so this runs for none without one.
+  for (const device of devices) {
+    const sendTask = (async (config: NativePushConfig) => {
+      try {
+        const token = await openNativePushToken(
+          config.tokenSecret,
+          { userId: input.recipientId, deviceId: device.deviceId, platform: device.platform, environment: device.environment },
+          device.sealedToken,
+        );
+        // A token sealed under another secret (SESSION_SECRET changed, or a restore onto a server with
+        // a new one) can never be read again: drop it, so it isn't loaded for each notification, and
+        // count it. The device gets notifications again when the app registers it again.
+        if (token === null) {
+          await retryD1Write({ scope: "native_push_device.drop_unreadable" }, () =>
+            db.nativePushDevice.updateMany({ where: { id: device.id, revokedAt: null, sealedToken: device.sealedToken }, data: { sealedToken: null } }),
+          );
+          scheduleCapture(deps, (config) =>
+            captureEvent(config, {
+              event: "spoonjoy.push.native_token_unreadable",
+              distinctId: input.recipientId,
+              properties: { kind: input.kind, deviceId: device.id },
+            }),
+          );
+          return;
+        }
+        // The event id names the notification, so a send repeated after a lost answer replaces the
+        // first on the device instead of showing twice.
+        const result = await sendNative(config, { token, environment: device.environment }, content, { collapseId: event.id });
+        if (result.status === "delivered") {
+          await markDelivered();
+        } else if (result.status === "expired") {
+          // Only the live device still holding this token is revoked: running it again after a lost
+          // answer changes nothing, and a device the app registered again meanwhile, with a new
+          // token, stays.
+          // revokedAt is ISO text, as the device API writes it (prisma/schema.prisma).
+          const revokedAt = new Date().toISOString();
+          await retryD1Write({ scope: "native_push_device.revoke" }, () =>
+            db.nativePushDevice.updateMany({ where: { id: device.id, revokedAt: null, sealedToken: device.sealedToken }, data: { revokedAt, sealedToken: null } }),
+          );
+        } else if (result.status === "failed") {
+          // An unavailable relay (no Apple push key yet) is expected until the key is set: no event.
+          scheduleCapture(deps, (config) =>
+            captureEvent(config, {
+              event: "spoonjoy.push.native_send_failed",
+              distinctId: input.recipientId,
+              properties: {
+                kind: input.kind,
+                deviceId: device.id,
+                httpStatus: result.httpStatus,
+                failureMode: result.httpStatus === 0 ? "no_response" : "http_error",
+                ...(result.apnsStatus === undefined ? {} : { apnsStatus: result.apnsStatus }),
+                ...(result.reason ? { pushError: result.reason } : {}),
+              },
+            }),
+          );
+        }
+      } catch (error) {
+        scheduleCapture(deps, (config) =>
+          captureException(config, {
+            error,
+            distinctId: input.recipientId,
+            extras: { kind: input.kind, deviceId: device.id, phase: "nativeSendTask" },
+          }),
+        );
+      }
+    })(nativePush as NativePushConfig);
+
+    if (deps.waitUntil) {
+      deps.waitUntil(sendTask);
+    } else {
+      await sendTask;
+    }
+  }
+
+  return { eventId: event.id, queuedSends: subscriptions.length + devices.length };
 }
