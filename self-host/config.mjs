@@ -96,7 +96,7 @@ export function selfHostVars({ built, env, port, sessionSecret, pushKeys, pushRe
   vars.VAPID_SUBJECT ||= pushSubject(vars.SPOONJOY_BASE_URL);
   // Notifications on the Apple apps through the push relay, with the key the server registered
   // for itself (self-host/push-relay.mjs), unless the owner set theirs.
-  if (pushRelayKey && !vars.SPOONJOY_PUSH_RELAY_KEY) vars.SPOONJOY_PUSH_RELAY_KEY = pushRelayKey;
+  if (pushRelayKey && !vars.SPOONJOY_PUSH_RELAY_KEY?.trim()) vars.SPOONJOY_PUSH_RELAY_KEY = pushRelayKey;
   // Analytics are off unless the owner brings their own PostHog project.
   if (!vars.POSTHOG_KEY) vars.POSTHOG_DISABLED = "true";
   return vars;
