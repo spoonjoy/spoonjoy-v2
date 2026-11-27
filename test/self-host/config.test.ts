@@ -92,6 +92,9 @@ describe("selfHostVars", () => {
       .toBe("sjr1.owner.key");
     expect(selfHostVars({ ...base, env: { SPOONJOY_PUSH_RELAY_URL: "off" } })).toMatchObject({ SPOONJOY_PUSH_RELAY_URL: "off" });
     expect(selfHostVars({ ...base, pushRelayKey: null }).SPOONJOY_PUSH_RELAY_KEY).toBeUndefined();
+    // A blank key is no key: the registered one is used.
+    expect(selfHostVars({ ...base, pushRelayKey: "sjr1.server.key", env: { SPOONJOY_PUSH_RELAY_KEY: "  " } }).SPOONJOY_PUSH_RELAY_KEY)
+      .toBe("sjr1.server.key");
   });
 
   it("takes the public address from SPOONJOY_BASE_URL, for a server behind an HTTPS proxy", () => {
