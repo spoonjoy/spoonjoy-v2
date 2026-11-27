@@ -11,6 +11,7 @@ import { getUserId, requireUserId } from "~/lib/session.server";
 import { hidesContent, withoutHidden } from "~/lib/moderation.server";
 import { notifyCookbookSaveOfMine } from "~/lib/notification-triggers.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import { getNativePushConfig, type NativePushEnv } from "~/lib/native-push.server";
 import {
   captureException,
   resolvePostHogServerConfig,
@@ -23,13 +24,15 @@ import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 
 interface CloudflareContextLike {
   cloudflare?: {
-    env?: (VapidEnv & PostHogServerEnv) | null;
+    env?: (VapidEnv & NativePushEnv & PostHogServerEnv) | null;
     ctx?: { waitUntil?: (promise: Promise<unknown>) => void };
   };
 }
 
 function getNotificationCtx(context: AppLoadContext): {
   vapidEnv: VapidEnv;
+  /** The settings native push reads (getNativePushConfig), next to the VAPID ones. */
+  nativePushEnv: NativePushEnv | null;
   postHogConfig: PostHogServerConfig;
   waitUntil?: (promise: Promise<unknown>) => void;
 } {
@@ -41,6 +44,7 @@ function getNotificationCtx(context: AppLoadContext): {
       VAPID_PRIVATE_KEY: envSource?.VAPID_PRIVATE_KEY,
       VAPID_SUBJECT: envSource?.VAPID_SUBJECT,
     },
+    nativePushEnv: envSource,
     postHogConfig: resolvePostHogServerConfig(envSource ?? {}),
     waitUntil: cf?.ctx?.waitUntil ? cf.ctx.waitUntil.bind(cf.ctx) : undefined,
   };
@@ -310,12 +314,13 @@ async function handleCookbookAction(
 
         // Fire-and-forget: notify the recipe owner when someone else saved their recipe.
         if (added) try {
-          const { vapidEnv, postHogConfig, waitUntil } = getNotificationCtx(context);
+          const { vapidEnv, nativePushEnv, postHogConfig, waitUntil } = getNotificationCtx(context);
           const vapid = getVapidConfig(vapidEnv);
+          const nativePush = getNativePushConfig(nativePushEnv);
           const notifyTask = notifyCookbookSaveOfMine(
             database,
             { recipeId, actorId: userId },
-            { vapid, waitUntil, postHogConfig },
+            { vapid, nativePush, waitUntil, postHogConfig },
           );
           if (waitUntil) {
             waitUntil(notifyTask);
