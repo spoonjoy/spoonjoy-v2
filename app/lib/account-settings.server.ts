@@ -193,8 +193,14 @@ export interface AccountSettingsActionResult {
  * What a token made on this page is for, in the cook's words, and what each one may do. A program
  * gets the personal-token default; a move to another Spoonjoy only reads the kitchen, for a week.
  */
+// A program's token reads the kitchen and the account and changes only the shopping list: no account or token
+// changes, so a 90-day token can't make itself a successor that outlives it.
 export const API_TOKEN_PURPOSES = {
-  program: { name: "Spoonjoy API token", scopes: undefined, expiresInDays: undefined },
+  program: {
+    name: "Spoonjoy API token",
+    scopes: "public:read recipes:read cookbooks:read shopping_list:read shopping_list:write account:read",
+    expiresInDays: 90,
+  },
   move: { name: "Moving my kitchen", scopes: "account:read kitchen:read", expiresInDays: 7 },
 } as const;
 export type ApiTokenPurpose = keyof typeof API_TOKEN_PURPOSES;
@@ -726,7 +732,8 @@ async function handleAccountSettingsIntent({
 
   if (intent === "createApiToken") {
     const purposeValue = formData.get("purpose")?.toString();
-    const purpose: ApiTokenPurpose = purposeValue === "move" ? "move" : "program";
+    // Anything but a program's token is the narrowest one, the page's own default.
+    const purpose: ApiTokenPurpose = purposeValue === "program" ? "program" : "move";
     const made = API_TOKEN_PURPOSES[purpose];
     const name = (formData.get("name")?.toString().trim() || made.name).slice(0, 100);
     const identity = await getSessionIdentity(request, getCloudflareEnv(context));
@@ -740,12 +747,16 @@ async function handleAccountSettingsIntent({
         name,
         { scopes: made.scopes, expiresAt: resolvePersonalTokenExpiry(made.expiresInDays), d1 },
       );
-      return {
-        success: true,
-        intent,
-        message: `${created.credential.name} is ready. Copy it now: Spoonjoy won't show it again.`,
-        token: { id: created.credential.id, name: created.credential.name, secret: created.token },
-      };
+      // The answer carries the secret, so no cache and no back-and-forward history keeps it.
+      return data<AccountSettingsActionResult>(
+        {
+          success: true,
+          intent,
+          message: `${created.credential.name} is ready. Copy it now: Spoonjoy won't show it again.`,
+          token: { id: created.credential.id, name: created.credential.name, secret: created.token },
+        },
+        { headers: { "Cache-Control": "private, no-store" } },
+      );
     } catch (error) {
       if (!(error instanceof ApiAuthError)) throw error;
       return { success: false, intent, error: "signed_out", message: error.message };
