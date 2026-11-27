@@ -291,6 +291,18 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Sole catch maps known fork domain errors (missing source recipe or exhausted title choices) to typed API v1 4xx results; unexpected fork failures rethrow to the instrumented api-v1.server route boundary.",
   },
   {
+    file: "app/lib/native-push.server.ts",
+    category: "delegated",
+    reason:
+      "Its catches turn a relay that doesn't answer, or answers without JSON, into a failed NativePushResult; notification-dispatch.server reports every failed result as spoonjoy.push.native_send_failed.",
+  },
+  {
+    file: "app/lib/native-push-token.server.ts",
+    category: "delegated",
+    reason:
+      "Its one catch answers null for a sealed token that can't be opened (another secret or device); notification-dispatch.server drops that token and reports it as spoonjoy.push.native_token_unreadable.",
+  },
+  {
     file: "app/lib/shopping-list.server.ts",
     category: "expected-4xx",
     reason:
