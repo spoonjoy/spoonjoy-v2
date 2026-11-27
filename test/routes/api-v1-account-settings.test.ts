@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nativePushTokenSecret, openNativePushToken } from "~/lib/native-push-token.server";
 import { faker } from "@faker-js/faker";
 import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
@@ -503,6 +504,12 @@ describe("API v1 native account settings", () => {
 	    });
     expect(JSON.stringify(developmentPayload)).not.toContain("development-secret");
     expect(JSON.stringify(developmentPayload)).not.toContain("tokenHash");
+    expect(JSON.stringify(developmentPayload)).not.toContain("sealedToken");
+    const sealedFor = async (environment: string) => {
+      const row = await db.nativePushDevice.findFirstOrThrow({ where: { userId, deviceId: "device-main", environment } });
+      return openNativePushToken(nativePushTokenSecret(null), { userId, deviceId: "device-main", platform: "ios", environment }, row.sealedToken);
+    };
+    await expect(sealedFor("development")).resolves.toBe("apns-token-development-secret");
 
 	    const production = await apiPost("me/apns-devices", auth, "req_me_apns_register_prod", {
 	      clientMutationId: "cm_me_apns_register_prod",
@@ -538,6 +545,8 @@ describe("API v1 native account settings", () => {
 	      mutation: { clientMutationId: "cm_me_apns_refresh_dev", replayed: false },
     });
     await expect(db.nativePushDevice.count({ where: { userId, deviceId: "device-main" } })).resolves.toBe(2);
+    await expect(sealedFor("development")).resolves.toBe("apns-token-development-rotated");
+    await expect(sealedFor("production")).resolves.toBe("apns-token-production-secret");
 
     const otherUser = await db.user.create({ data: createTestUser() });
     const otherToken = await createApiCredential(db, otherUser.id, "Native APNs transfer writer", { scopes: ["account:write"] });
@@ -564,6 +573,8 @@ describe("API v1 native account settings", () => {
         revokedAt: null,
       },
     })).resolves.toBe(0);
+    await expect(db.nativePushDevice.findFirstOrThrow({ where: { userId, deviceId: "device-main", environment: "development" } }))
+      .resolves.toMatchObject({ revokedAt: expect.any(String), sealedToken: null });
     await expect(db.nativePushDevice.count({
       where: {
         userId: otherUser.id,
@@ -587,6 +598,7 @@ describe("API v1 native account settings", () => {
 	    });
     expect(revokePayload.data.devices).toHaveLength(2);
     expect(revokePayload.data.devices.every((device: { revokedAt: string | null }) => device.revokedAt !== null)).toBe(true);
+    await expect(db.nativePushDevice.count({ where: { userId, deviceId: "device-main", sealedToken: { not: null } } })).resolves.toBe(0);
 
 	    const alreadyRevoked = await apiDelete("me/apns-devices/device-main", {
 	      ...auth,
