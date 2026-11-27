@@ -95,9 +95,23 @@ describe("sendNativePush", () => {
       .resolves.toEqual({ status: "expired", httpStatus: 200, apnsStatus: 410, reason: "Unregistered" });
   });
 
-  it("fails, keeping the device, when Apple refuses it for another reason", async () => {
+  it("is expired when Apple calls the token bad, as for a development token sent as production", async () => {
     await expect(sendNativePush(CONFIG, TARGET, CONTENT, { fetch: relay(200, { status: 400, reason: "BadDeviceToken", revoke: false }) }))
-      .resolves.toEqual({ status: "failed", httpStatus: 200, apnsStatus: 400, reason: "BadDeviceToken" });
+      .resolves.toEqual({ status: "expired", httpStatus: 200, apnsStatus: 400, reason: "BadDeviceToken" });
+  });
+
+  it("is expired, asking the relay nothing, for a token that isn't Apple's hex", async () => {
+    const fetch = relay(200, { status: 200 });
+    await expect(sendNativePush(CONFIG, { ...TARGET, token: "apns-token-from-a-test" }, CONTENT, { fetch }))
+      .resolves.toEqual({ status: "expired", httpStatus: 0, reason: "not_an_apple_token" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("fails, keeping the device, when Apple refuses it for another reason", async () => {
+    await expect(sendNativePush(CONFIG, TARGET, CONTENT, { fetch: relay(200, { status: 400, reason: "BadTopic", revoke: false }) }))
+      .resolves.toEqual({ status: "failed", httpStatus: 200, apnsStatus: 400, reason: "BadTopic" });
+    await expect(sendNativePush(CONFIG, TARGET, CONTENT, { fetch: relay(200, { status: 429, reason: "BadDeviceToken" }) }))
+      .resolves.toEqual({ status: "failed", httpStatus: 200, apnsStatus: 429, reason: "BadDeviceToken" });
   });
 
   it("fails when the relay answers 200 without Apple's status", async () => {
