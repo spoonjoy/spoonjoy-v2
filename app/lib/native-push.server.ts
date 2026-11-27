@@ -46,13 +46,13 @@ export interface NativePushTarget {
   environment: string;
 }
 
+/** The device tokens Apple issues, as the relay checks them (workers/push-relay/index.ts). */
+const APPLE_DEVICE_TOKEN = /^[0-9a-f]{64,200}$/i;
+
 /**
  * delivered: Apple took it. expired: the token is dead, so revoke the device. unavailable: the relay
  * has no Apple push key yet (503 not_configured), an expected state, not a failure. failed: anything else.
  */
-/** The device tokens Apple issues, as the relay checks them (workers/push-relay/index.ts). */
-const APPLE_DEVICE_TOKEN = /^[0-9a-f]{64,200}$/i;
-
 export type NativePushStatus = "delivered" | "expired" | "unavailable" | "failed";
 
 export interface NativePushResult {
