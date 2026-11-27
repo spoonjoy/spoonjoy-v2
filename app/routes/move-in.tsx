@@ -236,7 +236,7 @@ const SERVER_WORDS = {
     placeholder: "https://spoonjoy.app",
     address: "The address you open that Spoonjoy at: https://spoonjoy.app, or your own server's. It has to open from anywhere on the internet.",
     token:
-      "Make one on that Spoonjoy: sign in there, open /api/playground, and send POST /api/v1/tokens with a name and the scopes account:read and kitchen:read. Spoonjoy only reads your recipes with it, and forgets it once they're in.",
+      "Make one on that Spoonjoy: sign in there, open Account settings, and under API and app access choose Moving my kitchen to another Spoonjoy, then Make token. Spoonjoy only reads your recipes with it, and forgets it once they're in.",
   },
 } as const;
 
