@@ -1557,8 +1557,10 @@ describe("Account Settings Route", () => {
       formData.append("purpose", "move");
       const before = Date.now();
 
-      const result = (await authenticatedPost(formData)) as { token: { secret: string } };
+      const answer = (await authenticatedPost(formData)) as unknown as { data: { token: { secret: string } }; init: ResponseInit };
+      const result = answer.data;
 
+      expect(new Headers(answer.init.headers).get("Cache-Control")).toBe("private, no-store");
       expect(result).toMatchObject({
         success: true,
         intent: "createApiToken",
@@ -1573,23 +1575,35 @@ describe("Account Settings Route", () => {
       expect(days).toBeLessThan(7.01);
     });
 
-    it("makes a program token with the personal default scopes for 90 days, named as the cook asks", async () => {
+    it("makes a program token that reads the kitchen and changes only the shopping list, for 90 days, named as the cook asks", async () => {
       const formData = new FormData();
       formData.append("intent", "createApiToken");
-      formData.append("purpose", "anything else");
+      formData.append("purpose", "program");
       formData.append("name", `  ${"Kitchen display ".repeat(10)}  `);
 
-      const result = (await authenticatedPost(formData)) as { token: { secret: string } };
+      const result = ((await authenticatedPost(formData)) as unknown as { data: { token: { secret: string } } }).data;
 
       const name = "Kitchen display ".repeat(10).trim().slice(0, 100);
       expect(result).toMatchObject({ success: true, token: { name } });
       const stored = await db.apiCredential.findFirstOrThrow({ where: { userId: testUserId } });
       expect(stored.name).toBe(name);
-      expect(stored.scopes.split(" ")).toEqual(expect.arrayContaining(["recipes:read", "shopping_list:write"]));
-      expect(stored.scopes).not.toContain("kitchen:read");
+      expect(stored.scopes.split(" ").sort()).toEqual(
+        ["account:read", "cookbooks:read", "public:read", "recipes:read", "shopping_list:read", "shopping_list:write"],
+      );
       const days = (stored.expiresAt!.getTime() - Date.now()) / 86_400_000;
       expect(days).toBeGreaterThan(89.99);
       expect(days).toBeLessThan(90.01);
+    });
+
+    it("makes the narrowest token, for moving the kitchen, for a purpose it doesn't know", async () => {
+      const formData = new FormData();
+      formData.append("intent", "createApiToken");
+      formData.append("purpose", "everything");
+
+      await authenticatedPost(formData);
+
+      const stored = await db.apiCredential.findFirstOrThrow({ where: { userId: testUserId } });
+      expect(stored).toMatchObject({ name: "Moving my kitchen", scopes: "account:read kitchen:read" });
     });
 
     it("makes no token when the cook signs out everywhere while it is being made", async () => {
