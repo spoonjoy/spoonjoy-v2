@@ -33,22 +33,16 @@ function appBase(): string {
 }
 
 /**
- * Makes an API token on the signed-in cook's account with the scopes a move-in asks for, as docs/self-hosting.md
- * says. Returns it with the id of its credential, to delete once the move is done, as the docs ask a cook to.
+ * Deletes the move-in token named `name`, as a cook does on the Spoonjoy they left once the move is done, and as
+ * docs/self-hosting.md asks.
  */
-export async function makeMoveToken(cook: APIRequestContext): Promise<{ token: string; credentialId: string }> {
-  const answer = await cook.post("/api/v1/tokens", {
-    headers: { origin: new URL(appBase()).origin },
-    data: { name: "Move my kitchen", scopes: ["account:read", "kitchen:read"], expiresInDays: 1 },
-  });
-  expect(answer.status(), "making the move-in token").toBe(201);
-  const { data } = (await answer.json()) as { data: { token: string; credential: { id: string } } };
-  return { token: data.token, credentialId: data.credential.id };
-}
-
-/** Deletes the move-in token, as a cook does on the Spoonjoy they left once the move is done. */
-export async function deleteMoveToken(cook: APIRequestContext, credentialId: string): Promise<void> {
-  const answer = await cook.delete(`/api/v1/tokens/${encodeURIComponent(credentialId)}`, { headers: { origin: new URL(appBase()).origin } });
+export async function deleteMoveToken(cook: APIRequestContext, name: string): Promise<void> {
+  const listed = await cook.get("/api/v1/tokens");
+  expect(listed.status(), "listing the cook's tokens").toBe(200);
+  const { data } = (await listed.json()) as { data: { credentials: Array<{ id: string; name: string }> } };
+  const made = data.credentials.filter((credential) => credential.name === name);
+  expect(made, "the move-in token, once").toHaveLength(1);
+  const answer = await cook.delete(`/api/v1/tokens/${encodeURIComponent(made[0].id)}`, { headers: { origin: new URL(appBase()).origin } });
   expect(answer.status(), "deleting the move-in token").toBe(200);
 }
 
