@@ -14,6 +14,7 @@ import {
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { notificationDbOnD1, type NotificationDb } from "~/lib/notification-db-d1.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import { getNativePushConfig, type NativePushEnv } from "~/lib/native-push.server";
 import {
   captureException,
   resolvePostHogServerConfig,
@@ -28,13 +29,15 @@ const IN_FLIGHT_WAIT_MS = 10_000;
 
 interface CloudflareContextLike {
   cloudflare?: {
-    env?: (VapidEnv & PostHogServerEnv) | null;
+    env?: (VapidEnv & NativePushEnv & PostHogServerEnv) | null;
     ctx?: { waitUntil?: (promise: Promise<unknown>) => void };
   };
 }
 
 function getCloudflareCtx(context: AppLoadContext): {
   vapidEnv: VapidEnv;
+  /** The settings native push reads (getNativePushConfig), next to the VAPID ones. */
+  nativePushEnv: NativePushEnv | null;
   postHogConfig: PostHogServerConfig;
   waitUntil?: (promise: Promise<unknown>) => void;
 } {
@@ -46,6 +49,7 @@ function getCloudflareCtx(context: AppLoadContext): {
       VAPID_PRIVATE_KEY: envSource?.VAPID_PRIVATE_KEY,
       VAPID_SUBJECT: envSource?.VAPID_SUBJECT,
     },
+    nativePushEnv: envSource,
     postHogConfig: resolvePostHogServerConfig(envSource ?? {}),
     waitUntil: cf?.ctx?.waitUntil ? cf.ctx.waitUntil.bind(cf.ctx) : undefined,
   };
@@ -171,8 +175,9 @@ async function notifySourceChef(
   getDb: () => Promise<NotificationDb>,
 ): Promise<void> {
   try {
-    const { vapidEnv, postHogConfig, waitUntil } = getCloudflareCtx(context);
+    const { vapidEnv, nativePushEnv, postHogConfig, waitUntil } = getCloudflareCtx(context);
     const vapid = getVapidConfig(vapidEnv);
+    const nativePush = getNativePushConfig(nativePushEnv);
     const notifyTask = (async () => notifyForkOfMyRecipe(
       await getDb(),
       {
@@ -182,7 +187,7 @@ async function notifySourceChef(
         sourceChefId: fork.attribution.sourceChef.id,
         appliedTitle: fork.appliedTitle,
       },
-      { vapid, waitUntil, postHogConfig },
+      { vapid, nativePush, waitUntil, postHogConfig },
     ))();
     if (waitUntil) {
       waitUntil(notifyTask);
