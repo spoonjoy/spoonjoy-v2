@@ -116,6 +116,7 @@ import {
   notifyCookbookSaveOfMine,
 } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
+import { getNativePushConfig, type NativePushEnv } from "~/lib/native-push.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { retryD1Write as retryApiTokenRevoke } from "~/lib/d1-write-retry.server";
 import { assertAcceptableText } from "~/lib/objectionable-terms";
@@ -3051,11 +3052,13 @@ const addRecipeToCookbookTool: SpoonjoyApiOperation = {
       try {
         const env = context.env ?? {};
         const vapid = getVapidConfig(env as VapidEnv);
+        const nativePush = getNativePushConfig(env as NativePushEnv);
         const notifyTask = notifyCookbookSaveOfMine(
           context.db,
           { recipeId, actorId: result.ownerId },
           {
             vapid,
+            nativePush,
             waitUntil: context.waitUntil,
             postHogConfig: resolvePostHogServerConfig(env),
           },
@@ -3381,11 +3384,13 @@ const createSpoonTool: SpoonjoyApiOperation = {
       try {
         const env = context.env ?? {};
         const vapid = getVapidConfig(env as VapidEnv);
+        const nativePush = getNativePushConfig(env as NativePushEnv);
         const notifyTask = notifySpoonOnMyRecipe(
           context.db,
           { recipeId, spoonerId: principal.id },
           {
             vapid,
+            nativePush,
             waitUntil: context.waitUntil,
             postHogConfig: resolvePostHogServerConfig(env),
           },
@@ -3435,6 +3440,7 @@ const createSpoonTool: SpoonjoyApiOperation = {
       try {
         const env = context.env ?? {};
         const vapid = getVapidConfig(env as VapidEnv);
+        const nativePush = getNativePushConfig(env as NativePushEnv);
         const recipeMeta = await context.db.recipe.findUniqueOrThrow({
           where: { id: recipeId },
           select: { id: true, title: true },
@@ -3449,6 +3455,7 @@ const createSpoonTool: SpoonjoyApiOperation = {
           },
           {
             vapid,
+            nativePush,
             waitUntil: context.waitUntil,
             postHogConfig: resolvePostHogServerConfig(env),
           },
@@ -3793,6 +3800,7 @@ async function forkAndNotify(
   try {
     const env = context.env ?? {};
     const vapid = getVapidConfig(env as VapidEnv);
+    const nativePush = getNativePushConfig(env as NativePushEnv);
     const notifyTask = notifyForkOfMyRecipe(
       context.db,
       {
@@ -3804,6 +3812,7 @@ async function forkAndNotify(
       },
       {
         vapid,
+        nativePush,
         waitUntil: context.waitUntil,
         postHogConfig: resolvePostHogServerConfig(env),
       },
