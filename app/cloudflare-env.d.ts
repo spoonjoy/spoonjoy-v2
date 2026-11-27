@@ -195,6 +195,10 @@ declare global {
     VAPID_PUBLIC_KEY?: string;
     VAPID_PRIVATE_KEY?: string;
     VAPID_SUBJECT?: string;
+    /** The push relay for the Apple apps' notifications (docs/push-relay.md): the relay's workers.dev address (DEFAULT_PUSH_RELAY_URL) unless set, or "off". */
+    SPOONJOY_PUSH_RELAY_URL?: string;
+    /** This server's relay key, from the relay's POST /v1/servers. Without it, notifications go to browsers only. */
+    SPOONJOY_PUSH_RELAY_KEY?: string;
     POSTHOG_KEY?: string;
     POSTHOG_HOST?: string;
     POSTHOG_DISABLED?: string;
