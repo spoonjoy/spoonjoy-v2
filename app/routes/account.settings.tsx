@@ -470,17 +470,20 @@ export default function AccountSettings() {
         </Text>
 
         {/* Keyed on the token it made, so the form starts empty again after each one. */}
-        <tokenFetcher.Form key={newToken?.id ?? "new"} method="post" className="mt-5 space-y-4" data-testid="make-api-token">
+        <tokenFetcher.Form key={newToken?.id ?? "new"} method="post" className="mt-5 grid gap-4" data-testid="make-api-token">
           <input type="hidden" name="intent" value="createApiToken" />
           <RadioGroup legend="What it's for" name="purpose" options={TOKEN_PURPOSES} defaultValue="move" />
           <TextField label="Name" name="name" description="So you can tell your tokens apart. Optional." autoComplete="off" />
-          <Button
-            type="submit"
-            {...controls["create-api-token"].props}
-            disabled={tokenFetcher.state !== "idle"}
-          >
-            Make token
-          </Button>
+          {/* Its own row, so the grid doesn't stretch the button across the form. */}
+          <div>
+            <Button
+              type="submit"
+              {...controls["create-api-token"].props}
+              disabled={tokenFetcher.state !== "idle"}
+            >
+              Make token
+            </Button>
+          </div>
         </tokenFetcher.Form>
         {newToken ? (
           <div className="mt-4 space-y-3">
