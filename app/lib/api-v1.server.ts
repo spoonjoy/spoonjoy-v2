@@ -143,6 +143,8 @@ import {
   type NativeRecipeStepIngredientCreateInput,
 } from "~/lib/api-v1-recipe-steps.server";
 import { getAppleNativeAuthConfig, getVapidConfig, type OAuthEnv, type VapidEnv } from "~/lib/env.server";
+import { getNativePushConfig, type NativePushEnv } from "~/lib/native-push.server";
+import { nativePushTokenSecret, sealNativePushToken } from "~/lib/native-push-token.server";
 import {
   handleNativeAppleSignIn,
   NativeAppleAuthError,
@@ -5811,6 +5813,12 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "account.apns.register", async (db) => {
     const tokenHash = await hashApnsToken(token);
+    // Kept sealed so notifications can be sent to the device through the push relay (native-push.server.ts).
+    const sealedToken = await sealNativePushToken(
+      nativePushTokenSecret((args.context.cloudflare?.env ?? {}) as NativePushEnv),
+      { userId: principal.id, deviceId, platform, environment },
+      token,
+    );
     // Every write sets fixed values chosen here, once, so each runs again safely after a lost
     // answer; a retried create recognises its row by the device key and this registration time.
     const now = new Date();
@@ -5827,7 +5835,8 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
           environment,
         },
       },
-      data: { revokedAt: now.toISOString() },
+      // A revoked device's token is dropped too: nothing is sent to it again.
+      data: { revokedAt: now.toISOString(), sealedToken: null },
     }));
     const existing = await db.nativePushDevice.findFirst({
       where: { userId: principal.id, deviceId, platform, environment },
@@ -5838,6 +5847,7 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
           data: {
             tokenHash,
             tokenPrefix: token.slice(0, 12),
+            sealedToken,
             deviceName,
             appVersion,
             enabledAt: now,
@@ -5858,6 +5868,7 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
             environment,
             tokenHash,
             tokenPrefix: token.slice(0, 12),
+            sealedToken,
             deviceName,
             appVersion,
             enabledAt: now,
@@ -5898,7 +5909,7 @@ async function handleApnsDeviceRevoke(args: ApiV1RouteArgs, requestId: string, p
       const revokedAt = new Date().toISOString();
       await retryAccountD1Write({ scope: "apns.revoke" }, () => db.nativePushDevice.updateMany({
         where: { id: { in: activeDeviceIds } },
-        data: { revokedAt },
+        data: { revokedAt, sealedToken: null },
       }));
     }
     const devices = await db.nativePushDevice.findMany({
@@ -6770,6 +6781,7 @@ async function notifyNativeRecipeFork(
 ) {
   try {
     const vapid = getVapidConfig((args.context.cloudflare?.env ?? {}) as VapidEnv);
+    const nativePush = getNativePushConfig((args.context.cloudflare?.env ?? {}) as NativePushEnv);
     const waitUntil = apiV1WaitUntilFor(args);
     const notifyTask = notifyForkOfMyRecipe(
       db,
@@ -6780,7 +6792,7 @@ async function notifyNativeRecipeFork(
         sourceChefId: input.sourceChefId,
         appliedTitle: input.appliedTitle,
       },
-      { vapid, waitUntil },
+      { vapid, nativePush, waitUntil },
     );
     if (waitUntil) {
       waitUntil(notifyTask);
