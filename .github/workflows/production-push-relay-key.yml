@@ -1,0 +1,90 @@
+name: Production Push Relay Key
+
+# Gives production its push relay key (scripts/production-push-relay-key.ts, docs/push-relay.md):
+# registers https://spoonjoy.app with the push relay and stores the key it gets back as the
+# Worker secret SPOONJOY_PUSH_RELAY_KEY, in one new Worker version that copies the one production
+# runs and keeps its source tag, so the next Production Deploy accepts it. It does nothing when
+# production has the secret already.
+
+on:
+  workflow_dispatch:
+
+# The same group as Production Image Key and the native kill switches: each makes production Worker
+# versions, so they never run at once.
+concurrency:
+  group: production-image-key
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+jobs:
+  guard:
+    name: require trusted main
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Reject non-main workflow code
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Production credentials are restricted to refs/heads/main."
+            exit 1
+          fi
+
+  relay-key:
+    name: store the relay key
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # A new Worker version copies the newest one, so never run while a release may be uploading.
+      - name: Wait for any in-flight Production Deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 40); do
+            busy="$(gh run list --workflow production-deploy.yml --repo "$GITHUB_REPOSITORY" --json status --jq '[.[] | select(.status != "completed")] | length')"
+            if [ "$busy" = "0" ]; then
+              echo "No Production Deploy is running."
+              exit 0
+            fi
+            echo "A Production Deploy is running; checking again in 30s ($attempt/40)."
+            sleep 30
+          done
+          echo "::error::A Production Deploy was still running after 20 minutes."
+          exit 1
+
+      - name: Register production and store its key
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+        run: pnpm exec tsx scripts/production-push-relay-key.ts
