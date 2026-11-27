@@ -37,6 +37,12 @@
 //     .md/.txt/.yml/.yaml file under the given directories (error-context.md, report copies);
 // and fails if a re-read file still has such a value.
 //
+// API tokens. The Move in journey makes a Spoonjoy API token on Account settings, which shows
+// its secret once on the page, so the secret is in that page's DOM snapshots and page
+// snapshots. Every `sj_` token (sj_ and base64url, api-auth.server.ts) in a `.trace` line, a
+// text resource or a text file is redacted too. Screencast frames and videos are images and
+// cannot be redacted; the journey revokes its token before the report is uploaded.
+//
 // Usage: node scripts/sanitize-journey-traces.mjs <directory> [<directory> ...]
 // A directory that does not exist is skipped (a run that failed before Playwright wrote
 // anything has no test-results/ or journeys-report/).
@@ -46,6 +52,23 @@ import { pathToFileURL } from "node:url";
 import zlib from "node:zlib";
 
 export const REDACTED = "[redacted]";
+
+// A Spoonjoy API token's secret: `sj_` and the base64url of its random bytes (43 characters).
+const API_TOKEN = /\bsj_[A-Za-z0-9_-]{20,}/g;
+
+/**
+ * Redacts every Spoonjoy API token in `text`. Idempotent.
+ * @param {string} text
+ * @returns {string}
+ */
+export function redactApiTokens(text) {
+  return text.replace(API_TOKEN, REDACTED);
+}
+
+/** API tokens anywhere, then secret textboxes' values: what a text resource or file must not keep. */
+function redactSecretText(text) {
+  return redactPageSnapshotText(redactApiTokens(text));
+}
 
 // Object keys whose whole value is session state: a context's storage state, its cookie jar,
 // and its per-origin localStorage.
@@ -366,7 +389,7 @@ export function sanitizeTraceText(text) {
   for (const line of text.split("\n")) {
     if (line.trim() === "") continue;
     try {
-      lines.push(JSON.stringify(redactTraceEvent(JSON.parse(line))));
+      lines.push(JSON.stringify(redactTraceEvent(JSON.parse(redactApiTokens(line)))));
     } catch {
       droppedLines += 1;
     }
@@ -400,7 +423,7 @@ export function sanitizeTraceZip(buffer) {
       // An attached page snapshot (error-context) keeps its sha1 name: the viewer looks it up by
       // the name the trace events use, not by hashing the content.
       const resource = resourceText(entry.data);
-      const redacted = resource === undefined ? undefined : redactPageSnapshotText(resource);
+      const redacted = resource === undefined ? undefined : redactSecretText(resource);
       kept.push(redacted === undefined || redacted === resource ? entry : { ...entry, data: Buffer.from(redacted, "utf8") });
     } else {
       kept.push(entry);
@@ -441,7 +464,7 @@ export function findTraceLeaks(entries) {
     }
     if (isResourceEntry(entry.name)) {
       const resource = resourceText(entry.data);
-      if (resource !== undefined && redactPageSnapshotText(resource) !== resource) {
+      if (resource !== undefined && redactSecretText(resource) !== resource) {
         leaks.push(`"${entry.name}" still has an unredacted password value`);
       }
     }
@@ -508,11 +531,11 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
     for (const file of textFiles) {
       try {
         const original = (await readFile(file)).toString("utf8");
-        const redacted = redactPageSnapshotText(original);
+        const redacted = redactSecretText(original);
         if (redacted === original) continue;
         await writeFile(file, redacted);
         const reread = (await readFile(file)).toString("utf8");
-        if (redactPageSnapshotText(reread) !== reread) {
+        if (redactSecretText(reread) !== reread) {
           io.error(`${file}: still has an unredacted password value`);
           failed = true;
         }
