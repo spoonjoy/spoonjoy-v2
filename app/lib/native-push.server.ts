@@ -50,6 +50,9 @@ export interface NativePushTarget {
  * delivered: Apple took it. expired: the token is dead, so revoke the device. unavailable: the relay
  * has no Apple push key yet (503 not_configured), an expected state, not a failure. failed: anything else.
  */
+/** The device tokens Apple issues, as the relay checks them (workers/push-relay/index.ts). */
+const APPLE_DEVICE_TOKEN = /^[0-9a-f]{64,200}$/i;
+
 export type NativePushStatus = "delivered" | "expired" | "unavailable" | "failed";
 
 export interface NativePushResult {
@@ -73,6 +76,8 @@ export async function sendNativePush(
   content: NotificationPayload,
   options: { collapseId?: string; fetch?: typeof fetch } = {},
 ): Promise<NativePushResult> {
+  // Apple's tokens are hex (the relay takes nothing else); any other text can never be delivered.
+  if (!APPLE_DEVICE_TOKEN.test(target.token)) return { status: "expired", httpStatus: 0, reason: "not_an_apple_token" };
   const fetchImpl = options.fetch ?? globalThis.fetch;
   let response: Response;
   try {
@@ -105,6 +110,9 @@ export async function sendNativePush(
   }
   const apnsStatus = typeof body?.status === "number" ? body.status : undefined;
   const reason = typeof body?.reason === "string" ? body.reason : undefined;
-  const status: NativePushStatus = body?.revoke === true ? "expired" : apnsStatus === 200 ? "delivered" : "failed";
+  // BadDeviceToken: Apple will never take this token here (for example a development build's token
+  // registered as production), so it is as dead as an unregistered one.
+  const dead = body?.revoke === true || (apnsStatus === 400 && reason === "BadDeviceToken");
+  const status: NativePushStatus = dead ? "expired" : apnsStatus === 200 ? "delivered" : "failed";
   return { status, httpStatus: response.status, ...(apnsStatus === undefined ? {} : { apnsStatus }), ...(reason ? { reason } : {}) };
 }
