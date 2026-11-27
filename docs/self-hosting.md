@@ -57,7 +57,7 @@ Notifications on iPhone, iPad and Mac go through the Spoonjoy push relay at `htt
 
 - On its first start the server registers itself with the relay and keeps its key in `/data/push-relay.json`, readable only by the server. If the relay can't be reached then, the server starts anyway and tries again on its next start; until it has a key, notifications go to browsers only.
 - The start that registers logs `push-relay-registered` with the relay's address. `SPOONJOY_PUSH_RELAY_URL=off` keeps the server from contacting the relay at all. Browser notifications (web push) never go through it.
-- The app registers each signed-in device's push token with your server, which keeps it encrypted under the server's session secret. Under a new `SESSION_SECRET` the server can't read the tokens it has: it drops each one the first time it tries it, and a device gets no notifications until the app registers it again. A backup holds the encrypted tokens but not the session secret, so a server restored from one under a new secret drops them the same way.
+- The app registers each signed-in device's push token with your server, which keeps it encrypted under the server's session secret. Under a new `SESSION_SECRET` the server can't read the tokens it has: it drops each one the first time it tries it, and a device gets no notifications until notifications are turned on again in the app's Settings, which registers it again. A backup holds the encrypted tokens but not the session secret, so a server restored from one under a new secret drops them the same way.
 - If the relay stops taking the server's key (it was revoked, or the relay's own secret changed), delete `/data/push-relay.json` and restart: the server registers again.
 
 ## Signing in
