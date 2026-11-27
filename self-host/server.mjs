@@ -23,6 +23,7 @@ import { Miniflare, Response as MiniflareResponse, fetch as nodeFetch } from "mi
 import { createTransport } from "nodemailer";
 import { createBackup, backupFileName, pruneBackups, restoreBackup } from "./backup.mjs";
 import { serverPushKeys } from "./push-keys.mjs";
+import { serverPushRelayKey } from "./push-relay.mjs";
 import { backupSettings, miniflareOptions, photoUploads, settingsFromEnv } from "./config.mjs";
 import { nextCronTime, startCronTimers } from "./cron.mjs";
 import { BusyError, hostApi, oneAtATime } from "./host-api.mjs";
@@ -56,6 +57,16 @@ const options = miniflareOptions({
   settings: command === "serve" ? settings : { ...settings, port: 0 },
   sessionSecret: readFileSync(secretFile, "utf8").trim(),
   pushKeys: serverPushKeys(path.join(dataDir, "push-keys.json")),
+  // Only the server registers with the push relay: a backup or restore run sends nothing.
+  pushRelayKey: command === "serve"
+    ? await serverPushRelayKey({
+        file: path.join(dataDir, "push-relay.json"),
+        env: process.env,
+        baseUrl: process.env.SPOONJOY_BASE_URL?.trim() || `http://localhost:${settings.port}`,
+        fetch: globalThis.fetch,
+        log,
+      })
+    : null,
   version: process.env.SPOONJOY_VERSION ?? "dev",
   serverAssetFiles: readdirSync(path.join(appDir, "build/server/assets")),
   outboundFetch: nodeFetch,
