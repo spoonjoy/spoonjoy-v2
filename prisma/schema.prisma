@@ -992,6 +992,9 @@ model NativePushDevice {
   environment      String
   tokenHash        String
   tokenPrefix      String
+  // The token sealed under the deployment's SESSION_SECRET (app/lib/native-push-token.server.ts), so notifications
+  // can be sent to it through the push relay. Null on a device registered before it was kept.
+  sealedToken      String?
   deviceName       String?
   appVersion       String?
   enabledAt        DateTime @default(now())
