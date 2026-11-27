@@ -4,6 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import { getLocalDb } from "~/lib/db.server";
 import { enqueueNotification, type NotificationDispatchDeps } from "~/lib/notification-dispatch.server";
 import { notificationDbOnD1 } from "~/lib/notification-db-d1.server";
+import { sealNativePushToken } from "~/lib/native-push-token.server";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
@@ -118,6 +119,48 @@ describe("notificationDbOnD1", () => {
 
     expect(await db.pushSubscription.count({ where: { id: sub.id } })).toBe(0);
     await expect(notificationDbOnD1(d1.binding).pushSubscription.delete({ where: { id: sub.id } })).rejects.toMatchObject({ code: "P2025" });
+  });
+
+  it("sends to an owner's live Apple devices and revokes a dead one, as the Prisma path does", async () => {
+    const [owner, forker] = [await chef(), await chef()];
+    const nativePush = { relayUrl: "https://relay.example", relayKey: "sjr1.id.sig", tokenSecret: "native-secret" };
+    const sealed = (deviceId: string) =>
+      sealNativePushToken(nativePush.tokenSecret, { userId: owner.id, deviceId, platform: "ios", environment: "production" }, `${deviceId}-token`);
+    const base = { userId: owner.id, platform: "ios", environment: "production", tokenPrefix: "t" };
+    const live = await db.nativePushDevice.create({ data: { ...base, deviceId: "b-phone", tokenHash: "h1", sealedToken: await sealed("b-phone") } });
+    const dead = await db.nativePushDevice.create({ data: { ...base, deviceId: "a-pad", tokenHash: "h2", sealedToken: await sealed("a-pad") } });
+    await db.nativePushDevice.create({ data: { ...base, deviceId: "c-old", tokenHash: "h3", sealedToken: await sealed("c-old"), revokedAt: "2026-01-01T00:00:00.000Z" } });
+    await db.nativePushDevice.create({ data: { ...base, deviceId: "d-unsealed", tokenHash: "h4" } });
+    const store = notificationDbOnD1(d1.binding);
+
+    expect((await store.nativePushDevice.findMany({
+      where: { userId: owner.id, revokedAt: null, sealedToken: { not: null } },
+      select: { id: true, deviceId: true, platform: true, environment: true, sealedToken: true },
+    })).map((row) => row.id)).toEqual([live.id, dead.id].sort());
+
+    const sendNativePush = vi.fn(async (_config: unknown, target: { token: string }) =>
+      target.token === "a-pad-token"
+        ? { status: "expired" as const, httpStatus: 200, apnsStatus: 410, reason: "Unregistered" }
+        : { status: "delivered" as const, httpStatus: 200, apnsStatus: 200 });
+    const d = deps({ nativePush, sendNativePush });
+    const result = await enqueueNotification(store, { actorId: forker.id, recipientId: owner.id, kind: "spoon_on_my_recipe", payload: {} }, d);
+    await Promise.all(d.scheduled);
+
+    expect(result.queuedSends).toBe(2);
+    expect(sendNativePush).toHaveBeenCalledTimes(2);
+    await expect(db.nativePushDevice.findUniqueOrThrow({ where: { id: dead.id } })).resolves.toMatchObject({ revokedAt: expect.any(String), sealedToken: null });
+    await expect(db.nativePushDevice.findUniqueOrThrow({ where: { id: live.id } })).resolves.toMatchObject({ revokedAt: null });
+    const event = await db.notificationEvent.findUniqueOrThrow({ where: { id: result.eventId! } });
+    expect(event.pushDeliveredAt).toBeInstanceOf(Date);
+
+    // A revoke for a token the device no longer holds changes nothing.
+    await store.nativePushDevice.updateMany({ where: { id: live.id, revokedAt: null, sealedToken: "v1.old.token" }, data: { revokedAt: "2026-11-26T00:00:00.000Z", sealedToken: null } });
+    await expect(db.nativePushDevice.findUniqueOrThrow({ where: { id: live.id } })).resolves.toMatchObject({ revokedAt: null });
+
+    // Without revokedAt it only drops the token, and the device stays live.
+    const { sealedToken } = await db.nativePushDevice.findUniqueOrThrow({ where: { id: live.id } });
+    await store.nativePushDevice.updateMany({ where: { id: live.id, revokedAt: null, sealedToken }, data: { sealedToken: null } });
+    await expect(db.nativePushDevice.findUniqueOrThrow({ where: { id: live.id } })).resolves.toMatchObject({ revokedAt: null, sealedToken: null });
   });
 
   it("reads users and recipes by id, and answers null for missing rows", async () => {
