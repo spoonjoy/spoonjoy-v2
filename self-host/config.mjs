@@ -54,7 +54,7 @@ export function backupSettings(env, dataDir, checkCron) {
   return { schedule, keep, dir: env.SPOONJOY_BACKUP_DIR || path.join(dataDir, "backups") };
 }
 
-export function selfHostVars({ built, env, port, sessionSecret, pushKeys }) {
+export function selfHostVars({ built, env, port, sessionSecret, pushKeys, pushRelayKey }) {
   const vars = {
     ...built.vars,
     SPOONJOY_BASE_URL: `http://localhost:${port}`,
@@ -94,6 +94,9 @@ export function selfHostVars({ built, env, port, sessionSecret, pushKeys }) {
     vars.VAPID_PRIVATE_KEY = pushKeys.privateKey;
   }
   vars.VAPID_SUBJECT ||= pushSubject(vars.SPOONJOY_BASE_URL);
+  // Notifications on the Apple apps through the push relay, with the key the server registered
+  // for itself (self-host/push-relay.mjs), unless the owner set theirs.
+  if (pushRelayKey && !vars.SPOONJOY_PUSH_RELAY_KEY) vars.SPOONJOY_PUSH_RELAY_KEY = pushRelayKey;
   // Analytics are off unless the owner brings their own PostHog project.
   if (!vars.POSTHOG_KEY) vars.POSTHOG_DISABLED = "true";
   return vars;
@@ -136,10 +139,10 @@ function outboundInit(request) {
 
 const JOBS_QUEUE = "spoonjoy-jobs";
 
-export function miniflareOptions({ built, env, settings, sessionSecret, pushKeys, version, serverAssetFiles, outboundFetch, hostService }) {
+export function miniflareOptions({ built, env, settings, sessionSecret, pushKeys, pushRelayKey, version, serverAssetFiles, outboundFetch, hostService }) {
   const { appDir, dataDir, port } = settings;
   const serverDir = path.join(appDir, "build/server");
-  const vars = selfHostVars({ built, env, port, sessionSecret, pushKeys });
+  const vars = selfHostVars({ built, env, port, sessionSecret, pushKeys, pushRelayKey });
   return {
     host: "0.0.0.0",
     port,
