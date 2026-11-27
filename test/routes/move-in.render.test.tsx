@@ -102,7 +102,7 @@ describe("the Move in page", () => {
     const address = screen.getByRole("textbox", { name: /^Server address/ });
     expect(address.getAttribute("placeholder")).toBe("https://spoonjoy.app");
     expect(screen.getByText(/https:\/\/spoonjoy.app, or your own server's/)).toBeTruthy();
-    expect(screen.getByText(/open \/api\/playground, and send POST \/api\/v1\/tokens with a name and the scopes account:read and kitchen:read/)).toBeTruthy();
+    expect(screen.getByText(/open Account settings, and under API and app access choose Moving my kitchen to another Spoonjoy, then Make token/)).toBeTruthy();
     const form = address.closest("form") as HTMLFormElement;
     expect(new FormData(form).get("from")).toBe("server");
     expect(new FormData(form).get("app")).toBe("spoonjoy");
