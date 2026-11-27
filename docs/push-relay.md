@@ -12,6 +12,15 @@ For each notification the relay sees the server's relay key, the device token an
 
 Anyone can register, and a relay key can send to any device token its server has. A server only learns a token when someone signs in to it from the Spoonjoy app, so the tokens a server holds are its own users' devices; the relay doesn't check that, and the per-device limit is what stops one server flooding a device.
 
+## How Spoonjoy sends through it
+
+When the Spoonjoy app registers a device (`POST /api/v1/me/apns-devices`), the server keeps the token's hash, as before, and the token itself sealed: encrypted with AES-GCM under a key derived from the server's `SESSION_SECRET`, and bound to that account, device, platform and environment ([`app/lib/native-push-token.server.ts`](../app/lib/native-push-token.server.ts)). Revoking the device drops the sealed token. A notification goes to every live device of the person it's for, if their notification settings allow it, as web push does ([`app/lib/notification-dispatch.server.ts`](../app/lib/notification-dispatch.server.ts)), and a device the relay says to revoke is revoked. While the relay has no Apple push key it answers `503 not_configured`, and the server sends nothing and reports nothing until it does. [`test/lib/native-push-send-path.server.test.ts`](../test/lib/native-push-send-path.server.test.ts) runs this whole path, through the relay's own code to a stubbed Apple, in CI.
+
+A server sends only with a relay key, set as `SPOONJOY_PUSH_RELAY_KEY`; `SPOONJOY_PUSH_RELAY_URL` names another relay, or `off`. Each notification trigger reads the web push (VAPID) settings first, so a server sends to Apple devices only when web push is set up too; spoonjoy.app and self-hosted servers always have it. The iPhone, iPad and Mac app share one bundle id, so every send goes to the relay's one topic.
+
+- spoonjoy.app gets its key from the [Production Push Relay Key](../.github/workflows/production-push-relay-key.yml) workflow, which registers `https://spoonjoy.app` and stores the key as a Worker secret in a version tagged like production's own, so Production Deploy accepts it. It does nothing when production has the key already.
+- A self-hosted server registers itself on its first start and keeps its key in `/data/push-relay.json` ([`self-host/push-relay.mjs`](../self-host/push-relay.mjs), [Self-hosting](self-hosting.md#notifications-on-apple-devices)).
+
 ## Endpoints
 
 ### `GET /health`
