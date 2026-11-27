@@ -138,7 +138,7 @@ const TOKEN_PURPOSES = [
   {
     value: "program",
     label: "A program or agent using my kitchen",
-    description: "Reads your recipes and cookbooks, and can change your shopping list, account and tokens, but not your recipes. Works for 90 days.",
+    description: "Reads your recipes, cookbooks and account, and can change your shopping list, but not your recipes, account or tokens. Works for 90 days.",
   },
 ];
 
