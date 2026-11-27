@@ -5,6 +5,8 @@ import {
   type NotificationDispatchDeps,
 } from "~/lib/notification-dispatch.server";
 import type { PostHogServerConfig } from "~/lib/analytics-server";
+import type { NativePushConfig, NativePushResult } from "~/lib/native-push.server";
+import { sealNativePushToken } from "~/lib/native-push-token.server";
 import { createTestUser } from "../utils";
 
 const VAPID = {
@@ -1073,5 +1075,221 @@ describe("enqueueNotification — telemetry capture", () => {
       (b) => b.event === "spoonjoy.push.send_failed",
     );
     expect(sendFailed).toBeDefined();
+  });
+});
+
+describe("enqueueNotification — Apple devices through the push relay", () => {
+  const NATIVE: NativePushConfig = { relayUrl: "https://relay.example", relayKey: "sjr1.id.sig", tokenSecret: "native-secret" };
+  let origFetch: typeof globalThis.fetch;
+  let phFetch: ReturnType<typeof postHogFetchSpy>;
+
+  beforeEach(() => {
+    origFetch = globalThis.fetch;
+    phFetch = postHogFetchSpy();
+    globalThis.fetch = phFetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = origFetch;
+  });
+
+  async function device(
+    userId: string,
+    deviceId: string,
+    options: { environment?: string; platform?: string; token?: string | null; secret?: string; revokedAt?: string } = {},
+  ) {
+    const db = await getLocalDb();
+    const environment = options.environment ?? "production";
+    const platform = options.platform ?? "ios";
+    const token = options.token === undefined ? `${deviceId}-token` : options.token;
+    return db.nativePushDevice.create({
+      data: {
+        userId,
+        deviceId,
+        platform,
+        environment,
+        tokenHash: `${deviceId}-hash`,
+        tokenPrefix: deviceId.slice(0, 12),
+        sealedToken: token === null
+          ? null
+          : await sealNativePushToken(options.secret ?? NATIVE.tokenSecret, { userId, deviceId, platform, environment }, token),
+        revokedAt: options.revokedAt ?? null,
+      },
+    });
+  }
+
+  function nativeSender(result: Partial<NativePushResult> = {}) {
+    return vi.fn(async () => ({ status: "delivered" as const, httpStatus: 200, apnsStatus: 200, ...result }));
+  }
+
+  async function notify(recipientId: string, actorId: string, extra: Partial<NotificationDispatchDeps>) {
+    const db = await getLocalDb();
+    const tasks: Promise<unknown>[] = [];
+    const result = await enqueueNotification(
+      db,
+      { actorId, recipientId, kind: "spoon_on_my_recipe", payload: { recipeId: "r1", recipeTitle: "Pie", spoonerUsername: "ada" } },
+      { vapid: VAPID, postHogConfig: POSTHOG_ENABLED, waitUntil: (p) => tasks.push(p), sendPush: vi.fn(), ...extra },
+    );
+    await Promise.all(tasks);
+    return result;
+  }
+
+  it("sends to each live device with a sealed token, and marks the event delivered", async () => {
+    const db = await getLocalDb();
+    const [actor, recipient] = [await createUser(), await createUser()];
+    await device(recipient.id, "phone");
+    await device(recipient.id, "mac", { environment: "development", platform: "macos" });
+    await device(recipient.id, "old", { revokedAt: new Date().toISOString() });
+    await device(recipient.id, "unsealed", { token: null });
+    const sendNativePush = nativeSender();
+
+    const result = await notify(recipient.id, actor.id, { nativePush: NATIVE, sendNativePush });
+
+    expect(result.queuedSends).toBe(2);
+    expect(sendNativePush).toHaveBeenCalledTimes(2);
+    const calls = sendNativePush.mock.calls as unknown as Array<[NativePushConfig, { token: string; environment: string }, { title: string; url: string }, { collapseId?: string }]>;
+    expect(calls.map(([, target]) => target).sort((a, b) => a.token.localeCompare(b.token))).toEqual([
+      { token: "mac-token", environment: "development" },
+      { token: "phone-token", environment: "production" },
+    ]);
+    for (const [config, , content, options] of calls) {
+      expect(config).toBe(NATIVE);
+      expect(content.url).toBe("/recipes/r1");
+      expect(options).toEqual({ collapseId: result.eventId });
+    }
+    const event = await db.notificationEvent.findUniqueOrThrow({ where: { id: result.eventId! } });
+    expect(event.pushDeliveredAt).not.toBeNull();
+  });
+
+  it("sends to no device when the server has no relay key", async () => {
+    const [actor, recipient] = [await createUser(), await createUser()];
+    await device(recipient.id, "phone");
+    const sendNativePush = nativeSender();
+
+    const result = await notify(recipient.id, actor.id, { nativePush: null, sendNativePush });
+
+    expect(result.queuedSends).toBe(0);
+    expect(sendNativePush).not.toHaveBeenCalled();
+  });
+
+  it("sends to no device when the recipient turned the kind off", async () => {
+    const db = await getLocalDb();
+    const [actor, recipient] = [await createUser(), await createUser()];
+    await device(recipient.id, "phone");
+    await db.notificationPreference.create({ data: { userId: recipient.id, notifySpoonOnMyRecipe: false } });
+    const sendNativePush = nativeSender();
+
+    const result = await notify(recipient.id, actor.id, { nativePush: NATIVE, sendNativePush });
+
+    expect(result.queuedSends).toBe(0);
+    expect(sendNativePush).not.toHaveBeenCalled();
+  });
+
+  it("drops, and counts, a token sealed under another secret, as after SESSION_SECRET changed", async () => {
+    const db = await getLocalDb();
+    const [actor, recipient] = [await createUser(), await createUser()];
+    const unreadable = await device(recipient.id, "phone", { secret: "an-older-secret" });
+    const sendNativePush = nativeSender();
+
+    const result = await notify(recipient.id, actor.id, { nativePush: NATIVE, sendNativePush });
+
+    expect(result.queuedSends).toBe(1);
+    expect(sendNativePush).not.toHaveBeenCalled();
+    await expect(db.nativePushDevice.findUniqueOrThrow({ where: { id: unreadable.id } })).resolves.toMatchObject({ revokedAt: null, sealedToken: null });
+    const unreadables = postHogBodies(phFetch).filter((b) => b.event === "spoonjoy.push.native_token_unreadable");
+    expect(unreadables.map((b) => b.properties)).toEqual([expect.objectContaining({ kind: "spoon_on_my_recipe", deviceId: unreadable.id })]);
+
+    // The next notification doesn't load it again.
+    await notify(recipient.id, actor.id, { nativePush: NATIVE, sendNativePush });
+    expect(sendNativePush).not.toHaveBeenCalled();
+  });
+
+  it("revokes a device, and drops its token, when Apple says the token is dead", async () => {
+    const db = await getLocalDb();
+    const [actor, recipient] = [await createUser(), await createUser()];
+    const dead = await device(recipient.id, "phone");
+    const sendNativePush = nativeSender({ status: "expired", apnsStatus: 410, reason: "Unregistered" });
+
+    await notify(recipient.id, actor.id, { nativePush: NATIVE, sendNativePush });
+
+    const row = await db.nativePushDevice.findUniqueOrThrow({ where: { id: dead.id } });
+    expect(row.revokedAt).not.toBeNull();
+    expect(row.sealedToken).toBeNull();
+    const again = nativeSender();
+    await notify(recipient.id, actor.id, { nativePush: NATIVE, sendNativePush: again });
+    expect(again).not.toHaveBeenCalled();
+  });
+
+  it("keeps a device the app registered again with a new token while the old token's send was out", async () => {
+    const db = await getLocalDb();
+    const [actor, recipient] = [await createUser(), await createUser()];
+    const row = await device(recipient.id, "phone");
+    const fresh = await sealNativePushToken(NATIVE.tokenSecret, { userId: recipient.id, deviceId: "phone", platform: "ios", environment: "production" }, "new-token");
+    const sendNativePush = vi.fn(async () => {
+      await db.nativePushDevice.update({ where: { id: row.id }, data: { sealedToken: fresh } });
+      return { status: "expired" as const, httpStatus: 200, apnsStatus: 410, reason: "Unregistered" };
+    });
+
+    await notify(recipient.id, actor.id, { nativePush: NATIVE, sendNativePush });
+
+    await expect(db.nativePushDevice.findUniqueOrThrow({ where: { id: row.id } })).resolves.toMatchObject({ revokedAt: null, sealedToken: fresh });
+  });
+
+  it("keeps the device and reports a failed send, with Apple's status when the relay reached it", async () => {
+    const db = await getLocalDb();
+    const [actor, recipient] = [await createUser(), await createUser()];
+    const kept = await device(recipient.id, "phone");
+
+    await notify(recipient.id, actor.id, {
+      nativePush: NATIVE,
+      sendNativePush: nativeSender({ status: "failed", httpStatus: 200, apnsStatus: 400, reason: "BadDeviceToken" }),
+    });
+    await notify(recipient.id, actor.id, {
+      nativePush: NATIVE,
+      sendNativePush: nativeSender({ status: "failed", httpStatus: 0, apnsStatus: undefined, reason: undefined }),
+    });
+
+    await expect(db.nativePushDevice.findUniqueOrThrow({ where: { id: kept.id } })).resolves.toMatchObject({ revokedAt: null });
+    const failures = postHogBodies(phFetch).filter((b) => b.event === "spoonjoy.push.native_send_failed");
+    expect(failures.map((b) => b.properties)).toEqual([
+      expect.objectContaining({ deviceId: kept.id, kind: "spoon_on_my_recipe", httpStatus: 200, failureMode: "http_error", apnsStatus: 400, pushError: "BadDeviceToken" }),
+      expect.objectContaining({ deviceId: kept.id, httpStatus: 0, failureMode: "no_response" }),
+    ]);
+    expect(failures[1].properties).not.toHaveProperty("apnsStatus");
+    expect(failures[1].properties).not.toHaveProperty("pushError");
+  });
+
+  it("captures a send that throws, and runs inline without a scheduler", async () => {
+    const db = await getLocalDb();
+    const [actor, recipient] = [await createUser(), await createUser()];
+    await device(recipient.id, "phone");
+
+    await enqueueNotification(
+      db,
+      { actorId: actor.id, recipientId: recipient.id, kind: "spoon_on_my_recipe", payload: {} },
+      {
+        vapid: VAPID,
+        postHogConfig: POSTHOG_ENABLED,
+        nativePush: NATIVE,
+        sendNativePush: vi.fn(async () => {
+          throw new Error("relay exploded");
+        }),
+      },
+    );
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(postHogBodies(phFetch).find((b) => b.event === "$exception" && b.properties.phase === "nativeSendTask")).toBeDefined();
+  });
+
+  it("sends through the real relay client by default", async () => {
+    const [actor, recipient] = [await createUser(), await createUser()];
+    await device(recipient.id, "phone");
+    const relay = vi.fn(async (url: string) => url.startsWith(NATIVE.relayUrl)
+      ? new Response(JSON.stringify({ status: 200 }), { status: 200 })
+      : new Response("{}", { status: 200 }));
+    globalThis.fetch = relay as unknown as typeof fetch;
+
+    await notify(recipient.id, actor.id, { nativePush: NATIVE });
+
+    expect(relay.mock.calls.map(([url]) => url)).toContain("https://relay.example/v1/send");
   });
 });
