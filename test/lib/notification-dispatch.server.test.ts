@@ -1282,7 +1282,7 @@ describe("enqueueNotification — Apple devices through the push relay", () => {
 
   it("sends through the real relay client by default", async () => {
     const [actor, recipient] = [await createUser(), await createUser()];
-    await device(recipient.id, "phone");
+    await device(recipient.id, "phone", { token: "ef".repeat(32) });
     const relay = vi.fn(async (url: string) => url.startsWith(NATIVE.relayUrl)
       ? new Response(JSON.stringify({ status: 200 }), { status: 200 })
       : new Response("{}", { status: 200 }));
