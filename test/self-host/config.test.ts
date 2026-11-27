@@ -86,6 +86,14 @@ describe("selfHostVars", () => {
     expect(selfHostVars(base).VAPID_PUBLIC_KEY).toBeUndefined();
   });
 
+  it("sends to the Apple apps with the relay key the server registered, unless the owner set theirs", () => {
+    expect(selfHostVars({ ...base, pushRelayKey: "sjr1.server.key" }).SPOONJOY_PUSH_RELAY_KEY).toBe("sjr1.server.key");
+    expect(selfHostVars({ ...base, pushRelayKey: "sjr1.server.key", env: { SPOONJOY_PUSH_RELAY_KEY: "sjr1.owner.key" } }).SPOONJOY_PUSH_RELAY_KEY)
+      .toBe("sjr1.owner.key");
+    expect(selfHostVars({ ...base, env: { SPOONJOY_PUSH_RELAY_URL: "off" } })).toMatchObject({ SPOONJOY_PUSH_RELAY_URL: "off" });
+    expect(selfHostVars({ ...base, pushRelayKey: null }).SPOONJOY_PUSH_RELAY_KEY).toBeUndefined();
+  });
+
   it("takes the public address from SPOONJOY_BASE_URL, for a server behind an HTTPS proxy", () => {
     expect(selfHostVars({ ...base, env: { SPOONJOY_BASE_URL: "https://kitchen.example.com" } }).SPOONJOY_BASE_URL).toBe(
       "https://kitchen.example.com",
@@ -217,12 +225,17 @@ describe("miniflareOptions", () => {
     env: {},
     settings: { port: 8080, dataDir: "/data", appDir: "/app" },
     sessionSecret: "s",
+    pushRelayKey: "sjr1.server.key",
     version: "1.2.3",
     serverAssetFiles: ["route-a.js"],
   });
 
   it("listens on every address on one port", () => {
     expect(options).toMatchObject({ host: "0.0.0.0", port: 8080 });
+  });
+
+  it("hands the Worker the server's push relay key", () => {
+    expect(options.bindings.SPOONJOY_PUSH_RELAY_KEY).toBe("sjr1.server.key");
   });
 
   it("keeps the database, photos, cook sessions and cache in the data folder", () => {
