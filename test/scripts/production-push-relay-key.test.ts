@@ -96,6 +96,14 @@ describe("scripts/production-push-relay-key", () => {
     expect(fetch).toHaveBeenCalledWith("https://relay.example/v1/servers", expect.anything());
   });
 
+  it("refuses, registering nothing, when the relay is turned off", async () => {
+    const { run } = fakeWrangler();
+    const fetch = relay(201, { serverId: "serverid", relayKey: RELAY_KEY });
+    await expect(main({ run, fetch, env: { ...ENV, SPOONJOY_PUSH_RELAY_URL: "Off" }, log: vi.fn(), sleep: vi.fn(async () => undefined) }))
+      .rejects.toThrow("SPOONJOY_PUSH_RELAY_URL is off, so production has no relay to register with.");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("stores nothing when the relay refuses or answers without a key", async () => {
     await expect(registerWithRelay(DEFAULT_RELAY_URL, PRODUCTION_BASE_URL, relay(503, { error: "not_configured" })))
       .rejects.toThrow("The push relay refused to register https://spoonjoy.app: 503 not_configured.");
