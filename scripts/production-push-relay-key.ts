@@ -51,6 +51,7 @@ export async function main({ run, fetch: fetchImpl, env, log = console.log, slee
     return;
   }
   const relayUrl = (env.SPOONJOY_PUSH_RELAY_URL?.trim() || DEFAULT_RELAY_URL).replace(/\/+$/, "");
+  if (relayUrl.toLowerCase() === "off") throw new Error("SPOONJOY_PUSH_RELAY_URL is off, so production has no relay to register with.");
   const { serverId, relayKey } = await registerWithRelay(relayUrl, PRODUCTION_BASE_URL, fetchImpl);
   log(`Registered ${PRODUCTION_BASE_URL} with ${relayUrl} as server ${serverId}.`);
   try {
