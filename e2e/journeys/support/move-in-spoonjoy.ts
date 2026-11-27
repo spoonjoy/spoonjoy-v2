@@ -51,8 +51,7 @@ async function fillKitchen(cook: APIRequestContext) {
  * under a name of its own. The token is shown once; after a reload it is listed by name and its secret is gone. It is
  * deleted when the test ends, before the run's report is uploaded, and the run's Worker and database go with the run.
  */
-async function makeMoveToken(browser: Browser, baseURL: string | undefined): Promise<{ token: string; name: string }> {
-  const name = `Moving my kitchen ${Date.now()}`;
+async function makeMoveToken(browser: Browser, baseURL: string | undefined, name: string): Promise<string> {
   const context = await browser.newContext({ baseURL, storageState: scratchStorageStatePath(16) });
   try {
     const page = await context.newPage();
@@ -69,7 +68,7 @@ async function makeMoveToken(browser: Browser, baseURL: string | undefined): Pro
     await page.reload();
     await expect(section.getByRole("button", { name: `Revoke ${name}`, exact: true })).toBeVisible();
     await expect(section.locator("pre"), "the secret, shown only once").toHaveCount(0);
-    return { token, name };
+    return token;
   } finally {
     await context.close();
   }
@@ -87,15 +86,17 @@ export const spoonjoyTest = test.extend<{ otherSpoonjoy: SpoonjoyServer }>({
   otherSpoonjoy: [async ({ playwright, browser, baseURL }, use) => {
     const cook = await playwright.request.newContext({ baseURL, storageState: scratchStorageStatePath(16) });
     let server: SpoonjoyServer | null = null;
-    let made: { token: string; name: string } | null = null;
+    // Named before it is made, so the teardown deletes it even when a check after Make token fails.
+    const name = `Moving my kitchen ${Date.now()}`;
+    let making = false;
     try {
       await fillKitchen(cook);
-      made = await makeMoveToken(browser, baseURL);
-      server = await startSpoonjoyServer(made.token);
+      making = true;
+      server = await startSpoonjoyServer(await makeMoveToken(browser, baseURL, name));
       await use(server);
     } finally {
       await server?.close();
-      if (made) await deleteMoveToken(cook, made.name);
+      if (making) await deleteMoveToken(cook, name);
       await cook.dispose();
     }
   }, { timeout: SETUP_MS }],
