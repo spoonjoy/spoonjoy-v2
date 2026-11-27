@@ -20,7 +20,7 @@ While Compose builds from source, the `docker run` commands in this guide (runni
 - **Backups every day.** The server backs up its database and photos to one file in `/data/backups` every day, and keeps the last seven. See [Backups](#backups).
 - **One port, 8080.** Change it with `PORT`.
 - **Migrations on start.** Each start brings the database up to date with the image, and records each migration in a `d1_migrations` table as spoonjoy.app does.
-- **Analytics are off.** The image sends nothing anywhere. Set `POSTHOG_KEY` (and `POSTHOG_HOST`) only if you want your own PostHog project.
+- **Analytics are off.** The image sends no analytics. Set `POSTHOG_KEY` (and `POSTHOG_HOST`) only if you want your own PostHog project.
 - **A health check.** Docker reports the container healthy once `/health/ready` reaches the database and the photo store.
 - **Background jobs** (work that carries on after you close the page) run inside the server, one at a time. They wait in memory: one still waiting when the server stops is dropped, and can be started again a day later.
 - **The scheduled photo cleanup** runs on its spoonjoy.app schedule (every six hours), as a dry run unless you set `PHOTO_SWEEP_MODE=apply`.
@@ -38,6 +38,8 @@ The image runs as the unprivileged `node` user (uid 1000). A named volume needs 
 | `SESSION_SECRET` | Signs sign-in cookies. Leave it unset and the server makes one and keeps it in `/data`. | generated |
 | `OPENAI_API_KEY`, `GEMINI_API_KEY` | AI features (ingredient parsing, covers) until the admin picks AI under Server settings. Without one, ingredient parsing uses the built-in parser. | none |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Web push notifications in the browser. Leave the keys unset and the server makes its own pair and keeps it in `/data/push-keys.json`. The subject is your `https://` address, or `mailto:owner@<host>` on plain `http://`. A server restored into a new `/data` makes new keys, so browsers turn notifications on again there. | generated |
+| `SPOONJOY_PUSH_RELAY_URL` | The push relay that sends notifications to the Spoonjoy iPhone, iPad and Mac app, or `off` to send to browsers only. See [Notifications on Apple devices](#notifications-on-apple-devices). | `https://spoonjoy-push-relay.mendelow-studio.workers.dev` |
+| `SPOONJOY_PUSH_RELAY_KEY` | This server's key for that relay. Leave it unset and the server registers itself on its first start and keeps the key in `/data/push-relay.json`. | generated |
 | `SPOONJOY_SIGNUPS` | `open` lets anyone who reaches the server sign up; `invite` lets only people with an invite link. Set, it overrides the switch in Server settings. | the switch, invite-only at first |
 | `SPOONJOY_MODERATOR_USERNAMES` | Comma-separated usernames who may review reports at `/moderation`, besides the server's admin. | none |
 | `SPOONJOY_RATE_LIMIT_<NAME>` | Raises one of the per-minute limits (`AUTH_IP_RATE_LIMITER`, `API_IP_RATE_LIMITER`, `API_TOKEN_RATE_LIMITER`, `INGREDIENT_PARSE_RATE_LIMITER`), for a household that all reaches the server from one address. | spoonjoy.app's |
@@ -48,6 +50,15 @@ The image runs as the unprivileged `node` user (uid 1000). A named volume needs 
 | `POSTHOG_KEY`, `POSTHOG_HOST` | Your own PostHog project, if you want analytics. | off |
 
 Set `SPOONJOY_BASE_URL` to the address people open, such as `http://192.168.1.20:8080` on a home network or `https://recipes.example.com` behind HTTPS. Sign-in works at that address over plain `http://` too. Passkeys need HTTPS or `localhost`, because browsers offer them nowhere else, so on a plain `http://` network address people sign in with a password.
+
+## Notifications on Apple devices
+
+Notifications on iPhone, iPad and Mac go through the Spoonjoy push relay at `https://spoonjoy-push-relay.mendelow-studio.workers.dev`. For each notification it sees the device's token, the notification's title, text and page, and your server's IP address; when the server registers, it sees the server's address, and logs its origin. It keeps no tokens or notifications ([what it sees and keeps](push-relay.md#what-it-sees-and-keeps)). Only the holder of Apple's push key for the Spoonjoy app can reach those devices, so your server hands each notification to the relay, which passes it to Apple and keeps nothing. How the relay works, and exactly what it sees: [Push relay](push-relay.md).
+
+- On its first start the server registers itself with the relay and keeps its key in `/data/push-relay.json`, readable only by the server. If the relay can't be reached then, the server starts anyway and tries again on its next start; until it has a key, notifications go to browsers only.
+- The start that registers logs `push-relay-registered` with the relay's address. `SPOONJOY_PUSH_RELAY_URL=off` keeps the server from contacting the relay at all. Browser notifications (web push) never go through it.
+- The app registers each signed-in device's push token with your server, which keeps it encrypted under the server's session secret. Under a new `SESSION_SECRET` the server can't read the tokens it has: it drops each one the first time it tries it, and a device gets no notifications until the app registers it again. A backup holds the encrypted tokens but not the session secret, so a server restored from one under a new secret drops them the same way.
+- If the relay stops taking the server's key (it was revoked, or the relay's own secret changed), delete `/data/push-relay.json` and restart: the server registers again.
 
 ## Signing in
 
