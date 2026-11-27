@@ -53,6 +53,7 @@ import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
 import { notificationDbOnD1 } from "~/lib/notification-db-d1.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import { getNativePushConfig, type NativePushEnv } from "~/lib/native-push.server";
 import { absoluteUrlFromRequest, isRasterImageUrl, shareImageUrl } from "~/lib/og-metadata";
 import { DELETED_CHEF_USERNAME } from "~/lib/username";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
@@ -98,7 +99,7 @@ import { recipeViewerFor } from "~/lib/recipe-viewer.server";
 interface CloudflareContextLike {
   cloudflare?: {
     env?:
-      | (ImageGenEnv & { PHOTOS?: R2Bucket; DB?: unknown } & VapidEnv & PostHogServerEnv)
+      | (ImageGenEnv & { PHOTOS?: R2Bucket; DB?: unknown } & VapidEnv & NativePushEnv & PostHogServerEnv)
       | null;
     ctx?: { waitUntil?: (promise: Promise<unknown>) => void };
   };
@@ -121,6 +122,8 @@ function getCloudflareCtx(context: AppLoadContext): {
   bucket?: R2Bucket;
   env: (ImageGenEnv & PostHogServerEnv & { DB?: unknown }) | null;
   vapidEnv: VapidEnv;
+  /** The settings native push reads (getNativePushConfig), next to the VAPID ones. */
+  nativePushEnv: NativePushEnv | null;
   waitUntil?: (promise: Promise<unknown>) => void;
 } {
   const cf = (context as unknown as CloudflareContextLike).cloudflare;
@@ -149,6 +152,7 @@ function getCloudflareCtx(context: AppLoadContext): {
       VAPID_PRIVATE_KEY: envSource?.VAPID_PRIVATE_KEY,
       VAPID_SUBJECT: envSource?.VAPID_SUBJECT,
     },
+    nativePushEnv: envSource,
     waitUntil: cf?.ctx?.waitUntil ? cf.ctx.waitUntil.bind(cf.ctx) : undefined,
   };
 }
@@ -466,7 +470,7 @@ async function handleCreateSpoonOnD1(
   context: AppLoadContext,
 ) {
   const { useAsRecipeCover, ...fields } = spoonFormFields(formData);
-  const { bucket, env, vapidEnv, waitUntil } = getCloudflareCtx(context);
+  const { bucket, env, vapidEnv, nativePushEnv, waitUntil } = getCloudflareCtx(context);
   // The D1 binding comes from the environment, so it is always present here.
   const postHogConfig = resolvePostHogServerConfig(env as NonNullable<typeof env>);
   // The dialog sends a token made when it opened, and the spoon's id comes from it, so a resubmit
@@ -485,9 +489,10 @@ async function handleCreateSpoonOnD1(
 
   try {
     const vapid = getVapidConfig(vapidEnv);
+    const nativePush = getNativePushConfig(nativePushEnv);
     // The cook's notification reads and writes on D1, so it builds no Prisma client after the
     // answer (see notification-db-d1.server.ts).
-    const notify = () => notifySpoonOnMyRecipe(notificationDbOnD1(d1), { recipeId, spoonerId: userId }, { vapid, waitUntil, postHogConfig });
+    const notify = () => notifySpoonOnMyRecipe(notificationDbOnD1(d1), { recipeId, spoonerId: userId }, { vapid, nativePush, waitUntil, postHogConfig });
     if (waitUntil) waitUntil(deferBackgroundTask(notify));
     else await notify();
   } catch {
@@ -514,11 +519,12 @@ async function handleCreateSpoonOnD1(
   if (result.isOriginCook && spoonerUsername) {
     try {
       const vapid = getVapidConfig(vapidEnv);
+      const nativePush = getNativePushConfig(nativePushEnv);
       await later((database) =>
         fanoutFellowChefOriginCook(
           database,
           { spoonerId: userId, recipeId: recipe.id, recipeTitle: recipe.title, spoonerUsername },
-          { vapid, waitUntil, postHogConfig },
+          { vapid, nativePush, waitUntil, postHogConfig },
         ),
       );
     } catch {
@@ -540,7 +546,7 @@ async function handleCreateSpoon(
   // A recipe in the trash takes no new cooks, as on the API.
   await assertActiveRecipe(database, recipeId, userId);
 
-  const { bucket, env, vapidEnv, waitUntil } = getCloudflareCtx(context);
+  const { bucket, env, vapidEnv, nativePushEnv, waitUntil } = getCloudflareCtx(context);
   // Resolve once: threaded into both the spoon notify and the origin-cook
   // fan-out so silent dispatch/push failures self-capture (no-op when
   // POSTHOG_KEY is absent).
@@ -555,10 +561,11 @@ async function handleCreateSpoon(
   // Notify the recipe owner when someone else cooks their recipe.
   try {
     const vapid = getVapidConfig(vapidEnv);
+    const nativePush = getNativePushConfig(nativePushEnv);
     const notifyTask = notifySpoonOnMyRecipe(
       database,
       { recipeId, spoonerId: userId },
-      { vapid, waitUntil, postHogConfig },
+      { vapid, nativePush, waitUntil, postHogConfig },
     );
     if (waitUntil) {
       waitUntil(notifyTask);
@@ -644,6 +651,7 @@ async function handleCreateSpoon(
         select: { id: true, username: true },
       });
       const vapid = getVapidConfig(vapidEnv);
+      const nativePush = getNativePushConfig(nativePushEnv);
       const fanoutTask = fanoutFellowChefOriginCook(
         database,
         {
@@ -652,7 +660,7 @@ async function handleCreateSpoon(
           recipeTitle: recipeMeta.title,
           spoonerUsername: spooner.username,
         },
-        { vapid, waitUntil, postHogConfig },
+        { vapid, nativePush, waitUntil, postHogConfig },
       );
       if (waitUntil) {
         waitUntil(fanoutTask);
