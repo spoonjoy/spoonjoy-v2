@@ -30,6 +30,15 @@ export interface PushSubscriptionRow {
   authSecret: string;
 }
 
+/** An Apple device the dispatcher may send to through the push relay. */
+export interface NativePushDeviceRow {
+  id: string;
+  deviceId: string;
+  platform: string;
+  environment: string;
+  sealedToken: string | null;
+}
+
 /** The slice of Prisma the notification dispatcher and its fork and cook triggers use. */
 export interface NotificationDb {
   user: {
@@ -58,6 +67,14 @@ export interface NotificationDb {
   pushSubscription: {
     findMany(args: { where: { userId: string } }): Promise<PushSubscriptionRow[]>;
     delete(args: { where: { id: string } }): Promise<unknown>;
+  };
+  nativePushDevice: {
+    findMany(args: {
+      where: { userId: string; revokedAt: null; sealedToken: { not: null } };
+      select: { id: true; deviceId: true; platform: true; environment: true; sealedToken: true };
+    }): Promise<NativePushDeviceRow[]>;
+    /** Drops a live device's token, and revokes it too when given `revokedAt`, if it still holds that token. */
+    updateMany(args: { where: { id: string; revokedAt: null; sealedToken: string | null }; data: { revokedAt?: string; sealedToken: null } }): Promise<unknown>;
   };
 }
 
@@ -173,6 +190,34 @@ export function notificationDbOnD1(d1: D1ReadDatabase): NotificationDb {
         const changes = await write(d1, `DELETE FROM "PushSubscription" WHERE "id" = ?`, where.id);
         if (changes === 0) throw new D1NotificationError(`Push subscription ${where.id} is already gone`, "P2025");
         return { id: where.id };
+      },
+    },
+    nativePushDevice: {
+      async findMany({ where }) {
+        const [rows] = await d1ReadBatch(d1, [[
+          `SELECT "id", "deviceId", "platform", "environment", "sealedToken" FROM "NativePushDevice"
+            WHERE "userId" = ? AND "revokedAt" IS NULL AND "sealedToken" IS NOT NULL ORDER BY "id"`,
+          where.userId,
+        ]]);
+        return rows.map((row) => ({
+          id: text(row.id, "NativePushDevice.id"),
+          deviceId: text(row.deviceId, "NativePushDevice.deviceId"),
+          platform: text(row.platform, "NativePushDevice.platform"),
+          environment: text(row.environment, "NativePushDevice.environment"),
+          sealedToken: text(row.sealedToken, "NativePushDevice.sealedToken"),
+        }));
+      },
+      async updateMany({ where, data }) {
+        const count = await write(
+          d1,
+          `UPDATE "NativePushDevice" SET "revokedAt" = ?, "sealedToken" = NULL, "updatedAt" = ? WHERE "id" = ? AND "revokedAt" IS NULL AND "sealedToken" = ?`,
+          // The row matched only while revokedAt is null, so null leaves it live.
+          data.revokedAt ?? null,
+          d1Timestamp(new Date()),
+          where.id,
+          where.sealedToken,
+        );
+        return { count };
       },
     },
   };
