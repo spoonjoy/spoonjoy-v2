@@ -40,8 +40,8 @@ function appBase(): string {
 export async function deleteMoveToken(cook: APIRequestContext, name: string): Promise<void> {
   const listed = await cook.get("/api/v1/tokens");
   expect(listed.status(), "listing the cook's tokens").toBe(200);
-  const { data } = (await listed.json()) as { data: { credentials: Array<{ id: string; name: string; revokedAt: string | null }> } };
-  for (const made of data.credentials.filter((credential) => credential.name === name && !credential.revokedAt)) {
+  const { data } = (await listed.json()) as { data: { tokens: Array<{ id: string; name: string; revokedAt: string | null }> } };
+  for (const made of data.tokens.filter((credential) => credential.name === name && !credential.revokedAt)) {
     const answer = await cook.delete(`/api/v1/tokens/${encodeURIComponent(made.id)}`, { headers: { origin: new URL(appBase()).origin } });
     expect(answer.status(), "deleting the move-in token").toBe(200);
   }
