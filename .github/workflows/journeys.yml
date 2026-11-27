@@ -688,8 +688,11 @@ jobs:
       # removed network logs and redacted session cookies and storage state from every trace.
       # When Cloudflare's API kept failing the cleanup and the journeys passed, the cleanup step
       # passes with a warning and the reports still upload: (1) and (3) already make every
-      # password, session and cookie in them useless, no journey creates or shows an API token
-      # or OAuth secret, and the QA Run Sweep deletes the run's whole stack within hours.
+      # password, session and cookie in them useless, and the QA Run Sweep deletes the run's
+      # whole stack within hours. One journey shows an API token: the Move in journey makes one
+      # on Account settings. (3) redacts every sj_ token from trace text and page snapshots, but
+      # a failed test's screencast frames and video can still show it; the journey deletes that
+      # token in its teardown, before this upload, and it lived on the run's own Worker only.
       # Upload runs only if all three steps succeeded, and only the report matching $SUITE
       # actually exists; the credentials file and session files are deleted above and are
       # never in the uploaded paths.
