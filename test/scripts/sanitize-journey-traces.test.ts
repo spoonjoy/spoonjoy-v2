@@ -11,6 +11,7 @@ import {
   isCliEntry,
   main,
   readZip,
+  redactApiTokens,
   redactPageSnapshotText,
   redactSnapshotNode,
   redactTraceValue,
@@ -379,6 +380,43 @@ describe("typed passwords", () => {
     expect(findTraceLeaks([entry("resources/abc123", PAGE_SNAPSHOT)])).toEqual([
       '"resources/abc123" still has an unredacted password value',
     ]);
+  });
+});
+
+describe("API tokens", () => {
+  // As api-auth.server.ts makes them: sj_ and the base64url of 32 random bytes.
+  const TOKEN = "sj_Q2hlZnMta2l0Y2hlbi1tb3ZpbmctZGF5LXRva2VuLTEyMw";
+
+  it("redacts every Spoonjoy API token in text, idempotently, and leaves short sj_ names alone", () => {
+    const text = `token ${TOKEN} and "${TOKEN}-x" but sj_short and data-sj_x stay`;
+    const redacted = redactApiTokens(text);
+    expect(redacted).toBe(`token ${REDACTED} and "${REDACTED}" but sj_short and data-sj_x stay`);
+    expect(redactApiTokens(redacted)).toBe(redacted);
+  });
+
+  it("redacts a token shown on the page from trace lines, text resources and report files", async () => {
+    const shown = { type: "frame-snapshot", snapshot: { html: ["PRE", {}, TOKEN] } };
+    const zip = writeZip([
+      entry("test.trace", lines({ type: "after", callId: "c1", attachments: [{ name: "error-context", contentType: "text/markdown", sha1: "abc123" }] })),
+      entry("0-trace.trace", lines(shown)),
+      entry("resources/abc123", `# Page snapshot\n- code: ${TOKEN}`),
+    ]);
+    const out = readZip(sanitizeTraceZip(zip)!.buffer);
+    for (const e of out) expect(e.data.toString("latin1")).not.toContain(TOKEN);
+    expect(findTraceLeaks(out)).toEqual([]);
+    expect(findTraceLeaks([entry("resources/abc123", TOKEN)])).toEqual(['"resources/abc123" still has an unredacted password value']);
+
+    const files = new Map<string, string>([[join("test-results", "error-context.md"), `- code: ${TOKEN}`]]);
+    const d = deps({
+      readdir: vi.fn().mockResolvedValue([fakeFile("test-results", "error-context.md")]),
+      readFile: vi.fn(async (file: string) => Buffer.from(files.get(file)!, "utf8")),
+      writeFile: vi.fn(async (file: string, data: string) => {
+        files.set(file, data);
+      }),
+    });
+    await main(["test-results"], d);
+    expect(files.get(join("test-results", "error-context.md"))).toBe(`- code: ${REDACTED}`);
+    expect(d.exit).not.toHaveBeenCalled();
   });
 });
 
