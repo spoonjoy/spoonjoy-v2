@@ -45,8 +45,8 @@ const menuSheetPositionerClass =
  */
 const menuPopupClass =
   "box-border min-w-ouro-48 max-w-(--available-width) max-h-(--available-height) overflow-y-auto overscroll-contain p-1 " +
-  "rounded-ouro-lg bg-popover text-popover-foreground [--ouro-scroller-surface:var(--popover)] outline-none " +
-  "ring-1 ring-border/60 shadow-(--shadow-lg) " +
+  "rounded-ouro-lg bg-popover text-popover-foreground [--ouro-scroller-surface:var(--popover)] [--ouro-message-list-bubble-default:var(--muted)] outline-none " +
+  "ring-1 ring-border/60 shadow-(--shadow-lg) forced-colors:border forced-colors:border-solid " +
   "has-[[data-ouro-menu-indicator]]:[--ouro-menu-inset:var(--ouro-size-6)] " +
   "origin-(--transform-origin) " +
   "[transition:transform_var(--ouro-duration-fast)_var(--ouro-ease-out),opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
@@ -66,7 +66,7 @@ const menuPopupClass =
 const menuSheetPopupClass =
   "box-border w-full max-h-[min(80dvh,calc(100dvh-4rem))] overflow-y-auto overscroll-contain " +
   "px-2 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] " +
-  "rounded-t-ouro-xl bg-popover text-popover-foreground [--ouro-scroller-surface:var(--popover)] outline-none " +
+  "rounded-t-ouro-xl bg-popover text-popover-foreground [--ouro-scroller-surface:var(--popover)] [--ouro-message-list-bubble-default:var(--muted)] outline-none " +
   "[box-shadow:var(--ouro-shadow-sheet-bottom)] " +
   "has-[[data-ouro-menu-indicator]]:[--ouro-menu-inset:var(--ouro-size-6)] " +
   "[transition:transform_var(--ouro-duration-sheet)_var(--ouro-ease-drawer),opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +

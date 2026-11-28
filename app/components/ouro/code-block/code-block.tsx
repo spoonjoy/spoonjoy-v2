@@ -159,6 +159,10 @@ function AnsiCode({ code, catalogue }: { code: string; catalogue: EmojiCatalogue
  * output is the exception: with `language="ansi"`, its escape codes color and dim it, on the
  * server too. With `catalogue`, the emoji characters in the code show as an image catalogue's pictures.
  *
+ * Inside a `Message` bubble, which already frames it, it drops the border, caption band and hairline for one
+ * tonal fill, with the copy button floating at the top corner on hover and focus (on touch it stays shown),
+ * and the language read by screen readers.
+ *
  * Use `Kbd` instead for a key or shortcut in a sentence, `<code>` for a short name in
  * running text, and `CopyButton` for one value without a block around it.
  *
@@ -228,7 +232,9 @@ export function CodeBlock(props: CodeBlockProps): JSX.Element {
         // The figure doesn't clip what is in it (#2349): a squircle clip repaints the whole block as the code scrolls. The code
         // area, the one part that runs edge to edge, rounds its own corners, inside a plain rectangular clip, which is cheap and
         // which axe reads as the edge of the code's text, so it can measure that text's contrast without a screenshot.
-        "[@layer_ouro-reset]:m-0 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] rounded-ouro-lg border border-solid border-border bg-muted text-foreground outline-ring outline-offset-2 has-[[data-ouro-part=code]:focus-visible]:outline-2 has-[[data-ouro-part=code]:focus-visible]:outline-solid",
+        "[@layer_ouro-reset]:m-0 group/code relative grid min-w-0 grid-cols-[minmax(0,1fr)_auto] rounded-ouro-lg border border-solid border-border bg-muted text-foreground outline-ring outline-offset-2 has-[[data-ouro-part=code]:focus-visible]:outline-2 has-[[data-ouro-part=code]:focus-visible]:outline-solid",
+        // In a message bubble, which already frames it, the block is one tonal fill: no border (a transparent one stays for forced colours), band or hairline.
+        "[[data-ouro-message-content]_&]:border-transparent [[data-ouro-message-content]_&]:bg-[color-mix(in_oklab,currentColor_8%,transparent)] [[data-ouro-message-content]_&]:grid-rows-[minmax(0,1fr)]",
         bar ? "grid-rows-[minmax(calc(var(--spacing)*11),auto)_minmax(0,1fr)]" : "grid-rows-[minmax(0,1fr)]",
         className,
       )}
@@ -236,7 +242,7 @@ export function CodeBlock(props: CodeBlockProps): JSX.Element {
       {caption != null ? (
         <figcaption
           data-slot="caption"
-          className="col-start-1 row-start-1 flex min-w-0 items-center ps-4 pe-2 text-xs leading-5 font-medium text-[color-mix(in_oklab,var(--muted-foreground)_80%,var(--foreground))]"
+          className="[[data-ouro-message-content]_&]:sr-only col-start-1 row-start-1 flex min-w-0 items-center ps-4 pe-2 text-xs leading-5 font-medium text-[color-mix(in_oklab,var(--muted-foreground)_80%,var(--foreground))]"
         >
           <span className="min-w-0 truncate">{caption}</span>
         </figcaption>
@@ -250,20 +256,21 @@ export function CodeBlock(props: CodeBlockProps): JSX.Element {
           hideLabel
           variant="plain"
           size="sm"
-          className="col-start-2 row-start-1 self-center me-1.5"
+          className="col-start-2 row-start-1 self-center me-1.5 [[data-ouro-message-content]_&]:absolute [[data-ouro-message-content]_&]:end-1 [[data-ouro-message-content]_&]:top-1 [[data-ouro-message-content]_&]:me-0 [[data-ouro-message-content]_&]:transition-opacity [[data-ouro-message-content]_&]:duration-(--ouro-duration-fast) [[data-ouro-message-content]_&]:pointer-fine:opacity-0 [[data-ouro-message-content]_&]:pointer-fine:group-hover/code:opacity-100 [[data-ouro-message-content]_&]:group-focus-within/code:opacity-100"
         />
       ) : null}
       {bar ? (
         // The hairline sits beside the code, under its transparent top border, so it spans the figure from border to border (#530).
-        <span aria-hidden="true" data-slot="rule" className="pointer-events-none col-span-2 col-start-1 row-start-2 h-px self-start border-0 border-t border-solid border-border" />
+        <span aria-hidden="true" data-slot="rule" className="[[data-ouro-message-content]_&]:hidden pointer-events-none col-span-2 col-start-1 row-start-2 h-px self-start border-0 border-t border-solid border-border" />
       ) : null}
-      <div data-slot="code-clip" className={cn("col-span-2 col-start-1 grid min-h-0 min-w-0 overflow-hidden", bar ? "row-start-2" : "row-start-1")}>
+      <div data-slot="code-clip" className={cn("col-span-2 col-start-1 grid min-h-0 min-w-0 overflow-hidden", bar ? "row-start-2 [[data-ouro-message-content]_&]:row-start-1" : "row-start-1")}>
         <pre
           ref={scrollable}
           data-ouro-control="code-block"
           data-ouro-part="code"
           className={cn(
             "m-0 min-h-0 min-w-0 overflow-auto p-4 font-mono text-sm leading-6 outline-none",
+            "[[data-ouro-message-content]_&]:p-3 [[data-ouro-message-content]_&]:text-[length:inherit] [[data-ouro-message-content]_&]:leading-relaxed [[data-ouro-message-content]_&]:rounded-ouro-lg [[data-ouro-message-content]_&]:border-t-0",
             bar ? "rounded-b-[calc(var(--radius-ouro-lg)-1px)] border-0 border-t border-solid border-transparent" : "rounded-[calc(var(--radius-ouro-lg)-1px)]",
             wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
           )}

@@ -25,13 +25,13 @@ export {
 /**
  * The box with chips (`multiple`): Field's control look, but at least one control tall and
  * growing a row at a time as the chips wrap. The chips start past its corner's curve: the start
- * inset is the corner's radius (`--ouro-sq-r`, which its `rounded-ouro-control-md` sets), and at least 6px.
+ * inset is the corner's radius (`--ouro-sq-r`, which its `rounded-ouro-control-md` sets), and at least 8px.
  *
  * @internal
  * @claim "The chips start past its corner's curve" registry/ouro/components/ouro/combobox/combobox.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.test.tsx::Combobox chips clear the field's corner > starts one chip and wrapped rows of chips past %s, with a gap between the rows)
  */
 const chipsGroupClass =
-  "relative m-0 box-border flex w-full min-w-0 flex-wrap items-center gap-1.5 py-1.5 ps-[max(calc(var(--spacing)*1.5),var(--ouro-sq-r))] pe-3 cursor-text " +
+  "relative m-0 box-border flex w-full min-w-0 flex-wrap items-center gap-2 py-2 ps-[max(calc(var(--spacing)*2),var(--ouro-sq-r))] pe-3 cursor-text " +
   "min-h-(--ouro-control-h) [--ouro-control-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-control-h:calc(var(--spacing)*9)] " +
   "rounded-ouro-control-md border border-solid border-input bg-transparent text-base text-foreground sm:pointer-fine:text-sm " +
   "ouro-field-cue outline-ring outline-offset-2 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-solid " +
@@ -70,7 +70,7 @@ const chipClass =
 const chipRemoveClass =
   "press relative m-0 box-border inline-flex aspect-square h-full min-h-ouro-5 shrink-0 items-center justify-center rounded-ouro-sm border-0 p-0 " +
   "bg-transparent text-inherit cursor-pointer [-webkit-tap-highlight-color:transparent] pointer-fine:hover:bg-accent active:bg-accent motion-safe:active:scale-(--ouro-press-scale) " +
-  "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid [&_svg]:size-ouro-3_5";
+  "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid";
 
 /**
  * The popup: the input's width, on the popover surface. It opens at once and closes with a
@@ -83,7 +83,7 @@ const chipRemoveClass =
  */
 const popupClass =
   "box-border flex w-(--anchor-width) max-w-(--available-width) max-h-[min(var(--available-height),22rem)] flex-col " +
-  "origin-(--transform-origin) overflow-hidden rounded-ouro-md border border-solid border-border bg-popover text-popover-foreground [--ouro-scroller-surface:var(--popover)] " +
+  "origin-(--transform-origin) overflow-hidden rounded-ouro-md border border-solid border-border bg-popover text-popover-foreground [--ouro-scroller-surface:var(--popover)] [--ouro-message-list-bubble-default:var(--muted)] " +
   "shadow-(--shadow-lg) outline-none " +
   "[transition:opacity_var(--ouro-duration-fast)_var(--ouro-ease-out),scale_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
   "data-starting-style:transition-none data-ending-style:opacity-0 data-ending-style:scale-95 " +
@@ -106,9 +106,10 @@ const listClass = "box-border min-h-0 flex-1 overflow-y-auto overscroll-contain 
  */
 const itemClass =
   "relative box-border grid min-h-ouro-11 cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-ouro-sm px-2 py-1.5 " +
-  "text-base leading-5 outline-none select-none sm:pointer-fine:min-h-8 sm:pointer-fine:text-sm " +
-  "data-highlighted:bg-accent data-highlighted:text-accent-foreground not-data-disabled:active:bg-accent not-data-disabled:active:text-accent-foreground " +
-  // Forced colours drop the fill, so the highlight takes the system's pair.
+  "text-base leading-5 outline-ring -outline-offset-2 select-none sm:pointer-fine:min-h-8 sm:pointer-fine:text-sm " +
+  "data-highlighted:bg-accent data-highlighted:text-accent-foreground data-highlighted:outline-2 data-highlighted:outline-solid " +
+  "not-data-disabled:active:bg-accent not-data-disabled:active:text-accent-foreground " +
+  // Forced colours drop the fill, so the highlight takes the system's pair; its own outline still shows the option apart.
   "forced-colors:data-highlighted:bg-[Highlight] forced-colors:data-highlighted:text-[HighlightText] " +
   "data-disabled:cursor-not-allowed data-disabled:opacity-50";
 

@@ -1,6 +1,6 @@
 import { type ReactNode, type SVGProps } from "react";
 import { flushSync } from "react-dom";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
@@ -329,6 +329,7 @@ describe("loading", () => {
     try {
       const spinnerBox = () => host.querySelector("[data-ouro-spinner]")!.parentElement!;
       flushSync(() => root.render(<Button loading>Save</Button>));
+      await act(async () => {});
       expect(getComputedStyle(spinnerBox()).opacity).toBe("1");
       expect(spinnerBox().getAnimations()).toEqual([]);
       flushSync(() => root.render(<Button>Save</Button>));
@@ -894,6 +895,54 @@ describe("icon-only size", () => {
     for (const button of rest) expect(getComputedStyle(button).paddingInlineStart).not.toBe("0px");
   });
 
+  it("keeps a text label's padding when the whole label is one element, such as an aria-live span, under an aria-label", async () => {
+    const { host } = await render(
+      <>
+        <Button size="lg" variant="outline" tone="secondary" aria-label="Send the link to your computer">
+          <span aria-live="polite">Send the link</span>
+        </Button>
+        <Button aria-label="Add">
+          <span>
+            <Star />
+          </span>
+        </Button>
+      </>,
+    );
+    const [textLabel, nestedIcon] = [...host.querySelectorAll<HTMLElement>('[data-ouro="button"]')];
+    expect(getComputedStyle(textLabel!).paddingInlineStart).not.toBe("0px");
+    expect(getComputedStyle(nestedIcon!).paddingInlineStart).toBe("0px");
+  });
+
+  it("reads words under an element's own children, a number or a fragment's included, and only blank text or a component's children as no words", async () => {
+    const Glyph = ({ children }: { children: ReactNode }) => <span>{children}</span>;
+    const { host } = await render(
+      <>
+        <Button aria-label="Messages, 3 unread">
+          <span>{3}</span>
+        </Button>
+        <Button aria-label="Copy the link">
+          <span>{[<Star key="star" />, "Copy"]}</span>
+        </Button>
+        <Button aria-label="Copy the link">
+          <span>
+            <>Copy</>
+          </span>
+        </Button>
+        <Button aria-label="Add">
+          <span> </span>
+        </Button>
+        <Button aria-label="Favourite">
+          <span>
+            <Glyph>★</Glyph>
+          </span>
+        </Button>
+      </>,
+    );
+    const [number, mixed, fragment, blank, component] = [...host.querySelectorAll<HTMLElement>('[data-ouro="button"]')];
+    for (const label of [number, mixed, fragment]) expect(getComputedStyle(label!).paddingInlineStart).not.toBe("0px");
+    for (const icon of [blank, component]) expect(getComputedStyle(icon!).paddingInlineStart).toBe("0px");
+  });
+
   it("keeps the size an icon sets for itself", async () => {
     const { button } = await render(
       <Button aria-label="Add">
@@ -1321,6 +1370,35 @@ describe("Button server rendering", () => {
     expect(html).toContain('href="/x"');
     expect(warn).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
+  });
+
+  it("keeps a label built from more than one child as plain content, with no extra span per child (#3637)", () => {
+    const html = renderToString(<Button>Count: {5}</Button>);
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    const label = host.querySelector('[data-slot="button-label"]');
+    expect(label?.children.length).toBe(0);
+  });
+
+  it.each([
+    ["a plain text label", <Button key="plain">Save</Button>],
+    ["a label built from more than one child", <Button key="interpolated">Count: {5}</Button>],
+  ])("hydrates %s with no warning and no change to its DOM", async (_case, node) => {
+    const host = document.createElement("div");
+    host.innerHTML = renderToString(node);
+    document.body.append(host);
+    mounted.push(host);
+    const firstFrameHtml = host.innerHTML;
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const recoverable = vi.fn();
+    let root!: Root;
+    await act(async () => {
+      root = hydrateRoot(host, node, { onRecoverableError: recoverable });
+    });
+    roots.push(root);
+    expect(recoverable).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect(host.innerHTML).toBe(firstFrameHtml);
   });
 });
 

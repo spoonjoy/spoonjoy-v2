@@ -533,7 +533,9 @@ export function EmojiText(props: EmojiTextProps): JSX.Element {
         typeof part === "string" ? (
           part
         ) : (
-          <Emoji key={index} item={part.item} skinTone={part.tone} className={large ? "size-[2.75em] align-middle" : undefined} />
+          // Enlarged emoji sit next to each other separated only by the source text's own space, whose
+          // rendered width is under the minimum gap at this size; `mx-1` keeps them a clear gap apart.
+          <Emoji key={index} item={part.item} skinTone={part.tone} className={large ? "mx-1 size-[2.75em] align-middle" : undefined} />
         ),
       )}
     </span>

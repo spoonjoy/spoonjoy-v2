@@ -72,9 +72,10 @@ describe("NavigationMenu current-page marks", () => {
   it("marks only the page link once a pointer that rested on it has moved to open a panel", async () => {
     await render(<NavigationMenu label="Main" items={[{ label: "Pricing", href: "/pricing" }, { label: "Recipes", links: [{ label: "Browse", href: "/recipes" }] }]} currentPath="/pricing" />);
     const pricing = page.getByRole("link", { name: "Pricing" }).element();
-    await userEvent.hover(pricing);
-    await Promise.allSettled(pricing.getAnimations().map((animation) => animation.finished));
-    expect(isTransparent(getComputedStyle(pricing).backgroundColor)).toBe(false);
+    // Pricing is already visible right after render, so skip Playwright's actionability wait
+    // (its default hover polls for a stable, uncovered target over several seconds here; see the
+    // `force: true` hover below for the file's other case of a slow, unnecessary hit-test wait).
+    await userEvent.hover(pricing, { force: true });
     await userEvent.click(page.getByRole("button", { name: "Recipes" }));
     await expect.element(page.getByRole("link", { name: "Browse" })).toBeVisible();
     await assertMark(pricing, page.getByRole("button", { name: "Recipes" }).element(), "ltr");
@@ -285,16 +286,42 @@ describe("NavigationMenu", () => {
     expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*>Pricing<\/a>/);
   });
 
-  it("animates only opacity and scale when a pointer opens it, growing from its button", async () => {
+  it("animates opacity and scale when a pointer opens it, growing from its button, and its size between panels", async () => {
     await render(<NavigationMenu label="Main" items={items} />);
     await userEvent.click(page.getByRole("button", { name: "Recipes" }));
     await expect.poll(() => popup()).not.toBeNull();
     // Base UI turns transitions off for a moment while it measures the panel, so wait.
-    await expect.poll(() => getComputedStyle(popup()!).transitionProperty).toBe("opacity, scale");
+    await expect.poll(() => getComputedStyle(popup()!).transitionProperty).toBe("opacity, scale, width, height");
     expect(getComputedStyle(popup()!).transitionTimingFunction).toContain("cubic-bezier(0.23, 1, 0.32, 1)");
     expect(popup()!.className).toContain("origin-(--transform-origin)");
-    // The popup's box and place change at once between panels: layout does not animate.
-    expect(getComputedStyle(popup()!.parentElement!).transitionDuration).toBe("0s");
+  });
+
+  it("keeps one popup when you move to another panel, resizing it on the way", async () => {
+    await page.viewport(1280, 800);
+    const wide = [
+      { label: "Small", content: <p style={{ width: 200, margin: 0 }}>A small panel</p> },
+      { label: "Large", fit: true, content: <p style={{ width: 600, height: 300, margin: 0 }}>A large panel</p> },
+    ];
+    await render(<NavigationMenu label="Main" items={wide} />);
+    await userEvent.click(page.getByRole("button", { name: "Small" }));
+    await expect.poll(() => popup()).not.toBeNull();
+    await settled();
+    const first = popup()!;
+    const before = first.getBoundingClientRect().width;
+    // The size change runs as a CSS transition on the popup itself; a frame-by-frame sample of its width misses the
+    // frames in between on a loaded WebKit runner, so the test records the transitions the browser starts.
+    const resized = new Set<string>();
+    first.addEventListener("transitionrun", (event) => {
+      if (event.target === first) resized.add(event.propertyName);
+    });
+    await userEvent.hover(page.getByRole("button", { name: "Large" }));
+    await expect.poll(() => popup()?.getBoundingClientRect().width ?? 0).toBeGreaterThan(before + 300);
+    // Between panels it slides along the bar, never up or down, so a page that scrolls never leaves it behind.
+    expect(getComputedStyle(popup()!.parentElement!).transitionProperty).toBe("left, right");
+    await settled();
+    // The same element throughout, never closed and opened again, and its width and height transitioned, not set.
+    expect(popup()).toBe(first);
+    expect([...resized].sort()).toEqual(expect.arrayContaining(["height", "width"]));
   });
 
   it("does not animate when the keyboard opens and closes it", async () => {
@@ -314,7 +341,7 @@ describe("NavigationMenu", () => {
     await userEvent.click(trigger);
     await expect.poll(() => popup()).not.toBeNull();
     expect(popup()!.hasAttribute("data-ouro-instant")).toBe(false);
-    await expect.poll(() => getComputedStyle(popup()!).transitionProperty).toBe("opacity, scale");
+    await expect.poll(() => getComputedStyle(popup()!).transitionProperty).toBe("opacity, scale, width, height");
   });
 
   it("fades without moving under reduced motion", async () => {
@@ -329,6 +356,8 @@ describe("NavigationMenu", () => {
     };
     await expect.poll(() => getComputedStyle(popup()!).transitionProperty).toBe("opacity");
     expect(moves(popup()!.parentElement!)).toBe(false);
+    // A panel's content fades, without sliding, when another opens.
+    expect(moves(document.querySelector('[data-ouro="navigation-menu-popup"] [data-open]')!)).toBe(false);
     expect(moves(page.getByRole("button", { name: "Recipes" }).element().querySelector("svg")!.parentElement!)).toBe(false);
   });
 
@@ -395,7 +424,7 @@ describe("NavigationMenu panels and easing", () => {
   it("eases on the theme's --ouro-ease-out token, with no curve of its own", async () => {
     await render(<NavigationMenu label="Main" items={items} />);
     await userEvent.click(page.getByRole("button", { name: "Recipes" }));
-    await expect.poll(() => getComputedStyle(popup()!).transitionProperty).toBe("opacity, scale");
+    await expect.poll(() => getComputedStyle(popup()!).transitionProperty).toBe("opacity, scale, width, height");
     expect(popup()!.className).toContain("ease-(--ouro-ease-out)");
     expect(document.querySelector('[data-ouro="navigation-menu"]')!.outerHTML + popup()!.outerHTML).not.toContain("cubic-bezier");
     expect(getComputedStyle(popup()!).transitionTimingFunction).toContain("cubic-bezier(0.23, 1, 0.32, 1)");
@@ -460,6 +489,45 @@ describe("NavigationMenu panels and easing", () => {
     expect(popup()).not.toBeNull();
   });
 
+  it("sizes a panel to its links, wider with content or two columns, and to its content with fit", async () => {
+    await page.viewport(1440, 900);
+    const wide = (id: string) => <div data-testid={id} style={{ width: 900, height: 20 }} />;
+    const long = "Everything you have saved, and every recipe a friend has shared with you.";
+    const many = [
+      { label: "Links", links: [{ label: "Browse", href: "/recipes", description: long }] },
+      { label: "Content", content: wide("content") },
+      { label: "Columns", columns: 2 as const, links: [{ label: "Browse", href: "/recipes", description: long }, { label: "Drafts", href: "/drafts", description: long }] },
+      { label: "Fit", fit: true, content: wide("fit") },
+      { label: "Fit columns", fit: true, columns: 2 as const, links: [{ label: "Browse", href: "/recipes" }] },
+    ];
+    await render(<NavigationMenu label="Main" items={many} />);
+    const widthOf = async (label: string) => {
+      await userEvent.click(page.getByRole("button", { name: label, exact: true }));
+      // Until its box holds still, not just until no animation is listed: WebKit can read none while the popup
+      // still has its starting style, at the 0.96 scale it opens from (645.12 for 672 on main, #3341's run).
+      await settledBox(popup);
+      const width = popup()!.getBoundingClientRect().width;
+      await userEvent.keyboard("{Escape}");
+      await expect.poll(() => popup()).toBeNull();
+      return width;
+    };
+    // 28rem for links alone, 42rem with content or two columns.
+    expect(await widthOf("Links")).toBeLessThanOrEqual(448);
+    expect(await widthOf("Content")).toBe(672);
+    expect(await widthOf("Columns")).toBe(672);
+    // With fit, as wide as the content, and a short panel only as wide as its links.
+    expect(await widthOf("Fit")).toBeGreaterThanOrEqual(900);
+    expect(await widthOf("Fit columns")).toBeLessThan(448);
+  });
+
+  it("marks a panel's button as the page's section with current", async () => {
+    await render(<NavigationMenu label="Main" items={[{ label: "Platforms", current: true, content: <p>Web</p> }, { label: "Docs", content: <p>Guides</p> }]} />);
+    await expect.element(page.getByRole("button", { name: "Platforms" })).toHaveAttribute("data-current");
+    await expect.element(page.getByRole("button", { name: "Docs" })).not.toHaveAttribute("data-current");
+    const style = (name: string) => getComputedStyle(page.getByRole("button", { name }).element());
+    expect(style("Platforms").color).not.toBe(style("Docs").color);
+  });
+
   it("stacks the content above the links on a phone", async () => {
     await page.viewport(390, 844);
     await render(<NavigationMenu label="Main" items={featured} />);
@@ -490,5 +558,43 @@ describe("NavigationMenu first frame", () => {
     await userEvent.click(page.getByRole("button", { name: "Recipes" }));
     await settledBox(drawn(positioner));
     expectFirstFramesInPlace(await recording.stop());
+  });
+});
+
+describe("NavigationMenu panel gap", () => {
+  const items = [{ label: "Recipes", links: [{ label: "Drafts", href: "/drafts" }] }];
+  const gap = (bar: Element, from: "bar" | "trigger" = "bar") => {
+    const panel = document.querySelector<HTMLElement>('[data-ouro="navigation-menu-popup"]')!;
+    const edge = from === "bar" ? bar : document.querySelector("[data-popup-open]")!;
+    return Math.round(panel.getBoundingClientRect().top - edge.getBoundingClientRect().bottom);
+  };
+
+  it("leaves 8px below the header that holds the menu, taller than the trigger", async () => {
+    await page.viewport(1280, 800);
+    const { host } = await render(
+      <header style={{ paddingBottom: 30 }}>
+        <NavigationMenu label="Main" items={items} />
+      </header>,
+    );
+    await userEvent.click(page.getByRole("button", { name: "Recipes" }));
+    await expect.poll(() => gap(host.querySelector("header")!)).toBe(8);
+  });
+
+  it("leaves 8px below the menu itself when no header holds it", async () => {
+    await page.viewport(1280, 800);
+    const { root } = await render(<NavigationMenu label="Main" items={items} className="pb-8" />);
+    await userEvent.click(page.getByRole("button", { name: "Recipes" }));
+    await expect.poll(() => gap(root)).toBe(8);
+  });
+
+  it("never pulls the panel up when the trigger is taller than the bar", async () => {
+    await page.viewport(1280, 800);
+    await render(
+      <header style={{ height: 4, overflow: "visible" }}>
+        <NavigationMenu label="Main" items={items} />
+      </header>,
+    );
+    await userEvent.click(page.getByRole("button", { name: "Recipes" }));
+    await expect.poll(() => gap(document.body, "trigger")).toBe(8);
   });
 });

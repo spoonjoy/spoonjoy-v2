@@ -25,6 +25,18 @@ it("setup: the next test starts with the browser's media defaults", () => {
   expect(matchMedia("(prefers-contrast: more)").matches).toBe(false);
 });
 
+// The same order again, for the page's real viewport: the first test resizes it directly (as a
+// command that bypasses vitest/browser's own page.viewport() channel does), and the next starts
+// at the project's configured size again.
+it("setup: a test may end with the viewport resized", async () => {
+  await commands.setViewport({ width: 555, height: 444 });
+  expect(await commands.viewportState()).toEqual({ width: 555, height: 444 });
+});
+
+it("setup: the next test starts with the project's viewport again", async () => {
+  expect(await commands.viewportState()).not.toEqual({ width: 555, height: 444 });
+});
+
 // A file's own beforeAll sets media for all its tests. The middle test changes it and leaves it,
 // and the last must still see the file's setting, not the one the middle test left.
 describe("setup: media a file sets in beforeAll", () => {

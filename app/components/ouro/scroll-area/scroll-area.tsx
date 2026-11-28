@@ -106,7 +106,14 @@ function useScrollTabStop(viewportRef: { current: HTMLDivElement | null }): void
     viewport.addEventListener("scroll", update);
     // Content can gain or lose focusable elements with no resize (a disabled button turning
     // enabled), which changes whether the viewport itself still needs the tab stop.
-    const content = new MutationObserver(update);
+    // A burst of changes (a list mounting its rows) reads sizes once, in the next frame, not after each commit.
+    let frame = 0;
+    const content = new MutationObserver(() => {
+      if (!frame) frame = requestAnimationFrame(() => {
+        frame = 0;
+        update();
+      });
+    });
     content.observe(viewport, { childList: true, subtree: true, attributes: true, attributeFilter: ["tabindex", "disabled", "href"] });
     // Stryker disable next-line BlockStatement,CallExpression,StringLiteral: cleanup only releases listeners on an element that is going away, which nothing can observe
     return () => {
@@ -114,6 +121,8 @@ function useScrollTabStop(viewportRef: { current: HTMLDivElement | null }): void
       observer.disconnect();
       // Stryker disable next-line CallExpression: cleanup only releases an observer on an element that is going away, which nothing can observe
       content.disconnect();
+      // Stryker disable next-line CallExpression: cleanup only drops a read queued for an element that is going away, which nothing can observe
+      cancelAnimationFrame(frame);
       // Stryker disable next-line CallExpression,StringLiteral: cleanup only releases a listener on an element that is going away, which nothing can observe
       viewport.removeEventListener("scroll", update);
     };
@@ -158,11 +167,11 @@ function useUnnamedRegionCheck(viewportRef: { current: HTMLDivElement | null }, 
  * (pixels hidden), so a parent can draw a hairline once it is scrolled from the start. Its focus ring
  * is drawn over the content, so a header that sticks to the top never hides an edge of it.
  *
- * The viewport paints `--ouro-scroller-surface`, the fill of the surface behind it (the page's
- * `--background` by default; Card, Popover, Menu, Select, Combobox, Dialog and Sheet set their own), because
+ * The viewport paints `--ouro-scroller-surface`, falling back to its local `--muted`; Card, Popover,
+ * Menu, Select, Combobox, Dialog and Sheet set their own. The default is opaque because
  * Chromium on Windows keeps a see-through scroller off the compositor where LCD text is on, and repaints
- * it on every scroll frame (ourostack/ouro-ui#2891). Where the scroller sits on any other fill, set
- * the token on it (`[--ouro-scroller-surface:var(--muted)]`); on glass, set it to `transparent`.
+ * it on every scroll frame (ourostack/ouro-ui#2891). Set the token to another theme surface when
+ * needed (`[--ouro-scroller-surface:var(--card)]`); on glass, set it to `transparent`.
  *
  * Use plain page scrolling instead for a page's main content, and `Dialog` or `Sheet`,
  * which scroll their own bodies, for long content in an overlay.
@@ -178,6 +187,7 @@ function useUnnamedRegionCheck(viewportRef: { current: HTMLDivElement | null }, 
  *   <Row gap="sm">{tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}</Row>
  * </ScrollArea>
  * @claim "The viewport paints `--ouro-scroller-surface`" registry/ouro/components/ouro/scroll-area/scroll-area.surface.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.surface.test.tsx::ScrollArea surface > follows the token an app sets on the surface behind it)
+ * @claim "The default is opaque because" registry/ouro/components/ouro/scroll-area/scroll-area.surface.test.tsx verify:fileLine(registry/ouro/components/ouro/scroll-area/scroll-area.surface.test.tsx, /commands\.compositedLayers\(\)/)
  * @claim "Its focus ring is drawn over the content" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > draws its focus ring whole over content that sticks to an edge, and leaves the pointer to the content)
  * @claim "It keeps the browser's own scrolling" registry/ouro/components/ouro/scroll-area/scroll-area.touch.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.touch.test.tsx::leaves touch scrolling to the browser: the viewport is a native scroll container)
  * @claim "It keeps the browser's own scrolling" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > draws a thin native scrollbar in the theme's muted color, and scrolls only the way it is asked to)
@@ -227,7 +237,11 @@ export function ScrollArea(props: ScrollAreaProps): JSX.Element {
         aria-label={label}
         // While focused, isolate keeps the content's own stacking (a sticky header's z-index) inside the viewport, under the
         // focus ring. Only then: at rest the content stacks with the page, as it always has.
-        className={cn("peer min-h-0 bg-(--ouro-scroller-surface) focus-visible:isolate flex-1 rounded-[inherit] outline-none", viewports[orientation], scrollbar, contain && "overscroll-contain")}
+        className={cn(
+          "peer min-h-0 bg-[color:var(--ouro-scroller-surface,var(--muted))] focus-visible:isolate flex-1 rounded-[inherit] outline-none",
+          "[&_[data-ouro=button][data-tone=primary][data-variant=plain]]:text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]",
+          viewports[orientation], scrollbar, contain && "overscroll-contain",
+        )}
       >
         <div className={orientation === "vertical" ? "min-w-0" : "min-w-fit"}>{children}</div>
       </div>

@@ -239,7 +239,9 @@ describe("FileField", () => {
     it("for a file larger than maxSize, naming the limit", async () => {
       const onReject = vi.fn();
       const { host, input, zone } = await render(<FileField label="Photo" maxSize={5 * 1024 * 1024} onReject={onReject} />);
-      const big = new File([new Uint8Array(5 * 1024 * 1024 + 1)], "big.png", { type: "image/png" });
+      // Only the size is read, so the file reports one byte over the limit without holding 5 MB.
+      const big = new File(["x"], "big.png", { type: "image/png" });
+      Object.defineProperty(big, "size", { value: 5 * 1024 * 1024 + 1 });
       await drop(zone, [big]);
       expect(messages(host, input)).toEqual(["big.png is larger than 5 MB."]);
       expect(onReject).toHaveBeenCalledWith([{ file: big, reason: "size" }]);

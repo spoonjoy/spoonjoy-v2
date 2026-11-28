@@ -29,7 +29,7 @@ const portalClass = "relative isolate z-[calc(var(--ouro-layer)+1)]";
  */
 const viewportClass =
   "group/toaster fixed outline-none [--ouro-toast-dir:-1] data-[edge=top]:[--ouro-toast-dir:1] " +
-  "start-(--ouro-toaster-start) end-(--ouro-toaster-end) bottom-(--ouro-toaster-bottom) w-(--ouro-toaster-width) " +
+  "start-(--ouro-toaster-start) end-(--ouro-toaster-end) bottom-(--ouro-toaster-bottom) w-(--ouro-toaster-width) max-w-[calc(100%-2rem)] " +
   // A move to the top cross-fades: the stack fades out, moves while invisible and fades back in, so it never slides across the screen.
   "transition-opacity duration-(--ouro-duration-fast) ease-(--ouro-ease-out) data-[ouro-toaster-fading]:opacity-0 " +
   "data-[ouro-toaster-moved=top]:!top-(--ouro-toaster-moved-top) data-[ouro-toaster-moved=top]:!bottom-auto " +
@@ -72,7 +72,7 @@ const rootClass =
   // `--ouro-toast-dir` turns every offset below toward the screen's middle.
   "group-data-[edge=top]/toaster:top-0 group-data-[edge=top]/toaster:bottom-auto group-data-[edge=top]/toaster:origin-top " +
   "select-none [-webkit-tap-highlight-color:transparent] " +
-  "rounded-ouro-lg border border-solid border-border bg-popover [--ouro-scroller-surface:var(--popover)] text-popover-foreground shadow-(--shadow-lg) " +
+  "rounded-ouro-lg border border-solid border-border bg-popover [--ouro-scroller-surface:var(--popover)] [--ouro-message-list-bubble-default:var(--muted)] text-popover-foreground shadow-(--shadow-lg) " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "[--gap:0.75rem] [--peek:0.75rem] [--leave:1] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))] " +
   "[--height:var(--toast-frontmost-height,var(--toast-height))] " +
@@ -109,7 +109,7 @@ const contentClass =
  * @claim "The action button: a quiet bordered" registry/ouro/components/ouro/toast/toaster.touch.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.touch.test.tsx::gives the dismiss and action buttons 44px touch targets)
  */
 const actionClass =
-  "press relative m-0 -my-1 box-border inline-flex h-9 shrink-0 items-center justify-center rounded-ouro-md border border-solid border-border " +
+  "press relative m-0 -my-1 box-border inline-flex h-ouro-11 shrink-0 items-center justify-center rounded-ouro-md border border-solid border-border " +
   "bg-transparent px-3 text-base font-medium text-foreground pointer-fine:h-8 pointer-fine:text-sm whitespace-nowrap " +
   "cursor-pointer touch-manipulation outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "pointer-fine:hover:bg-accent pointer-fine:hover:text-accent-foreground motion-safe:active:scale-(--ouro-press-scale)";

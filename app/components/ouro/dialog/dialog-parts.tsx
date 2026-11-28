@@ -44,7 +44,7 @@ const viewportClass =
 const popupClass =
   "relative isolate box-border flex max-h-full min-h-0 flex-col outline-none " +
   "rounded-ouro-xl bg-(--ouro-bg) text-popover-foreground ring-1 ring-border/60 " +
-  "[--ouro-bg:var(--popover)] [--ouro-scroller-surface:var(--popover)] [--ouro-bd:color-mix(in_oklab,var(--border)_60%,transparent)] " +
+  "[--ouro-bg:var(--popover)] [--ouro-scroller-surface:var(--popover)] [--ouro-message-list-bubble-default:var(--muted)] [--ouro-bd:color-mix(in_oklab,var(--border)_60%,transparent)] " +
   "shadow-(--shadow-xl) " +
   "[transition:transform_var(--ouro-dialog-duration)_var(--ouro-dialog-ease),opacity_var(--ouro-dialog-duration)_var(--ouro-dialog-ease)] " +
   "data-starting-style:[transform:scale(0.96)] data-starting-style:opacity-0 " +
@@ -282,12 +282,22 @@ function useHeldTop(): (popup: HTMLElement) => () => void {
     const viewport = popup.parentElement!;
     // Where the popup's top is held, from the viewport's top: where the viewport centred it when it opened.
     let held: number | undefined;
+    let screenHeight: number | undefined;
     // A relative offset from where the viewport's centring puts it, so the popup's own margins (Lightbox's full
     // screen) stay as they are.
     const place = () => {
+      if (popup.hasAttribute("data-closed") || popup.hidden) {
+        held = undefined;
+        screenHeight = undefined;
+        return;
+      }
+      const viewportHeight = viewport.clientHeight;
+      // A window of a new height centres it again; a width change (a page's scroll bar coming or going) does not.
+      if (screenHeight !== viewportHeight) held = undefined;
+      screenHeight = viewportHeight;
       const height = popup.offsetHeight;
       const natural = popup.offsetTop - (parseFloat(popup.style.top) || 0);
-      const lowest = viewport.clientHeight - parseFloat(getComputedStyle(viewport).paddingBottom) - height;
+      const lowest = viewportHeight - parseFloat(getComputedStyle(viewport).paddingBottom) - height;
       held ??= natural;
       // Taller than the room, it stays where the viewport puts it; otherwise as near the held top as it fits.
       // Stryker disable next-line EqualityOperator: at natural === lowest the popup fills the room, so held >= lowest and both give 0.
@@ -296,20 +306,19 @@ function useHeldTop(): (popup: HTMLElement) => () => void {
     place();
     const content = new ResizeObserver(place);
     content.observe(popup);
-    // A window of a new height centres it again; a width change (a page's scroll bar coming or going) does not.
-    let screenHeight = viewport.clientHeight;
-    const screen = new ResizeObserver(() => {
-      if (viewport.clientHeight !== screenHeight) held = undefined;
-      screenHeight = viewport.clientHeight;
-      place();
-    });
+    const screen = new ResizeObserver(place);
     screen.observe(viewport);
+    // A same-size reopen need not notify ResizeObserver.
+    const state = new MutationObserver(place);
+    state.observe(popup, { attributes: true, attributeFilter: ["data-closed"] });
     // Stryker disable next-line BlockStatement: the observers watch a popup and viewport that are leaving the page, so no test sees them stop.
     return () => {
       // Stryker disable next-line CallExpression: as above.
       content.disconnect();
       // Stryker disable next-line CallExpression: as above.
       screen.disconnect();
+      // Stryker disable next-line CallExpression: as above.
+      state.disconnect();
     };
   },
   // Stryker disable next-line ArrayDeclaration: the callback reads nothing from render, so any dependency list keeps it.

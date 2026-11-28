@@ -51,10 +51,10 @@ const toggleBase =
   "not-data-disabled:not-active:pointer-fine:hover:[--ouro-state:var(--ouro-state-hover,8%)] not-data-disabled:active:[--ouro-state:var(--ouro-state-pressed,14%)] " +
   "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
   "disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 " +
-  // Pressed: the primary tone at 10% behind text mixed 20% toward the foreground, as Button's soft look.
+  // Pressed: the primary tone at 10% behind text mixed toward the foreground, with more foreground on the scroller.
   // Forced colours drop the tint, so a pressed toggle fills with the system highlight there. It opts
   // out of forcing, or the label's backplate would hide HighlightText; its focus ring stays a system colour.
-  "data-pressed:[--ouro-bg:color-mix(in_oklab,var(--primary)_10%,transparent)] data-pressed:text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))] contrast-more:data-pressed:[--ouro-bd:currentColor] " +
+  "data-pressed:[--ouro-bg:color-mix(in_oklab,var(--primary)_10%,transparent)] data-pressed:text-[color-mix(in_oklab,var(--primary)_var(--ouro-toggle-ink-primary,80%),var(--foreground))] contrast-more:data-pressed:[--ouro-bd:currentColor] " +
   "forced-colors:data-pressed:forced-color-adjust-none forced-colors:data-pressed:[--ouro-bd:Highlight] forced-colors:data-pressed:[--ouro-bg:Highlight] " +
   "forced-colors:data-pressed:text-[HighlightText] forced-colors:data-pressed:outline-[CanvasText]";
 
@@ -155,7 +155,7 @@ const iconClass = "size-[1.25em] shrink-0";
  * @internal
  */
 const overflowScrollerClass = cn(
-  "flex-nowrap overflow-x-auto overflow-y-hidden overscroll-x-contain " +
+  "flex-nowrap overflow-x-auto overflow-y-hidden overscroll-x-contain bg-muted [--ouro-toggle-ink-primary:70%] " +
     "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden " +
     "forced-colors:rounded-ouro-md forced-colors:outline-1 forced-colors:outline-solid forced-colors:-outline-offset-1",
 );

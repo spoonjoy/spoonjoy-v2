@@ -712,11 +712,19 @@ async function painted(): Promise<void> {
 }
 
 // Waits for the page's running CSS transitions, such as the colors easing after a switch to dark,
-// so text is measured as it rests. Gives up after 3 seconds.
+// and for a settle with no Animation object, such as the outline a scroll just above moved (X-ray's
+// own plain style write, marked data-ouro-settling while it is pending), so text is measured as it
+// rests. Gives up after 3 seconds total.
 async function settleTransitions(): Promise<void> {
+  const deadline = performance.now() + 3000;
   const running = document.getAnimations().filter((animation) => animation instanceof CSSTransition && animation.playState === "running");
   const finished = Promise.all(running.map((animation) => animation.finished.catch(() => undefined)));
-  await Promise.race([finished, new Promise((resolve) => setTimeout(resolve, 3000))]);
+  await Promise.race([finished, new Promise((resolve) => setTimeout(resolve, Math.max(0, deadline - performance.now())))]);
+  // A settle with no Animation object marks itself with data-ouro-settling only once its own listener
+  // (a 'scroll' handler, say) reacts: give it the frame that takes before checking, so an element that
+  // has not yet reacted is not read as settled already (ourostack/ouro-ui#3361).
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  while (document.querySelector("[data-ouro-settling]") && performance.now() < deadline) await new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
 // Whether an element shows, with an area, and its box stays where it is over a frame. As Playwright

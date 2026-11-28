@@ -1,4 +1,7 @@
+import { squircleCorner, splitCornerRadii } from "./squircle-curve.ts";
+
 export { squircleCorners };
+export { squircleCornersDedupe };
 export default squircleCorners;
 
 interface Node {
@@ -20,9 +23,6 @@ interface Node {
 const CLIP = "(clip-path: shape(from 0 0, close))";
 const MISSING = `(not (corner-shape: squircle)) and ${CLIP}`;
 const ENCLOSING_CIRCLE = 0.543;
-// Ouro's two-Bezier corner (within 0.03% of the n=4 superellipse) in units of the radius: start, then each curve's two
-// controls and end, drawn from the corner's left edge to its top edge.
-const CORNER = [[0, 1], [0, 0.613, -0.0092, 0.3274, 0.1591, 0.1591], [0.3274, -0.0092, 0.613, 0, 1, 0]] as const;
 const KEYS = ["tl", "tr", "br", "bl"] as const;
 const LONGHANDS: Record<string, number> = {
   "border-top-left-radius": 0, "border-start-start-radius": 0,
@@ -46,6 +46,11 @@ function squircleCorners(): { postcssPlugin: string; OnceExit(root: unknown): vo
     OnceExit(input: unknown) {
       const root = input as Node;
       const selectors = new Set<string>();
+      // Two rules in the same place (the same @media, @supports or layer) that round to the same radii need the
+      // same fallback declarations: grouped by parent and by those declarations, they share one sibling rule
+      // instead of each writing its own, which is the only duplication this pass can safely remove (a rule's own
+      // class is unique, so no other group ever claims its selector).
+      const groups = new Map<Node, Map<string, { vars: string[]; radii: string[]; selectors: string[] }>>();
       root.walkRules((rule) => {
         if (skipped(rule)) return;
         const corners = cornersOf(rule);
@@ -56,13 +61,23 @@ function squircleCorners(): { postcssPlugin: string; OnceExit(root: unknown): vo
           vars.push(`--sq-${KEYS[i]}: ${round ? "0px" : c}`);
           return round ? (c ?? "0") : `calc(${c} * ${ENCLOSING_CIRCLE})`;
         });
-        const sibling = { selector: rule.selector, nodes: [] as object[] };
-        for (const v of vars) sibling.nodes.push({ prop: v.split(": ")[0], value: v.split(": ")[1] });
-        sibling.nodes.push({ prop: "border-radius", value: radii.join(" ") });
-        const wrap = { name: "supports", params: MISSING, nodes: [sibling] };
-        rule.parent!.append(wrap);
+        let byBody = groups.get(rule.parent!);
+        if (!byBody) groups.set(rule.parent!, (byBody = new Map()));
+        const key = `${vars.join(";")}|${radii.join(" ")}`;
+        let group = byBody.get(key);
+        if (!group) byBody.set(key, (group = { vars, radii, selectors: [] }));
+        group.selectors.push(rule.selector!);
         for (const s of rule.selectors ?? []) selectors.add(s);
       });
+      for (const [parent, byBody] of groups) {
+        for (const group of byBody.values()) {
+          const sibling = { selector: group.selectors.join(","), nodes: [] as object[] };
+          for (const v of group.vars) sibling.nodes.push({ prop: v.split(": ")[0], value: v.split(": ")[1] });
+          sibling.nodes.push({ prop: "border-radius", value: group.radii.join(" ") });
+          const wrap = { name: "supports", params: MISSING, nodes: [sibling] };
+          parent.append(wrap);
+        }
+      }
       if (selectors.size === 0) return;
       const list = [...selectors].join(",\n");
       const layer = {
@@ -81,6 +96,145 @@ function squircleCorners(): { postcssPlugin: string; OnceExit(root: unknown): vo
   };
 }
 
+interface CssAsset { type: string; fileName: string; source: string | Uint8Array }
+
+/**
+ * A Vite plugin that collapses duplicate `squircleCorners()` output within a built CSS file.
+ * Vite's PostCSS pipeline runs `squircleCorners()` once per source CSS file, so a chunk that bundles several source
+ * files ends up with a `@layer squircle-corners` carrying a separately-computed copy of the shared boilerplate per
+ * source file. The copies are identical (`clipPath()` reads just custom properties), so this merges them into one
+ * pair of rules per chunk, after Vite has decided chunking, since an earlier merge could not see the final chunks.
+ *
+ * @example
+ * // vite.config.ts: plugins: [squircleCornersDedupe()], css: { postcss: { plugins: [squircleCorners()] } }
+ *
+ * Add it beside `squircleCorners()` in a Vite build (not Storybook's dev server, which emits no bundle to dedupe).
+ */
+function squircleCornersDedupe(): { name: string; apply: "build"; generateBundle(options: unknown, bundle: Record<string, CssAsset>): void } {
+  return {
+    name: "ouro-squircle-corners-dedupe",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      for (const file of Object.values(bundle)) {
+        if (file.type !== "asset" || !file.fileName.endsWith(".css") || typeof file.source !== "string") continue;
+        file.source = dedupeSquircleCss(file.source);
+      }
+    },
+  };
+}
+
+// Finds the index of the character that closes the `open` at `openIndex`, honoring backslash escapes, or -1.
+function matchingClose(css: string, openIndex: number, open: string, close: string): number {
+  let depth = 0;
+  for (let i = openIndex; i < css.length; i++) {
+    const ch = css[i];
+    if (ch === "\\") { i++; continue; }
+    if (ch === open) depth++;
+    else if (ch === close) { depth--; if (depth === 0) return i; }
+  }
+  return -1;
+}
+
+// Splits a selector list on its top-level commas, skipping escaped characters and the commas inside :is(), [] and similar.
+function splitSelectors(list: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < list.length; i++) {
+    const ch = list[i];
+    if (ch === "\\") { i++; continue; }
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth--;
+    else if (ch === "," && depth === 0) { out.push(list.slice(start, i)); start = i + 1; }
+  }
+  out.push(list.slice(start));
+  return out.map((s) => s.trim()).filter(Boolean);
+}
+
+// Merges adjacent `selectors{declBody}` rules that share one exact declBody, within one already-bundled span.
+function dedupeStyleRules(body: string): string {
+  const order: string[] = [];
+  const bySelectors = new Map<string, string[]>();
+  let i = 0;
+  while (i < body.length) {
+    const open = body.indexOf("{", i);
+    if (open === -1) break;
+    const close = matchingClose(body, open, "{", "}");
+    if (close === -1) break;
+    const selectorText = body.slice(i, open);
+    const declBody = body.slice(open + 1, close);
+    let selectors = bySelectors.get(declBody);
+    if (!selectors) { bySelectors.set(declBody, (selectors = [])); order.push(declBody); }
+    selectors.push(...splitSelectors(selectorText));
+    i = close + 1;
+  }
+  return order.map((declBody) => {
+    const seen = new Set<string>();
+    const merged = bySelectors.get(declBody)!.filter((s) => (seen.has(s) ? false : (seen.add(s), true)));
+    return `${merged.join(",")}{${declBody}}`;
+  }).join("");
+}
+
+// Merges adjacent `@supports(params){...}` blocks that share one exact, whitespace-normalized params string, within
+// one already-bundled span, and dedupes the style rules inside each merged group.
+function dedupeSupportsGroups(layerBody: string): string {
+  const order: string[] = [];
+  const byParams = new Map<string, { raw: string; body: string }>();
+  let i = 0;
+  const marker = "@supports";
+  while (i < layerBody.length) {
+    const at = layerBody.indexOf(marker, i);
+    if (at === -1) break;
+    const open = layerBody.indexOf("{", at);
+    if (open === -1) break;
+    const raw = layerBody.slice(at + marker.length, open).trim();
+    const close = matchingClose(layerBody, open, "{", "}");
+    if (close === -1) break;
+    const body = layerBody.slice(open + 1, close);
+    const key = raw.replace(/\s+/g, " ");
+    let group = byParams.get(key);
+    if (!group) { byParams.set(key, (group = { raw, body: "" })); order.push(key); }
+    group.body += body;
+    i = close + 1;
+  }
+  return order.map((key) => {
+    const group = byParams.get(key)!;
+    return `@supports ${group.raw}{${dedupeStyleRules(group.body)}}`;
+  }).join("");
+}
+
+/**
+ * Merges `squircleCorners()`'s repeated boilerplate within one CSS string, working inside its own
+ * `@layer squircle-corners` blocks, which hold rules from this plugin alone, so the cascade order of the rest of
+ * the file stays as it was. A named CSS layer's content accumulates across its `@layer <name>{...}` blocks
+ * wherever they sit, so folding the later blocks into the first one's spot keeps the same cascade.
+ */
+function dedupeSquircleCss(css: string): string {
+  const marker = "@layer squircle-corners{";
+  const spans: { start: number; end: number; body: string }[] = [];
+  let i = 0;
+  while (true) {
+    const at = css.indexOf(marker, i);
+    if (at === -1) break;
+    const open = at + marker.length - 1;
+    const close = matchingClose(css, open, "{", "}");
+    if (close === -1) break;
+    spans.push({ start: at, end: close + 1, body: css.slice(open + 1, close) });
+    i = close + 1;
+  }
+  if (spans.length === 0) return css;
+  const merged = dedupeSupportsGroups(spans.map((s) => s.body).join(""));
+  let out = "";
+  let cursor = 0;
+  spans.forEach((span, index) => {
+    out += css.slice(cursor, span.start);
+    out += index === 0 ? `${marker}${merged}}` : "";
+    cursor = span.end;
+  });
+  out += css.slice(cursor);
+  return out;
+}
+
 function skipped(rule: Node): boolean {
   for (let p = rule.parent; p; p = p.parent) {
     if (p.type === "rule") return true;
@@ -96,27 +250,11 @@ function cornersOf(rule: Node): (string | null)[] {
     if (decl.type !== "decl") continue;
     const value = decl.value!.trim();
     if (decl.prop === "border-radius" && !value.includes("/")) {
-      const [a, b = a, c = a, d = b] = splitTop(value);
+      const [a, b = a, c = a, d = b] = splitCornerRadii(value);
       out.splice(0, 4, a ?? null, b ?? null, c ?? null, d ?? null);
-    } else if (decl.prop! in LONGHANDS) out[LONGHANDS[decl.prop!]!] = splitTop(value)[0] ?? null;
+    } else if (decl.prop! in LONGHANDS) out[LONGHANDS[decl.prop!]!] = splitCornerRadii(value)[0] ?? null;
   }
   return out;
-}
-
-function splitTop(value: string): string[] {
-  const parts: string[] = [];
-  let depth = 0;
-  let start = 0;
-  for (let i = 0; i <= value.length; i++) {
-    const ch = value[i];
-    if (ch === "(") depth++;
-    else if (ch === ")") depth--;
-    else if ((ch === " " || ch === undefined) && depth === 0) {
-      if (i > start) parts.push(value.slice(start, i));
-      start = i + 1;
-    }
-  }
-  return parts;
 }
 
 const px = (v: string) => (/px$/.test(v) ? parseFloat(v) : /rem$/.test(v) ? parseFloat(v) * 16 : NaN);
@@ -135,9 +273,7 @@ function isRound(value: string, rule: Node): boolean {
 function clipPath(): string {
   const n = (x: number, k: string) => `calc(var(--sq-${k}) * ${Number(x.toFixed(4))})`;
   const curves = KEYS.map((k, i) => {
-    const pts: [number, number][] = [[CORNER[0]![0]!, CORNER[0]![1]!]];
-    for (const c of [CORNER[1], CORNER[2]]) for (let j = 0; j < 6; j += 2) pts.push([c![j]!, c![j + 1]!]);
-    const placed = pts.map(([u, v]) => [i === 1 || i === 2 ? -u : u, i >= 2 ? -v : v] as [number, number]);
+    const placed = squircleCorner.map(([u, v]) => [i === 1 || i === 2 ? -u : u, i >= 2 ? -v : v] as [number, number]);
     if (i === 1 || i === 3) placed.reverse();
     const rel = (p: [number, number], from: [number, number]) => `${n(p[0] - from[0], k)} ${n(p[1] - from[1], k)}`;
     return [0, 3].map((s) => `curve by ${rel(placed[s + 3]!, placed[s]!)} with ${rel(placed[s + 1]!, placed[s]!)} / ${rel(placed[s + 2]!, placed[s]!)}`).join(", ");

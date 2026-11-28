@@ -63,6 +63,29 @@ export const InContext: Story = {
   },
 };
 
+/** In a window toolbar: a glass capsule where only the checked segment shows its label, with its count in a small pill. */
+export const Glass: Story = {
+  render: function Render(args) {
+    const dot = <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" fill="currentColor" /></svg>;
+    return (
+      <Surface>
+        <SegmentedControl
+          {...args}
+          glass
+          hideLabel
+          label="Browse"
+          defaultValue="places"
+          items={[
+            { value: "places", label: "Places", icon: dot, count: 14 },
+            { value: "people", label: "People", icon: dot, count: 3 },
+            { value: "dates", label: "Dates", icon: dot },
+          ]}
+        />
+      </Surface>
+    );
+  },
+};
+
 /** A visible label, a segment off with a reason, and every segment off with one. */
 export const States: Story = {
   render: (args) => (

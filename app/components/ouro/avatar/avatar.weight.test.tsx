@@ -5,17 +5,19 @@ import { Avatar } from "~/components/ouro/avatar/avatar";
 import { act } from "~/lib/ouro/testing/act";
 
 // A chat draws an avatar beside every message, so its count of elements and components is paid
-// once per message. Each budget is what the variant draws now: a change that adds to one fails here.
+// once per message, and a list of people (a command palette's rows) pays it once per row. Each budget is what the
+// variant draws now: a change that adds to one fails here. Class names count too: every one is a rule the engine
+// matches each time it styles the avatar.
 
 const picture = "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
 
-const variants: { variant: string; avatar: ReactElement; loaded?: true; elements: number; components: number }[] = [
-  { variant: "initials", avatar: <Avatar name="Ana Lind" />, elements: 3, components: 1 },
-  { variant: "a picture, once it has loaded", avatar: <Avatar name="Ana Lind" src={picture} />, loaded: true, elements: 3, components: 1 },
-  { variant: "a presence dot", avatar: <Avatar name="Ana Lind" presence="busy" presenceLabel="Busy" />, elements: 6, components: 2 },
-  { variant: "a name still loading", avatar: <Avatar name={null} />, elements: 3, components: 2 },
-  { variant: "a group chat of three", avatar: <Avatar name="Crew" members={[{ name: "Ana Lind" }, { name: "Ben Ito" }, { name: "Cy Voss" }]} size="lg" />, elements: 5, components: 8 },
-  { variant: "an agent's glyph", avatar: <Avatar name="Halden" shape="agent" />, elements: 5, components: 2 },
+const variants: { variant: string; avatar: ReactElement; loaded?: true; elements: number; components: number; classes: number }[] = [
+  { variant: "initials", avatar: <Avatar name="Ana Lind" />, elements: 2, components: 1, classes: 23 },
+  { variant: "a picture, once it has loaded", avatar: <Avatar name="Ana Lind" src={picture} />, loaded: true, elements: 3, components: 1, classes: 24 },
+  { variant: "a presence dot", avatar: <Avatar name="Ana Lind" presence="busy" presenceLabel="Busy" />, elements: 5, components: 2, classes: 38 },
+  { variant: "a name still loading", avatar: <Avatar name={null} />, elements: 3, components: 2, classes: 31 },
+  { variant: "a group chat of three", avatar: <Avatar name="Crew" members={[{ name: "Ana Lind" }, { name: "Ben Ito" }, { name: "Cy Voss" }]} size="lg" />, elements: 5, components: 8, classes: 66 },
+  { variant: "an agent's glyph", avatar: <Avatar name="Halden" shape="agent" />, elements: 5, components: 2, classes: 31 },
 ];
 
 /** The components React keeps for what the root draws: every fiber but the root, elements and text, context providers included. */
@@ -29,7 +31,7 @@ function componentsUnder(host: HTMLElement): number {
 }
 
 describe("Avatar's weight", () => {
-  it.each(variants)("draws $variant in no more than $elements elements and $components components", async ({ avatar, loaded, elements, components }) => {
+  it.each(variants)("draws $variant in no more than $elements elements, $classes class names and $components components", async ({ avatar, loaded, elements, components, classes }) => {
     const host = document.createElement("div");
     host.dataset["testHarness"] = "";
     document.body.append(host);
@@ -37,10 +39,12 @@ describe("Avatar's weight", () => {
     await act(async () => root.render(avatar));
     if (loaded) await expect.poll(() => host.querySelector("img")).not.toBeNull();
     const drawnElements = host.querySelectorAll("*").length;
+    const drawnClasses = [...host.querySelectorAll("*")].reduce((sum, element) => sum + element.classList.length, 0);
     const drawnComponents = componentsUnder(host);
     await act(async () => root.unmount());
     host.remove();
     expect(drawnElements, "elements").toBeLessThanOrEqual(elements);
+    expect(drawnClasses, "class names").toBeLessThanOrEqual(classes);
     expect(drawnComponents, "components").toBeLessThanOrEqual(components);
   });
 });

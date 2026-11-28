@@ -57,7 +57,6 @@ afterEach(async () => {
   await act(async () => roots.splice(0).forEach((root) => root.unmount()));
   for (const node of mounted) node.remove();
   mounted = [];
-  await commands.resetMedia();
 });
 
 const warnings = () => warn.mock.calls.map((call: unknown[]) => call[0]);
@@ -111,8 +110,15 @@ async function openUncontrolled(props: Partial<PopoverProps> = {}) {
 
 describe("Popover", () => {
   it("keeps its fixed sizes at a compact --spacing: an 18rem panel", async () => {
-    await page.viewport(1280, 800);
-    const panel = await openUncontrolled();
+    // Layout width does not depend on the entrance, so this test need not wait for it.
+    await render(
+      <Popover title="Share recipe" presentation="popover" trigger={<Button>Share</Button>}>
+        <input aria-label="Link" />
+      </Popover>,
+    );
+    await userEvent.click(trigger());
+    await expect.poll(() => popup()).not.toBeNull();
+    const panel = popup()!;
     const width = () => parseFloat(getComputedStyle(panel).width);
     expect(width()).toBeCloseTo(288);
     panel.style.setProperty("--spacing", "0.2rem");
@@ -184,6 +190,27 @@ describe("Popover", () => {
     await expect.poll(() => close.getBoundingClientRect().width).toBeGreaterThan(1);
     await userEvent.keyboard("{Enter}");
     await expect.poll(() => popup()).toBeNull();
+  });
+
+  it("keeps Tab and Shift+Tab inside a modal popover, past its last and first control", async () => {
+    const element = await openUncontrolled();
+    await expect.poll(() => document.activeElement?.getAttribute("aria-label")).toBe("Link");
+    for (let press = 0; press < 6; press++) {
+      await pressTab();
+      await expect.poll(() => element.contains(document.activeElement) && !document.activeElement?.hasAttribute("data-type")).toBe(true);
+    }
+    for (let press = 0; press < 6; press++) {
+      await pressTab({ shift: true });
+      await expect.poll(() => element.contains(document.activeElement) && !document.activeElement?.hasAttribute("data-type")).toBe(true);
+    }
+  });
+
+  it("marks a modal popover with data-ouro-modal", async () => {
+    expect((await openUncontrolled()).getAttribute("data-ouro-modal")).toBe("");
+  });
+
+  it("leaves a popover that is not modal without data-ouro-modal", async () => {
+    expect((await openUncontrolled({ modal: false })).hasAttribute("data-ouro-modal")).toBe(false);
   });
 
   it("labels the close button Close by default", async () => {
@@ -564,6 +591,57 @@ describe("controlled Popover", () => {
     await expect.poll(() => document.activeElement).toBe(popup());
   });
 
+  it("returns focus to the element finalFocus names, drawn after the popover closed, as a popover and as a sheet", async () => {
+    function Elsewhere({ label }: { label: string }) {
+      const [open, setOpen] = useState(false);
+      const [later, setLater] = useState(false);
+      const anchor = useRef<HTMLButtonElement>(null);
+      const target = useRef<HTMLButtonElement>(null);
+      return (
+        <>
+          <button ref={anchor} type="button" onClick={() => setOpen(true)}>
+            {label}
+          </button>
+          {later ? <button ref={target} type="button">Landing</button> : null}
+          <Popover title={label} presentation="auto" open={open} onOpenChange={setOpen} anchor={anchor} finalFocus={target}>
+            <button type="button" onClick={() => { setOpen(false); setLater(true); }}>Apply</button>
+          </Popover>
+        </>
+      );
+    }
+    for (const width of [1280, 390]) {
+      await page.viewport(width, 800);
+      await render(<Elsewhere label={`Filters ${width}`} />);
+      await userEvent.click(page.getByRole("button", { name: `Filters ${width}`, exact: true }));
+      await settled();
+      await userEvent.click(page.getByRole("button", { name: "Apply" }).last());
+      await expect.poll(() => document.activeElement?.textContent).toBe("Landing");
+    }
+    await page.viewport(1280, 800);
+  });
+
+  it("returns a sheet's focus to its trigger even when finalFocus is set", async () => {
+    // The types forbid both props together; this checks a plain-JS caller still gets the trigger.
+    await page.viewport(390, 844);
+    const other = createRef<HTMLButtonElement>();
+    const Loose = Popover as unknown as (props: Record<string, unknown>) => ReactNode;
+    await render(
+      <>
+        <button ref={other} type="button">Elsewhere</button>
+        <Loose title="Filters" presentation="auto" trigger={<button type="button">Open filters</button>} finalFocus={other}>
+          <p>Body</p>
+        </Loose>
+      </>,
+    );
+    const trigger = page.getByRole("button", { name: "Open filters" }).element() as HTMLElement;
+    await userEvent.click(trigger);
+    await settled();
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => popup()).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(trigger);
+    await page.viewport(1280, 800);
+  });
+
   it("returns focus to anchor after a mouse open, as a popover and as a sheet", async () => {
     // Safari does not focus a button on click, so focus must go back to anchor by name.
     for (const width of [1280, 390]) {
@@ -588,6 +666,47 @@ describe("controlled Popover", () => {
     expect(popup()!.getAttribute("data-ouro-presentation")).toBe("sheet");
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => popup()).toBeNull();
+  });
+
+  it("leaves focus in a dialog opened while it closes, instead of pulling it back to anchor (#3612)", async () => {
+    // A press inside the popover can close it and open a sibling dialog in the same handler, as a
+    // calendar's Edit action does: setOpen(false) and the dialog's open state change together, so the
+    // popover is still mid-exit when the dialog opens. Its anchor-named finalFocus must not then steal
+    // focus back from the dialog.
+    function Overlap() {
+      const anchor = useRef<HTMLButtonElement>(null);
+      const [open, setOpen] = useState(false);
+      const [dialogOpen, setDialogOpen] = useState(false);
+      return (
+        <>
+          <button ref={anchor} type="button" onClick={() => setOpen((value) => !value)}>
+            Filters
+          </button>
+          <Popover title="Filters" open={open} anchor={anchor} onOpenChange={setOpen}>
+            <Button
+              onClick={() => {
+                setOpen(false);
+                setDialogOpen(true);
+              }}
+            >
+              Edit
+            </Button>
+          </Popover>
+          <Dialog title="Edit event" open={dialogOpen} onOpenChange={setDialogOpen}>
+            <input aria-label="Name" />
+          </Dialog>
+        </>
+      );
+    }
+
+    await render(<Overlap />);
+    const toggle = page.getByRole("button", { name: "Filters" }).element() as HTMLElement;
+    await userEvent.click(toggle);
+    await settled();
+    await userEvent.click(page.getByRole("button", { name: "Edit" }));
+    const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
+    await expect.poll(() => dialog()?.hasAttribute("data-open")).toBe(true);
+    await expect.poll(() => dialog()?.contains(document.activeElement)).toBe(true);
   });
 });
 
@@ -1254,5 +1373,164 @@ describe("Popover under forced colours", () => {
     } finally {
       await commands.emulateMedia({ forcedColors: "none" });
     }
+  });
+});
+
+describe("Popover handing focus to a layer opened from inside it", () => {
+  it("leaves focus in the dialog the popover's own button opened, a second later", async () => {
+    function App() {
+      const [popover, setPopover] = useState(true);
+      const [dialog, setDialog] = useState(false);
+      const anchor = useRef<HTMLButtonElement>(null);
+      return (
+        <>
+          <button ref={anchor} type="button">Event</button>
+          <Popover title="Details" presentation="popover" open={popover} onOpenChange={setPopover} anchor={anchor}>
+            <Button
+              onClick={() => {
+                setPopover(false);
+                setDialog(true);
+              }}
+            >
+              Edit
+            </Button>
+          </Popover>
+          <Dialog title="Edit event" open={dialog} onOpenChange={setDialog} presentation="dialog">
+            <input aria-label="Title" />
+          </Dialog>
+        </>
+      );
+    }
+    await render(<App />);
+    await act(async () => document.querySelector<HTMLElement>('[data-ouro-popover-content] button')!.click());
+    await expect.poll(() => document.activeElement?.getAttribute("aria-label")).toBe("Title");
+    await new Promise((resolve) => setTimeout(resolve, 1000)); // real clock: a late focus return is the bug, and it lands after Base UI's own frames
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Title");
+  });
+
+  it("still returns focus to its anchor when it opens inside a dialog", async () => {
+    function App() {
+      const anchor = useRef<HTMLButtonElement>(null);
+      const [open, setOpen] = useState(false);
+      return (
+        <Dialog title="Outer" open onOpenChange={() => {}} presentation="dialog">
+          <button ref={anchor} type="button" onClick={() => setOpen(true)}>Anchor</button>
+          <Popover title="Inner" presentation="popover" open={open} onOpenChange={setOpen} anchor={anchor}>
+            <Button>Inside</Button>
+          </Popover>
+        </Dialog>
+      );
+    }
+    await render(<App />);
+    const anchor = [...document.querySelectorAll("button")].find((button) => button.textContent === "Anchor")!;
+    await act(async () => anchor.click());
+    await expect.poll(() => document.querySelector('[data-ouro-popover-content]')?.contains(document.activeElement)).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => document.querySelector('[data-ouro-popover-content]')).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(anchor);
+  });
+
+  it("returns focus to its anchor while a closing or hidden dialog elsewhere on the page holds none", async () => {
+    function App() {
+      const anchor = useRef<HTMLButtonElement>(null);
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <div role="dialog" aria-label="Closing" data-ending-style="">
+            <button type="button">Closing action</button>
+          </div>
+          <div hidden>
+            <div role="dialog" aria-label="Hidden">
+              <button type="button">Hidden action</button>
+            </div>
+          </div>
+          <button ref={anchor} type="button" onClick={() => setOpen(true)}>Anchor</button>
+          <Popover title="Details" presentation="popover" open={open} onOpenChange={setOpen} anchor={anchor}>
+            <Button>Inside</Button>
+          </Popover>
+        </>
+      );
+    }
+    await render(<App />);
+    const anchor = [...document.querySelectorAll("button")].find((button) => button.textContent === "Anchor")!;
+    await act(async () => anchor.click());
+    await expect.poll(() => document.querySelector("[data-ouro-popover-content]")?.contains(document.activeElement)).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => document.querySelector("[data-ouro-popover-content]")).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(anchor);
+  });
+
+  it("returns focus to its anchor when it closes while another popover holds focus", async () => {
+    function App() {
+      const anchor = useRef<HTMLButtonElement>(null);
+      const other = useRef<HTMLButtonElement>(null);
+      const [first, setFirst] = useState(true);
+      return (
+        <>
+          <button ref={anchor} type="button">First anchor</button>
+          <button ref={other} type="button">Second anchor</button>
+          <Popover title="First" presentation="popover" open={first} onOpenChange={setFirst} anchor={anchor}>
+            <Button>First inside</Button>
+          </Popover>
+          <Popover title="Second" presentation="popover" open onOpenChange={() => {}} anchor={other}>
+            <Button onClick={() => setFirst(false)}>Close first</Button>
+          </Popover>
+        </>
+      );
+    }
+    await render(<App />);
+    const anchor = [...document.querySelectorAll("button")].find((button) => button.textContent === "First anchor")!;
+    const findClose = () => [...document.querySelectorAll("button")].find((button) => button.textContent === "Close first");
+    await expect.poll(findClose).toBeDefined();
+    const closeFirst = findClose()!;
+    await act(async () => closeFirst.focus());
+    await act(async () => closeFirst.click());
+    await expect.poll(() => [...document.querySelectorAll("[data-ouro-popover-content]")].some((panel) => panel.textContent?.includes("First inside"))).toBe(false);
+    await expect.poll(() => document.activeElement).toBe(anchor);
+  });
+
+  it("returns focus to its anchor when it closes while focus is elsewhere in the dialog that holds the anchor", async () => {
+    function App() {
+      const anchor = useRef<HTMLButtonElement>(null);
+      const [open, setOpen] = useState(true);
+      return (
+        <Dialog title="Outer" open onOpenChange={() => {}} presentation="dialog">
+          <button ref={anchor} type="button">Anchor</button>
+          <button type="button" onClick={() => setOpen(false)}>Close popover</button>
+          <Popover title="Inner" presentation="popover" open={open} onOpenChange={setOpen} anchor={anchor}>
+            <Button>Inside</Button>
+          </Popover>
+        </Dialog>
+      );
+    }
+    await render(<App />);
+    const anchor = [...document.querySelectorAll("button")].find((button) => button.textContent === "Anchor")!;
+    const closer = [...document.querySelectorAll("button")].find((button) => button.textContent === "Close popover")!;
+    await act(async () => closer.focus());
+    await act(async () => closer.click());
+    await expect.poll(() => document.querySelector("[data-ouro-popover-content]")).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(anchor);
+  });
+
+  it("returns focus to the button that opened it when its anchor ref holds no element", async () => {
+    function App() {
+      const [open, setOpen] = useState(false);
+      const empty = useRef<HTMLElement>(null);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>Opener</button>
+          <Popover title="Loose" presentation="popover" open={open} onOpenChange={setOpen} anchor={empty}>
+            <Button>Inside</Button>
+          </Popover>
+        </>
+      );
+    }
+    await render(<App />);
+    const opener = [...document.querySelectorAll("button")].find((button) => button.textContent === "Opener")!;
+    await act(async () => opener.focus());
+    await act(async () => opener.click());
+    await expect.poll(() => document.querySelector("[data-ouro-popover-content]")).not.toBeNull();
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => document.activeElement).toBe(opener);
   });
 });

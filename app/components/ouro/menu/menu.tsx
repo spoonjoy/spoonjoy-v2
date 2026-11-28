@@ -136,6 +136,12 @@ export interface MenuSubmenuEntry {
   type: "submenu";
   label: string;
   items: readonly MenuEntry[];
+  /**
+   * An icon before the label, as an item's `icon`, so the words line up with the items beside it:
+   * an `<svg>` drawn at 16px in the item's color, which screen readers skip.
+   * @claim "An icon before the label, as" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu items > shows a submenu's icon before its label, level with an item's, out of its name)
+   */
+  icon?: ReactNode;
   disabled?: boolean | undefined;
   /** The text of the item that goes back from the submenu in the phone sheet. Default "Back". */
   backLabel?: string | undefined;
@@ -388,7 +394,7 @@ function renderEntries(entries: readonly MenuEntry[]): ReactNode {
         );
       case "submenu":
         return (
-          <MenuSub key={index} label={entry.label} disabled={entry.disabled} backLabel={entry.backLabel}>
+          <MenuSub key={index} label={entry.label} icon={entry.icon} disabled={entry.disabled} backLabel={entry.backLabel}>
             {renderEntries(entry.items)}
           </MenuSub>
         );
@@ -404,16 +410,21 @@ function renderEntries(entries: readonly MenuEntry[]): ReactNode {
             {...("disabledReason" in entry ? { disabledReason: entry.disabledReason } : {})}
             axAction={entry.axAction}
           >
-            {entry.icon !== undefined && (
-              <span aria-hidden="true" data-ouro-menu-icon="" className="flex shrink-0">
-                {entry.icon}
-              </span>
-            )}
+            <MenuIcon icon={entry.icon} />
             {entry.label}
           </MenuItem>
         );
     }
   });
+}
+
+/** An entry's icon before its label: decoration, so screen readers skip it. */
+function MenuIcon({ icon }: { icon: ReactNode }): JSX.Element | null {
+  return icon === undefined ? null : (
+    <span aria-hidden="true" data-ouro-menu-icon="" className="flex shrink-0">
+      {icon}
+    </span>
+  );
 }
 
 /** Marks a context area as pressed while a finger is down, so the class turns off selection and the callout. */
@@ -1221,6 +1232,8 @@ export interface MenuSubProps {
   label: string;
   /** The submenu's items. */
   children: ReactNode;
+  /** An icon before the label, as `MenuItem` shows one in its children, so the submenu's words line up with its neighbours'. */
+  icon?: ReactNode;
   /** The item cannot open the submenu. */
   disabled?: boolean | undefined;
   /**
@@ -1245,7 +1258,7 @@ export interface MenuSubProps {
  *   <MenuItem href={mailto}>Email</MenuItem>
  * </MenuSub>
  */
-export function MenuSub({ label, children, disabled, backLabel = "Back" }: MenuSubProps): JSX.Element {
+export function MenuSub({ label, icon, children, disabled, backLabel = "Back" }: MenuSubProps): JSX.Element {
   const { sheet } = useMenuPart("MenuSub", '<MenuSub label="Share">…</MenuSub>');
   // Owned here, so the Back item can close only this submenu.
   const [open, setOpen] = useState(false);
@@ -1290,6 +1303,7 @@ export function MenuSub({ label, children, disabled, backLabel = "Back" }: MenuS
         }}
       >
         <span data-ouro-menu-label="" className="flex min-w-0 flex-1 items-center gap-2">
+          <MenuIcon icon={icon} />
           {label}
         </span>
         <ChevronIcon />

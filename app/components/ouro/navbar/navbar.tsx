@@ -33,19 +33,43 @@ export interface NavbarLink {
   links?: never;
 }
 
-/** A group of links in a Navbar: a button that opens a panel in the bar, and a labelled group in the sheet. */
-export interface NavbarGroup {
+/** The fields a Navbar group has whatever it holds: its button's text, and how wide its panel is. */
+interface NavbarGroupBase {
   /** The group's name, the button's text: "Recipes". */
   label: string;
-  /**
-   * The group's links, each with an optional `description`.
-   *
-   * @claim "The group's links, each with an" registry/ouro/components/ouro/navbar/navbar.test.tsx verify:testExists(registry/ouro/components/ouro/navbar/navbar.test.tsx::Navbar at tablet widths and with groups > closes the sheet when the links come to fit)
-   */
-  links: readonly NavbarLink[];
+  /** The panel is as wide as its content, up to the screen's width (NavigationMenu's `fit`). */
+  fit?: boolean | undefined;
+  /** Marks the button as the section the page is in, when its links cannot tell (a group of `content`). */
+  current?: boolean | undefined;
   /** Not with `links`. To link the section's own page, make it the group's first link. */
   href?: never;
 }
+
+/**
+ * A group in a Navbar: a button that opens a panel in the bar, and a labelled group in the sheet. The panel holds its
+ * `links`, or its own `content` (a grid of platforms, groups side by side), or both, content first.
+ */
+export type NavbarGroup = NavbarGroupBase &
+  (
+    | {
+        /**
+         * The group's links, each with an optional `description`.
+         *
+         * @claim "The group's links, each with an" registry/ouro/components/ouro/navbar/navbar.test.tsx verify:testExists(registry/ouro/components/ouro/navbar/navbar.test.tsx::Navbar at tablet widths and with groups > closes the sheet when the links come to fit)
+         */
+        links: readonly NavbarLink[];
+        /** Anything else in the panel, before its links. */
+        content?: ReactNode;
+      }
+    | {
+        links?: undefined;
+        /**
+         * The panel's own content, in place of a list of links. Its links close the panel when followed. In the sheet it
+         * shows under the group's name; give the Navbar a `menu` to lay the sheet out yourself.
+         */
+        content: ReactNode;
+      }
+  );
 
 /** One item of a Navbar: a link (`href`), or a group of links (`links`). */
 export type NavbarItem = NavbarLink | NavbarGroup;
@@ -136,8 +160,8 @@ const bar =
   "ps-[max(1rem,env(safe-area-inset-left,0px))] pe-[max(1rem,env(safe-area-inset-right,0px))]";
 
 // A link: 44px with 16px text on a coarse pointer at every width, 36px with 14px text with a
-// fine one. The current page, or the section it is in, is underlined in the primary colour as in the bar's row and in
-// FamilyBar, not given a hover highlight; forced colours keep the underline.
+// fine one. The current page, or the section it is in, is underlined in the primary colour as in the bar's row,
+// not given a hover highlight; forced colours keep the underline.
 const link_ =
   "relative m-0 box-border items-center rounded-ouro-md px-3 font-medium text-muted-foreground no-underline select-none touch-manipulation " +
   "text-base pointer-fine:text-sm leading-5 [-webkit-tap-highlight-color:transparent] " +
@@ -152,7 +176,7 @@ const example = '<Navbar label="Main" items={[{ label: "Recipes", href: "/recipe
 
 /**
  * The bar across the top of an app: your brand, the main links and a few controls, with
- * the current page marked `aria-current="page"`, and the link of the section it is in `aria-current="true"`, both underlined in the primary colour as in `FamilyBar`, distinct from hover and press highlights. A group of links (`{ label, links }`)
+ * the current page marked `aria-current="page"`, and the link of the section it is in `aria-current="true"`, both underlined in the primary colour, distinct from hover and press highlights. A group of links (`{ label, links }`)
  * opens a panel, as in `NavigationMenu`. Whenever the links do not fit, below the `collapseBelow` breakpoint and
  * wherever they overflow the bar, they collapse behind a menu button into a `Sheet` that slides in from
  * the side, with each group under its name; the brand and `actions` stay in the bar. When, below the collapse breakpoint,
@@ -296,7 +320,7 @@ export function Navbar(props: NavbarProps): JSX.Element {
   }, []);
 
   // An item's own `current` wins; otherwise the path decides, across the links and the groups.
-  const all = items.flatMap((item): ReadonlyArray<{ href: string; current?: boolean | undefined }> => (item.links !== undefined ? item.links : [item]));
+  const all = items.flatMap((item): ReadonlyArray<{ href: string; current?: boolean | undefined }> => (item.href === undefined ? (item.links ?? []) : [item]));
   const marked = all.some((link) => link.current)
     ? undefined
     : currentHref(
@@ -375,14 +399,17 @@ export function Navbar(props: NavbarProps): JSX.Element {
           {!open && !filled ? null : menu ?? (
             <ul className={cn(list_, "flex-col gap-1")}>
               {items.map((item, index) =>
-                item.links !== undefined ? (
+                item.href === undefined ? (
                   <li key={index} className="grid gap-1 pt-3 first:pt-0">
                     <p id={`${id}${index}`} className="m-0 px-3 py-1 text-xs leading-4 font-medium text-muted-foreground">
                       {item.label}
                     </p>
-                    <ul aria-labelledby={`${id}${index}`} className={cn(list_, "flex-col gap-1")}>
-                      {item.links.map(sheetLinkFor)}
-                    </ul>
+                    {item.content}
+                    {item.links !== undefined && (
+                      <ul aria-labelledby={`${id}${index}`} className={cn(list_, "flex-col gap-1")}>
+                        {item.links.map(sheetLinkFor)}
+                      </ul>
+                    )}
                   </li>
                 ) : (
                   sheetLinkFor(item, index)

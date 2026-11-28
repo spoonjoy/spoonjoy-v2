@@ -462,9 +462,7 @@ function searchCatalogue(catalogue: EmojiCatalogue, query: string, limit: number
   return [...byShortcode, ...rest].slice(0, limit);
 }
 
-/** Splits text into the characters a person sees, an emoji with its tone modifier or its joined parts whole. */
-// Stryker disable next-line ObjectLiteral: grapheme is Intl.Segmenter's default granularity, named here for the reader.
-const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+let graphemes: Intl.Segmenter | undefined;
 
 /**
  * The text with the emoji the catalogue lists as text turned into their tokens: `:shortcode:`,
@@ -476,9 +474,12 @@ const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
  * @claim "changes only when the catalogue lists it whole" registry/ouro/components/ouro/emoji/emoji.test.tsx verify:testExists(registry/ouro/components/ouro/emoji/emoji.test.tsx::Emoji helpers > turns each emoji the catalogue lists as text into its token, a whole character at a time)
  */
 function emojiTextToTokens(text: string, catalogue: EmojiCatalogue): string {
+  if (!text) return text;
   const { byText } = catalogueIndex(catalogue);
+  // Stryker disable next-line ObjectLiteral: grapheme is Intl.Segmenter's default granularity, named here for the reader.
+  const split = (graphemes ??= new Intl.Segmenter(undefined, { granularity: "grapheme" }));
   let tokens = "";
-  for (const { segment } of graphemes.segment(text)) {
+  for (const { segment } of split.segment(text)) {
     const found = byText.get(segment.replace(VARIATION, ""));
     tokens += found ? emojiToken(found.item, found.tone) : segment;
   }

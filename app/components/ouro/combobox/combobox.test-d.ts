@@ -13,6 +13,7 @@ expectTypeOf<{
   multiple: true;
   items: [{ value: "rowan"; label: "Rowan Vale"; description: "Designer"; media: ReactElement; meta: ReactElement }];
   autoHighlight: true;
+  resultsFor: "Ro" | null;
   inputValue: "Ro";
   onInputChange: (text: string) => void;
   onInputKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;

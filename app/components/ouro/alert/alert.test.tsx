@@ -2,7 +2,7 @@ import { useState, type ReactNode, type SVGProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Button } from "~/components/ouro/button/button";
 import { act } from "~/lib/ouro/testing/act";
@@ -90,6 +90,22 @@ describe("Alert", () => {
     expect(new Set(looks).size).toBe(tones.length);
   });
 
+  it("uses a surface instead of a border, and keeps an edge in forced colours", async () => {
+    const tones = ["primary", "secondary", "destructive", "success", "warning"] as const;
+    const { host } = await render(<>{tones.map((tone) => <Alert key={tone} tone={tone} title={tone} />)}</>);
+    const alerts = [...host.querySelectorAll<HTMLElement>('[data-ouro="alert"]')];
+    for (const alert of alerts) expect(getComputedStyle(alert).borderTopWidth).toBe("0px");
+    try {
+      await commands.emulateMedia({ forcedColors: "active" });
+      for (const alert of alerts) {
+        expect(getComputedStyle(alert).outlineStyle).toBe("solid");
+        expect(parseFloat(getComputedStyle(alert).outlineWidth)).toBeGreaterThanOrEqual(1);
+      }
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
   it("renders an action below the description", async () => {
     const retry = vi.fn();
     const { alert } = await render(
@@ -109,6 +125,83 @@ describe("Alert", () => {
     const description = alert.querySelector("[data-ouro-alert-description]")!;
     const action = alert.querySelector("[data-ouro-alert-action]")!;
     expect(action.getBoundingClientRect().top).toBeGreaterThanOrEqual(description.getBoundingClientRect().bottom);
+  });
+
+  it("keeps a title alone, or a title with a description and an action, in a column", async () => {
+    const alone = await render(<Alert title="Saved" />);
+    const body = alone.alert.querySelector("[data-slot='alert-body']")!.getBoundingClientRect();
+    // The body is the title's line and no more: no foot kept for an action that overhangs.
+    expect(body.height).toBeCloseTo(alone.alert.querySelector("[data-ouro-alert-title]")!.getBoundingClientRect().height, 0);
+    const full = await render(
+      <div style={{ width: "900px" }}>
+        <Alert title="Not saved" description="Check your connection." action={<Button size="sm">Try again</Button>} />
+      </div>,
+    );
+    const title = full.alert.querySelector("[data-ouro-alert-title]")!.getBoundingClientRect();
+    const description = full.alert.querySelector("[data-ouro-alert-description]")!.getBoundingClientRect();
+    const action = full.alert.querySelector("[data-ouro-alert-action]")!.getBoundingClientRect();
+    expect(description.top).toBeGreaterThanOrEqual(title.bottom);
+    expect(action.top).toBeGreaterThanOrEqual(description.bottom);
+  });
+
+  it("puts an action beside a title with no description where they fit, and under it where they don't", async () => {
+    const band = (width: string) => (
+      <div style={{ width }}>
+        <Alert
+          tone="warning"
+          title="2 need your answer"
+          action={
+            <>
+              <Button size="sm">Design review</Button>
+              <Button size="sm">Planning</Button>
+            </>
+          }
+        />
+      </div>
+    );
+    const wide = await render(band("900px"));
+    const title = () => wide.alert.querySelector("[data-ouro-alert-title]")!.getBoundingClientRect();
+    const action = () => wide.alert.querySelector("[data-ouro-alert-action]")!.getBoundingClientRect();
+    expect(action().left).toBeGreaterThanOrEqual(title().right);
+    // On one line, level: the title, its buttons and the icon share a middle.
+    const middle = (box: DOMRect) => box.top + box.height / 2;
+    const button = wide.alert.querySelector("[data-ouro-alert-action] button")!.getBoundingClientRect();
+    const icon = wide.alert.querySelector("[data-ouro-alert-icon]")!.getBoundingClientRect();
+    expect(Math.abs(middle(button) - middle(title()))).toBeLessThanOrEqual(1);
+    expect(Math.abs(middle(icon) - middle(title()))).toBeLessThanOrEqual(1);
+    const narrow = await render(band("260px"));
+    const narrowTitle = narrow.alert.querySelector("[data-ouro-alert-title]")!;
+    // The title keeps its whole line, unbroken, and the action goes under it.
+    expect(narrowTitle.getBoundingClientRect().height).toBeLessThan(30);
+    const wrapped = narrow.alert.querySelector("[data-ouro-alert-action] button")!.getBoundingClientRect();
+    expect(wrapped.top - narrowTitle.getBoundingClientRect().bottom).toBeCloseTo(12, 0);
+    const last = [...narrow.alert.querySelectorAll("[data-ouro-alert-action] button")].at(-1)!.getBoundingClientRect();
+    // The padding under the last button is the same as without the overhang.
+    expect(narrow.alert.getBoundingClientRect().bottom - last.bottom).toBeCloseTo(16, 0);
+  });
+
+  it("lets an action beside its title shrink, so a row of buttons in it scrolls inside the alert", async () => {
+    const { alert } = await render(
+      <div style={{ width: "420px" }}>
+        <Alert
+          tone="warning"
+          title="4 need your answer"
+          action={
+            <div data-testid="strip" style={{ display: "flex", flexWrap: "nowrap", overflowX: "auto", gap: "8px" }}>
+              {["Design review", "Planning", "Architecture forum", "Quarterly review"].map((name) => (
+                <Button key={name} size="sm" style={{ flex: "none" }}>
+                  {name}
+                </Button>
+              ))}
+            </div>
+          }
+        />
+      </div>,
+    );
+    const strip = alert.querySelector<HTMLElement>("[data-testid='strip']")!;
+    const body = alert.querySelector("[data-slot='alert-body']")!.getBoundingClientRect();
+    expect(alert.querySelector("[data-ouro-alert-action]")!.getBoundingClientRect().right).toBeLessThanOrEqual(body.right + 0.5);
+    expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
   });
 
   it("shows a dismiss button with onDismiss, named by dismissLabel", async () => {

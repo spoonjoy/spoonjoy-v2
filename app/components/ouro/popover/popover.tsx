@@ -32,6 +32,17 @@ export type PopoverPresentation = "auto" | "popover" | "sheet";
 
 const presentations: readonly PopoverPresentation[] = ["auto", "popover", "sheet"];
 
+/**
+ * Whether a dialog or sheet that does not hold the popover's anchor is open now, or opening as this popover's own
+ * exit transition still runs, so returning focus to the anchor would take it from there. Reads `data-open` (Base
+ * UI's own open marker) rather than focus: an overlay opened in the same handler that closes this popover may not
+ * yet hold focus when `finalFocus` runs (#3612), as #2675 found for Dialog and Sheet closing into one another.
+ */
+const otherLayerOpen = (anchor: Element | null | undefined) =>
+  [...document.querySelectorAll<HTMLElement>('[role="dialog"][data-open], [role="alertdialog"][data-open]')].some(
+    (layer) => layer.getAttribute("data-ouro-presentation") !== "popover" && !(anchor && layer.contains(anchor)),
+  );
+
 const controlFix = "<Popover open={open} onOpenChange={setOpen} anchor={buttonRef}>";
 
 /** Props shared by both ways of opening a Popover. */
@@ -144,6 +155,12 @@ export type PopoverControlledProps = PopoverBaseProps & {
    * @claim "With `modal={false}` a press on" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::controlled Popover > with modal={false}, leaves a press on the anchor to its own onClick, which closes it without reopening)
    */
   anchor: RefObject<HTMLElement | null>;
+  /**
+   * Where focus goes when the popover closes, when that is not the anchor: `finalFocus={gridRef}`.
+   * Use it when the element the popover pointed at is gone by then, such as a deleted row.
+   * The ref is read as the popover closes, so it can name an element drawn after `open` became false.
+   */
+  finalFocus?: RefObject<HTMLElement | null>;
   /** Not with `open`. Remove `open`, `onOpenChange` and `anchor` to let a trigger open the popover. */
   trigger?: never;
 };
@@ -206,6 +223,7 @@ export function Popover(props: PopoverProps): JSX.Element {
     open,
     onOpenChange,
     anchor,
+    finalFocus: returnFocus,
     // Guard props (hint types), dropped here so they never reach the DOM.
     isOpen,
     onClose,
@@ -216,6 +234,7 @@ export function Popover(props: PopoverProps): JSX.Element {
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
     anchor?: RefObject<HTMLElement | null>;
+    finalFocus?: RefObject<HTMLElement | null>;
   };
 
   checkOpenMode("Popover", "popover", trigger !== undefined, open, onOpenChange);
@@ -302,11 +321,13 @@ export function Popover(props: PopoverProps): JSX.Element {
             ref={popupRef}
             className={className}
             data-ouro-presentation="popover"
+            {...(modal ? { "data-ouro-modal": "" } : {})}
             {...(controlled
               ? {
                   initialFocus: () => (lastInput() === "touch" || lastInput() === "pen" ? popupRef.current : true),
                   // Safari does not focus a button on click, so name where focus goes back.
-                  finalFocus: anchor,
+                  // Stryker disable next-line ConditionalExpression,BooleanLiteral,OptionalChaining: with no layer to stand down for, true (Base UI's own return) and the anchor land on the same element, and anchor is always set in this mode
+                  finalFocus: () => (otherLayerOpen(anchor?.current) ? false : ((returnFocus ?? anchor)?.current ?? true)),
                 }
               : {})}
           >
@@ -350,7 +371,7 @@ export function Popover(props: PopoverProps): JSX.Element {
           open={isOpenNow}
           onOpenChange={setOpen}
           presentation="sheet"
-          finalFocus={trigger !== undefined ? triggerRef : anchor}
+          finalFocus={trigger !== undefined ? triggerRef : (returnFocus ?? anchor)}
         >
           {children}
         </SheetFrame>

@@ -52,10 +52,10 @@ describe("ScrollArea surface", () => {
   it.each([
     ["the theme's own fills", {}],
     ["a theme whose page, card and popover fills differ", distinct],
-  ])("paints its viewport with the page's background, opaque, on the page (%s)", async (_name, style) => {
+  ])("paints its viewport with the muted surface, opaque, on the page (%s)", async (_name, style) => {
     const host = await render(<ScrollArea label="Steps">x</ScrollArea>, style);
     const viewport = viewportOf(host);
-    expect(background(viewport)).toBe(fill("--background"));
+    expect(background(viewport)).toBe(fill("--muted"));
     expect(background(viewport)).not.toMatch(/rgba|transparent/);
   });
 
@@ -106,6 +106,48 @@ describe("ScrollArea surface", () => {
     expect(background(viewportOf(host))).toBe("rgb(1, 2, 3)");
   });
 
+  it("keeps a plain primary action readable on its surface without changing the page action", async () => {
+    const host = await render(
+      <div style={{ "--primary": "#9b6834", "--foreground": "#28231d" } as React.CSSProperties}>
+        <Button variant="plain">Page</Button>
+        <ScrollArea label="Actions"><Button variant="plain">Scroll</Button></ScrollArea>
+        <i style={{ color: "var(--primary)" }} />
+        <b style={{ color: "color-mix(in oklab, var(--primary) 80%, var(--foreground))" }} />
+      </div>,
+    );
+    const [pageButton, scrollButton] = host.querySelectorAll("button");
+    expect(getComputedStyle(pageButton!).color).toBe(getComputedStyle(host.querySelector("i")!).color);
+    expect(getComputedStyle(scrollButton!).color).toBe(getComputedStyle(host.querySelector("b")!).color);
+  });
+
+  it("uses the nested dark theme's muted surface without overriding an app's surface token", async () => {
+    const root = document.documentElement;
+    const wasDark = root.classList.contains("dark");
+    root.classList.remove("dark");
+    try {
+      const host = await render(
+        <>
+          <div className="dark" data-test-default="">
+            <ScrollArea label="Dark steps">x</ScrollArea>
+          </div>
+          <div style={{ "--ouro-scroller-surface": "rgb(1, 2, 3)" } as React.CSSProperties}>
+            <div className="dark" data-test-override="">
+              <ScrollArea label="Custom dark steps">x</ScrollArea>
+            </div>
+          </div>
+        </>,
+      );
+      const dark = host.querySelector<HTMLElement>("[data-test-default]")!;
+      const probe = document.createElement("div");
+      probe.style.backgroundColor = "var(--muted)";
+      dark.append(probe);
+      expect(background(viewportOf(dark))).toBe(background(probe));
+      expect(background(viewportOf(host.querySelector("[data-test-override]")!))).toBe("rgb(1, 2, 3)");
+    } finally {
+      root.classList.toggle("dark", wasDark);
+    }
+  });
+
   it("stays see-through inside a glass surface that opts out, so the glass shows", async () => {
     const host = await render(
       <div style={{ "--ouro-scroller-surface": "transparent" } as React.CSSProperties}>
@@ -117,7 +159,7 @@ describe("ScrollArea surface", () => {
 
   // Chromium on Windows promotes a scroller to the compositor only when it is opaque or the display scales
   // 150% or more (ourostack/ouro-ui#2891); an opaque viewport is promoted everywhere, so this holds on every host.
-  it.skipIf(server.browser !== "chromium")("is a layer of its own that the compositor scrolls, the page's background behind it", async () => {
+  it.skipIf(server.browser !== "chromium")("is a layer of its own that the compositor scrolls on the muted surface", async () => {
     const host = await render(
       <ScrollArea label="Steps" className="h-48">
         <div style={{ height: 1200 }}>x</div>

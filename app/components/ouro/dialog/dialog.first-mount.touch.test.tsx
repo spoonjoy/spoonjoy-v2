@@ -52,12 +52,16 @@ describe("Dialog mounted by the tap that opens it", () => {
     await act(() => root!.render(<MountOnOpen />));
     await commands.tap("[data-app-opener]");
     const popup = () => document.querySelector<HTMLElement>('[data-ouro="dialog"]');
+    // Reads the popup's state as words, so a failed poll says whether the tap opened nothing or the popup never settled.
     await expect
       .poll(() => {
         const element = popup();
-        return Boolean(element && !element.hasAttribute("data-starting-style") && element.getAnimations().length === 0);
+        if (!element) return "the tap opened no popup";
+        if (element.hasAttribute("data-starting-style")) return "the popup kept data-starting-style";
+        if (element.getAnimations().length > 0) return "the popup still has running animations";
+        return "settled";
       })
-      .toBe(true);
+      .toBe("settled");
     await expect.poll(() => popup()!.contains(document.activeElement)).toBe(true);
     expect(document.activeElement).toBe(popup());
   });

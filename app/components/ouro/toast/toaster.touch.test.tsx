@@ -546,4 +546,12 @@ it("waits while a finger is on a toast, and fans the stack out, as a mouse over 
     vi.useRealTimers();
   }
   await expect.poll(() => toastNamed("Held")).toBeUndefined();
+
 });
+it("draws an action button at least 44px tall, so Undo is a full touch target", async () => {
+  await renderToaster();
+  const item = await show("Event deleted", { action: { label: "Undo", onClick: () => {} } });
+  const button = item.querySelector<HTMLElement>('[data-ouro-part="action"]')!;
+  expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+});
+

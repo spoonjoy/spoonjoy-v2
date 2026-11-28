@@ -1,6 +1,6 @@
 "use client";
 
-import type { JSX, ReactElement, ReactNode } from "react";
+import type { JSX, ReactElement, ReactNode, RefObject } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { checkOpenMode, type TriggerOrOpen } from "~/lib/ouro/open-mode";
 import { returnFocusTo } from "~/lib/ouro/return-focus";
@@ -95,6 +95,16 @@ export interface SheetBaseProps {
    * @claim "lays a layer over the page behind the sheet that paints nothing" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::non-modal sheet > with scrim, the page keeps its colours and contrast, the layer takes no presses, and a press on the page still closes it)
    */
   scrim?: boolean | undefined;
+  /**
+   * What takes focus as the sheet opens. `false` leaves focus where it is: for a non-modal sheet
+   * the page opens beside what the person is doing, such as a details panel a press in a grid
+   * opens once its content is read, so their keys stay where they were. A ref puts focus on that
+   * element inside the sheet.
+   * @default the sheet's first control, or the sheet itself
+   * @claim "`false` leaves focus where it is" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::non-modal sheet > with initialFocus={false}, opens beside the control in use and leaves focus on it)
+   * @claim "A ref puts focus on that element inside the sheet" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::non-modal sheet > with initialFocus as a ref, opens with focus on that element)
+   */
+  initialFocus?: boolean | RefObject<HTMLElement | null> | undefined;
   /** The body. It scrolls when it is taller than the sheet. */
   children: ReactNode;
   /** The actions row, stacked full width on phones; primary action last. */
@@ -196,6 +206,7 @@ export function Sheet(props: SheetProps): JSX.Element {
     modal,
     closeOnOutsidePress,
     scrim,
+    initialFocus,
     children,
     footer,
     className,
@@ -250,6 +261,7 @@ export function Sheet(props: SheetProps): JSX.Element {
       modal={modal}
       closeOnOutsidePress={closeOnOutsidePress}
       scrim={scrim}
+      initialFocus={initialFocus}
       className={className}
       trigger={trigger}
       open={open}

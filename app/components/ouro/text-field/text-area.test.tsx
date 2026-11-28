@@ -124,6 +124,120 @@ describe("TextArea", () => {
     expect(onValueChange).toHaveBeenLastCalledWith("Salt!", expect.anything());
   });
 
+  it("calls the latest handler, and none once it is removed", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { textarea, rerender } = await render(<TextArea label="Notes" onFocus={first} />);
+    textarea.focus();
+    expect(first).toHaveBeenCalledTimes(1);
+    textarea.blur();
+    await rerender(<TextArea label="Notes" onFocus={second} />);
+    textarea.focus();
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).toHaveBeenCalledTimes(1);
+    textarea.blur();
+    await rerender(<TextArea label="Notes" />);
+    textarea.focus();
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  it("syncs a controlled value through the DOM property, never rewriting defaultValue as the person types", async () => {
+    function Controlled() {
+      const [value, setValue] = useState("a");
+      return <TextArea label="Notes" value={value} onValueChange={setValue} />;
+    }
+    const { textarea } = await render(<Controlled />);
+    const mutations: MutationRecord[] = [];
+    const observer = new MutationObserver((records) => mutations.push(...records));
+    observer.observe(textarea, { childList: true });
+    textarea.focus();
+    textarea.setSelectionRange(1, 1);
+    await userEvent.keyboard("bcd");
+    await frame();
+    observer.disconnect();
+    expect(textarea.value).toBe("abcd");
+    // Setting defaultValue replaces the textarea's child text node: a childList mutation that
+    // invalidates every :has() rule whose subject can contain it (ouro-ui#3759).
+    expect(mutations.filter((record) => record.type === "childList")).toHaveLength(0);
+  });
+
+  it("shows its value again after a change its owner refuses, as React's own controlled textarea does (#3911)", async () => {
+    const onValueChange = vi.fn();
+    const { textarea } = await render(<TextArea label="Notes" value="stored" onValueChange={onValueChange} />);
+    // A script's input: the native value setter and an input event, as an untrusted page script would write it.
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(textarea, "forged");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(onValueChange).toHaveBeenLastCalledWith("forged", expect.anything());
+    expect(textarea.value).toBe("stored");
+    textarea.focus();
+    textarea.setSelectionRange(6, 6);
+    await userEvent.keyboard("!");
+    expect(textarea.value).toBe("stored");
+  });
+
+  it("shows the value its owner keeps when the owner takes only part of a change (#3911)", async () => {
+    function Capped() {
+      const [value, setValue] = useState("abc");
+      return <TextArea label="Notes" value={value} onValueChange={(next) => setValue(next.slice(0, 4))} />;
+    }
+    const { textarea } = await render(<Capped />);
+    textarea.focus();
+    textarea.setSelectionRange(3, 3);
+    await userEvent.keyboard("d");
+    expect(textarea.value).toBe("abcd");
+    // Already at the cap: the owner's value doesn't change, so nothing re-renders with a new value.
+    await userEvent.keyboard("e");
+    expect(textarea.value).toBe("abcd");
+  });
+
+  it("writes nothing to the native textarea when a parent re-renders it with the same props", async () => {
+    // A new ref and handler each render, as an inline one is: TextArea hands the textarea stable stand-ins for them.
+    const field = () => <TextArea label="Notes" defaultValue="Salt" ref={() => {}} onFocus={() => {}} />;
+    const { textarea, rerender } = await render(field());
+    // Every commit that reaches a textarea ends in React writing its defaultValue, so counting those writes counts commits.
+    const writes: string[] = [];
+    const own = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "defaultValue")!;
+    Object.defineProperty(textarea, "defaultValue", {
+      configurable: true,
+      get() {
+        return own.get!.call(this);
+      },
+      set(value: string) {
+        writes.push(value);
+        own.set!.call(this, value);
+      },
+    });
+    await rerender(field());
+    expect(writes).toEqual([]);
+    expect(textarea.value).toBe("Salt");
+  });
+
+  it("treats a handler given as undefined as no handler at all", async () => {
+    const { textarea } = await render(<TextArea label="Notes" onCopy={undefined} />);
+    const errors: unknown[] = [];
+    const onError = (event: ErrorEvent) => {
+      errors.push(event.error);
+      event.preventDefault();
+    };
+    window.addEventListener("error", onError);
+    textarea.dispatchEvent(new ClipboardEvent("copy", { bubbles: true }));
+    window.removeEventListener("error", onError);
+    expect(errors).toEqual([]);
+  });
+
+  it("server-renders a controlled value as the textarea's text", () => {
+    expect(renderToString(<TextArea label="Notes" value="Salt" onValueChange={() => {}} />)).toMatch(/<textarea[^>]*>Salt<\/textarea>/);
+  });
+
+  it("keeps the label pointing at the textarea, by the id Field gives it", async () => {
+    const { host, textarea } = await render(<TextArea label="Notes" />);
+    expect(textarea.id).not.toBe("");
+    expect(host.querySelector("label")!.htmlFor).toBe(textarea.id);
+  });
+
   it("passes aria-required through without making the textarea natively required", async () => {
     const { textarea } = await render(<TextArea label="Method" aria-required />);
     expect(textarea.getAttribute("aria-required")).toBe("true");

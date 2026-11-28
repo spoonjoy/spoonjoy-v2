@@ -26,6 +26,9 @@ const breakpoints = {
 const barClass =
   "fixed inset-x-0 bottom-0 z-(--ouro-layer) mx-auto mb-[max(1rem,env(safe-area-inset-bottom,0px))] box-border flex max-w-lg items-center gap-2 " +
   "ps-[max(0.75rem,env(safe-area-inset-left,0px))] pe-[max(0.75rem,env(safe-area-inset-right,0px))] " +
+  // Below 360px the side room drops to 0.5rem, so five tabs and the accessory stay 44px wide on a
+  // 320px phone (with 0.75rem they come to 43.2px).
+  "max-[22.5rem]:ps-[max(0.5rem,env(safe-area-inset-left,0px))] max-[22.5rem]:pe-[max(0.5rem,env(safe-area-inset-right,0px))] " +
   "transition-[translate,opacity] duration-(--ouro-duration-base) ease-(--ouro-ease-out) " +
   "data-closed:pointer-events-none data-closed:translate-y-[calc(100%+max(1rem,env(safe-area-inset-bottom,0px)))] data-closed:opacity-0 " +
   "motion-reduce:transition-opacity motion-reduce:duration-(--ouro-duration-fast) motion-reduce:data-closed:translate-y-0";

@@ -182,7 +182,7 @@ export function Breadcrumb(props: BreadcrumbProps): JSX.Element {
                     closeLabel={closeLabel}
                     trigger={
                       <button type="button" aria-label={moreLabel} data-ouro-control="breadcrumb" data-ouro-part="more" className={more}>
-                        <span aria-hidden="true">…</span>
+                        <span aria-hidden="true">⋯</span>
                       </button>
                     }
                     items={hidden.map((step) => ({ label: step.label, href: step.href, disabled: step.href === undefined }))}

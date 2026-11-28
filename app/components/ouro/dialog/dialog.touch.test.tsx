@@ -101,7 +101,7 @@ describe("initial focus in the centered dialog (landscape phone, 844x390)", () =
   });
 });
 
-describe("initial focus in the sheet form matches a plain Sheet (390x844)", () => {
+describe("initial focus in the sheet form: a tap keeps the keyboard down, as a plain Sheet does (390x844)", () => {
   async function focusAfter(open: "tap" | "keyboard", node: ReactNode) {
     await mount(node);
     if (open === "tap") await commands.tap(TRIGGER);
@@ -118,8 +118,8 @@ describe("initial focus in the sheet form matches a plain Sheet (390x844)", () =
   it.each(["tap", "keyboard"] as const)("after a %s open", async (open) => {
     const dialog = await focusAfter(open, <Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>{form}</Dialog>);
     const sheet = await focusAfter(open, <Sheet title="Edit recipe" trigger={<Button>Edit</Button>}>{form}</Sheet>);
-    expect(dialog).toBe(sheet);
-    expect(dialog).toBe("popup");
+    expect(sheet).toBe("popup");
+    expect(dialog).toBe(open === "tap" ? "popup" : "input");
   });
 });
 
@@ -177,11 +177,39 @@ describe("initial focus in a controlled dialog opened from the app's own button"
     expect(focusOf(element)).toBe("input");
   });
 
-  it.each(["tap", "keyboard"] as const)("focuses the sheet popup after a %s, as a trigger-opened one does", async (open) => {
+  it.each(["tap", "keyboard"] as const)("focuses the sheet's %s", async (open) => {
     await mount(<ControlledDialog presentation="sheet" />);
     const element = await openWith(open);
     expect(element.getAttribute("data-ouro-presentation")).toBe("sheet");
-    expect(focusOf(element)).toBe("popup");
+    expect(focusOf(element)).toBe(open === "tap" ? "popup" : "input");
+  });
+});
+
+describe("initial focus in a controlled sheet follows the last press's pointer type", () => {
+  it.each([
+    ["touch", "popup"],
+    ["pen", "popup"],
+    ["mouse", "input"],
+  ] as const)("after a %s press, then a click that opens it, focuses the %s", async (pointerType, expected) => {
+    await mount(<ControlledDialog presentation="sheet" />);
+    document.dispatchEvent(new PointerEvent("pointerdown", { pointerType, bubbles: true }));
+    document.querySelector<HTMLElement>(OPENER)!.click();
+    const element = await opened();
+    expect(element.getAttribute("data-ouro-presentation")).toBe("sheet");
+    expect(focusOf(element)).toBe(expected);
+  });
+
+  it("focuses a triggered sheet's first input when a click opens it after an unrelated touch", async () => {
+    await mount(
+      <Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>
+        {form}
+      </Dialog>,
+    );
+    document.dispatchEvent(new PointerEvent("pointerdown", { pointerType: "touch", bubbles: true }));
+    document.querySelector<HTMLElement>(TRIGGER)!.click();
+    const element = await opened();
+    expect(element.getAttribute("data-ouro-presentation")).toBe("sheet");
+    expect(focusOf(element)).toBe("input");
   });
 });
 

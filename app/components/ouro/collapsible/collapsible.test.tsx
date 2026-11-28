@@ -81,12 +81,12 @@ describe("Collapsible", () => {
     expect(watch.names()).toEqual([]);
   });
 
-  it("keeps the trigger's edge under forced colours, which drop its fill", async () => {
+  it("draws the trigger as an underlined title under forced colours, with no box", async () => {
     await commands.emulateMedia({ forcedColors: "active" });
     try {
       const { trigger } = await render(<Collapsible title="Nutrition facts">{facts}</Collapsible>);
-      expect(parseFloat(getComputedStyle(trigger).borderTopWidth)).toBeGreaterThan(0);
-      expect(getComputedStyle(trigger).borderTopStyle).toBe("solid");
+      expect(parseFloat(getComputedStyle(trigger).borderTopWidth)).toBe(0);
+      expect(getComputedStyle(trigger).textDecorationLine).toContain("underline");
     } finally {
       await commands.emulateMedia({ forcedColors: "none" });
     }
@@ -372,19 +372,18 @@ describe("Collapsible's title width", () => {
 });
 
 describe("Collapsible in a bordered container, under forced colours", () => {
-  it("drops the container's own edge, since each trigger inside already draws its own (#3187)", async () => {
+  it("leaves the container's own edge alone, since no trigger draws a box to double it (#3764)", async () => {
     try {
       const view = await render(
-        <div style={{ border: "1px solid black" }} className="forced-colors:border-0!" data-test-surface="">
+        <div style={{ border: "1px solid black" }} data-test-surface="">
           <Collapsible title="Equipment">A heavy pot with a lid, and tongs.</Collapsible>
         </div>,
       );
       const surface = view.host.querySelector<HTMLElement>("[data-test-surface]")!;
       await commands.emulateMedia({ forcedColors: "active" });
       expect(matchMedia("(forced-colors: active)").matches).toBe(true);
-      // The container's own edge is gone, so only the trigger's edge remains: it is not doubled.
-      expect(parseFloat(getComputedStyle(surface).borderTopWidth)).toBe(0);
-      expect(parseFloat(getComputedStyle(view.trigger).borderTopWidth)).toBeGreaterThan(0);
+      expect(parseFloat(getComputedStyle(surface).borderTopWidth)).toBe(1);
+      expect(parseFloat(getComputedStyle(view.trigger).borderTopWidth)).toBe(0);
     } finally {
       await commands.emulateMedia({ forcedColors: "none" });
     }

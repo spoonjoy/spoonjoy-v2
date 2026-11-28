@@ -6,10 +6,10 @@ import { useCallback, type RefCallback } from "react";
  * What can take focus: links, enabled form controls and anything in the tab order. A control
  * that only says it is disabled (`aria-disabled`) still can.
  */
-const tabbable = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+export const tabbable = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /** Whether an element can take focus now: laid out, and not inert or hidden from assistive tech. */
-function reachable(element: HTMLElement): boolean {
+export function reachable(element: HTMLElement): boolean {
   return element.getClientRects().length > 0 && element.closest('[inert], [aria-hidden="true"]') === null;
 }
 

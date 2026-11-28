@@ -23,7 +23,7 @@ async function render(node: ReactNode) {
     get nav() {
       return host.querySelector<HTMLElement>('[data-ouro="breadcrumb"]')!;
     },
-    /** The visible trail: each crumb's text, and "…" for the menu button. */
+    /** The visible trail: each crumb's text, and "⋯" for the menu button. */
     get trail() {
       return [...host.querySelectorAll<HTMLElement>("[data-ouro-breadcrumb-item]")].map((item) => item.textContent);
     },
@@ -94,7 +94,7 @@ describe("Breadcrumb", () => {
 
   it("collapses the middle of a long trail into a menu of links", async () => {
     const { trail } = await render(<Breadcrumb items={long} />);
-    expect(trail).toEqual(["Home", "…", "Short ribs", "Edit"]);
+    expect(trail).toEqual(["Home", "⋯", "Short ribs", "Edit"]);
     expect(page.getByRole("listitem").elements().length).toBe(4);
     await userEvent.click(page.getByRole("button", { name: "More" }));
     const items = page.getByRole("menuitem");
@@ -118,10 +118,10 @@ describe("Breadcrumb", () => {
 
   it("keeps more of the trail with maxItems, and at least the first and the current page", async () => {
     const more = await render(<Breadcrumb items={long} maxItems={5} />);
-    expect(more.trail).toEqual(["Home", "…", "Braises", "Short ribs", "Edit"]);
+    expect(more.trail).toEqual(["Home", "⋯", "Braises", "Short ribs", "Edit"]);
     await act(async () => roots.splice(0).forEach((root) => root.unmount()));
     const least = await render(<Breadcrumb items={long} maxItems={1} />);
-    expect(least.trail).toEqual(["Home", "…", "Edit"]);
+    expect(least.trail).toEqual(["Home", "⋯", "Edit"]);
   });
 
   it("takes its spoken strings as props", async () => {

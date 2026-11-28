@@ -881,6 +881,22 @@ describe("Emoji helpers", () => {
   const keycap: EmojiItem = { id: "keycap-star", name: "Keycap asterisk", text: "*️⃣", src: image("keycap") };
   const withKeycap: EmojiCatalogue = { categories: [...catalogue.categories, { id: "keys", label: "Keys", items: [keycap] }] };
 
+  it("initializes grapheme matching only for the first nonempty conversion and reuses it", async () => {
+    const construct = vi.spyOn(Intl, "Segmenter");
+    try {
+      const fresh: typeof import("./emoji-styles") = await import(/* @vite-ignore */ new URL("./emoji-styles.ts?first-conversion", import.meta.url).href);
+      expect(construct).not.toHaveBeenCalled();
+      expect(fresh.emojiTextToTokens("", catalogue)).toBe("");
+      expect(construct).not.toHaveBeenCalled();
+      expect(fresh.emojiTextToTokens("hello", catalogue)).toBe("hello");
+      expect(construct).toHaveBeenCalledTimes(1);
+      expect(fresh.emojiTextToTokens("👋🏽 🎉", catalogue)).toBe(":wave-tone3: :party:");
+      expect(construct).toHaveBeenCalledTimes(1);
+    } finally {
+      construct.mockRestore();
+    }
+  });
+
   it("indexes a catalogue once, each emoji once, by id, tone id, token and text", () => {
     const index = catalogueIndex(catalogue);
     expect(catalogueIndex(catalogue)).toBe(index);

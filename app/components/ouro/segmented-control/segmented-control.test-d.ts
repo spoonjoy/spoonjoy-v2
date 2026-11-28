@@ -38,5 +38,10 @@ expectTypeOf<{ label: "View"; items: typeof items; value: ["list"] }>().not.toEx
 expectTypeOf<{ label: "View"; items: typeof items; revealOnHover: true }>().toExtend<SegmentedControlProps>();
 expectTypeOf<{ label: "View"; items: typeof items; revealOnHover: "hover" }>().not.toExtend<SegmentedControlProps>();
 
+// glass is a boolean, and a segment takes an icon and a count.
+expectTypeOf<{ label: "View"; items: typeof items; glass: true }>().toExtend<SegmentedControlProps>();
+expectTypeOf<{ label: "View"; items: Array<{ value: "a"; label: "A"; count: 3 }> }>().toExtend<SegmentedControlProps>();
+expectTypeOf<{ label: "View"; items: Array<{ value: "a"; label: "A"; count: "3" }> }>().not.toExtend<SegmentedControlProps>();
+
 // @ts-expect-error label is required.
 createElement(SegmentedControl, { items });

@@ -1,4 +1,4 @@
-export { groupClass, labelClass, ownLook, revealClass, rootClass, segmentClass, thumbClass };
+export { countClass, glassGroupClass, groupClass, iconClass, labelClass, ownLook, revealClass, rootClass, segmentClass, thumbClass };
 
 // Class strings for SegmentedControl, apart from the component so its file exports only
 // components (React Fast Refresh). Class strings are literal so the app's Tailwind finds
@@ -90,3 +90,26 @@ const segmentClass =
   "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) data-pressed:[anchor-name:--ouro-segment] " +
   "outline-ring outline-offset-1 focus-visible:outline-2 focus-visible:outline-solid " +
   "data-disabled:cursor-not-allowed data-disabled:opacity-50";
+
+/** A segment's icon, before its label. @internal */
+const iconClass = "me-1.5 flex [&:only-child]:me-0 [&_svg]:size-[1.25em]";
+
+/** A count pill inside the segment, after its label. @internal */
+const countClass =
+  "ms-1.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-foreground/15 px-1 text-[10px] leading-none tabular-nums";
+
+/**
+ * Liquid Glass for a window toolbar: a capsule of the theme's glass with a rim, and a glass thumb.
+ *
+ * @internal
+ */
+const glassGroupClass =
+  // ButtonGroup's glass height class, so the docs CSS carries it once; cn's merge drops the group's own h-.
+  "h-(--ouro-glass-h,calc(var(--spacing)*10)) " +
+  "min-h-ouro-8 rounded-full [corner-shape:superellipse(1.05)] border border-(--ouro-glass-rim) " +
+  "bg-[color-mix(in_oklab,var(--ouro-glass)_var(--ouro-glass-tint),transparent)] shadow-(--shadow-sm) backdrop-blur-xl " +
+  "[&_[data-ouro-segment-thumb]]:rounded-full [&_[data-ouro-segment-thumb]]:bg-foreground/10 " +
+  // Stryker disable next-line StringLiteral: a test cannot emulate reduced transparency (Playwright has no option for it)
+  "[@media(prefers-reduced-transparency:reduce)]:bg-(--ouro-glass-solid) [@media(prefers-reduced-transparency:reduce)]:border-(--ouro-glass-edge) " +
+  "[@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none " +
+  "contrast-more:bg-(--ouro-glass-solid) contrast-more:border-current contrast-more:backdrop-blur-none";
