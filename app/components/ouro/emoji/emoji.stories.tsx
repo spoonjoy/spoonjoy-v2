@@ -95,7 +95,7 @@ const catalogue: EmojiCatalogue = {
 
 const find = (id: string) => catalogue.categories.flatMap((category) => category.items).find((item) => item.id === id)!;
 const row: CSSProperties = { display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", fontSize: "14px", lineHeight: "20px", color: "var(--foreground)" };
-const bubble: CSSProperties = { maxWidth: 360, padding: "8px 12px", borderRadius: 12, background: "var(--muted)", color: "var(--foreground)", fontSize: "14px", lineHeight: "20px" };
+const bubble: CSSProperties = { maxWidth: 360, padding: "12px 16px", borderRadius: 12, background: "var(--muted)", color: "var(--foreground)", fontSize: "14px", lineHeight: "20px" };
 
 const meta = {
   title: "Chat/Emoji",
@@ -187,7 +187,7 @@ export const Placeholder: Story = {
 /** `EmojiText` draws a message's tokens and emoji text as the catalogue's images, and leaves a token it does not know as typed. */
 export const InMessages: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 8 }}>
+    <div style={{ display: "grid", gap: 12 }}>
       <div style={bubble}>
         <EmojiText text="Shipped the release notes :party: thanks for the reviews :heart: and :fern: (and :unknown: stays text)" catalogue={catalogue} />
       </div>

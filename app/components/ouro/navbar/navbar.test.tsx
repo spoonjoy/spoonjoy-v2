@@ -84,7 +84,7 @@ describe("Navbar current-page marks", () => {
   });
 
   for (const direction of ["ltr", "rtl"] as const) {
-    it(`underlines the current page in its ${direction} bar, as FamilyBar marks the current site`, async () => {
+    it(`underlines the current page in its ${direction} bar`, async () => {
       document.documentElement.dir = direction;
       await render(<Navbar label="Main" items={[{ label: "Recipes", href: "/recipes" }, { label: "Cookbooks", href: "/cookbooks" }]} currentPath="/recipes" />);
       assertMark();
@@ -364,6 +364,7 @@ describe("Navbar", () => {
     });
   }
 
+  // Opens and closes the sheet three times, each a full slide; a loaded WebKit shard took 7.6 s.
   it("opens afresh after each close: the menu prop's state and the sheet's scroll as the first open had them", async () => {
     function Filter() {
       const [text, setText] = useState("");
@@ -396,7 +397,7 @@ describe("Navbar", () => {
       await userEvent.keyboard("{Escape}");
       await expect.poll(() => document.querySelector<HTMLElement>('[data-ouro="sheet"]')?.hidden).toBe(true);
     }
-  });
+  }, 30_000);
 
   it("builds no sheet where the links fit the bar", async () => {
     await page.viewport(1024, 768);
@@ -657,10 +658,49 @@ describe("Navbar at tablet widths and with groups", () => {
     await expect.element(sheet.getByRole("link", { name: "Cookbooks" })).toBeVisible();
   });
 
+  it("opens a group's own content as its panel, marks the group current, and shows the content under its name in the sheet", async () => {
+    const items = [
+      { label: "Platforms", current: true, fit: true, content: <a href="/apple/">Apple</a> },
+      { label: "Pricing", href: "/pricing" },
+    ];
+    await render(<Navbar label="Main" items={items} currentPath="/apple/" />);
+    const nav = page.getByRole("navigation", { name: "Main" });
+    const button = nav.getByRole("button", { name: "Platforms" });
+    expect(button.element().hasAttribute("data-current")).toBe(true);
+    await userEvent.click(button);
+    await expect.element(page.getByRole("link", { name: "Apple" })).toBeVisible();
+    await page.viewport(390, 844);
+    await userEvent.keyboard("{Escape}");
+    const menu = page.getByRole("button", { name: "Menu" });
+    await expect.element(menu).toBeVisible();
+    await userEvent.click(menu);
+    await expect.element(page.getByRole("dialog", { name: "Menu" }).getByRole("link", { name: "Apple" })).toBeVisible();
+  });
+
   it("puts a group's button and the bar's links in the server HTML", () => {
     const html = renderToString(<Navbar label="Main" items={grouped} currentPath="/cookbooks" />);
     expect(html).toMatch(/<button[^>]*>Recipes/);
     expect(html).toMatch(/aria-current="page"[^>]*>Cookbooks</);
+  });
+});
+
+describe("Navbar panels", () => {
+  it("opens a panel clear of the bar's bottom edge, an even gap below the hairline, not measured from the shorter trigger", async () => {
+    await page.viewport(1280, 800);
+    const { bar } = await render(
+      <Navbar
+        label="Main"
+        className="min-h-20"
+        items={[{ label: "Recipes", links: [{ label: "Drafts", href: "/drafts" }] }]}
+      />,
+    );
+    await userEvent.click(page.getByRole("button", { name: "Recipes" }));
+    await expect
+      .poll(() => {
+        const panel = document.querySelector<HTMLElement>('[data-ouro="navigation-menu-popup"]')!;
+        return Math.round(panel.getBoundingClientRect().top - bar.getBoundingClientRect().bottom);
+      })
+      .toBe(8);
   });
 });
 

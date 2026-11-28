@@ -58,6 +58,14 @@ interface NavigationMenuPanelBase {
    * @claim "The panel's links in one column" registry/ouro/components/ouro/navigation-menu/navigation-menu.test.tsx verify:testExists(registry/ouro/components/ouro/navigation-menu/navigation-menu.test.tsx::NavigationMenu panels and easing > stacks the content above the links on a phone)
    */
   columns?: 1 | 2 | (number & { "Use columns={1} or columns={2}": never }) | undefined;
+  /**
+   * The panel is as wide as its content, up to the screen's width, for content laid out in columns side by side (a
+   * grid of platforms, a row of groups). Otherwise it is at most 28rem, or 42rem with `content` or two columns.
+   * @claim "Otherwise it is at most 28rem, or 42rem with `content` or two columns." registry/ouro/components/ouro/navigation-menu/navigation-menu.tsx verify:fileLine(registry/ouro/components/ouro/navigation-menu/navigation-menu.tsx, /sm:max-w-md data-wide:sm:max-w-2xl/)
+   */
+  fit?: boolean | undefined;
+  /** Marks the button as the section the page is in, when its panel's links cannot tell (a panel of `content`). */
+  current?: boolean | undefined;
   /** Not with a panel. To link the section's own page, make it the panel's first link. */
   href?: never;
 }
@@ -129,8 +137,8 @@ export interface NavigationMenuProps {
 // Class strings are literal so the app's Tailwind finds them when it compiles.
 
 // A row item, link or button: 44px with 16px text on a coarse pointer at every width, 36px
-// with 14px text with a fine one. The current page, or the section it is in, is underlined in the primary colour, as in
-// FamilyBar; forced colours keep the underline.
+// with 14px text with a fine one. The current page, or the section it is in, is underlined in the primary colour; forced
+// colours keep the underline.
 const rowItem =
   "press relative m-0 box-border inline-flex h-ouro-11 min-w-ouro-11 pointer-fine:h-9 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap " +
   "rounded-ouro-md border-0 forced-colors:border forced-colors:border-solid bg-transparent px-3 font-[inherit] text-base pointer-fine:text-sm leading-5 font-medium text-muted-foreground no-underline " +
@@ -149,23 +157,31 @@ const instantly = "data-ouro-instant:transition-none";
 // The chevron turns when its panel is open; with reduced motion it turns without a transition.
 const chevron = cn("inline-flex motion-safe:transition-[rotate] motion-safe:duration-(--ouro-duration-base) data-popup-open:rotate-180", easeOut, instantly);
 
-// The popup follows the open panel. Its box and place change at once between panels, since
-// layout does not animate; it opens with a scale and fade from its button and closes faster.
-// Reduced motion keeps only the fade.
-const positioner = "box-border h-(--positioner-height) w-(--positioner-width) max-w-(--available-width)";
+// One popup for every panel: moving from one button to the next, it keeps its place in the page and resizes to the new
+// panel, sliding along under the bar (sideways only, so a page that scrolls never leaves it behind), while the new panel's content slides in from the side you moved towards and the
+// old one's slides out the other way. It opens with a scale and fade from its button and closes faster. Reduced motion
+// keeps only the fades: nothing changes size or moves in between.
+const positioner =
+  "box-border h-(--positioner-height) w-(--positioner-width) max-w-(--available-width) " +
+  "motion-safe:transition-[left,right] motion-safe:duration-(--ouro-duration-slow) ease-(--ouro-ease-out) data-instant:transition-none";
 const popup = cn(
-  "relative box-border h-(--popup-height) w-(--popup-width) origin-(--transform-origin) rounded-ouro-lg bg-popover text-popover-foreground [--ouro-scroller-surface:var(--popover)] outline-none " +
+  "relative box-border h-(--popup-height) w-(--popup-width) origin-(--transform-origin) rounded-ouro-lg bg-popover text-popover-foreground [--ouro-scroller-surface:var(--popover)] [--ouro-message-list-bubble-default:var(--muted)] outline-none " +
   "ring-1 ring-border/60 shadow-(--shadow-lg) " +
   "transition-opacity duration-(--ouro-duration-base) data-starting-style:opacity-0 data-ending-style:opacity-0 data-ending-style:duration-(--ouro-duration-fast) " +
-    "motion-safe:transition-[opacity,scale] motion-safe:data-starting-style:scale-96 motion-safe:data-ending-style:scale-96",
+    "motion-safe:[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out),scale_var(--ouro-duration-base)_var(--ouro-ease-out),width_var(--ouro-duration-slow)_var(--ouro-ease-out),height_var(--ouro-duration-slow)_var(--ouro-ease-out)] " +
+    "motion-safe:data-starting-style:scale-96 motion-safe:data-ending-style:scale-96 motion-safe:data-ending-style:[transition-duration:var(--ouro-duration-fast)]",
   easeOut,
   instantly,
 );
 // A panel: nearly the screen's width on a phone, as wide as its links from 640px; wider with
-// content or two columns.
+// content or two columns, and as wide as its content with `fit`. It is never taller than the room under its button, and
+// scrolls inside itself only when its content can't fit there.
 const panel = cn(
-  "box-border h-full w-[calc(100vw-2rem)] p-2 sm:w-max sm:min-w-ouro-64 sm:max-w-md data-wide:sm:max-w-2xl " +
-    "transition-opacity duration-(--ouro-duration-base) data-starting-style:opacity-0 data-ending-style:opacity-0",
+  "box-border h-full max-h-(--available-height) overflow-y-auto overscroll-contain w-[calc(100vw-2rem)] p-2 sm:w-max sm:min-w-ouro-64 sm:max-w-md data-wide:sm:max-w-2xl data-fit:sm:max-w-[calc(100vw-2rem)] data-fit:sm:p-4 " +
+    "transition-opacity duration-(--ouro-duration-base) data-starting-style:opacity-0 data-ending-style:opacity-0 " +
+    "motion-safe:transition-[opacity,translate] motion-safe:duration-(--ouro-duration-slow) " +
+    "motion-safe:data-starting-style:data-[activation-direction=left]:-translate-x-[30%] motion-safe:data-starting-style:data-[activation-direction=right]:translate-x-[30%] " +
+    "motion-safe:data-ending-style:data-[activation-direction=left]:translate-x-[30%] motion-safe:data-ending-style:data-[activation-direction=right]:-translate-x-[30%]",
   easeOut,
   instantly,
 );
@@ -317,6 +333,12 @@ export function NavigationMenuView(props: NavigationMenuViewProps): JSX.Element 
   };
 
   const portal = usePortalContainer("NavigationMenu");
+  // The 8px gap is measured from the bar's bottom edge, not the trigger's: a trigger is shorter than the bar around it, so
+  // measured from the trigger the panel would sit across the bar's hairline.
+  const gapBelowBar = () => {
+    const n = nav.current!, b = (e: Element) => e.getBoundingClientRect().bottom;
+    return Math.max(8, b(n.closest("header") ?? n) - b(n.querySelector("[data-popup-open]")!) + 8);
+  };
   const directed = (
     <BaseNavigationMenu.Root
       ref={mergedNav}
@@ -334,7 +356,13 @@ export function NavigationMenuView(props: NavigationMenuViewProps): JSX.Element 
         {items.map((item, index) =>
           isPanel(item) ? (
             <BaseNavigationMenu.Item key={index} value={index}>
-              <BaseNavigationMenu.Trigger data-current={item.links?.some(isCurrent) ? "" : undefined} data-ouro-control="navigation-menu" data-ouro-part="trigger" className={rowItem}>
+              <BaseNavigationMenu.Trigger
+                // Stryker disable next-line StringLiteral: CSS matches data-current by its presence, not its value.
+                data-current={item.current || item.links?.some(isCurrent) ? "" : undefined}
+                data-ouro-control="navigation-menu"
+                data-ouro-part="trigger"
+                className={rowItem}
+              >
                 {item.label}
                 <BaseNavigationMenu.Icon data-ouro-instant={instant ? "" : undefined} className={chevron}>
                   <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="size-ouro-3_5">
@@ -344,7 +372,10 @@ export function NavigationMenuView(props: NavigationMenuViewProps): JSX.Element 
               </BaseNavigationMenu.Trigger>
               <BaseNavigationMenu.Content
                 data-ouro-instant={instant ? "" : undefined}
-                data-wide={item.content !== undefined || item.columns === 2 ? "" : undefined}
+                // Stryker disable next-line StringLiteral: CSS matches data-wide by its presence, not its value.
+                data-wide={!item.fit && (item.content !== undefined || item.columns === 2) ? "" : undefined}
+                // Stryker disable next-line StringLiteral: CSS matches data-fit by its presence, not its value.
+                data-fit={item.fit ? "" : undefined}
                 className={panel}
               >
                 <div className={cn("grid gap-2", item.content !== undefined && item.links !== undefined && "sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]")}>
@@ -393,9 +424,11 @@ export function NavigationMenuView(props: NavigationMenuViewProps): JSX.Element 
           ),
         )}
       </BaseNavigationMenu.List>
-      <BaseNavigationMenu.Portal {...portal} data-ouro="navigation-menu-portal" className={floatingPortalClass}>
+      {/* Fixed at the screen's top, so its focus guards are always in view: placed in the page's flow, Tab from a button
+          into its panel stepped through a guard far up the page, and the browser scrolled the page back to it. */}
+      <BaseNavigationMenu.Portal {...portal} data-ouro="navigation-menu-portal" className={cn(floatingPortalClass, "fixed inset-x-0 top-0")}>
         <PortalScope>
-          <BaseNavigationMenu.Positioner positionMethod={floatingPositionMethod} sideOffset={8} collisionPadding={16} className={positioner}>
+          <BaseNavigationMenu.Positioner positionMethod={floatingPositionMethod} sideOffset={gapBelowBar} collisionPadding={16} className={positioner}>
             <BaseNavigationMenu.Popup data-ouro="navigation-menu-popup" data-ouro-instant={instant ? "" : undefined} className={popup}>
               <BaseNavigationMenu.Viewport className="relative h-full w-full overflow-hidden rounded-[inherit]" />
             </BaseNavigationMenu.Popup>

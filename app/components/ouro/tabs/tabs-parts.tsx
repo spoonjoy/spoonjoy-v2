@@ -16,12 +16,71 @@ import {
   ownLook,
   panelClass,
   rootClass,
+  stickyListClass,
   tabClass,
   tabFaceClass,
   type TabsOrientation,
 } from "~/components/ouro/tabs/tabs-styles";
 
 const TabsContext = createContext(false);
+
+/**
+ * Base UI scrolls the highlighted tab into view whenever the tabs register, which reads the
+ * row's layout and so makes the browser lay the page out in the middle of the mount. A tab that
+ * has just mounted hides `scrollTo`, the method that scroll needs, for one frame. In that frame,
+ * once the mount has committed, the selected tab brings itself into view in a row that scrolls
+ * sideways (only a horizontal row scrolls), so a row that opens on a later tab still shows it.
+ * After it, the arrow keys scroll the row as before.
+ */
+function holdScrollOnMount(element: HTMLElement | null): void {
+  if (!element) return;
+  Object.defineProperty(element, "scrollTo", { value: undefined, configurable: true });
+  requestAnimationFrame(() => {
+    delete (element as { scrollTo?: unknown }).scrollTo;
+    if (!element.isConnected || element.getAttribute("aria-selected") !== "true") return;
+    const list = element.closest<HTMLElement>('[role="tablist"]')!;
+    const row = list.getBoundingClientRect();
+    const tab = element.getBoundingClientRect();
+    const by = Math.min(0, tab.left - row.left) + Math.max(0, tab.right - row.right);
+    list.scrollLeft += by;
+  });
+}
+
+/** The selected tab of the root's own row, which comes before any Tabs nested in a panel, and the panel it labels. */
+function selection(root: HTMLElement): { tab: HTMLElement | null; panel: HTMLElement | undefined } {
+  const tab = root.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+  return { tab, panel: tab ? [...root.querySelectorAll<HTMLElement>('[role="tabpanel"]')].find((panel) => panel.getAttribute("aria-labelledby") === tab.id) : undefined };
+}
+
+/**
+ * Measures, as the person chooses a tab, whether the panel's start shows in the box that scrolls (or the page): below the
+ * box's `scroll-padding-top` (a sticky bar's room) and a row of tabs (sticky or not), and with a tab's height of the panel
+ * above the box's bottom. When it doesn't, returns what brings
+ * the tabs to the top of the box with the chosen panel under them, once that panel is drawn, if the choice took, the
+ * chosen tab has a panel, and the box is still where it was. Null when the start shows, or without a panel.
+ * @claim "if the choice took, the" registry/ouro/components/ouro/tabs/tabs.test.tsx verify:testExists(registry/ouro/components/ouro/tabs/tabs.test.tsx::Tabs show the chosen panel > moves nothing when the choice doesn't take, the chosen tab has no panel, or the app scrolled the box itself)
+ */
+function revealPanel(root: HTMLElement): (() => void) | null {
+  const { tab, panel } = selection(root);
+  if (!panel) return null;
+  const list = root.querySelector<HTMLElement>('[role="tablist"]')!;
+  const doc = root.ownerDocument;
+  // The walk ends at the body, or at a shadow root's edge, where the page scrolls.
+  let box = root.parentElement;
+  while (box && box !== doc.body && !(getComputedStyle(box).overflowY !== "visible" && box.scrollHeight > box.clientHeight)) box = box.parentElement;
+  const scroller = box && box !== doc.body ? box : doc.scrollingElement!;
+  const edge = scroller === box ? box.getBoundingClientRect().top : 0;
+  const top = edge + (parseFloat(getComputedStyle(scroller).scrollPaddingTop) || 0);
+  const covered = getComputedStyle(list).flexDirection === "row" ? list.getBoundingClientRect().bottom : top;
+  const start = panel.getBoundingClientRect().top;
+  if (start >= Math.max(top, covered) && start + tab!.offsetHeight <= edge + scroller.clientHeight) return null;
+  const before = scroller.scrollTop;
+  const at = before + root.getBoundingClientRect().top - top;
+  return () => {
+    const now = selection(root);
+    if (now.tab !== tab && now.panel && scroller.scrollTop === before) scroller.scrollTo({ top: at, behavior: "instant" });
+  };
+}
 
 /** Throws in development, with the JSX the part belongs in, unless it sits inside a TabsRoot. */
 function useTabsPart(part: string, inner: string): void {
@@ -53,6 +112,11 @@ export type TabsRootProps = Omit<BaseTabs.Root.Props, "className"> & { className
  * unless its `items` cannot express your layout, such as a tab that holds a badge next to
  * its label or a panel shared by two tabs.
  *
+ * Choosing a tab brings its panel's start into view under the tabs when it is below the fold
+ * or scrolled under a sticky row, and moves nothing when it shows.
+ * @claim "Choosing a tab brings its panel's" registry/ouro/components/ouro/tabs/tabs.test.tsx verify:testExists(registry/ouro/components/ouro/tabs/tabs.test.tsx::Tabs show the chosen panel > brings a panel whose start is below the fold up under the tabs, in the nearest box that scrolls, past one its content overflows in view)
+ * @claim "Choosing a tab brings its panel's" registry/ouro/components/ouro/tabs/tabs.test.tsx verify:testExists(registry/ouro/components/ouro/tabs/tabs.test.tsx::Tabs show the chosen panel > moves nothing when the chosen panel's start shows a row's height under the tabs, to the pixel)
+ *
  * @example
  * <TabsRoot defaultValue="ingredients">
  *   <TabsList aria-label="Recipe">
@@ -74,7 +138,7 @@ export function TabsRoot(props: TabsRootProps): JSX.Element {
  *
  * @internal
  */
-export function TabsRootUnchecked({ className, onPointerDownCapture, ref, ...props }: TabsRootProps): JSX.Element {
+export function TabsRootUnchecked({ className, onPointerDownCapture, onValueChange, ref, ...props }: TabsRootProps): JSX.Element {
   const root = useRef<HTMLDivElement>(null);
   const merged = useMergedRef(ref, root);
   return (
@@ -89,6 +153,20 @@ export function TabsRootUnchecked({ className, onPointerDownCapture, ref, ...pro
             event.currentTarget.toggleAttribute("data-ouro-keyboard", false);
             onPointerDownCapture?.(event);
           }}
+          // The person's choice (not one Base UI makes itself, on mount or when a tab is disabled) is measured before the
+          // app's handler and before the chosen panel is drawn, and revealed once it is, before the frame is painted. Until
+          // the leaving panel is gone, the browser's scroll anchoring doesn't follow it.
+          onValueChange={(value, details) => {
+            const element = root.current!;
+            const reveal = details.reason === "none" ? revealPanel(element) : null;
+            onValueChange?.(value, details);
+            element.toggleAttribute("data-ouro-switching", true);
+            requestAnimationFrame(() => {
+              reveal?.();
+              // Base UI takes the leaving panel away later in this frame.
+              requestAnimationFrame(() => element.toggleAttribute("data-ouro-switching", false));
+            });
+          }}
           className={cn(rootClass, className)}
         />
       </PageDirection>
@@ -97,7 +175,14 @@ export function TabsRootUnchecked({ className, onPointerDownCapture, ref, ...pro
 }
 
 /** Props for {@link TabsList}. Name the list with `aria-label`. */
-export type TabsListProps = Omit<BaseTabs.List.Props, "className"> & { className?: string | undefined };
+export type TabsListProps = Omit<BaseTabs.List.Props, "className"> & {
+  className?: string | undefined;
+  /**
+   * Keeps the row at the top of the box that scrolls (or the page) once what is above it scrolls away, over the panel.
+   * @claim "Keeps the row at the top" registry/ouro/components/ouro/tabs/tabs.test.tsx verify:testExists(registry/ouro/components/ouro/tabs/tabs.test.tsx::Tabs show the chosen panel > keeps a sticky row at the top of the box, filled with its surface, brings back a start scrolled under it, and leaves one just under it)
+   */
+  sticky?: boolean | undefined;
+};
 
 /**
  * Part: the row (or column) of tabs. Name it with `aria-label` when the page has more than
@@ -105,7 +190,7 @@ export type TabsListProps = Omit<BaseTabs.List.Props, "className"> & { className
  * overflows scrolls sideways, on a phone. A key that moves the
  * selection switches tabs without animation.
  */
-export function TabsList({ className, ref, onKeyDownCapture, ...props }: TabsListProps): JSX.Element {
+export function TabsList({ className, ref, onKeyDownCapture, sticky, ...props }: TabsListProps): JSX.Element {
   useTabsPart("TabsList", '<TabsList aria-label="…">…</TabsList>');
   usePartClassName("TabsList", className);
   const own = useRef<HTMLDivElement>(null);
@@ -121,7 +206,7 @@ export function TabsList({ className, ref, onKeyDownCapture, ...props }: TabsLis
         event.currentTarget.closest('[data-ouro="tabs"]')!.toggleAttribute("data-ouro-keyboard", true);
         onKeyDownCapture?.(event);
       }}
-      className={cn(listClass, className)}
+      className={cn(listClass, sticky && stickyListClass, className)}
     />
   );
 }
@@ -172,12 +257,14 @@ export function TabsTab(allProps: TabsTabProps): JSX.Element {
   useTabsPart("TabsTab", '<TabsTab value="…">…</TabsTab>');
   usePartClassName("TabsTab", className);
   const reason = useDisabledReason(allProps, props["aria-describedby"]);
+  const merged = useMergedRef(props.ref, holdScrollOnMount);
   const tab = (
     <BaseTabs.Tab
       data-ouro-control="tabs"
       data-ouro-part="tab"
       data-slot="tabs-trigger"
       {...props}
+      ref={merged}
       disabled={disabled && !reason.off}
       {...(reason.off
         ? {

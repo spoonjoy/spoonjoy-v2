@@ -421,8 +421,13 @@ describe("Reorderable", () => {
       let atMove: Element | null = null;
       const watch = new MutationObserver(() => (atMove ??= document.activeElement));
       watch.observe(element, { childList: true });
-      let closing: boolean | undefined;
-      grip.addEventListener("focus", () => (closing ??= document.querySelector('[role="menu"]') !== null));
+      let closing = "the handle was never focused";
+      let focused = false;
+      grip.addEventListener("focus", () => {
+        if (focused) return;
+        focused = true;
+        closing = document.querySelector('[role="menu"]') !== null ? "menu still open" : "menu already gone when the handle took focus";
+      });
       await userEvent.click(item);
       watch.disconnect();
       expect(order(element)).toEqual(["Sear", "Deglaze", "Braise", "Soften"]);
@@ -430,7 +435,7 @@ describe("Reorderable", () => {
       expect(atMove).toBe(item);
       await expect.poll(() => document.activeElement).toBe(grip);
       // Back before the menu has gone, so a press on another handle meanwhile finds focus on this one.
-      expect(closing).toBe(true);
+      expect(closing).toBe("menu still open");
       await menuClosed();
     });
 

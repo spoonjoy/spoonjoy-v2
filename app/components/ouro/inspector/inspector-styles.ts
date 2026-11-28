@@ -107,7 +107,7 @@ const outlineClass = "absolute top-0 left-0 will-change-transform data-clipped:i
  * @claim "An outline's frame: its edges, drawn" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > hides the outline and tag of a component scrolled out of view inside a box, and clips one partly out)
  */
 const frameClass =
-  "absolute inset-0 fill-none stroke-[color-mix(in_oklab,var(--primary)_75%,transparent)] [shape-rendering:crispEdges] " +
+  "absolute inset-0 fill-none stroke-[color-mix(in_oklab,var(--primary)_75%,transparent)] " +
   "in-data-spotlight:stroke-primary in-data-spotlight:stroke-2";
 
 /**

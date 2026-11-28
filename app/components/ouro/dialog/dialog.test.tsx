@@ -53,7 +53,6 @@ afterEach(async () => {
   await act(async () => roots.splice(0).forEach((root) => root.unmount()));
   for (const node of mounted) node.remove();
   mounted = [];
-  await commands.resetMedia();
 });
 
 const popup = () => document.querySelector<HTMLElement>("[data-ouro-presentation]");
@@ -176,6 +175,13 @@ describe("automatic presentation", () => {
     expect(element.getAttribute("role")).toBe("dialog");
     expect(dialogPopup()).toBeNull();
     expect(Math.round(element.getBoundingClientRect().bottom)).toBe(innerHeight);
+  });
+
+  it("gives the sheet's first field focus as it opens at 390px, not the sheet itself", async () => {
+    await page.viewport(390, 844);
+    const element = await openUncontrolled();
+    await expect.poll(() => document.activeElement?.getAttribute("aria-label")).toBe("Name");
+    expect(document.activeElement).not.toBe(element);
   });
 
   it("follows presentation over the viewport", async () => {
@@ -791,6 +797,93 @@ describe("Dialog's top edge while its content changes", () => {
     );
   }
   const box = () => dialogPopup()!.getBoundingClientRect();
+
+  function KeptSteps({ open, height, instant = false }: { open: boolean; height: number; instant?: boolean }) {
+    return (
+      <DialogRoot open={open} onOpenChange={() => {}}>
+        <DialogPortal keepMounted>
+          <DialogViewport>
+            <DialogPopup style={{ transitionDuration: instant ? "0s" : undefined }}>
+              <DialogTitle>Getting set up</DialogTitle>
+              <div style={{ height }} />
+            </DialogPopup>
+          </DialogViewport>
+        </DialogPortal>
+      </DialogRoot>
+    );
+  }
+
+  it("skips placement measurements while a kept-mounted popup is closed", async () => {
+    const height = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get");
+    const top = vi.spyOn(HTMLElement.prototype, "offsetTop", "get");
+    const viewportHeight = vi.spyOn(Element.prototype, "clientHeight", "get");
+    const { rerender } = await render(<KeptSteps open={false} height={80} />);
+    const element = dialogPopup()!;
+    expect(element).not.toBeNull();
+    const viewport = element.parentElement!;
+    await nextFrame();
+    await nextFrame();
+    await rerender(<KeptSteps open={false} height={240} />);
+    await page.viewport(1280, 700);
+    await nextFrame();
+    await nextFrame();
+    expect(height.mock.contexts.filter((node) => node === element)).toHaveLength(0);
+    expect(top.mock.contexts.filter((node) => node === element)).toHaveLength(0);
+    expect(viewportHeight.mock.contexts.filter((node) => node === viewport)).toHaveLength(0);
+
+    await rerender(<KeptSteps open height={240} />);
+    await nextFrame();
+    expect(Math.abs(box().top - (700 - box().bottom))).toBeLessThanOrEqual(1);
+    expect(height.mock.contexts.filter((node) => node === element).length).toBeGreaterThan(0);
+
+    [height, top, viewportHeight].forEach((spy) => spy.mockClear());
+    await rerender(<KeptSteps open={false} height={240} />);
+    await expect.poll(() => element.hidden).toBe(true);
+    expect(height.mock.contexts.filter((node) => node === element)).toHaveLength(0);
+    expect(top.mock.contexts.filter((node) => node === element)).toHaveLength(0);
+    expect(viewportHeight.mock.contexts.filter((node) => node === viewport)).toHaveLength(0);
+
+    await rerender(<KeptSteps open height={240} />);
+    expect(element.hasAttribute("data-closed")).toBe(false);
+    [height, top, viewportHeight].forEach((spy) => spy.mockClear());
+    await act(async () => { element.hidden = true; });
+    await nextFrame();
+    await nextFrame();
+    expect(height.mock.contexts.filter((node) => node === element)).toHaveLength(0);
+    expect(top.mock.contexts.filter((node) => node === element)).toHaveLength(0);
+    expect(viewportHeight.mock.contexts.filter((node) => node === viewport)).toHaveLength(0);
+  });
+
+  it.each(["full", "reduced", "instant"] as const)("reopens centred before paint without a resize notification, with %s motion", async (motion) => {
+    await commands.emulateMedia({ reducedMotion: motion === "reduced" ? "reduce" : "no-preference" });
+    try {
+      const observe = vi.spyOn(ResizeObserver.prototype, "observe");
+      const instant = motion === "instant";
+      const { rerender } = await render(<KeptSteps open height={80} instant={instant} />);
+      await settled();
+      const element = dialogPopup()!;
+      const opened = box();
+      await rerender(<KeptSteps open height={240} instant={instant} />);
+      await expect.poll(() => box().height).toBeGreaterThan(opened.height + 100);
+      await expect.poll(() => Math.round(box().top)).toBe(Math.round(opened.top));
+      expect(element.style.top).not.toBe("0px");
+
+      const placementObservers = observe.mock.calls.flatMap(([target], index) => {
+        const observer = observe.mock.contexts[index];
+        return (target === element || target === element.parentElement) && observer instanceof ResizeObserver ? [observer] : [];
+      });
+      expect(placementObservers.length).toBeGreaterThanOrEqual(2);
+      placementObservers.forEach((observer) => observer.disconnect());
+      await rerender(<KeptSteps open={false} height={240} instant={instant} />);
+      await expect.poll(() => element.hasAttribute("data-closed") && element.getAnimations().length === 0).toBe(true);
+      expect(dialogPopup()).toBe(element);
+      await rerender(<KeptSteps open height={240} instant={instant} />);
+      await nextFrame();
+      expect(Math.abs(box().top - (800 - box().bottom))).toBeLessThanOrEqual(1);
+    } finally {
+      await commands.emulateMedia({ reducedMotion: "no-preference" });
+    }
+  });
 
   it("opens centred, then keeps its top edge where it opened as its content grows", async () => {
     const { rerender } = await render(<Steps count={2} />);
@@ -1494,8 +1587,13 @@ describe("Dialog and the page's scroll", () => {
     document.documentElement.style.scrollBehavior = "smooth";
     document.querySelector<HTMLElement>('[data-ouro="button"]')!.focus({ preventScroll: true });
     const arrowScroll = scrollEnd();
+    const scrollStarted = new Promise<boolean>((resolve) => {
+      window.addEventListener("scroll", () => resolve(true), { once: true });
+      // real clock: WebKit sends no scroll at all for a synthetic arrow key, so none is waited for past this
+      setTimeout(() => resolve(false), 500);
+    });
     await userEvent.keyboard("{ArrowDown}");
-    await arrowScroll;
+    if (await scrollStarted) await arrowScroll;
     window.scrollTo({ top: 1500, behavior: "instant" });
     await frame();
     await frame();
@@ -1845,6 +1943,15 @@ describe("first focus after the last press, with and without a trigger", () => {
   });
 
   it("focuses the body's first control after a mouse click opens a dialog with a trigger", async () => {
+    await openWithTrigger("mouse");
+    await expect.poll(() => document.activeElement).toBe(name());
+  });
+
+  it("focuses a phone sheet itself after a tap, so the keyboard stays down, and its first field after a mouse click", async () => {
+    await page.viewport(390, 844);
+    const element = await openWithTrigger("touch");
+    await expect.poll(() => document.activeElement).toBe(element);
+    await act(async () => roots.splice(0).forEach((root) => root.unmount()));
     await openWithTrigger("mouse");
     await expect.poll(() => document.activeElement).toBe(name());
   });

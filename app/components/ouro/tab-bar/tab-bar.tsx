@@ -218,7 +218,7 @@ function ownedPaths(items: readonly TabBarItem[]): Array<{ path: string; index: 
  *   ]}
  *   accessory={{ label: "Search", href: "/search", icon: <Search /> }}
  * />
- * @claim "Each tab is 64px tall, well" registry/ouro/components/ouro/tab-bar/tab-bar.touch.test.tsx verify:testExists(registry/ouro/components/ouro/tab-bar/tab-bar.touch.test.tsx::fits five tabs and an accessory on a phone, each well over 44px, and a tap reaches the tab under the finger)
+ * @claim "Each tab is 64px tall, well" registry/ouro/components/ouro/tab-bar/tab-bar.touch.test.tsx verify:testExists(registry/ouro/components/ouro/tab-bar/tab-bar.touch.test.tsx::fits five tabs and an accessory on a %ipx phone, each at least 44px, and a tap reaches the tab under the finger)
  * @claim "The bar of tabs at the" registry/ouro/components/ouro/tab-bar/tab-bar.test.tsx verify:testExists(registry/ouro/components/ouro/tab-bar/tab-bar.test.tsx::TabBar > sits fixed at the bottom of a phone screen, with equal 64px tabs, and keeps its room in the page)
  * @claim "The bar is navigation only and" registry/ouro/components/ouro/tab-bar/tab-bar.test.tsx verify:fileLine(registry/ouro/components/ouro/tab-bar/tab-bar.test.tsx, /hides\sfrom\s%s\s\(%ipx\),\sand\swith\snever\sstays/)
  * @claim "It hides from `hideFrom` (640px by" registry/ouro/components/ouro/tab-bar/tab-bar.test.tsx verify:fileLine(registry/ouro/components/ouro/tab-bar/tab-bar.test.tsx, /hides\sfrom\s%s\s\(%ipx\),\sand\swith\snever\sstays/)

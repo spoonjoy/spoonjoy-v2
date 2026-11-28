@@ -26,6 +26,7 @@ import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
 import { expectMotion, expectNoMotion, parseDuration } from "~/lib/ouro/testing/motion";
 import { isMoving } from "~/lib/ouro/testing/settled";
+import { squircleCorner, splitCornerRadii } from "~/lib/ouro/squircle-curve";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -119,8 +120,10 @@ const hidden = (target: Element) => {
   return !!tag && getComputedStyle(tag).visibility === "hidden";
 };
 
-/** Waits until nothing on the page is moving: a transition WebKit still lists as finished counts too (ourostack/ouro-ui#3361). */
-const settled = () => expect.poll(() => document.getAnimations().some(isMoving)).toBe(false);
+/** Waits until nothing on the page is moving: a transition WebKit still lists as finished counts too, and a
+ * reposition X-ray made with no Animation object (a scroll, say) counts until it clears data-ouro-settling too
+ * (ourostack/ouro-ui#3361). */
+const settled = () => expect.poll(() => document.getAnimations().some(isMoving) || !!layer()?.hasAttribute("data-ouro-settling")).toBe(false);
 
 /** The page's own component roots, in document order, as X-ray should see them. */
 const pageRoots = (host: HTMLElement) => [...host.querySelectorAll('[data-ouro]:not([data-ouro$="-portal"])')];
@@ -136,8 +139,6 @@ afterEach(async () => {
   for (const node of mounted) node.remove();
   mounted = [];
   scrollTo({ top: 0, behavior: "instant" });
-  await page.viewport(414, 896);
-  await commands.resetMedia();
 });
 
 // Exact geometry, on a bare page: where X-ray breaks an outline's edges, and where it puts a tag.
@@ -179,6 +180,220 @@ describe("Inspector geometry", () => {
   }
 
   const path = (index = 0) => outlines()[index]!.querySelector("path")!.getAttribute("d");
+
+  it("separates radius axes around nested CSS math and repeated whitespace", () => {
+    expect(splitCornerRadii("  min(calc(10% + 20px), max(10px, 30%))   40px ")).toEqual(["min(calc(10% + 20px), max(10px, 30%))", "40px"]);
+    expect(splitCornerRadii("")).toEqual([]);
+  });
+
+  it("keeps paths finite when pixel snapping collapses either dimension", async () => {
+    for (const [width, height] of [[0.25, 100], [100, 0.25]]) {
+      const surface = component(100, 200, width!, height!);
+      surface.style.borderTopLeftRadius = "40px";
+    }
+    await xray();
+    await drawn(2);
+    for (const outline of outlines()) expect(outline.querySelector("path")!.getAttribute("d")).not.toMatch(/NaN|Infinity/);
+  });
+
+  for (const fallback of [false, true]) {
+    it(`follows a squircle surface's corner instead of painting a square or a circular arc, ${fallback ? "fallback" : "native"}`, async () => {
+      const surface = component(100, 200, 200, 100);
+      // The fallback's border radius is only its enclosing circle; --sq-* holds the surface's actual radius.
+      surface.style.borderRadius = `${fallback ? 40 * 0.543 : 40}px`;
+      if (fallback) {
+        for (const corner of ["tl", "tr", "br", "bl"]) surface.style.setProperty(`--sq-${corner}`, "40px");
+        const points = squircleCorner.map(([x, y]) => `${x * 40} ${y * 40}`);
+        surface.style.clipPath = `path("M${points[0]}C${points.slice(1, 4).join(" ")}C${points.slice(4).join(" ")}H200V100H0Z")`;
+        surface.style.setProperty("corner-shape", "round");
+      } else surface.style.setProperty("corner-shape", "squircle");
+      await xray();
+      await drawn(1);
+      const curve = outlines()[0]!.querySelector("path")!;
+      // The n=4 superellipse crosses the corner diagonal here, not at the square or circle's corner.
+      const diagonal = 39.5 * (1 - 2 ** -0.25) + 0.5;
+      expect(curve.isPointInStroke(new DOMPoint(diagonal, diagonal))).toBe(true);
+      expect(curve.isPointInStroke(new DOMPoint(diagonal - 0.3, diagonal - 0.3))).toBe(true);
+      expect(curve.isPointInStroke(new DOMPoint(0.5, 0.5))).toBe(false);
+      const circular = 40 * (1 - Math.SQRT1_2) + 0.5;
+      expect(curve.isPointInStroke(new DOMPoint(circular, circular))).toBe(false);
+      for (const [x, y] of [[0.5, 50], [100, 0.5], [199.5, 50], [100, 99.5]]) {
+        expect(curve.isPointInStroke(new DOMPoint(x, y))).toBe(true);
+      }
+      if (fallback) {
+        expect(document.elementFromPoint(100 + diagonal - 1, 200 + diagonal - 1)).not.toBe(surface);
+        expect(document.elementFromPoint(100 + diagonal + 1, 200 + diagonal + 1)).toBe(surface);
+      }
+    });
+
+    it(`clamps asymmetric corner radii together and keeps a zero corner square, ${fallback ? "fallback" : "native"}`, async () => {
+      const cases = [
+        { width: 100, height: 60, radii: [80, 40, 0, 20] },
+        { width: 60, height: 100, radii: [20, 80, 40, 0] },
+        { width: 100, height: 60, radii: [0, 20, 80, 40] },
+        { width: 60, height: 100, radii: [40, 0, 20, 80] },
+      ];
+      for (const [index, { width, height, radii }] of cases.entries()) {
+        const surface = component(100, 200 + index * 110, width, height);
+        surface.style.borderRadius = radii.map((radius) => `${radius}px`).join(" ");
+        if (fallback) {
+          for (const [corner, radius] of radii.entries()) surface.style.setProperty(`--sq-${["tl", "tr", "br", "bl"][corner]}`, `${radius}px`);
+        } else surface.style.setProperty("corner-shape", "squircle");
+      }
+      await xray();
+      await drawn(4);
+      const diagonal = (radius: number) => Math.max(0, radius * 0.6 - 0.5) * (1 - 2 ** -0.25);
+      for (const [index, { width, height, radii }] of cases.entries()) {
+        const curve = outlines()[index]!.querySelector("path")!;
+        const [tl, tr, br, bl] = radii.map(diagonal);
+        for (const [x, y] of [[0.5 + tl!, 0.5 + tl!], [width - 0.5 - tr!, 0.5 + tr!], [width - 0.5 - br!, height - 0.5 - br!], [0.5 + bl!, height - 0.5 - bl!]]) {
+          expect(curve.isPointInStroke(new DOMPoint(x, y))).toBe(true);
+        }
+      }
+    });
+  }
+
+  it("resolves elliptical percentage radii and mixed percentage fallback lengths on their own axes", async () => {
+    const surface = component(100, 200, 200, 100);
+    surface.style.borderTopLeftRadius = "20% 30%";
+    surface.style.borderTopRightRadius = "30px";
+    surface.style.setProperty("--sq-tr", "calc(10% + 10px)");
+    surface.style.setProperty("corner-top-left-shape", "squircle");
+    await xray();
+    await drawn(1);
+    const curve = outlines()[0]!.querySelector("path")!;
+    const diagonal = 1 - 2 ** -0.25;
+    expect(curve.isPointInStroke(new DOMPoint(0.5 + 39.5 * diagonal, 0.5 + 29.5 * diagonal))).toBe(true);
+    expect(curve.isPointInStroke(new DOMPoint(199.5 - 29.5 * diagonal, 0.5 + 19.5 * diagonal))).toBe(true);
+  });
+
+  it("includes the nonzero axis of a square elliptical corner in CSS overlap clamping", async () => {
+    const surface = component(100, 200, 100, 100);
+    surface.style.borderRadius = "0px 20px 120px 20px / 120px 20px 0px 20px";
+    surface.style.setProperty("corner-shape", "round");
+    expect(document.elementFromPoint(195, 205)).toBe(surface);
+    await xray();
+    await drawn(1);
+    const curve = outlines()[0]!.querySelector("path")!;
+    const diagonal = (20 * (100 / 140) - 0.5) * (1 - Math.SQRT1_2);
+    expect(curve.isPointInStroke(new DOMPoint(99.5 - diagonal, 0.5 + diagonal))).toBe(true);
+    expect(curve.isPointInStroke(new DOMPoint(0.5 + diagonal, 99.5 - diagonal))).toBe(true);
+    expect(curve.isPointInStroke(new DOMPoint(0.5, 0.5))).toBe(true);
+    expect(curve.isPointInStroke(new DOMPoint(99.5, 99.5))).toBe(true);
+  });
+
+  it("keeps a mixed fallback radius when only its longer axis resolves above zero", async () => {
+    const surface = component(100, 200, 100, 200);
+    surface.style.borderRadius = "0px 20px 20px 20px";
+    surface.style.setProperty("--sq-tl", "calc(400% - 500px)");
+    surface.style.setProperty("corner-shape", "round");
+    await xray();
+    await drawn(1);
+    const curve = outlines()[0]!.querySelector("path")!;
+    const diagonal = (20 * (200 / 320) - 0.5) * (1 - Math.SQRT1_2);
+    expect(curve.isPointInStroke(new DOMPoint(99.5 - diagonal, 0.5 + diagonal))).toBe(true);
+    expect(curve.isPointInStroke(new DOMPoint(0.5, 0.5))).toBe(true);
+  });
+
+  it("resolves CSS min, max and clamp radii instead of adding their terms", async () => {
+    const surface = component(100, 200, 200, 100);
+    surface.style.borderTopLeftRadius = "min(40px, 20%)";
+    surface.style.borderTopRightRadius = "max(10px, 15%)";
+    surface.style.borderBottomRightRadius = "clamp(10px, 20%, 30px)";
+    surface.style.setProperty("corner-shape", "squircle");
+    await xray();
+    await drawn(1);
+    const curve = outlines()[0]!.querySelector("path")!;
+    const diagonal = 1 - 2 ** -0.25;
+    for (const [x, y] of [[0.5 + 39.5 * diagonal, 0.5 + 19.5 * diagonal], [199.5 - 29.5 * diagonal, 0.5 + 14.5 * diagonal], [199.5 - 29.5 * diagonal, 99.5 - 19.5 * diagonal]]) {
+      expect(curve.isPointInStroke(new DOMPoint(x, y))).toBe(true);
+    }
+  });
+
+  it("keeps circular capsules round when the engine serializes their radius in exponent notation", async () => {
+    const surface = component(100, 200, 200, 40);
+    surface.style.borderRadius = "calc(infinity * 1px)";
+    surface.style.setProperty("corner-shape", "round");
+    await xray();
+    await drawn(1);
+    const curve = outlines()[0]!.querySelector("path")!;
+    const diagonal = 19.5 * (1 - Math.SQRT1_2) + 0.5;
+    expect(curve.isPointInStroke(new DOMPoint(diagonal, diagonal))).toBe(true);
+    expect(curve.isPointInStroke(new DOMPoint(0.5, 0.5))).toBe(false);
+  });
+
+  it("keeps a subpixel corner axis on the straight edge", async () => {
+    const surface = component(100, 200, 200, 100);
+    surface.style.borderTopLeftRadius = "0.25px 20px";
+    surface.style.borderBottomRightRadius = "20px 0.25px";
+    surface.style.setProperty("corner-shape", "squircle");
+    await xray();
+    await drawn(1);
+    const curve = outlines()[0]!.querySelector("path")!;
+    expect(curve.isPointInStroke(new DOMPoint(0.5, 5))).toBe(true);
+    expect(curve.isPointInStroke(new DOMPoint(5, 0.5))).toBe(true);
+    const bounds = curve.getBBox();
+    expect(bounds.x).toBeCloseTo(0.5, 5);
+    expect(bounds.y).toBeCloseTo(0.5, 5);
+    expect(bounds.width).toBeCloseTo(199, 5);
+    expect(bounds.height).toBeCloseTo(99, 5);
+  });
+
+  it("avoids measuring the CSS math probe for already resolved radii", async () => {
+    const surface = component(100, 200, 200, 100);
+    surface.style.borderRadius = "40px";
+    const read = vi.spyOn(window, "getComputedStyle");
+    await xray();
+    await drawn(1);
+    expect(read.mock.calls.filter(([element]) => element.getAttribute("data-slot") === "inspector-radius-value")).toHaveLength(0);
+  });
+
+  it("limits text masks to intersecting lines with one pixel of clearance on every side", async () => {
+    const surface = component(100, 200, 200, 100);
+    surface.style.borderRadius = "40px";
+    const first = line("corner", 102, 202);
+    const second = line("middle", 160, 250);
+    line("outside", 320, 350);
+    await xray();
+    await drawn(1);
+    const bounds = outlines()[0]!.querySelector<SVGPathElement>("mask path")!.getBBox();
+    expect(bounds.x).toBeCloseTo(first.left - 100 - 1);
+    expect(bounds.y).toBeCloseTo(first.top - 200 - 1);
+    expect(bounds.width).toBeCloseTo(second.right - first.left + 2);
+    expect(bounds.height).toBeCloseTo(second.bottom - first.top + 2);
+  });
+
+  it("cuts text gaps through curved corners without removing the rest of the curve", async () => {
+    const surface = component(100, 200, 200, 100);
+    surface.style.borderRadius = "40px";
+    surface.style.setProperty("corner-shape", "squircle");
+    const text = line("corner", 102, 202);
+    await xray();
+    await drawn(1);
+    const svg = outlines()[0]!.querySelector("svg")!;
+    // Rasterize the actual outline with its text mask, independently of the page's text and tags.
+    const copy = svg.cloneNode(true) as SVGSVGElement;
+    copy.setAttribute("width", "200");
+    copy.setAttribute("height", "100");
+    copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    copy.setAttribute("fill", "none");
+    copy.setAttribute("stroke", "black");
+    const image = new Image();
+    image.src = `data:image/svg+xml;base64,${btoa(new XMLSerializer().serializeToString(copy))}`;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = 200;
+    canvas.height = 100;
+    const context = canvas.getContext("2d")!;
+    context.drawImage(image, 0, 0);
+    const pixels = context.getImageData(0, 0, 200, 100).data;
+    const alpha = (x: number, y: number) => pixels[(y * 200 + x) * 4 + 3]!;
+    for (let y = Math.ceil(text.top - 200); y < Math.floor(text.bottom - 200); y++) {
+      for (let x = Math.ceil(text.left - 100); x < Math.floor(text.right - 100); x++) expect(alpha(x, y)).toBe(0);
+    }
+    expect(alpha(193, 6)).toBeGreaterThan(0);
+    expect(alpha(199, 0)).toBe(0);
+  });
 
   it("breaks each edge of an outline where a line of text crosses it, a pixel wider on each side, and nowhere else", async () => {
     component(100, 200, 200, 100);
@@ -508,6 +723,40 @@ describe("Inspector", () => {
     outlines().forEach((outline, index) => expect(onTarget(outline, components[index]!), `outline ${index}`).toBe(true));
   });
 
+  it("still outlines the page when its first scheduled frame never calls back, as a stalled renderer drops one (ourostack/ouro-ui#3740)", async () => {
+    // A CI runner's compositor can stall under contention and drop a requestAnimationFrame callback
+    // instead of merely delaying it (the same mechanism ourostack/ouro-ui#3314 found for a different
+    // file): nothing else on this static page re-triggers X-ray's census, so a mount that depends
+    // solely on that one frame would never outline anything.
+    const real = window.requestAnimationFrame;
+    vi.stubGlobal("requestAnimationFrame", () => 1);
+    let host: HTMLElement;
+    try {
+      ({ host } = await render(<Page />));
+    } finally {
+      vi.stubGlobal("requestAnimationFrame", real);
+    }
+    await drawn(pageRoots(host).length);
+  });
+
+  it("cancels the frame its backstop beat, so that frame never measures a layer already unmounted", async () => {
+    // The renderer holds the mount's frame past the 500ms backstop, then calls it after X-ray closed (#3761).
+    const [real, realCancel] = [window.requestAnimationFrame, window.cancelAnimationFrame];
+    const late = new Map<number, FrameRequestCallback>();
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => late.set(late.size + 1e6, callback).size + 1e6 - 1);
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => (late.delete(id) ? undefined : realCancel(id)));
+    let host: HTMLElement;
+    try {
+      ({ host } = await render(<Page />));
+    } finally {
+      vi.stubGlobal("requestAnimationFrame", real);
+    }
+    await drawn(pageRoots(host).length);
+    await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    vi.stubGlobal("cancelAnimationFrame", realCancel);
+    expect(() => late.forEach((callback) => callback(0))).not.toThrow();
+  });
+
   it("puts its bar in a landmark named by its label", async () => {
     await render(<Page inspector={{ label: "Röntgen" }} />);
     await drawn(3);
@@ -574,7 +823,11 @@ describe("Inspector", () => {
 
   it("leaves every line of the page's text as readable as it was, in light and dark: outlines step around text, and tags sit clear of text and of each other", async () => {
     // A dense page: text right against the edges of the components above and below it, where a
-    // tag above a component's corner would land on the line before.
+    // tag above a component's corner would land on the line before. Narrow enough that the
+    // page's maxWidth: 420 grid wraps its text: this used to come from the file's own afterEach
+    // leaving the viewport at 414x896, which the kit's own reset (to the project's default, not
+    // this file's) no longer does, so the test sets it itself.
+    await page.viewport(414, 896);
     const { host } = await render(
       <Page>
         <div style={{ display: "grid", gap: 2 }}>
@@ -631,6 +884,54 @@ describe("Inspector", () => {
     // not resolve the instant nothing is "running", only once the finished entry is gone too, as a
     // measurement taken in between would read the page before WebKit's paint caught up to it (#3361: a
     // ratio of 2.49:1 measured against an outline WebKit had not yet finished drawing).
+    expect(performance.now() - before).toBeGreaterThanOrEqual(200);
+  });
+
+  it("marks data-ouro-settling while a scroll repositions its outlines, with no Animation object to tell settled() apart (#3361)", async () => {
+    // A scroll's reposition is a plain style write (place(), no CSS transition), so document.getAnimations()
+    // never lists it: only this attribute tells a test the outlines have not caught up to the scroll yet.
+    const { host } = await render(<Page />);
+    const components = pageRoots(host);
+    await drawn(components.length);
+    const own = layer()!;
+    const starts: boolean[] = [];
+    const observer = new MutationObserver(() => starts.push(own.hasAttribute("data-ouro-settling")));
+    observer.observe(own, { attributes: true, attributeFilter: ["data-ouro-settling"] });
+    try {
+      scrollBy(0, 200);
+      await expect.poll(() => outlines().every((outline, index) => onTarget(outline, components[index]!))).toBe(true);
+      await settled();
+      expect(starts, "data-ouro-settling toggled true at least once while the scroll's reposition was pending").toContain(true);
+      expect(own.hasAttribute("data-ouro-settling"), "cleared once the reposition is drawn and settled() may resolve").toBe(false);
+    } finally {
+      observer.disconnect();
+    }
+  });
+
+  it("clears data-ouro-settling itself on unmount, even though a reference to the layer root can outlive the component", async () => {
+    // A reposition can still be pending (the attribute set) the instant X-ray closes: its own next frame,
+    // which would otherwise clear it, never comes once the component unmounts and cancels that frame. The
+    // cleanup must clear the attribute itself, since this held reference to the now-detached root still
+    // shows whatever it left behind.
+    const { host } = await render(<Page />);
+    await drawn(pageRoots(host).length);
+    const own = layer()!;
+    own.setAttribute("data-ouro-settling", "");
+    await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    expect(own.hasAttribute("data-ouro-settling"), "cleanup clears it, rather than leaving it for the cancelled frame").toBe(false);
+  });
+
+  it("does not measure contrast while a scroll-triggered reposition is still pending, with no Animation to catch it (#3361)", async () => {
+    await render(<Page />);
+    await settled();
+    const own = layer()!;
+    own.setAttribute("data-ouro-settling", "");
+    setTimeout(() => own.removeAttribute("data-ouro-settling"), 200);
+    const before = performance.now();
+    await settled();
+    // A loaded runner can take longer than 200ms to reach this poll, but never less: settled() must wait
+    // out a reposition with no Animation object (a scroll, say) exactly as it waits out a transition, since
+    // measureTextContrast's own settleTransitions() waits on the very same attribute (#3361).
     expect(performance.now() - before).toBeGreaterThanOrEqual(200);
   });
 
@@ -1713,6 +2014,7 @@ describe("Inspector", () => {
     await rerender(<Opened buttonTop={500} badgeTop={922 - badgeHeight / 2} spotlight="badge" />);
     await expect.poll(() => into.mock.calls.length).toBe(1);
     expect(into.mock.contexts[0]).toBe(badge);
+    await expect.poll(() => Math.abs(badge.getBoundingClientRect().top + badgeHeight / 2 - scrollportMiddle()) < 2).toBe(true);
     await act(async () => roots.splice(0).forEach((root) => root.unmount()));
     scrollTo({ top: 0, behavior: "instant" });
     into.mockClear();
@@ -1850,6 +2152,19 @@ describe("Inspector", () => {
     await render(<Page open={false} />);
     expect(layer()).toBeNull();
     expect(renderToString(<Inspector open onOpenChange={() => {}} docsHref={docsHref} />)).toBe("");
+  });
+
+  it("reads no component layout or corner styles and starts no observers while closed", async () => {
+    const read = vi.spyOn(window, "getComputedStyle");
+    const box = vi.spyOn(Element.prototype, "getBoundingClientRect");
+    const resize = vi.spyOn(ResizeObserver.prototype, "observe");
+    const mutations = vi.spyOn(MutationObserver.prototype, "observe");
+    await render(<Inspector open={false} onOpenChange={() => {}} />);
+    await frame();
+    expect(box).not.toHaveBeenCalled();
+    expect(read.mock.calls.filter(([element]) => element !== document.documentElement)).toEqual([]);
+    expect(resize).not.toHaveBeenCalled();
+    expect(mutations).not.toHaveBeenCalled();
   });
 
   it("names a guessed prop, and has no messages for valid props", async () => {

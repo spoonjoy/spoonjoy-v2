@@ -5,8 +5,9 @@
  * - The color pairs shadcn's themes lack: success, warning and a foreground for
  *   destructive, with defaults that pass 4.5:1 on shadcn's stock themes. An app or a
  *   theme overrides them like any other variable.
- * - Avatar's eight initials hues, --avatar-1 to --avatar-8, which Avatar mixes toward the
- *   background (the tint) and the foreground (the letters).
+ * - Avatar's eight initials hues, --avatar-1 to --avatar-8, mixed toward the background (the tint,
+ *   --ouro-avatar-tint-*) and the foreground (the letters, --ouro-avatar-ink-*) once on the root and
+ *   on .dark, so no avatar mixes its own.
  * - --ouro-size-*: the fixed sizes of icons, avatars, thumbs and the like, in rem on Tailwind's
  *   quarter-rem steps (--ouro-size-8 is 2rem), named for their step with a dot as an underscore
  *   (--ouro-size-2_5). Density is --spacing, and these do not follow it, so a compact app keeps
@@ -35,18 +36,18 @@
  * - --ouro-layer: the z-index of sheet and dialog portals.
  * - --ouro-gap-min: the least gap between two separate surfaces that don't touch (0.5rem); Ouro check's
  *   near-miss rule reads it.
- * - --ouro-scroller-surface: the opaque fill of the surface a scroller sits on, the page's background
- *   by default. ScrollArea and MessageList paint their scroll viewport with it, so Chromium on Windows
+ * - --ouro-scroller-surface: an optional override for a scroller's opaque fill. ScrollArea and
+ *   MessageList fall back to their local muted surface, so Chromium on Windows
  *   (which keeps LCD text on a see-through scroller by not promoting it to the compositor) promotes it
  *   and scrolls without repainting. Ouro's own surfaces (Card, Popover, Menu, Dialog, Sheet and the like) set it
- *   to their fill. A scroller on any other surface sets it to that surface's opaque color.
+ *   to their fill. An app can set it to another opaque theme surface, or to transparent on glass.
  * - The root type on a very wide screen: 112.5% from 150rem and 125% from 200rem, so a 4K display
  *   at 1x reads at a laptop's size.
  * - --input and --radius, with shadcn's stock values, for an app whose theme has neither:
  *   fields draw their border in --input and round their corners on the --radius-ouro-* steps.
  *   shadcn add writes a variable only when the app's stylesheet lacks it, and a theme
  *   loaded after this file wins, so an app that has them keeps its own.
- * - --ouro-message-run-gap, the space between consecutive messages from one sender (--ouro-size-1), and
+ * - --ouro-message-run-gap, the space between consecutive messages from one sender (--ouro-size-2), and
  *   --ouro-message-joined-radius, the corner where two bubbles of a run meet (unset, --radius-ouro-xl, a step
  *   under the outer --radius-ouro-2xl). A lone bubble has four equal corners.
  * - The press transition and the keyframes for spinners, indeterminate progress, skeletons and the
@@ -134,7 +135,7 @@
   --radius: 0.9375rem;
   --ouro-corner-shape: squircle;
   --ouro-radius-scale: 1;
-  --ouro-message-run-gap: var(--ouro-size-1);
+  --ouro-message-run-gap: var(--ouro-size-2);
   --destructive-foreground: #ffffff;
   --success: #157d3c;
   --success-foreground: #ffffff;
@@ -229,8 +230,6 @@
    * level the portal still wins, because it is the last child of <body>.
    */
   --ouro-layer: 50;
-  /* The opaque fill of the surface a scroller sits on (ScrollArea, MessageList); see the header. */
-  --ouro-scroller-surface: var(--background);
   /* Liquid Glass, as the switch's lens wears it: the tint over what is behind, the inner rim and the outer hairline. */
   --ouro-glass: #ffffff;
   --ouro-glass-tint: 34%;
@@ -247,17 +246,19 @@
   --ouro-row-hover-shadow: 0 0 0 1px var(--border);
   --ouro-state-hover: 5%;
   --ouro-state-pressed: 12%;
+  /* How far Avatar's tint leans to its hue from the background, and its letters from the foreground (see below). */
+  --ouro-avatar-tint-mix: 18%;
+  --ouro-avatar-ink-mix: 70%;
 }
 
 .dark {
-  --ouro-scroller-surface: var(--background);
-  --ouro-row-radius: 0.375rem;
+  /*
+   * --ouro-row-radius, --ouro-row-selected*, and --ouro-row-hover-shadow
+   * are not repeated here: their formulas already read theme-dependent variables (or are fixed
+   * constants), so :root's declarations resolve to the same value here too.
+   */
   --ouro-row-hover: color-mix(in oklab, var(--foreground) 6%, var(--background));
   --ouro-row-pressed: color-mix(in oklab, var(--foreground) 12%, var(--background));
-  --ouro-row-selected: color-mix(in oklab, var(--accent) 94%, var(--foreground));
-  --ouro-row-selected-hover: color-mix(in oklab, var(--accent) 86%, var(--foreground));
-  --ouro-row-selected-pressed: color-mix(in oklab, var(--accent) 75%, var(--foreground));
-  --ouro-row-hover-shadow: 0 0 0 1px var(--border);
   --ouro-state-hover: 8%;
   --ouro-state-pressed: 14%;
   --input: oklch(1 0 0 / 15%);
@@ -275,12 +276,40 @@
   --avatar-6: #6cb8f6;
   --avatar-7: #c3a6ec;
   --avatar-8: #ef85e2;
+  --ouro-avatar-tint-mix: 46%;
+  --ouro-avatar-ink-mix: 18%;
   --ouro-backdrop-color: #000000;
   --ouro-glass-tint: 12%;
   --ouro-glass-rim: rgb(255 255 255 / 0.3);
   --ouro-glass-edge: rgb(8 6 4 / 0.35);
   --ouro-glass-solid: #e9e6e1;
   --ouro-count: #d13438;
+}
+
+/* Avatar's colours, mixed once here rather than in every avatar: each hue (and the brand) as the tint behind the
+   initials, mixed toward the background, and the ink of the initials, mixed toward the foreground, so each pair keeps
+   at least 4.5:1. Declared on .dark as on the root, so a .dark element mixes its own scheme's colours for what is in it. */
+@layer base {
+  :root, .dark {
+    --ouro-avatar-tint-1: color-mix(in oklab, var(--avatar-1) var(--ouro-avatar-tint-mix), var(--background));
+    --ouro-avatar-ink-1: color-mix(in oklab, var(--avatar-1) var(--ouro-avatar-ink-mix), var(--foreground));
+    --ouro-avatar-tint-2: color-mix(in oklab, var(--avatar-2) var(--ouro-avatar-tint-mix), var(--background));
+    --ouro-avatar-ink-2: color-mix(in oklab, var(--avatar-2) var(--ouro-avatar-ink-mix), var(--foreground));
+    --ouro-avatar-tint-3: color-mix(in oklab, var(--avatar-3) var(--ouro-avatar-tint-mix), var(--background));
+    --ouro-avatar-ink-3: color-mix(in oklab, var(--avatar-3) var(--ouro-avatar-ink-mix), var(--foreground));
+    --ouro-avatar-tint-4: color-mix(in oklab, var(--avatar-4) var(--ouro-avatar-tint-mix), var(--background));
+    --ouro-avatar-ink-4: color-mix(in oklab, var(--avatar-4) var(--ouro-avatar-ink-mix), var(--foreground));
+    --ouro-avatar-tint-5: color-mix(in oklab, var(--avatar-5) var(--ouro-avatar-tint-mix), var(--background));
+    --ouro-avatar-ink-5: color-mix(in oklab, var(--avatar-5) var(--ouro-avatar-ink-mix), var(--foreground));
+    --ouro-avatar-tint-6: color-mix(in oklab, var(--avatar-6) var(--ouro-avatar-tint-mix), var(--background));
+    --ouro-avatar-ink-6: color-mix(in oklab, var(--avatar-6) var(--ouro-avatar-ink-mix), var(--foreground));
+    --ouro-avatar-tint-7: color-mix(in oklab, var(--avatar-7) var(--ouro-avatar-tint-mix), var(--background));
+    --ouro-avatar-ink-7: color-mix(in oklab, var(--avatar-7) var(--ouro-avatar-ink-mix), var(--foreground));
+    --ouro-avatar-tint-8: color-mix(in oklab, var(--avatar-8) var(--ouro-avatar-tint-mix), var(--background));
+    --ouro-avatar-ink-8: color-mix(in oklab, var(--avatar-8) var(--ouro-avatar-ink-mix), var(--foreground));
+    --ouro-avatar-tint-brand: color-mix(in oklab, var(--primary) var(--ouro-avatar-tint-mix), var(--background));
+    --ouro-avatar-ink-brand: color-mix(in oklab, var(--primary) var(--ouro-avatar-ink-mix), var(--foreground));
+  }
 }
 
 /* Every rounded Ouro element takes the corner shape (only those: setting it on every element slowed paint). The selector has no :where(), so the engine's ancestor filter skips elements outside Ouro before it searches their class. */
@@ -401,37 +430,61 @@
     opacity var(--ouro-duration-fast) ease;
 }
 
+/* The fade a row that scrolls sideways draws over its cut-off end, in a left-to-right page (FamilyBar's row). An
+   arbitrary-value Tailwind class repeats this text as its own escaped selector on every page that links it; a shared
+   utility writes it once. */
+@utility ouro-fade-end {
+  /* fade-ok: fades a scrolling row of links, not a picture; gradient-ok: a hard mask, not a drawn gradient: it says more of the row is cut off past this edge. */
+  mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent);
+}
+
+/* The same fade, mirrored for a right-to-left page (FamilyBar's row). */
+@utility ouro-fade-start {
+  /* fade-ok: fades a scrolling row of links, not a picture; gradient-ok: a hard mask, not a drawn gradient: it says more of the row is cut off past this edge. */
+  mask-image: linear-gradient(to left, #000 calc(100% - 3rem), transparent);
+}
+
 /* Spinner motion, namespaced so it never collides with an app's keyframes. */
 @keyframes ouro-spin {
   to {
     rotate: 1turn;
   }
 }
-/* Composer's expand and collapse: a clip over the frame opens or closes by --ouro-composer-gap, and the toolbar comes and goes. */
+/* Composer's expand and collapse: a clip over the frame opens or closes by --ouro-composer-gap, and the toolbar comes and goes.
+   The clip's inset is a registered length, so the animation runs on the main thread, which paints under a backdrop-filter;
+   a clip-path animation is composited, and Chromium leaves a clip like that unpainted for a while there. The toolbar's exit
+   plays its entrance backwards (animation-direction: reverse) rather than a mirrored keyframes block; the frame's own grow
+   and shrink keep separate keyframes, because a collapse the component turns round mid-flight measures the clip's current
+   position and restarts the animation under a new name, which an unchanged name (only reversed) would not force. The keyframes
+   read the gap through calc(): a bare var(--ouro-…) value is the shape of a v0.1.0 @theme inline leftover, which the upgrade test fails on. */
+@property --ouro-composer-inset {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+/* An arbitrary-value Tailwind class repeats this clip-path as its own escaped selector on
+   every page that links it; a shared utility writes it once (ouro-fade-end's comment above). */
+@utility ouro-composer-clip {
+  clip-path: inset(var(--ouro-composer-inset) 0 0 round var(--ouro-composer-radius));
+}
 @keyframes ouro-composer-reveal {
   from {
-    clip-path: inset(var(--ouro-composer-gap) 0 0 0 round var(--ouro-composer-radius));
+    --ouro-composer-inset: calc(var(--ouro-composer-gap));
   }
   to {
-    clip-path: inset(0 0 0 0 round var(--ouro-composer-radius));
+    --ouro-composer-inset: 0;
   }
 }
 @keyframes ouro-composer-conceal {
   from {
-    clip-path: inset(0 0 0 0 round var(--ouro-composer-radius));
+    --ouro-composer-inset: 0;
   }
   to {
-    clip-path: inset(var(--ouro-composer-gap) 0 0 0 round var(--ouro-composer-radius));
+    --ouro-composer-inset: calc(var(--ouro-composer-gap));
   }
 }
 @keyframes ouro-composer-toolbar-in {
   from {
-    opacity: 0;
-    transform: translateY(-0.5rem);
-  }
-}
-@keyframes ouro-composer-toolbar-out {
-  to {
     opacity: 0;
     transform: translateY(-0.5rem);
   }
@@ -490,6 +543,27 @@
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+/* A new message's bubble in MessageList: a sent one grows from its tail's corner, another's grows from its sender's side
+   while it fades in. Both scale only, never translate, so the list's scrollable overflow does not grow; reduced motion
+   only fades. */
+@keyframes ouro-message-sent {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+@keyframes ouro-message-received {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+@keyframes ouro-message-fade {
+  from {
+    opacity: 0;
   }
 }
 

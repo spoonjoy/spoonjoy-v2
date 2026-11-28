@@ -91,6 +91,21 @@ describe("Badge looks off when marked data-disabled", () => {
 });
 
 describe("Badge", () => {
+  it("keeps an icon with no label to see in its middle, and tucks it toward its edge before a label", async () => {
+    const alone = await render(
+      <Badge icon={StarIcon} onClick={() => {}}>
+        <span className="sr-only">Add a star</span>
+      </Badge>,
+    );
+    const centre = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return r.left + r.width / 2;
+    };
+    expect(Math.abs(centre(alone.badge.querySelector("svg")!) - centre(alone.badge))).toBeLessThanOrEqual(0.5);
+    const labelled = await render(<Badge icon={StarIcon}>Starred</Badge>);
+    expect(getComputedStyle(labelled.badge.querySelector("svg")!).marginInlineStart).not.toBe("0px");
+  });
+
   it("is a quiet secondary label by default", async () => {
     const { badge } = await render(<Badge>Draft</Badge>);
     expect(badge.tagName).toBe("SPAN");

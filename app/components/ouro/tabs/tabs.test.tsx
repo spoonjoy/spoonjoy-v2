@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { SegmentedControl } from "~/components/ouro/segmented-control/segmented-control";
 import { Tabs, type TabsProps } from "~/components/ouro/tabs/tabs";
-import { TabsIndicator, TabsList, TabsPanel, TabsRoot, TabsTab } from "~/components/ouro/tabs/tabs-parts";
+import { TabsIndicator, TabsList, TabsPanel, TabsRoot, TabsTab, type TabsRootProps } from "~/components/ouro/tabs/tabs-parts";
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
 import { pressTab } from "~/lib/ouro/testing/tab";
@@ -189,6 +189,69 @@ describe("Tabs", () => {
     await userEvent.keyboard("{ArrowRight}");
     expect(document.activeElement).toBe(tabs[1]);
     expect(tabs[1]!.getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("doesn't scroll the row on mount, and scrolls an overflowing row to the tab an arrow key focuses", async () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ value: `tab-${i}`, label: `Tab number ${i}`, content: <p>{i}</p> }));
+    const scrollTo = vi.spyOn(HTMLElement.prototype, "scrollTo");
+    const { tabs, host } = await render(<Tabs label="Many" items={many} />);
+    host.style.maxWidth = "200px";
+    expect(scrollTo).not.toHaveBeenCalled();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    tabs[0]!.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    await expect.poll(() => scrollTo.mock.calls.length).toBeGreaterThan(0);
+  });
+
+  describe("the frame after the tabs mount", () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ value: `tab-${i}`, label: `Tab number ${i}`, content: <p>{i}</p> }));
+    const frames = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const inView = (host: HTMLElement) => {
+      const row = host.querySelector<HTMLElement>('[role="tablist"]')!.getBoundingClientRect();
+      const tab = host.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')!.getBoundingClientRect();
+      return tab.left >= row.left - 1 && tab.right <= row.right + 1;
+    };
+
+    it("brings a selected tab past the row's end into view, no further", async () => {
+      const { host } = await render(<Tabs label="Many" items={many} defaultValue="tab-6" />);
+      const list = host.querySelector<HTMLElement>('[role="tablist"]')!;
+      expect(list.scrollWidth).toBeGreaterThan(list.clientWidth);
+      await expect.poll(() => list.scrollLeft).toBeGreaterThan(0);
+      expect(inView(host)).toBe(true);
+    });
+
+    it("brings a selected tab before the row's start into view in a right-to-left page", async () => {
+      document.documentElement.dir = "rtl";
+      try {
+        const { host } = await render(<Tabs label="Many" items={many} defaultValue="tab-11" />);
+        const list = host.querySelector<HTMLElement>('[role="tablist"]')!;
+        await expect.poll(() => list.scrollLeft).toBeLessThan(0);
+        expect(inView(host)).toBe(true);
+      } finally {
+        document.documentElement.dir = "";
+      }
+    });
+
+    it("leaves the row where it is when the selected tab is already in view", async () => {
+      const { host } = await render(<Tabs label="Many" items={many} defaultValue="tab-0" />);
+      await frames();
+      expect(host.querySelector<HTMLElement>('[role="tablist"]')!.scrollLeft).toBe(0);
+    });
+
+    it("leaves alone a selected tab that is gone by then", async () => {
+      const errors: unknown[] = [];
+      const onError = (event: ErrorEvent) => errors.push(event.error);
+      addEventListener("error", onError);
+      try {
+        const { tabs, rerender } = await render(<Tabs label="Many" items={many} defaultValue="tab-11" />);
+        await rerender(<Tabs label="Many" items={many.slice(0, 11)} defaultValue="tab-11" />);
+        expect(tabs[11]!.isConnected).toBe(false);
+        await frames();
+        expect(errors).toEqual([]);
+      } finally {
+        removeEventListener("error", onError);
+      }
+    });
   });
 
   it("moves to the next tab with ArrowLeft in a right-to-left page, where it sits on the left", async () => {
@@ -491,6 +554,255 @@ const pages = [
   { value: "mine", label: "My recipes", href: "/my-recipes" },
   { value: "saved", label: "Saved", href: "/saved-recipes" },
 ];
+
+describe("Tabs show the chosen panel", () => {
+  const frames = async () => {
+    for (let i = 0; i < 2; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
+  };
+  const tall = (text: string, height = 600) => <p style={{ height, margin: 0 }}>{text}</p>;
+  type Options = { sticky?: boolean; panels?: number; orientation?: "vertical"; disabled?: boolean; onValueChange?: TabsRootProps["onValueChange"]; height?: number; padding?: number; after?: number };
+  const tabs = ({ sticky, panels = 2, orientation, disabled, onValueChange, height }: Options = {}) => (
+    <TabsRoot defaultValue="first" orientation={orientation} onValueChange={onValueChange}>
+      <TabsList aria-label="Parts" sticky={sticky}>
+        <TabsTab value="first" disabled={disabled}>
+          First
+        </TabsTab>
+        <TabsTab value="second">Second</TabsTab>
+        <TabsIndicator />
+      </TabsList>
+      {panels > 0 ? <TabsPanel value="first">{tall("The first part", height)}</TabsPanel> : null}
+      {panels > 1 ? <TabsPanel value="second">{tall("The second part")}</TabsPanel> : null}
+    </TabsRoot>
+  );
+  // A box 300px tall that scrolls, with `above` px over the tabs.
+  const inBox = (above: number, options?: Options) => (
+    <div data-box="" style={{ height: 300, overflowY: "auto", scrollPaddingTop: options?.padding }}>
+      <div style={{ height: above }} />
+      {tabs(options)}
+      <div style={{ height: options?.after }} />
+    </div>
+  );
+  const parts = (host: HTMLElement) => {
+    const box = host.querySelector<HTMLElement>("[data-box]")!;
+    const at = (selector: string) => host.querySelector(selector)!.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    return { box, at, list: host.querySelector<HTMLElement>('[role="tablist"]')!, panel: () => at('[role="tabpanel"]') };
+  };
+
+  it("brings a panel whose start is below the fold up under the tabs, in the nearest box that scrolls, past one its content overflows in view", async () => {
+    const { host } = await render(
+      <div data-box="" style={{ height: 300, overflowY: "auto" }}>
+        <div style={{ height: 100 }}>
+          <div style={{ height: 240 }} />
+          {tabs()}
+        </div>
+      </div>,
+    );
+    const { box, at, list, panel } = parts(host);
+    expect(panel() + list.offsetHeight).toBeGreaterThan(300);
+    await userEvent.click(page.getByRole("tab", { name: "Second" }));
+    await frames();
+    expect(box.scrollTop).toBe(240);
+    expect(at('[data-ouro="tabs"]')).toBe(0);
+    await expect.element(page.getByRole("tabpanel")).toHaveTextContent("The second part");
+    expect(getComputedStyle(list).position).toBe("relative");
+  });
+
+  it("moves nothing when the chosen panel's start shows a row's height under the tabs, to the pixel", async () => {
+    const { host, rerender } = await render(inBox(0));
+    const { box, at, list, panel } = parts(host);
+    await rerender(inBox(300 - list.offsetHeight - (panel() - at('[role="tablist"]'))));
+    expect(panel() + list.offsetHeight).toBe(300);
+    await userEvent.click(page.getByRole("tab", { name: "Second" }));
+    await frames();
+    expect(box.scrollTop).toBe(0);
+  });
+
+  it("keeps a sticky row at the top of the box, filled with its surface, brings back a start scrolled under it, and leaves one just under it", async () => {
+    const { host } = await render(<div style={{ ["--ouro-scroller-surface" as string]: "rgb(10, 20, 30)" }}>{inBox(240, { sticky: true })}</div>);
+    const { box, at, list, panel } = parts(host);
+    expect(getComputedStyle(list).backgroundColor).toBe("rgb(10, 20, 30)");
+    const start = panel();
+    box.scrollTop = start - list.offsetHeight + 10;
+    expect([at('[role="tablist"]'), getComputedStyle(list).position]).toEqual([0, "sticky"]);
+    expect(panel()).toBe(list.offsetHeight - 10);
+    await userEvent.click(page.getByRole("tab", { name: "Second" }));
+    await frames();
+    expect(box.scrollTop).toBe(240);
+    box.scrollTop = start - list.offsetHeight;
+    await userEvent.click(page.getByRole("tab", { name: "First" }));
+    await frames();
+    expect([box.scrollTop, panel()]).toEqual([start - list.offsetHeight, list.offsetHeight]);
+  });
+
+  it("uses the nested dark theme's muted surface for the sticky row", async () => {
+    const root = document.documentElement;
+    const wasDark = root.classList.contains("dark");
+    root.classList.remove("dark");
+    try {
+      const { host } = await render(<div className="dark">{inBox(240, { sticky: true })}</div>);
+      const row = parts(host).list;
+      const probe = document.createElement("div");
+      probe.style.backgroundColor = "var(--muted)";
+      row.append(probe);
+      expect(getComputedStyle(row).backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
+    } finally {
+      root.classList.toggle("dark", wasDark);
+    }
+  });
+
+  it("keeps a sticky row still while a panel shorter than the box leaves, whether it brings the tabs up or not", async () => {
+    const { host } = await render(inBox(240, { sticky: true, height: 150, after: 300 }));
+    const { box } = parts(host);
+    box.scrollTop = 240;
+    await userEvent.click(page.getByRole("tab", { name: "Second" }));
+    await frames();
+    expect(box.scrollTop).toBe(240);
+    await userEvent.click(page.getByRole("tab", { name: "First" }));
+    await frames();
+    box.scrollTop = 0;
+    await userEvent.click(page.getByRole("tab", { name: "Second" }));
+    await frames();
+    expect(box.scrollTop).toBe(240);
+  });
+
+  it("brings the tabs to the box's scroll-padding-top, under a bar that sticks there", async () => {
+    const { host } = await render(inBox(240, { padding: 40 }));
+    await userEvent.click(page.getByRole("tab", { name: "Second" }));
+    await frames();
+    expect(parts(host).at('[data-ouro="tabs"]')).toBe(40);
+  });
+
+  it("switches tabs with nothing selected first, or in a shadow root", async () => {
+    await render(
+      <TabsRoot defaultValue={null}>
+        <TabsList aria-label="Parts">
+          <TabsTab value="first">First</TabsTab>
+          <TabsTab value="second">Second</TabsTab>
+        </TabsList>
+        <TabsPanel value="first" keepMounted>
+          The first part
+        </TabsPanel>
+      </TabsRoot>,
+    );
+    await userEvent.click(page.getByRole("tab", { name: "Second" }));
+    await expect.element(page.getByRole("tab", { name: "Second" })).toHaveAttribute("aria-selected", "true");
+    const outer = document.createElement("div");
+    document.body.append(outer);
+    mounted.push(outer);
+    const inner = document.createElement("div");
+    outer.attachShadow({ mode: "open" }).append(inner);
+    const shadow = createRoot(inner);
+    roots.push(shadow);
+    await act(async () =>
+      shadow.render(
+        <TabsRoot defaultValue="third">
+          <TabsList aria-label="Shadow parts">
+            <TabsTab value="third">Third</TabsTab>
+            <TabsTab value="fourth">Fourth</TabsTab>
+          </TabsList>
+          <TabsPanel value="third">The third part</TabsPanel>
+          <TabsPanel value="fourth">The fourth part</TabsPanel>
+        </TabsRoot>,
+      ),
+    );
+    await userEvent.click(page.getByRole("tab", { name: "Fourth" }));
+    await expect.element(page.getByRole("tab", { name: "Fourth" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("measures the selected tab's own panel, where hidden panels stay mounted", async () => {
+    const kept = (
+      <div data-box="" style={{ height: 300, overflowY: "auto" }}>
+        <div style={{ height: 50 }} />
+        <TabsRoot defaultValue="second">
+          <TabsList aria-label="Parts">
+            <TabsTab value="first">First</TabsTab>
+            <TabsTab value="second">Second</TabsTab>
+          </TabsList>
+          <TabsPanel value="first" keepMounted>
+            {tall("The first part")}
+          </TabsPanel>
+          <TabsPanel value="second" keepMounted>
+            {tall("The second part")}
+          </TabsPanel>
+        </TabsRoot>
+      </div>
+    );
+    const { host } = await render(kept);
+    await userEvent.click(page.getByRole("tab", { name: "First" }));
+    await frames();
+    expect(parts(host).box.scrollTop).toBe(0);
+  });
+
+  it("moves nothing for a column of tabs beside a panel whose start shows, though the column runs below it", async () => {
+    await page.viewport(800, 896);
+    const { host } = await render(inBox(50, { orientation: "vertical" }));
+    const { box, list, panel } = parts(host);
+    expect(list.getBoundingClientRect().bottom - box.getBoundingClientRect().top).toBeGreaterThan(panel());
+    await userEvent.click(page.getByRole("tab", { name: "Second" }));
+    await frames();
+    expect(box.scrollTop).toBe(0);
+  });
+
+  it("scrolls the page when no box around the tabs scrolls, past one that fits what it holds, with the page's own scrollbar kept", async () => {
+    const { host } = await render(
+      <div style={{ overflowY: "auto" }}>
+        <div style={{ height: innerHeight - 50 }} />
+        {tabs()}
+        <div style={{ height: innerHeight }} />
+      </div>,
+    );
+    document.documentElement.style.overflowY = "scroll";
+    try {
+      const root = host.querySelector('[data-ouro="tabs"]')!;
+      scrollTo(0, 50);
+      await userEvent.click(page.getByRole("tab", { name: "Second" }));
+      await frames();
+      expect(scrollY).toBeGreaterThan(0);
+      expect(root.getBoundingClientRect().top).toBe(0);
+    } finally {
+      document.documentElement.style.overflowY = "";
+      scrollTo(0, 0);
+    }
+  });
+
+  it("moves nothing when the choice doesn't take, the chosen tab has no panel, or the app scrolled the box itself", async () => {
+    const { host, rerender } = await render(inBox(240, { onValueChange: (_value, details) => details.cancel() }));
+    const { box } = parts(host);
+    await userEvent.click(page.getByRole("tab", { name: "Second" }));
+    await frames();
+    expect([box.scrollTop, page.getByRole("tab", { name: "Second" }).element().getAttribute("aria-selected")]).toEqual([0, "false"]);
+    await rerender(inBox(240, { panels: 1 }));
+    await userEvent.click(page.getByRole("tab", { name: "Second" }));
+    await frames();
+    expect(box.scrollTop).toBe(0);
+    await rerender(inBox(240, { onValueChange: () => (box.scrollTop = 20) }));
+    await userEvent.click(page.getByRole("tab", { name: "First" }));
+    await frames();
+    expect(box.scrollTop).toBe(20);
+  });
+
+  it("moves nothing when Base UI moves the selection itself, off a tab that becomes disabled, and lets anchoring follow again after a swap", async () => {
+    const { host, rerender } = await render(inBox(240));
+    const { box } = parts(host);
+    await rerender(inBox(240, { disabled: true }));
+    await frames();
+    expect([box.scrollTop, page.getByRole("tab", { name: "Second" }).element().getAttribute("aria-selected")]).toEqual([0, "true"]);
+    expect(getComputedStyle(host.querySelector('[role="tabpanel"]')!).overflowAnchor).toBe("auto");
+  });
+
+  it("moves nothing when the tabs have no panel", async () => {
+    await render(
+      <>
+        <div style={{ height: innerHeight - 100 }} />
+        {tabs({ panels: 0 })}
+        <div style={{ height: innerHeight }} />
+      </>,
+    );
+    await userEvent.click(page.getByRole("tab", { name: "Second" }));
+    await frames();
+    expect(scrollY).toBe(0);
+  });
+});
 
 const scopes = [
   { value: "all", label: "All", href: "/search" },

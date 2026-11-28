@@ -158,7 +158,7 @@ const levels = [2, 3, 4, 5, 6] as const;
 const variants = {
   // Where corner-shape is missing, the surface slot paints the background and border instead (see ouro-base.css).
   outline:
-    "rounded-ouro-xl border border-border bg-(--ouro-bg) border-(--ouro-bd) [--ouro-bg:var(--card)] [--ouro-scroller-surface:var(--card)] [--ouro-bd:var(--border)] text-card-foreground shadow-(--shadow-xs)",
+    "rounded-ouro-xl border border-border bg-(--ouro-bg) border-(--ouro-bd) [--ouro-bg:var(--card)] [--ouro-scroller-surface:var(--card)] [--ouro-message-list-bubble-default:var(--muted)] [--ouro-bd:var(--border)] text-card-foreground shadow-(--shadow-xs)",
   plain: "bg-transparent text-foreground",
 } as const;
 
@@ -468,7 +468,12 @@ export function Card(props: CardProps): JSX.Element {
     rise && (
       <div data-slot="card-rise" className={cn("grid overflow-hidden", mediaPull[variant][size])}>
         <div data-slot="card-rise-media" className={cn("relative overflow-hidden [grid-area:1/1]", zoom && zoomMediaClass)}>{media}</div>
-        <div data-slot="card-rise-band" className={riseBandClass}>
+        <div
+          data-slot="card-rise-band"
+          data-ouro-allow="overlap"
+          data-ouro-allow-why="the title and description rise onto their own glass band over the media; the band's grid row always matches their height"
+          className={riseBandClass}
+        >
           <div aria-hidden="true" data-slot="card-rise-glass" data-card-glass="" className={riseGlassClass} />
           {titleBlock("z-2 py-3 [grid-area:1/1]")}
         </div>

@@ -47,15 +47,38 @@ function running(element: Element): Array<CSSTransition | CSSAnimation> {
 
 const kebabCase = (name: string) => name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 
+/**
+ * A named `@keyframes` rule's declared properties, read from its CSS text rather than a running
+ * animation's effect: WebKit's `KeyframeEffect.getKeyframes()` omits a step's registered custom
+ * property (`@property`) from what it reports, though the animation itself still runs it.
+ */
+function keyframeRulePropertiesOf(name: string): string[] {
+  const properties = new Set<string>();
+  for (const sheet of document.styleSheets) {
+    let rules: CSSRuleList;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue; // A cross-origin sheet throws on read; it holds none of Ouro's keyframes.
+    }
+    for (const rule of rules) {
+      if (rule instanceof CSSKeyframesRule && rule.name === name) {
+        for (const keyframe of rule.cssRules) for (const property of (keyframe as CSSKeyframeRule).style) properties.add(property);
+      }
+    }
+  }
+  return [...properties];
+}
+
 /** The properties one animation runs, as the browser names them (longhands not folded). */
 function namesOf(animation: CSSTransition | CSSAnimation): string[] {
-  return animation instanceof CSSTransition
-    ? [animation.transitionProperty]
-    : (animation.effect as KeyframeEffect)
-        .getKeyframes()
-        .flatMap((keyframe) => Object.keys(keyframe))
-        .filter((key) => !["offset", "computedOffset", "easing", "composite"].includes(key))
-        .map(kebabCase);
+  if (animation instanceof CSSTransition) return [animation.transitionProperty];
+  const fromEffect = (animation.effect as KeyframeEffect)
+    .getKeyframes()
+    .flatMap((keyframe) => Object.keys(keyframe))
+    .filter((key) => !["offset", "computedOffset", "easing", "composite"].includes(key));
+  const names = fromEffect.length > 0 ? fromEffect : keyframeRulePropertiesOf(animation.animationName);
+  return names.map((name) => (name.startsWith("--") ? name : kebabCase(name)));
 }
 
 /**

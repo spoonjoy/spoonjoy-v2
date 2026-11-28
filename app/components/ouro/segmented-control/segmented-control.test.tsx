@@ -275,6 +275,15 @@ describe("SegmentedControl", () => {
     expect(segments[2]!.getAttribute("aria-checked")).toBe("true");
   });
 
+  it("tabs to the first enabled segment when the controlled value matches none and the first segment is disabled", async () => {
+    const { segments } = await render(
+      <SegmentedControl label="View" value="missing" onValueChange={() => {}} items={[{ ...items[0]!, disabled: true }, items[1]!, items[2]!]} />,
+    );
+    expect(segments.map((segment) => segment.tabIndex)).toEqual([-1, 0, -1]);
+    await pressTab();
+    expect(document.activeElement).toBe(segments[1]);
+  });
+
   it("moves focus to the segment the app checks, so the ring and the thumb mark one segment", async () => {
     const theme = [
       { value: "system", label: "Match my computer" },
@@ -414,6 +423,13 @@ describe("SegmentedControl", () => {
     const { root, host } = await render(<SegmentedControl label="View" items={items} fullWidth hideLabel />);
     const group = root.querySelector('[role="radiogroup"]')!;
     expect(Math.round(group.getBoundingClientRect().width)).toBe(Math.round(host.getBoundingClientRect().width - 48));
+    expect(group.className.split(" ")).toEqual(expect.arrayContaining(["grid", "w-full"]));
+  });
+
+  it("leaves the group's own grid-flow columns without fullWidth", async () => {
+    const { root } = await render(<SegmentedControl label="View" items={items} hideLabel />);
+    const group = root.querySelector('[role="radiogroup"]')!;
+    expect(group.className.split(" ")).not.toEqual(expect.arrayContaining(["w-full"]));
   });
 
   it("stretches its label across with fullWidth, and keeps it to its text without", async () => {

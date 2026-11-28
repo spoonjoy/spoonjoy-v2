@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 import { Tabs } from "~/components/ouro/tabs/tabs";
 import { TabsIndicator, TabsList, TabsPanel, TabsRoot, TabsTab } from "~/components/ouro/tabs/tabs-parts";
+import { ScrollArea } from "~/components/ouro/scroll-area/scroll-area";
 import { Text } from "~/components/ouro/text/text";
 
 // Layout here uses inline styles and the theme's CSS variables (shadcn's names).
@@ -111,6 +112,40 @@ export const Parts: Story = {
           <Text>Three drafts.</Text>
         </TabsPanel>
       </TabsRoot>
+    </Surface>
+  ),
+};
+
+/**
+ * A sticky row, under a recipe's summary in a box that scrolls: the row stays at the top once the summary scrolls away, and
+ * choosing a tab brings its panel's start into view under the row.
+ */
+export const StickyRow: Story = {
+  render: () => (
+    <Surface>
+      <ScrollArea label="Recipe" className="h-80">
+        <div style={{ display: "grid", gap: 16 }}>
+          <Text>A loaf that rises overnight, for a slow morning.</Text>
+          <Text>Flour, water, salt and a little yeast, mixed the night before and baked in a hot pot.</Text>
+          <TabsRoot defaultValue="method">
+            <TabsList aria-label="Recipe" sticky>
+              <TabsTab value="method">Method</TabsTab>
+              <TabsTab value="notes">Notes</TabsTab>
+              <TabsIndicator />
+            </TabsList>
+            <TabsPanel value="method">
+              {["Mix the flour, water, salt and yeast.", "Cover and leave it overnight.", "Fold the dough and shape a round.", "Bake it in a hot pot, lid on, then lid off."].map((step) => (
+                <Text key={step} style={{ marginBlock: 48 }}>
+                  {step}
+                </Text>
+              ))}
+            </TabsPanel>
+            <TabsPanel value="notes">
+              <Text>Rest it longer in a cool kitchen.</Text>
+            </TabsPanel>
+          </TabsRoot>
+        </div>
+      </ScrollArea>
     </Surface>
   ),
 };

@@ -204,7 +204,9 @@ describe("Combobox on a phone", () => {
     expect(onValueChange).toHaveBeenLastCalledWith(null);
     expect(new FormData(form).get("herb")).toBe("");
     expect(host.querySelector(TRIGGER)!.textContent).toContain("Pick a herb");
-    expect(clear()).toBeNull();
+    // Clear's own press-release transition (160ms) is a real animation, so Base UI's exit
+    // choreography waits for it before unmounting the button; a tap does not wait that long.
+    await expect.poll(clear).toBeNull();
     expect(document.activeElement).toBe(host.querySelector(TRIGGER));
     expect(sheet()).toBeNull();
 

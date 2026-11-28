@@ -52,10 +52,10 @@ const iosBackdrop =
  *
  * @internal
  * @claim "The actions row of a Dialog" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::footer > renders footer as the actions row after the body, and closes from an action wrapped in SheetClose)
- * @claim "The actions row of a Dialog" registry/ouro/components/ouro/sheet/sheet-styles.ts verify:fileLine(registry/ouro/components/ouro/sheet/sheet-styles.ts, /const\sfooterClass\s=\s"box-border\sflex\sshrink-0\sjustify-end\sgap-3\spx-5\spt-3\spb-5\smax-sm:flex-col\smax-sm:\*:w-full"/)
+ * @claim "The actions row of a Dialog" registry/ouro/components/ouro/sheet/sheet-styles.ts verify:fileLine(registry/ouro/components/ouro/sheet/sheet-styles.ts, /const\sfooterClass\s=\s"box-border\sflex\sshrink-0\sjustify-end\sgap-3\spx-5\spt-3\spb-5\s\[@media\(min-height:36rem\)\]:max-sm:flex-col\s\[@media\(min-height:36rem\)\]:max-sm:\*:w-full"/)
  * @claim "The actions row of a Dialog" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::footer > lays out actions in a row at the end on wide screens)
  */
-const footerClass = "box-border flex shrink-0 justify-end gap-3 px-5 pt-3 pb-5 max-sm:flex-col max-sm:*:w-full";
+const footerClass = "box-border flex shrink-0 justify-end gap-3 px-5 pt-3 pb-5 [@media(min-height:36rem)]:max-sm:flex-col [@media(min-height:36rem)]:max-sm:*:w-full";
 
 /**
  * The Fix code for an appearance class on a sheet part: the theme's CSS variables

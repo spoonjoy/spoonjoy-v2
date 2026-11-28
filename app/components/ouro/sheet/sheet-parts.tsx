@@ -91,9 +91,9 @@ const viewportClasses = {
 } as const;
 
 const popupBase =
-  "[--ouro-sheet-stretch:3.5] [--ouro-sheet-slack:calc(var(--ouro-sheet-stretch)*0.25px)] [--ouro-sheet-gap:2rem] " +
+  "[--ouro-sheet-stretch:3.5] [--ouro-sheet-slack:calc(var(--ouro-sheet-stretch)*0.25px)] [--ouro-sheet-gap:2rem] [@media(max-height:36rem)]:[--ouro-sheet-gap:0.5rem] " +
   "relative box-border flex min-h-0 flex-col outline-none touch-none " +
-  "bg-popover text-popover-foreground [--ouro-scroller-surface:var(--popover)] [-webkit-tap-highlight-color:transparent] " +
+  "bg-popover text-popover-foreground [--ouro-scroller-surface:var(--popover)] [--ouro-message-list-bubble-default:var(--muted)] [-webkit-tap-highlight-color:transparent] " +
   "[transition:transform_calc(var(--ouro-duration-sheet)*var(--drawer-swipe-strength,1))_var(--ouro-ease-drawer)] " +
   "will-change-transform [transform:var(--ouro-sheet-transform)] data-swiping:select-none " +
   // While a finger is down, Base UI also writes the raw damped offset as an inline

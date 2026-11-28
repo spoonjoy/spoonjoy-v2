@@ -288,7 +288,7 @@ const sizes = {
 const glass =
   "[--ouro-glass-h:calc(var(--spacing)*10)] [--ouro-bd:var(--ouro-glass-rim)] [--ouro-bg:color-mix(in_oklab,var(--ouro-glass)_var(--ouro-glass-tint),transparent)] " +
   "[--ouro-control-radius:9999px] [--ouro-control-corner-shape:superellipse(1.05)] " +
-  "[--ouro-button-h:var(--ouro-glass-h)] sm:[--ouro-button-h:var(--ouro-glass-h)] " +
+  "[--ouro-button-h:var(--ouro-glass-h)] " +
   "shadow-(--shadow-sm) backdrop-blur-xl aria-expanded:[--ouro-state:var(--ouro-state-pressed,14%)] aria-expanded:before:opacity-[var(--ouro-state-pressed,14%)] " +
   // Stryker disable next-line StringLiteral: a test cannot emulate reduced transparency (Playwright has no option for it)
   "[@media(prefers-reduced-transparency:reduce)]:[--ouro-bg:var(--ouro-glass-solid)] [@media(prefers-reduced-transparency:reduce)]:[--ouro-bd:var(--ouro-glass-edge)] [@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none " +
@@ -304,6 +304,12 @@ const glass =
 // fall back to --primary and --primary-foreground at the button itself (never in a :root rule,
 // so a theme scoped to part of the page still repaints it). A theme sets them to give the action
 // its own colour while selection (checkboxes, switches, the current tab) keeps --primary.
+// soft and outline read one indirection property, --ouro-tone, set per tone by a tiny
+// class below: both formulas are byte for byte Badge's, so a page that renders both
+// shares one pair of generated rules instead of one pair per tone per component.
+const softToneClass =
+  "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--ouro-tone)_10%,transparent)] text-[color-mix(in_oklab,var(--ouro-tone)_80%,var(--foreground))] contrast-more:[--ouro-bd:currentColor]";
+const outlineToneClass = "[--ouro-bd:color-mix(in_oklab,var(--ouro-tone)_45%,transparent)] [--ouro-bg:transparent]";
 const looks = {
   solid: {
     primary:
@@ -319,18 +325,18 @@ const looks = {
     warning: "[--ouro-bd:transparent] [--ouro-bg:var(--warning)] text-warning-foreground",
   },
   soft: {
-    primary: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--primary)_10%,transparent)] text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))] contrast-more:[--ouro-bd:currentColor]",
+    primary: `${softToneClass} [--ouro-tone:var(--primary)]`,
     secondary: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--secondary)_50%,transparent)] text-secondary-foreground contrast-more:[--ouro-bd:currentColor]",
-    destructive: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--destructive)_10%,transparent)] text-[color-mix(in_oklab,var(--destructive)_80%,var(--foreground))] contrast-more:[--ouro-bd:currentColor]",
-    success: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--success)_10%,transparent)] text-[color-mix(in_oklab,var(--success)_80%,var(--foreground))] contrast-more:[--ouro-bd:currentColor]",
-    warning: "[--ouro-bd:transparent] [--ouro-bg:color-mix(in_oklab,var(--warning)_10%,transparent)] text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))] contrast-more:[--ouro-bd:currentColor]",
+    destructive: `${softToneClass} [--ouro-tone:var(--destructive)]`,
+    success: `${softToneClass} [--ouro-tone:var(--success)]`,
+    warning: `${softToneClass} [--ouro-tone:var(--warning)]`,
   },
   outline: {
-    primary: "[--ouro-bd:color-mix(in_oklab,var(--primary)_45%,transparent)] [--ouro-bg:transparent] text-foreground",
+    primary: `${outlineToneClass} [--ouro-tone:var(--primary)] text-foreground`,
     secondary: "[--ouro-bd:var(--border)] [--ouro-bg:transparent] text-foreground",
-    destructive: "[--ouro-bd:color-mix(in_oklab,var(--destructive)_45%,transparent)] [--ouro-bg:transparent] text-destructive",
-    success: "[--ouro-bd:color-mix(in_oklab,var(--success)_45%,transparent)] [--ouro-bg:transparent] text-success",
-    warning: "[--ouro-bd:color-mix(in_oklab,var(--warning)_45%,transparent)] [--ouro-bg:transparent] text-warning",
+    destructive: `${outlineToneClass} [--ouro-tone:var(--destructive)] text-destructive`,
+    success: `${outlineToneClass} [--ouro-tone:var(--success)] text-success`,
+    warning: `${outlineToneClass} [--ouro-tone:var(--warning)] text-warning`,
   },
   plain: {
     primary: "[--ouro-bd:transparent] [--ouro-bg:transparent] text-primary",
@@ -434,6 +440,18 @@ function returnPresses(event: globalThis.KeyboardEvent, root: Element): boolean 
   return !target.matches(takesReturn);
 }
 
+// Whether a node's own children, read without rendering, include a word: a string or number
+// anywhere under an intrinsic element (span, div, ...) or a fragment. A custom component's
+// rendered output isn't known here, so its children aren't looked into: an icon component
+// (Star, a lucide-react svg wrapper) reads as having no text of its own, as an svg's paths do.
+function elementHasText(node: ReactNode): boolean {
+  if (typeof node === "string") return node.trim() !== "";
+  if (typeof node === "number") return true;
+  if (Array.isArray(node)) return node.some(elementHasText);
+  if (isValidElement<{ children?: ReactNode }>(node) && (typeof node.type === "string" || node.type === Fragment)) return elementHasText(node.props.children);
+  return false;
+}
+
 /**
  * A button, or a link styled as one. The obvious name for any action: pressing
  * it gives physical feedback, it has a 44px touch target on phones, and `loading`
@@ -528,15 +546,8 @@ export function Button(props: ButtonProps): JSX.Element {
   // button, so the button's accessible name stays exactly its label.
   const wasLoading = useRef(loading);
   // A button that mounts already loading draws its spinner on the first frame; it fades in only when loading turns on later.
-  const [mounted, setMounted] = useState(false);
-  useEffect(
-    () => {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setMounted(true);
-    },
-    // Stryker disable next-line ArrayDeclaration: an effect that only sets a flag to true runs the same whatever its list holds.
-    [],
-  );
+  const [initialLoading, setInitialLoading] = useState(loading);
+  if (initialLoading && !loading) setInitialLoading(false);
   useEffect(() => {
     if (loading && !wasLoading.current) announce(loadingLabel);
     wasLoading.current = loading;
@@ -572,6 +583,9 @@ export function Button(props: ButtonProps): JSX.Element {
   // it is tall, so an icon's button is square, as shadcn's icon size is, and a theme whose controls are capsules draws
   // it as a circle. Its width is a floor, so content that is wider than the height keeps its width.
   // A picture whose width and height differ, such as a logo, is not an icon: it keeps the label's padding.
+  // Neither does an element whose own children include words: an aria-live span, a <Trans>, or a styled
+  // span around text is an ordinary label, named more fully by aria-label, not an icon. A custom
+  // component's rendered output isn't known without rendering it, so it still reads as an icon.
   const named = rest as { "aria-label"?: string; "aria-labelledby"?: string };
   const iconOnly =
     size !== "inline" &&
@@ -580,6 +594,7 @@ export function Button(props: ButtonProps): JSX.Element {
     isValidElement<{ width?: unknown; height?: unknown }>(children) &&
     children.type !== Fragment &&
     !(children.type === "img" && children.props.width !== children.props.height) &&
+    !elementHasText(children) &&
     Boolean(named["aria-label"] || named["aria-labelledby"]);
   // Stryker disable next-line ConditionalExpression: the glass height variable is read only by the glass look, so setting it on another variant's small size changes nothing.
   const classes = cn(base, iconChildClass, sizes[size], iconOnly && iconOnlyClass, looks[variant][tone], variant === "glass" && size === "sm" && "[--ouro-glass-h:calc(var(--spacing)*9)]", fullWidth && "w-full", className);
@@ -603,7 +618,7 @@ export function Button(props: ButtonProps): JSX.Element {
         {children}
       </span>
       {EndIcon && <EndIcon aria-hidden="true" className={cn(iconClass, fade, "-me-0.5")} />}
-      {loading && <Spinner fadeIn={mounted} />}
+      {loading && <Spinner fadeIn={!initialLoading} />}
     </>
   );
 

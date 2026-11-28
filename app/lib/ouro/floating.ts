@@ -142,7 +142,7 @@ const floatingMotionClass =
  * @claim "Forced colours draw the ring as a solid border" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover under forced colours > keeps its own edge, whether or not a plain button inside it draws one (#3103))
  */
 const floatingSurfaceClass =
-  "box-border rounded-ouro-lg bg-popover text-popover-foreground [--ouro-scroller-surface:var(--popover)] outline-none " +
+  "box-border rounded-ouro-lg bg-popover text-popover-foreground [--ouro-scroller-surface:var(--popover)] [--ouro-message-list-bubble-default:var(--muted)] outline-none " +
   "ring-1 ring-border/60 shadow-(--shadow-lg) forced-colors:border forced-colors:border-solid";
 
 /**

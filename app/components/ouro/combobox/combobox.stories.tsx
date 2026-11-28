@@ -3,6 +3,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Combobox, type ComboboxItem } from "~/components/ouro/combobox/combobox";
+import { pickerSheetQuery } from "~/lib/ouro/use-sheet-presentation";
 
 // Layout here uses inline styles and the theme's CSS variables (shadcn's names).
 
@@ -168,22 +169,32 @@ const personItem = (person: (typeof people)[number]): ComboboxItem => ({
 
 /**
  * A people picker: each person with their picture, job title and a "1:1" mark, and their picture
- * on the chip. `autoHighlight` lets Enter pick the top match; the app keeps the text
- * (`inputValue`) and clears it after each pick; the second field is read-only.
+ * on the chip. Type and press Enter before the search answers: `resultsFor` keeps the
+ * pick with that query. The second field is read-only.
  */
 export const People: Story = {
   parameters: { screenshot: { name: "combobox-people", open: true } },
   render: function Render() {
     const [text, setText] = useState("");
     const [picked, setPicked] = useState<string[]>(["iris"]);
-    const shown = people.filter((person) => picked.includes(person.id) || person.name.toLowerCase().includes(text.toLowerCase()));
+    const [answer, setAnswer] = useState({ query: "", people });
+    useEffect(() => {
+      const timer = setTimeout(() => {
+        setAnswer({ query: text, people: people.filter((person) => person.name.toLowerCase().includes(text.toLowerCase())) });
+      }, 450);
+      return () => clearTimeout(timer);
+    }, [text]);
     return (
       <Surface>
         <Combobox
           label="To"
           multiple
           autoHighlight
-          items={shown.map(personItem)}
+          items={answer.people.map(personItem)}
+          resultsFor={answer.query}
+          loading={answer.query !== text}
+          loadingLabel="Finding people…"
+          emptyLabel="No one by that name"
           inputValue={text}
           onInputChange={setText}
           value={picked}
@@ -196,5 +207,32 @@ export const People: Story = {
         <Combobox label="Sent to" multiple readOnly items={people.map(personItem)} defaultValue={["rowan", "mara"]} description="Read-only while the message sends." />
       </Surface>
     );
+  },
+};
+
+/** Resolves with what `find` returns once it returns something, checking once a frame (a play function's wait). */
+async function frameUntil<T>(find: () => T | null | undefined): Promise<T> {
+  for (let frame = 0; frame < 600; frame++) {
+    const found = find();
+    if (found) return found;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+  throw new Error("the story never reached the state it shows");
+}
+
+/**
+ * The option Enter would pick, held by keyboard: an outline on top of its fill, not the fill
+ * alone, so the row is unmistakable against `--accent`'s low contrast in light mode (#3821).
+ */
+export const Highlighted: Story = {
+  parameters: { screenshot: { name: "combobox-highlighted" } },
+  render: () => <Combobox label="Herb" name="herb" items={herbs} />,
+  play: async ({ canvasElement }) => {
+    // A touch phone's Combobox opens its list in a sheet a tap brings up, not with the arrow keys: the story stays closed there.
+    if (window.matchMedia(pickerSheetQuery).matches) return;
+    const input = await frameUntil(() => canvasElement.querySelector("input"));
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    await frameUntil(() => canvasElement.ownerDocument.querySelector('[role="option"][data-highlighted]'));
   },
 };

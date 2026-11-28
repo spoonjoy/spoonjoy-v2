@@ -281,6 +281,27 @@ describe("ScrollArea", () => {
     await expect.poll(() => viewport.tabIndex).toBe(-1);
   });
 
+  it("reads sizes once for a burst of changes inside, in the next frame, not after each change", async () => {
+    const { viewport, area } = await render(
+      <ScrollArea className="h-40">
+        <button disabled>Go</button>
+        {tall}
+      </ScrollArea>,
+    );
+    await expect.poll(() => viewport.tabIndex).toBe(0);
+    const button = area.querySelector("button")!;
+    const reads = vi.spyOn(viewport, "toggleAttribute");
+    // Each change is heard on its own, before the next frame; the button ends as it began.
+    for (const disabled of [false, true]) {
+      button.disabled = disabled;
+      await Promise.resolve();
+    }
+    expect(reads).not.toHaveBeenCalled();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    // One read: its two overflow edges.
+    expect(reads).toHaveBeenCalledTimes(2);
+  });
+
   it("follows a disabled button turning enabled, with no resize", async () => {
     const { viewport, area } = await render(
       <ScrollArea className="h-40">

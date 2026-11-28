@@ -915,6 +915,40 @@ describe("non-modal sheet", () => {
     expect(popup()).not.toBeNull();
   });
 
+  /** A control the person uses, and a non-modal sheet it opens beside them with `initialFocus`. */
+  function Beside({ initialFocus }: { initialFocus: SheetProps["initialFocus"] }) {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <Button onClick={() => setOpen(true)}>Show the look</Button>
+        <Sheet title="Look" side="right" modal={false} initialFocus={initialFocus} open={open} onOpenChange={setOpen}>
+          <Button>Ocean</Button>
+          <Button ref={focusRef}>Forest</Button>
+        </Sheet>
+      </>
+    );
+  }
+  const focusRef = createRef<HTMLButtonElement>();
+
+  it("with initialFocus={false}, opens beside the control in use and leaves focus on it", async () => {
+    await page.viewport(1280, 800);
+    await render(<Beside initialFocus={false} />);
+    const opener = page.getByRole("button", { name: "Show the look" });
+    await userEvent.click(opener);
+    await expect.poll(() => popup()).not.toBeNull();
+    await settled();
+    expect(document.activeElement).toBe(opener.element());
+  });
+
+  it("with initialFocus as a ref, opens with focus on that element", async () => {
+    await page.viewport(1280, 800);
+    await render(<Beside initialFocus={focusRef} />);
+    await userEvent.click(page.getByRole("button", { name: "Show the look" }));
+    await expect.poll(() => popup()).not.toBeNull();
+    await settled();
+    await expect.poll(() => document.activeElement).toBe(focusRef.current);
+  });
+
   it("closes on Escape from inside it, and from its close button, which shows at its top corner", async () => {
     await page.viewport(1280, 800);
     const onOpenChange = vi.fn();

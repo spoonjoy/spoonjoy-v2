@@ -144,8 +144,6 @@ afterEach(async () => {
   await act(async () => roots.splice(0).forEach((root) => root.unmount()));
   for (const node of mounted) node.remove();
   mounted = [];
-  await resizeTo(414, 896);
-  await commands.resetMedia();
 });
 
 describe("Select", () => {

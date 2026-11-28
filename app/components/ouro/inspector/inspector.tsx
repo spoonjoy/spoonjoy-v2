@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type JSX } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type JSX } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ouro/button/button";
 import { actionsClass, frameClass, isPartOf, itemFor, labelClass, layerClass, linkClass, listClass, outlineClass, outlinesClass, pillClass, scanClass, statusClass, tagClass } from "~/components/ouro/inspector/inspector-styles";
 import { Sheet } from "~/components/ouro/sheet/sheet";
+import { squircleCorner, splitCornerRadii } from "~/lib/ouro/squircle-curve";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useReducedMotion } from "~/lib/ouro/use-reduced-motion";
 
@@ -267,6 +268,7 @@ interface Edges {
  * @claim "What X-ray reads once an update" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > clips by each box a component's overflow belongs to, from the start edge on either axis)
  */
 interface Ancestor {
+  style: CSSStyleDeclaration;
   position: string;
   rtl: boolean;
   x: [number, number] | null;
@@ -282,6 +284,7 @@ const readAncestor = (element: Element, cache: Map<Element, Ancestor>): Ancestor
     const left = box.left + element.clientLeft;
     const top = box.top + element.clientTop;
     ancestor = {
+      style,
       position: style.position,
       rtl: style.direction === "rtl",
       x: style.overflowX === "visible" ? null : [left, left + element.clientWidth],
@@ -375,6 +378,47 @@ function textLines(own: Element): Edges[] {
 
 // Whether two boxes share any area.
 const overlap = (a: Edges, b: Edges) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+type RadiusLength = (value: string, side: number) => number;
+
+function roundedFrame(box: DOMRect, style: CSSStyleDeclaration, radiusLength: RadiusLength): string | null {
+  if (box.width <= 0 || box.height <= 0) return null;
+  const names = ["top-left", "top-right", "bottom-right", "bottom-left"];
+  const radii = names.map((name, index) => {
+    const fallback = style.getPropertyValue(`--sq-${["tl", "tr", "br", "bl"][index]}`);
+    const squircle = radiusLength(fallback, Math.max(box.width, box.height)) > 0;
+    const value = squircle ? [fallback] : splitCornerRadii(style.getPropertyValue(`border-${name}-radius`));
+    const x = radiusLength(value[0]!, box.width);
+    const y = radiusLength(value[1] ?? value[0]!, box.height);
+    return {
+      x,
+      y,
+      squircle: squircle || /squircle|superellipse\(2\)/.test(style.getPropertyValue(`corner-${name}-shape`)),
+    };
+  });
+  if (!radii.some(({ x }) => x > 0)) return null;
+  const [tl, tr, br, bl] = radii;
+  // CSS reduces every radius by the same factor when adjacent corners overlap.
+  const scale = Math.min(1, box.width / (tl!.x + tr!.x), box.width / (bl!.x + br!.x), box.height / (tl!.y + bl!.y), box.height / (tr!.y + br!.y));
+  const corners = radii.map(({ x, y, squircle }, index) => {
+    const rx = Math.max(0, x * scale - 0.5);
+    const ry = Math.max(0, y * scale - 0.5);
+    const right = index === 1 || index === 2;
+    const bottom = index >= 2;
+    const point = (u: number, v: number) => [right ? box.width - 0.5 - u * rx : 0.5 + u * rx, bottom ? box.height - 0.5 - v * ry : 0.5 + v * ry];
+    const points = squircleCorner.map(([u, v]) => point(u, v));
+    if (index === 1 || index === 3) points.reverse();
+    const start = points[0]!.join(" ");
+    const end = points[6]!.join(" ");
+    const curve = rx === 0 || ry === 0
+      ? `L${end}`
+      : squircle
+        ? `C${points.slice(1, 4).map((p) => p.join(" ")).join(" ")}C${points.slice(4).map((p) => p.join(" ")).join(" ")}`
+        : `A${rx} ${ry} 0 0 1 ${end}`;
+    return { start, curve };
+  });
+  return corners.map(({ start, curve }, index) => `${index === 0 ? "M" : "L"}${start}${curve}`).join("") + "Z";
+}
 
 // The frame's four edges as an SVG path in the outline's own pixels, with a gap wherever a line of
 // text crosses an edge, so a frame never draws over text and lowers its contrast.
@@ -537,6 +581,8 @@ function InspectorLayer({
   spotlight,
   controls,
 }: Pick<InspectorProps, "onOpenChange" | "sourceHref" | "spotlight" | "controls"> & { docsHref: (item: string) => string; label: string }): JSX.Element {
+  const maskId = useId();
+  const radiusProbe = useRef<HTMLDivElement>(null);
   const layer = useRef<HTMLDivElement>(null);
   const [outlines] = useState(() => new Map<number, HTMLElement>());
   const [found, setFound] = useState<Found[]>([]);
@@ -560,6 +606,16 @@ function InspectorLayer({
    */
   const place = (all: Found[]) => {
     const own = layer.current!;
+    const radiusLength: RadiusLength = (value, side) => {
+      // Computed lengths may use exponent notation. Only mixed CSS math needs a layout:
+      // resolve it in X-ray's contained probe, not by guessing at min()/clamp() or percentages.
+      if (!value.includes("(")) return Number.parseFloat(value) * (value.endsWith("%") ? side / 100 : 1);
+      const probe = radiusProbe.current!;
+      probe.style.width = `${side}px`;
+      const child = probe.firstElementChild as HTMLElement;
+      child.style.width = value;
+      return Number.parseFloat(getComputedStyle(child).width);
+    };
     // An outline React has yet to render is placed once it has, from the layout effect below.
     const components = all.filter((component) => outlines.has(component.key));
     const ancestors = new Map<Element, Ancestor>();
@@ -591,7 +647,12 @@ function InspectorLayer({
       const spot = places[index];
       return !!spot && covered(component.element, parts[index]!, ancestors.get(component.element)!.rtl, [spot.x + sizes[index]![0] / 2, spot.y + sizes[index]![1] / 2], own);
     });
-    const paths = components.map((_, index) => framePath(boxes[index]!, lines));
+    const paths = components.map((component, index) => roundedFrame(boxes[index]!, ancestors.get(component.element)!.style, radiusLength) ?? framePath(boxes[index]!, lines));
+    const gaps = boxes.map((box) => lines.filter((line) => overlap(box, line)).map((line) => {
+      const x = line.left - box.left - 1;
+      const y = line.top - box.top - 1;
+      return `M${x} ${y}h${line.right - line.left + 2}v${line.bottom - line.top + 2}H${x}Z`;
+    }).join(""));
     components.forEach((component, index) => {
       const outline = outlines.get(component.key)!;
       const box = boxes[index]!;
@@ -604,6 +665,7 @@ function InspectorLayer({
       const frame = outline.firstElementChild as HTMLElement;
       frame.style.clipPath = cut.some(Boolean) ? `inset(${cut.join("px ")}px)` : "";
       frame.querySelector("path")!.setAttribute("d", paths[index]!);
+      frame.querySelector("mask path")!.setAttribute("d", gaps[index]!);
       const tag = tags[index]!;
       const spot = places[index];
       tag.toggleAttribute("data-crowded", !spot);
@@ -616,12 +678,17 @@ function InspectorLayer({
   useEffect(() => {
     const own = layer.current!;
     let frame = 0;
+    let backstop = 0;
     // Whether anything moved at the last measure.
     let moved: boolean | undefined;
     const observed = new Set<Element>();
     const resizes = new ResizeObserver(() => schedule());
     const update = () => {
+      // Whichever of the frame and the backstop runs first cancels the other: a frame left pending outlives its id here.
+      cancelAnimationFrame(frame);
       frame = 0;
+      clearTimeout(backstop);
+      backstop = 0;
       const modal = modalOpen(own);
       // While a dialog shuts off the page, the bar (shut off with it) steps aside so it never covers the dialog.
       own.toggleAttribute("data-modal", modal);
@@ -645,10 +712,20 @@ function InspectorLayer({
       // and nothing tells X-ray when the style catches up.
       const now = moving(own);
       if (now || moved) schedule();
+      // Outside an animation (a scroll, a resize, a mutation) the reposition above is a synchronous
+      // write with no Animation object, so nothing but this attribute tells a test it happened (#3361).
+      else own.removeAttribute("data-ouro-settling");
       moved = now;
     };
     const schedule = () => {
-      if (!frame) frame = requestAnimationFrame(update);
+      if (!frame) {
+        // Stryker disable next-line StringLiteral: a test reads only whether the attribute is set, never its value.
+        own.setAttribute("data-ouro-settling", "");
+        frame = requestAnimationFrame(update);
+        // A stalled compositor can drop a frame callback rather than merely delay it (#3314); this
+        // backstop measures anyway so the page still outlines once the stall passes (#3740).
+        backstop = window.setTimeout(update, 500);
+      }
     };
     // X-ray's own writes (each outline's position) are no change to the page.
     const mutations = new MutationObserver((records) => {
@@ -662,6 +739,11 @@ function InspectorLayer({
     schedule();
     return () => {
       cancelAnimationFrame(frame);
+      clearTimeout(backstop);
+      // Stryker disable next-line StringLiteral: `own` is this layer's own element, coming down with
+      // it (X-ray closes by unmounting), so clearing an attribute on an element about to leave the
+      // page changes nothing a test, or anything else, can observe.
+      own.removeAttribute("data-ouro-settling");
       mutations.disconnect();
       resizes.disconnect();
       removeEventListener("scroll", schedule, { capture: true });
@@ -724,6 +806,9 @@ function InspectorLayer({
   const count = `${found.length} ${found.length === 1 ? "component" : "components"}`;
   return (
     <div ref={layer} data-ouro="inspector" data-ouro-part="layer" data-starting-style={entering ? "" : undefined} className={layerClass}>
+      <div ref={radiusProbe} data-slot="inspector-radius-probe" aria-hidden="true" className="invisible fixed top-0 start-0 h-0 overflow-hidden [contain:strict]">
+        <div data-slot="inspector-radius-value" className="block min-w-0 max-w-none" />
+      </div>
       <div aria-hidden="true" data-ouro-part="scan" className={scanClass} />
       <div aria-hidden="true" data-ouro-part="outlines" className={outlinesClass}>
         {found.map((component) => (
@@ -739,7 +824,13 @@ function InspectorLayer({
           >
             <div data-ouro-inspector-frame="" className={frameClass}>
               <svg className="absolute inset-0 size-full overflow-visible">
-                <path d="" />
+                <path d="" mask={`url(#${maskId}-${component.key})`} />
+                <defs>
+                  <mask id={`${maskId}-${component.key}`} maskUnits="userSpaceOnUse" x="0" y="0" width="100%" height="100%" stroke="none">
+                    <rect width="100%" height="100%" fill="white" />
+                    <path d="" fill="black" />
+                  </mask>
+                </defs>
               </svg>
             </div>
             {component.control ? (

@@ -105,8 +105,6 @@ afterEach(async () => {
   await act(async () => roots.splice(0).forEach((root) => root.unmount()));
   for (const node of mounted) node.remove();
   mounted = [];
-  await page.viewport(414, 896);
-  await commands.resetMedia();
 });
 
 const warnings = () => warn.mock.calls.map((call: unknown[]) => String(call[0]));
@@ -240,6 +238,20 @@ describe("Toaster", () => {
       }
     }
     expect(warnings()).toEqual([]);
+  });
+
+  it("stays inside the viewport at doubled text on a window just over the phone breakpoint", async () => {
+    const html = document.documentElement;
+    const old = html.style.fontSize;
+    onTestFinished(() => {
+      html.style.fontSize = old;
+    });
+    html.style.fontSize = "200%";
+    await page.viewport(700, 800);
+    await render(<Toaster />);
+    const rect = viewport()!.getBoundingClientRect();
+    expect(rect.left).toBeGreaterThanOrEqual(0);
+    expect(rect.right).toBeLessThanOrEqual(700);
   });
 
   async function checkDefaultGeometry(onMutated?: () => void) {
@@ -412,8 +424,8 @@ describe("Toaster", () => {
     expect(region.getAttribute("role")).toBe("region");
     expect(region.getAttribute("aria-label")).toBe("Notifications");
     // The toasts are not read out from the region they sit in; two live regions inside it speak for them.
-    expect(region.hasAttribute("aria-live")).toBe(false);
-    expect([...region.querySelectorAll("[aria-live]")].map((live) => live.getAttribute("aria-live"))).toEqual(["polite", "assertive"]);
+    expect(region.getAttribute("aria-live")).toBe("off");
+    expect([...region.querySelectorAll("[aria-live]:not([aria-live=off])")].map((live) => live.getAttribute("aria-live"))).toEqual(["polite", "assertive"]);
     expect(region.textContent).toBe("");
     expect(toasts()).toEqual([]);
   });
@@ -1156,7 +1168,7 @@ describe("toast()", () => {
     expect(assertively.getAttribute("role")).toBe("alert");
     // Both speak from inside the Notifications landmark, which is not itself a live region.
     expect(viewport()!.contains(politely) && viewport()!.contains(assertively)).toBe(true);
-    expect(viewport()!.hasAttribute("aria-live")).toBe(false);
+    expect(viewport()!.getAttribute("aria-live")).toBe("off");
     expect(document.querySelector("[data-ouro-announcer]")?.textContent ?? "").toBe("");
     // Polite toasts are spoken in the order they were added.
     const texts = announced.changes.map((change) => change.text);

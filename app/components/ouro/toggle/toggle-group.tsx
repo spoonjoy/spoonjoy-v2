@@ -453,9 +453,14 @@ function ScrollRow(props: {
   const { labelId, outerRef, onKeyDown, pressedKey, children } = props;
   const pressedRef = useRef<HTMLDivElement>(null);
   const rowRef = useMergedRef(outerRef, pressedRef);
+  const mounted = useRef(false);
   useLayoutEffect(() => {
     // Stryker disable next-line OptionalChaining: the ref is attached by the time this effect runs
     const pressedButton = pressedRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    const first = !mounted.current;
+    mounted.current = true;
+    // The first toggle is already in view at scrollLeft 0; scrolling it would force a layout of the whole page mid-commit.
+    if (first && !pressedButton?.previousElementSibling) return;
     pressedButton?.scrollIntoView({ inline: "nearest", block: "nearest" });
     // Stryker disable next-line ArrayDeclaration: the ref is stable; only a value change need run this again
   }, [pressedKey]);

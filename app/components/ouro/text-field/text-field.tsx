@@ -230,6 +230,8 @@ function Icon({ children }: { children: ReactNode }): JSX.Element {
  * `variant="plain"` draws no frame, and `size="lg"` sets 20px text: together they put the
  * field inside a row your app frames, such as a page's main search between two rules.
  *
+ * For native-host quiet reading, see the [Resting caret guide](https://ui.ouroboros.bot/docs/resting-caret/).
+ *
  * @group Forms
  * @see https://ui.ouroboros.bot/docs/text-field
  *

@@ -1,6 +1,14 @@
 import { commands, server } from "vitest/browser";
 import { expect, test, vi } from "vitest";
 
+test("projectDefaultViewport reads the page's own unconfigured viewport instead of a hardcoded guess", async () => {
+  // ouro-chromium and ouro-webkit (where this file runs) set no browser.viewport, so the
+  // project's default must come from the page's own real size, not a constant: this would fail
+  // against a guessed value that doesn't match what the browser actually launched at.
+  const state = await commands.viewportState();
+  expect(state).toEqual({ width: window.innerWidth, height: window.innerHeight });
+});
+
 test("emulateMedia switches reduced motion and color scheme", async () => {
   await commands.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
   expect(matchMedia("(prefers-reduced-motion: reduce)").matches).toBe(true);
@@ -49,8 +57,9 @@ test("emulateMedia throws, naming the query, when the frame never matches it", a
 }, 20_000);
 
 test("emulateMedia names the query the frame never matched, even when its last read does not answer", async () => {
-  // The query never matches, and the first read after 6 s holds the frame until 14 s after the start, as a loaded runner
-  // can: past the 10 s wait and the 3 s a read may take, however late in the wait that read began.
+  // The query never matches, and the first read after 6 s holds the frame: starting this early in the 10 s wait, that
+  // read's own deadline (the wait's remainder, floored at 3 s) lands at the wait's own end, around 10 s, not later, so
+  // holding past 11.5 s is margin enough to cross it, a loaded runner's jitter included, without the 14 s this once held.
   const real = window.matchMedia;
   const start = performance.now();
   let stalled = false;
@@ -58,7 +67,7 @@ test("emulateMedia names the query the frame never matched, even when its last r
     if (query !== "(prefers-reduced-motion: reduce)") return real.call(window, query);
     if (!stalled && performance.now() - start > 6000) {
       stalled = true;
-      while (performance.now() < start + 14_000);
+      while (performance.now() < start + 11_500);
     }
     return { matches: false };
   }) as typeof window.matchMedia;

@@ -5,6 +5,7 @@ import { commands } from "vitest/browser";
 import { TabBar } from "~/components/ouro/tab-bar/tab-bar";
 import { act } from "~/lib/ouro/testing/act";
 import { expectMotion, parseDuration } from "~/lib/ouro/testing/motion";
+import { rotate } from "~/lib/ouro/testing/rotate";
 
 // Runs in the `touch` project: Chromium as a 390x844 phone with a coarse pointer.
 
@@ -18,6 +19,8 @@ afterEach(async () => {
   root = undefined;
   for (const node of nodes.splice(0)) node.remove();
   await commands.emulateMedia({ reducedMotion: "no-preference" });
+  // The touch project's phone, for a test that narrowed it.
+  await rotate(390, 844);
 });
 
 const icon = <svg viewBox="0 0 24 24" />;
@@ -53,7 +56,9 @@ function stub(target: object, name: string, value: unknown) {
 
 const aside = (nav: HTMLElement) => nav.hasAttribute("data-closed");
 
-it("fits five tabs and an accessory on a phone, each well over 44px, and a tap reaches the tab under the finger", async () => {
+it.each([390, 320])("fits five tabs and an accessory on a %ipx phone, each at least 44px, and a tap reaches the tab under the finger", async (width) => {
+  await rotate(width, 844);
+  expect(innerWidth).toBe(width);
   expect(matchMedia("(pointer: coarse)").matches).toBe(true);
   const host = document.createElement("div");
   document.body.append(host);
@@ -75,7 +80,7 @@ it("fits five tabs and an accessory on a phone, each well over 44px, and a tap r
     const rect = link.getBoundingClientRect();
     expect(rect.width).toBeGreaterThanOrEqual(44);
     expect(rect.height).toBeGreaterThanOrEqual(44);
-    expect(rect.right).toBeLessThanOrEqual(390);
+    expect(rect.right).toBeLessThanOrEqual(width);
     expect(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)?.closest("a")).toBe(link);
     // No label is cut to nothing.
     expect(link.textContent!.length).toBeGreaterThan(0);

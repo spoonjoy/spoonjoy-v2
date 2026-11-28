@@ -1,7 +1,7 @@
 "use client";
 
 import { Toggle } from "@base-ui/react/toggle";
-import { useEffect, useId, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type Ref } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { Tooltip } from "~/components/ouro/tooltip/tooltip";
@@ -10,7 +10,10 @@ import { TouchTarget } from "~/lib/ouro/touch-target";
 import { devThrow, devWarn } from "~/lib/ouro/dev";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import {
+  countClass,
+  glassGroupClass,
   groupClass,
+  iconClass,
   labelClass,
   ownLook,
   revealClass,
@@ -25,6 +28,10 @@ export interface SegmentedControlItem {
   value: string;
   /** The segment's text. Keep it to one short word; every segment gets the width of the longest. */
   label: string;
+  /** An icon before the label. With `glass`, an unchecked segment shows only this, and the label stays for screen readers. */
+  icon?: ReactNode | undefined;
+  /** A count shown in a small pill inside the segment, after the label (unread messages, matches). Shown with the label. */
+  count?: number | undefined;
   /** Shows the segment but keeps it from being pressed. */
   disabled?: boolean | undefined;
   /**
@@ -67,6 +74,12 @@ export interface SegmentedControlProps {
   /** Stretches the control to the width of its container, with the segments sharing it equally. */
   fullWidth?: boolean | undefined;
   /**
+   * Draws the control as a Liquid Glass capsule for a window toolbar, in the theme's glass behind blur, with a glass
+   * thumb. The checked segment shows its label and count while the others show their `icon`, so give the segments an
+   * `icon`. It turns solid under reduced transparency or more contrast.
+   */
+  glass?: boolean | undefined;
+  /**
    * For a secondary control laid over content, such as a switch on a slide: on a screen with a
    * mouse the control stays transparent, keeping its room, until the pointer rests on it or focus
    * is in it, then fades in. On a touch screen it shows from the start. Screen readers reach it
@@ -97,15 +110,16 @@ function Segment(props: {
   disabled: boolean | undefined;
   arrowedRef: { current: boolean };
   choose: (value: string) => void;
+  glass: boolean | undefined;
 }): JSX.Element {
-  const { item, selected, tabStop, disabled, arrowedRef, choose } = props;
+  const { item, selected, tabStop, disabled, arrowedRef, choose, glass } = props;
   const reason = useDisabledReason(item);
   const segment = (
     <Toggle
       pressed={selected}
       // Pressing the checked segment would leave none checked. Keep it.
       onPressedChange={(next) => {
-        // Stryker disable next-line ConditionalExpression: only the checked segment reports false, and choose ignores the checked value
+        // Stryker disable next-line ConditionalExpression,LogicalOperator: only the checked segment reports false, and choose ignores the checked value
         if (next && !reason.off) choose(item.value);
       }}
       disabled={disabled || (item.disabled && !reason.off)}
@@ -127,7 +141,18 @@ function Segment(props: {
       }}
     >
       <TouchTarget />
-      <span className="relative min-w-0 truncate">{item.label}</span>
+      {item.icon !== undefined && (
+        <span aria-hidden="true" data-slot="segmented-control-icon" className={cn(iconClass, glass && !selected && "me-0")}>
+          {item.icon}
+        </span>
+      )}
+      {/* sr-only alone: beside relative, which sets position too, the hidden label could stay in the row and push the icon aside. */}
+      <span data-slot="segmented-control-label" className={glass && !selected && item.icon !== undefined ? "sr-only" : "relative min-w-0 truncate"}>{item.label}</span>
+      {item.count !== undefined && (glass ? selected : true) && (
+        <span data-slot="segmented-control-count" className={countClass}>
+          {item.count}
+        </span>
+      )}
       {reason.note}
     </Toggle>
   );
@@ -188,6 +213,7 @@ export function SegmentedControl(props: SegmentedControlProps): JSX.Element {
     onValueChange,
     disabled,
     fullWidth,
+    glass,
     revealOnHover,
     name,
     className,
@@ -330,8 +356,9 @@ export function SegmentedControl(props: SegmentedControlProps): JSX.Element {
           // It also ends what the person asked for here: a check the app makes after this is its own.
           if (!event.currentTarget.contains(event.relatedTarget)) asked.current.clear();
         }}
-        // Stryker disable next-line ConditionalExpression,LogicalOperator: fullWidth is tested on the plain group
-        className={cn(groupClass, fullWidth && "grid w-full")}
+        data-glass={glass ? "" : undefined}
+        // Stryker disable next-line ConditionalExpression,LogicalOperator: fullWidth is tested on the plain group; the glass class sets its own look
+        className={cn(groupClass, glass && glassGroupClass, fullWidth && "grid w-full")}
       >
         <span aria-hidden="true" data-ouro-segment-thumb="" className={thumbClass} style={thumbStyle} />
         {items.map((item) => (
@@ -343,6 +370,7 @@ export function SegmentedControl(props: SegmentedControlProps): JSX.Element {
             disabled={disabled}
             arrowedRef={arrowed}
             choose={choose}
+            glass={glass}
           />
         ))}
       </div>

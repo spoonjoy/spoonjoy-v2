@@ -20,9 +20,12 @@ trackUserEventCommands();
 // run in sets. The tests of sound turn it back to false; they stub the audio they check.
 Object.defineProperty(navigator, "webdriver", { value: false, configurable: true });
 
-// Media emulation (reduced motion, forced colours, colour scheme, contrast) stays on the page after
-// the test that set it. So each file starts from the browser's defaults, and each test puts back the
-// media it found, which keeps a setting its file makes in `beforeAll` for all of its tests.
+// Media emulation (reduced motion, forced colours, colour scheme, contrast) and the page's real
+// viewport size stay on the page after the test that set them. So each file starts from the
+// browser's (or the project's configured) defaults, and each test puts back what it found, which
+// keeps a setting its file makes in `beforeAll` for all of its tests. A shard's file order differs
+// between a pull request and main, so state a file leaves behind otherwise reads differently next
+// to a different neighbour there than it did here (ourostack/ouro-ui#3300, #3319).
 // A browser command answers through a WebSocket message, and code that runs on from it runs inside that
 // message's dispatch, with `window.event` set. So each hook ends on a real timer's task, which no event
 // dispatches, and the test starts as code outside an event handler does (taken before a test can fake it).
@@ -32,21 +35,23 @@ const leaveEvent = () => new Promise<void>((resolve) => realSetTimeout(resolve, 
 // A face that finishes loading mid-test moves text, so every face the stylesheets declare loads before
 // the file's first test.
 beforeAll(async () => {
-  await commands.resetMedia();
+  // One round trip resets both, rather than two independent ones.
+  await commands.resetEnvironment();
   await loadFonts();
   await leaveEvent();
 });
 
-let mediaBeforeTest: Awaited<ReturnType<typeof commands.mediaState>> | undefined;
+let environmentBeforeTest: Awaited<ReturnType<typeof commands.snapshotEnvironment>> | undefined;
 beforeEach(async () => {
-  mediaBeforeTest = await commands.mediaState();
+  // One round trip reads both snapshots, rather than doubling this hook's dispatch per test.
+  environmentBeforeTest = await commands.snapshotEnvironment();
   await leaveEvent();
 });
-// Runs after the file's own afterEach, so a test that changed media in its body or a `beforeEach`
-// is put back before the next test.
+// Runs after the file's own afterEach, so a test that changed media or the viewport in its body or
+// a `beforeEach` is put back before the next test.
 afterEach(async () => {
-  if (mediaBeforeTest) await commands.restoreMedia(mediaBeforeTest);
-  mediaBeforeTest = undefined;
+  if (environmentBeforeTest) await commands.restoreEnvironment(environmentBeforeTest);
+  environmentBeforeTest = undefined;
   await leaveEvent();
 });
 

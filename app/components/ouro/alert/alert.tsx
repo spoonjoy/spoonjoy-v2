@@ -38,7 +38,11 @@ export interface AlertOwnProps {
     | "warning"
     | (string & { 'danger and error are "destructive"; info is "primary"; neutral is "secondary"': never })
     | undefined;
-  /** A control under the description, usually a small Button: `action={<Button size="sm">Retry</Button>}`. */
+  /**
+   * A control under the description, usually a small Button: `action={<Button size="sm">Retry</Button>}`. With no
+   * description it sits beside the title where they fit on one line, and under it where they don't.
+   * @claim "With no description it sits beside the title" registry/ouro/components/ouro/alert/alert.test.tsx verify:testExists(registry/ouro/components/ouro/alert/alert.test.tsx::Alert > puts an action beside a title with no description where they fit, and under it where they don't)
+   */
   action?: ReactNode;
   /**
    * Shows a close button that calls this. Remove the alert from your state in it. When
@@ -76,20 +80,20 @@ export type AlertProps = Omit<HTMLAttributes<HTMLDivElement>, keyof AlertOwnProp
 
 const tones = {
   primary: {
-    root: "border-primary/30 bg-primary/5",
+    root: "bg-primary/10",
     accent: "text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]",
   },
-  secondary: { root: "border-border bg-card", accent: "text-foreground" },
+  secondary: { root: "bg-muted", accent: "text-foreground" },
   destructive: {
-    root: "border-destructive/30 bg-destructive/5",
+    root: "bg-destructive/10",
     accent: "text-[color-mix(in_oklab,var(--destructive)_80%,var(--foreground))]",
   },
   success: {
-    root: "border-success/30 bg-success/5",
+    root: "bg-success/10",
     accent: "text-[color-mix(in_oklab,var(--success)_80%,var(--foreground))]",
   },
   warning: {
-    root: "border-warning/30 bg-warning/5",
+    root: "bg-warning/10",
     accent: "text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))]",
   },
 } as const;
@@ -257,15 +261,20 @@ export function Alert(props: AlertProps): JSX.Element {
       data-ouro="alert"
       data-tone={tone}
       className={cn(
-        "box-border flex w-full items-start gap-3 rounded-ouro-lg border border-solid p-4 text-foreground",
+        "box-border flex w-full items-start gap-3 rounded-ouro-lg border-0 p-4 text-foreground forced-colors:outline forced-colors:outline-1 forced-colors:-outline-offset-1 forced-colors:outline-[CanvasText]",
         tones[tone].root,
         className,
       )}
     >
       {Icon && <Icon aria-hidden="true" data-slot="alert-icon" data-ouro-alert-icon="" className={cn("mt-0.5 size-ouro-5 shrink-0", accent)} />}
       {/* A long word (an address in an error) wraps anywhere, so it stays inside the alert, however narrow. */}
-      <div data-slot="alert-body" className="flex min-w-0 flex-1 flex-col gap-1 [overflow-wrap:anywhere]">
-        <div data-slot="alert-title" data-ouro-alert-title="" data-ouro-text="" className={cn("text-base/6 font-medium sm:pointer-fine:text-sm/5", accent)}>
+      {/* With no description, the title and the action share a line where they fit: the title keeps its whole line
+          before the action wraps under it. The action overhangs its line as the dismiss button does, so the line stays the
+          title's, level with the icon and the dismiss button; the body's foot and the row gap give the overhang back, so a
+          wrapped action sits 12px under the title and 16px over the alert's edge, as before. The action shrinks to the row,
+          so a row of buttons in it wraps or scrolls inside the alert. */}
+      <div data-slot="alert-body" className={cn("flex min-w-0 flex-1 [overflow-wrap:anywhere]", description === undefined && action !== undefined ? "flex-row flex-wrap items-center gap-x-3 gap-y-[18px] pb-1.5" : "flex-col gap-1")}>
+        <div data-slot="alert-title" data-ouro-alert-title="" data-ouro-text="" className={cn("max-w-full shrink-0 text-base/6 font-medium sm:pointer-fine:text-sm/5", accent)}>
           {title}
         </div>
         {description !== undefined && (
@@ -274,7 +283,7 @@ export function Alert(props: AlertProps): JSX.Element {
           </div>
         )}
         {action !== undefined && (
-          <div data-slot="alert-action" data-ouro-alert-action="" className="mt-2 flex flex-wrap gap-2">
+          <div data-slot="alert-action" data-ouro-alert-action="" className={cn("flex flex-wrap gap-2", description === undefined ? "-my-1.5 min-w-0" : "mt-2")}>
             {action}
           </div>
         )}

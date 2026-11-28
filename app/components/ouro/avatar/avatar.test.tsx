@@ -1,4 +1,4 @@
-import { Profiler, type ReactNode } from "react";
+import { Profiler, type CSSProperties, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
@@ -118,13 +118,24 @@ function drawn(scope: Element): string {
 
 /**
  * Writes each drawn letter in `element` as text instead, in the same element with the same classes
- * but without the `::before` that draws it: the avatar as it was when its initials were text.
+ * but without the `::before` that draws it: the avatar as it was when its initials were text. Letters
+ * whose `::before` is a box of its own, trimmed to the capitals (an avatar's surface, a group's slice),
+ * are written in a span with the classes that box had, as the initials' own element once was.
  */
 function write(element: Element): void {
   for (const letters of element.querySelectorAll<HTMLElement>("[data-ouro-avatar-initials], [data-ouro-avatar-count]")) {
     const text = letters.dataset["ouroAvatarInitials"] ?? letters.dataset["ouroAvatarCount"]!;
+    const trimmed = letters.classList.contains("before:[text-box:trim-both_cap_alphabetic]");
     for (const name of [...letters.classList]) if (name.startsWith("before:")) letters.classList.remove(name);
-    letters.textContent = text;
+    if (!trimmed) {
+      letters.textContent = text;
+      continue;
+    }
+    const box = document.createElement("span");
+    box.className = "block whitespace-nowrap [text-box:trim-both_cap_alphabetic]";
+    box.dataset["written"] = "";
+    box.textContent = text;
+    letters.append(box);
   }
 }
 
@@ -565,6 +576,41 @@ describe("Avatar colors", () => {
     }
   });
 
+  it("takes each hue's mix from ouro-base in light and dark, and a .dark element's own mix for what is in it", async () => {
+    const { host } = await render(
+      <>
+        {names.map((name) => (
+          <Avatar key={name} name={name} />
+        ))}
+        <Avatar name="Ana Lind" color="brand" />
+      </>,
+    );
+    const avatars = [...host.querySelectorAll<HTMLElement>('[data-ouro="avatar"]')];
+    const drawn = () => new Set(avatars.map((avatar) => `${getComputedStyle(surface(avatar)).backgroundColor} on ${getComputedStyle(avatar).color}`));
+    // The mix each avatar would compute for itself, for the eight hues and the brand, in the scheme of `where`.
+    const mixes = (tint: number, ink: number, where: HTMLElement = document.body) =>
+      new Set(
+        [1, 2, 3, 4, 5, 6, 7, 8, "brand"].map((hue) => {
+          const color = hue === "brand" ? "var(--primary)" : `var(--avatar-${hue})`;
+          const probe = document.createElement("i");
+          probe.style.backgroundColor = `color-mix(in oklab, ${color} ${tint}%, var(--background))`;
+          probe.style.color = `color-mix(in oklab, ${color} ${ink}%, var(--foreground))`;
+          where.append(probe);
+          const want = `${getComputedStyle(probe).backgroundColor} on ${getComputedStyle(probe).color}`;
+          probe.remove();
+          return want;
+        }),
+      );
+    expect(drawn()).toEqual(mixes(18, 70));
+    document.documentElement.classList.add("dark");
+    expect(drawn()).toEqual(mixes(46, 18));
+    // A page in light with one dark region: the avatars in it mix the dark scheme's colours, as the probes beside them do.
+    document.documentElement.classList.remove("dark");
+    host.classList.add("dark");
+    expect(drawn()).toEqual(mixes(46, 18, host));
+    expect(drawn()).not.toEqual(mixes(46, 18));
+  });
+
   it("spreads ids that differ only in their last character across the hues", async () => {
     const sequential = Array.from({ length: 16 }, (_, index) => `user-${String(index).padStart(4, "0")}`);
     const hex = Array.from({ length: 16 }, (_, index) => `8f14e45f-ceea-467f-a0e6-00000000000${index.toString(16)}`);
@@ -865,8 +911,12 @@ describe("Avatar presence", () => {
     const fontSize = parseFloat(getComputedStyle(avatars[0]!).fontSize);
     for (const avatar of avatars) {
       const box = avatar.getBoundingClientRect();
-      const letters = avatar.querySelector<HTMLElement>("[data-ouro-avatar-initials]")!.getBoundingClientRect();
-      const where = `${size} ${drawn(avatar)}${avatar.dataset["presence"] ? " with a dot" : ""}: letters ${JSON.stringify(letters)} avatar ${JSON.stringify(box)}`;
+      const where0 = `${size} ${drawn(avatar)}${avatar.dataset["presence"] ? " with a dot" : ""}`;
+      // The letters are a ::before, which has no box a script can read: written as text (the drawn letters
+      // look exactly as written text does, below), they take the box the ::before has.
+      write(avatar);
+      const letters = avatar.querySelector<HTMLElement>("[data-written]")!.getBoundingClientRect();
+      const where = `${where0}: letters ${JSON.stringify(letters)} avatar ${JSON.stringify(box)}`;
       // The initials' box runs from the top of the capitals to the baseline (a cap height, under
       // 0.8em in any font, where the line would be at least 1em), so its middle is the letters' own.
       expect(letters.height / fontSize, where).toBeGreaterThan(0.6);
@@ -974,21 +1024,26 @@ describe("Avatar presence", () => {
     }
   });
 
-  it("shows a state's glyph from 40px up, and only its colour below", async () => {
+  it("shows a marked state's glyph at every size, down to 8 and 9px, and never for busy", async () => {
     const { host } = await render(
       <>
         {sizes.map((size) => (
-          <Avatar key={size} name="Ana Lind" size={size} presence="away" presenceLabel="Away" />
+          <Avatar key={`away-${size}`} name="Ana Lind" size={size} presence="away" presenceLabel="Away" />
+        ))}
+        {sizes.map((size) => (
+          <Avatar key={`busy-${size}`} name="Ben Ito" size={size} presence="busy" presenceLabel="Busy" />
         ))}
       </>,
     );
-    const drawn = [...host.querySelectorAll<HTMLElement>('[data-ouro="avatar"]')].map((avatar) => ({
-      size: avatar.getBoundingClientRect().width,
-      glyph: avatar.querySelector("[data-ouro-avatar-presence] path") !== null,
-    }));
-    expect(drawn.filter((one) => one.glyph).every((one) => one.size >= 40)).toBe(true);
-    expect(drawn.filter((one) => !one.glyph).every((one) => one.size < 40)).toBe(true);
-    expect(drawn.some((one) => one.glyph) && drawn.some((one) => !one.glyph)).toBe(true);
+    const glyphDrawn = (presence: "away" | "busy") =>
+      [...host.querySelectorAll<HTMLElement>(`[data-ouro="avatar"][data-presence="${presence}"]`)].map(
+        (avatar) => avatar.querySelector("[data-ouro-avatar-presence] path") !== null,
+      );
+    // Away's clock hand draws at every size now, with a thicker stroke at the smallest dots
+    // (8 and 9px) so it stays crisp there instead of the old, thinner line that was hidden
+    // rather than left to blur; busy never has a mark.
+    expect(glyphDrawn("away").every(Boolean)).toBe(true);
+    expect(glyphDrawn("busy").some(Boolean)).toBe(false);
   });
 
   it("bites the dot out of the avatar's surface, so a non-plain background shows through the gap", async () => {
@@ -1097,18 +1152,44 @@ describe("Avatar presence", () => {
       const disc = circle.getBoundingClientRect();
       const frame = glyph.getBoundingClientRect();
       expect(disc.width).toBeGreaterThan(frame.width * (ring ? 0.8 : 0.95));
-      // The marks on it are rounded strokes in the tone's foreground (or the tone, on a ring), never filled.
-      for (const mark of glyph.querySelectorAll("path")) {
+      // A ring's mark is a rounded stroke in the tone; a dot's own mark (available, away, or
+      // do not disturb's bar) is a rounded stroke too except do not disturb's bar, drawn as a
+      // filled rect in the tone's foreground instead, since a stroke that thin would blur at a
+      // rect's short, straight edges.
+      const marks = [...glyph.querySelectorAll("path"), ...glyph.querySelectorAll("rect")];
+      for (const mark of marks) {
         const line = getComputedStyle(mark);
-        expect(line.fill).toBe("none");
-        expect(line.strokeLinecap).toBe("round");
-        expect(line.strokeLinejoin).toBe("round");
-        expect(line.stroke).toBe(token(ring ? tone : `${tone}-foreground`));
+        const filled = mark.tagName.toLowerCase() === "rect";
+        if (filled) {
+          expect(line.fill).toBe(token(`${tone}-foreground`));
+          expect(line.stroke).toBe("none");
+        } else {
+          expect(line.fill).toBe("none");
+          expect(line.strokeLinecap).toBe("round");
+          expect(line.strokeLinejoin).toBe("round");
+          expect(line.stroke).toBe(ring ? token(tone) : token(`${tone}-foreground`));
+        }
         const drawn = mark.getBBox();
         expect(Math.max(drawn.width, drawn.height)).toBeGreaterThan(4);
       }
-      expect(glyph.querySelectorAll("path")).toHaveLength(presence === "busy" ? 0 : 1);
+      expect(marks).toHaveLength(presence === "busy" ? 0 : 1);
     }
+  });
+
+  it("reads --ouro-presence-<state> before the named tone, so an app can re-point one state alone", async () => {
+    const amber = "rgb(193, 156, 0)";
+    const { host } = await render(
+      <div style={{ "--ouro-presence-away": amber } as CSSProperties}>
+        <Avatar name="Ana Lind" presence="away" presenceLabel="Away" />
+        <Avatar name="Ben Ito" presence="busy" presenceLabel="Busy" />
+      </div>,
+    );
+    const [away, busy] = [...host.querySelectorAll<HTMLElement>("[data-ouro-avatar-presence] svg circle")];
+    // The overridden state draws the app's color, not the shipped warning tone.
+    expect(getComputedStyle(away!).fill).toBe(amber);
+    expect(getComputedStyle(away!).fill).not.toBe(token("warning"));
+    // A different state's dot, and the general warning tone itself, are untouched by that override.
+    expect(getComputedStyle(busy!).fill).toBe(token("destructive"));
   });
 
   it("renders the dot in server HTML", () => {

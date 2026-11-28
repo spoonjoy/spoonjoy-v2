@@ -6,11 +6,23 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { commands } from "vitest/browser";
 import { ScrollArea } from "@base-ui/react/scroll-area";
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
+import { installSquircleCapsules } from "~/lib/ouro/squircle-capsules";
 import { useOuro } from "~/lib/ouro/use-ouro";
 import { useReducedMotion } from "~/lib/ouro/use-reduced-motion";
 import { act } from "~/lib/ouro/testing/act";
 
-
+// Wraps the real installSquircleCapsules in a spy, so a test can tell whether OuroProvider's own gate ever
+// reached the import at all. squircle-capsules.ts repeats the same corner-shape/clip-path check inside
+// installSquircleCapsules itself, so watching only its effects (a MutationObserver) can't tell a provider
+// that skipped the import apart from one that imported it and let the inner check bail.
+// Mocks via a real import() expression (vi.mock's typed-path form), not a bare string: shadcn's install-time
+// rewriter only rewrites import declarations and import() calls, so a string literal here would be left
+// pointing at the pre-install registry path after install, no longer matching the path OuroProvider's own
+// import() resolves to.
+vi.mock(import("~/lib/ouro/squircle-capsules"), async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, installSquircleCapsules: vi.fn(actual.installSquircleCapsules) };
+});
 
 const roots: ReturnType<typeof createRoot>[] = [];
 afterEach(async () => {
@@ -107,6 +119,30 @@ describe("OuroProvider and useOuro", () => {
       </OuroProvider>,
     );
     expect(html).toBe('<a href="/recipes" class="mt-2">Recipes</a>');
+  });
+
+  it("installs the squircle capsule watcher once on mount, and stops it on unmount", async () => {
+    vi.mocked(installSquircleCapsules).mockClear();
+    const supports = vi.spyOn(CSS, "supports").mockImplementation((prop: string) => prop === "clip-path");
+    const mutationObserve = vi.spyOn(MutationObserver.prototype, "observe");
+    const mutationDisconnect = vi.spyOn(MutationObserver.prototype, "disconnect");
+    await mount(<OuroProvider>content</OuroProvider>);
+    await expect.poll(() => mutationObserve.mock.calls.length).toBe(1);
+    expect(mutationObserve).toHaveBeenCalledExactlyOnceWith(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+    // The provider's own gate reaches the import exactly once: it is what decides whether the chunk loads at all.
+    expect(installSquircleCapsules).toHaveBeenCalledExactlyOnceWith(document);
+    // The watcher is the fallback for exactly these two features, checked by their exact names. Positional,
+    // not toHaveBeenCalledWith: the capsule watcher it loads makes this same pair of calls again once its
+    // own module resolves, which would hide a mutated literal in the provider's own check.
+    expect(supports.mock.calls[0]).toEqual(["corner-shape", "squircle"]);
+    expect(supports.mock.calls[1]).toEqual(["clip-path", "shape(from 0 0, close)"]);
+    const root = roots.at(-1)!;
+    await act(async () => root.render(<OuroProvider>content changed</OuroProvider>));
+    // A re-render does not install the watcher again.
+    expect(mutationObserve).toHaveBeenCalledOnce();
+    expect(mutationDisconnect).not.toHaveBeenCalled();
+    await act(async () => roots.pop()!.unmount());
+    expect(mutationDisconnect).toHaveBeenCalledOnce();
   });
 });
 
@@ -407,5 +443,17 @@ describe("OuroProvider quiet", () => {
       await act(async () => root.unmount());
       style.remove();
     }
+  });
+
+  it("loads no capsule watcher where corner-shape is drawn", async () => {
+    vi.mocked(installSquircleCapsules).mockClear();
+    const mutationObserve = vi.spyOn(MutationObserver.prototype, "observe");
+    vi.spyOn(CSS, "supports").mockReturnValue(true);
+    await mount(<OuroProvider>content</OuroProvider>);
+    await import("~/lib/ouro/squircle-capsules");
+    expect(mutationObserve).not.toHaveBeenCalled();
+    // The provider's own gate never reaches the import: a mutant that always imports would still bail inside
+    // installSquircleCapsules, hiding behind the MutationObserver check above, but never calls it at all.
+    expect(installSquircleCapsules).not.toHaveBeenCalled();
   });
 });

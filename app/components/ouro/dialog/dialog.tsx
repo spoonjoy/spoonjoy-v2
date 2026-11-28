@@ -229,7 +229,7 @@ const TEXT_ENTRY =
  */
 function firstFocus(popup: HTMLElement): HTMLElement {
   const candidates = [
-    ...popup.querySelectorAll<HTMLElement>(`[data-ouro-dialog-content] :is(${FOCUSABLE}), [data-ouro-footer] :is(${TEXT_ENTRY}), [data-ouro-dialog-close]`),
+    ...popup.querySelectorAll<HTMLElement>(`:is([data-ouro-dialog-content], [data-ouro-sheet-content]) :is(${FOCUSABLE}), [data-ouro-footer] :is(${TEXT_ENTRY}), [data-ouro-dialog-close]`),
     popup,
   ];
   return candidates.find((element) => element.getClientRects().length > 0)!;
@@ -484,7 +484,7 @@ export function DialogFrame({
   const centeredFinalFocus = trigger !== undefined ? { finalFocus: () => returnFocusTo(triggerRef.current) } : {};
   // Focus goes where firstFocus picks, never on a scrolling body. The centered dialog focuses
   // itself after a touch or pen open. A dialog without a trigger decides when it opens, from the
-  // last press on the page. (The sheet always focuses itself, like a plain Sheet.)
+  // last press on the page. (The sheet focuses the same first control.)
   const initialFocus = {
     initialFocus: () => {
       const touch = trigger === undefined ? lastInput() === "touch" || lastInput() === "pen" : tapOpened;
@@ -508,6 +508,11 @@ export function DialogFrame({
       presentation="sheet"
       closeDisabled={closeDisabled}
       onOpenChangeComplete={onOpenChangeComplete}
+      initialFocus={() => {
+        const sheet = [...document.querySelectorAll<HTMLElement>("[data-ouro-presentation='sheet']")].pop()!;
+        const touch = trigger === undefined ? lastInput() === "touch" || lastInput() === "pen" : tapOpened;
+        return touch ? sheet : firstFocus(sheet);
+      }}
       {...finalFocus}
     >
       {children}
